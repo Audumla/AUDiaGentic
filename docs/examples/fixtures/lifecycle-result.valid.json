@@ -1,0 +1,8 @@
+{
+  "contract-version": "v1",
+  "mode": "apply",
+  "status": "success",
+  "completed-operations": ["create-.audiagentic"],
+  "warnings": [],
+  "checkpoint-dir": ".audiagentic/runtime/lifecycle/checkpoints"
+}

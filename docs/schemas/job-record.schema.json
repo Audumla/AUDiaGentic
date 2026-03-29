@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "job-id",
+    "packet-id",
+    "project-id",
+    "provider-id",
+    "workflow-profile",
+    "state",
+    "created-at",
+    "updated-at",
+    "artifacts",
+    "approvals"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "job-id": {
+      "type": "string"
+    },
+    "packet-id": {
+      "type": "string"
+    },
+    "project-id": {
+      "type": "string"
+    },
+    "provider-id": {
+      "type": "string"
+    },
+    "workflow-profile": {
+      "type": "string",
+      "enum": [
+        "lite",
+        "standard",
+        "strict"
+      ]
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "created",
+        "ready",
+        "running",
+        "awaiting-approval",
+        "completed",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "created-at": {
+      "type": "string"
+    },
+    "updated-at": {
+      "type": "string"
+    },
+    "artifacts": {
+      "type": "array"
+    },
+    "approvals": {
+      "type": "array"
+    }
+  }
+}

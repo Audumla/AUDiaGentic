@@ -1,0 +1,19 @@
+{
+  "canonical-provider-ids": [
+    "local-openai",
+    "claude",
+    "codex",
+    "gemini",
+    "copilot",
+    "continue",
+    "cline"
+  ],
+  "canonical-component-ids": [
+    "core-lifecycle",
+    "release-audit-ledger",
+    "agent-jobs",
+    "provider-layer",
+    "discord-overlay",
+    "optional-server"
+  ]
+}

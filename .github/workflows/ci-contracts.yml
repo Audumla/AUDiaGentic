@@ -1,0 +1,26 @@
+name: ci-contracts
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  contract-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest jsonschema pyyaml
+      - name: Validate schemas
+        run: python tools/validate_schemas.py
+      - name: Validate canonical ids
+        run: python tools/validate_ids.py
+      - name: Validate packet dependencies
+        run: python tools/validate_packet_dependencies.py
+      - name: Run contract tests
+        run: python -m pytest tests/unit/contracts

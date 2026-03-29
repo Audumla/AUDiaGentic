@@ -1,0 +1,10 @@
+{
+  "contract-version": "v1",
+  "providers": {
+    "claude": {
+      "enabled": true,
+      "install-mode": "external-configured",
+      "auth-ref": "secret-key"
+    }
+  }
+}

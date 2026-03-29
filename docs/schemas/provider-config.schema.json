@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "providers"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "providers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "install-mode"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "install-mode": {
+            "type": "string"
+          },
+          "base-url": {
+            "type": "string"
+          },
+          "default-model": {
+            "type": "string"
+          },
+          "auth-ref": {
+            "type": "string",
+            "pattern": "^env:[A-Z0-9_]+$"
+          }
+        }
+      }
+    }
+  }
+}

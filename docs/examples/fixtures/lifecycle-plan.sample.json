@@ -1,0 +1,15 @@
+{
+  "contract-version": "v1",
+  "operation": "legacy-cutover",
+  "mode": "plan",
+  "project-id": "my-project",
+  "state-detected": "legacy-only",
+  "warnings": [
+    "Legacy Release Please workflow will be renamed and replaced with AUDiaGentic baseline workflow."
+  ],
+  "actions": [
+    "create .audiagentic/",
+    "migrate release history",
+    "install baseline workflow"
+  ]
+}

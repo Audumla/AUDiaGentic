@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "project-id",
+    "project-name",
+    "workflow-profile",
+    "tracked-docs-root",
+    "runtime-root",
+    "release-strategy"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "project-id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "project-name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "workflow-profile": {
+      "type": "string",
+      "enum": [
+        "lite",
+        "standard",
+        "strict"
+      ]
+    },
+    "tracked-docs-root": {
+      "const": "docs"
+    },
+    "runtime-root": {
+      "const": ".audiagentic/runtime"
+    },
+    "release-strategy": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,7 @@
+contract-version: v1
+project-id: sample-project
+project-name: Sample Project
+workflow-profile: lite
+tracked-docs-root: docs
+runtime-root: .audiagentic/runtime
+release-strategy: release-please

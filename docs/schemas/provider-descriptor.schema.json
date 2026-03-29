@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "provider-id",
+    "install-mode",
+    "supports-jobs",
+    "supports-interactive",
+    "supports-skill-wrapper",
+    "supports-structured-output",
+    "supports-server-session",
+    "supports-baseline-healthcheck"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "provider-id": {
+      "type": "string",
+      "enum": [
+        "local-openai",
+        "claude",
+        "codex",
+        "gemini",
+        "copilot",
+        "continue",
+        "cline"
+      ]
+    },
+    "install-mode": {
+      "type": "string"
+    },
+    "supports-jobs": {
+      "type": "boolean"
+    },
+    "supports-interactive": {
+      "type": "boolean"
+    },
+    "supports-skill-wrapper": {
+      "type": "boolean"
+    },
+    "supports-structured-output": {
+      "type": "boolean"
+    },
+    "supports-server-session": {
+      "type": "boolean"
+    },
+    "supports-baseline-healthcheck": {
+      "type": "boolean"
+    }
+  }
+}

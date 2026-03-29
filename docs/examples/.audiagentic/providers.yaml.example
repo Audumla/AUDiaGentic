@@ -1,0 +1,11 @@
+contract-version: v1
+providers:
+  local-openai:
+    enabled: true
+    install-mode: external-configured
+    base-url: http://localhost:8000/v1
+    default-model: qwen-coder
+  claude:
+    enabled: false
+    install-mode: external-configured
+    auth-ref: env:ANTHROPIC_API_KEY
