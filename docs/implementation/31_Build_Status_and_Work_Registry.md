@@ -111,7 +111,7 @@ Each row in the registry must contain:
 | Phase 1 | `VERIFIED` | phase 1 gate complete |
 | Phase 2 | `VERIFIED` | phase 2 gate complete |
 | Phase 3 | `VERIFIED` | phase 3 gate complete |
-| Phase 4 | `IN_PROGRESS` | PKT-PRV-006 in progress |
+| Phase 4 | `IN_PROGRESS` | PKT-PRV-007 in progress |
 | Phase 5 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 4 gate is verified |
 | Phase 6 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 5/6 preconditions are satisfied |
 
@@ -180,8 +180,8 @@ Later phases should continue this registry pattern using the same fields and sta
 | PKT-PRV-003 | local-openai provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_local_openai.py |
 | PKT-PRV-004 | claude provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_claude.py |
 | PKT-PRV-005 | codex provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_codex.py |
-| PKT-PRV-006 | gemini provider adapter | IN_PROGRESS | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | implementing gemini adapter |
-| PKT-PRV-007 | copilot provider adapter | READY_TO_START | — | — | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
+| PKT-PRV-006 | gemini provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_gemini.py |
+| PKT-PRV-007 | copilot provider adapter | IN_PROGRESS | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | implementing copilot adapter |
 | PKT-PRV-008 | continue provider adapter | READY_TO_START | — | — | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
 | PKT-PRV-009 | cline provider adapter | READY_TO_START | — | — | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
 | PKT-PRV-010 | Job/provider integration seam tests | READY_TO_START | — | — | needs PKT-PRV-002 + PKT-JOB-003 VERIFIED | 03, 06, packet | 2026-03-30 | |
