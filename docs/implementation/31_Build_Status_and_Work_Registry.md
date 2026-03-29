@@ -109,8 +109,8 @@ Each row in the registry must contain:
 |---|---|---|
 | Phase 0 | `VERIFIED` | phase 0 gate complete |
 | Phase 1 | `VERIFIED` | phase 1 gate complete |
-| Phase 2 | `READY_TO_START` | phase 1 gate verified |
-| Phase 3 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 2 gate is verified |
+| Phase 2 | `VERIFIED` | phase 2 gate complete |
+| Phase 3 | `READY_TO_START` | phase 2 gate verified |
 | Phase 4 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 3 gate is verified |
 | Phase 5 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 4 gate is verified |
 | Phase 6 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 5/6 preconditions are satisfied |
@@ -152,9 +152,9 @@ Each row in the registry must contain:
 | PKT-RLS-003 | Regenerate current release summary | VERIFIED | Codex | workspace | needs PKT-RLS-002 VERIFIED | 09, packet | 2026-03-29 | tests: tests/integration/release/test_current_summary.py |
 | PKT-RLS-004 | Generate audit + check-in summaries | VERIFIED | Codex | workspace | needs PKT-RLS-002 + PKT-RLS-003 VERIFIED | 09, packet | 2026-03-29 | tests: tests/integration/release/test_audit_summary.py; fixtures: audit-summary.sample.md, checkin.sample.md |
 | PKT-RLS-005 | Finalize release with exactly-once append | VERIFIED | Codex | workspace | needs PKT-RLS-002 + PKT-RLS-003 + PKT-RLS-004 VERIFIED | 09, 10, packet | 2026-03-29 | tests: tests/e2e/release/test_finalize.py; fixture: finalize-checkpoint.partial.json |
-| PKT-RLS-006 | Release Please baseline workflow/config management | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-LFC-003 + PKT-RLS-005 VERIFIED | 10, 23, packet | 2026-03-29 | |
-| PKT-RLS-007 | Convert legacy changelog/history to ledger events | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-LFC-005 + PKT-RLS-001 VERIFIED | 09, 15, packet | 2026-03-29 | |
-| PKT-RLS-008 | End-to-end release flow integration tests | WAITING_ON_DEPENDENCIES | Unassigned | - | needs all Phase 2 RLS packets VERIFIED | 24, packet | 2026-03-29 | |
+| PKT-RLS-006 | Release Please baseline workflow/config management | VERIFIED | Codex | workspace | needs PKT-LFC-003 + PKT-RLS-005 VERIFIED | 10, 23, packet | 2026-03-29 | tests: tests/integration/release/test_release_please_management.py; fixtures: release-please-*.sample.yml |
+| PKT-RLS-007 | Convert legacy changelog/history to ledger events | VERIFIED | Codex | workspace | needs PKT-LFC-005 + PKT-RLS-001 VERIFIED | 09, 15, packet | 2026-03-29 | tests: tests/integration/release/test_history_import.py; fixture: legacy-changelog.sample.md |
+| PKT-RLS-008 | End-to-end release flow integration tests | VERIFIED | Codex | workspace | needs all Phase 2 RLS packets VERIFIED | 24, packet | 2026-03-29 | tests: tests/integration/release/test_end_to_end_release_flow.py |
 
 ### Later phases
 

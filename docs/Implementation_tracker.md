@@ -178,3 +178,6 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-29 | Phase 2 | PKT-RLS-003 | VERIFIED | Current release summary regeneration |
 | 2026-03-29 | Phase 2 | PKT-RLS-004 | VERIFIED | Audit + check-in summaries |
 | 2026-03-29 | Phase 2 | PKT-RLS-005 | VERIFIED | Finalize release exactly-once append |
+| 2026-03-29 | Phase 2 | PKT-RLS-006 | VERIFIED | Release Please baseline workflow management |
+| 2026-03-29 | Phase 2 | PKT-RLS-007 | VERIFIED | Legacy changelog import |
+| 2026-03-29 | Phase 2 | PKT-RLS-008 | VERIFIED | End-to-end release flow tests |
