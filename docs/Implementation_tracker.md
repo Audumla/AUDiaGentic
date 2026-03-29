@@ -185,3 +185,4 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-30 | Phase 3 | PKT-JOB-002 | VERIFIED | Workflow profile loader + validator; tests: tests/unit/jobs/test_profiles.py; fixtures: workflow-overrides.*.yaml |
 | 2026-03-30 | Phase 3 | PKT-JOB-003 | VERIFIED | Packet runner; tests: tests/integration/jobs/test_packet_runner.py |
 | 2026-03-30 | Phase 3 | PKT-JOB-004 | VERIFIED | Stage execution contract + persistence; tests: tests/unit/jobs/test_stage_contract.py; fixtures: stage-result.*.json |
+| 2026-03-30 | Phase 3 | PKT-JOB-005 | VERIFIED | Job approvals + timeout handling; tests: tests/integration/jobs/test_job_approvals.py |
