@@ -5,6 +5,9 @@
 ### config
 - [chg_20260330_0018] Added schemas for provider health checks and stage results.
 
+### docs
+- [chg_20260330_0019] Added progress report for Phase 3-4 completion.
+
 ### feature
 - [chg_20260330_0001] Added initial job persistence and state machine with tests.
 - [chg_20260330_0002] Added workflow profile loading and override validation.
