@@ -183,3 +183,4 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-29 | Phase 2 | PKT-RLS-008 | VERIFIED | End-to-end release flow tests |
 | 2026-03-30 | Phase 3 | PKT-JOB-001 | VERIFIED | Job record store + state machine; tests: tests/unit/jobs/test_state_machine.py |
 | 2026-03-30 | Phase 3 | PKT-JOB-002 | VERIFIED | Workflow profile loader + validator; tests: tests/unit/jobs/test_profiles.py; fixtures: workflow-overrides.*.yaml |
+| 2026-03-30 | Phase 3 | PKT-JOB-003 | VERIFIED | Packet runner; tests: tests/integration/jobs/test_packet_runner.py |
