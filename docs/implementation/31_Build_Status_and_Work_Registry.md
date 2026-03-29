@@ -163,8 +163,8 @@ Each row in the registry must contain:
 | PKT-JOB-001 | Job record store and state machine | VERIFIED | Codex | workspace | needs PKT-FND-002 + PKT-LFC-003 VERIFIED | 03, 05, packet | 2026-03-30 | tests: tests/unit/jobs/test_state_machine.py |
 | PKT-JOB-002 | Workflow profile loader and validator | VERIFIED | Codex | workspace | needs PKT-FND-002 + PKT-JOB-001 VERIFIED | 03, 05, packet | 2026-03-30 | tests: tests/unit/jobs/test_profiles.py; fixtures: workflow-overrides.*.yaml |
 | PKT-JOB-003 | Packet runner | VERIFIED | Codex | workspace | needs PKT-JOB-001 + PKT-JOB-002 VERIFIED | 03, 05, packet | 2026-03-30 | tests: tests/integration/jobs/test_packet_runner.py |
-| PKT-JOB-004 | Stage execution contract + stage output persistence | READY_TO_START | — | — | needs PKT-JOB-003 VERIFIED | 03, 05, packet | 2026-03-30 | |
-| PKT-JOB-005 | Approvals and timeouts inside jobs | WAITING_ON_DEPENDENCIES | — | — | needs PKT-JOB-001 + PKT-JOB-004 VERIFIED | 03, 05, packet | 2026-03-30 | |
+| PKT-JOB-004 | Stage execution contract + stage output persistence | VERIFIED | Codex | workspace | needs PKT-JOB-003 VERIFIED | 03, 05, packet | 2026-03-30 | tests: tests/unit/jobs/test_stage_contract.py; fixtures: stage-result.*.json; runner updated for stage persistence |
+| PKT-JOB-005 | Approvals and timeouts inside jobs | READY_TO_START | — | — | needs PKT-JOB-001 + PKT-JOB-004 VERIFIED | 03, 05, packet | 2026-03-30 | |
 | PKT-JOB-006 | Release script integration from jobs | WAITING_ON_DEPENDENCIES | — | — | needs PKT-JOB-003 + PKT-RLS-001/003/004 VERIFIED | 03, 05, packet | 2026-03-30 | |
 
 ### Later phases
