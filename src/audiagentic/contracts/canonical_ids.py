@@ -38,6 +38,8 @@ CANONICAL_SCHEMA_IDS = (
     "project-config",
     "provider-config",
     "provider-descriptor",
+    "provider-health",
+    "stage-result",
     "validation-report",
 )
 
