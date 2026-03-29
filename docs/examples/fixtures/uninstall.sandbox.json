@@ -1,0 +1,4 @@
+{
+  "sandbox": "uninstall-default",
+  "expected": "runtime removed, configs preserved"
+}
