@@ -181,3 +181,4 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-29 | Phase 2 | PKT-RLS-006 | VERIFIED | Release Please baseline workflow management |
 | 2026-03-29 | Phase 2 | PKT-RLS-007 | VERIFIED | Legacy changelog import |
 | 2026-03-29 | Phase 2 | PKT-RLS-008 | VERIFIED | End-to-end release flow tests |
+| 2026-03-30 | Phase 3 | PKT-JOB-001 | VERIFIED | Job record store + state machine; tests: tests/unit/jobs/test_state_machine.py |
