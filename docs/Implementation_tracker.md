@@ -173,3 +173,4 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-29 | Phase 1 | PKT-LFC-005 | VERIFIED | Legacy cutover apply + report tests |
 | 2026-03-29 | Phase 1 | PKT-LFC-006 | VERIFIED | Uninstall semantics + e2e tests |
 | 2026-03-29 | Phase 1 | PKT-LFC-007 | VERIFIED | Doc migration classification + report tests |
+| 2026-03-29 | Phase 2 | PKT-RLS-001 | VERIFIED | Fragment recorder + unit tests |
