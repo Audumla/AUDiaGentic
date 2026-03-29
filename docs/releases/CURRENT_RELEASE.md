@@ -18,6 +18,7 @@
 - [chg_20260330_0013] Added copilot provider adapter stub.
 - [chg_20260330_0014] Added continue provider adapter stub.
 - [chg_20260330_0015] Added cline provider adapter stub.
+- [chg_20260330_0017] Added optional server seam for in-process job execution.
 
 ### tests
 - [chg_20260330_0016] Added provider/job seam tests.
