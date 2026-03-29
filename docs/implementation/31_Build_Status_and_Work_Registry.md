@@ -110,7 +110,7 @@ Each row in the registry must contain:
 | Phase 0 | `VERIFIED` | phase 0 gate complete |
 | Phase 1 | `VERIFIED` | phase 1 gate complete |
 | Phase 2 | `VERIFIED` | phase 2 gate complete |
-| Phase 3 | `READY_TO_START` | phase 2 gate verified |
+| Phase 3 | `IN_PROGRESS` | PKT-JOB-001 in progress |
 | Phase 4 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 3 gate is verified |
 | Phase 5 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 4 gate is verified |
 | Phase 6 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 5/6 preconditions are satisfied |
@@ -156,13 +156,23 @@ Each row in the registry must contain:
 | PKT-RLS-007 | Convert legacy changelog/history to ledger events | VERIFIED | Codex | workspace | needs PKT-LFC-005 + PKT-RLS-001 VERIFIED | 09, 15, packet | 2026-03-29 | tests: tests/integration/release/test_history_import.py; fixture: legacy-changelog.sample.md |
 | PKT-RLS-008 | End-to-end release flow integration tests | VERIFIED | Codex | workspace | needs all Phase 2 RLS packets VERIFIED | 24, packet | 2026-03-29 | tests: tests/integration/release/test_end_to_end_release_flow.py |
 
+### Phase 3 — Jobs and Simple Workflows
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-JOB-001 | Job record store and state machine | VERIFIED | Codex | workspace | needs PKT-FND-002 + PKT-LFC-003 VERIFIED | 03, 05, packet | 2026-03-30 | tests: tests/unit/jobs/test_state_machine.py |
+| PKT-JOB-002 | Workflow profile loader and validator | READY_TO_START | — | — | needs PKT-FND-002 + PKT-JOB-001 VERIFIED | 03, 05, packet | 2026-03-30 | |
+| PKT-JOB-003 | Packet runner | WAITING_ON_DEPENDENCIES | — | — | needs PKT-JOB-001 + PKT-JOB-002 VERIFIED | 03, 05, packet | 2026-03-30 | |
+| PKT-JOB-004 | Stage execution contract + stage output persistence | WAITING_ON_DEPENDENCIES | — | — | needs PKT-JOB-003 VERIFIED | 03, 05, packet | 2026-03-30 | |
+| PKT-JOB-005 | Approvals and timeouts inside jobs | WAITING_ON_DEPENDENCIES | — | — | needs PKT-JOB-001 + PKT-JOB-004 VERIFIED | 03, 05, packet | 2026-03-30 | |
+| PKT-JOB-006 | Release script integration from jobs | WAITING_ON_DEPENDENCIES | — | — | needs PKT-JOB-003 + PKT-RLS-001/003/004 VERIFIED | 03, 05, packet | 2026-03-30 | |
+
 ### Later phases
 
 Later phases should continue this registry pattern using the same fields and status rules. Work may be listed now as `WAITING_ON_DEPENDENCIES`, but active claiming should not occur until earlier phase gates are closed.
 
 | Phase | Packets | Current State |
 |---|---|---|
-| Phase 3 | PKT-JOB-001 .. PKT-JOB-006 | WAITING_ON_DEPENDENCIES |
 | Phase 4 | PKT-PRV-001 .. PKT-PRV-010, PKT-SRV-001 | WAITING_ON_DEPENDENCIES |
 | Phase 5 | PKT-DSC-001 .. PKT-DSC-004 | WAITING_ON_DEPENDENCIES |
 | Phase 6 | PKT-MIG-001 .. PKT-MIG-003 | WAITING_ON_DEPENDENCIES |
