@@ -140,7 +140,7 @@ Each row in the registry must contain:
 | PKT-LFC-003 | Fresh install apply + validate | VERIFIED | Codex | workspace | needs PKT-LFC-001 + PKT-LFC-002 VERIFIED | 05, packet | 2026-03-29 | tests: tests/e2e/lifecycle/test_fresh_install.py; fixture: fresh-install.sandbox.json |
 | PKT-LFC-004 | Update dispatcher + version selection | VERIFIED | Codex | workspace | needs PKT-LFC-001 + PKT-LFC-002 VERIFIED | 05, packet | 2026-03-29 | tests: tests/unit/lifecycle/test_update_dispatch.py; fixture: update-dispatch.sample.json |
 | PKT-LFC-005 | Legacy cutover | VERIFIED | Codex | workspace | needs PKT-LFC-001 + PKT-LFC-002 + PKT-LFC-003 VERIFIED | 05, 15, packet | 2026-03-29 | tests: tests/e2e/lifecycle/test_cutover.py; fixture: legacy-cutover.sandbox.json |
-| PKT-LFC-006 | Uninstall current AUDiaGentic | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-LFC-003 + PKT-LFC-004 VERIFIED | 05, packet | 2026-03-29 | |
+| PKT-LFC-006 | Uninstall current AUDiaGentic | VERIFIED | Codex | workspace | needs PKT-LFC-003 + PKT-LFC-004 VERIFIED | 05, packet | 2026-03-29 | tests: tests/e2e/lifecycle/test_uninstall.py; fixture: uninstall.sandbox.json |
 | PKT-LFC-007 | Document migration outcomes + reports | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-LFC-005 VERIFIED | 15, packet | 2026-03-29 | |
 
 ### Phase 2 — Release / Audit / Ledger / Release Please
