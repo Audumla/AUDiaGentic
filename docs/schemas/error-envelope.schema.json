@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "ok",
+    "error-code",
+    "error-kind",
+    "message",
+    "details"
+  ],
+  "properties": {
+    "contract-version": {"const": "v1"},
+    "ok": {"const": false},
+    "error-code": {"type": "string"},
+    "error-kind": {
+      "type": "string",
+      "enum": ["validation", "business-rule", "io", "external", "internal"]
+    },
+    "message": {"type": "string"},
+    "details": {"type": "object"}
+  }
+}

@@ -26,6 +26,8 @@ def _schema_path_for_fixture(fixture_path: Path) -> Path:
         stem = name[: -len(".invalid.json")]
     else:
         raise ValueError("fixture file must end in .valid.json or .invalid.json")
+    if "." in stem:
+        stem = stem.split(".", 1)[0]
     return SCHEMA_DIR / f"{stem}.schema.json"
 
 

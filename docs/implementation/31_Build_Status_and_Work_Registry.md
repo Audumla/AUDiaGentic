@@ -123,12 +123,12 @@ Each row in the registry must contain:
 
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
-| PKT-FND-001 | Canonical IDs + naming validator | VERIFIED | Codex | workspace | none | 03, 06, packet | 2026-03-29 | tests: tests/unit/contracts/test_validate_ids.py; fixtures: docs/examples/fixtures/canonical-ids.valid.json |
-| PKT-FND-002 | Schema package + validator | VERIFIED | Codex | workspace | needs PKT-FND-001 VERIFIED | 03, 06, packet | 2026-03-29 | tests: tests/unit/contracts/test_schema_validation.py; fixtures: docs/examples/fixtures/*.valid.json + *.invalid.json |
+| PKT-FND-001 | Canonical IDs + naming validator | VERIFIED | Codex | workspace | none | 03, 06, packet | 2026-03-29 | tests: tests/unit/contracts/test_validate_ids.py; fixtures: docs/examples/fixtures/canonical-ids.sample.json; schemas: installed-state,error-envelope |
+| PKT-FND-002 | Schema package + validator | VERIFIED | Codex | workspace | needs PKT-FND-001 VERIFIED | 03, 06, packet | 2026-03-29 | tests: tests/unit/contracts/test_schema_validation.py; fixtures: docs/examples/fixtures/*.valid.json + *.invalid.json; schema map supports dotted fixture names |
 | PKT-FND-003 | File ownership matrix + glossary | VERIFIED | Codex | workspace | needs PKT-FND-001 VERIFIED | 18, 19, packet | 2026-03-29 | tests: tests/unit/contracts/test_docs_consistency.py; fixtures: docs/examples/fixtures/ownership-matrix.sample.json |
 | PKT-FND-004 | Example project scaffold | VERIFIED | Codex | workspace | needs PKT-FND-002 + PKT-FND-003 VERIFIED | 04, packet | 2026-03-29 | tests: tests/integration/test_example_scaffold.py; tool: tools/seed_example_project.py |
 | PKT-FND-005 | Lifecycle CLI stub + checkpoints | VERIFIED | Codex | workspace | needs PKT-FND-002 + PKT-FND-004 VERIFIED | 05, packet | 2026-03-29 | tests: tests/integration/lifecycle/test_stub.py; tools: tools/lifecycle_stub.py |
-| PKT-FND-006 | Error envelope + error codes | VERIFIED | Codex | workspace | needs PKT-FND-002 VERIFIED | 20, packet | 2026-03-29 | tests: tests/unit/contracts/test_error_envelope.py; fixtures: docs/examples/fixtures/error-envelope.*.json |
+| PKT-FND-006 | Error envelope + error codes | VERIFIED | Codex | workspace | needs PKT-FND-002 VERIFIED | 20, packet | 2026-03-29 | tests: tests/unit/contracts/test_error_envelope.py; fixtures: docs/examples/fixtures/error-envelope.*.json; schema added |
 | PKT-FND-007 | CI validators + packet dependency validation | VERIFIED | Codex | workspace | needs PKT-FND-001 + PKT-FND-002 + PKT-FND-006 VERIFIED | 19, 20, packet | 2026-03-29 | tests: tests/integration/contracts/test_ci_validators.py; workflows: ci-contracts.yml, ci-tests.yml, ci-destructive-plan.yml |
 
 ### Phase 1 — Lifecycle and Project Enablement
@@ -136,7 +136,7 @@ Each row in the registry must contain:
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
 | PKT-LFC-001 | Installed-state detector | VERIFIED | Codex | workspace | needs Phase 0 VERIFIED | 05, 07, packet | 2026-03-29 | tests: tests/unit/lifecycle/test_detector.py; fixtures: docs/examples/fixtures/installed-state.fixtures.json |
-| PKT-LFC-002 | Lifecycle manifest + checkpoint writer | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-LFC-001 VERIFIED | 05, packet | 2026-03-29 | |
+| PKT-LFC-002 | Lifecycle manifest + checkpoint writer | VERIFIED | Codex | workspace | needs PKT-LFC-001 VERIFIED | 05, packet | 2026-03-29 | tests: tests/unit/lifecycle/test_manifest.py; fixtures: installed-state.*.json; checkpoints updated |
 | PKT-LFC-003 | Fresh install apply + validate | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-LFC-001 + PKT-LFC-002 VERIFIED | 05, packet | 2026-03-29 | |
 | PKT-LFC-004 | Update dispatcher + version selection | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-LFC-001 + PKT-LFC-002 VERIFIED | 05, packet | 2026-03-29 | |
 | PKT-LFC-005 | Legacy cutover | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-LFC-001 + PKT-LFC-002 + PKT-LFC-003 VERIFIED | 05, 15, packet | 2026-03-29 | |
