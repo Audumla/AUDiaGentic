@@ -23,6 +23,7 @@
         "claude",
         "codex",
         "gemini",
+        "qwen",
         "copilot",
         "continue",
         "cline"

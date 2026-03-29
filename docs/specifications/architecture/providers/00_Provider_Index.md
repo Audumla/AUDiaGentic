@@ -9,3 +9,4 @@ Provider docs define how each provider maps onto the common provider contract.
 - [Copilot](05_Copilot.md)
 - [Continue](06_Continue.md)
 - [Cline](07_Cline.md)
+- [Qwen](08_Qwen.md)
