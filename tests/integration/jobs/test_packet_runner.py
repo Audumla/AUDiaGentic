@@ -10,6 +10,7 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.jobs.packet_runner import run_packet
+from audiagentic.jobs.stages import stage_output_path
 from audiagentic.jobs.store import job_record_path
 from tests.helpers import sandbox as sandbox_helper
 
@@ -19,7 +20,7 @@ def test_packet_runner_executes_stages_in_order(tmp_path: Path) -> None:
     try:
         seen: list[str] = []
 
-        def stage_executor(job, stage, ctx, previous_output):
+        def stage_handler(job, stage, ctx, previous_output):
             seen.append(stage["id"])
             return {
                 "stage-result": "success",
@@ -34,12 +35,14 @@ def test_packet_runner_executes_stages_in_order(tmp_path: Path) -> None:
             provider_id="local-openai",
             workflow_profile="lite",
             job_id="job_20260330_0001",
-            stage_executor=stage_executor,
+            stage_handler=stage_handler,
             now_fn=lambda: "2026-03-30T00:00:00Z",
         )
         assert seen == ["plan", "implement", "summary"]
         assert result["state"] == "completed"
         assert job_record_path(sandbox.repo, "job_20260330_0001").exists()
+        for stage_id in seen:
+            assert stage_output_path(sandbox.repo, "job_20260330_0001", stage_id).exists()
     finally:
         sandbox.cleanup()
 
@@ -47,7 +50,7 @@ def test_packet_runner_executes_stages_in_order(tmp_path: Path) -> None:
 def test_packet_runner_handles_required_stage_failure(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "packet-runner-failure")
     try:
-        def stage_executor(job, stage, ctx, previous_output):
+        def stage_handler(job, stage, ctx, previous_output):
             if stage["id"] == "implement":
                 return {
                     "stage-result": "failure",
@@ -67,7 +70,7 @@ def test_packet_runner_handles_required_stage_failure(tmp_path: Path) -> None:
             provider_id="local-openai",
             workflow_profile="lite",
             job_id="job_20260330_0002",
-            stage_executor=stage_executor,
+            stage_handler=stage_handler,
             now_fn=lambda: "2026-03-30T00:00:00Z",
         )
         assert result["state"] == "failed"

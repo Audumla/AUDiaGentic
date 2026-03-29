@@ -20,7 +20,9 @@ This packet is placed in Phase 3 because later packets depend on its outputs and
 This packet owns the following implementation surface:
 
 - `src/audiagentic/jobs/stages.py`
+- `src/audiagentic/jobs/packet_runner.py`
 - `tests/unit/jobs/test_stage_contract.py`
+- `tests/integration/jobs/test_packet_runner.py`
 
 ### It may read from
 - frozen contracts in `docs/specifications/architecture/`

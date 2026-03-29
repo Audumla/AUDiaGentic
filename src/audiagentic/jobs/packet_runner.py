@@ -12,8 +12,8 @@ from audiagentic.jobs import store
 from audiagentic.jobs.profiles import load_profile
 from audiagentic.jobs.records import build_job_record
 from audiagentic.jobs.state_machine import transition_and_persist
+from audiagentic.jobs.stages import StageHandler, execute_stage
 
-StageExecutor = Callable[[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any] | None], dict[str, Any]]
 ProviderAdapter = Callable[[dict[str, Any]], dict[str, Any]]
 
 
@@ -48,7 +48,7 @@ def _stub_provider(packet_ctx: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _stub_stage_executor(
+def _stub_stage_handler(
     job_record: dict[str, Any],
     stage: dict[str, Any],
     packet_ctx: dict[str, Any],
@@ -83,7 +83,7 @@ def run_packet(
     workflow_profile: str,
     job_id: str | None = None,
     overrides: dict[str, Any] | None = None,
-    stage_executor: StageExecutor | None = None,
+    stage_handler: StageHandler | None = None,
     provider_adapter: ProviderAdapter | None = None,
     now_fn: Callable[[], str] | None = None,
 ) -> dict[str, Any]:
@@ -120,14 +120,22 @@ def run_packet(
     }
     provider_result = (provider_adapter or _stub_provider)(packet_ctx)
 
-    executor = stage_executor or _stub_stage_executor
+    handler = stage_handler or _stub_stage_handler
     previous_output: dict[str, Any] | None = None
     transition_and_persist(project_root, job_id, "running", now_fn=now_fn)
     for stage in profile["stages"]:
         if stage.get("enabled") is False and not stage.get("required", False):
             continue
         stage_input = {"provider-result": provider_result}
-        output = executor(record, stage, packet_ctx, previous_output | stage_input if previous_output else stage_input)
+        envelope = execute_stage(
+            project_root,
+            job_record=record,
+            stage=stage,
+            packet_ctx=packet_ctx,
+            handler=handler,
+            previous_output=previous_output | stage_input if previous_output else stage_input,
+        )
+        output = envelope["output"]
         previous_output = output
         if output.get("stage-result") == "failure":
             if stage.get("required", False):
