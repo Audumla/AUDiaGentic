@@ -9,3 +9,4 @@
 - [chg_20260330_0004] Added stage output persistence for job workflows.
 - [chg_20260330_0005] Added job approval tracking with expiration handling.
 - [chg_20260330_0006] Added job release bridge to update the change ledger.
+- [chg_20260330_0007] Added provider registry and documented qwen provider support.

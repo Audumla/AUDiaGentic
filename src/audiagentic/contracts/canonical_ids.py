@@ -10,6 +10,7 @@ CANONICAL_PROVIDER_IDS = (
     "claude",
     "codex",
     "gemini",
+    "qwen",
     "copilot",
     "continue",
     "cline",

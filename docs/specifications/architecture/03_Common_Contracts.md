@@ -17,6 +17,7 @@ This document defines the canonical ids, schemas, return types, and contract rul
 - `claude`
 - `codex`
 - `gemini`
+- `qwen`
 - `copilot`
 - `continue`
 - `cline`
