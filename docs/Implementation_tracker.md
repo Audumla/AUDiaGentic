@@ -177,3 +177,4 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-29 | Phase 2 | PKT-RLS-002 | VERIFIED | Ledger sync + lock integration tests (exit code anomaly noted) |
 | 2026-03-29 | Phase 2 | PKT-RLS-003 | VERIFIED | Current release summary regeneration |
 | 2026-03-29 | Phase 2 | PKT-RLS-004 | VERIFIED | Audit + check-in summaries |
+| 2026-03-29 | Phase 2 | PKT-RLS-005 | VERIFIED | Finalize release exactly-once append |
