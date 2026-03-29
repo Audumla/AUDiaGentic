@@ -2,6 +2,9 @@
 
 ## Changes
 
+### config
+- [chg_20260330_0018] Added schemas for provider health checks and stage results.
+
 ### feature
 - [chg_20260330_0001] Added initial job persistence and state machine with tests.
 - [chg_20260330_0002] Added workflow profile loading and override validation.
