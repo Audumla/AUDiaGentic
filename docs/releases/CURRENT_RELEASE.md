@@ -13,3 +13,4 @@
 - [chg_20260330_0008] Added provider health checks and selection logic.
 - [chg_20260330_0009] Added local-openai adapter stub for provider execution.
 - [chg_20260330_0010] Added claude provider adapter stub.
+- [chg_20260330_0011] Added codex provider adapter stub.
