@@ -150,7 +150,7 @@ Each row in the registry must contain:
 | PKT-RLS-001 | Record fragment per change event | VERIFIED | Codex | workspace | needs Phase 1 VERIFIED | 09, 13, packet | 2026-03-29 | tests: tests/unit/release/test_fragments.py |
 | PKT-RLS-002 | Sync current release ledger with lock + manifest | VERIFIED | Codex | workspace | needs PKT-RLS-001 VERIFIED | 09, packet | 2026-03-29 | tests: tests/integration/release/test_sync.py |
 | PKT-RLS-003 | Regenerate current release summary | VERIFIED | Codex | workspace | needs PKT-RLS-002 VERIFIED | 09, packet | 2026-03-29 | tests: tests/integration/release/test_current_summary.py |
-| PKT-RLS-004 | Generate audit + check-in summaries | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-RLS-002 + PKT-RLS-003 VERIFIED | 09, packet | 2026-03-29 | |
+| PKT-RLS-004 | Generate audit + check-in summaries | VERIFIED | Codex | workspace | needs PKT-RLS-002 + PKT-RLS-003 VERIFIED | 09, packet | 2026-03-29 | tests: tests/integration/release/test_audit_summary.py; fixtures: audit-summary.sample.md, checkin.sample.md |
 | PKT-RLS-005 | Finalize release with exactly-once append | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-RLS-002 + PKT-RLS-003 + PKT-RLS-004 VERIFIED | 09, 10, packet | 2026-03-29 | |
 | PKT-RLS-006 | Release Please baseline workflow/config management | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-LFC-003 + PKT-RLS-005 VERIFIED | 10, 23, packet | 2026-03-29 | |
 | PKT-RLS-007 | Convert legacy changelog/history to ledger events | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-LFC-005 + PKT-RLS-001 VERIFIED | 09, 15, packet | 2026-03-29 | |
