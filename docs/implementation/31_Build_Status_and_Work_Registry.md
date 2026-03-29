@@ -110,7 +110,7 @@ Each row in the registry must contain:
 | Phase 0 | `VERIFIED` | phase 0 gate complete |
 | Phase 1 | `VERIFIED` | phase 1 gate complete |
 | Phase 2 | `VERIFIED` | phase 2 gate complete |
-| Phase 3 | `IN_PROGRESS` | PKT-JOB-001 in progress |
+| Phase 3 | `IN_PROGRESS` | PKT-JOB-002 in progress |
 | Phase 4 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 3 gate is verified |
 | Phase 5 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 4 gate is verified |
 | Phase 6 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 5/6 preconditions are satisfied |
@@ -161,8 +161,8 @@ Each row in the registry must contain:
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
 | PKT-JOB-001 | Job record store and state machine | VERIFIED | Codex | workspace | needs PKT-FND-002 + PKT-LFC-003 VERIFIED | 03, 05, packet | 2026-03-30 | tests: tests/unit/jobs/test_state_machine.py |
-| PKT-JOB-002 | Workflow profile loader and validator | READY_TO_START | — | — | needs PKT-FND-002 + PKT-JOB-001 VERIFIED | 03, 05, packet | 2026-03-30 | |
-| PKT-JOB-003 | Packet runner | WAITING_ON_DEPENDENCIES | — | — | needs PKT-JOB-001 + PKT-JOB-002 VERIFIED | 03, 05, packet | 2026-03-30 | |
+| PKT-JOB-002 | Workflow profile loader and validator | VERIFIED | Codex | workspace | needs PKT-FND-002 + PKT-JOB-001 VERIFIED | 03, 05, packet | 2026-03-30 | tests: tests/unit/jobs/test_profiles.py; fixtures: workflow-overrides.*.yaml |
+| PKT-JOB-003 | Packet runner | READY_TO_START | — | — | needs PKT-JOB-001 + PKT-JOB-002 VERIFIED | 03, 05, packet | 2026-03-30 | |
 | PKT-JOB-004 | Stage execution contract + stage output persistence | WAITING_ON_DEPENDENCIES | — | — | needs PKT-JOB-003 VERIFIED | 03, 05, packet | 2026-03-30 | |
 | PKT-JOB-005 | Approvals and timeouts inside jobs | WAITING_ON_DEPENDENCIES | — | — | needs PKT-JOB-001 + PKT-JOB-004 VERIFIED | 03, 05, packet | 2026-03-30 | |
 | PKT-JOB-006 | Release script integration from jobs | WAITING_ON_DEPENDENCIES | — | — | needs PKT-JOB-003 + PKT-RLS-001/003/004 VERIFIED | 03, 05, packet | 2026-03-30 | |
