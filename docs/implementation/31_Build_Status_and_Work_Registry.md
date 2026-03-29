@@ -108,8 +108,8 @@ Each row in the registry must contain:
 | Phase | State | Notes |
 |---|---|---|
 | Phase 0 | `VERIFIED` | phase 0 gate complete |
-| Phase 1 | `IN_PROGRESS` | PKT-LFC-001 verified |
-| Phase 2 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 1 gate is verified |
+| Phase 1 | `VERIFIED` | phase 1 gate complete |
+| Phase 2 | `READY_TO_START` | phase 1 gate verified |
 | Phase 3 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 2 gate is verified |
 | Phase 4 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 3 gate is verified |
 | Phase 5 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 4 gate is verified |
@@ -141,7 +141,7 @@ Each row in the registry must contain:
 | PKT-LFC-004 | Update dispatcher + version selection | VERIFIED | Codex | workspace | needs PKT-LFC-001 + PKT-LFC-002 VERIFIED | 05, packet | 2026-03-29 | tests: tests/unit/lifecycle/test_update_dispatch.py; fixture: update-dispatch.sample.json |
 | PKT-LFC-005 | Legacy cutover | VERIFIED | Codex | workspace | needs PKT-LFC-001 + PKT-LFC-002 + PKT-LFC-003 VERIFIED | 05, 15, packet | 2026-03-29 | tests: tests/e2e/lifecycle/test_cutover.py; fixture: legacy-cutover.sandbox.json |
 | PKT-LFC-006 | Uninstall current AUDiaGentic | VERIFIED | Codex | workspace | needs PKT-LFC-003 + PKT-LFC-004 VERIFIED | 05, packet | 2026-03-29 | tests: tests/e2e/lifecycle/test_uninstall.py; fixture: uninstall.sandbox.json |
-| PKT-LFC-007 | Document migration outcomes + reports | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-LFC-005 VERIFIED | 15, packet | 2026-03-29 | |
+| PKT-LFC-007 | Document migration outcomes + reports | VERIFIED | Codex | workspace | needs PKT-LFC-005 VERIFIED | 15, packet | 2026-03-29 | tests: tests/integration/lifecycle/test_doc_migration.py; fixture: doc-migration.sample.json |
 
 ### Phase 2 — Release / Audit / Ledger / Release Please
 
