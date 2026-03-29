@@ -176,16 +176,16 @@ Later phases should continue this registry pattern using the same fields and sta
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
 | PKT-PRV-001 | Provider registry and descriptor validation | VERIFIED | Codex | workspace | needs PKT-FND-001 + PKT-FND-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/unit/providers/test_registry.py |
-| PKT-PRV-002 | Provider selection and health check service | READY_TO_START | — | — | needs PKT-PRV-001 + PKT-JOB-003 VERIFIED | 03, 06, packet | 2026-03-30 | |
-| PKT-PRV-003 | local-openai provider adapter | WAITING_ON_DEPENDENCIES | — | — | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
-| PKT-PRV-004 | claude provider adapter | WAITING_ON_DEPENDENCIES | — | — | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
-| PKT-PRV-005 | codex provider adapter | WAITING_ON_DEPENDENCIES | — | — | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
-| PKT-PRV-006 | gemini provider adapter | WAITING_ON_DEPENDENCIES | — | — | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
-| PKT-PRV-007 | copilot provider adapter | WAITING_ON_DEPENDENCIES | — | — | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
-| PKT-PRV-008 | continue provider adapter | WAITING_ON_DEPENDENCIES | — | — | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
-| PKT-PRV-009 | cline provider adapter | WAITING_ON_DEPENDENCIES | — | — | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
-| PKT-PRV-010 | Job/provider integration seam tests | WAITING_ON_DEPENDENCIES | — | — | needs PKT-PRV-002 + PKT-JOB-003 VERIFIED | 03, 06, packet | 2026-03-30 | |
-| PKT-SRV-001 | Optional server seam foundation | WAITING_ON_DEPENDENCIES | — | — | needs PKT-JOB-006 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
+| PKT-PRV-002 | Provider selection and health check service | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-JOB-003 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_selection.py; fixtures: provider-health.*.json |
+| PKT-PRV-003 | local-openai provider adapter | READY_TO_START | — | — | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
+| PKT-PRV-004 | claude provider adapter | READY_TO_START | — | — | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
+| PKT-PRV-005 | codex provider adapter | READY_TO_START | — | — | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
+| PKT-PRV-006 | gemini provider adapter | READY_TO_START | — | — | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
+| PKT-PRV-007 | copilot provider adapter | READY_TO_START | — | — | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
+| PKT-PRV-008 | continue provider adapter | READY_TO_START | — | — | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
+| PKT-PRV-009 | cline provider adapter | READY_TO_START | — | — | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
+| PKT-PRV-010 | Job/provider integration seam tests | READY_TO_START | — | — | needs PKT-PRV-002 + PKT-JOB-003 VERIFIED | 03, 06, packet | 2026-03-30 | |
+| PKT-SRV-001 | Optional server seam foundation | READY_TO_START | — | — | needs PKT-JOB-006 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | |
 
 ### Later phases
 
