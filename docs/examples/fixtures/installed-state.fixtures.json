@@ -1,0 +1,8 @@
+{
+  "states": [
+    {"state": "none", "markers": []},
+    {"state": "legacy-only", "markers": ["docs/releases/CHANGELOG.md"]},
+    {"state": "audiagentic-current", "markers": [".audiagentic/installed.json", ".audiagentic/project.yaml"]},
+    {"state": "mixed-or-invalid", "markers": ["docs/releases/CHANGELOG.md", ".audiagentic/project.yaml"]}
+  ]
+}

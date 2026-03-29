@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "event-id",
+    "timestamp-utc",
+    "project-id",
+    "source",
+    "change-class",
+    "files",
+    "diff-stats",
+    "technical-summary",
+    "user-summary-candidate",
+    "status"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "event-id": {
+      "type": "string"
+    },
+    "timestamp-utc": {
+      "type": "string"
+    },
+    "project-id": {
+      "type": "string"
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "kind",
+        "provider-id",
+        "surface",
+        "session-id",
+        "job-id",
+        "packet-id"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "interactive-prompt",
+            "job-run",
+            "workflow-stage",
+            "manual-script",
+            "release-finalization"
+          ]
+        },
+        "provider-id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "surface": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session-id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "job-id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "packet-id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "change-class": {
+      "type": "string",
+      "enum": [
+        "feature",
+        "code-fix",
+        "refactor",
+        "docs",
+        "tests",
+        "config",
+        "release",
+        "audit",
+        "workflow"
+      ]
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "diff-stats": {
+      "type": "object",
+      "required": [
+        "files-changed",
+        "insertions",
+        "deletions"
+      ],
+      "properties": {
+        "files-changed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "insertions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deletions": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "technical-summary": {
+      "type": "string"
+    },
+    "user-summary-candidate": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "unreleased",
+        "released"
+      ]
+    }
+  }
+}

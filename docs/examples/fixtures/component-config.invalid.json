@@ -1,0 +1,7 @@
+{
+  "contract-version": "v1",
+  "components": {
+    "core-lifecycle": {"enabled": true},
+    "release-audit-ledger": {"enabled": true}
+  }
+}

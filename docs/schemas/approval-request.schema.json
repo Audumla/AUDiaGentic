@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "approval-id",
+    "project-id",
+    "kind",
+    "source-kind",
+    "source-id",
+    "summary",
+    "state",
+    "requested-at",
+    "expires-at"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "approval-id": {
+      "type": "string"
+    },
+    "project-id": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "source-kind": {
+      "type": "string"
+    },
+    "source-id": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "rejected",
+        "expired",
+        "cancelled"
+      ]
+    },
+    "requested-at": {
+      "type": "string"
+    },
+    "expires-at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

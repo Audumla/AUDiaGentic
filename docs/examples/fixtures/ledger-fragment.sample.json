@@ -1,0 +1,26 @@
+{
+  "contract-version": "v1",
+  "event-id": "chg_20260329_0001",
+  "timestamp-utc": "2026-03-29T00:00:00Z",
+  "project-id": "my-project",
+  "source": {
+    "kind": "interactive-prompt",
+    "provider-id": "claude",
+    "surface": "vscode",
+    "session-id": "sess_001",
+    "job-id": null,
+    "packet-id": null
+  },
+  "change-class": "code-fix",
+  "files": [
+    "src/core/ledger.py"
+  ],
+  "diff-stats": {
+    "files-changed": 1,
+    "insertions": 12,
+    "deletions": 2
+  },
+  "technical-summary": "Added ledger sync lock timeout handling.",
+  "user-summary-candidate": "Improved ledger sync safety.",
+  "status": "unreleased"
+}

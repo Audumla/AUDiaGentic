@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "event-id",
+    "event-type",
+    "project-id",
+    "source-kind",
+    "source-id"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "event-id": {
+      "type": "string"
+    },
+    "event-type": {
+      "type": "string"
+    },
+    "project-id": {
+      "type": "string"
+    },
+    "source-kind": {
+      "type": "string"
+    },
+    "source-id": {
+      "type": "string"
+    },
+    "occurred-at": {
+      "type": "string"
+    },
+    "payload": {
+      "type": "object"
+    }
+  }
+}

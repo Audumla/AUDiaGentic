@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "mode",
+    "status",
+    "completed-operations",
+    "warnings",
+    "checkpoint-dir"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "apply",
+        "update",
+        "cutover",
+        "uninstall"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "failure",
+        "partial"
+      ]
+    },
+    "completed-operations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "checkpoint-dir": {
+      "type": "string"
+    }
+  }
+}

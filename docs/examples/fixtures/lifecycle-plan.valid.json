@@ -1,0 +1,8 @@
+{
+  "contract-version": "v1",
+  "mode": "plan",
+  "state-classification": "legacy-only",
+  "operations": ["scan-project"],
+  "warnings": [],
+  "blocking-errors": []
+}

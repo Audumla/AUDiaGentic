@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "mode",
+    "state-classification",
+    "operations",
+    "warnings",
+    "blocking-errors"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "mode": {
+      "const": "plan"
+    },
+    "state-classification": {
+      "type": "string"
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "blocking-errors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
