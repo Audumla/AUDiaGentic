@@ -15,3 +15,4 @@
 - [chg_20260330_0010] Added claude provider adapter stub.
 - [chg_20260330_0011] Added codex provider adapter stub.
 - [chg_20260330_0012] Added gemini provider adapter stub.
+- [chg_20260330_0013] Added copilot provider adapter stub.

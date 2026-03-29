@@ -193,4 +193,5 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-30 | Phase 4 | PKT-PRV-004 | VERIFIED | claude adapter; tests: tests/integration/providers/test_claude.py |
 | 2026-03-30 | Phase 4 | PKT-PRV-005 | VERIFIED | codex adapter; tests: tests/integration/providers/test_codex.py |
 | 2026-03-30 | Phase 4 | PKT-PRV-006 | VERIFIED | gemini adapter; tests: tests/integration/providers/test_gemini.py |
-| 2026-03-30 | Phase 4 | PKT-PRV-007 | IN_PROGRESS | copilot adapter started |
+| 2026-03-30 | Phase 4 | PKT-PRV-007 | VERIFIED | copilot adapter; tests: tests/integration/providers/test_copilot.py |
+| 2026-03-30 | Phase 4 | PKT-PRV-008 | IN_PROGRESS | continue adapter started |
