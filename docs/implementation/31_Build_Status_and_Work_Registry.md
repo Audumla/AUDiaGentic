@@ -111,7 +111,7 @@ Each row in the registry must contain:
 | Phase 1 | `VERIFIED` | phase 1 gate complete |
 | Phase 2 | `VERIFIED` | phase 2 gate complete |
 | Phase 3 | `VERIFIED` | phase 3 gate complete |
-| Phase 4 | `IN_PROGRESS` | PKT-SRV-001 in progress |
+| Phase 4 | `VERIFIED` | phase 4 gate complete |
 | Phase 5 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 4 gate is verified |
 | Phase 6 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 5/6 preconditions are satisfied |
 
@@ -185,7 +185,7 @@ Later phases should continue this registry pattern using the same fields and sta
 | PKT-PRV-008 | continue provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_continue.py |
 | PKT-PRV-009 | cline provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_cline.py |
 | PKT-PRV-010 | Job/provider integration seam tests | VERIFIED | Codex | workspace | needs PKT-PRV-002 + PKT-JOB-003 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_job_provider_seam.py |
-| PKT-SRV-001 | Optional server seam foundation | IN_PROGRESS | Codex | workspace | needs PKT-JOB-006 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | implementing server seam |
+| PKT-SRV-001 | Optional server seam foundation | VERIFIED | Codex | workspace | needs PKT-JOB-006 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/unit/server/test_service_boundary.py; fixture: server-seam.request.json |
 
 ### Later phases
 

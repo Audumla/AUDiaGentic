@@ -197,4 +197,4 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-30 | Phase 4 | PKT-PRV-008 | VERIFIED | continue adapter; tests: tests/integration/providers/test_continue.py |
 | 2026-03-30 | Phase 4 | PKT-PRV-009 | VERIFIED | cline adapter; tests: tests/integration/providers/test_cline.py |
 | 2026-03-30 | Phase 4 | PKT-PRV-010 | VERIFIED | provider/job seam tests; tests: tests/integration/providers/test_job_provider_seam.py |
-| 2026-03-30 | Phase 4 | PKT-SRV-001 | IN_PROGRESS | optional server seam started |
+| 2026-03-30 | Phase 4 | PKT-SRV-001 | VERIFIED | optional server seam; tests: tests/unit/server/test_service_boundary.py |
