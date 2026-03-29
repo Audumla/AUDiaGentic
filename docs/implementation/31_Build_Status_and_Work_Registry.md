@@ -137,7 +137,7 @@ Each row in the registry must contain:
 |---|---|---|---|---|---|---|---|---|
 | PKT-LFC-001 | Installed-state detector | VERIFIED | Codex | workspace | needs Phase 0 VERIFIED | 05, 07, packet | 2026-03-29 | tests: tests/unit/lifecycle/test_detector.py; fixtures: docs/examples/fixtures/installed-state.fixtures.json |
 | PKT-LFC-002 | Lifecycle manifest + checkpoint writer | VERIFIED | Codex | workspace | needs PKT-LFC-001 VERIFIED | 05, packet | 2026-03-29 | tests: tests/unit/lifecycle/test_manifest.py; fixtures: installed-state.*.json; checkpoints updated |
-| PKT-LFC-003 | Fresh install apply + validate | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-LFC-001 + PKT-LFC-002 VERIFIED | 05, packet | 2026-03-29 | |
+| PKT-LFC-003 | Fresh install apply + validate | VERIFIED | Codex | workspace | needs PKT-LFC-001 + PKT-LFC-002 VERIFIED | 05, packet | 2026-03-29 | tests: tests/e2e/lifecycle/test_fresh_install.py; fixture: fresh-install.sandbox.json |
 | PKT-LFC-004 | Update dispatcher + version selection | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-LFC-001 + PKT-LFC-002 VERIFIED | 05, packet | 2026-03-29 | |
 | PKT-LFC-005 | Legacy cutover | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-LFC-001 + PKT-LFC-002 + PKT-LFC-003 VERIFIED | 05, 15, packet | 2026-03-29 | |
 | PKT-LFC-006 | Uninstall current AUDiaGentic | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-LFC-003 + PKT-LFC-004 VERIFIED | 05, packet | 2026-03-29 | |
