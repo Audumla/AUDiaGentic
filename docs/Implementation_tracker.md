@@ -169,3 +169,4 @@ If one of these is missing, the correct action is to clarify the state first —
 |---|---|---|---|---|
 | 2026-03-29 | Phase 1 | PKT-LFC-002 | VERIFIED | Manifest + checkpoint semantics; installed-state schema + error-envelope schema added |
 | 2026-03-29 | Phase 1 | PKT-LFC-003 | VERIFIED | Fresh install apply + e2e tests | 
+| 2026-03-29 | Phase 1 | PKT-LFC-004 | VERIFIED | Update dispatch module + unit tests |
