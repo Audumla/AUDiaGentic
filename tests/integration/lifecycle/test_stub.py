@@ -26,7 +26,8 @@ def test_stub_writes_expected_checkpoints(tmp_path: Path) -> None:
         payload = lifecycle_stub.run_stub("plan", sandbox.repo)
         assert payload["mode"] == "plan"
         checkpoint = _read_checkpoint(sandbox.repo, "detected")
-        assert checkpoint == payload
+        assert checkpoint["phase"] == "detected"
+        assert checkpoint["payload"] == payload
     finally:
         sandbox.cleanup()
 
@@ -51,7 +52,7 @@ def test_stub_idempotent_plan(tmp_path: Path) -> None:
         second = lifecycle_stub.run_stub("plan", sandbox.repo)
         assert first == second
         checkpoint = _read_checkpoint(sandbox.repo, "detected")
-        assert checkpoint == second
+        assert checkpoint["payload"] == second
     finally:
         sandbox.cleanup()
 

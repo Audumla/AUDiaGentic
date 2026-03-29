@@ -160,3 +160,11 @@ A packet is safe to begin only when:
 - you understand the ownership boundary and outputs
 
 If one of these is missing, the correct action is to clarify the state first — not to start coding.
+
+---
+
+## Active Progress
+
+| Date | Phase | Packet | Status | Notes |
+|---|---|---|---|---|
+| 2026-03-29 | Phase 1 | PKT-LFC-002 | VERIFIED | Manifest + checkpoint semantics; installed-state schema + error-envelope schema added |
