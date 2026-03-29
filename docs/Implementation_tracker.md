@@ -191,4 +191,5 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-30 | Phase 4 | PKT-PRV-002 | VERIFIED | Provider selection + health checks; tests: tests/integration/providers/test_selection.py |
 | 2026-03-30 | Phase 4 | PKT-PRV-003 | VERIFIED | local-openai adapter; tests: tests/integration/providers/test_local_openai.py |
 | 2026-03-30 | Phase 4 | PKT-PRV-004 | VERIFIED | claude adapter; tests: tests/integration/providers/test_claude.py |
-| 2026-03-30 | Phase 4 | PKT-PRV-005 | IN_PROGRESS | codex adapter started |
+| 2026-03-30 | Phase 4 | PKT-PRV-005 | VERIFIED | codex adapter; tests: tests/integration/providers/test_codex.py |
+| 2026-03-30 | Phase 4 | PKT-PRV-006 | IN_PROGRESS | gemini adapter started |
