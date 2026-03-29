@@ -1,0 +1,7 @@
+{
+  "samples": [
+    {"source": "docs/releases/CHANGELOG.md", "result": "migrated"},
+    {"source": "docs/mixed_notes/release_and_design.md", "result": "copied-for-review"},
+    {"source": "notes/tmp.md", "result": "skipped-ambiguous"}
+  ]
+}
