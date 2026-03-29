@@ -11,3 +11,4 @@
 - [chg_20260330_0006] Added job release bridge to update the change ledger.
 - [chg_20260330_0007] Added provider registry and documented qwen provider support.
 - [chg_20260330_0008] Added provider health checks and selection logic.
+- [chg_20260330_0009] Added local-openai adapter stub for provider execution.

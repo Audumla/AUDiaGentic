@@ -189,3 +189,5 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-30 | Phase 3 | PKT-JOB-006 | VERIFIED | Release bridge integration; tests: tests/integration/jobs/test_release_bridge.py |
 | 2026-03-30 | Phase 4 | PKT-PRV-001 | VERIFIED | Provider registry + descriptor validation; tests: tests/unit/providers/test_registry.py |
 | 2026-03-30 | Phase 4 | PKT-PRV-002 | VERIFIED | Provider selection + health checks; tests: tests/integration/providers/test_selection.py |
+| 2026-03-30 | Phase 4 | PKT-PRV-003 | VERIFIED | local-openai adapter; tests: tests/integration/providers/test_local_openai.py |
+| 2026-03-30 | Phase 4 | PKT-PRV-004 | IN_PROGRESS | claude adapter started |
