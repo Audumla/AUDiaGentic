@@ -1,0 +1,5 @@
+{
+  "sandbox": "legacy-cutover",
+  "legacy-markers": ["docs/releases/CHANGELOG.md", ".github/workflows/release-please.yml"],
+  "notes": "Legacy-only repo with release-please workflow"
+}
