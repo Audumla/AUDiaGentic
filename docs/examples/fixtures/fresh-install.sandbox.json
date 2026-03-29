@@ -1,0 +1,5 @@
+{
+  "sandbox": "fresh-install",
+  "project-root": "<tmp>/sandbox-fresh-install/repo",
+  "notes": "Empty repo with .git only"
+}
