@@ -147,7 +147,7 @@ Each row in the registry must contain:
 
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
-| PKT-RLS-001 | Record fragment per change event | WAITING_ON_DEPENDENCIES | Unassigned | - | needs Phase 1 VERIFIED | 09, 13, packet | 2026-03-29 | |
+| PKT-RLS-001 | Record fragment per change event | VERIFIED | Codex | workspace | needs Phase 1 VERIFIED | 09, 13, packet | 2026-03-29 | tests: tests/unit/release/test_fragments.py |
 | PKT-RLS-002 | Sync current release ledger with lock + manifest | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-RLS-001 VERIFIED | 09, packet | 2026-03-29 | |
 | PKT-RLS-003 | Regenerate current release summary | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-RLS-002 VERIFIED | 09, packet | 2026-03-29 | |
 | PKT-RLS-004 | Generate audit + check-in summaries | WAITING_ON_DEPENDENCIES | Unassigned | - | needs PKT-RLS-002 + PKT-RLS-003 VERIFIED | 09, packet | 2026-03-29 | |
