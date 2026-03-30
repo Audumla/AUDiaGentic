@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "provider-id",
+    "fetched-at",
+    "source",
+    "models"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "provider-id": {
+      "type": "string"
+    },
+    "fetched-at": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "cli",
+        "api",
+        "static"
+      ]
+    },
+    "models": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "model-id",
+          "status",
+          "supports-structured-output",
+          "context-window"
+        ],
+        "properties": {
+          "model-id": {
+            "type": "string"
+          },
+          "display-name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "deprecated",
+              "experimental"
+            ]
+          },
+          "supports-structured-output": {
+            "type": "boolean"
+          },
+          "context-window": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

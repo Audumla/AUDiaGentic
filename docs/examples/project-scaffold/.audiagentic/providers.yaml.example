@@ -6,3 +6,173 @@ providers:
     access-mode: none
     base-url: http://localhost:8000/v1
     default-model: qwen-coder
+    model-aliases:
+      fast: qwen-coder
+      balanced: qwen-plus
+      deep: qwen-max
+      review: qwen-max
+      code: qwen-coder
+      reasoning: qwen-max
+      long: qwen-max
+    catalog-refresh:
+      source: static
+      max-age-hours: 168
+    prompt-surface:
+      enabled: true
+      tag-syntax: prefix-token-v1
+      first-line-policy: first-non-empty-line
+      cli-mode: bridge-wrapper
+      vscode-mode: bridge-wrapper
+      settings-profile: openai-bridge-prompt-tags-v1
+  qwen:
+    enabled: true
+    install-mode: external-configured
+    access-mode: cli
+    default-model: qwen-coder
+    model-aliases:
+      fast: qwen-coder
+      balanced: qwen-plus
+      deep: qwen-max
+      review: qwen-max
+      code: qwen-coder
+      reasoning: qwen-max
+      long: qwen-max
+    catalog-refresh:
+      source: cli
+      max-age-hours: 168
+    prompt-surface:
+      enabled: true
+      tag-syntax: prefix-token-v1
+      first-line-policy: first-non-empty-line
+      cli-mode: bridge-wrapper
+      vscode-mode: bridge-wrapper
+      settings-profile: openai-bridge-prompt-tags-v1
+  codex:
+    enabled: true
+    install-mode: external-configured
+    access-mode: cli
+    default-model: gpt-5.4-mini
+    model-aliases:
+      fast: gpt-5.4-mini
+      balanced: gpt-5.4-mini
+      deep: gpt-5.4
+      review: gpt-5.4
+      code: gpt-5.4-mini
+      reasoning: gpt-5.4
+      long: gpt-5.4
+    catalog-refresh:
+      source: cli
+      max-age-hours: 168
+    prompt-surface:
+      enabled: true
+      tag-syntax: prefix-token-v1
+      first-line-policy: first-non-empty-line
+      cli-mode: wrapper-normalize
+      vscode-mode: extension-normalize
+      settings-profile: codex-prompt-tags-v1
+  claude:
+    enabled: true
+    install-mode: external-configured
+    access-mode: cli
+    default-model: sonnet
+    model-aliases:
+      fast: sonnet
+      balanced: sonnet
+      deep: opus
+      review: opus
+      code: sonnet
+      reasoning: opus
+      long: opus
+    catalog-refresh:
+      source: cli
+      max-age-hours: 168
+    prompt-surface:
+      enabled: true
+      tag-syntax: prefix-token-v1
+      first-line-policy: first-non-empty-line
+      cli-mode: wrapper-normalize
+      vscode-mode: extension-normalize
+      settings-profile: claude-prompt-tags-v1
+  gemini:
+    enabled: true
+    install-mode: external-configured
+    access-mode: cli
+    default-model: gemini-2.5-pro
+    model-aliases:
+      fast: gemini-2.5-flash
+      balanced: gemini-2.5-pro
+      deep: gemini-2.5-pro
+      review: gemini-2.5-pro
+      code: gemini-2.5-flash
+      reasoning: gemini-2.5-pro
+      long: gemini-2.5-pro
+    catalog-refresh:
+      source: cli
+      max-age-hours: 168
+    prompt-surface:
+      enabled: true
+      tag-syntax: prefix-token-v1
+      first-line-policy: first-non-empty-line
+      cli-mode: wrapper-normalize
+      vscode-mode: extension-normalize
+      settings-profile: gemini-prompt-tags-v1
+  copilot:
+    enabled: true
+    install-mode: external-configured
+    access-mode: cli
+    default-model: default
+    model-aliases:
+      fast: default
+      balanced: default
+      deep: default
+      review: default
+      code: default
+      reasoning: default
+    catalog-refresh:
+      source: cli
+      max-age-hours: 168
+    prompt-surface:
+      enabled: true
+      tag-syntax: prefix-token-v1
+      first-line-policy: first-non-empty-line
+      cli-mode: bridge-wrapper
+      vscode-mode: extension-normalize
+      settings-profile: copilot-prompt-tags-v1
+  continue:
+    enabled: false
+    install-mode: external-configured
+    access-mode: cli
+    default-model: default
+    model-aliases:
+      fast: default
+      balanced: default
+      deep: default
+      review: default
+      code: default
+      reasoning: default
+    catalog-refresh:
+      source: cli
+      max-age-hours: 168
+  cline:
+    enabled: true
+    install-mode: external-configured
+    access-mode: cli
+    default-model: gpt-5.4-mini
+    model-aliases:
+      fast: gpt-5.4-mini
+      balanced: gpt-5.4
+      deep: claude-sonnet-4-6
+      review: claude-sonnet-4-6
+      code: gpt-5.4-mini
+      reasoning: claude-sonnet-4-6
+      long: claude-sonnet-4-6
+    catalog-refresh:
+      source: cli
+      max-age-hours: 168
+    prompt-surface:
+      enabled: true
+      tag-syntax: prefix-token-v1
+      first-line-policy: first-non-empty-line
+      cli-mode: wrapper-normalize
+      vscode-mode: extension-normalize
+      settings-profile: cline-prompt-tags-v1

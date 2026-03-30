@@ -49,6 +49,63 @@
     },
     "supports-baseline-healthcheck": {
       "type": "boolean"
+    },
+    "supports-prompt-tag-launch": {
+      "type": "boolean"
+    },
+    "prompt-tag-syntaxes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "prefix-token-v1"
+        ]
+      }
+    },
+    "prompt-tag-cli-mode": {
+      "type": "string",
+      "enum": [
+        "native-pass-through",
+        "wrapper-normalize",
+        "extension-normalize",
+        "bridge-wrapper",
+        "unsupported"
+      ]
+    },
+    "prompt-tag-vscode-mode": {
+      "type": "string",
+      "enum": [
+        "native-pass-through",
+        "wrapper-normalize",
+        "extension-normalize",
+        "bridge-wrapper",
+        "unsupported"
+      ]
+    },
+    "requires-surface-settings-sync": {
+      "type": "boolean"
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "supports-prompt-tag-launch"
+        ],
+        "properties": {
+          "supports-prompt-tag-launch": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "prompt-tag-syntaxes",
+          "prompt-tag-cli-mode",
+          "prompt-tag-vscode-mode",
+          "requires-surface-settings-sync"
+        ]
+      }
+    }
+  ]
 }

@@ -27,9 +27,12 @@ Do not implement arbitrary workflow graphs in this phase.
 4. PKT-JOB-004 — stage execution contract and stage output persistence
 5. PKT-JOB-005 — approvals and timeouts inside jobs
 6. PKT-JOB-006 — release script integration from jobs
+7. PKT-JOB-011 — job control and running-job cancellation
 
 ## Exit gate
 
 - jobs can run `lite` end to end without providers
 - profile overrides validate
 - jobs do not write tracked docs directly except through owned release scripts
+- job cancellation remains a follow-on control path rather than a core workflow rewrite
+- job-control implementation can be reviewed independently from the core job lifecycle packets

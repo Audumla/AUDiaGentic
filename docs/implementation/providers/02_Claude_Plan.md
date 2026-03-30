@@ -33,3 +33,9 @@ class ClaudeAdapter:
 - adapter is selectable through provider registry
 - adapter passes health check tests
 - adapter returns normalized response shape
+
+## Follow-on prompt-trigger runbook
+
+The implementation-ready prompt-trigger path for Claude lives in
+`docs/implementation/providers/20_Claude_Prompt_Trigger_Runbook.md`.
+Use that runbook for the native hook rollout and smoke-test shape.

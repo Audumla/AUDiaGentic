@@ -36,9 +36,13 @@ CANONICAL_SCHEMA_IDS = (
     "lifecycle-plan",
     "lifecycle-result",
     "project-config",
+    "prompt-launch-request",
     "provider-config",
     "provider-descriptor",
+    "provider-model-catalog",
     "provider-health",
+    "review-bundle",
+    "review-report",
     "stage-result",
     "validation-report",
 )

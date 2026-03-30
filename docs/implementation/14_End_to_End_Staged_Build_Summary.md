@@ -36,6 +36,10 @@
 - Prompts can launch or resume workflow activities through explicit tags.
 - Review stages can validate another agent's output and feed findings back into the workflow.
 
+### After Phase 3.3
+- Prompt launch can use short action aliases and provider shorthand.
+- Provider-default model selection and default runtime subject generation reduce typing without changing the normalized launch contract.
+
 ### After Phase 4
 - Jobs can use concrete providers with health checks and selection.
 - Optional server seam exists but is not required.
@@ -44,9 +48,34 @@
 - Providers expose model catalogs and deterministic model selection.
 - Teams can switch models via aliases without changing job payloads.
 
+### After Phase 4.2
+- Provider status/validation commands can report config health, CLI availability, and catalog presence.
+- Provider diagnostics stay separate from the job launch contract.
+
+### After Phase 4.3
+- Provider surfaces can recognize prompt tags and normalize them into the frozen launch contract.
+- Provider-specific surface settings stay synchronized with the shared prompt-tag contract.
+
+### After Phase 4.4
+- Provider execution stays classified per provider without changing the shared grammar.
+- The provider-level implementation docs stay isolated so native-intercept, mapped-execution, and backend-only providers can be tested independently.
+
+### After Phase 4.6
+- Provider-owned prompt-trigger bridges and wrapper surfaces can launch the shared runner.
+- Each provider has a documented trigger path or fallback bridge path.
+- Prompt-trigger behavior stays isolated from the shared launch grammar.
+- Phase 5 can still proceed independently because prompt-trigger launch is a separate provider-layer concern.
+
+### After Phase 4.7
+- Provider availability can be probed and bootstrapped with explicit policy.
+- Missing providers can be auto-installed, prompted, skipped, or marked manual according to project config.
+- Provider install/bootstrap behavior stays isolated from provider execution and prompt-trigger behavior.
+- Project install can prepare provider surfaces earlier instead of failing only at launch time.
+
 ### After Phase 5
 - Discord can receive summaries, approvals, and notices.
 - Core behavior is unchanged when Discord is disabled.
+- Phase 5 is ready to implement once Phase 4.4 is verified and the packet headers are resolved.
 
 ### After Phase 6
 - Legacy projects can be migrated and cutover can be hardened with runbooks and reports.

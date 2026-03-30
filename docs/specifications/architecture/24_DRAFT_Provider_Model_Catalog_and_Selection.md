@@ -68,6 +68,7 @@ providers:
 Rules:
 - `default-model` remains the fallback when no job model is specified.
 - `model-aliases` lets teams switch model targets without changing job requests.
+- Providers may expose many aliases, not just `fast` and `deep`; common presets include `balanced`, `review`, `code`, `reasoning`, and `long`.
 - `catalog-refresh.max-age-hours` controls stale catalog warnings only (no automatic refresh in MVP).
 
 ## Model selection rules (DRAFT)

@@ -37,6 +37,9 @@ src/
       stages.py
       approvals.py
       release_bridge.py
+      prompt_parser.py
+      prompt_launch.py
+      reviews.py
     providers/
       registry.py
       selection.py

@@ -1,0 +1,26 @@
+{
+  "contract-version": "v1",
+  "prompt-id": "prm_20260330_0001",
+  "source": {
+    "kind": "interactive-prompt",
+    "surface": "vscode",
+    "provider-id": "codex",
+    "session-id": "sess_001",
+    "model-id": "gpt-5.4-mini",
+    "model-alias": "fast-default"
+  },
+  "tag": "implement",
+  "target": {
+    "kind": "packet",
+    "packet-id": "PKT-JOB-008"
+  },
+  "workflow-profile": "standard",
+  "existing-job-id": null,
+  "prompt-body": "Continue implementing the packet using the current docs.",
+  "review-policy": {
+    "required-reviews": 2,
+    "aggregation-rule": "all-pass",
+    "require-distinct-reviewers": true
+  },
+  "commit-scope": "proposal"
+}

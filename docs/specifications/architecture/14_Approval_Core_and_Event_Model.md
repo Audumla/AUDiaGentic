@@ -66,3 +66,8 @@ MVP rules:
 - overlays such as Discord consume by tailing/filtering project-local events
 - failure to publish an event must never mutate approval state retroactively
 - event rotation is local-log based; archival/export is a DRAFT future enhancement
+
+
+## Phase 3.2 additive review gating note
+
+Structured review does not replace the approval core. A `ReviewBundle` may satisfy a workflow's review requirement, but any later explicit approval step still flows through the approval service. Review evidence and approval state must remain separate contracts.

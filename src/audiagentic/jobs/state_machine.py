@@ -11,7 +11,7 @@ from audiagentic.jobs import store
 LEGAL_TRANSITIONS = {
     "created": {"ready"},
     "ready": {"running", "cancelled"},
-    "running": {"awaiting-approval", "completed", "failed"},
+    "running": {"awaiting-approval", "completed", "failed", "cancelled"},
     "awaiting-approval": {"running", "cancelled"},
     "completed": set(),
     "failed": set(),

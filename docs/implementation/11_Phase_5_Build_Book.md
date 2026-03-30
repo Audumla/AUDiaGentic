@@ -4,7 +4,7 @@ Discord is built last as an optional overlay. It consumes events and approval st
 
 ## Phase deliverables
 
-See the packet files for exact build steps.
+See the packet files for exact build steps. Phase 4.4 must be verified before this phase is claimed.
 
 ## Parallelization
 

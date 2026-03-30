@@ -28,6 +28,14 @@ class JobRecord:
     updated_at: str
     artifacts: list[dict[str, Any]]
     approvals: list[dict[str, Any]]
+    model_id: str | None = None
+    model_alias: str | None = None
+    default_model: str | None = None
+    launch_source: dict[str, Any] | None = None
+    launch_tag: str | None = None
+    launch_target: dict[str, Any] | None = None
+    review_policy: dict[str, Any] | None = None
+    review_bundle_id: str | None = None
 
 
 def _now_timestamp() -> str:
@@ -53,6 +61,14 @@ def build_job_record(
     updated_at: str | None = None,
     artifacts: list[dict[str, Any]] | None = None,
     approvals: list[dict[str, Any]] | None = None,
+    model_id: str | None = None,
+    model_alias: str | None = None,
+    default_model: str | None = None,
+    launch_source: dict[str, Any] | None = None,
+    launch_tag: str | None = None,
+    launch_target: dict[str, Any] | None = None,
+    review_policy: dict[str, Any] | None = None,
+    review_bundle_id: str | None = None,
 ) -> dict[str, Any]:
     timestamp = _now_timestamp()
     payload = {
@@ -68,6 +84,22 @@ def build_job_record(
         "artifacts": artifacts or [],
         "approvals": approvals or [],
     }
+    if model_id is not None:
+        payload["model-id"] = model_id
+    if model_alias is not None:
+        payload["model-alias"] = model_alias
+    if default_model is not None:
+        payload["default-model"] = default_model
+    if launch_source is not None:
+        payload["launch-source"] = launch_source
+    if launch_tag is not None:
+        payload["launch-tag"] = launch_tag
+    if launch_target is not None:
+        payload["launch-target"] = launch_target
+    if review_policy is not None:
+        payload["review-policy"] = review_policy
+    if review_bundle_id is not None:
+        payload["review-bundle-id"] = review_bundle_id
     issues = validate_job_record(payload)
     if issues:
         raise AudiaGenticError(
@@ -100,4 +132,12 @@ def coerce_job_record(payload: dict[str, Any]) -> JobRecord:
         updated_at=payload["updated-at"],
         artifacts=list(payload.get("artifacts", [])),
         approvals=list(payload.get("approvals", [])),
+        model_id=payload.get("model-id"),
+        model_alias=payload.get("model-alias"),
+        default_model=payload.get("default-model"),
+        launch_source=payload.get("launch-source"),
+        launch_tag=payload.get("launch-tag"),
+        launch_target=payload.get("launch-target"),
+        review_policy=payload.get("review-policy"),
+        review_bundle_id=payload.get("review-bundle-id"),
     )

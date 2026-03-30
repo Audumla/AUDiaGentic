@@ -38,7 +38,18 @@ Leaves behind:
 - updated schemas/fixtures for new contracts introduced by later phases
 - validation updates required by new tracked config fields
 
+
+### Phase 0.2 — Prompt/review contract extension
+Capture the additive contract, schema, and fixture work required by prompt-tagged launch and structured review without reopening base Phase 0 design.
+
+Leaves behind:
+- prompt launch envelope contract
+- review report and review bundle contracts
+- prompt-launch policy block in ProjectConfig
+- fixtures for ad hoc targets and multi-review aggregation
+
 ### Phase 1 — Lifecycle and project enablement
+
 Build installation, update, cutover, uninstall, and project enablement into `.audiagentic/`.
 
 Leaves behind:
@@ -55,7 +66,23 @@ Leaves behind:
 - lifecycle validation extensions required by new contracts
 - incremental install/update behavior fixes tied to new config fields
 
+
+### Phase 1.2 — Incremental lifecycle updates for prompt launch
+Capture tracked-config preservation and validation needed by prompt-launch policy fields.
+
+Leaves behind:
+- lifecycle validation for prompt-launch policy fields
+- stable `.audiagentic/project.yaml` handling for workflow overrides and review policy
+
+### Phase 1.3 — Provider auto-install policy persistence
+Capture tracked-config preservation and validation needed by provider auto-install and bootstrap policy fields.
+
+Leaves behind:
+- lifecycle validation for provider auto-install policy fields
+- stable `.audiagentic/providers.yaml` and `.audiagentic/project.yaml` handling for install/bootstrap policy fields
+
 ### Phase 2 — Release / audit / ledger / Release Please
+
 Build the release core independent of jobs.
 
 Leaves behind:
@@ -73,7 +100,16 @@ Leaves behind:
 - ledger or summary tweaks needed for new contracts
 - additional deterministic release artifacts required by later phases
 
+
+### Phase 2.2 — Incremental release/ledger updates for prompt/review metadata
+Capture deterministic omission/summarization rules for prompt provenance and review outputs.
+
+Leaves behind:
+- explicit release/audit handling for prompt/review metadata
+- deterministic check-in summary rules for review outcomes
+
 ### Phase 3 — Jobs and simple workflows
+
 Build a simple job engine that uses the release core instead of reimplementing it.
 
 Leaves behind:
@@ -91,13 +127,37 @@ Leaves behind:
 - new job validation or metadata required by providers or overlays
 - additional job artifacts required by model catalog and selection
 
+
 ### Phase 3.2 — Prompt-tagged workflow launch and review loop
-Add a prompt-tag driven launch path that can create or resume workflow activities from CLI or VS Code prompts.
+Add a prompt-tag driven launch path that can create or resume workflow activities from CLI or VS Code prompts, including generic ad hoc work and deterministic multi-review.
 
 Leaves behind:
 - prompt tag resolution for workflow activities
-- review-stage feedback loop artifacts
+- normalized prompt launch envelope
+- ad hoc target handling
+- structured review reports and review bundles
 - cross-prompt handoff rules for plan/implement/review
+- deterministic multi-review aggregation
+
+### Phase 3.3 — Prompt shorthand and default-launch enhancement
+Add ergonomic shorthand for prompt launch so a provider or short tag can be used without spelling out the full target block, while preserving the same normalized launch path.
+
+Leaves behind:
+- short action aliases for launch tags
+- provider shorthand launch parsing
+- default subject generation when target is omitted
+
+### Phase 3.4 — Job control and running-job cancellation
+Add a dedicated job-control path so pending, awaiting-approval, and actively running jobs can be cancelled deterministically without changing the prompt-launch contract.
+
+Leaves behind:
+- job-control request and runtime record
+- cooperative stop checks for running jobs
+- running-job cancellation state transitions
+- cancel/stop CLI or service surface
+- provider-default model resolution in launch flow
+- prompt-launch ergonomics tests and docs
+
 
 ### Phase 4 — Providers and optional server seam
 Add providers and an optional extraction boundary without changing earlier cores.
@@ -117,6 +177,55 @@ Leaves behind:
 - model alias and selection resolution
 - catalog refresh CLI
 - provider documentation updates for model guidance
+
+### Phase 4.2 — Provider status and validation
+Track provider status inspection, config validation, CLI availability checks, and catalog presence reporting without changing model-selection or surface rules.
+
+Leaves behind:
+- provider status CLI / validation command
+- CLI availability reporting
+- catalog presence and health reporting
+- deterministic config diagnostics for provider-backed surfaces
+
+### Phase 4.3 — Provider prompt-tag surface integration
+Add shared prompt-tag recognition and provider-surface synchronization so CLI and VS Code surfaces can normalize tagged prompts into the frozen launch contract.
+
+Leaves behind:
+- shared prompt-tag surface contract
+- provider config/descriptor prompt-surface fields
+- provider-specific surface settings profiles
+- prompt-tag surface rollout packets per provider
+
+### Phase 4.4 — Provider tag execution compliance and isolated provider implementation docs
+Add a provider-execution compliance model and per-provider implementation guides so each provider can be implemented and tested independently without changing the shared grammar.
+
+Leaves behind:
+- provider execution compliance model
+- provider conformance matrix
+- isolated provider implementation docs
+- provider-specific settings and smoke-test guidance
+- native-intercept / mapped-execution / backend-only classification notes
+
+### Phase 4.6 — Provider prompt-trigger launch behavior
+Add provider-owned prompt-trigger bridges and wrapper/instruction surfaces so a tagged prompt can actually launch the shared workflow runner from each provider's local integration path.
+
+Leaves behind:
+- shared prompt-trigger launch contract
+- provider instruction/bridge surface matrix
+- realistic provider rollout assessment
+- wrapper fallback and repo bridge guidance
+- provider-specific launch packets and smoke tests
+- a stable hook between provider instruction surfaces and `prompt-launch`
+
+### Phase 4.7 — Provider availability and auto-install orchestration
+Add provider availability checks and opt-in auto-install/bootstrap behavior so missing providers can be configured or prepared during project install instead of failing only at launch time.
+
+Leaves behind:
+- shared provider availability and install-policy contract
+- provider-specific install/bootstrapping guidance
+- repo-local bootstrap and re-check harness
+- install policy packets per provider
+- project-local install configuration examples
 
 ### Phase 5 — Discord overlay
 Add Discord as a true overlay using approval + events only.

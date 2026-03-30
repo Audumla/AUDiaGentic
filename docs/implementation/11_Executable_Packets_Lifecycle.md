@@ -12,3 +12,4 @@ These packets are the authoritative build sheets for Phase 1.
 - [PKT-LFC-006](packets/phase-1/PKT-LFC-006.md)
 - [PKT-LFC-007](packets/phase-1/PKT-LFC-007.md)
 - [PKT-LFC-008](packets/phase-1/PKT-LFC-008.md)
+- [PKT-LFC-010](packets/phase-1/PKT-LFC-010.md)

@@ -14,6 +14,40 @@ Begin with the **current build state**, then confirm the packet is available, th
 
 ---
 
+## Feature extension numbering
+
+This project records doc-changing feature extensions with a decimal suffix so later updates do not collide.
+
+Current extension slots:
+- `.1` = provider definition extensions, including access-mode and model catalog work
+- `.2` = prompt-tagged workflow launch, ad hoc execution, and structured review loop
+- `.3` = prompt shorthand and default-launch enhancements, including provider shorthand and inferred default subjects/models
+- `.4` = provider prompt-tag surface recognition and synchronization across provider surfaces
+- `.5` = provider tag execution compliance and isolated provider implementation docs
+- `.6` = provider prompt-trigger launch behavior, agent instruction surfaces, and wrapper/bridge invocation
+- `.7` = provider availability, auto-install, and bootstrap orchestration
+
+Do not invent a new suffix until the build registry and roadmap are updated first.
+
+---
+
+## Current operational starting point
+
+At the time of this pack:
+- `.1` work is complete
+- `.2` work is complete for the first executable pass, with `@adhoc` intentionally feature-gated
+- `.3` work is complete for the first shorthand/default-launch pass
+- `.4` shared surface-contract work is implemented
+- `.5` provider execution compliance docs are staged as the isolated provider-specific implementation layer
+- `.6` prompt-trigger launch behavior is drafted as the next feature slice
+- `.7` provider availability and auto-install orchestration is drafted as the next feature slice
+- Phase 5 Discord overlay packets are ready to start once claimed
+- the build registry is the source of truth for any remaining later-phase work
+
+That means a new implementor should begin by reading `31_Build_Status_and_Work_Registry.md` and then claim the next later-phase packet that is actually `READY_TO_START`.
+
+---
+
 ## Step-by-step startup procedure
 
 ### Step 1 — read the current build state
@@ -62,6 +96,7 @@ Suggested naming:
 - `pkt-fnd-001-<owner>`
 - `pkt-lfc-003-<owner>`
 - `pkt-rls-002-<owner>`
+- `pkt-job-008-<owner>`
 
 Do not mix multiple packets in the same branch unless the roadmap or phase lead explicitly approves it.
 
@@ -127,24 +162,46 @@ Do not work around the issue locally in code.
 
 ## Minimum reading set by packet type
 
-### For Phase 0 work
+### For Phase 0 / 0.1 / 0.2 work
 Read:
 - `27_Phase_0_Kickoff_Checklist.md`
 - `06_Phase_0_Build_Book.md`
+- `03_Common_Contracts.md`
+- `26_Prompt_Tagged_Workflow_Launch_and_Review_Extension.md` when working on `.2`
 - your packet file
-- relevant contract docs
 
-### For Phase 1 work
+### For Phase 1 / 1.1 / 1.2 work
 Read:
 - `07_Phase_1_Build_Book.md`
 - `05_Installation_Update_Cutover_and_Uninstall.md`
 - your packet file
 
-### For Phase 2 work
+### For Phase 2 / 2.1 / 2.2 work
 Read:
 - `08_Phase_2_Build_Book.md`
 - `09_Release_Audit_and_Change_Ledger.md`
 - `10_Release_Please_Baseline_Workflow_Management.md`
+- your packet file
+
+### For Phase 3 / 3.1 / 3.2 / 3.3 work
+Read:
+- `09_Phase_3_Build_Book.md`
+- `08_Agent_Jobs_MVP.md`
+- `12_Workflow_Profiles_and_Extensibility.md`
+- `35_Phase_3_2_Prompt_Tagged_Workflow_Launch_and_Review_Extension.md` when working on `.2`
+- `37_Phase_3_3_Prompt_Tagged_Workflow_Shortcuts_and_Defaults.md` when working on `.3`
+- your packet file
+
+### For Phase 4 / 4.1 / 4.2 / 4.3 work
+Read:
+- `06_Phase_4_Providers_and_Optional_Server_Foundation.md`
+- `10_Phase_4_Build_Book.md`
+- `27_Provider_Prompt_Tag_Recognition_and_Surface_Synchronization.md` when working on `.4`
+- `38_Phase_4_3_Provider_Prompt_Tag_Surface_Integration.md` when working on `.4`
+- `10_Prompt_Tag_Surface_Integration_Shared.md` when working on `.4`
+- `28_Provider_Tag_Execution_Compliance_Model.md` when working on `.5`
+- `11_Provider_Tag_Execution_Conformance_Matrix.md` when working on `.5`
+- `39_Phase_4_4_Provider_Tag_Execution_Implementation.md` when working on `.5`
 - your packet file
 
 ---

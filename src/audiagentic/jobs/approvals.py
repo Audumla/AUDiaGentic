@@ -12,6 +12,7 @@ from jsonschema import Draft202012Validator
 
 from audiagentic.contracts.errors import AudiaGenticError
 from audiagentic.jobs import store
+from audiagentic.jobs.reviews import read_review_bundle
 from audiagentic.jobs.state_machine import transition_and_persist
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -195,6 +196,16 @@ def request_job_approval(
             message="job must be running to request approval",
             details={"job-id": job_id, "state": job["state"]},
         )
+    review_bundle_id = job.get("review-bundle-id")
+    if review_bundle_id:
+        bundle = read_review_bundle(project_root, job_id)
+        if bundle["decision"] != "approved":
+            raise AudiaGenticError(
+                code="JOB-BUSINESS-005",
+                kind="business-rule",
+                message="review bundle is not approved",
+                details={"job-id": job_id, "decision": bundle["decision"]},
+            )
     approval = build_approval_request(
         approval_id=approval_id,
         project_id=project_id,
