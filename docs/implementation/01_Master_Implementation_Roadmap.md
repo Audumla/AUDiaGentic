@@ -31,6 +31,13 @@ Leaves behind:
 - lifecycle CLI stub
 - example project scaffold
 
+### Phase 0.1 — Incremental contract enhancements
+Capture follow-on contract/schema updates discovered after Phase 0 gate closes.
+
+Leaves behind:
+- updated schemas/fixtures for new contracts introduced by later phases
+- validation updates required by new tracked config fields
+
 ### Phase 1 — Lifecycle and project enablement
 Build installation, update, cutover, uninstall, and project enablement into `.audiagentic/`.
 
@@ -40,6 +47,13 @@ Leaves behind:
 - project-local config creation
 - migration reports
 - managed workflow file handling
+
+### Phase 1.1 — Incremental lifecycle enhancements
+Capture follow-on lifecycle updates needed by later phases without redesigning Phase 1 seams.
+
+Leaves behind:
+- lifecycle validation extensions required by new contracts
+- incremental install/update behavior fixes tied to new config fields
 
 ### Phase 2 — Release / audit / ledger / Release Please
 Build the release core independent of jobs.
@@ -52,6 +66,13 @@ Leaves behind:
 - finalization with exactly-once historical append
 - Release Please baseline workflow/config management
 
+### Phase 2.1 — Incremental release/ledger enhancements
+Capture release/ledger updates required by later phases while keeping Phase 2 contracts stable.
+
+Leaves behind:
+- ledger or summary tweaks needed for new contracts
+- additional deterministic release artifacts required by later phases
+
 ### Phase 3 — Jobs and simple workflows
 Build a simple job engine that uses the release core instead of reimplementing it.
 
@@ -63,6 +84,21 @@ Leaves behind:
 - approval handling inside jobs
 - release bridge from jobs to scripts
 
+### Phase 3.1 — Incremental job enhancements
+Capture job-layer updates required by later phases without redesigning Phase 3 seams.
+
+Leaves behind:
+- new job validation or metadata required by providers or overlays
+- additional job artifacts required by model catalog and selection
+
+### Phase 3.2 — Prompt-tagged workflow launch and review loop
+Add a prompt-tag driven launch path that can create or resume workflow activities from CLI or VS Code prompts.
+
+Leaves behind:
+- prompt tag resolution for workflow activities
+- review-stage feedback loop artifacts
+- cross-prompt handoff rules for plan/implement/review
+
 ### Phase 4 — Providers and optional server seam
 Add providers and an optional extraction boundary without changing earlier cores.
 
@@ -72,6 +108,15 @@ Leaves behind:
 - deterministic provider selection
 - provider adapters
 - optional service seam that can be ignored by default
+
+### Phase 4.1 — Provider model catalog and selection
+Extend provider capabilities with explicit model catalogs and model selection rules.
+
+Leaves behind:
+- provider model catalog contract
+- model alias and selection resolution
+- catalog refresh CLI
+- provider documentation updates for model guidance
 
 ### Phase 5 — Discord overlay
 Add Discord as a true overlay using approval + events only.

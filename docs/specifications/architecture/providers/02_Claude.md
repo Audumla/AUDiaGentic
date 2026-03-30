@@ -15,6 +15,11 @@ Optional premium provider for jobs and later higher-quality summaries.
 - supports baseline health check
 - supports job invocation through provider layer before any optional server work
 
+## Model catalog (Phase 4.1)
+
+Model catalog and selection rules are defined in `24_DRAFT_Provider_Model_Catalog_and_Selection.md`.
+Claude typically uses `access-mode: cli` or `env`, with catalog refresh sourced from CLI or API.
+
 ## Required provider-specific decisions before implementation
 - auth reference shape
 - health check command or request

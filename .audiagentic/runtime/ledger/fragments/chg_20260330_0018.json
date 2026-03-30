@@ -1,0 +1,28 @@
+{
+  "change-class": "config",
+  "contract-version": "v1",
+  "diff-stats": {
+    "deletions": 0,
+    "files-changed": 3,
+    "insertions": 80
+  },
+  "event-id": "chg_20260330_0018",
+  "files": [
+    "docs/schemas/provider-health.schema.json",
+    "docs/schemas/stage-result.schema.json",
+    "src/audiagentic/contracts/canonical_ids.py"
+  ],
+  "project-id": "audiagentic",
+  "source": {
+    "job-id": null,
+    "kind": "manual-script",
+    "packet-id": null,
+    "provider-id": "codex",
+    "session-id": "local",
+    "surface": "terminal"
+  },
+  "status": "unreleased",
+  "technical-summary": "Added provider-health and stage-result schemas and registered them as canonical.",
+  "timestamp-utc": "2026-03-29T14:35:19.737923Z",
+  "user-summary-candidate": "Added schemas for provider health checks and stage results."
+}

@@ -13,3 +13,4 @@ These packets are the authoritative build sheets for Phase 2.
 - [PKT-RLS-007](packets/phase-2/PKT-RLS-007.md)
 
 - [PKT-RLS-008](packets/phase-2/PKT-RLS-008.md)
+- [PKT-RLS-009](packets/phase-2/PKT-RLS-009.md)

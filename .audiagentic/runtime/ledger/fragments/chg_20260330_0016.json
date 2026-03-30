@@ -1,0 +1,28 @@
+{
+  "change-class": "tests",
+  "contract-version": "v1",
+  "diff-stats": {
+    "deletions": 4,
+    "files-changed": 3,
+    "insertions": 75
+  },
+  "event-id": "chg_20260330_0016",
+  "files": [
+    "tests/integration/providers/test_job_provider_seam.py",
+    "docs/Implementation_tracker.md",
+    "docs/implementation/31_Build_Status_and_Work_Registry.md"
+  ],
+  "project-id": "audiagentic",
+  "source": {
+    "job-id": null,
+    "kind": "interactive-prompt",
+    "packet-id": "PKT-PRV-010",
+    "provider-id": "codex",
+    "session-id": "local",
+    "surface": "terminal"
+  },
+  "status": "unreleased",
+  "technical-summary": "Added provider/job seam integration tests to ensure selection happens outside runner.",
+  "timestamp-utc": "2026-03-29T14:29:55.404792Z",
+  "user-summary-candidate": "Added provider/job seam tests."
+}

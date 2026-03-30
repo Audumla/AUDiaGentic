@@ -4,12 +4,14 @@
     "local-openai": {
       "enabled": true,
       "install-mode": "external-configured",
+      "access-mode": "none",
       "base-url": "http://localhost:8000/v1",
       "default-model": "qwen-coder"
     },
     "claude": {
       "enabled": false,
       "install-mode": "external-configured",
+      "access-mode": "env",
       "auth-ref": "env:ANTHROPIC_API_KEY"
     }
   }

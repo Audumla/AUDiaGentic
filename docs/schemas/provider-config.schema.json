@@ -15,7 +15,8 @@
         "type": "object",
         "required": [
           "enabled",
-          "install-mode"
+          "install-mode",
+          "access-mode"
         ],
         "properties": {
           "enabled": {
@@ -23,6 +24,14 @@
           },
           "install-mode": {
             "type": "string"
+          },
+          "access-mode": {
+            "type": "string",
+            "enum": [
+              "env",
+              "cli",
+              "none"
+            ]
           },
           "base-url": {
             "type": "string"
@@ -34,7 +43,23 @@
             "type": "string",
             "pattern": "^env:[A-Z0-9_]+$"
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "access-mode": {
+                  "const": "env"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "auth-ref"
+              ]
+            }
+          }
+        ]
       }
     }
   }

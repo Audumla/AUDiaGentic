@@ -4,6 +4,7 @@
     "claude": {
       "enabled": true,
       "install-mode": "external-configured",
+      "access-mode": "env",
       "auth-ref": "secret-key"
     }
   }

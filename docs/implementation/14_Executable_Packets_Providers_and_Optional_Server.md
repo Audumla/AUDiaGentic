@@ -16,3 +16,5 @@ These packets are the authoritative build sheets for Phase 4.
 - [PKT-SRV-001](packets/phase-4/PKT-SRV-001.md)
 
 - [PKT-PRV-010](packets/phase-4/PKT-PRV-010.md)
+- [PKT-PRV-011](packets/phase-4/PKT-PRV-011.md)
+- [PKT-PRV-012](packets/phase-4/PKT-PRV-012.md)

@@ -1,0 +1,32 @@
+{
+  "change-class": "feature",
+  "contract-version": "v1",
+  "diff-stats": {
+    "deletions": 10,
+    "files-changed": 7,
+    "insertions": 180
+  },
+  "event-id": "chg_20260330_0008",
+  "files": [
+    "src/audiagentic/providers/health.py",
+    "src/audiagentic/providers/selection.py",
+    "tests/integration/providers/test_selection.py",
+    "docs/examples/fixtures/provider-health.valid.json",
+    "docs/examples/fixtures/provider-health.invalid.json",
+    "docs/Implementation_tracker.md",
+    "docs/implementation/31_Build_Status_and_Work_Registry.md"
+  ],
+  "project-id": "audiagentic",
+  "source": {
+    "job-id": null,
+    "kind": "interactive-prompt",
+    "packet-id": "PKT-PRV-002",
+    "provider-id": "codex",
+    "session-id": "local",
+    "surface": "terminal"
+  },
+  "status": "unreleased",
+  "technical-summary": "Added provider health checks and selection logic with integration tests.",
+  "timestamp-utc": "2026-03-29T14:12:58.065641Z",
+  "user-summary-candidate": "Added provider health checks and selection logic."
+}

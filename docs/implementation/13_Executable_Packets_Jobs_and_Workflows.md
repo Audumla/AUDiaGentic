@@ -10,3 +10,5 @@ These packets are the authoritative build sheets for Phase 3.
 - [PKT-JOB-004](packets/phase-3/PKT-JOB-004.md)
 - [PKT-JOB-005](packets/phase-3/PKT-JOB-005.md)
 - [PKT-JOB-006](packets/phase-3/PKT-JOB-006.md)
+- [PKT-JOB-007](packets/phase-3/PKT-JOB-007.md)
+- [PKT-JOB-008](packets/phase-3/PKT-JOB-008.md)

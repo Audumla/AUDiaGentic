@@ -108,11 +108,17 @@ Each row in the registry must contain:
 | Phase | State | Notes |
 |---|---|---|
 | Phase 0 | `VERIFIED` | phase 0 gate complete |
+| Phase 0.1 | `READY_TO_START` | incremental contract/schema updates pending: access-mode, model catalog, job model fields |
 | Phase 1 | `VERIFIED` | phase 1 gate complete |
+| Phase 1.1 | `READY_TO_START` | incremental lifecycle updates pending: preserve new tracked config fields |
 | Phase 2 | `VERIFIED` | phase 2 gate complete |
+| Phase 2.1 | `READY_TO_START` | incremental release/ledger updates pending: summarize or ignore model/provider metadata explicitly |
 | Phase 3 | `VERIFIED` | phase 3 gate complete |
-| Phase 4 | `VERIFIED` | phase 4 gate complete |
-| Phase 5 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 4 gate is verified |
+| Phase 3.1 | `READY_TO_START` | incremental job updates pending: model-id, model-alias, provider-id forwarding |
+| Phase 3.2 | `DEFERRED_DRAFT` | prompt-tagged workflow launch and review loop pending design decisions |
+| Phase 4 | `VERIFIED` | phase 4 gate complete (access-mode contract update verified) |
+| Phase 4.1 | `READY_TO_START` | provider model catalog + selection extensions pending: catalog refresh, aliases, default-model resolution |
+| Phase 5 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 4.1 gate is verified |
 | Phase 6 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 5/6 preconditions are satisfied |
 
 ---
@@ -131,6 +137,12 @@ Each row in the registry must contain:
 | PKT-FND-006 | Error envelope + error codes | VERIFIED | Codex | workspace | needs PKT-FND-002 VERIFIED | 20, packet | 2026-03-29 | tests: tests/unit/contracts/test_error_envelope.py; fixtures: docs/examples/fixtures/error-envelope.*.json; schema added |
 | PKT-FND-007 | CI validators + packet dependency validation | VERIFIED | Codex | workspace | needs PKT-FND-001 + PKT-FND-002 + PKT-FND-006 VERIFIED | 19, 20, packet | 2026-03-29 | tests: tests/integration/contracts/test_ci_validators.py; workflows: ci-contracts.yml, ci-tests.yml, ci-destructive-plan.yml |
 
+### Phase 0.1 — Incremental Contract Updates
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-FND-008 | Contract/schema updates from later phases | READY_TO_START | unassigned | n/a | needs Phase 0 VERIFIED + PKT-PRV-011/012 specs | 03, 16, packet | 2026-03-30 | contracts: access-mode, model catalog, model-id/model-alias; schemas and fixtures reserved |
+
 ### Phase 1 — Lifecycle and Project Enablement
 
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
@@ -142,6 +154,12 @@ Each row in the registry must contain:
 | PKT-LFC-005 | Legacy cutover | VERIFIED | Codex | workspace | needs PKT-LFC-001 + PKT-LFC-002 + PKT-LFC-003 VERIFIED | 05, 15, packet | 2026-03-29 | tests: tests/e2e/lifecycle/test_cutover.py; fixture: legacy-cutover.sandbox.json |
 | PKT-LFC-006 | Uninstall current AUDiaGentic | VERIFIED | Codex | workspace | needs PKT-LFC-003 + PKT-LFC-004 VERIFIED | 05, packet | 2026-03-29 | tests: tests/e2e/lifecycle/test_uninstall.py; fixture: uninstall.sandbox.json |
 | PKT-LFC-007 | Document migration outcomes + reports | VERIFIED | Codex | workspace | needs PKT-LFC-005 VERIFIED | 15, packet | 2026-03-29 | tests: tests/integration/lifecycle/test_doc_migration.py; fixture: doc-migration.sample.json |
+
+### Phase 1.1 — Incremental Lifecycle Updates
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-LFC-008 | Lifecycle updates for new config fields | READY_TO_START | unassigned | n/a | needs Phase 1 VERIFIED + PKT-FND-008 | 05, packet | 2026-03-30 | preserve new tracked config fields in .audiagentic/project.yaml, .audiagentic/providers.yaml, installed.json |
 
 ### Phase 2 — Release / Audit / Ledger / Release Please
 
@@ -156,6 +174,12 @@ Each row in the registry must contain:
 | PKT-RLS-007 | Convert legacy changelog/history to ledger events | VERIFIED | Codex | workspace | needs PKT-LFC-005 + PKT-RLS-001 VERIFIED | 09, 15, packet | 2026-03-29 | tests: tests/integration/release/test_history_import.py; fixture: legacy-changelog.sample.md |
 | PKT-RLS-008 | End-to-end release flow integration tests | VERIFIED | Codex | workspace | needs all Phase 2 RLS packets VERIFIED | 24, packet | 2026-03-29 | tests: tests/integration/release/test_end_to_end_release_flow.py |
 
+### Phase 2.1 — Incremental Release/Ledger Updates
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-RLS-009 | Release updates for new contract fields | READY_TO_START | unassigned | n/a | needs Phase 2 VERIFIED + PKT-FND-008 | 09, 10, packet | 2026-03-30 | release docs to explicitly summarize or omit provider/model metadata |
+
 ### Phase 3 — Jobs and Simple Workflows
 
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
@@ -166,6 +190,18 @@ Each row in the registry must contain:
 | PKT-JOB-004 | Stage execution contract + stage output persistence | VERIFIED | Codex | workspace | needs PKT-JOB-003 VERIFIED | 03, 05, packet | 2026-03-30 | tests: tests/unit/jobs/test_stage_contract.py; fixtures: stage-result.*.json; runner updated for stage persistence |
 | PKT-JOB-005 | Approvals and timeouts inside jobs | VERIFIED | Codex | workspace | needs PKT-JOB-001 + PKT-JOB-004 VERIFIED | 03, 05, packet | 2026-03-30 | tests: tests/integration/jobs/test_job_approvals.py |
 | PKT-JOB-006 | Release script integration from jobs | VERIFIED | Codex | workspace | needs PKT-JOB-003 + PKT-RLS-001/003/004 VERIFIED | 03, 05, packet | 2026-03-30 | tests: tests/integration/jobs/test_release_bridge.py |
+
+### Phase 3.1 — Incremental Job Updates
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-JOB-007 | Job updates for provider model selection | READY_TO_START | unassigned | n/a | needs Phase 3 VERIFIED + PKT-PRV-012 | 08, 12, packet | 2026-03-30 | job fields: provider-id, model-id, model-alias, default-model |
+
+### Phase 3.2 — Prompt-Tagged Workflow Launch and Review Loop
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-JOB-008 | Prompt-tagged workflow launch and review loop | DEFERRED_DRAFT | unassigned | n/a | needs Phase 3 VERIFIED + design decisions | 08, 12, 25, packet | 2026-03-30 | prompt tags, CLI/VS Code provenance, review feedback loop |
 
 ### Later phases
 
@@ -185,7 +221,14 @@ Later phases should continue this registry pattern using the same fields and sta
 | PKT-PRV-008 | continue provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_continue.py |
 | PKT-PRV-009 | cline provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_cline.py |
 | PKT-PRV-010 | Job/provider integration seam tests | VERIFIED | Codex | workspace | needs PKT-PRV-002 + PKT-JOB-003 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_job_provider_seam.py |
+| PKT-PRV-011 | Provider access-mode contract + health config rules | VERIFIED | Codex | workspace | needs PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/unit/contracts/test_schema_validation.py; tests/integration/providers/test_selection.py; tests/integration/test_example_scaffold.py; tests/e2e/lifecycle/test_fresh_install.py |
 | PKT-SRV-001 | Optional server seam foundation | VERIFIED | Codex | workspace | needs PKT-JOB-006 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/unit/server/test_service_boundary.py; fixture: server-seam.request.json |
+
+### Phase 4.1 — Provider Model Catalog and Selection
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-PRV-012 | Provider model catalog + selection rules | READY_TO_START | unassigned | n/a | needs PKT-PRV-011 VERIFIED + PKT-FND-008 + PKT-JOB-007 | 03, 24, packet | 2026-03-30 | adds model catalog contract, schema, CLI refresh, aliases, default-model resolution |
 
 ### Later phases
 
@@ -193,6 +236,8 @@ Later phases should continue this registry pattern using the same fields and sta
 
 | Phase | Packets | Current State |
 |---|---|---|
+| Phase 4.1 | PKT-PRV-012 | READY_TO_START |
+| Phase 3.2 | PKT-JOB-008 | DEFERRED_DRAFT |
 | Phase 5 | PKT-DSC-001 .. PKT-DSC-004 | WAITING_ON_DEPENDENCIES |
 | Phase 6 | PKT-MIG-001 .. PKT-MIG-003 | WAITING_ON_DEPENDENCIES |
 

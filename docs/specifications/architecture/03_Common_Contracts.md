@@ -88,11 +88,13 @@ providers:
   local-openai:
     enabled: true
     install-mode: external-configured
+    access-mode: none
     base-url: http://localhost:8000/v1
     default-model: qwen-coder
   claude:
     enabled: false
     install-mode: external-configured
+    access-mode: env
     auth-ref: env:ANTHROPIC_API_KEY
 ```
 
@@ -100,6 +102,16 @@ Secret rule:
 - tracked config stores secret references only
 - secrets must not be written into tracked docs
 - supported references in v1: `env:NAME`
+
+Access-mode rules:
+- `env` requires `auth-ref: env:NAME`
+- `cli` uses credentials provided by the provider CLI at runtime
+- `none` means no authentication is required (typical for local endpoints)
+
+### DRAFT — Provider model catalog and selection
+
+Phase 4.1 introduces a provider model catalog contract and model selection rules.
+See `24_DRAFT_Provider_Model_Catalog_and_Selection.md`.
 
 ## ProviderDescriptor
 

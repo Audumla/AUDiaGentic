@@ -12,3 +12,4 @@ These packets are the authoritative build sheets for Phase 0.
 
 - [PKT-FND-006](packets/phase-0/PKT-FND-006.md)
 - [PKT-FND-007](packets/phase-0/PKT-FND-007.md)
+- [PKT-FND-008](packets/phase-0/PKT-FND-008.md)

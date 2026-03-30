@@ -15,6 +15,11 @@ HTTP OpenAI-compatible endpoint used heavily in MVP for deterministic and low-co
 - supports baseline health check
 - supports job invocation through provider layer before any optional server work
 
+## Model catalog (Phase 4.1)
+
+Model catalog and selection rules are defined in `24_DRAFT_Provider_Model_Catalog_and_Selection.md`.
+Local OpenAI-compatible endpoints typically use `access-mode: none` and a `static` or `api` catalog source.
+
 ## Required provider-specific decisions before implementation
 - auth reference shape
 - health check command or request
