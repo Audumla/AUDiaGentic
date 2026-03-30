@@ -1,3 +1,5 @@
+> This draft is preserved for history. Implementation should now use `26_Prompt_Tagged_Workflow_Launch_and_Review_Extension.md` as the execution-ready extension contract.
+
 # DRAFT - Prompt-Tagged Workflow Launch and Review Loop
 
 ## Purpose

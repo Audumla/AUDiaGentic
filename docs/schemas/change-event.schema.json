@@ -77,6 +77,51 @@
             "string",
             "null"
           ]
+        },
+        "prompt-id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prompt-tag": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "plan",
+            "implement",
+            "review",
+            "audit",
+            "check-in-prep",
+            null
+          ]
+        },
+        "target-kind": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "packet",
+            "job",
+            "artifact",
+            "adhoc",
+            null
+          ]
+        },
+        "target-ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "review-id": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },

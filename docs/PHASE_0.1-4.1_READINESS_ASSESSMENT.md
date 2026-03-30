@@ -241,10 +241,10 @@ PKT-PRV-011 (access-mode) VERIFIED
        ↓
 PKT-PRV-012 (model catalog) ← START HERE
        ↓
-    ┌───┴────────────────────────┐
-    ↓                            ↓
-PKT-FND-008 (schemas)      PKT-JOB-007 (job metadata)
-       ↓                            ↑
+PKT-FND-008 (schemas)
+       ↓
+PKT-JOB-007 (job metadata)
+       ↓
     ┌───┴────────────────────────┐
     ↓                            ↓
 PKT-LFC-008 (lifecycle)    PKT-RLS-009 (release outputs)

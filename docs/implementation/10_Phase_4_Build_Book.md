@@ -23,3 +23,9 @@ Phase 4 uses **deterministic provider selection with no automatic failover in MV
 Phase 4 includes a provider access-mode contract so CLI-authenticated providers can be configured explicitly without requiring stored API keys.
 
 Phase 4.1 extends providers with model catalog and selection rules; see `11_Phase_4_1_Provider_Model_Catalog_and_Selection.md`.
+
+Phase 4.2 adds provider status/validation CLI and catalog presence reporting; see `PKT-PRV-013`.
+Phase 4.3 adds shared provider prompt-tag surface recognition and synchronization; see `38_Phase_4_3_Provider_Prompt_Tag_Surface_Integration.md`.
+Phase 4.4 adds provider tag execution compliance and isolated provider implementation docs; see `39_Phase_4_4_Provider_Tag_Execution_Implementation.md`.
+Phase 4.6 drafts provider prompt-trigger launch behavior and per-provider bridge/wrapper rollout; see `40_Phase_4_6_Provider_Prompt_Trigger_Launch_Behavior.md` and the realism assessment in `providers/28_Prompt_Trigger_Realistic_Rollout_Assessment.md`.
+Phase 4.7 drafts provider availability and auto-install orchestration; see `41_Phase_4_7_Provider_Auto_Install_Orchestration.md`.

@@ -1,0 +1,16 @@
+{
+  "contract-version": "v1",
+  "providers": {
+    "codex": {
+      "enabled": true,
+      "install-mode": "external-configured",
+      "access-mode": "cli",
+      "prompt-surface": {
+        "enabled": true,
+        "tag-syntax": "prefix-token-v1",
+        "first-line-policy": "first-non-empty-line",
+        "settings-profile": "codex-prompt-tags-v1"
+      }
+    }
+  }
+}

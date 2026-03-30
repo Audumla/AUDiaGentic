@@ -38,7 +38,7 @@ Define the gate tests that must pass before each phase is considered complete.
 - unhealthy provider blocks job selection per provider selection rules
 - optional server seam can be absent with no import failures
 
-## Phase 5-6 tests
+## Phase 5 tests
 
 - Discord disabled path leaves all prior phases functional
 - Discord approval action resolves through approval core only

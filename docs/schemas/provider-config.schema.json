@@ -39,9 +39,111 @@
           "default-model": {
             "type": "string"
           },
+          "model-aliases": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "catalog-refresh": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string",
+                "enum": [
+                  "cli",
+                  "api",
+                  "static"
+                ]
+              },
+              "max-age-hours": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "source"
+            ],
+            "additionalProperties": false
+          },
           "auth-ref": {
             "type": "string",
             "pattern": "^env:[A-Z0-9_]+$"
+          },
+          "prompt-surface": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "tag-syntax": {
+                "type": "string",
+                "enum": [
+                  "prefix-token-v1"
+                ]
+              },
+              "first-line-policy": {
+                "type": "string",
+                "enum": [
+                  "first-non-empty-line"
+                ]
+              },
+              "cli-mode": {
+                "type": "string",
+                "enum": [
+                  "native-pass-through",
+                  "wrapper-normalize",
+                  "extension-normalize",
+                  "bridge-wrapper",
+                  "unsupported"
+                ]
+              },
+              "vscode-mode": {
+                "type": "string",
+                "enum": [
+                  "native-pass-through",
+                  "wrapper-normalize",
+                  "extension-normalize",
+                  "bridge-wrapper",
+                  "unsupported"
+                ]
+              },
+              "settings-profile": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "enabled",
+              "tag-syntax",
+              "first-line-policy",
+              "settings-profile"
+            ],
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "enabled": {
+                      "const": true
+                    }
+                  }
+                },
+                "then": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "cli-mode"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "vscode-mode"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
           }
         },
         "allOf": [

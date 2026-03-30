@@ -1,9 +1,9 @@
 # Phase 0–2 Readiness and Execution Reference
 
-This document is the execution reference for the first three implementation stages:
-- Phase 0 — Contracts and scaffolding
-- Phase 1 — Lifecycle and project enablement
-- Phase 2 — Release, audit, ledger, and Release Please baseline
+This document is the execution reference for the first three implementation stages and their additive extension lanes:
+- Phase 0 / 0.1 / 0.2 — Contracts and scaffolding plus incremental extensions
+- Phase 1 / 1.1 / 1.2 — Lifecycle and project enablement plus incremental extensions
+- Phase 2 / 2.1 / 2.2 — Release, audit, ledger, Release Please baseline, plus incremental extensions
 
 Its purpose is to give any worker a fast but authoritative picture of:
 - what is ready to implement
@@ -191,3 +191,8 @@ Those all belong in:
 - `31_Build_Status_and_Work_Registry.md`
 
 Use this file and the registry together; do not invent parallel trackers.
+
+
+## Extension note
+
+The .2 extension adds prompt-launch and review-related contract/lifecycle/release work to Phases 0–2. These packets remain blocked until the .1 provider/model contract line is frozen.
