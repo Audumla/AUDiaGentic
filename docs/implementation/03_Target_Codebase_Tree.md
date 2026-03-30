@@ -41,6 +41,8 @@ src/
       registry.py
       selection.py
       health.py
+      catalog.py
+      models.py
       adapters/
         local_openai.py
         claude.py
@@ -63,6 +65,7 @@ tools/
   validate_schemas.py
   seed_example_project.py
   lifecycle_stub.py
+  refresh_model_catalog.py
 tests/
   fixtures/
   unit/

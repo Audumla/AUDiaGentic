@@ -22,10 +22,16 @@ n- replacing in-process execution as the default
 1. PKT-PRV-001 — provider registry and descriptor validation
 2. PKT-PRV-002 — provider selection and healthcheck service
 3. PKT-PRV-003 through PKT-PRV-009 — provider adapters
-4. PKT-SRV-001 — optional server seam draft foundation
+4. PKT-PRV-011 — provider access-mode contract + health config rules
+5. PKT-SRV-001 — optional server seam draft foundation
 
 ## Exit gate
 
 - provider selection is deterministic and testable
 - unhealthy provider states fail cleanly without corrupting job records
 - the system still works entirely in-process with no server enabled
+
+## Follow-on phase
+
+Provider model catalog and selection extensions are defined in Phase 4.1.
+See `11_Phase_4_1_Provider_Model_Catalog_and_Selection.md`.

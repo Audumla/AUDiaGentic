@@ -7,6 +7,11 @@
 
 ### docs
 - [chg_20260330_0019] Added progress report for Phase 3-4 completion.
+- [chg_20260330_0021] Planned provider model catalog support and added Phase 4.1 tracking.
+- [chg_20260330_0022] Documented incremental .1 phases and updated tracking before implementation.
+- [chg_20260330_0023] Documented full packet breakdowns for incremental .1 phases.
+- [chg_20260330_0024] Clarified the .1 packet scopes and dependencies before implementation.
+- [chg_20260330_0025] Added the .2 workflow-launch extension docs and tracker updates.
 
 ### feature
 - [chg_20260330_0001] Added initial job persistence and state machine with tests.
@@ -25,6 +30,7 @@
 - [chg_20260330_0014] Added continue provider adapter stub.
 - [chg_20260330_0015] Added cline provider adapter stub.
 - [chg_20260330_0017] Added optional server seam for in-process job execution.
+- [chg_20260330_0020] Added access-mode support for provider configuration and validation.
 
 ### tests
 - [chg_20260330_0016] Added provider/job seam tests.

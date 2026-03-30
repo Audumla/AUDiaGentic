@@ -50,6 +50,19 @@ stages:
 - required stage failure stops the job
 - optional stage failure records warning and continues if profile allows
 
+## Draft extension: prompt-tagged workflow launch
+
+Phase 3.2 may allow prompt tags to select workflow activities directly.
+
+Initial idea:
+- `plan` launches or resumes the planning activity
+- `implement` launches or resumes implementation
+- `review` runs a validation pass on another agent's output
+- `audit` checks for policy or release completeness
+- `check-in-prep` prepares release-facing summaries
+
+Review output should be structured so another prompt can respond to findings without guessing intent.
+
 
 ## Stage execution contract
 

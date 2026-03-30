@@ -58,6 +58,7 @@ This implementation pack is the **end-to-end staged build book** for AUDiaGentic
 - `28_DRAFT_Platform_Compatibility_and_Portability.md`
 - `29_DRAFT_Performance_and_Scale_Guidance.md`
 - `30_DRAFT_Developer_Onboarding.md`
+- `34_DRAFT_Prompt_Tagged_Workflow_Launch_and_Review_Loop.md`
 
 ## Reading order for immediate execution
 

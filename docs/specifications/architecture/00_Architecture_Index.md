@@ -40,5 +40,7 @@ The following areas were strengthened specifically to close pre-implementation g
 - 21_DRAFT_Operational_Scale_and_Performance_Notes.md
 - 22_DRAFT_ReleasePlease_Invocation_Options.md
 - 23_DRAFT_Optional_Server_and_Session_Mirroring.md
+- 24_DRAFT_Provider_Model_Catalog_and_Selection.md
+- 25_DRAFT_Prompt_Tagged_Workflow_Launch_and_Review_Loop.md
 
 - `20_Error_Envelope_and_Error_Codes.md`

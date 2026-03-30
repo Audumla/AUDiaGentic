@@ -45,3 +45,15 @@ MVP fallback behavior:
 - no automatic failover
 - no multi-provider fanout
 - if the selected provider health check returns `unhealthy` or `configured: false`, job creation fails before execution begins
+
+## Draft extension: prompt-tagged workflow launch
+
+Phase 3.2 adds a prompt-tagged launch path for workflow activities.
+
+Draft rules:
+- prompts may carry an explicit tag such as `plan`, `implement`, or `review`
+- the prompt source must preserve whether it came from CLI or VS Code
+- a tag may create a new job or resume an existing one
+- review prompts may consume another agent's work artifact and return structured feedback
+
+This extension is intentionally separate from the core MVP job runner so it can be designed without changing the existing state machine.

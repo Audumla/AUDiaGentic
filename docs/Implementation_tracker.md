@@ -14,6 +14,18 @@ Begin with the **current build state**, then confirm the packet is available, th
 
 ---
 
+## Feature extension numbering
+
+This project records doc-changing feature extensions with a decimal suffix so later updates do not collide.
+
+Current extension slot:
+- `.1` = provider definition extensions, including access-mode and catalog work
+- `.2` = prompt-tagged workflow launch and review loop
+
+When a new doc-changing feature lands, record the next suffix here before editing specs or packets.
+
+---
+
 ## Step-by-step startup procedure
 
 ### Step 1 — read the current build state
@@ -198,3 +210,10 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-30 | Phase 4 | PKT-PRV-009 | VERIFIED | cline adapter; tests: tests/integration/providers/test_cline.py |
 | 2026-03-30 | Phase 4 | PKT-PRV-010 | VERIFIED | provider/job seam tests; tests: tests/integration/providers/test_job_provider_seam.py |
 | 2026-03-30 | Phase 4 | PKT-SRV-001 | VERIFIED | optional server seam; tests: tests/unit/server/test_service_boundary.py |
+| 2026-03-30 | Phase 4 | PKT-PRV-011 | VERIFIED | provider access-mode contract + health config rules; tests: tests/unit/contracts/test_schema_validation.py; tests/integration/providers/test_selection.py; tests/integration/test_example_scaffold.py; tests/e2e/lifecycle/test_fresh_install.py |
+| 2026-03-30 | Phase 4.1 | PKT-PRV-012 | READY_TO_START | provider model catalog + selection rules; model aliases, catalog refresh, default-model resolution |
+| 2026-03-30 | Phase 0.1 | PKT-FND-008 | READY_TO_START | contract/schema updates for access-mode, model catalog, model-id/model-alias |
+| 2026-03-30 | Phase 1.1 | PKT-LFC-008 | READY_TO_START | lifecycle updates to preserve new tracked config fields |
+| 2026-03-30 | Phase 2.1 | PKT-RLS-009 | READY_TO_START | release updates to summarize or omit provider/model metadata explicitly |
+| 2026-03-30 | Phase 3.1 | PKT-JOB-007 | READY_TO_START | job updates for provider-id, model-id, model-alias, default-model |
+| 2026-03-30 | Phase 3.2 | PKT-JOB-008 | DEFERRED_DRAFT | prompt-tagged workflow launch and review loop; CLI/VS Code provenance, review feedback loop |

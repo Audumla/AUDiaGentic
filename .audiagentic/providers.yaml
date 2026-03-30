@@ -1,0 +1,44 @@
+contract-version: v1
+providers:
+  local-openai:
+    enabled: true
+    install-mode: external-configured
+    access-mode: none
+    base-url: http://localhost:8000/v1
+    default-model: default
+  qwen:
+    enabled: true
+    install-mode: external-configured
+    access-mode: none
+    base-url: http://localhost:8000/v1
+    default-model: default
+  codex:
+    enabled: true
+    install-mode: external-configured
+    access-mode: cli
+    default-model: default
+  claude:
+    enabled: true
+    install-mode: external-configured
+    access-mode: cli
+    default-model: default
+  gemini:
+    enabled: true
+    install-mode: external-configured
+    access-mode: cli
+    default-model: default
+  copilot:
+    enabled: true
+    install-mode: external-configured
+    access-mode: cli
+    default-model: default
+  continue:
+    enabled: true
+    install-mode: external-configured
+    access-mode: cli
+    default-model: default
+  cline:
+    enabled: true
+    install-mode: external-configured
+    access-mode: cli
+    default-model: default

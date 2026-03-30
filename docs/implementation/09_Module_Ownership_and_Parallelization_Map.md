@@ -73,6 +73,7 @@ Owns:
 - provider registry and selection
 - provider adapters
 - optional server seam draft
+- provider model catalog and selection extensions (Phase 4.1)
 
 Parallelism:
 - PKT-PRV-001 and PRV-002 first
@@ -96,6 +97,7 @@ Parallelism:
 - Freeze 3: end of Phase 2 — release file ownership and ledger semantics
 - Freeze 4: end of Phase 3 — job state and workflow stage contract
 - Freeze 5: end of Phase 4 — provider and optional server seam
+- Freeze 5.1: end of Phase 4.1 — provider model catalog and selection contract
 
 ## What implementors must not do
 

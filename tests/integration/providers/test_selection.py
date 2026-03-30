@@ -28,14 +28,18 @@ def _descriptor(provider_id: str, supports_jobs: bool = True) -> dict:
 
 def test_selection_picks_healthy_provider() -> None:
     registry = {"local-openai": _descriptor("local-openai")}
-    config = {"local-openai": {"enabled": True, "install-mode": "external-configured"}}
+    config = {
+        "local-openai": {"enabled": True, "install-mode": "external-configured", "access-mode": "none"}
+    }
     job = {"provider-id": "local-openai"}
     assert select_provider(job, registry, config) == "local-openai"
 
 
 def test_selection_rejects_unknown_provider() -> None:
     registry = {"local-openai": _descriptor("local-openai")}
-    config = {"local-openai": {"enabled": True, "install-mode": "external-configured"}}
+    config = {
+        "local-openai": {"enabled": True, "install-mode": "external-configured", "access-mode": "none"}
+    }
     job = {"provider-id": "unknown"}
     try:
         select_provider(job, registry, config)
@@ -47,7 +51,9 @@ def test_selection_rejects_unknown_provider() -> None:
 
 def test_selection_rejects_missing_jobs_capability() -> None:
     registry = {"local-openai": _descriptor("local-openai", supports_jobs=False)}
-    config = {"local-openai": {"enabled": True, "install-mode": "external-configured"}}
+    config = {
+        "local-openai": {"enabled": True, "install-mode": "external-configured", "access-mode": "none"}
+    }
     job = {"provider-id": "local-openai"}
     try:
         select_provider(job, registry, config)
@@ -59,7 +65,9 @@ def test_selection_rejects_missing_jobs_capability() -> None:
 
 def test_selection_rejects_unhealthy_provider() -> None:
     registry = {"local-openai": _descriptor("local-openai")}
-    config = {"local-openai": {"enabled": False, "install-mode": "external-configured"}}
+    config = {
+        "local-openai": {"enabled": False, "install-mode": "external-configured", "access-mode": "none"}
+    }
     job = {"provider-id": "local-openai"}
     try:
         select_provider(job, registry, config)
@@ -78,8 +86,19 @@ def test_health_check_matches_fixture_shape() -> None:
     result = health_check(
         fixture["provider-id"],
         {"supports-jobs": True},
-        {"enabled": True},
+        {"enabled": True, "access-mode": "cli"},
         now_fn=lambda: fixture["checked-at"],
     )
     for key in ("contract-version", "provider-id", "status", "configured", "latency-ms", "error", "checked-at"):
         assert key in result
+
+
+def test_health_check_requires_auth_ref_for_env_mode() -> None:
+    result = health_check(
+        "claude",
+        {"supports-jobs": True},
+        {"enabled": True, "install-mode": "external-configured", "access-mode": "env"},
+        now_fn=lambda: "2026-03-30T00:00:00Z",
+    )
+    assert result["configured"] is False
+    assert result["status"] == "unhealthy"

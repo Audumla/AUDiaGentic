@@ -1,0 +1,29 @@
+{
+  "change-class": "feature",
+  "contract-version": "v1",
+  "diff-stats": {
+    "deletions": 3,
+    "files-changed": 4,
+    "insertions": 151
+  },
+  "event-id": "chg_20260330_0006",
+  "files": [
+    "src/audiagentic/jobs/release_bridge.py",
+    "tests/integration/jobs/test_release_bridge.py",
+    "docs/Implementation_tracker.md",
+    "docs/implementation/31_Build_Status_and_Work_Registry.md"
+  ],
+  "project-id": "audiagentic",
+  "source": {
+    "job-id": null,
+    "kind": "interactive-prompt",
+    "packet-id": "PKT-JOB-006",
+    "provider-id": "codex",
+    "session-id": "local",
+    "surface": "terminal"
+  },
+  "status": "unreleased",
+  "technical-summary": "Added job-to-release bridge to record change events and regenerate release summaries.",
+  "timestamp-utc": "2026-03-29T14:02:54.027511Z",
+  "user-summary-candidate": "Added job release bridge to update the change ledger."
+}

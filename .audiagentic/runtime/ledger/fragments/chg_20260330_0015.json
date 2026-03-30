@@ -1,0 +1,29 @@
+{
+  "change-class": "feature",
+  "contract-version": "v1",
+  "diff-stats": {
+    "deletions": 4,
+    "files-changed": 4,
+    "insertions": 36
+  },
+  "event-id": "chg_20260330_0015",
+  "files": [
+    "src/audiagentic/providers/adapters/cline.py",
+    "tests/integration/providers/test_cline.py",
+    "docs/Implementation_tracker.md",
+    "docs/implementation/31_Build_Status_and_Work_Registry.md"
+  ],
+  "project-id": "audiagentic",
+  "source": {
+    "job-id": null,
+    "kind": "interactive-prompt",
+    "packet-id": "PKT-PRV-009",
+    "provider-id": "codex",
+    "session-id": "local",
+    "surface": "terminal"
+  },
+  "status": "unreleased",
+  "technical-summary": "Added cline provider adapter stub with integration test.",
+  "timestamp-utc": "2026-03-29T14:27:55.211399Z",
+  "user-summary-candidate": "Added cline provider adapter stub."
+}

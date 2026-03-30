@@ -1,0 +1,29 @@
+{
+  "change-class": "feature",
+  "contract-version": "v1",
+  "diff-stats": {
+    "deletions": 3,
+    "files-changed": 4,
+    "insertions": 329
+  },
+  "event-id": "chg_20260330_0005",
+  "files": [
+    "src/audiagentic/jobs/approvals.py",
+    "tests/integration/jobs/test_job_approvals.py",
+    "docs/Implementation_tracker.md",
+    "docs/implementation/31_Build_Status_and_Work_Registry.md"
+  ],
+  "project-id": "audiagentic",
+  "source": {
+    "job-id": null,
+    "kind": "interactive-prompt",
+    "packet-id": "PKT-JOB-005",
+    "provider-id": "codex",
+    "session-id": "local",
+    "surface": "terminal"
+  },
+  "status": "unreleased",
+  "technical-summary": "Added approval request handling, duplicate detection, and job timeout transitions.",
+  "timestamp-utc": "2026-03-29T13:59:53.590876Z",
+  "user-summary-candidate": "Added job approval tracking with expiration handling."
+}

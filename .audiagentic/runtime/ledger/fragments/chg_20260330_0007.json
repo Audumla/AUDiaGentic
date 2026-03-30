@@ -1,0 +1,36 @@
+{
+  "change-class": "feature",
+  "contract-version": "v1",
+  "diff-stats": {
+    "deletions": 3,
+    "files-changed": 11,
+    "insertions": 158
+  },
+  "event-id": "chg_20260330_0007",
+  "files": [
+    "src/audiagentic/providers/registry.py",
+    "tests/unit/providers/test_registry.py",
+    "src/audiagentic/contracts/canonical_ids.py",
+    "docs/examples/fixtures/canonical-ids.sample.json",
+    "docs/schemas/provider-descriptor.schema.json",
+    "docs/specifications/architecture/03_Common_Contracts.md",
+    "docs/specifications/architecture/providers/00_Provider_Index.md",
+    "docs/specifications/architecture/providers/08_Qwen.md",
+    "docs/implementation/providers/08_Qwen_Plan.md",
+    "docs/Implementation_tracker.md",
+    "docs/implementation/31_Build_Status_and_Work_Registry.md"
+  ],
+  "project-id": "audiagentic",
+  "source": {
+    "job-id": null,
+    "kind": "interactive-prompt",
+    "packet-id": "PKT-PRV-001",
+    "provider-id": "codex",
+    "session-id": "local",
+    "surface": "terminal"
+  },
+  "status": "unreleased",
+  "technical-summary": "Added provider registry validation and introduced qwen as a canonical provider id with docs updates.",
+  "timestamp-utc": "2026-03-29T14:09:27.423074Z",
+  "user-summary-candidate": "Added provider registry and documented qwen provider support."
+}
