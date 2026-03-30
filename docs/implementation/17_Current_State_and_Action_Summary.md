@@ -18,6 +18,7 @@ The current state is:
 - Phase 4.6 provider prompt-trigger docs now spell out the in-chat exposure path for each provider
 - `docs/implementation/providers/28_Prompt_Trigger_Realistic_Rollout_Assessment.md` now captures the realistic provider-by-provider rollout order
 - The shared prompt-trigger bridge harness for `PKT-PRV-031` is now implemented and test-covered
+- Project release bootstrap and workflow activation is implemented so the repository can install and refresh itself using the same tracked release machinery it already owns
 - Codex has its first provider-specific bridge path implemented through repo-local `AGENTS.md` and `.agents/skills` guidance plus a Codex wrapper bridge
 - Claude has its first provider-specific bridge path implemented through repo-local guidance plus a Claude wrapper bridge
 - Gemini has its first provider-specific bridge path implemented through repo-local `GEMINI.md` guidance plus a Gemini wrapper bridge
@@ -29,6 +30,7 @@ The current state is:
 - Codex and Continue should be treated as wrapper/bridge-first
 - Gemini stays in the guarded group until its local hook behavior is proven; Qwen remains guarded for native hooks even though the bridge fallback is implemented
 - `.7` provider availability and auto-install orchestration is now drafted as the next feature slice
+- Phase 2.3 project release bootstrap and workflow activation is implemented and now tracked as a verified release-core extension
 - Phase 1.3 provider auto-install policy persistence is drafted as a lifecycle follow-on
 - Phase 3.4 job control and running-job cancellation is implemented and ready for review
 - PKT-JOB-011 now has a concrete implementation packet with files, tests, and recovery steps

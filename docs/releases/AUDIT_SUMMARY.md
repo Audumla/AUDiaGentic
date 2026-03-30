@@ -1,1 +1,55 @@
 # Audit Summary
+
+Total events: 51
+
+- chg_20260330_0001: Added job record contract helpers, store, and state machine with unit tests and registry updates.
+- chg_20260330_0002: Added workflow profile loader/validator with override parsing and fixtures.
+- chg_20260330_0003: Added packet runner with stub provider seam and integration tests.
+- chg_20260330_0004: Added stage execution contract with persisted outputs and wired packet runner to use it.
+- chg_20260330_0005: Added approval request handling, duplicate detection, and job timeout transitions.
+- chg_20260330_0006: Added job-to-release bridge to record change events and regenerate release summaries.
+- chg_20260330_0007: Added provider registry validation and introduced qwen as a canonical provider id with docs updates.
+- chg_20260330_0008: Added provider health checks and selection logic with integration tests.
+- chg_20260330_0009: Added local-openai adapter stub with qwen alias test.
+- chg_20260330_0010: Added claude provider adapter stub with integration test.
+- chg_20260330_0011: Added codex provider adapter stub with integration test.
+- chg_20260330_0012: Added gemini provider adapter stub with integration test.
+- chg_20260330_0013: Added copilot provider adapter stub with integration test.
+- chg_20260330_0014: Added continue provider adapter stub with integration test.
+- chg_20260330_0015: Added cline provider adapter stub with integration test.
+- chg_20260330_0016: Added provider/job seam integration tests to ensure selection happens outside runner.
+- chg_20260330_0017: Added optional server service boundary with in-process job execution.
+- chg_20260330_0018: Added provider-health and stage-result schemas and registered them as canonical.
+- chg_20260330_0019: Added progress report covering Phase 3 and Phase 4 completion.
+- chg_20260330_0020: Added provider access-mode contract with schema enforcement and health-check validation for CLI/env/none modes.
+- chg_20260330_0021: Added Phase 4.1 planning and draft specs for provider model catalogs and selection, updating roadmap, gates, and provider docs.
+- chg_20260330_0022: Added .1 phase extensions (0.1–3.1) and tracking updates alongside Phase 4.1 planning docs.
+- chg_20260330_0023: Added full packet build sheets for Phase 0.1–3.1 increments and updated executable packet lists.
+- chg_20260330_0024: Refined .1 packet breakdowns with explicit contract fields, dependencies, and integration points.
+- chg_20260330_0025: Documented Phase 3.2 prompt-tagged workflow launch and review loop, and recorded the current .2 feature-extension slot.
+- chg_20260330_0026: Added a real Codex CLI provider wrapper with prompt envelope normalization, workspace threading, smoke tests, and documentation for the remaining task-payload limitation.
+- chg_20260330_0027: Added a real Claude CLI provider wrapper with stdin-based prompt delivery, smoke tests, and documentation for the remaining hook/skills limitation.
+- chg_20260330_0028: Added a real Qwen CLI provider wrapper with smoke tests and updated the conformance docs for the remaining experimental hook path.
+- chg_20260330_0029: Added a real Cline CLI provider wrapper with JSON-stream parsing, smoke tests, and documentation for the remaining native-hook hardening path.
+- chg_20260330_0030: Drafted Phase 4.6 provider prompt-trigger launch behavior, added provider-by-provider packet breakdowns, and aligned the roadmap, build registry, and indexes.
+- chg_20260330_0031: Added a compact provider implementation snapshot to the current-state summary so implemented, tuning, and bridge-backed providers are visible at a glance.
+- chg_20260330_0032: Drafted Phase 4.7 provider availability and auto-install orchestration, added provider-by-provider packet breakdowns, and aligned the roadmap, build registry, and indexes.
+- chg_20260330_0033: Drafted Phase 1.3 provider auto-install policy persistence and lifecycle roundtrip so future provider auto-install fields round-trip safely through lifecycle flows.
+- chg_20260330_0034: Expanded the provider prompt-trigger documentation with provider-specific in-chat tag exposure paths, aligned the shared checklist, and detailed the Phase 4.6 packets for each provider surface.
+- chg_20260330_0035: Added the Claude prompt-trigger implementation runbook and linked it into the provider docs and packet trail so the first native-hook rollout path is implementation-ready.
+- chg_20260330_0036: Added the Gemini prompt-trigger implementation runbook and linked it into the provider docs and packet trail so the hook-or-bridge rollout path is implementation-ready.
+- chg_20260330_0037: Added implementation-ready prompt-trigger runbooks for the remaining providers and linked them into the provider specs, implementation notes, packet trail, and current-state summary.
+- chg_20260330_0038: Drafted Phase 3.4 job control and running-job cancellation as a dedicated job-layer control path with registry and roadmap updates.
+- chg_20260330_0039: Expanded the Phase 3.4 job-control packet into an implementation-ready packet with files, tests, fixtures, acceptance criteria, and recovery steps.
+- chg_20260330_0040: Implemented Phase 3.4 job control and running-job cancellation with a job-control record, CLI command, cooperative runner checks, state-machine support, and focused tests.
+- chg_20260330_0041: Added a realistic provider-by-provider rollout assessment for Phase 4.6 and aligned the shared and provider-specific prompt-trigger docs to the conservative implementation order.
+- chg_20260330_0042: Implemented the shared Phase 4.6 prompt-trigger bridge harness with a new bridge module, CLI subcommand, standalone tool wrapper, and integration test coverage.
+- chg_20260330_0043: Added the Claude-specific bridge surface and repo-local instruction rules for the first provider-specific Phase 4.6 path, alongside packet and registry updates.
+- chg_20260330_0044: Added the Cline-specific bridge surface and repo-local instruction rules for the second provider-specific Phase 4.6 path, alongside packet, spec, and registry updates.
+- chg_20260330_0045: Added the Codex-specific bridge surface with repo-local AGENTS.md guidance, skill files, and a Codex wrapper bridge for the third provider-specific Phase 4.6 path.
+- chg_20260330_0046: Added the Gemini-specific bridge surface with repo-local GEMINI.md guidance and a Gemini wrapper bridge for the fourth provider-specific Phase 4.6 path.
+- chg_20260330_0047: Added the Copilot-specific bridge surface with repo-local Copilot guidance and aligned the packet, provider spec, runbook, registry, and current-state documentation to the implemented wrapper bridge path.
+- chg_20260330_0048: Added bridge-only prompt-trigger surfaces for local-openai and Qwen, with repo-local bridge wrappers plus packet, runbook, registry, and current-state updates.
+- chg_20260331_0001: Implemented generic project release bootstrap and workflow activation so the repository can install itself using the project release workflow.
+- chg_20260331_0002: Aligned release bootstrap docs with the project-level release-bootstrap entry point and marked the new Phase 2.3 slot verified.
+- chg_20260331_0003: Corrected the project-local bootstrap config to use the real AUDiaGentic project identity.

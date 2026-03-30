@@ -12,6 +12,7 @@ Deliver the release subsystem as a standalone core capability before any job eng
 - audit and check-in summaries
 - release finalization checkpoints and resume logic
 - baseline Release Please managed workflow/config
+- project release bootstrap and workflow activation using the project's own release machinery
 - legacy changelog/history conversion to ledger events
 
 ## Out of scope
@@ -29,6 +30,7 @@ Deliver the release subsystem as a standalone core capability before any job eng
 5. PKT-RLS-005 — finalize release with exactly-once historical append
 6. PKT-RLS-006 — baseline Release Please workflow/config management
 7. PKT-RLS-007 — convert legacy changelog/history to ledger events
+8. PKT-RLS-011 — project release bootstrap and workflow activation
 
 ## Exit gate
 

@@ -18,9 +18,9 @@ def test_detect_none(tmp_path: Path) -> None:
 
 
 def test_detect_legacy_only(tmp_path: Path) -> None:
-    legacy = tmp_path / "docs" / "releases"
+    legacy = tmp_path / ".github" / "workflows"
     legacy.mkdir(parents=True)
-    (legacy / "CHANGELOG.md").write_text("legacy", encoding="utf-8")
+    (legacy / "release-please.yml").write_text("legacy", encoding="utf-8")
     state = detect_installed_state(tmp_path)
     assert state.state == "legacy-only"
 
@@ -37,10 +37,11 @@ def test_detect_audiagentic_current(tmp_path: Path) -> None:
 def test_detect_mixed_or_invalid(tmp_path: Path) -> None:
     audi_root = tmp_path / ".audiagentic"
     audi_root.mkdir()
+    (audi_root / "installed.json").write_text("{}", encoding="utf-8")
     (audi_root / "project.yaml").write_text("contract-version: v1", encoding="utf-8")
-    legacy = tmp_path / "docs" / "releases"
+    legacy = tmp_path / ".github" / "workflows"
     legacy.mkdir(parents=True)
-    (legacy / "CHANGELOG.md").write_text("legacy", encoding="utf-8")
+    (legacy / "release-please.yml").write_text("legacy", encoding="utf-8")
     state = detect_installed_state(tmp_path)
     assert state.state == "mixed-or-invalid"
 
