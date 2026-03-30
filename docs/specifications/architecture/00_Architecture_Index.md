@@ -21,6 +21,7 @@
 17. `17_Feasibility_Risks_and_Open_Questions.md`
 18. `18_File_Ownership_Matrix.md`
 19. `19_Glossary.md`
+20. `20_Error_Envelope_and_Error_Codes.md`
 
 ## Review-driven additions in this pack
 
@@ -43,4 +44,11 @@ The following areas were strengthened specifically to close pre-implementation g
 - 24_DRAFT_Provider_Model_Catalog_and_Selection.md
 - 25_DRAFT_Prompt_Tagged_Workflow_Launch_and_Review_Loop.md
 
-- `20_Error_Envelope_and_Error_Codes.md`
+## Extension docs
+
+- 26_Prompt_Tagged_Workflow_Launch_and_Review_Extension.md
+- 27_Provider_Prompt_Tag_Recognition_and_Surface_Synchronization.md
+- 28_Provider_Tag_Execution_Compliance_Model.md
+- 29_DRAFT_Provider_Prompt_Trigger_Launch_Behavior.md
+- 30_DRAFT_Provider_Auto_Install_and_Availability_Orchestration.md
+- 31_DRAFT_Provider_Auto_Install_Policy_Persistence_and_Lifecycle_Roundtrip.md

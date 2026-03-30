@@ -51,7 +51,8 @@ This implementation pack is the **end-to-end staged build book** for AUDiaGentic
 - `packets/phase-2/`
 - `packets/phase-3/`
 - `packets/phase-4/`
-- `packets/phase-5-6/`
+- `packets/phase-5/`
+- `packets/phase-6/`
 
 ## Draft docs
 
@@ -59,6 +60,16 @@ This implementation pack is the **end-to-end staged build book** for AUDiaGentic
 - `29_DRAFT_Performance_and_Scale_Guidance.md`
 - `30_DRAFT_Developer_Onboarding.md`
 - `34_DRAFT_Prompt_Tagged_Workflow_Launch_and_Review_Loop.md`
+
+## Extension execution docs
+
+- `35_Phase_3_2_Prompt_Tagged_Workflow_Launch_and_Review_Extension.md`
+- `36_Prompt_Extension_Readiness_Assessment.md`
+- `37_Phase_3_3_Prompt_Tagged_Workflow_Shortcuts_and_Defaults.md`
+- `38_Phase_4_3_Provider_Prompt_Tag_Surface_Integration.md`
+- `39_Phase_4_4_Provider_Tag_Execution_Implementation.md`
+- `40_Phase_4_6_Provider_Prompt_Trigger_Launch_Behavior.md`
+- `41_Phase_4_7_Provider_Auto_Install_Orchestration.md`
 
 ## Reading order for immediate execution
 

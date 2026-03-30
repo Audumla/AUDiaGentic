@@ -61,6 +61,125 @@
     },
     "approvals": {
       "type": "array"
+    },
+    "model-id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "model-alias": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "default-model": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "launch-source": {
+      "type": "object",
+      "properties": {
+        "prompt-id": {
+          "type": "string"
+        },
+        "surface": {
+          "type": "string",
+          "enum": [
+            "cli",
+            "vscode"
+          ]
+        },
+        "session-id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "prompt-id",
+        "surface",
+        "session-id"
+      ],
+      "additionalProperties": false
+    },
+    "launch-tag": {
+      "type": "string",
+      "enum": [
+        "plan",
+        "implement",
+        "review",
+        "audit",
+        "check-in-prep"
+      ]
+    },
+    "launch-target": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "packet",
+            "job",
+            "artifact",
+            "adhoc"
+          ]
+        },
+        "packet-id": {
+          "type": "string"
+        },
+        "job-id": {
+          "type": "string"
+        },
+        "artifact-id": {
+          "type": "string"
+        },
+        "artifact-path": {
+          "type": "string"
+        },
+        "adhoc-id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "review-policy": {
+      "type": "object",
+      "properties": {
+        "required-reviews": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "aggregation-rule": {
+          "type": "string",
+          "enum": [
+            "all-pass",
+            "majority-pass"
+          ]
+        },
+        "require-distinct-reviewers": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "required-reviews",
+        "aggregation-rule",
+        "require-distinct-reviewers"
+      ],
+      "additionalProperties": false
+    },
+    "review-bundle-id": {
+      "type": [
+        "string",
+        "null"
+      ]
     }
   }
 }

@@ -55,6 +55,42 @@ Validation rules:
 - `tracked-docs-root` must point at `docs`
 - `runtime-root` must point at `.audiagentic/runtime`
 
+
+### Phase 1.2 / 3.2 additive ProjectConfig fields
+
+Prompt-tagged launch and review policy are tracked in `.audiagentic/project.yaml` for MVP.
+`.audiagentic/workflows.yaml` is **not** part of the MVP tracked layout and remains deferred.
+
+```yaml
+contract-version: v1
+project-id: my-project
+project-name: My Project
+workflow-profile: standard
+tracked-docs-root: docs
+runtime-root: .audiagentic/runtime
+release-strategy: release-please
+workflow-overrides:
+  review:
+    enabled: true
+  audit:
+    enabled: false
+prompt-launch:
+  syntax: prefix-token-v1
+  allow-adhoc-target: false
+  default-review-policy:
+    required-reviews: 2
+    aggregation-rule: all-pass
+    require-distinct-reviewers: true
+```
+
+Additive rules:
+- `workflow-overrides` stays in `.audiagentic/project.yaml` for MVP.
+- `prompt-launch.syntax` is fixed to `prefix-token-v1` in MVP.
+- `prompt-launch.allow-adhoc-target` defaults to `false` in the first executable pass when omitted, so `@adhoc` remains opt-in until the core launch path is stable.
+- `prompt-launch.default-review-policy.required-reviews` must be an integer >= 1.
+- `prompt-launch.default-review-policy.aggregation-rule` supports `all-pass` for MVP and may accept `majority-pass` only as a documented but not yet implemented future extension.
+- `prompt-launch.default-review-policy.require-distinct-reviewers` defaults to `true`.
+
 ## ComponentConfig
 
 ```yaml
@@ -108,10 +144,66 @@ Access-mode rules:
 - `cli` uses credentials provided by the provider CLI at runtime
 - `none` means no authentication is required (typical for local endpoints)
 
+Provider install-orchestration note:
+- Phase 4.7 adds optional install/bootstrap policy fields such as `install-mode`, `install-policy.on-missing`, `install-command`, and `install-check`
+- those fields remain opt-in and project-local; they do not change the canonical provider execution contract
+
+### Phase 3.4 job-control note
+
+Job cancellation and stop control are tracked separately from approvals and prompt launch.
+Phase 3.4 adds a dedicated job-control record and cancellation request shape, but it does not
+change the canonical launch grammar or provider execution contract.
+
+Suggested job-control record:
+```json
+{
+  "contract-version": "v1",
+  "job-id": "job_20260329_0001",
+  "project-id": "my-project",
+  "requested-action": "cancel",
+  "requested-by": "operator",
+  "requested-at": "2026-03-30T00:10:00Z",
+  "reason": "user requested stop",
+  "result": "applied",
+  "applied-at": "2026-03-30T00:10:02Z"
+}
+```
+
+Rules:
+- job-control records are append-only and project-local
+- cancellation must preserve existing stage outputs and job provenance
+- `running -> cancelled` is a legal Phase 3.4 control transition when the runner acknowledges the stop
+- approval flows remain separate from job-control flows
+
+
+### Phase 4.3 — Provider prompt-surface and prompt-tag fields
+
+Phase 4.3 adds provider-surface metadata that keeps CLI and VS Code prompt tagging synchronized without changing the canonical prompt-launch contract.
+
+ProviderConfig may include an optional `prompt-surface` block with `enabled`, `tag-syntax`, `first-line-policy`, `cli-mode`, `vscode-mode`, and `settings-profile` fields.
+
+ProviderDescriptor may include additive prompt-tag capability fields:
+- `supports-prompt-tag-launch`
+- `prompt-tag-syntaxes`
+- `prompt-tag-cli-mode`
+- `prompt-tag-vscode-mode`
+- `requires-surface-settings-sync`
+
+Rules:
+- prompt-surface config is additive and must not redefine prompt tag meaning
+- if prompt-surface is enabled, the provider must declare the supported surface mode(s) and settings profile name
+- provider descriptor prompt-tag fields must match the surface contract and the shared prompt-launch grammar
+- prompt-tag surface changes remain separate from model catalog and provider status reporting
+
 ### DRAFT — Provider model catalog and selection
 
 Phase 4.1 introduces a provider model catalog contract and model selection rules.
 See `24_DRAFT_Provider_Model_Catalog_and_Selection.md`.
+
+### Phase 3.2 dependency note
+
+Prompt-tagged launch consumes provider/model metadata only after the Phase 4.1 contract is frozen. Prompt launch therefore depends on the .1 provider/model contract but does not redefine it.
+
 
 ## ProviderDescriptor
 
@@ -225,6 +317,52 @@ Valid `state` values:
 - `failed`
 - `cancelled`
 
+
+### Phase 3.1 / 3.2 additive JobRecord fields
+
+The following fields are additive and optional until the .1 and .2 packets are implemented:
+
+- `model-id`
+- `model-alias`
+- `default-model`
+- `launch-source`
+- `launch-tag`
+- `launch-target`
+- `review-policy`
+- `review-bundle-id`
+
+Recommended shapes:
+
+```json
+{
+  "model-id": "gpt-5.4-mini",
+  "model-alias": "fast-default",
+  "default-model": "gpt-5.4-mini",
+  "launch-source": {
+    "prompt-id": "prm_20260330_0001",
+    "surface": "vscode",
+    "session-id": "sess_001"
+  },
+  "launch-tag": "implement",
+  "launch-target": {
+    "kind": "packet",
+    "packet-id": "PKT-JOB-007"
+  },
+  "review-policy": {
+    "required-reviews": 2,
+    "aggregation-rule": "all-pass",
+    "require-distinct-reviewers": true
+  },
+  "review-bundle-id": "rvb_20260330_0001"
+}
+```
+
+Rules:
+- additive fields must not change the base state machine
+- `launch-tag` must be one of `plan`, `implement`, `review`, `audit`, `check-in-prep`
+- `launch-target.kind` must be one of `packet`, `job`, `artifact`, `adhoc`
+- `review-bundle-id` is present only after a review loop has been opened
+
 ## ChangeEvent
 
 ```json
@@ -271,6 +409,22 @@ Valid `change-class` values:
 - `release`
 - `audit`
 - `workflow`
+
+
+### Phase 3.2 additive ChangeEvent source fields
+
+Prompt-tagged launch extends `source` with the following optional fields:
+
+- `prompt-id`
+- `prompt-tag`
+- `target-kind`
+- `target-ref`
+- `review-id`
+
+Rules:
+- prompt metadata is runtime provenance and must not be treated as release-visible by default
+- `target-ref` may contain a packet id, job id, artifact id/path token, or adhoc id depending on `target-kind`
+- review-derived events may include `review-id` when a structured review report was emitted
 
 ## ApprovalRequest
 
@@ -689,3 +843,132 @@ Rules:
 - stage result enum: `success`, `failure`, `skipped`
 - next-stage recommendation enum: `continue`, `stop`, `escalate`
 - profiles may only mark non-core stages optional in MVP
+
+
+
+## PromptLaunchRequest
+
+Phase 3.2 introduces a normalized prompt launch envelope. CLI, VS Code, and other interactive surfaces must normalize into this shape before the jobs layer consumes the request.
+
+```json
+{
+  "contract-version": "v1",
+  "prompt-id": "prm_20260330_0001",
+  "source": {
+    "kind": "interactive-prompt",
+    "surface": "vscode",
+    "provider-id": "codex",
+    "session-id": "sess_001",
+    "model-id": "gpt-5.4-mini",
+    "model-alias": "fast-default"
+  },
+  "tag": "implement",
+  "target": {
+    "kind": "packet",
+    "packet-id": "PKT-JOB-007"
+  },
+  "workflow-profile": "standard",
+  "existing-job-id": null,
+  "prompt-body": "Continue the packet implementation using the approved spec updates.",
+  "review-policy": {
+    "required-reviews": 2,
+    "aggregation-rule": "all-pass",
+    "require-distinct-reviewers": true
+  },
+  "commit-scope": "proposal"
+}
+```
+
+Required rules:
+- the parser consumes `prefix-token-v1` syntax only in MVP
+- the first non-empty line may use a short action alias such as `@p`, `@i`, `@r`, `@a`, or `@c`
+- the first non-empty line may also use a provider shorthand such as `@codex` or `@claude`; in that case the launcher defaults to the provider's normal action path and model selection rules
+- when the target is omitted, the launcher may infer a default runtime subject and still assign a generated job id
+- supported target kinds are `packet`, `job`, `artifact`, and `adhoc`
+- `existing-job-id` resumes a job only when the target and stage transition are compatible
+- `commit-scope` is advisory metadata for the launcher and does not bypass approval policy
+- provider-owned prompt-trigger behavior is defined separately in Phase 4.6 and must feed this contract rather than replacing it
+
+## ReviewReport
+
+```json
+{
+  "contract-version": "v1",
+  "review-id": "rvr_20260330_0001",
+  "subject": {
+    "kind": "artifact",
+    "job-id": "job_20260330_0007",
+    "artifact-id": "art_job_0007_impl_plan"
+  },
+  "reviewer": {
+    "provider-id": "claude",
+    "surface": "cli",
+    "session-id": "sess_044",
+    "prompt-id": "prm_20260330_0044",
+    "reviewer-key": "claude:cli:sess_044"
+  },
+  "criteria": [
+    "matches packet scope",
+    "preserves existing contracts",
+    "covers tests and recovery"
+  ],
+  "findings": [
+    {
+      "finding-id": "fdg_001",
+      "severity": "major",
+      "blocking": true,
+      "summary": "Schema fixture coverage is incomplete.",
+      "suggested-fix": "Add valid and invalid fixtures for the new launch envelope."
+    }
+  ],
+  "recommendation": "rework",
+  "follow-up-actions": [
+    "Add missing fixtures",
+    "rerun schema validation"
+  ],
+  "created-at": "2026-03-30T03:00:00Z"
+}
+```
+
+Rules:
+- `recommendation` must be one of `pass`, `pass-with-notes`, `rework`, or `block`
+- each finding must explicitly state whether it is blocking
+- review reports are runtime artifacts unless a later stage intentionally summarizes them into tracked docs
+
+## ReviewBundle
+
+```json
+{
+  "contract-version": "v1",
+  "review-bundle-id": "rvb_20260330_0001",
+  "subject": {
+    "kind": "artifact",
+    "job-id": "job_20260330_0007",
+    "artifact-id": "art_job_0007_impl_plan"
+  },
+  "required-reviews": 2,
+  "aggregation-rule": "all-pass",
+  "require-distinct-reviewers": true,
+  "reports": [
+    {
+      "review-id": "rvr_20260330_0001",
+      "reviewer-key": "claude:cli:sess_044",
+      "recommendation": "pass"
+    },
+    {
+      "review-id": "rvr_20260330_0002",
+      "reviewer-key": "codex:vscode:sess_015",
+      "recommendation": "rework"
+    }
+  ],
+  "decision": "rework",
+  "status": "complete",
+  "updated-at": "2026-03-30T03:15:00Z"
+}
+```
+
+Rules:
+- `required-reviews` defaults from `ProjectConfig.prompt-launch.default-review-policy`
+- `aggregation-rule: all-pass` means any `rework` or `block` prevents an approved decision
+- `require-distinct-reviewers: true` means duplicate `reviewer-key` values do not count twice
+- `decision` must be one of `pending`, `approved`, `rework`, or `blocked`

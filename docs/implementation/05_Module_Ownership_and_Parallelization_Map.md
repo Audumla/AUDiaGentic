@@ -19,3 +19,8 @@
 - Any packet touching tracked files under `docs/releases/` must coordinate through the release owner.
 - Provider adapter packets can run in parallel after `PKT-PRV-001` and `PKT-PRV-002` are merged.
 - Discord packets can run in parallel with migration hardening once events and approvals are frozen.
+
+
+## Extension ownership note
+
+Phase 3.2 prompt launch and review implementation remains in the **Jobs** ownership group even when adapters are triggered from CLI or VS Code. CLI or editor surfaces must remain thin normalization adapters and must not duplicate job orchestration logic.

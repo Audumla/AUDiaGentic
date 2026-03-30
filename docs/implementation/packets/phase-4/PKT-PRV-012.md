@@ -14,8 +14,6 @@ Providers change model availability over time. Without an explicit catalog and s
 ## Dependencies
 
 - `PKT-PRV-011`
-- `PKT-FND-008` for contract/schema updates
-- `PKT-JOB-007` for job metadata integration
 
 ## Concrete provider model inputs
 
@@ -75,7 +73,7 @@ This packet owns the following implementation surface:
 6. Update provider selection to validate resolved model against catalog when present.
 7. Add `tools/refresh_model_catalog.py` CLI to write runtime catalogs.
 8. Update provider docs with model catalog guidance and examples.
-9. Wire the provider model inputs into job validation and packet runner paths.
+9. Publish the provider/model contract and examples so `PKT-JOB-007` can consume them without redefining field names.
 10. Run schema, unit, and integration tests listed below.
 
 ## Integration points

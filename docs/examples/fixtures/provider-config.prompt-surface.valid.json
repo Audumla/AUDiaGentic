@@ -1,0 +1,34 @@
+{
+  "contract-version": "v1",
+  "providers": {
+    "local-openai": {
+      "enabled": true,
+      "install-mode": "external-configured",
+      "access-mode": "none",
+      "base-url": "http://localhost:8000/v1",
+      "default-model": "qwen-coder",
+      "prompt-surface": {
+        "enabled": true,
+        "tag-syntax": "prefix-token-v1",
+        "first-line-policy": "first-non-empty-line",
+        "cli-mode": "bridge-wrapper",
+        "vscode-mode": "bridge-wrapper",
+        "settings-profile": "openai-bridge-prompt-tags-v1"
+      }
+    },
+    "claude": {
+      "enabled": false,
+      "install-mode": "external-configured",
+      "access-mode": "env",
+      "auth-ref": "env:ANTHROPIC_API_KEY",
+      "prompt-surface": {
+        "enabled": true,
+        "tag-syntax": "prefix-token-v1",
+        "first-line-policy": "first-non-empty-line",
+        "cli-mode": "wrapper-normalize",
+        "vscode-mode": "extension-normalize",
+        "settings-profile": "claude-prompt-tags-v1"
+      }
+    }
+  }
+}

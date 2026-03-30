@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "prompt-id",
+    "source",
+    "tag",
+    "target",
+    "workflow-profile",
+    "prompt-body"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "prompt-id": {
+      "type": "string"
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "kind",
+        "surface",
+        "provider-id",
+        "session-id",
+        "model-id",
+        "model-alias"
+      ],
+      "properties": {
+        "kind": {
+          "const": "interactive-prompt"
+        },
+        "surface": {
+          "type": "string",
+          "enum": [
+            "cli",
+            "vscode"
+          ]
+        },
+        "provider-id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session-id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model-id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model-alias": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "tag": {
+      "type": "string",
+      "enum": [
+        "plan",
+        "implement",
+        "review",
+        "audit",
+        "check-in-prep"
+      ]
+    },
+    "target": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "packet",
+            "job",
+            "artifact",
+            "adhoc"
+          ]
+        },
+        "packet-id": {
+          "type": "string"
+        },
+        "job-id": {
+          "type": "string"
+        },
+        "artifact-id": {
+          "type": "string"
+        },
+        "artifact-path": {
+          "type": "string"
+        },
+        "adhoc-id": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "packet"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "packet-id"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "job"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "job-id"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "artifact"
+              }
+            }
+          },
+          "then": {
+            "anyOf": [
+              {
+                "required": [
+                  "artifact-id"
+                ]
+              },
+              {
+                "required": [
+                  "artifact-path"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "adhoc"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "adhoc-id": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "target-origin": {
+      "type": "string",
+      "enum": [
+        "explicit",
+        "default"
+      ]
+    },
+    "workflow-profile": {
+      "type": "string",
+      "enum": [
+        "lite",
+        "standard",
+        "strict"
+      ]
+    },
+    "existing-job-id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "prompt-body": {
+      "type": "string"
+    },
+    "review-policy": {
+      "type": "object",
+      "properties": {
+        "required-reviews": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "aggregation-rule": {
+          "type": "string",
+          "enum": [
+            "all-pass",
+            "majority-pass"
+          ]
+        },
+        "require-distinct-reviewers": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "required-reviews",
+        "aggregation-rule",
+        "require-distinct-reviewers"
+      ],
+      "additionalProperties": false
+    },
+    "commit-scope": {
+      "type": "string",
+      "enum": [
+        "none",
+        "proposal",
+        "pre-commit"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

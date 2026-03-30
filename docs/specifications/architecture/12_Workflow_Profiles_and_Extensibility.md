@@ -50,21 +50,27 @@ stages:
 - required stage failure stops the job
 - optional stage failure records warning and continues if profile allows
 
-## Draft extension: prompt-tagged workflow launch
 
-Phase 3.2 may allow prompt tags to select workflow activities directly.
+## Phase 3.2 extension: prompt-tagged workflow launch
 
-Initial idea:
-- `plan` launches or resumes the planning activity
-- `implement` launches or resumes implementation
-- `review` runs a validation pass on another agent's output
-- `audit` checks for policy or release completeness
-- `check-in-prep` prepares release-facing summaries
+Phase 3.2 adds prompt tags that select a workflow activity deterministically.
 
-Review output should be structured so another prompt can respond to findings without guessing intent.
+Frozen MVP rules:
+- prompt syntax is `prefix-token-v1`
+- tags are `plan`, `implement`, `review`, `audit`, and `check-in-prep`
+- shorthand `@adhoc` is accepted as `@implement target=adhoc`, but may remain feature-gated in the first executable pass
+- tag resolution happens before the stage runner starts
+- prompt launch never reorders profile stages; it only enters or resumes the correct legal stage
 
+Target rules:
+- packet-oriented work uses `target.kind=packet`
+- generic user-directed work uses `target.kind=adhoc`
+- review uses `target.kind=artifact`, `job`, or `packet`
+
+Review output must be structured so a later prompt can respond to findings deterministically.
 
 ## Stage execution contract
+
 
 Every built-in stage executes against a common contract:
 
@@ -88,6 +94,7 @@ Stage timeout rules:
 - `audit`: 10 minutes
 - `check-in-prep`: 10 minutes
 
+
 ## Override storage
 
 MVP profile overrides live in `.audiagentic/project.yaml`.
@@ -101,6 +108,13 @@ workflow-overrides:
     enabled: false
   audit:
     enabled: false
+  prompt-launch:
+    syntax: prefix-token-v1
+    allow-adhoc-target: false
+    default-review-policy:
+      required-reviews: 2
+      aggregation-rule: all-pass
+    require-distinct-reviewers: true
 ```
 
 Override rules:
@@ -108,18 +122,6 @@ Override rules:
 - built-in stage order is fixed in MVP
 - projects may disable only optional stages
 - required stages in a built-in profile may not be disabled
-
-
-## Override location
-
-Project-specific overrides live in:
-
-```text
-.audiagentic/workflows.yaml
-```
-
-MVP rules:
-- built-in profile id remains in `.audiagentic/project.yaml`
-- override details live in `.audiagentic/workflows.yaml`
-- only stage enablement may be overridden in MVP
-- `plan` and `implement` may not be disabled
+- prompt-launch policy is stored in `.audiagentic/project.yaml` for MVP
+- `.audiagentic/workflows.yaml` is deferred and must not be introduced by implementation packets unless the architecture is explicitly revised
+- `prompt-launch.allow-adhoc-target` may be turned on later without requiring contract rewrites

@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.providers.models import resolve_model_selection
 from audiagentic.providers.health import health_check
 
 
@@ -11,6 +12,7 @@ def select_provider(
     job_record: dict[str, Any],
     provider_registry: dict[str, dict[str, Any]],
     provider_config: dict[str, dict[str, Any]],
+    provider_catalogs: dict[str, dict[str, Any]] | None = None,
     *,
     default_provider_id: str | None = None,
 ) -> str:
@@ -45,5 +47,12 @@ def select_provider(
             kind="business-rule",
             message="provider is not healthy",
             details={"provider-id": provider_id, "status": result.get("status")},
+        )
+    if provider_catalogs is not None:
+        resolve_model_selection(
+            provider_id=provider_id,
+            provider_config=config,
+            job_request=job_record,
+            catalog=provider_catalogs.get(provider_id),
         )
     return provider_id

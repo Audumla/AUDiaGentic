@@ -108,18 +108,29 @@ Each row in the registry must contain:
 | Phase | State | Notes |
 |---|---|---|
 | Phase 0 | `VERIFIED` | phase 0 gate complete |
-| Phase 0.1 | `READY_TO_START` | incremental contract/schema updates pending: access-mode, model catalog, job model fields |
+| Phase 0.1 | `VERIFIED` | .1 contract/schema updates for provider model catalog and model selection complete |
+| Phase 0.2 | `VERIFIED` | prompt/review contract extension complete with gated `@adhoc` support |
 | Phase 1 | `VERIFIED` | phase 1 gate complete |
-| Phase 1.1 | `READY_TO_START` | incremental lifecycle updates pending: preserve new tracked config fields |
+| Phase 1.1 | `VERIFIED` | lifecycle preservation of .1 config fields complete |
+| Phase 1.2 | `VERIFIED` | lifecycle preservation of prompt-launch config complete |
+| Phase 1.3 | `DEFERRED_DRAFT` | lifecycle preservation of provider auto-install policy fields drafted |
 | Phase 2 | `VERIFIED` | phase 2 gate complete |
-| Phase 2.1 | `READY_TO_START` | incremental release/ledger updates pending: summarize or ignore model/provider metadata explicitly |
+| Phase 2.1 | `VERIFIED` | release/ledger updates for .1 fields complete |
+| Phase 2.2 | `VERIFIED` | release/audit handling for prompt/review metadata complete |
 | Phase 3 | `VERIFIED` | phase 3 gate complete |
-| Phase 3.1 | `READY_TO_START` | incremental job updates pending: model-id, model-alias, provider-id forwarding |
-| Phase 3.2 | `DEFERRED_DRAFT` | prompt-tagged workflow launch and review loop pending design decisions |
+| Phase 3.1 | `VERIFIED` | incremental job updates for provider model selection complete |
+| Phase 3.2 | `VERIFIED` | prompt-tagged launch, gated `@adhoc`, and review loop complete |
+| Phase 3.3 | `VERIFIED` | prompt shorthand/default-launch enhancements complete |
+| Phase 3.4 | `READY_FOR_REVIEW` | job control and running-job cancellation implemented and awaiting review |
 | Phase 4 | `VERIFIED` | phase 4 gate complete (access-mode contract update verified) |
-| Phase 4.1 | `READY_TO_START` | provider model catalog + selection extensions pending: catalog refresh, aliases, default-model resolution |
-| Phase 5 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 4.1 gate is verified |
-| Phase 6 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 5/6 preconditions are satisfied |
+| Phase 4.1 | `VERIFIED` | provider model catalog + selection extensions complete |
+| Phase 4.2 | `VERIFIED` | provider status/validation CLI complete |
+| Phase 4.3 | `VERIFIED` | shared provider prompt-tag contract verified; provider-specific rollout guidance now lives in Phase 4.4 |
+| Phase 4.4 | `VERIFIED` | provider execution compliance model and isolated provider implementation docs staged |
+| Phase 4.6 | `IN_PROGRESS` | shared prompt-trigger bridge harness and first Claude/Cline/Codex/Gemini/Copilot/local-openai/Qwen provider paths implemented; remaining provider instruction surfaces and wrapper/bridge rollout still need packets; realism assessment now documents first-wave vs wrapper-first providers |
+| Phase 4.7 | `DEFERRED_DRAFT` | provider availability and auto-install orchestration drafted; install/bootstrap policy and packets still need refinement |
+| Phase 5 | `READY_TO_START` | can start once Phase 4.4 gate is verified |
+| Phase 6 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 5 is complete and Phase 6 prerequisites are satisfied |
 
 ---
 
@@ -141,7 +152,13 @@ Each row in the registry must contain:
 
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
-| PKT-FND-008 | Contract/schema updates from later phases | READY_TO_START | unassigned | n/a | needs Phase 0 VERIFIED + PKT-PRV-011/012 specs | 03, 16, packet | 2026-03-30 | contracts: access-mode, model catalog, model-id/model-alias; schemas and fixtures reserved |
+| PKT-FND-008 | Contract/schema updates from later phases | VERIFIED | Codex | workspace | needs Phase 0 VERIFIED + PKT-PRV-012 VERIFIED | 03, 16, packet | 2026-03-30 | contracts: access-mode, model catalog, model-id/model-alias; implemented with schema and fixture updates |
+
+### Phase 0.2 — Prompt / Review Contract Extension
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-FND-009 | Prompt launch + review bundle contracts and schemas | VERIFIED | Codex | workspace | needs Phase 0 VERIFIED + PKT-FND-008 + PKT-PRV-012 | 03, 26, 35, packet | 2026-03-30 | contracts: PromptLaunchRequest, ReviewReport, ReviewBundle, project prompt-launch policy, adhoc target |
 
 ### Phase 1 — Lifecycle and Project Enablement
 
@@ -159,7 +176,19 @@ Each row in the registry must contain:
 
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
-| PKT-LFC-008 | Lifecycle updates for new config fields | READY_TO_START | unassigned | n/a | needs Phase 1 VERIFIED + PKT-FND-008 | 05, packet | 2026-03-30 | preserve new tracked config fields in .audiagentic/project.yaml, .audiagentic/providers.yaml, installed.json |
+| PKT-LFC-008 | Lifecycle updates for new config fields | VERIFIED | Codex | workspace | needs Phase 1 VERIFIED + PKT-FND-008 VERIFIED | 05, packet | 2026-03-30 | preserve new tracked config fields in .audiagentic/project.yaml, .audiagentic/providers.yaml, installed.json |
+
+### Phase 1.2 — Prompt Launch Lifecycle Updates
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-LFC-009 | Lifecycle updates for prompt-launch policy fields | VERIFIED | Codex | workspace | needs Phase 1 VERIFIED + PKT-FND-009 VERIFIED | 05, 26, 35, packet | 2026-03-30 | preserve/validate prompt-launch + workflow-overrides in .audiagentic/project.yaml |
+
+### Phase 1.3 — Provider Auto-Install Policy Persistence
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-LFC-010 | Provider auto-install policy persistence and lifecycle roundtrip | DEFERRED_DRAFT | Codex | workspace | needs Phase 1 VERIFIED + PKT-FND-008 VERIFIED + PKT-PRV-039 DEFERRED_DRAFT | 05, 30, 41, packet | 2026-03-30 | preserve provider install/bootstrap policy fields across lifecycle commands |
 
 ### Phase 2 — Release / Audit / Ledger / Release Please
 
@@ -178,7 +207,13 @@ Each row in the registry must contain:
 
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
-| PKT-RLS-009 | Release updates for new contract fields | READY_TO_START | unassigned | n/a | needs Phase 2 VERIFIED + PKT-FND-008 | 09, 10, packet | 2026-03-30 | release docs to explicitly summarize or omit provider/model metadata |
+| PKT-RLS-009 | Release updates for new contract fields | VERIFIED | Codex | workspace | needs Phase 2 VERIFIED + PKT-FND-008 VERIFIED | 09, 10, packet | 2026-03-30 | release docs explicitly summarize or omit provider/model metadata |
+
+### Phase 2.2 — Prompt / Review Release-Ledger Updates
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-RLS-010 | Release/audit handling for prompt and review metadata | VERIFIED | Codex | workspace | needs Phase 2 VERIFIED + PKT-FND-009 VERIFIED | 09, 10, 26, 35, packet | 2026-03-30 | omit raw prompt text/review bundles by default; allow deterministic summarized outcome handling |
 
 ### Phase 3 — Jobs and Simple Workflows
 
@@ -195,13 +230,26 @@ Each row in the registry must contain:
 
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
-| PKT-JOB-007 | Job updates for provider model selection | READY_TO_START | unassigned | n/a | needs Phase 3 VERIFIED + PKT-PRV-012 | 08, 12, packet | 2026-03-30 | job fields: provider-id, model-id, model-alias, default-model |
+| PKT-JOB-007 | Job updates for provider model selection | VERIFIED | Codex | workspace | needs Phase 3 VERIFIED + PKT-FND-008 VERIFIED + PKT-PRV-012 VERIFIED | 08, 12, packet | 2026-03-30 | job fields: provider-id, model-id, model-alias, default-model |
 
 ### Phase 3.2 — Prompt-Tagged Workflow Launch and Review Loop
 
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
-| PKT-JOB-008 | Prompt-tagged workflow launch and review loop | DEFERRED_DRAFT | unassigned | n/a | needs Phase 3 VERIFIED + design decisions | 08, 12, 25, packet | 2026-03-30 | prompt tags, CLI/VS Code provenance, review feedback loop |
+| PKT-JOB-008 | Prompt-tagged launch core + ad hoc target | VERIFIED | Codex | workspace | needs Phase 3 VERIFIED + PKT-JOB-007 VERIFIED + PKT-FND-009 VERIFIED + PKT-LFC-009 VERIFIED | 08, 12, 26, 35, packet | 2026-03-30 | parser, normalized launch envelope, target legality, CLI/VS Code provenance; provider shorthand defaults and short tag aliases added; explicit `@adhoc` may remain feature-gated in pass 1 |
+| PKT-JOB-009 | Structured review loop + multi-review aggregation | VERIFIED | Codex | workspace | needs PKT-JOB-008 VERIFIED + PKT-RLS-010 VERIFIED | 08, 12, 14, 26, 35, packet | 2026-03-30 | review reports, review bundle, all-pass aggregation, deterministic review-gated progression |
+
+### Phase 3.3 — Prompt Shorthand and Default-Launch Enhancement
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-JOB-010 | Prompt shorthand and default-launch behavior | VERIFIED | Codex | workspace | needs PKT-JOB-008 VERIFIED + PKT-PRV-012 VERIFIED + PKT-PRV-013 VERIFIED | 08, 12, 26, packet | 2026-03-30 | provider shorthand defaults, short tag aliases, default subject generation, provider-default model resolution |
+
+### Phase 3.4 — Job Control and Running-Job Cancellation
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-JOB-011 | Job control and running-job cancellation | READY_FOR_REVIEW | Codex | workspace | needs PKT-JOB-001 + PKT-JOB-004 + PKT-JOB-005 + PKT-JOB-009 VERIFIED | 08, 12, 32, packet | 2026-03-30 | explicit stop/cancel surface for pending, awaiting-approval, and running jobs; control module, CLI, and tests added |
 
 ### Later phases
 
@@ -214,8 +262,8 @@ Later phases should continue this registry pattern using the same fields and sta
 | PKT-PRV-001 | Provider registry and descriptor validation | VERIFIED | Codex | workspace | needs PKT-FND-001 + PKT-FND-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/unit/providers/test_registry.py |
 | PKT-PRV-002 | Provider selection and health check service | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-JOB-003 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_selection.py; fixtures: provider-health.*.json |
 | PKT-PRV-003 | local-openai provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_local_openai.py |
-| PKT-PRV-004 | claude provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_claude.py |
-| PKT-PRV-005 | codex provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_codex.py |
+| PKT-PRV-004 | claude provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_claude.py; live wrapper smoke test verified; hook/skills assets still needed for full native-intercept rollout |
+| PKT-PRV-005 | codex provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_codex.py; live wrapper smoke test verified; prompt envelope still needs richer task payload for fully specific execution |
 | PKT-PRV-006 | gemini provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_gemini.py |
 | PKT-PRV-007 | copilot provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_copilot.py |
 | PKT-PRV-008 | continue provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_continue.py |
@@ -228,7 +276,67 @@ Later phases should continue this registry pattern using the same fields and sta
 
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
-| PKT-PRV-012 | Provider model catalog + selection rules | READY_TO_START | unassigned | n/a | needs PKT-PRV-011 VERIFIED + PKT-FND-008 + PKT-JOB-007 | 03, 24, packet | 2026-03-30 | adds model catalog contract, schema, CLI refresh, aliases, default-model resolution |
+| PKT-PRV-012 | Provider model catalog + selection rules | VERIFIED | Codex | workspace | needs PKT-PRV-011 VERIFIED | 03, 24, packet | 2026-03-30 | adds model catalog contract, schema, CLI refresh, aliases, default-model resolution |
+
+### Phase 4.2 — Provider Status and Validation
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-PRV-013 | Provider CLI/status inspection | VERIFIED | Codex | workspace | needs PKT-PRV-012 VERIFIED | 03, 24, packet | 2026-03-30 | status command reports config health, CLI availability, and catalog presence |
+
+### Phase 4.3 — Provider Prompt-Tag Surface Integration
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-PRV-014 | Shared prompt-tag surface contract + sync harness | VERIFIED | Codex | workspace | needs PKT-PRV-012 VERIFIED + PKT-FND-009 VERIFIED + PKT-LFC-009 VERIFIED + PKT-RLS-010 VERIFIED + PKT-JOB-008 VERIFIED + PKT-JOB-009 VERIFIED | 03, 27, 38, packet | 2026-03-30 | shared prompt-surface config/descriptor fields and sync harness |
+| PKT-PRV-015 | codex prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-005 VERIFIED | 03, 27, 38, packet | 2026-03-30 | codex wrapper/extension prompt-tag rollout |
+| PKT-PRV-016 | claude prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-004 VERIFIED | 03, 27, 38, packet | 2026-03-30 | claude wrapper/extension prompt-tag rollout |
+| PKT-PRV-017 | gemini prompt-tag surface integration | READY_FOR_REVIEW | Gemini CLI | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-006 VERIFIED | 03, 27, 38, packet | 2026-03-30 | implemented prompt-tag detection and normalization; smoke tests simulated |
+| PKT-PRV-018 | copilot prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-007 VERIFIED | 03, 27, 38, packet | 2026-03-30 | copilot surface rollout |
+| PKT-PRV-019 | continue prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-008 VERIFIED | 03, 27, 38, packet | 2026-03-30 | continue surface rollout |
+| PKT-PRV-020 | cline prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-009 VERIFIED | 03, 27, 38, packet | 2026-03-30 | cline wrapper/extension prompt-tag rollout |
+| PKT-PRV-021 | local-openai/qwen bridge-wrapper prompt-tag integration | VERIFIED | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-003 VERIFIED + PKT-PRV-011 VERIFIED | 03, 27, 38, packet | 2026-03-30 | bridge-wrapper surface wiring for local-openai and qwen; bridge wrappers and smoke tests are implemented |
+
+### Phase 4.4 — Provider Tag Execution Compliance and Isolated Provider Implementations
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-PRV-022 | Provider tag execution compliance model + conformance matrix | VERIFIED | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-012 VERIFIED + PKT-PRV-013 VERIFIED | 03, 27, 28, 39, packet | 2026-03-30 | shared provider execution compliance model and matrix |
+| PKT-PRV-023 | Codex tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-005 VERIFIED | 28, 39, packet | 2026-03-30 | isolated Codex execution doc and smoke-test guidance |
+| PKT-PRV-024 | Claude Code tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-004 VERIFIED | 28, 39, packet | 2026-03-30 | isolated Claude execution doc and smoke-test guidance |
+| PKT-PRV-025 | Gemini tag execution implementation | READY_FOR_REVIEW | Gemini CLI | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-006 VERIFIED | 28, 39, packet | 2026-03-30 | implemented native intercept guidance and GEMINI.md |
+| PKT-PRV-026 | GitHub Copilot tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-007 VERIFIED | 28, 39, packet | 2026-03-30 | isolated Copilot execution doc and smoke-test guidance |
+| PKT-PRV-027 | Continue tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-008 VERIFIED | 28, 39, packet | 2026-03-30 | isolated Continue execution doc and smoke-test guidance |
+| PKT-PRV-028 | Cline tag execution implementation | VERIFIED | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-009 VERIFIED | 28, 39, packet | 2026-03-30 | CLI-backed wrapper implemented and smoke-tested; hook-native path remains feature-gated |
+| PKT-PRV-029 | local OpenAI-compatible tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-003 VERIFIED + PKT-PRV-011 VERIFIED | 28, 39, packet | 2026-03-30 | backend-only provider execution doc and smoke-test guidance |
+| PKT-PRV-030 | Qwen Code tag execution implementation | VERIFIED | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-003 VERIFIED + PKT-PRV-011 VERIFIED | 28, 39, packet | 2026-03-30 | CLI-backed wrapper implemented and smoke-tested; hook-native path remains feature-gated |
+
+### Phase 4.6 — Provider Prompt-Trigger Launch Behavior
+
+| Packet | Title | Status | Owner | Scope | Dependencies | Docs | Updated | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-PRV-031 | Shared provider prompt-trigger launch contract + bridge harness | VERIFIED | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-JOB-008 VERIFIED + PKT-JOB-009 VERIFIED | 03, 29, 40, packet | 2026-03-30 | canonical trigger grammar, launcher bridge, and fallback wrapper contract; shared bridge harness implemented and tested |
+| PKT-PRV-032 | Codex prompt-trigger launch integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 VERIFIED + PKT-PRV-005 VERIFIED | 03, 29, 40, packet | 2026-03-30 | AGENTS.md / wrapper path for Codex prompt-trigger launch; Codex repo guidance and wrapper bridge are implemented |
+| PKT-PRV-033 | Claude prompt-trigger launch integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 READY_FOR_REVIEW + PKT-PRV-004 VERIFIED | 03, 29, 40, packet | 2026-03-30 | Claude instruction surface and wrapper path for prompt-trigger launch; Claude repo guidance and wrapper bridge are implemented |
+| PKT-PRV-034 | Gemini prompt-trigger launch integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 VERIFIED + PKT-PRV-006 VERIFIED | 03, 29, 40, packet | 2026-03-30 | Gemini instruction surface and wrapper path for prompt-trigger launch; Gemini repo guidance and wrapper bridge are implemented |
+| PKT-PRV-035 | GitHub Copilot prompt-trigger launch integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 VERIFIED + PKT-PRV-007 VERIFIED | 03, 29, 40, packet | 2026-03-30 | Copilot config / instruction surface and bridge path for prompt-trigger launch; repo-local Copilot bridge assets and wrapper path are implemented |
+| PKT-PRV-036 | Continue prompt-trigger launch integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-031 DEFERRED_DRAFT + PKT-PRV-008 VERIFIED | 03, 29, 40, packet | 2026-03-30 | Continue config surface and wrapper path for prompt-trigger launch |
+| PKT-PRV-037 | Cline prompt-trigger launch integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 READY_FOR_REVIEW + PKT-PRV-009 VERIFIED | 03, 29, 40, packet | 2026-03-30 | Cline rule/hook surface and wrapper path for prompt-trigger launch; Cline repo guidance and wrapper bridge are implemented |
+| PKT-PRV-038 | local-openai/qwen prompt-trigger bridge integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 VERIFIED + PKT-PRV-003 VERIFIED + PKT-PRV-011 VERIFIED | 03, 29, 40, packet | 2026-03-30 | bridge-owned launch path for backend-only surfaces; local-openai and Qwen bridge wrappers are implemented |
+
+### Phase 4.7 — Provider Availability and Auto-Install Orchestration
+
+| Packet | Title | Status | Owner | Scope | Dependencies | Docs | Updated | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-PRV-039 | Shared provider availability and auto-install contract + bootstrap harness | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-012 VERIFIED + PKT-PRV-013 VERIFIED + PKT-PRV-031 DEFERRED_DRAFT | 03, 30, 41, packet | 2026-03-30 | shared install policy, availability probe, and bootstrap harness |
+| PKT-PRV-040 | Codex auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-005 VERIFIED + PKT-PRV-015 READY_TO_START | 03, 30, 41, packet | 2026-03-30 | Codex install/bootstrap guidance and smoke tests |
+| PKT-PRV-041 | Claude auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-004 VERIFIED + PKT-PRV-016 READY_TO_START | 03, 30, 41, packet | 2026-03-30 | Claude install/bootstrap guidance and smoke tests |
+| PKT-PRV-042 | Gemini auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-006 VERIFIED + PKT-PRV-017 IN_PROGRESS | 03, 30, 41, packet | 2026-03-30 | Gemini install/bootstrap guidance and smoke tests |
+| PKT-PRV-043 | GitHub Copilot auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-007 VERIFIED + PKT-PRV-018 READY_TO_START | 03, 30, 41, packet | 2026-03-30 | Copilot install/bootstrap guidance and smoke tests |
+| PKT-PRV-044 | Continue auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-008 VERIFIED + PKT-PRV-019 READY_TO_START | 03, 30, 41, packet | 2026-03-30 | Continue install/bootstrap guidance and smoke tests |
+| PKT-PRV-045 | Cline auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-009 VERIFIED + PKT-PRV-020 READY_TO_START | 03, 30, 41, packet | 2026-03-30 | Cline install/bootstrap guidance and smoke tests |
+| PKT-PRV-046 | local-openai availability and bridge bootstrap | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-003 VERIFIED + PKT-PRV-021 VERIFIED | 03, 30, 41, packet | 2026-03-30 | bridge-owned availability and bootstrap for backend-only surfaces |
+| PKT-PRV-047 | Qwen auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-030 VERIFIED + PKT-PRV-021 VERIFIED | 03, 30, 41, packet | 2026-03-30 | Qwen install/bootstrap guidance and smoke tests |
 
 ### Later phases
 
@@ -236,9 +344,18 @@ Later phases should continue this registry pattern using the same fields and sta
 
 | Phase | Packets | Current State |
 |---|---|---|
-| Phase 4.1 | PKT-PRV-012 | READY_TO_START |
-| Phase 3.2 | PKT-JOB-008 | DEFERRED_DRAFT |
-| Phase 5 | PKT-DSC-001 .. PKT-DSC-004 | WAITING_ON_DEPENDENCIES |
+| Phase 4.1 | PKT-PRV-012 | VERIFIED |
+| Phase 4.2 | PKT-PRV-013 | VERIFIED |
+| Phase 4.3 | PKT-PRV-014 .. PKT-PRV-021 | VERIFIED |
+| Phase 4.4 | PKT-PRV-022 .. PKT-PRV-030 | VERIFIED |
+| Phase 4.6 | PKT-PRV-031 .. PKT-PRV-038 | IN_PROGRESS |
+| Phase 4.7 | PKT-PRV-039 .. PKT-PRV-047 | DEFERRED_DRAFT |
+| Phase 0.2 | PKT-FND-009 | VERIFIED |
+| Phase 1.2 | PKT-LFC-009 | VERIFIED |
+| Phase 2.2 | PKT-RLS-010 | VERIFIED |
+| Phase 3.2 | PKT-JOB-008, PKT-JOB-009 | VERIFIED | `@adhoc` is a conscious launch-scope choice, not an unresolved design gap |
+| Phase 3.3 | PKT-JOB-010 | VERIFIED | prompt shorthand/default-launch enhancement complete |
+| Phase 5 | PKT-DSC-001 .. PKT-DSC-004 | READY_TO_START |
 | Phase 6 | PKT-MIG-001 .. PKT-MIG-003 | WAITING_ON_DEPENDENCIES |
 
 ---

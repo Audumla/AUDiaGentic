@@ -1,0 +1,25 @@
+{
+  "contract-version": "v1",
+  "review-bundle-id": "rvb_20260330_0001",
+  "subject": {
+    "kind": "artifact"
+  },
+  "required-reviews": 0,
+  "aggregation-rule": "weighted-vote",
+  "require-distinct-reviewers": "yes",
+  "reports": [
+    {
+      "review-id": "rvr_1",
+      "reviewer-key": "x",
+      "recommendation": "pass"
+    },
+    {
+      "review-id": "rvr_2",
+      "reviewer-key": "x",
+      "recommendation": "pass"
+    }
+  ],
+  "decision": "approved",
+  "status": "done",
+  "updated-at": "2026-03-30T03:15:00Z"
+}

@@ -15,7 +15,7 @@ Add provider execution behind a stable provider contract without changing the ea
 ## Out of scope
 
 - Discord session mirroring
-n- replacing in-process execution as the default
+- replacing in-process execution as the default
 
 ## Implementation order
 
@@ -31,7 +31,13 @@ n- replacing in-process execution as the default
 - unhealthy provider states fail cleanly without corrupting job records
 - the system still works entirely in-process with no server enabled
 
-## Follow-on phase
+## Follow-on phases
 
 Provider model catalog and selection extensions are defined in Phase 4.1.
 See `11_Phase_4_1_Provider_Model_Catalog_and_Selection.md`.
+
+Provider status/validation behavior is defined in Phase 4.2.
+Prompt-tag surface recognition and synchronization are defined in Phase 4.3.
+Provider execution compliance and isolated per-provider implementation docs are defined in Phase 4.4.
+Provider prompt-trigger launch behavior is drafted in Phase 4.6.
+Provider availability and auto-install orchestration is drafted in Phase 4.7.

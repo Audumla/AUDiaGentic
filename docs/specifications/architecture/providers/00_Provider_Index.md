@@ -2,6 +2,12 @@
 
 Provider docs define how each provider maps onto the common provider contract.
 Model catalog and selection rules are defined in `24_DRAFT_Provider_Model_Catalog_and_Selection.md`.
+Prompt-tag surface recognition and synchronization are defined in `27_Provider_Prompt_Tag_Recognition_and_Surface_Synchronization.md`.
+Provider execution compliance and isolated provider implementation docs are defined in `28_Provider_Tag_Execution_Compliance_Model.md` and `docs/implementation/providers/11_Provider_Tag_Execution_Conformance_Matrix.md`.
+Provider prompt-trigger launch behavior is drafted in `29_DRAFT_Provider_Prompt_Trigger_Launch_Behavior.md`.
+The realistic provider-by-provider rollout assessment for prompt-trigger launch is documented in `docs/implementation/providers/28_Prompt_Trigger_Realistic_Rollout_Assessment.md`.
+Provider auto-install and availability orchestration is drafted in `30_DRAFT_Provider_Auto_Install_and_Availability_Orchestration.md`.
+The provider-specific implementation packs live in `docs/implementation/providers/12_Codex_Tag_Execution_Implementation.md` through `19_Qwen_Tag_Execution_Implementation.md`.
 
 - [Local OpenAI-compatible](01_Local_OpenAI_Compatible.md)
 - [Claude](02_Claude.md)
@@ -11,3 +17,24 @@ Model catalog and selection rules are defined in `24_DRAFT_Provider_Model_Catalo
 - [Continue](06_Continue.md)
 - [Cline](07_Cline.md)
 - [Qwen](08_Qwen.md)
+
+## Provider execution implementation docs
+
+- `docs/implementation/providers/11_Provider_Tag_Execution_Conformance_Matrix.md`
+- `docs/implementation/providers/12_Codex_Tag_Execution_Implementation.md`
+- `docs/implementation/providers/13_Claude_Code_Tag_Execution_Implementation.md`
+- `docs/implementation/providers/20_Claude_Prompt_Trigger_Runbook.md`
+- `docs/implementation/providers/14_Gemini_Tag_Execution_Implementation.md`
+- `docs/implementation/providers/21_Gemini_Prompt_Trigger_Runbook.md`
+- `docs/implementation/providers/22_Codex_Prompt_Trigger_Runbook.md`
+- `docs/implementation/providers/15_GitHub_Copilot_Tag_Execution_Implementation.md`
+- `docs/implementation/providers/23_Copilot_Prompt_Trigger_Runbook.md`
+- `docs/implementation/providers/16_Continue_Tag_Execution_Implementation.md`
+- `docs/implementation/providers/24_Continue_Prompt_Trigger_Runbook.md`
+- `docs/implementation/providers/17_Cline_Tag_Execution_Implementation.md`
+- `docs/implementation/providers/25_Cline_Prompt_Trigger_Runbook.md`
+- `docs/implementation/providers/18_Local_OpenAI_Compatible_Tag_Execution_Implementation.md`
+- `docs/implementation/providers/26_Local_OpenAI_Compatible_Prompt_Trigger_Runbook.md`
+- `docs/implementation/providers/19_Qwen_Tag_Execution_Implementation.md`
+- `docs/implementation/providers/27_Qwen_Prompt_Trigger_Runbook.md`
+- `docs/implementation/providers/28_Prompt_Trigger_Realistic_Rollout_Assessment.md`

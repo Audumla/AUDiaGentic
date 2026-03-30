@@ -74,5 +74,64 @@ def test_packet_runner_handles_required_stage_failure(tmp_path: Path) -> None:
             now_fn=lambda: "2026-03-30T00:00:00Z",
         )
         assert result["state"] == "failed"
+        assert not (
+            sandbox.repo
+            / ".audiagentic"
+            / "runtime"
+            / "jobs"
+            / "job_20260330_0002"
+            / "stages"
+            / "summary.json"
+        ).exists()
+    finally:
+        sandbox.cleanup()
+
+
+def test_packet_runner_is_idempotent_for_repeat_runs(tmp_path: Path) -> None:
+    sandbox = sandbox_helper.create(tmp_path, "packet-runner-repeat")
+    try:
+        seen: list[str] = []
+
+        def stage_handler(job, stage, ctx, previous_output):
+            seen.append(stage["id"])
+            return {
+                "stage-result": "success",
+                "artifacts": [],
+                "next-stage-recommendation": "continue",
+            }
+
+        first = run_packet(
+            sandbox.repo,
+            packet_id="pkt-job-003",
+            project_id="my-project",
+            provider_id="local-openai",
+            workflow_profile="lite",
+            job_id="job_20260330_0003",
+            stage_handler=stage_handler,
+            now_fn=lambda: "2026-03-30T00:00:00Z",
+        )
+        second = run_packet(
+            sandbox.repo,
+            packet_id="pkt-job-003",
+            project_id="my-project",
+            provider_id="local-openai",
+            workflow_profile="lite",
+            job_id="job_20260330_0003",
+            stage_handler=stage_handler,
+            now_fn=lambda: "2026-03-30T00:00:00Z",
+        )
+
+        assert first["state"] == "completed"
+        assert second["state"] == "completed"
+        assert seen == ["plan", "implement", "summary", "plan", "implement", "summary"]
+        stage_dir = (
+            sandbox.repo
+            / ".audiagentic"
+            / "runtime"
+            / "jobs"
+            / "job_20260330_0003"
+            / "stages"
+        )
+        assert len(list(stage_dir.glob("*.json"))) == 3
     finally:
         sandbox.cleanup()

@@ -74,6 +74,11 @@ Owns:
 - provider adapters
 - optional server seam draft
 - provider model catalog and selection extensions (Phase 4.1)
+- provider status/validation CLI (Phase 4.2)
+- provider prompt-tag surface integration and synchronization (Phase 4.3)
+- provider tag execution compliance and isolated per-provider implementation docs (Phase 4.4)
+- provider prompt-trigger launch behavior and bridge/wrapper rollout (Phase 4.6)
+- provider availability and auto-install orchestration (Phase 4.7)
 
 Parallelism:
 - PKT-PRV-001 and PRV-002 first
@@ -98,6 +103,11 @@ Parallelism:
 - Freeze 4: end of Phase 3 — job state and workflow stage contract
 - Freeze 5: end of Phase 4 — provider and optional server seam
 - Freeze 5.1: end of Phase 4.1 — provider model catalog and selection contract
+- Freeze 5.2: end of Phase 4.2 — provider status/validation contract
+- Freeze 5.3: end of Phase 4.3 — provider prompt-tag surface contract
+- Freeze 5.4: end of Phase 4.4 — provider execution compliance and isolated provider implementation contract
+- Freeze 5.5: end of Phase 4.6 — provider prompt-trigger launch bridge contract
+- Freeze 5.6: end of Phase 4.7 — provider availability and auto-install contract
 
 ## What implementors must not do
 

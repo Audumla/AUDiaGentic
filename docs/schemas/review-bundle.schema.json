@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "review-bundle-id",
+    "subject",
+    "required-reviews",
+    "aggregation-rule",
+    "require-distinct-reviewers",
+    "reports",
+    "decision",
+    "status",
+    "updated-at"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "review-bundle-id": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "job",
+            "artifact",
+            "packet",
+            "adhoc"
+          ]
+        },
+        "job-id": {
+          "type": "string"
+        },
+        "artifact-id": {
+          "type": "string"
+        },
+        "packet-id": {
+          "type": "string"
+        },
+        "adhoc-id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "required-reviews": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "aggregation-rule": {
+      "type": "string",
+      "enum": [
+        "all-pass",
+        "majority-pass"
+      ]
+    },
+    "require-distinct-reviewers": {
+      "type": "boolean"
+    },
+    "reports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "review-id",
+          "reviewer-key",
+          "recommendation"
+        ],
+        "properties": {
+          "review-id": {
+            "type": "string"
+          },
+          "reviewer-key": {
+            "type": "string"
+          },
+          "recommendation": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "pass-with-notes",
+              "rework",
+              "block"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "rework",
+        "blocked"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "complete"
+      ]
+    },
+    "updated-at": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

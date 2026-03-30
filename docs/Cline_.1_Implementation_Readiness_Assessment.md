@@ -183,7 +183,7 @@ PKT-PRV-012 (Model Catalog) ← Independent, can run in parallel
 ### Foundation Work Required
 
 2. **Define Contract Requirements for PKT-FND-008**
-   - Identify specific contract fields from later phases (Phase 5-6)
+   - Identify specific contract fields from later phases (Phase 5 and Phase 6)
    - Define new schema requirements
    - Create example fixtures
    - Update dependency tracking

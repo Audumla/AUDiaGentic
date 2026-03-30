@@ -18,11 +18,32 @@ Begin with the **current build state**, then confirm the packet is available, th
 
 This project records doc-changing feature extensions with a decimal suffix so later updates do not collide.
 
-Current extension slot:
-- `.1` = provider definition extensions, including access-mode and catalog work
-- `.2` = prompt-tagged workflow launch and review loop
+Current extension slots:
+- `.1` = provider definition extensions, including access-mode and model catalog work
+- `.2` = prompt-tagged workflow launch, structured review loop, and feature-gated ad hoc execution
+- `.3` = prompt shorthand and default-launch enhancements, including provider shorthand and inferred default subjects/models
+- `.4` = provider prompt-tag surface recognition and synchronization across provider surfaces
+- `.5` = provider tag execution compliance and isolated provider implementation docs
+- `.6` = provider prompt-trigger launch behavior, agent instruction surfaces, and wrapper/bridge invocation
+- `.7` = provider availability, auto-install, and bootstrap orchestration
 
-When a new doc-changing feature lands, record the next suffix here before editing specs or packets.
+Do not invent a new suffix until the build registry and roadmap are updated first.
+
+---
+
+## Current operational starting point
+
+At the time of this pack:
+- `.1` work is complete
+- `.2` work is complete for the first executable pass, with `@adhoc` intentionally feature-gated
+- `.3` work is complete for the first shorthand/default-launch pass
+- `.4` shared surface-contract work is implemented
+- `.5` provider execution compliance docs are staged as the isolated provider-specific implementation layer
+- `.6` prompt-trigger launch behavior is now drafted, with a realistic rollout assessment that splits first-wave and wrapper-first providers; the shared bridge harness is now implemented and the Claude/Cline provider paths have started
+- `.7` provider auto-install orchestration is now drafted and awaiting implementation packets
+- later phase work beyond `.7` remains deferred until additional packet definitions are added
+
+That means new implementors should use the build registry for the next legal packet rather than reopening `.1`, `.2`, or `.3`.
 
 ---
 
@@ -74,6 +95,7 @@ Suggested naming:
 - `pkt-fnd-001-<owner>`
 - `pkt-lfc-003-<owner>`
 - `pkt-rls-002-<owner>`
+- `pkt-job-008-<owner>`
 
 Do not mix multiple packets in the same branch unless the roadmap or phase lead explicitly approves it.
 
@@ -139,24 +161,44 @@ Do not work around the issue locally in code.
 
 ## Minimum reading set by packet type
 
-### For Phase 0 work
+### For Phase 0 / 0.1 / 0.2 work
 Read:
 - `27_Phase_0_Kickoff_Checklist.md`
 - `06_Phase_0_Build_Book.md`
+- `03_Common_Contracts.md`
+- `26_Prompt_Tagged_Workflow_Launch_and_Review_Extension.md` when working on `.2`
 - your packet file
-- relevant contract docs
 
-### For Phase 1 work
+### For Phase 1 / 1.1 / 1.2 work
 Read:
 - `07_Phase_1_Build_Book.md`
 - `05_Installation_Update_Cutover_and_Uninstall.md`
 - your packet file
 
-### For Phase 2 work
+### For Phase 2 / 2.1 / 2.2 work
 Read:
 - `08_Phase_2_Build_Book.md`
 - `09_Release_Audit_and_Change_Ledger.md`
 - `10_Release_Please_Baseline_Workflow_Management.md`
+- your packet file
+
+### For Phase 3 / 3.1 / 3.2 / 3.3 / 3.4 work
+Read:
+- `09_Phase_3_Build_Book.md`
+- `08_Agent_Jobs_MVP.md`
+- `12_Workflow_Profiles_and_Extensibility.md`
+- `35_Phase_3_2_Prompt_Tagged_Workflow_Launch_and_Review_Extension.md` when working on `.2`
+- `37_Phase_3_3_Prompt_Tagged_Workflow_Shortcuts_and_Defaults.md` when working on `.3`
+- `32_DRAFT_Job_Control_and_Running_Job_Cancellation.md` when working on `.4`
+- your packet file
+
+### For Phase 4 / 4.1 / 4.2 / 4.3 work
+Read:
+- `06_Phase_4_Providers_and_Optional_Server_Foundation.md`
+- `10_Phase_4_Build_Book.md`
+- `27_Provider_Prompt_Tag_Recognition_and_Surface_Synchronization.md` when working on `.4`
+- `38_Phase_4_3_Provider_Prompt_Tag_Surface_Integration.md` when working on `.4`
+- `10_Prompt_Tag_Surface_Integration_Shared.md` when working on `.4`
 - your packet file
 
 ---
@@ -173,6 +215,7 @@ A packet is safe to begin only when:
 
 If one of these is missing, the correct action is to clarify the state first — not to start coding.
 
+
 ---
 
 ## Active Progress
@@ -180,7 +223,7 @@ If one of these is missing, the correct action is to clarify the state first —
 | Date | Phase | Packet | Status | Notes |
 |---|---|---|---|---|
 | 2026-03-29 | Phase 1 | PKT-LFC-002 | VERIFIED | Manifest + checkpoint semantics; installed-state schema + error-envelope schema added |
-| 2026-03-29 | Phase 1 | PKT-LFC-003 | VERIFIED | Fresh install apply + e2e tests | 
+| 2026-03-29 | Phase 1 | PKT-LFC-003 | VERIFIED | Fresh install apply + e2e tests |
 | 2026-03-29 | Phase 1 | PKT-LFC-004 | VERIFIED | Update dispatch module + unit tests |
 | 2026-03-29 | Phase 1 | PKT-LFC-005 | VERIFIED | Legacy cutover apply + report tests |
 | 2026-03-29 | Phase 1 | PKT-LFC-006 | VERIFIED | Uninstall semantics + e2e tests |
@@ -202,8 +245,8 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-30 | Phase 4 | PKT-PRV-001 | VERIFIED | Provider registry + descriptor validation; tests: tests/unit/providers/test_registry.py |
 | 2026-03-30 | Phase 4 | PKT-PRV-002 | VERIFIED | Provider selection + health checks; tests: tests/integration/providers/test_selection.py |
 | 2026-03-30 | Phase 4 | PKT-PRV-003 | VERIFIED | local-openai adapter; tests: tests/integration/providers/test_local_openai.py |
-| 2026-03-30 | Phase 4 | PKT-PRV-004 | VERIFIED | claude adapter; tests: tests/integration/providers/test_claude.py |
-| 2026-03-30 | Phase 4 | PKT-PRV-005 | VERIFIED | codex adapter; tests: tests/integration/providers/test_codex.py |
+| 2026-03-30 | Phase 4 | PKT-PRV-004 | VERIFIED | claude adapter; tests: tests/integration/providers/test_claude.py; live wrapper smoke test verified; hook/skills assets still needed for full native-intercept rollout |
+| 2026-03-30 | Phase 4 | PKT-PRV-005 | VERIFIED | codex adapter; tests: tests/integration/providers/test_codex.py; live wrapper smoke test verified; task payload enrichment still a follow-up |
 | 2026-03-30 | Phase 4 | PKT-PRV-006 | VERIFIED | gemini adapter; tests: tests/integration/providers/test_gemini.py |
 | 2026-03-30 | Phase 4 | PKT-PRV-007 | VERIFIED | copilot adapter; tests: tests/integration/providers/test_copilot.py |
 | 2026-03-30 | Phase 4 | PKT-PRV-008 | VERIFIED | continue adapter; tests: tests/integration/providers/test_continue.py |
@@ -211,9 +254,28 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-30 | Phase 4 | PKT-PRV-010 | VERIFIED | provider/job seam tests; tests: tests/integration/providers/test_job_provider_seam.py |
 | 2026-03-30 | Phase 4 | PKT-SRV-001 | VERIFIED | optional server seam; tests: tests/unit/server/test_service_boundary.py |
 | 2026-03-30 | Phase 4 | PKT-PRV-011 | VERIFIED | provider access-mode contract + health config rules; tests: tests/unit/contracts/test_schema_validation.py; tests/integration/providers/test_selection.py; tests/integration/test_example_scaffold.py; tests/e2e/lifecycle/test_fresh_install.py |
-| 2026-03-30 | Phase 4.1 | PKT-PRV-012 | READY_TO_START | provider model catalog + selection rules; model aliases, catalog refresh, default-model resolution |
-| 2026-03-30 | Phase 0.1 | PKT-FND-008 | READY_TO_START | contract/schema updates for access-mode, model catalog, model-id/model-alias |
-| 2026-03-30 | Phase 1.1 | PKT-LFC-008 | READY_TO_START | lifecycle updates to preserve new tracked config fields |
-| 2026-03-30 | Phase 2.1 | PKT-RLS-009 | READY_TO_START | release updates to summarize or omit provider/model metadata explicitly |
-| 2026-03-30 | Phase 3.1 | PKT-JOB-007 | READY_TO_START | job updates for provider-id, model-id, model-alias, default-model |
-| 2026-03-30 | Phase 3.2 | PKT-JOB-008 | DEFERRED_DRAFT | prompt-tagged workflow launch and review loop; CLI/VS Code provenance, review feedback loop |
+| 2026-03-30 | Phase 4.1 | PKT-PRV-012 | VERIFIED | provider model catalog + selection rules; tests: tests/unit/providers/test_model_catalog.py; tests/integration/providers/test_model_selection.py |
+| 2026-03-30 | Phase 4.2 | PKT-PRV-013 | VERIFIED | provider CLI/status inspection; tests: tests/unit/providers/test_provider_status.py; tests/integration/providers/test_provider_status_cli.py |
+| 2026-03-30 | Phase 4.3 | PKT-PRV-014 | VERIFIED | provider prompt-tag surface contract, schema, fixtures, semantic validation, and status summary implemented; provider-specific rollout guidance now lives in Phase 4.4 |
+| 2026-03-30 | Phase 4.4 | PKT-PRV-022 | VERIFIED | provider execution compliance model, conformance matrix, and isolated provider implementation docs added |
+| 2026-03-30 | Phase 4.6 | PKT-PRV-031 | VERIFIED | provider prompt-trigger launch behavior; shared trigger bridge and provider-specific instruction surfaces drafted and implemented for the shared bridge harness |
+| 2026-03-30 | Phase 4.6 | PKT-PRV-032 | READY_FOR_REVIEW | Codex prompt-trigger bridge surface implemented with repo-local `AGENTS.md` and `.agents/skills` guidance |
+| 2026-03-30 | Phase 4.6 | PKT-PRV-033 | READY_FOR_REVIEW | Claude prompt-trigger bridge surface implemented with repo-local `CLAUDE.md` and `.claude/rules` guidance |
+| 2026-03-30 | Phase 4.6 | PKT-PRV-034 | READY_FOR_REVIEW | Gemini prompt-trigger bridge surface implemented with repo-local `GEMINI.md` guidance |
+| 2026-03-30 | Phase 4.6 | PKT-PRV-035 | READY_FOR_REVIEW | GitHub Copilot prompt-trigger bridge surface implemented with repo-local `.github/copilot-instructions.md`, prompt files, and agent files |
+| 2026-03-30 | Phase 4.6 | PKT-PRV-037 | READY_FOR_REVIEW | Cline prompt-trigger bridge surface implemented with repo-local `.clinerules` guidance |
+| 2026-03-30 | Phase 4.6 | PKT-PRV-038 | READY_FOR_REVIEW | local-openai/qwen prompt-trigger bridge surface implemented with repo-local bridge wrappers |
+| 2026-03-30 | Phase 4.7 | PKT-PRV-039 | DEFERRED_DRAFT | provider availability and auto-install orchestration; shared install policy and provider-specific bootstrap packets drafted |
+| 2026-03-30 | Phase 5 | PKT-DSC-001 .. PKT-DSC-004 | READY_TO_START | Discord overlay packet headers normalized; phase 5 is ready to implement after Phase 4.4 verification |
+| 2026-03-30 | Phase 0.1 | PKT-FND-008 | VERIFIED | contract/schema updates for access-mode, model catalog, model-id/model-alias |
+| 2026-03-30 | Phase 1.1 | PKT-LFC-008 | VERIFIED | lifecycle updates to preserve new tracked config fields |
+| 2026-03-30 | Phase 2.1 | PKT-RLS-009 | VERIFIED | release updates to summarize or omit provider/model metadata explicitly |
+| 2026-03-30 | Phase 3.1 | PKT-JOB-007 | VERIFIED | job updates for provider-id, model-id, model-alias, default-model |
+| 2026-03-30 | Phase 0.2 | PKT-FND-009 | VERIFIED | foundational prompt-launch contracts and schemas specified; implementation complete |
+| 2026-03-30 | Phase 1.2 | PKT-LFC-009 | VERIFIED | lifecycle handling for prompt/job config persistence implemented |
+| 2026-03-30 | Phase 1.3 | PKT-LFC-010 | DEFERRED_DRAFT | lifecycle preservation for provider auto-install policy fields drafted |
+| 2026-03-30 | Phase 2.2 | PKT-RLS-010 | VERIFIED | release/audit reporting for prompt launch + review artifacts implemented |
+| 2026-03-30 | Phase 3.2 | PKT-JOB-008 | VERIFIED | prompt-tagged launch core implemented; provider shorthand defaults and short tag aliases added; explicit `@adhoc` remains feature-gated by config |
+| 2026-03-30 | Phase 3.2 | PKT-JOB-009 | VERIFIED | structured multi-review bundle + policy loop implemented |
+| 2026-03-30 | Phase 3.3 | PKT-JOB-010 | VERIFIED | prompt shorthand/default-launch enhancement implemented; provider shorthand and short aliases resolve to default subjects/models |
+| 2026-03-30 | Phase 3.4 | PKT-JOB-011 | READY_FOR_REVIEW | job control and running-job cancellation implemented; tests added |

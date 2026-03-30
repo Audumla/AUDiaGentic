@@ -1,3 +1,5 @@
+> This draft is preserved for history. Implementation should now use `35_Phase_3_2_Prompt_Tagged_Workflow_Launch_and_Review_Extension.md` together with the .2 packet set.
+
 # Draft Guide - Prompt-Tagged Workflow Launch and Review Loop
 
 ## Goal

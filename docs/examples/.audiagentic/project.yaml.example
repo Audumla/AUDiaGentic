@@ -1,7 +1,19 @@
 contract-version: v1
 project-id: sample-project
 project-name: Sample Project
-workflow-profile: lite
+workflow-profile: standard
 tracked-docs-root: docs
 runtime-root: .audiagentic/runtime
 release-strategy: release-please
+workflow-overrides:
+  review:
+    enabled: true
+  audit:
+    enabled: false
+prompt-launch:
+  syntax: prefix-token-v1
+  allow-adhoc-target: false
+  default-review-policy:
+    required-reviews: 2
+    aggregation-rule: all-pass
+    require-distinct-reviewers: true

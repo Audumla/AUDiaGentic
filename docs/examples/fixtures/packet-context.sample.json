@@ -1,0 +1,11 @@
+{
+  "job-id": "job_20260330_0001",
+  "project-id": "my-project",
+  "packet-id": "pkt-job-003",
+  "provider-id": "local-openai",
+  "model-id": null,
+  "model-alias": null,
+  "default-model": null,
+  "workflow-profile": "lite",
+  "working-root": "/path/to/project"
+}

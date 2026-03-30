@@ -13,6 +13,7 @@ Implement safe installation, update, cutover, uninstall, and project enablement 
 - uninstall current AUDiaGentic
 - document migration report generation
 - managed workflow replacement warnings
+- provider install/bootstrap policy field preservation for later provider auto-install features
 
 ## Out of scope
 
@@ -30,6 +31,7 @@ Implement safe installation, update, cutover, uninstall, and project enablement 
 5. PKT-LFC-005 — legacy cutover
 6. PKT-LFC-006 — uninstall current AUDiaGentic
 7. PKT-LFC-007 — document migration outcomes and reports
+8. PKT-LFC-010 — preserve provider auto-install policy fields across lifecycle commands
 
 ## Exit gate
 

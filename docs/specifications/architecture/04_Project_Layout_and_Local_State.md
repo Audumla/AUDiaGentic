@@ -13,7 +13,7 @@ docs/
 .audiagentic/
   project.yaml
   components.yaml
-  providers.yaml
+  providers.yaml  # access-mode, model catalog, and prompt-surface settings
   runtime/
 ```
 
@@ -23,6 +23,8 @@ docs/
 .audiagentic/runtime/
   approvals/
   jobs/
+    launches/
+    reviews/
   ledger/
     fragments/
     sync/
@@ -45,3 +47,8 @@ docs/
 ```gitignore
 .audiagentic/runtime/
 ```
+
+
+## Phase 3.2 runtime additions
+
+Prompt launch requests, review reports, and review bundles are runtime-only artifacts. They must live under `.audiagentic/runtime/jobs/` or a child path such as `.audiagentic/runtime/jobs/<job-id>/reviews/` and must not be written directly into tracked docs.

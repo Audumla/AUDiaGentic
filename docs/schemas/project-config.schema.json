@@ -38,6 +38,62 @@
     },
     "release-strategy": {
       "type": "string"
+    },
+    "workflow-overrides": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "prompt-launch": {
+      "type": "object",
+      "properties": {
+        "syntax": {
+          "type": "string",
+          "const": "prefix-token-v1"
+        },
+        "allow-adhoc-target": {
+          "type": "boolean"
+        },
+        "default-review-policy": {
+          "type": "object",
+          "properties": {
+            "required-reviews": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "aggregation-rule": {
+              "type": "string",
+              "enum": [
+                "all-pass",
+                "majority-pass"
+              ]
+            },
+            "require-distinct-reviewers": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "required-reviews",
+            "aggregation-rule",
+            "require-distinct-reviewers"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "syntax"
+      ],
+      "additionalProperties": false
     }
   },
   "additionalProperties": true

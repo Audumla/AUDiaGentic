@@ -17,6 +17,7 @@ from audiagentic.jobs.approvals import (
     request_job_approval,
 )
 from audiagentic.jobs.records import build_job_record
+from audiagentic.jobs.reviews import build_review_bundle, persist_review_bundle
 from audiagentic.jobs.store import read_job_record, write_job_record
 from tests.helpers import sandbox as sandbox_helper
 
@@ -92,5 +93,49 @@ def test_duplicate_pending_approval_returns_existing(tmp_path: Path) -> None:
         )
         duplicate = request_approval(sandbox.repo, second)
         assert duplicate["approval-id"] == stored["approval-id"]
+    finally:
+        sandbox.cleanup()
+
+
+def test_review_bundle_blocks_approval_until_approved(tmp_path: Path) -> None:
+    sandbox = sandbox_helper.create(tmp_path, "job-approval-review-gate")
+    try:
+        job = build_job_record(
+            job_id="job_20260330_0102",
+            packet_id="pkt-job-005",
+            project_id="my-project",
+            provider_id="local-openai",
+            workflow_profile="lite",
+            state="running",
+            created_at="2026-03-30T00:00:00Z",
+            updated_at="2026-03-30T00:00:00Z",
+            review_bundle_id="rvb_20260330_0102",
+        )
+        write_job_record(sandbox.repo, job)
+        bundle = build_review_bundle(
+            review_bundle_id="rvb_20260330_0102",
+            subject={"kind": "job", "job-id": job["job-id"]},
+            required_reviews=1,
+            aggregation_rule="all-pass",
+            require_distinct_reviewers=True,
+            reports=[
+                {"review-id": "rvr_1", "reviewer-key": "claude:cli:sess_1", "recommendation": "rework"}
+            ],
+        )
+        persist_review_bundle(sandbox.repo, job["job-id"], bundle)
+        try:
+            request_job_approval(
+                sandbox.repo,
+                job_id=job["job-id"],
+                project_id="my-project",
+                kind="job-continue",
+                summary="Continue job",
+                approval_id="apr_002",
+                now_ts="2026-03-30T00:00:00Z",
+            )
+        except Exception as exc:  # noqa: BLE001
+            assert "review bundle is not approved" in str(exc)
+        else:
+            raise AssertionError("expected review gate failure")
     finally:
         sandbox.cleanup()

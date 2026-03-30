@@ -34,7 +34,9 @@ def test_job_provider_seam_selects_externally(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "job-provider-seam")
     try:
         registry = {"local-openai": _descriptor("local-openai")}
-        config = {"local-openai": {"enabled": True, "install-mode": "external-configured"}}
+        config = {
+            "local-openai": {"enabled": True, "install-mode": "external-configured", "access-mode": "none"}
+        }
         job_request = {"provider-id": "local-openai"}
         provider_id = select_provider(job_request, registry, config)
 
@@ -57,7 +59,9 @@ def test_unhealthy_provider_blocks_job_creation(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "job-provider-unhealthy")
     try:
         registry = {"local-openai": _descriptor("local-openai")}
-        config = {"local-openai": {"enabled": False, "install-mode": "external-configured"}}
+        config = {
+            "local-openai": {"enabled": False, "install-mode": "external-configured", "access-mode": "none"}
+        }
         job_request = {"provider-id": "local-openai"}
         try:
             select_provider(job_request, registry, config)
