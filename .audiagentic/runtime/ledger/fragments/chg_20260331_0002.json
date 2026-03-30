@@ -1,0 +1,28 @@
+{
+  "change-class": "docs",
+  "contract-version": "v1",
+  "diff-stats": {
+    "deletions": 0,
+    "files-changed": 3,
+    "insertions": 8
+  },
+  "event-id": "chg_20260331_0002",
+  "files": [
+    "docs/Implementation_tracker.md",
+    "docs/specifications/architecture/10_Release_Please_Baseline_Workflow_Management.md",
+    "docs/specifications/architecture/22_DRAFT_ReleasePlease_Invocation_Options.md"
+  ],
+  "project-id": "audiagentic",
+  "source": {
+    "job-id": null,
+    "kind": "interactive-prompt",
+    "packet-id": "PKT-RLS-011",
+    "provider-id": "codex",
+    "session-id": "local",
+    "surface": "terminal"
+  },
+  "status": "unreleased",
+  "technical-summary": "Aligned release bootstrap docs with the project-level release-bootstrap entry point and marked the new Phase 2.3 slot verified.",
+  "timestamp-utc": "2026-03-31T00:00:00Z",
+  "user-summary-candidate": "Aligned the release bootstrap docs with the new project-level release-bootstrap entry point."
+}

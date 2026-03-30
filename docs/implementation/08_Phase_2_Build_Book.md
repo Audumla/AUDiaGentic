@@ -17,3 +17,5 @@ See `02_Phase_Gates_and_Exit_Criteria.md`.
 ## v12 corrective additions
 
 Phase 2 now explicitly includes an end-to-end release-flow integration packet so the release core is proven before jobs depend on it.
+
+Phase 2.3 now captures project release bootstrap and workflow activation so the repository can install and refresh itself using the same tracked release machinery it already owns.

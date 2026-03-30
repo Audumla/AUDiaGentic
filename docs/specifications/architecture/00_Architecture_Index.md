@@ -52,3 +52,5 @@ The following areas were strengthened specifically to close pre-implementation g
 - 29_DRAFT_Provider_Prompt_Trigger_Launch_Behavior.md
 - 30_DRAFT_Provider_Auto_Install_and_Availability_Orchestration.md
 - 31_DRAFT_Provider_Auto_Install_Policy_Persistence_and_Lifecycle_Roundtrip.md
+- 32_DRAFT_Job_Control_and_Running_Job_Cancellation.md
+- 33_DRAFT_Project_Release_Bootstrap_and_Workflow_Activation.md

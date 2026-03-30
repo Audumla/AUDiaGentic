@@ -1,1 +1,55 @@
-# Check-in
+# Check-In Summary
+
+Total changes: 51
+
+- Added initial job persistence and state machine with tests.
+- Added workflow profile loading and override validation.
+- Added packet runner to execute workflow stages sequentially.
+- Added stage output persistence for job workflows.
+- Added job approval tracking with expiration handling.
+- Added job release bridge to update the change ledger.
+- Added provider registry and documented qwen provider support.
+- Added provider health checks and selection logic.
+- Added local-openai adapter stub for provider execution.
+- Added claude provider adapter stub.
+- Added codex provider adapter stub.
+- Added gemini provider adapter stub.
+- Added copilot provider adapter stub.
+- Added continue provider adapter stub.
+- Added cline provider adapter stub.
+- Added provider/job seam tests.
+- Added optional server seam for in-process job execution.
+- Added schemas for provider health checks and stage results.
+- Added progress report for Phase 3-4 completion.
+- Added access-mode support for provider configuration and validation.
+- Planned provider model catalog support and added Phase 4.1 tracking.
+- Documented incremental .1 phases and updated tracking before implementation.
+- Documented full packet breakdowns for incremental .1 phases.
+- Clarified the .1 packet scopes and dependencies before implementation.
+- Added the .2 workflow-launch extension docs and tracker updates.
+- Implemented the Codex CLI provider wrapper and documented the remaining payload gap.
+- Implemented the Claude CLI provider wrapper and documented the remaining hook gap.
+- Implemented the Qwen CLI provider wrapper and documented the experimental hook gap.
+- Implemented the Cline CLI provider wrapper and documented the remaining hook gap.
+- Drafted Phase 4.6 provider prompt-trigger launch behavior and packet breakdowns.
+- Added a provider implementation snapshot to the current-state summary.
+- Drafted Phase 4.7 provider availability and auto-install orchestration and packet breakdowns.
+- Drafted Phase 1.3 provider auto-install policy persistence follow-on.
+- Expanded provider prompt-trigger docs with provider-specific chat exposure paths.
+- Added the Claude prompt-trigger implementation runbook.
+- Added the Gemini prompt-trigger implementation runbook.
+- Added the remaining provider prompt-trigger implementation runbooks.
+- Drafted Phase 3.4 job control and running-job cancellation.
+- Expanded the Phase 3.4 job-control packet into an implementation-ready packet.
+- Implemented Phase 3.4 job control and running-job cancellation.
+- Added the prompt-trigger rollout realism assessment.
+- Implemented the shared Phase 4.6 prompt-trigger bridge harness.
+- Added the Claude provider bridge surface and repo-local instruction rules.
+- Added the Cline provider bridge surface and repo-local instruction rules.
+- Added the Codex provider bridge surface and repo-local guidance.
+- Added the Gemini provider bridge surface and repo-local guidance.
+- Added the Copilot provider bridge surface and repo-local guidance.
+- Added the local-openai and Qwen bridge-only prompt-trigger surfaces.
+- Added project release bootstrap and workflow activation so the repo can install itself using its own release machinery.
+- Aligned the release bootstrap docs with the new project-level release-bootstrap entry point.
+- Corrected the project-local bootstrap config to use the real AUDiaGentic identity.

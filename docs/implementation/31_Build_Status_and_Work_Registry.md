@@ -117,6 +117,7 @@ Each row in the registry must contain:
 | Phase 2 | `VERIFIED` | phase 2 gate complete |
 | Phase 2.1 | `VERIFIED` | release/ledger updates for .1 fields complete |
 | Phase 2.2 | `VERIFIED` | release/audit handling for prompt/review metadata complete |
+| Phase 2.3 | `VERIFIED` | project release bootstrap and workflow activation complete using the project's own release machinery |
 | Phase 3 | `VERIFIED` | phase 3 gate complete |
 | Phase 3.1 | `VERIFIED` | incremental job updates for provider model selection complete |
 | Phase 3.2 | `VERIFIED` | prompt-tagged launch, gated `@adhoc`, and review loop complete |
@@ -214,6 +215,12 @@ Each row in the registry must contain:
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
 | PKT-RLS-010 | Release/audit handling for prompt and review metadata | VERIFIED | Codex | workspace | needs Phase 2 VERIFIED + PKT-FND-009 VERIFIED | 09, 10, 26, 35, packet | 2026-03-30 | omit raw prompt text/review bundles by default; allow deterministic summarized outcome handling |
+
+### Phase 2.3 — Project Release Bootstrap and Workflow Activation
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-RLS-011 | Project release bootstrap and workflow activation | VERIFIED | Codex | workspace | needs Phase 2 VERIFIED + PKT-RLS-006 VERIFIED + PKT-RLS-008 VERIFIED + PKT-LFC-003 VERIFIED | 05, 09, 10, 23, packet | 2026-03-31 | bootstrap command installs project-local release workflow state, preserves existing provider config, and activates the project's own release machinery |
 
 ### Phase 3 — Jobs and Simple Workflows
 
@@ -353,6 +360,7 @@ Later phases should continue this registry pattern using the same fields and sta
 | Phase 0.2 | PKT-FND-009 | VERIFIED |
 | Phase 1.2 | PKT-LFC-009 | VERIFIED |
 | Phase 2.2 | PKT-RLS-010 | VERIFIED |
+| Phase 2.3 | PKT-RLS-011 | VERIFIED |
 | Phase 3.2 | PKT-JOB-008, PKT-JOB-009 | VERIFIED | `@adhoc` is a conscious launch-scope choice, not an unresolved design gap |
 | Phase 3.3 | PKT-JOB-010 | VERIFIED | prompt shorthand/default-launch enhancement complete |
 | Phase 5 | PKT-DSC-001 .. PKT-DSC-004 | READY_TO_START |

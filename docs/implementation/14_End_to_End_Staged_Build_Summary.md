@@ -25,6 +25,11 @@
 ### After Phase 2.1
 - Release artifacts and ledger summaries reflect incremental contract updates.
 
+### After Phase 2.3
+- The project can bootstrap itself into a current release-managed state using its own release machinery.
+- Release workflow state, release docs, and installed-state tracking are refreshed deterministically.
+- The bootstrap path preserves existing tracked provider configuration.
+
 ### After Phase 3
 - Jobs can execute simple workflows and update the release core through owned scripts.
 - Approvals and workflow profiles exist.

@@ -65,6 +65,12 @@
 - no raw prompt text or raw review bundles are written into tracked release docs by default
 - check-in summaries remain deterministic after review outcome handling is added
 
+## Phase 2.3 exit gate
+- project-local release bootstrap writes or refreshes installed state deterministically
+- managed Release Please workflow/config state is prepared through the project's own release machinery
+- existing tracked provider config is preserved during bootstrap/update
+- audit, check-in, and current-release docs regenerate deterministically after bootstrap
+
 ## Phase 3 exit gate
 
 - jobs run using local deterministic scripts only and stub/mock provider seam only

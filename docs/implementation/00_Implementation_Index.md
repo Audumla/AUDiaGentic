@@ -60,6 +60,8 @@ This implementation pack is the **end-to-end staged build book** for AUDiaGentic
 - `29_DRAFT_Performance_and_Scale_Guidance.md`
 - `30_DRAFT_Developer_Onboarding.md`
 - `34_DRAFT_Prompt_Tagged_Workflow_Launch_and_Review_Loop.md`
+- `42_Phase_3_4_Job_Control_and_Running_Job_Cancellation.md`
+- `43_Phase_2_3_Project_Release_Bootstrap_and_Workflow_Activation.md`
 
 ## Extension execution docs
 
