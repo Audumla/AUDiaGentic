@@ -1,0 +1,23 @@
+{
+  "components": {
+    "core-lifecycle": "installed",
+    "release-audit-ledger": "installed",
+    "release-workflow": "installed"
+  },
+  "contract-version": "v1",
+  "current-version": "0.1.0",
+  "installation-kind": "update",
+  "last-lifecycle-action": "release-bootstrap",
+  "previous-version": "0.1.0",
+  "providers": {
+    "claude": "configured",
+    "cline": "configured",
+    "codex": "configured",
+    "continue": "disabled",
+    "copilot": "configured",
+    "gemini": "configured",
+    "local-openai": "configured",
+    "qwen": "configured"
+  },
+  "updated-at": "2026-03-30T23:57:27.858822Z"
+}

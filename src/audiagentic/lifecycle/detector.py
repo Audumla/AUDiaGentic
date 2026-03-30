@@ -5,9 +5,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 LEGACY_MARKERS = (
-    Path("docs/releases/CHANGELOG.md"),
-    Path("docs/releases/RELEASE_NOTES.md"),
-    Path("docs/releases/VERSION_HISTORY.md"),
     Path(".github/workflows/release-please.yml"),
 )
 

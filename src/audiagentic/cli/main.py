@@ -16,6 +16,7 @@ if str(SRC_ROOT) not in sys.path:
 
 import lifecycle_stub
 import refresh_model_catalog as refresh_model_catalog_tool
+from audiagentic.release import bootstrap as release_bootstrap
 import provider_status as provider_status_tool
 from audiagentic.jobs import control as job_control_tool
 from audiagentic.jobs import prompt_launch as prompt_launch_tool
@@ -66,6 +67,10 @@ def main(argv: list[str] | None = None) -> int:
     job_control_parser.add_argument("--action", required=True, choices=["cancel", "stop", "kill"])
     job_control_parser.add_argument("--requested-by", default="operator")
     job_control_parser.add_argument("--reason", default="")
+
+    release_bootstrap_parser = subparsers.add_parser("release-bootstrap")
+    release_bootstrap_parser.add_argument("--project-root", required=True)
+    release_bootstrap_parser.add_argument("--release-id", default="rel_0001")
 
     args = parser.parse_args(argv)
     if args.command == "lifecycle-stub":
@@ -122,6 +127,10 @@ def main(argv: list[str] | None = None) -> int:
             reason=args.reason,
         )
         result = job_control_tool.request_job_control(Path(args.project_root), request)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+    if args.command == "release-bootstrap":
+        result = release_bootstrap.bootstrap_release_workflow(Path(args.project_root), release_id=args.release_id)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
     return 1

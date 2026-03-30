@@ -18,6 +18,8 @@ In the baseline architecture, AUDiaGentic prepares tracked release docs and mana
 
 AUDiaGentic does **not** require a local Release Please CLI for MVP correctness.
 
+The project-level `release-bootstrap` command is the local bootstrap entry point that prepares the tracked docs, installed state, and managed workflow baseline before normal release execution continues.
+
 ## Workflow state classification
 
 - `absent`

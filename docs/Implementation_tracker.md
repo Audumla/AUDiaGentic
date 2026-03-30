@@ -26,6 +26,7 @@ Current extension slots:
 - `.5` = provider tag execution compliance and isolated provider implementation docs
 - `.6` = provider prompt-trigger launch behavior, agent instruction surfaces, and wrapper/bridge invocation
 - `.7` = provider availability, auto-install, and bootstrap orchestration
+- `.8` = project release bootstrap and workflow activation using the project's own release machinery
 
 Do not invent a new suffix until the build registry and roadmap are updated first.
 
@@ -41,7 +42,9 @@ At the time of this pack:
 - `.5` provider execution compliance docs are staged as the isolated provider-specific implementation layer
 - `.6` prompt-trigger launch behavior is now drafted, with a realistic rollout assessment that splits first-wave and wrapper-first providers; the shared bridge harness is now implemented and the Claude/Cline provider paths have started
 - `.7` provider auto-install orchestration is now drafted and awaiting implementation packets
-- later phase work beyond `.7` remains deferred until additional packet definitions are added
+- `.8` project release bootstrap and workflow activation is complete so the project can install itself using its own release processes
+- Phase 2.3 project release bootstrap and workflow activation is verified and using the project's own release machinery
+- later phase work beyond `.8` remains deferred until additional packet definitions are added
 
 That means new implementors should use the build registry for the next legal packet rather than reopening `.1`, `.2`, or `.3`.
 
@@ -275,6 +278,7 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-30 | Phase 1.2 | PKT-LFC-009 | VERIFIED | lifecycle handling for prompt/job config persistence implemented |
 | 2026-03-30 | Phase 1.3 | PKT-LFC-010 | DEFERRED_DRAFT | lifecycle preservation for provider auto-install policy fields drafted |
 | 2026-03-30 | Phase 2.2 | PKT-RLS-010 | VERIFIED | release/audit reporting for prompt launch + review artifacts implemented |
+| 2026-03-31 | Phase 2.3 | PKT-RLS-011 | VERIFIED | project release bootstrap and workflow activation implemented through the project's own release machinery |
 | 2026-03-30 | Phase 3.2 | PKT-JOB-008 | VERIFIED | prompt-tagged launch core implemented; provider shorthand defaults and short tag aliases added; explicit `@adhoc` remains feature-gated by config |
 | 2026-03-30 | Phase 3.2 | PKT-JOB-009 | VERIFIED | structured multi-review bundle + policy loop implemented |
 | 2026-03-30 | Phase 3.3 | PKT-JOB-010 | VERIFIED | prompt shorthand/default-launch enhancement implemented; provider shorthand and short aliases resolve to default subjects/models |

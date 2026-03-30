@@ -16,3 +16,7 @@ Draft design note. MVP baseline remains GitHub-workflow-driven Release Please.
 
 ## Constraint
 Any future option must preserve Release Please as a pluggable release strategy rather than hard-coding one invocation path into core release logic.
+
+## Project bootstrap note
+
+The repository may expose a project-level `release-bootstrap` command that prepares the same tracked docs and managed workflow state before the managed Release Please workflow runs. This is a bootstrap orchestration convenience, not an alternative Release Please backend.

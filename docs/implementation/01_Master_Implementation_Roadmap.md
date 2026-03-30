@@ -108,6 +108,15 @@ Leaves behind:
 - explicit release/audit handling for prompt/review metadata
 - deterministic check-in summary rules for review outcomes
 
+### Phase 2.3 — Project release bootstrap and workflow activation
+Use the project's own release machinery to bootstrap or refresh the project-local release workflow state so the repository can install and refresh itself with the same tracked release processes it already owns.
+
+Leaves behind:
+- project-local release workflow activation
+- bootstrap of `.audiagentic/installed.json` and managed Release Please workflow/config state
+- preservation of existing tracked provider config during bootstrap/update
+- audit/check-in/current-release regeneration through the release subsystem
+
 ### Phase 3 — Jobs and simple workflows
 
 Build a simple job engine that uses the release core instead of reimplementing it.
