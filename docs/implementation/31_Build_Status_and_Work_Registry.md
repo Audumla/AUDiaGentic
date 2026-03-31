@@ -153,13 +153,13 @@ Each row in the registry must contain:
 
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
-| PKT-FND-008 | Contract/schema updates from later phases | VERIFIED | Codex | workspace | needs Phase 0 VERIFIED + PKT-PRV-012 VERIFIED | 03, 16, packet | 2026-03-30 | contracts: access-mode, model catalog, model-id/model-alias; implemented with schema and fixture updates |
+| PKT-FND-008 | Contract/schema updates from later phases | VERIFIED | Codex | workspace | needs Phase 0 VERIFIED + PKT-PRV-012 VERIFIED (seam: provider/model contract feeds incremental config fields) | 03, 16, packet | 2026-03-30 | contracts: access-mode, model catalog, model-id/model-alias; implemented with schema and fixture updates |
 
 ### Phase 0.2 — Prompt / Review Contract Extension
 
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
-| PKT-FND-009 | Prompt launch + review bundle contracts and schemas | VERIFIED | Codex | workspace | needs Phase 0 VERIFIED + PKT-FND-008 + PKT-PRV-012 | 03, 26, 35, packet | 2026-03-30 | contracts: PromptLaunchRequest, ReviewReport, ReviewBundle, project prompt-launch policy, adhoc target |
+| PKT-FND-009 | Prompt launch + review bundle contracts and schemas | VERIFIED | Codex | workspace | needs Phase 0 VERIFIED + PKT-FND-008 + PKT-PRV-012 (seam: prompt-launch and review bundle contracts align with provider launch surface) | 03, 26, 35, packet | 2026-03-30 | contracts: PromptLaunchRequest, ReviewReport, ReviewBundle, project prompt-launch policy, adhoc target |
 
 ### Phase 1 — Lifecycle and Project Enablement
 
@@ -189,7 +189,7 @@ Each row in the registry must contain:
 
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
-| PKT-LFC-010 | Provider auto-install policy persistence and lifecycle roundtrip | DEFERRED_DRAFT | Codex | workspace | needs Phase 1 VERIFIED + PKT-FND-008 VERIFIED + PKT-PRV-039 DEFERRED_DRAFT | 05, 30, 41, packet | 2026-03-30 | preserve provider install/bootstrap policy fields across lifecycle commands |
+| PKT-LFC-010 | Provider auto-install policy persistence and lifecycle roundtrip | DEFERRED_DRAFT | Codex | workspace | needs Phase 1 VERIFIED + PKT-FND-008 VERIFIED + PKT-PRV-039 DEFERRED_DRAFT (seam: lifecycle roundtrip will preserve future provider install policy fields) | 05, 30, 41, packet | 2026-03-30 | preserve provider install/bootstrap policy fields across lifecycle commands |
 
 ### Phase 2 — Release / Audit / Ledger / Release Please
 
@@ -237,7 +237,7 @@ Each row in the registry must contain:
 
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
-| PKT-JOB-007 | Job updates for provider model selection | VERIFIED | Codex | workspace | needs Phase 3 VERIFIED + PKT-FND-008 VERIFIED + PKT-PRV-012 VERIFIED | 08, 12, packet | 2026-03-30 | job fields: provider-id, model-id, model-alias, default-model |
+| PKT-JOB-007 | Job updates for provider model selection | VERIFIED | Codex | workspace | needs Phase 3 VERIFIED + PKT-FND-008 VERIFIED + PKT-PRV-012 VERIFIED (seam: job model selection consumes shared provider/model contract) | 08, 12, packet | 2026-03-30 | job fields: provider-id, model-id, model-alias, default-model |
 
 ### Phase 3.2 — Prompt-Tagged Workflow Launch and Review Loop
 
@@ -250,7 +250,7 @@ Each row in the registry must contain:
 
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
-| PKT-JOB-010 | Prompt shorthand and default-launch behavior | VERIFIED | Codex | workspace | needs PKT-JOB-008 VERIFIED + PKT-PRV-012 VERIFIED + PKT-PRV-013 VERIFIED | 08, 12, 26, packet | 2026-03-30 | provider shorthand defaults, short tag aliases, default subject generation, provider-default model resolution |
+| PKT-JOB-010 | Prompt shorthand and default-launch behavior | VERIFIED | Codex | workspace | needs PKT-JOB-008 VERIFIED + PKT-PRV-012 VERIFIED + PKT-PRV-013 VERIFIED (seam: shorthand defaults depend on provider catalog/status contracts) | 08, 12, 26, packet | 2026-03-30 | provider shorthand defaults, short tag aliases, default subject generation, provider-default model resolution |
 
 ### Phase 3.4 — Job Control and Running-Job Cancellation
 
