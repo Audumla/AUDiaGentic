@@ -128,8 +128,10 @@ Each row in the registry must contain:
 | Phase 4.2 | `VERIFIED` | provider status/validation CLI complete |
 | Phase 4.3 | `VERIFIED` | shared provider prompt-tag contract verified; provider-specific rollout guidance now lives in Phase 4.4 |
 | Phase 4.4 | `VERIFIED` | provider execution compliance model and isolated provider implementation docs staged |
-| Phase 4.6 | `IN_PROGRESS` | shared prompt-trigger bridge harness and first Claude/Cline/Codex/Gemini/Copilot/local-openai/Qwen provider paths implemented; remaining provider instruction surfaces and wrapper/bridge rollout still need packets; realism assessment now documents first-wave vs wrapper-first providers |
+| Phase 4.6 | `IN_PROGRESS` | shared prompt-trigger bridge harness and first Claude/Cline/Codex/Gemini/Copilot/local-openai/Qwen provider paths implemented; provider prompt-calling mechanics map is now explicit starting with Codex; Codex preflight now validates required `AGENTS.md` and skill files; Continue is deferred as a future integration; remaining provider instruction surfaces and wrapper/bridge rollout still need packets; realism assessment now documents first-wave vs wrapper-first providers |
 | Phase 4.7 | `DEFERRED_DRAFT` | provider availability and auto-install orchestration drafted; install/bootstrap policy and packets still need refinement |
+| Phase 4.9 | `DEFERRED_DRAFT` | live stream and progress capture drafted; console mirroring and runtime persistence remain AUDiaGentic-owned; Cline and Codex are the first-wave validation providers |
+| Phase 4.10 | `IN_PROGRESS` | shared live input and interactive session control harness implemented and tested; prompt-launch now merges default stream/input controls so live output capture and interactive turns stay AUDiaGentic-owned; Cline and Codex are the first-wave validation providers |
 | Phase 5 | `READY_TO_START` | can start once Phase 4.4 gate is verified |
 | Phase 6 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 5 is complete and Phase 6 prerequisites are satisfied |
 
@@ -300,7 +302,7 @@ Later phases should continue this registry pattern using the same fields and sta
 | PKT-PRV-016 | claude prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-004 VERIFIED | 03, 27, 38, packet | 2026-03-30 | claude wrapper/extension prompt-tag rollout |
 | PKT-PRV-017 | gemini prompt-tag surface integration | READY_FOR_REVIEW | Gemini CLI | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-006 VERIFIED | 03, 27, 38, packet | 2026-03-30 | implemented prompt-tag detection and normalization; smoke tests simulated |
 | PKT-PRV-018 | copilot prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-007 VERIFIED | 03, 27, 38, packet | 2026-03-30 | copilot surface rollout |
-| PKT-PRV-019 | continue prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-008 VERIFIED | 03, 27, 38, packet | 2026-03-30 | continue surface rollout |
+| PKT-PRV-019 | continue prompt-tag surface integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-008 VERIFIED | 03, 27, 38, packet | 2026-03-30 | future integration; not part of the active prompt-calling rollout |
 | PKT-PRV-020 | cline prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-009 VERIFIED | 03, 27, 38, packet | 2026-03-30 | cline wrapper/extension prompt-tag rollout |
 | PKT-PRV-021 | local-openai/qwen bridge-wrapper prompt-tag integration | VERIFIED | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-003 VERIFIED + PKT-PRV-011 VERIFIED | 03, 27, 38, packet | 2026-03-30 | bridge-wrapper surface wiring for local-openai and qwen; bridge wrappers and smoke tests are implemented |
 
@@ -313,7 +315,7 @@ Later phases should continue this registry pattern using the same fields and sta
 | PKT-PRV-024 | Claude Code tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-004 VERIFIED | 28, 39, packet | 2026-03-30 | isolated Claude execution doc and smoke-test guidance |
 | PKT-PRV-025 | Gemini tag execution implementation | READY_FOR_REVIEW | Gemini CLI | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-006 VERIFIED | 28, 39, packet | 2026-03-30 | implemented native intercept guidance and GEMINI.md |
 | PKT-PRV-026 | GitHub Copilot tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-007 VERIFIED | 28, 39, packet | 2026-03-30 | isolated Copilot execution doc and smoke-test guidance |
-| PKT-PRV-027 | Continue tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-008 VERIFIED | 28, 39, packet | 2026-03-30 | isolated Continue execution doc and smoke-test guidance |
+| PKT-PRV-027 | Continue tag execution implementation | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-008 VERIFIED | 28, 39, packet | 2026-03-30 | future integration; isolated Continue execution doc and smoke-test guidance are deferred |
 | PKT-PRV-028 | Cline tag execution implementation | VERIFIED | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-009 VERIFIED | 28, 39, packet | 2026-03-30 | CLI-backed wrapper implemented and smoke-tested; hook-native path remains feature-gated |
 | PKT-PRV-029 | local OpenAI-compatible tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-003 VERIFIED + PKT-PRV-011 VERIFIED | 28, 39, packet | 2026-03-30 | backend-only provider execution doc and smoke-test guidance |
 | PKT-PRV-030 | Qwen Code tag execution implementation | VERIFIED | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-003 VERIFIED + PKT-PRV-011 VERIFIED | 28, 39, packet | 2026-03-30 | CLI-backed wrapper implemented and smoke-tested; hook-native path remains feature-gated |
@@ -327,7 +329,7 @@ Later phases should continue this registry pattern using the same fields and sta
 | PKT-PRV-033 | Claude prompt-trigger launch integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 READY_FOR_REVIEW + PKT-PRV-004 VERIFIED | 03, 29, 40, packet | 2026-03-30 | Claude instruction surface and wrapper path for prompt-trigger launch; Claude repo guidance and wrapper bridge are implemented |
 | PKT-PRV-034 | Gemini prompt-trigger launch integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 VERIFIED + PKT-PRV-006 VERIFIED | 03, 29, 40, packet | 2026-03-30 | Gemini instruction surface and wrapper path for prompt-trigger launch; Gemini repo guidance and wrapper bridge are implemented |
 | PKT-PRV-035 | GitHub Copilot prompt-trigger launch integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 VERIFIED + PKT-PRV-007 VERIFIED | 03, 29, 40, packet | 2026-03-30 | Copilot config / instruction surface and bridge path for prompt-trigger launch; repo-local Copilot bridge assets and wrapper path are implemented |
-| PKT-PRV-036 | Continue prompt-trigger launch integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-031 DEFERRED_DRAFT + PKT-PRV-008 VERIFIED | 03, 29, 40, packet | 2026-03-30 | Continue config surface and wrapper path for prompt-trigger launch |
+| PKT-PRV-036 | Continue prompt-trigger launch integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-031 DEFERRED_DRAFT + PKT-PRV-008 VERIFIED | 03, 29, 40, packet | 2026-03-30 | future integration; Continue config surface and wrapper path for prompt-trigger launch |
 | PKT-PRV-037 | Cline prompt-trigger launch integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 READY_FOR_REVIEW + PKT-PRV-009 VERIFIED | 03, 29, 40, packet | 2026-03-30 | Cline rule/hook surface and wrapper path for prompt-trigger launch; Cline repo guidance and wrapper bridge are implemented |
 | PKT-PRV-038 | local-openai/qwen prompt-trigger bridge integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 VERIFIED + PKT-PRV-003 VERIFIED + PKT-PRV-011 VERIFIED | 03, 29, 40, packet | 2026-03-30 | bridge-owned launch path for backend-only surfaces; local-openai and Qwen bridge wrappers are implemented |
 
@@ -340,10 +342,26 @@ Later phases should continue this registry pattern using the same fields and sta
 | PKT-PRV-041 | Claude auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-004 VERIFIED + PKT-PRV-016 READY_TO_START | 03, 30, 41, packet | 2026-03-30 | Claude install/bootstrap guidance and smoke tests |
 | PKT-PRV-042 | Gemini auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-006 VERIFIED + PKT-PRV-017 IN_PROGRESS | 03, 30, 41, packet | 2026-03-30 | Gemini install/bootstrap guidance and smoke tests |
 | PKT-PRV-043 | GitHub Copilot auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-007 VERIFIED + PKT-PRV-018 READY_TO_START | 03, 30, 41, packet | 2026-03-30 | Copilot install/bootstrap guidance and smoke tests |
-| PKT-PRV-044 | Continue auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-008 VERIFIED + PKT-PRV-019 READY_TO_START | 03, 30, 41, packet | 2026-03-30 | Continue install/bootstrap guidance and smoke tests |
+| PKT-PRV-044 | Continue auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-008 VERIFIED + PKT-PRV-019 DEFERRED_DRAFT | 03, 30, 41, packet | 2026-03-30 | future integration; Continue install/bootstrap guidance and smoke tests are deferred |
 | PKT-PRV-045 | Cline auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-009 VERIFIED + PKT-PRV-020 READY_TO_START | 03, 30, 41, packet | 2026-03-30 | Cline install/bootstrap guidance and smoke tests |
 | PKT-PRV-046 | local-openai availability and bridge bootstrap | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-003 VERIFIED + PKT-PRV-021 VERIFIED | 03, 30, 41, packet | 2026-03-30 | bridge-owned availability and bootstrap for backend-only surfaces |
 | PKT-PRV-047 | Qwen auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-030 VERIFIED + PKT-PRV-021 VERIFIED | 03, 30, 41, packet | 2026-03-30 | Qwen install/bootstrap guidance and smoke tests |
+
+### Phase 4.9 — Provider Live Stream and Progress Capture
+
+| Packet | Title | Status | Owner | Scope | Dependencies | Docs | Updated | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-PRV-048 | Shared provider live-stream capture contract + harness | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-031 VERIFIED + PKT-PRV-022 VERIFIED | 03, 34, 45, packet | 2026-03-31 | shared live-stream event contract, stdout/stderr capture helpers, normalized runtime records, and console mirroring switches |
+| PKT-PRV-049 | Codex live-stream capture integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-048 DEFERRED_DRAFT + PKT-PRV-005 VERIFIED + PKT-PRV-032 READY_FOR_REVIEW | 03, 34, 45, packet | 2026-03-31 | Codex is the first-wave validation provider for live console capture and runtime persistence |
+| PKT-PRV-050 | Cline live-stream capture integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-048 DEFERRED_DRAFT + PKT-PRV-009 VERIFIED + PKT-PRV-037 READY_FOR_REVIEW | 03, 34, 45, packet | 2026-03-31 | Cline is the first-wave validation provider for live console capture and runtime persistence |
+
+### Phase 4.10 — Provider Live Input and Interactive Session Control
+
+| Packet | Title | Status | Owner | Scope | Dependencies | Docs | Updated | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-PRV-051 | Shared provider live-input capture contract + harness | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-048 DEFERRED_DRAFT + PKT-PRV-031 VERIFIED + PKT-PRV-022 VERIFIED | 03, 35, 46, packet | 2026-03-31 | shared input event contract, stdin forwarding helpers, normalized runtime input records, and console input switches; harness implemented and test-covered |
+| PKT-PRV-052 | Codex live-input capture integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-051 READY_FOR_REVIEW + PKT-PRV-005 VERIFIED + PKT-PRV-032 READY_FOR_REVIEW | 03, 35, 46, packet | 2026-03-31 | Codex is the first-wave validation provider for live interactive input and runtime persistence |
+| PKT-PRV-053 | Cline live-input capture integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-051 READY_FOR_REVIEW + PKT-PRV-009 VERIFIED + PKT-PRV-037 READY_FOR_REVIEW | 03, 35, 46, packet | 2026-03-31 | Cline is the first-wave validation provider for live interactive input and runtime persistence |
 
 ### Later phases
 
@@ -357,6 +375,8 @@ Later phases should continue this registry pattern using the same fields and sta
 | Phase 4.4 | PKT-PRV-022 .. PKT-PRV-030 | VERIFIED |
 | Phase 4.6 | PKT-PRV-031 .. PKT-PRV-038 | IN_PROGRESS |
 | Phase 4.7 | PKT-PRV-039 .. PKT-PRV-047 | DEFERRED_DRAFT |
+| Phase 4.9 | PKT-PRV-048 .. PKT-PRV-050 | DEFERRED_DRAFT |
+| Phase 4.10 | PKT-PRV-051 .. PKT-PRV-053 | IN_PROGRESS |
 | Phase 0.2 | PKT-FND-009 | VERIFIED |
 | Phase 1.2 | PKT-LFC-009 | VERIFIED |
 | Phase 2.2 | PKT-RLS-010 | VERIFIED |

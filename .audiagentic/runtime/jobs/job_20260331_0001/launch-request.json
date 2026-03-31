@@ -1,0 +1,21 @@
+{
+  "contract-version": "v1",
+  "existing-job-id": null,
+  "prompt-body": "Review whether the prompt-trigger path launches a job and returns a structured result.",
+  "prompt-id": "prm_20260331_033708",
+  "source": {
+    "kind": "interactive-prompt",
+    "model-alias": null,
+    "model-id": null,
+    "provider-id": "codex",
+    "session-id": null,
+    "surface": "cli"
+  },
+  "tag": "implement",
+  "target": {
+    "kind": "packet",
+    "packet-id": "PKT-JOB-008"
+  },
+  "target-origin": "explicit",
+  "workflow-profile": "standard"
+}

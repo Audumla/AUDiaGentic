@@ -18,9 +18,20 @@ def test_cline_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(cline.shutil, "which", lambda _: r"C:\\Tools\\cline.exe")
 
-    def fake_run(command, *, cwd=None, check=False, capture_output=False, text=False, encoding=None, errors=None):
+    def fake_run_streaming_command(
+        command,
+        *,
+        cwd=None,
+        stdout_log_path=None,
+        stderr_log_path=None,
+        tee_console=False,
+        input_text=None,
+    ):
         captured["command"] = command
         captured["cwd"] = cwd
+        captured["stdout_log_path"] = stdout_log_path
+        captured["stderr_log_path"] = stderr_log_path
+        captured["tee_console"] = tee_console
 
         class Result:
             returncode = 0
@@ -35,7 +46,7 @@ def test_cline_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
         return Result()
 
-    monkeypatch.setattr(cline.subprocess, "run", fake_run)
+    monkeypatch.setattr(cline, "run_streaming_command", fake_run_streaming_command)
 
     result = cline.run(
         {
@@ -59,6 +70,7 @@ def test_cline_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
     assert "--auto-approve-all" in captured["command"]
     assert "--cwd" in captured["command"]
     assert str(captured["cwd"]) == str(tmp_path)
+    assert captured["tee_console"] is False
     assert str(captured["command"][-1]).startswith("AUDiaGentic Cline provider execution request.")
 
 

@@ -49,7 +49,7 @@ def bootstrap_release_workflow(project_root: Path, *, release_id: str = "rel_000
     (audi_root / "runtime").mkdir(parents=True, exist_ok=True)
 
     created_files: list[str] = []
-    for filename in ("project.yaml", "components.yaml", "providers.yaml"):
+    for filename in ("project.yaml", "components.yaml", "providers.yaml", "prompt-syntax.yaml"):
         _copy_example_if_missing(project_root, filename, created_files)
 
     current_manifest = None

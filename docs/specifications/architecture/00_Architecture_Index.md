@@ -43,6 +43,8 @@ The following areas were strengthened specifically to close pre-implementation g
 - 23_DRAFT_Optional_Server_and_Session_Mirroring.md
 - 24_DRAFT_Provider_Model_Catalog_and_Selection.md
 - 25_DRAFT_Prompt_Tagged_Workflow_Launch_and_Review_Loop.md
+- 34_DRAFT_Provider_Live_Stream_and_Progress_Capture.md
+- 35_DRAFT_Provider_Live_Input_and_Interactive_Session_Control.md
 
 ## Extension docs
 

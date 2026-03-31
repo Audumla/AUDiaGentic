@@ -1,0 +1,23 @@
+{
+  "contract-version": "v1",
+  "created-at": "2026-03-31T06:28:51.688497Z",
+  "criteria": [
+    "Review the current project state and call out any gaps.",
+    "Return JSON with findings, recommendation, and follow-up-actions."
+  ],
+  "findings": [],
+  "follow-up-actions": [],
+  "recommendation": "pass-with-notes",
+  "review-id": "rvr_20260331_062054",
+  "reviewer": {
+    "prompt-id": "prm_20260331_062054",
+    "provider-id": "cline",
+    "reviewer-key": "cline:cli:unknown",
+    "session-id": null,
+    "surface": "cli"
+  },
+  "subject": {
+    "job-id": "job_001",
+    "kind": "job"
+  }
+}

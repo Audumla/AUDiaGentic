@@ -41,3 +41,5 @@ Prompt-tag surface recognition and synchronization are defined in Phase 4.3.
 Provider execution compliance and isolated per-provider implementation docs are defined in Phase 4.4.
 Provider prompt-trigger launch behavior is drafted in Phase 4.6.
 Provider availability and auto-install orchestration is drafted in Phase 4.7.
+Provider live stream and progress capture are drafted in Phase 4.9.
+Provider live input and interactive session control is in progress in Phase 4.10.

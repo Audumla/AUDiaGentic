@@ -26,6 +26,10 @@ Current extension slots:
 - `.5` = provider tag execution compliance and isolated provider implementation docs
 - `.6` = provider prompt-trigger launch behavior, agent instruction surfaces, and wrapper/bridge invocation
 - `.7` = provider availability, auto-install, and bootstrap orchestration
+- `.8` = project release bootstrap and workflow activation using the project's own release machinery
+- `.9` = provider live stream and progress capture, with Cline and Codex as the first-wave validation providers
+- `.10` = provider live input and interactive session control, with Cline and Codex as the first-wave validation providers
+- prompt tag names, provider shorthands, and argument aliases are configurable through `.audiagentic/prompt-syntax.yaml`
 
 Do not invent a new suffix until the build registry and roadmap are updated first.
 
@@ -41,6 +45,9 @@ At the time of this pack:
 - `.5` provider execution compliance docs are staged as the isolated provider-specific implementation layer
 - `.6` prompt-trigger launch behavior is drafted as the next feature slice
 - `.7` provider availability and auto-install orchestration is drafted as the next feature slice
+- `.8` project release bootstrap and workflow activation is complete so the project can install itself using its own release processes
+- `.9` provider live stream and progress capture is drafted so AUDiaGentic can own console mirroring and runtime persistence while providers emit progress
+- `.10` provider live input and interactive session control is in progress; the shared harness is implemented and test-covered, and Cline/Codex are next
 - Phase 5 Discord overlay packets are ready to start once claimed
 - the build registry is the source of truth for any remaining later-phase work
 
@@ -199,6 +206,10 @@ Read:
 - `27_Provider_Prompt_Tag_Recognition_and_Surface_Synchronization.md` when working on `.4`
 - `38_Phase_4_3_Provider_Prompt_Tag_Surface_Integration.md` when working on `.4`
 - `10_Prompt_Tag_Surface_Integration_Shared.md` when working on `.4`
+- `34_DRAFT_Provider_Live_Stream_and_Progress_Capture.md` when working on `.9`
+- `45_Phase_4_9_Provider_Live_Stream_and_Progress_Capture.md` when working on `.9`
+- `35_DRAFT_Provider_Live_Input_and_Interactive_Session_Control.md` when working on `.10`
+- `46_Phase_4_10_Provider_Live_Input_and_Interactive_Session_Control.md` when working on `.10`
 - `28_Provider_Tag_Execution_Compliance_Model.md` when working on `.5`
 - `11_Provider_Tag_Execution_Conformance_Matrix.md` when working on `.5`
 - `39_Phase_4_4_Provider_Tag_Execution_Implementation.md` when working on `.5`

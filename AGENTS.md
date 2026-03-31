@@ -9,6 +9,20 @@ This repository uses canonical prompt tags to launch AUDiaGentic workflow jobs.
   workflow semantics layer.
 - Keep provenance visible: provider id, surface, and session id should survive normalization.
 
+## Prompt-calling protocol
+
+If a prompt begins with a canonical tag, treat it as a workflow launch request, not ordinary
+chat.
+
+The Codex launch path is:
+
+```powershell
+python tools/codex_prompt_trigger_bridge.py --project-root .
+```
+
+The shared bridge normalizes the raw prompt and forwards it into `prompt-launch`, so the
+tagged prompt becomes a job request with preserved provenance.
+
 ## Codex path
 
 Codex should use the shared prompt-trigger bridge:
@@ -35,4 +49,3 @@ Each canonical action maps to a focused skill under `.agents/skills/`:
 - review prompts should stay read-focused unless the normalized request explicitly allows more
 - do not broaden review into implementation work
 - keep tracked docs and release artifacts synchronized with the job record
-

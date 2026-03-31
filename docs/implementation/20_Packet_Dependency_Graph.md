@@ -100,9 +100,25 @@ graph TD
   PRV21 --> PRV29
   PRV22 --> PRV30[PKT-PRV-030]
   PRV21 --> PRV30
+  PRV31 --> PRV48[PKT-PRV-048]
+  PRV22 --> PRV48
+  PRV48 --> PRV49[PKT-PRV-049]
+  PRV5 --> PRV49
+  PRV32 --> PRV49
+  PRV48 --> PRV50[PKT-PRV-050]
+  PRV9 --> PRV50
+  PRV37 --> PRV50
+  PRV48 --> PRV51[PKT-PRV-051]
+  PRV31 --> PRV51
+  PRV51 --> PRV52[PKT-PRV-052]
+  PRV5 --> PRV52
+  PRV32 --> PRV52
+  PRV51 --> PRV53[PKT-PRV-053]
+  PRV9 --> PRV53
+  PRV37 --> PRV53
 ```
 
-## Clarification on .1 and .2 extension ordering
+## Clarification on extension ordering
 
 `.1` freezes provider/model contract fields before jobs or prompt launch consume them.
 The intended order is:
@@ -165,6 +181,20 @@ The intended order is:
 7. `PKT-PRV-045`
 8. `PKT-PRV-046`
 9. `PKT-PRV-047`
+
+`.8` is the project release bootstrap extension tracked under Phase 2.3, so it is not repeated in this provider-facing cluster.
+
+`.9` adds live stream and progress capture after the trigger layer is already frozen and the shared stream contract is written down. The intended order is:
+
+1. `PKT-PRV-048`
+2. `PKT-PRV-049`
+3. `PKT-PRV-050`
+
+`.10` adds live input and interactive session control after live-stream capture is already frozen and the shared input contract is written down. The intended order is:
+
+1. `PKT-PRV-051`
+2. `PKT-PRV-052`
+3. `PKT-PRV-053`
 
 `PKT-PRV-012` no longer depends on `PKT-JOB-007`; the earlier apparent cycle is resolved by treating provider/model field names as provider-owned contract output first.
 

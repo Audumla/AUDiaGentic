@@ -62,6 +62,27 @@ def test_parse_prompt_launch_request_accepts_short_tag_alias() -> None:
     assert request["target-origin"] == "explicit"
 
 
+def test_parse_prompt_launch_request_accepts_provider_suffix_and_prompt_controls() -> None:
+    request = parse_prompt_launch_request(
+        "@r-cline id=job_001 ctx=documentation t=review-default out=docs/report.md\n",
+        surface="cli",
+        provider_id=None,
+        session_id="sess_004",
+        workflow_profile="standard",
+        prompt_id="prm_20260330_0004",
+        project_root=Path("."),
+    )
+    assert request["tag"] == "review"
+    assert request["source"]["provider-id"] == "cline"
+    assert request["target"] == {"kind": "job", "job-id": "job_001"}
+    assert request["prompt-controls"] == {
+        "id": "job_001",
+        "context": "documentation",
+        "output": "docs/report.md",
+        "template": "review-default",
+    }
+
+
 def test_parse_prompt_launch_request_accepts_adhoc_baseline() -> None:
     request = parse_prompt_launch_request(
         "@adhoc\nReview the plan and identify gaps.\n",
@@ -92,3 +113,80 @@ def test_parse_prompt_launch_request_rejects_majority_pass_in_mvp() -> None:
         assert exc.kind == "validation"
     else:
         raise AssertionError("expected validation error")
+
+
+def test_parse_prompt_launch_request_uses_configurable_syntax_aliases(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    (project_root / ".audiagentic").mkdir(parents=True, exist_ok=True)
+    (project_root / ".audiagentic" / "prompt-syntax.yaml").write_text(
+        "\n".join(
+            [
+                "contract-version: v1",
+                "default-profile: shared",
+                "generic-tag: agent",
+                "tag-aliases:",
+                "  inspect: review",
+                "provider-aliases:",
+                "  clinex: cline",
+                "directive-aliases:",
+                "  who: id",
+                "  ctxx: context",
+                "  outx: output",
+                "  tpl: template",
+                "  agent: provider",
+                "profiles:",
+                "  shared: {}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    request = parse_prompt_launch_request(
+        "@agent provider=clinex who=job_001 ctxx=documentation tpl=review-default outx=docs/report.md\n",
+        surface="cli",
+        provider_id=None,
+        session_id="sess_005",
+        workflow_profile="standard",
+        prompt_id="prm_20260330_0005",
+        project_root=project_root,
+    )
+
+    assert request["tag"] == "implement"
+    assert request["source"]["provider-id"] == "cline"
+    assert request["target"] == {"kind": "job", "job-id": "job_001"}
+    assert request["prompt-controls"] == {
+        "id": "job_001",
+        "context": "documentation",
+        "output": "docs/report.md",
+        "template": "review-default",
+    }
+
+
+def test_parse_prompt_launch_request_accepts_stream_and_input_controls() -> None:
+    request = parse_prompt_launch_request(
+        "@review provider=cline target=job:job_001\nReview the job.\n",
+        surface="cli",
+        provider_id=None,
+        session_id="sess_006",
+        workflow_profile="standard",
+        prompt_id="prm_20260330_0006",
+        stream_controls={
+            "enabled": True,
+            "tee-console": True,
+            "capture-stdout": True,
+            "capture-stderr": True,
+            "capture-progress": True,
+            "event-format": "ndjson",
+        },
+        input_controls={
+            "enabled": True,
+            "tee-console": True,
+            "capture-stdin": True,
+            "capture-input-events": True,
+            "allow-pause-resume": True,
+            "event-format": "ndjson",
+        },
+    )
+
+    assert request["stream-controls"]["enabled"] is True
+    assert request["input-controls"]["capture-input-events"] is True

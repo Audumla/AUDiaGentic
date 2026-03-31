@@ -39,6 +39,10 @@
           "default-model": {
             "type": "string"
           },
+          "timeout-seconds": {
+            "type": "integer",
+            "minimum": 1
+          },
           "model-aliases": {
             "type": "object",
             "additionalProperties": {

@@ -18,14 +18,20 @@ def test_codex_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(codex.shutil, "which", lambda _: r"C:\\Tools\\codex.exe")
 
-    def fake_run(command, *, cwd=None, check=None, capture_output=None, text=None, encoding=None, errors=None):  # type: ignore[no-untyped-def]
+    def fake_run_streaming_command(
+        command,
+        *,
+        cwd=None,
+        stdout_log_path=None,
+        stderr_log_path=None,
+        tee_console=False,
+        input_text=None,
+    ):
         captured["command"] = command
         captured["cwd"] = cwd
-        captured["check"] = check
-        captured["capture_output"] = capture_output
-        captured["text"] = text
-        captured["encoding"] = encoding
-        captured["errors"] = errors
+        captured["stdout_log_path"] = stdout_log_path
+        captured["stderr_log_path"] = stderr_log_path
+        captured["tee_console"] = tee_console
         output_path = Path(command[command.index("--output-last-message") + 1])
         output_path.write_text("codex completed", encoding="utf-8")
 
@@ -36,7 +42,7 @@ def test_codex_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
         return Completed()
 
-    monkeypatch.setattr(codex.subprocess, "run", fake_run)
+    monkeypatch.setattr(codex, "run_streaming_command", fake_run_streaming_command)
 
     result = codex.run(
         {
@@ -57,12 +63,8 @@ def test_codex_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
     assert captured["command"][0] == r"C:\\Tools\\codex.exe"
     assert captured["command"][1:4] == ["exec", "--ephemeral", "--skip-git-repo-check"]
     assert captured["command"][-1].startswith("AUDiaGentic Codex provider execution request.")
-    assert captured["cwd"] == str(tmp_path)
-    assert captured["check"] is False
-    assert captured["capture_output"] is True
-    assert captured["text"] is True
-    assert captured["encoding"] == "utf-8"
-    assert captured["errors"] == "replace"
+    assert captured["cwd"] == tmp_path
+    assert captured["tee_console"] is False
 
 
 def test_codex_adapter_requires_command(monkeypatch) -> None:

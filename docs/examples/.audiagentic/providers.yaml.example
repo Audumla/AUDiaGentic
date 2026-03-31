@@ -157,15 +157,16 @@ providers:
     enabled: true
     install-mode: external-configured
     access-mode: cli
-    default-model: gpt-5.4-mini
+    default-model: kwaipilot/kat-coder-pro
+    timeout-seconds: 60
     model-aliases:
-      fast: gpt-5.4-mini
-      balanced: gpt-5.4
-      deep: claude-sonnet-4-6
-      review: claude-sonnet-4-6
-      code: gpt-5.4-mini
-      reasoning: claude-sonnet-4-6
-      long: claude-sonnet-4-6
+      fast: kwaipilot/kat-coder-pro
+      balanced: kwaipilot/kat-coder-pro
+      deep: kwaipilot/kat-coder-pro
+      review: kwaipilot/kat-coder-pro
+      code: kwaipilot/kat-coder-pro
+      reasoning: kwaipilot/kat-coder-pro
+      long: kwaipilot/kat-coder-pro
     catalog-refresh:
       source: cli
       max-age-hours: 168

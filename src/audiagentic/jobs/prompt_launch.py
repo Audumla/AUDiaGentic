@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,7 +23,9 @@ from audiagentic.jobs.reviews import (
     subject_from_target,
 )
 from audiagentic.providers.config import load_provider_config
+from audiagentic.providers.execution import execute_provider
 from audiagentic.providers.models import resolve_model_selection
+from audiagentic.jobs.prompt_templates import load_prompt_context, load_prompt_template, render_prompt_template
 from audiagentic.jobs.state_machine import TERMINAL_STATES
 
 
@@ -50,6 +53,21 @@ def load_project_config(project_root: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
+def _apply_launch_defaults(project_root: Path, request: dict[str, Any]) -> dict[str, Any]:
+    merged = deepcopy(request)
+    prompt_launch = load_project_config(project_root).get("prompt-launch", {})
+    if isinstance(prompt_launch, dict):
+        defaults = {
+            "review-policy": prompt_launch.get("default-review-policy"),
+            "stream-controls": prompt_launch.get("default-stream-controls"),
+            "input-controls": prompt_launch.get("default-input-controls"),
+        }
+        for key, value in defaults.items():
+            if key not in merged and isinstance(value, dict):
+                merged[key] = deepcopy(value)
+    return merged
 
 
 def prompt_launch_path(project_root: Path, job_id: str) -> Path:
@@ -221,10 +239,88 @@ def _launch_review_request(project_root: Path, request: dict[str, Any], *, now_f
         "prompt-id": request["prompt-id"],
         "reviewer-key": reviewer_key_from_source(request["source"]),
     }
-    criteria = [line.strip() for line in request["prompt-body"].splitlines() if line.strip()]
+    provider_id = request["source"].get("provider-id")
+    provider_config = load_provider_config(project_root).get("providers", {})
+    provider_cfg = provider_config.get(provider_id or "", {})
+    prompt_controls = request.get("prompt-controls", {})
+    rendered_prompt = request["prompt-body"]
+    template_name = prompt_controls.get("template") if isinstance(prompt_controls, dict) else None
+    context_value = prompt_controls.get("context") if isinstance(prompt_controls, dict) else None
+    resolved_context, context_path = load_prompt_context(project_root, context_value if isinstance(context_value, str) else None)
+    if provider_id:
+        template_text, template_path = load_prompt_template(
+            project_root,
+            tag=request["tag"],
+            provider_id=provider_id,
+            template_name=template_name if isinstance(template_name, str) and template_name else None,
+        )
+        if template_text:
+            rendered_prompt = render_prompt_template(
+                template_text,
+                {
+                    "id": prompt_controls.get("id") if isinstance(prompt_controls, dict) else None,
+                    "context": resolved_context,
+                    "output": prompt_controls.get("output") if isinstance(prompt_controls, dict) else None,
+                    "template": template_name,
+                    "provider": provider_id,
+                    "tag": request["tag"],
+                    "body": request["prompt-body"],
+                    "subject": subject,
+                    "project-root": str(project_root),
+                    "template-path": str(template_path) if template_path else None,
+                    "context-path": str(context_path) if context_path else None,
+                },
+            )
+    prompt_for_criteria = request["prompt-body"].strip() or rendered_prompt.strip()
+    criteria = [line.strip() for line in prompt_for_criteria.splitlines() if line.strip()]
     if not criteria:
         criteria = ["review the subject against the requested prompt"]
-    report = build_review_report(
+    report_payload: dict[str, Any] | None = None
+    if provider_id and provider_cfg.get("access-mode") in {"cli", "external-configured", "none"}:
+        try:
+            provider_result = execute_provider(
+                provider_id=provider_id,
+                packet_ctx={
+                    "provider-id": provider_id,
+                    "job-id": job_id,
+                    "packet-id": subject.get("job-id")
+                    or subject.get("packet-id")
+                    or subject.get("artifact-id")
+                    or subject.get("adhoc-id")
+                    or job_id,
+                    "workflow-profile": request["workflow-profile"],
+                    "working-root": str(project_root),
+                    "prompt-body": rendered_prompt,
+                    "prompt-controls": prompt_controls,
+                    "stream-controls": request.get("stream-controls", {}),
+                    "input-controls": request.get("input-controls", {}),
+                },
+                provider_cfg=provider_cfg,
+            )
+            output_text = str(provider_result.get("output") or "").strip()
+            if output_text:
+                try:
+                    parsed = json.loads(output_text)
+                except json.JSONDecodeError:
+                    parsed = None
+                if isinstance(parsed, dict):
+                    findings = parsed.get("findings", [])
+                    recommendation = parsed.get("recommendation", "pass-with-notes")
+                    follow_up_actions = parsed.get("follow-up-actions", [])
+                    if isinstance(findings, list) and isinstance(follow_up_actions, list) and isinstance(recommendation, str):
+                        report_payload = build_review_report(
+                            review_id=review_id,
+                            subject=subject,
+                            reviewer=reviewer,
+                            criteria=criteria,
+                            findings=findings,
+                            recommendation=recommendation,
+                            follow_up_actions=follow_up_actions,
+                            created_at=(now_fn or _now_timestamp)(),
+                        )
+        except AudiaGenticError:
+            report_payload = None
+    report = report_payload or build_review_report(
         review_id=review_id,
         subject=subject,
         reviewer=reviewer,
@@ -275,6 +371,7 @@ def launch_prompt_request(
     *,
     now_fn=None,
 ) -> dict[str, Any]:
+    request = _apply_launch_defaults(project_root, request)
     prompt_launch = load_project_config(project_root).get("prompt-launch", {})
     if (
         request["target"]["kind"] == "adhoc"

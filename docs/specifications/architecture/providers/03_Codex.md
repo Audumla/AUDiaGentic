@@ -26,6 +26,7 @@ Prompt-tag recognition and synchronization are defined in `27_Provider_Prompt_Ta
 - CLI surface mode: wrapper-normalize
 - VS Code surface mode: extension-normalize
 - settings profile: codex-prompt-tags-v1
+- alias and argument names resolve from `.audiagentic/prompt-syntax.yaml`
 
 
 ## Prompt-trigger exposure (Phase 4.6)
@@ -35,9 +36,20 @@ before Codex begins its own execution flow. Because a documented arbitrary pre-s
 not confirmed here, exact tag handling belongs in the repository bridge rather than in Codex
 itself.
 
+### Exact mechanics
+
+1. the user types a canonical tag on the first non-empty line
+2. the repo-owned wrapper reads the raw prompt and preserves provenance
+3. `AGENTS.md` instructs Codex to treat the tag as a launch request
+4. `.agents/skills/*/SKILL.md` maps the canonical action to a narrow action shape
+5. the bridge preflights `AGENTS.md` and the five canonical skill files
+6. the bridge hands the normalized envelope to `prompt-launch`
+7. the jobs layer persists the job record and review/release artifacts
+
 ### Chat exposure path
 - user types a tagged prompt in Codex CLI or the Codex VS Code surface
 - the wrapper reads the first non-empty line and resolves the canonical action
+- the wrapper validates the required prompt-calling assets before launch
 - `AGENTS.md` provides the project doctrine and the tag-to-skill guidance
 - `.agents/skills/**/SKILL.md` provides the action-specific prompt shape after normalization
 - the wrapper injects the normalized envelope and then launches Codex through the selected
@@ -65,6 +77,29 @@ The implementation runbook for Codex prompt-trigger behavior lives at
 
 Use that runbook when turning the shared prompt-trigger contract into Codex-specific
 implementation steps, wrapper wiring, and smoke tests.
+
+## Phase 4.9 live stream and progress capture
+
+Codex is a first-wave validation provider for the shared live-stream contract because the repo
+already uses a stable wrapper path for prompt-trigger launches.
+
+For the first pass:
+- AUDiaGentic should tee live console progress while owning persistence
+- Codex should not be responsible for writing runtime stream artifacts
+- normalized progress records should be written under the job runtime folder
+- final structured artifacts should still be written after the stream completes
+
+## Phase 4.10 live input and interactive session control
+
+Codex is also a first-wave validation provider for the shared live-input contract because the
+repo already uses a stable wrapper path for prompt-trigger launches and can reopen the same
+provider session for controlled follow-up input.
+
+For the first pass:
+- AUDiaGentic should own stdin/input capture and normalized session-input persistence
+- the Codex wrapper should tee live input or control turns to the console when interactive mode is enabled
+- the provider should not be responsible for writing runtime input artifacts
+- the same input contract should remain usable later by Discord or another overlay
 
 ## Required provider-specific decisions before implementation
 - auth reference shape

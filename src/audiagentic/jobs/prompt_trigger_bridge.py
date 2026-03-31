@@ -26,9 +26,27 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--model-id")
     parser.add_argument("--model-alias")
     parser.add_argument("--workflow-profile", default="standard")
+    parser.add_argument("--stream-controls-json")
+    parser.add_argument("--input-controls-json")
     args = parser.parse_args(argv)
 
     prompt_text = _read_prompt_text(args.prompt_file)
+    try:
+        stream_controls = json.loads(args.stream_controls_json) if args.stream_controls_json else None
+        input_controls = json.loads(args.input_controls_json) if args.input_controls_json else None
+    except json.JSONDecodeError as exc:
+        print(
+            json.dumps(
+                {
+                    "status": "error",
+                    "kind": "validation",
+                    "message": f"invalid JSON control block: {exc.msg}",
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 2
     request = parse_prompt_launch_request(
         prompt_text,
         surface=args.surface,
@@ -37,7 +55,10 @@ def run(argv: list[str] | None = None) -> int:
         model_id=args.model_id,
         model_alias=args.model_alias,
         workflow_profile=args.workflow_profile,
+        stream_controls=stream_controls,
+        input_controls=input_controls,
         allow_adhoc_target=False,
+        project_root=Path(args.project_root),
     )
     result = launch_prompt_request(Path(args.project_root), request)
     print(json.dumps(result, indent=2, sort_keys=True))
