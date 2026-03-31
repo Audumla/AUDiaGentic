@@ -132,6 +132,7 @@ Each row in the registry must contain:
 | Phase 4.7 | `DEFERRED_DRAFT` | provider availability and auto-install orchestration drafted; install/bootstrap policy and packets still need refinement |
 | Phase 4.9 | `DEFERRED_DRAFT` | live stream and progress capture drafted; console mirroring and runtime persistence remain AUDiaGentic-owned; Cline and Codex are the first-wave validation providers |
 | Phase 4.10 | `IN_PROGRESS` | shared live input and interactive session control harness implemented and tested; prompt-launch now merges default stream/input controls so live output capture and interactive turns stay AUDiaGentic-owned; Cline and Codex are the first-wave validation providers |
+| Phase 4.11 | `DEFERRED_DRAFT` | structured completion and result normalization drafted; Cline and Codex are the first-wave completion-normalization providers; AUDiaGentic owns final artifact persistence |
 | Phase 5 | `READY_TO_START` | can start once Phase 4.4 gate is verified |
 | Phase 6 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 5 is complete and Phase 6 prerequisites are satisfied |
 
@@ -363,6 +364,12 @@ Later phases should continue this registry pattern using the same fields and sta
 | PKT-PRV-052 | Codex live-input capture integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-051 READY_FOR_REVIEW + PKT-PRV-005 VERIFIED + PKT-PRV-032 READY_FOR_REVIEW | 03, 35, 46, packet | 2026-03-31 | Codex is the first-wave validation provider for live interactive input and runtime persistence |
 | PKT-PRV-053 | Cline live-input capture integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-051 READY_FOR_REVIEW + PKT-PRV-009 VERIFIED + PKT-PRV-037 READY_FOR_REVIEW | 03, 35, 46, packet | 2026-03-31 | Cline is the first-wave validation provider for live interactive input and runtime persistence |
 
+### Phase 4.11 — Provider Structured Completion and Result Normalization
+
+| Packet | Title | Status | Owner | Scope | Dependencies | Docs | Updated | Notes |
+|---|---|---|---|---|---|---|---|---|
+| Phase 4.11 | docs-only draft | DEFERRED_DRAFT | Codex | workspace | needs Phase 4.10 IN_PROGRESS + Cline/Codex prompt-trigger paths | 03, 36, 47, providers/31 | 2026-03-31 | shared final-result contract and provider completion-method matrix are documented; implementation is a follow-on after live-input stabilizes |
+
 ### Later phases
 
 Later phases should continue this registry pattern using the same fields and status rules. Work may be listed now as `WAITING_ON_DEPENDENCIES`, but active claiming should not occur until earlier phase gates are closed.
@@ -377,6 +384,7 @@ Later phases should continue this registry pattern using the same fields and sta
 | Phase 4.7 | PKT-PRV-039 .. PKT-PRV-047 | DEFERRED_DRAFT |
 | Phase 4.9 | PKT-PRV-048 .. PKT-PRV-050 | DEFERRED_DRAFT |
 | Phase 4.10 | PKT-PRV-051 .. PKT-PRV-053 | IN_PROGRESS |
+| Phase 4.11 | — | DEFERRED_DRAFT |
 | Phase 0.2 | PKT-FND-009 | VERIFIED |
 | Phase 1.2 | PKT-LFC-009 | VERIFIED |
 | Phase 2.2 | PKT-RLS-010 | VERIFIED |
