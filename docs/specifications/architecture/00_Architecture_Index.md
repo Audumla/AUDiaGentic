@@ -46,6 +46,7 @@ The following areas were strengthened specifically to close pre-implementation g
 - 34_DRAFT_Provider_Live_Stream_and_Progress_Capture.md
 - 35_DRAFT_Provider_Live_Input_and_Interactive_Session_Control.md
 - 36_DRAFT_Provider_Structured_Completion_and_Result_Normalization.md
+- 37_DRAFT_Provider_Optimization_and_Shared_Workflow_Extensibility.md
 
 ## Extension docs
 
@@ -60,3 +61,4 @@ The following areas were strengthened specifically to close pre-implementation g
 - 34_DRAFT_Provider_Live_Stream_and_Progress_Capture.md
 - 35_DRAFT_Provider_Live_Input_and_Interactive_Session_Control.md
 - 36_DRAFT_Provider_Structured_Completion_and_Result_Normalization.md
+- 37_DRAFT_Provider_Optimization_and_Shared_Workflow_Extensibility.md
