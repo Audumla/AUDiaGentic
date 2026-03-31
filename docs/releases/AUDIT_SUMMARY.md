@@ -1,6 +1,6 @@
 # Audit Summary
 
-Total events: 51
+Total events: 52
 
 - chg_20260330_0001: Added job record contract helpers, store, and state machine with unit tests and registry updates.
 - chg_20260330_0002: Added workflow profile loader/validator with override parsing and fixtures.
@@ -53,3 +53,4 @@ Total events: 51
 - chg_20260331_0001: Implemented generic project release bootstrap and workflow activation so the repository can install itself using the project release workflow.
 - chg_20260331_0002: Aligned release bootstrap docs with the project-level release-bootstrap entry point and marked the new Phase 2.3 slot verified.
 - chg_20260331_0003: Corrected the project-local bootstrap config to use the real AUDiaGentic project identity.
+- chg_20260331_0004: Upgraded the managed release workflow from a placeholder echo to a real project-bootstrap workflow that runs the project release bootstrap command and verifies installed state.
