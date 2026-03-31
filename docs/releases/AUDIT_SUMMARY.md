@@ -1,6 +1,6 @@
 # Audit Summary
 
-Total events: 59
+Total events: 60
 
 - chg_20260330_0001: Added job record contract helpers, store, and state machine with unit tests and registry updates.
 - chg_20260330_0002: Added workflow profile loader/validator with override parsing and fixtures.
@@ -62,3 +62,4 @@ Total events: 59
 - chg_20260331_0010: Added configurable prompt-syntax profiles and alias normalization for tags, providers, and directive names.
 - chg_20260331_0011: Wired configurable live-stream and live-input defaults through prompt launch, extended Codex/Cline/Gemini timeout defaults for longer reviews, and added shared streaming helpers in the Codex and Cline adapters.
 - chg_20260331_0012: Drafted Phase 4.12 provider optimization and shared workflow extensibility so shared scripts, skills, MCP tools, and wrappers can reduce token usage without locking in the future workflow model.
+- chg_20260331_0013: Tightened Phase 4.12 to be explicitly script-first and template-driven for repeatable operations, with agents limited to the minimum intent or parameters needed by the helper.

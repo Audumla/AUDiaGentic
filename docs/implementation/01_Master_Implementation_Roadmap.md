@@ -272,6 +272,7 @@ Add shared optimization seams so repetitive text scanning, editing, summarizatio
 Leaves behind:
 - shared optimization and reuse contract
 - reusable file scan / patch / summarize helpers
+- template-driven repeated-output helpers
 - skill / MCP / wrapper extension points
 - future workflow/task tracker seam
 - provider-neutral token-reduction guidance
