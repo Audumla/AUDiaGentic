@@ -61,6 +61,8 @@ This implementation pack is the **end-to-end staged build book** for AUDiaGentic
 - `30_DRAFT_Developer_Onboarding.md`
 - `34_DRAFT_Prompt_Tagged_Workflow_Launch_and_Review_Loop.md`
 - `35_DRAFT_Provider_Live_Input_and_Interactive_Session_Control.md`
+- `36_DRAFT_Provider_Structured_Completion_and_Result_Normalization.md`
+- `37_DRAFT_Provider_Optimization_and_Shared_Workflow_Extensibility.md`
 - `42_Phase_3_4_Job_Control_and_Running_Job_Cancellation.md`
 - `43_Phase_2_3_Project_Release_Bootstrap_and_Workflow_Activation.md`
 
@@ -75,8 +77,12 @@ This implementation pack is the **end-to-end staged build book** for AUDiaGentic
 - `41_Phase_4_7_Provider_Auto_Install_Orchestration.md`
 - `45_Phase_4_9_Provider_Live_Stream_and_Progress_Capture.md`
 - `46_Phase_4_10_Provider_Live_Input_and_Interactive_Session_Control.md`
+- `47_Phase_4_11_Provider_Structured_Completion_and_Result_Normalization.md`
+- `48_Phase_4_12_Provider_Optimization_and_Shared_Workflow_Extensibility.md`
 - `29_Provider_Live_Stream_Progress_Capture_Assessment.md`
 - `30_Provider_Live_Input_Interactive_Session_Assessment.md`
+- `31_Provider_Structured_Completion_And_Result_Normalization_Matrix.md`
+- `32_Provider_Optimization_and_Shared_Workflow_Extensibility_Matrix.md`
 
 ## Reading order for immediate execution
 

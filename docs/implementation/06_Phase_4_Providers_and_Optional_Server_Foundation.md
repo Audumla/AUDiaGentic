@@ -43,3 +43,5 @@ Provider prompt-trigger launch behavior is drafted in Phase 4.6.
 Provider availability and auto-install orchestration is drafted in Phase 4.7.
 Provider live stream and progress capture are drafted in Phase 4.9.
 Provider live input and interactive session control is in progress in Phase 4.10.
+Provider structured completion and result normalization is drafted in Phase 4.11.
+Provider optimization and shared workflow extensibility is drafted in Phase 4.12.
