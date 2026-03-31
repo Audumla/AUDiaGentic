@@ -100,6 +100,7 @@
 - Skills, MCP tools, and wrapper helpers can reuse the same optimization seams across providers without forcing a single workflow engine.
 - A later task/feature tracker can be introduced without rewriting the existing prompt-launch or provider contracts.
 - Token-heavy callouts can be shortened while still preserving the same underlying job, review, and provider ownership model.
+- Repeatable operations stay script-first and template-driven, with agents providing only the minimum intent or parameters needed to invoke them.
 
 ### After Phase 5
 - Discord can receive summaries, approvals, and notices.
