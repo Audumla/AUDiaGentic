@@ -95,6 +95,12 @@
 - AUDiaGentic can store, render, and replay final results even when the provider only exposes raw text or a final-message file.
 - Discord and later overlays can consume the same normalized completion result without changing provider ownership.
 
+### After Phase 4.12
+- Repetitive file scanning, patching, and summarization can move into shared scripts or tools instead of staying inline in prompts.
+- Skills, MCP tools, and wrapper helpers can reuse the same optimization seams across providers without forcing a single workflow engine.
+- A later task/feature tracker can be introduced without rewriting the existing prompt-launch or provider contracts.
+- Token-heavy callouts can be shortened while still preserving the same underlying job, review, and provider ownership model.
+
 ### After Phase 5
 - Discord can receive summaries, approvals, and notices.
 - Core behavior is unchanged when Discord is disabled.
