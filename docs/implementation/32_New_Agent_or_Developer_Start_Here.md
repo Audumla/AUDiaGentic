@@ -29,6 +29,8 @@ Current extension slots:
 - `.8` = project release bootstrap and workflow activation using the project's own release machinery
 - `.9` = provider live stream and progress capture, with Cline and Codex as the first-wave validation providers
 - `.10` = provider live input and interactive session control, with Cline and Codex as the first-wave validation providers
+- `.11` = provider structured completion and result normalization, with Cline and Codex as the first-wave validation providers
+- `.12` = provider optimization and shared workflow extensibility, with scripts/skills/MCP/wrapper reuse reserved for later token-reduction work
 - prompt tag names, provider shorthands, and argument aliases are configurable through `.audiagentic/prompt-syntax.yaml`
 
 Do not invent a new suffix until the build registry and roadmap are updated first.
@@ -48,6 +50,8 @@ At the time of this pack:
 - `.8` project release bootstrap and workflow activation is complete so the project can install itself using its own release processes
 - `.9` provider live stream and progress capture is drafted so AUDiaGentic can own console mirroring and runtime persistence while providers emit progress
 - `.10` provider live input and interactive session control is in progress; the shared harness is implemented and test-covered, and Cline/Codex are next
+- `.11` provider structured completion and result normalization is drafted so Cline, Codex, and the remaining providers can return canonical review/output payloads without duplicating the shared bridge harness
+- `.12` provider optimization and shared workflow extensibility is drafted so shared scripts, skills, MCP tools, and wrappers can reduce token usage without locking in the future workflow model
 - Phase 5 Discord overlay packets are ready to start once claimed
 - the build registry is the source of truth for any remaining later-phase work
 

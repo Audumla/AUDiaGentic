@@ -31,6 +31,7 @@
 - [chg_20260331_0007] Drafted Phase 4.9 live stream and progress capture with first-wave Cline/Codex guidance.
 - [chg_20260331_0008] Drafted Phase 4.10 live input and interactive session control with first-wave Cline/Codex guidance.
 - [chg_20260331_0009] Implemented the shared Phase 4.10 live-input harness and session-input CLI, with test coverage.
+- [chg_20260331_0012] Drafted Phase 4.12 provider optimization and shared workflow extensibility so shared scripts, skills, MCP tools, and wrappers can reduce token usage without locking in the future workflow model.
 
 ### feature
 - [chg_20260330_0001] Added initial job persistence and state machine with tests.

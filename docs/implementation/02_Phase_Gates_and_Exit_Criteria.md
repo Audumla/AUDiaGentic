@@ -168,6 +168,13 @@
 - provider-specific result-normalization guidance exists before implementation begins
 - Discord and later overlays remain later consumers of the same normalized completion contract
 
+## Phase 4.12 draft gate
+- shared optimization and reuse contract is written down
+- provider-neutral helper seams for file scanning, patching, and summarization are named
+- skill, MCP, and wrapper extension points are documented without forcing a single implementation technology
+- the future workflow/task tracker remains intentionally undefined but not blocked
+- provider-specific token-reduction guidance exists before implementation begins
+
 ## Phase 5 exit gate
 - Phase 4.4 gate is verified and provider execution docs are frozen
 - Discord can be fully disabled
