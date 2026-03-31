@@ -17,3 +17,17 @@ prompt-launch:
     required-reviews: 2
     aggregation-rule: all-pass
     require-distinct-reviewers: true
+  default-stream-controls:
+    enabled: true
+    tee-console: true
+    capture-stdout: true
+    capture-stderr: true
+    capture-progress: true
+    event-format: ndjson
+  default-input-controls:
+    enabled: true
+    tee-console: true
+    capture-stdin: true
+    capture-input-events: true
+    allow-pause-resume: true
+    event-format: ndjson

@@ -13,6 +13,9 @@ This file exists to minimize duplication: the grammar, normalization rules, and 
 - Tags must keep the same meanings across providers
 - Prompt body must exclude the tag line after normalization when the provider receives body text
 - Provider adapters must preserve provider id, surface, and a stable session key
+- The active alias profile comes from `.audiagentic/prompt-syntax.yaml`
+- `settings-profile` selects the alias profile used for tag names, provider shorthands, and directive aliases
+- `adhoc` is the generic agent-call baseline unless a project profile remaps it
 
 ## Shared checklist template
 
@@ -26,6 +29,7 @@ Every provider-specific rollout doc must answer these questions:
 7. What smoke test proves `@review` works?
 8. Which in-chat asset or hook receives the tags before the provider plans?
 9. What is the rollback step if provider settings drift?
+10. Which prompt-syntax profile name is used, and what alias changes does it introduce?
 
 ## Shared verification commands
 

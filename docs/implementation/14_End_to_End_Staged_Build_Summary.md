@@ -77,6 +77,18 @@
 - Provider install/bootstrap behavior stays isolated from provider execution and prompt-trigger behavior.
 - Project install can prepare provider surfaces earlier instead of failing only at launch time.
 
+### After Phase 4.9
+- Provider progress can be mirrored live to the console while AUDiaGentic owns runtime capture.
+- Provider output can be persisted as normalized stream artifacts for later overlay consumption.
+- Cline and Codex can validate the first-stream contract before the broader provider set is enabled.
+- Discord can later tail the same stream without making providers responsible for persistence.
+
+### After Phase 4.10
+- Provider sessions can accept controlled follow-up input while AUDiaGentic owns capture and persistence.
+- Input turns can be replayed, summarized, or later consumed by overlays without changing provider ownership.
+- Cline and Codex can validate the first interactive-session contract before the broader provider set is enabled.
+- Discord can later consume the same normalized input stream without making providers responsible for persistence.
+
 ### After Phase 5
 - Discord can receive summaries, approvals, and notices.
 - Core behavior is unchanged when Discord is disabled.

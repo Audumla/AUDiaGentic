@@ -1,0 +1,21 @@
+{
+  "contract-version": "v1",
+  "existing-job-id": null,
+  "prompt-body": "Review the current project state and call out any gaps.",
+  "prompt-id": "prm_20260331_033839",
+  "source": {
+    "kind": "interactive-prompt",
+    "model-alias": null,
+    "model-id": null,
+    "provider-id": "cline",
+    "session-id": null,
+    "surface": "cli"
+  },
+  "tag": "review",
+  "target": {
+    "adhoc-id": "adh_20260331_033839",
+    "kind": "adhoc"
+  },
+  "target-origin": "default",
+  "workflow-profile": "standard"
+}

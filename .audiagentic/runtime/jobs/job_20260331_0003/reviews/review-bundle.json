@@ -1,0 +1,21 @@
+{
+  "aggregation-rule": "all-pass",
+  "contract-version": "v1",
+  "decision": "approved",
+  "reports": [
+    {
+      "recommendation": "pass-with-notes",
+      "review-id": "rvr_20260331_033839",
+      "reviewer-key": "cline:cli:unknown"
+    }
+  ],
+  "require-distinct-reviewers": true,
+  "required-reviews": 1,
+  "review-bundle-id": "rvb_20260331_033839",
+  "status": "complete",
+  "subject": {
+    "adhoc-id": "adh_20260331_033839",
+    "kind": "adhoc"
+  },
+  "updated-at": "2026-03-31T03:38:39.658765Z"
+}
