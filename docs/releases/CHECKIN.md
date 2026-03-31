@@ -1,6 +1,6 @@
 # Check-In Summary
 
-Total changes: 59
+Total changes: 60
 
 - Added initial job persistence and state machine with tests.
 - Added workflow profile loading and override validation.
@@ -62,3 +62,4 @@ Total changes: 59
 - Drafted Phase 4.10 live input and interactive session control with first-wave Cline/Codex guidance.
 - Implemented the shared Phase 4.10 live-input harness and session-input CLI, with test coverage.
 - Drafted Phase 4.12 provider optimization and shared workflow extensibility so shared scripts, skills, MCP tools, and wrappers can reduce token usage without locking in the future workflow model.
+- Tightened Phase 4.12 to be explicitly script-first and template-driven for repeatable operations, with agents limited to the minimum intent or parameters needed by the helper.
