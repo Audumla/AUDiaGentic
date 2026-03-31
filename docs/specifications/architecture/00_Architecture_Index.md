@@ -45,6 +45,7 @@ The following areas were strengthened specifically to close pre-implementation g
 - 25_DRAFT_Prompt_Tagged_Workflow_Launch_and_Review_Loop.md
 - 34_DRAFT_Provider_Live_Stream_and_Progress_Capture.md
 - 35_DRAFT_Provider_Live_Input_and_Interactive_Session_Control.md
+- 36_DRAFT_Provider_Structured_Completion_and_Result_Normalization.md
 
 ## Extension docs
 
@@ -56,3 +57,6 @@ The following areas were strengthened specifically to close pre-implementation g
 - 31_DRAFT_Provider_Auto_Install_Policy_Persistence_and_Lifecycle_Roundtrip.md
 - 32_DRAFT_Job_Control_and_Running_Job_Cancellation.md
 - 33_DRAFT_Project_Release_Bootstrap_and_Workflow_Activation.md
+- 34_DRAFT_Provider_Live_Stream_and_Progress_Capture.md
+- 35_DRAFT_Provider_Live_Input_and_Interactive_Session_Control.md
+- 36_DRAFT_Provider_Structured_Completion_and_Result_Normalization.md

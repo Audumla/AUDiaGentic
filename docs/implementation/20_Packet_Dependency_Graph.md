@@ -196,6 +196,8 @@ The intended order is:
 2. `PKT-PRV-052`
 3. `PKT-PRV-053`
 
+`.11` adds structured completion and result normalization after the live input/capture path is already frozen and the shared result contract is written down. This phase is currently docs-only, so it does not yet introduce new packet ids.
+
 `PKT-PRV-012` no longer depends on `PKT-JOB-007`; the earlier apparent cycle is resolved by treating provider/model field names as provider-owned contract output first.
 
 ## Clarification on Phase 3 and Phase 4
