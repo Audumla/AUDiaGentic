@@ -48,3 +48,42 @@ components:
     assert findings
     issues = " ".join(entry["issue"] for entry in findings)
     assert "invalid ids" in issues
+
+
+def test_validate_ids_ignores_invalid_fixtures(tmp_path: Path) -> None:
+    _write_yaml(
+        tmp_path / "provider-config.invalid.yaml",
+        """
+contract-version: v1
+providers:
+  local_openai:
+    enabled: true
+components:
+  core_lifecycle:
+    enabled: true
+""".lstrip(),
+    )
+    findings = validate_ids.scan_paths([tmp_path])
+    assert findings == []
+
+
+def test_validate_ids_ignores_schema_contents(tmp_path: Path, monkeypatch) -> None:
+    docs_schemas = tmp_path / "docs" / "schemas"
+    docs_schemas.mkdir(parents=True)
+    (docs_schemas / "provider-config.schema.json").write_text(
+        """
+{
+  "type": "object",
+  "properties": {
+    "type": {"const": "provider-config"},
+    "additionalProperties": false,
+    "required": ["providers"]
+  }
+}
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(validate_ids, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(validate_ids, "validate_schema_files", lambda _path: [])
+    findings = validate_ids.scan_paths([tmp_path / "docs"])
+    assert findings == []
