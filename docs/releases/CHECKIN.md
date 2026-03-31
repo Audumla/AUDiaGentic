@@ -40,7 +40,7 @@ Total changes: 58
 - Added the Gemini prompt-trigger implementation runbook.
 - Added the remaining provider prompt-trigger implementation runbooks.
 - Added configurable prompt-syntax profiles and alias normalization for tags, providers, and directive names.
-- Wired configurable live-stream and live-input defaults through prompt launch, with shared streaming helpers in the Codex and Cline adapters.
+- Wired configurable live-stream and live-input defaults through prompt launch, extended Codex/Cline/Gemini timeout defaults for longer reviews, and added shared streaming helpers in the Codex and Cline adapters.
 - Drafted Phase 3.4 job control and running-job cancellation.
 - Expanded the Phase 3.4 job-control packet into an implementation-ready packet.
 - Implemented Phase 3.4 job control and running-job cancellation.

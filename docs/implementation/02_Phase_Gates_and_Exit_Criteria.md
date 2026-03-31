@@ -161,6 +161,13 @@
 - provider-specific live-input packets exist before implementation begins
 - Discord remains a later consumer of the same input contract
 
+## Phase 4.11 draft gate
+- shared structured completion and result normalization contract is written down
+- provider completion surfaces are named for the first-wave providers, starting with Cline and Codex
+- final artifact persistence is owned by AUDiaGentic, not the provider
+- provider-specific result-normalization guidance exists before implementation begins
+- Discord and later overlays remain later consumers of the same normalized completion contract
+
 ## Phase 5 exit gate
 - Phase 4.4 gate is verified and provider execution docs are frozen
 - Discord can be fully disabled
