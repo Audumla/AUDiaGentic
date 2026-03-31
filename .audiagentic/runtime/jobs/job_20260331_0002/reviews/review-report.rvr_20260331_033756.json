@@ -1,0 +1,22 @@
+{
+  "contract-version": "v1",
+  "created-at": "2026-03-31T03:37:56.678714Z",
+  "criteria": [
+    "Review the current project state and call out any gaps."
+  ],
+  "findings": [],
+  "follow-up-actions": [],
+  "recommendation": "pass-with-notes",
+  "review-id": "rvr_20260331_033756",
+  "reviewer": {
+    "prompt-id": "prm_20260331_033756",
+    "provider-id": "codex",
+    "reviewer-key": "codex:cli:unknown",
+    "session-id": null,
+    "surface": "cli"
+  },
+  "subject": {
+    "adhoc-id": "adh_20260331_033756",
+    "kind": "adhoc"
+  }
+}

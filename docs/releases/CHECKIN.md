@@ -1,6 +1,6 @@
 # Check-In Summary
 
-Total changes: 52
+Total changes: 58
 
 - Added initial job persistence and state machine with tests.
 - Added workflow profile loading and override validation.
@@ -39,6 +39,8 @@ Total changes: 52
 - Added the Claude prompt-trigger implementation runbook.
 - Added the Gemini prompt-trigger implementation runbook.
 - Added the remaining provider prompt-trigger implementation runbooks.
+- Added configurable prompt-syntax profiles and alias normalization for tags, providers, and directive names.
+- Wired configurable live-stream and live-input defaults through prompt launch, with shared streaming helpers in the Codex and Cline adapters.
 - Drafted Phase 3.4 job control and running-job cancellation.
 - Expanded the Phase 3.4 job-control packet into an implementation-ready packet.
 - Implemented Phase 3.4 job control and running-job cancellation.
@@ -54,3 +56,8 @@ Total changes: 52
 - Aligned the release bootstrap docs with the new project-level release-bootstrap entry point.
 - Corrected the project-local bootstrap config to use the real AUDiaGentic identity.
 - Upgraded the release workflow to run the project bootstrap path and verify installed state.
+- Formalized the provider prompt-calling mechanics map, starting with Codex as the reference bridge/skills path.
+- Added Codex prompt-calling preflight validation and parked Continue as a future integration.
+- Drafted Phase 4.9 live stream and progress capture with first-wave Cline/Codex guidance.
+- Drafted Phase 4.10 live input and interactive session control with first-wave Cline/Codex guidance.
+- Implemented the shared Phase 4.10 live-input harness and session-input CLI, with test coverage.

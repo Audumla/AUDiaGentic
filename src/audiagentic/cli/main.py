@@ -21,8 +21,18 @@ import provider_status as provider_status_tool
 from audiagentic.jobs import control as job_control_tool
 from audiagentic.jobs import prompt_launch as prompt_launch_tool
 from audiagentic.jobs import prompt_trigger_bridge as prompt_trigger_bridge_tool
+from audiagentic.jobs import session_input as session_input_tool
 from audiagentic.jobs.prompt_parser import parse_prompt_launch_request
 from audiagentic.jobs import store as job_store
+
+
+def _load_json_argument(raw_value: str | None) -> dict[str, object] | None:
+    if raw_value is None:
+        return None
+    payload = json.loads(raw_value)
+    if not isinstance(payload, dict):
+        raise ValueError("JSON argument must decode to an object")
+    return payload
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -42,6 +52,8 @@ def main(argv: list[str] | None = None) -> int:
     prompt_parser.add_argument("--model-id")
     prompt_parser.add_argument("--model-alias")
     prompt_parser.add_argument("--workflow-profile", default="standard")
+    prompt_parser.add_argument("--stream-controls-json")
+    prompt_parser.add_argument("--input-controls-json")
 
     bridge_parser = subparsers.add_parser("prompt-trigger-bridge")
     bridge_parser.add_argument("--project-root", default=".")
@@ -52,6 +64,8 @@ def main(argv: list[str] | None = None) -> int:
     bridge_parser.add_argument("--model-id")
     bridge_parser.add_argument("--model-alias")
     bridge_parser.add_argument("--workflow-profile", default="standard")
+    bridge_parser.add_argument("--stream-controls-json")
+    bridge_parser.add_argument("--input-controls-json")
 
     refresh_parser = subparsers.add_parser("refresh-model-catalog")
     refresh_parser.add_argument("--project-root", required=True)
@@ -68,6 +82,31 @@ def main(argv: list[str] | None = None) -> int:
     job_control_parser.add_argument("--requested-by", default="operator")
     job_control_parser.add_argument("--reason", default="")
 
+    session_input_parser = subparsers.add_parser("session-input")
+    session_input_parser.add_argument("--project-root", required=True)
+    session_input_parser.add_argument("--job-id", required=True)
+    session_input_parser.add_argument("--message")
+    session_input_parser.add_argument("--message-file")
+    session_input_parser.add_argument("--provider-id")
+    session_input_parser.add_argument("--prompt-id")
+    session_input_parser.add_argument("--surface", default="cli", choices=["cli", "vscode"])
+    session_input_parser.add_argument("--stage", default="running")
+    session_input_parser.add_argument(
+        "--event-kind",
+        default="input-submitted",
+        choices=[
+            "input-requested",
+            "input-submitted",
+            "input-applied",
+            "input-rejected",
+            "input-timeout",
+            "pause-requested",
+            "resume-requested",
+            "turn-complete",
+        ],
+    )
+    session_input_parser.add_argument("--details-json")
+
     release_bootstrap_parser = subparsers.add_parser("release-bootstrap")
     release_bootstrap_parser.add_argument("--project-root", required=True)
     release_bootstrap_parser.add_argument("--release-id", default="rel_0001")
@@ -76,20 +115,26 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "lifecycle-stub":
         return lifecycle_stub.run(["--mode", args.mode, "--project-root", args.project_root])
     if args.command == "prompt-launch":
-        if args.prompt_file:
-            prompt_text = Path(args.prompt_file).read_text(encoding="utf-8")
-        else:
-            prompt_text = sys.stdin.read()
-        request = parse_prompt_launch_request(
-            prompt_text,
-            surface=args.surface,
-            provider_id=args.provider_id,
-            session_id=args.session_id,
-            model_id=args.model_id,
-            model_alias=args.model_alias,
-            workflow_profile=args.workflow_profile,
-            allow_adhoc_target=False,
-        )
+        try:
+            if args.prompt_file:
+                prompt_text = Path(args.prompt_file).read_text(encoding="utf-8")
+            else:
+                prompt_text = sys.stdin.read()
+            request = parse_prompt_launch_request(
+                prompt_text,
+                surface=args.surface,
+                provider_id=args.provider_id,
+                session_id=args.session_id,
+                model_id=args.model_id,
+                model_alias=args.model_alias,
+                workflow_profile=args.workflow_profile,
+                stream_controls=_load_json_argument(args.stream_controls_json),
+                input_controls=_load_json_argument(args.input_controls_json),
+                allow_adhoc_target=False,
+            )
+        except ValueError as exc:
+            print(json.dumps({"status": "error", "kind": "validation", "message": str(exc)}, indent=2, sort_keys=True))
+            return 2
         result = prompt_launch_tool.launch_prompt_request(Path(args.project_root), request)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
@@ -112,6 +157,10 @@ def main(argv: list[str] | None = None) -> int:
             bridge_args.extend(["--model-alias", args.model_alias])
         if args.workflow_profile:
             bridge_args.extend(["--workflow-profile", args.workflow_profile])
+        if args.stream_controls_json:
+            bridge_args.extend(["--stream-controls-json", args.stream_controls_json])
+        if args.input_controls_json:
+            bridge_args.extend(["--input-controls-json", args.input_controls_json])
         return prompt_trigger_bridge_tool.run(bridge_args)
     if args.command == "providers-status":
         status_args = ["--project-root", args.project_root]
@@ -128,6 +177,28 @@ def main(argv: list[str] | None = None) -> int:
         )
         result = job_control_tool.request_job_control(Path(args.project_root), request)
         print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+    if args.command == "session-input":
+        if args.message_file:
+            message = Path(args.message_file).read_text(encoding="utf-8")
+        elif args.message is not None:
+            message = args.message
+        else:
+            message = sys.stdin.read()
+        details = json.loads(args.details_json) if args.details_json else None
+        job = job_store.read_job_record(Path(args.project_root), args.job_id)
+        record = session_input_tool.build_and_persist_session_input(
+            Path(args.project_root),
+            job_id=args.job_id,
+            prompt_id=args.prompt_id,
+            provider_id=args.provider_id or job.get("provider-id"),
+            surface=args.surface,
+            stage=args.stage,
+            event_kind=args.event_kind,
+            message=message,
+            details=details,
+        )
+        print(json.dumps({"status": "recorded", "session-input": record}, indent=2, sort_keys=True))
         return 0
     if args.command == "release-bootstrap":
         result = release_bootstrap.bootstrap_release_workflow(Path(args.project_root), release_id=args.release_id)

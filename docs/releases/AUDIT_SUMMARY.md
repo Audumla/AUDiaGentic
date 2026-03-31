@@ -1,6 +1,6 @@
 # Audit Summary
 
-Total events: 52
+Total events: 58
 
 - chg_20260330_0001: Added job record contract helpers, store, and state machine with unit tests and registry updates.
 - chg_20260330_0002: Added workflow profile loader/validator with override parsing and fixtures.
@@ -54,3 +54,10 @@ Total events: 52
 - chg_20260331_0002: Aligned release bootstrap docs with the project-level release-bootstrap entry point and marked the new Phase 2.3 slot verified.
 - chg_20260331_0003: Corrected the project-local bootstrap config to use the real AUDiaGentic project identity.
 - chg_20260331_0004: Upgraded the managed release workflow from a placeholder echo to a real project-bootstrap workflow that runs the project release bootstrap command and verifies installed state.
+- chg_20260331_0005: Formalized the provider prompt-calling mechanics map, starting with Codex as the reference bridge/skills path.
+- chg_20260331_0006: Added Codex prompt-calling preflight validation and parked Continue as a future integration.
+- chg_20260331_0007: Drafted Phase 4.9 live stream and progress capture with first-wave Cline/Codex guidance.
+- chg_20260331_0008: Drafted Phase 4.10 live input and interactive session control with first-wave Cline/Codex guidance.
+- chg_20260331_0009: Implemented the shared Phase 4.10 live-input harness and session-input CLI, with test coverage.
+- chg_20260331_0010: Added configurable prompt-syntax profiles and alias normalization for tags, providers, and directive names.
+- chg_20260331_0011: Wired configurable live-stream and live-input defaults through prompt launch, with shared streaming helpers in the Codex and Cline adapters.

@@ -1,0 +1,21 @@
+{
+  "aggregation-rule": "all-pass",
+  "contract-version": "v1",
+  "decision": "approved",
+  "reports": [
+    {
+      "recommendation": "pass-with-notes",
+      "review-id": "rvr_20260331_062449",
+      "reviewer-key": "cline:cli:unknown"
+    }
+  ],
+  "require-distinct-reviewers": true,
+  "required-reviews": 1,
+  "review-bundle-id": "rvb_20260331_062449",
+  "status": "complete",
+  "subject": {
+    "job-id": "job_001",
+    "kind": "job"
+  },
+  "updated-at": "2026-03-31T06:31:55.893292Z"
+}

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "job-id",
+    "provider-id",
+    "surface",
+    "session-state",
+    "updated-at"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "job-id": {
+      "type": "string"
+    },
+    "provider-id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "surface": {
+      "type": "string",
+      "enum": [
+        "cli",
+        "vscode"
+      ]
+    },
+    "session-state": {
+      "type": "string",
+      "enum": [
+        "open",
+        "paused",
+        "closed"
+      ]
+    },
+    "updated-at": {
+      "type": "string"
+    },
+    "last-prompt-id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "last-event-kind": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

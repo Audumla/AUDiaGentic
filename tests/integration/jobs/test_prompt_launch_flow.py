@@ -11,6 +11,7 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.jobs.prompt_launch import launch_prompt_request
+from audiagentic.jobs import prompt_launch
 from audiagentic.jobs.prompt_parser import parse_prompt_launch_request
 from audiagentic.jobs.store import job_record_path
 from tests.helpers import sandbox as sandbox_helper
@@ -35,6 +36,20 @@ def _write_project_and_provider_config(sandbox) -> None:
                 "    required-reviews: 2",
                 "    aggregation-rule: all-pass",
                 "    require-distinct-reviewers: true",
+                "  default-stream-controls:",
+                "    enabled: true",
+                "    tee-console: true",
+                "    capture-stdout: true",
+                "    capture-stderr: true",
+                "    capture-progress: true",
+                "    event-format: ndjson",
+                "  default-input-controls:",
+                "    enabled: true",
+                "    tee-console: true",
+                "    capture-stdin: true",
+                "    capture-input-events: true",
+                "    allow-pause-resume: true",
+                "    event-format: ndjson",
             ]
         ),
         encoding="utf-8",
@@ -63,6 +78,17 @@ def _write_project_and_provider_config(sandbox) -> None:
                 "    model-aliases:",
                 "      fast: sonnet",
                 "      deep: opus",
+                "    catalog-refresh:",
+                "      source: cli",
+                "      max-age-hours: 168",
+                "  cline:",
+                "    enabled: true",
+                "    install-mode: external-configured",
+                "    access-mode: cli",
+                "    default-model: gpt-5.4-mini",
+                "    model-aliases:",
+                "      fast: gpt-5.4-mini",
+                "      deep: gpt-5.4",
                 "    catalog-refresh:",
                 "      source: cli",
                 "      max-age-hours: 168",
@@ -124,22 +150,58 @@ def test_prompt_launch_defaults_model_and_job_subject_from_provider_shorthand(tm
 
 def test_prompt_review_creates_review_artifacts(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "prompt-review")
+    original_execute_provider = prompt_launch.execute_provider
     try:
         _write_project_and_provider_config(sandbox)
+        captured: dict[str, object] = {}
+
+        def fake_execute_provider(*, provider_id, packet_ctx, provider_cfg):  # type: ignore[no-untyped-def]
+            captured["packet_ctx"] = packet_ctx
+            return {
+                "provider-id": provider_id,
+                "status": "ok",
+                "output": json.dumps(
+                    {
+                        "findings": [
+                            {
+                                "finding-id": "fdg_001",
+                                "severity": "minor",
+                                "blocking": False,
+                                "summary": "Template-driven review executed.",
+                                "suggested-fix": "None needed.",
+                            }
+                        ],
+                        "recommendation": "pass-with-notes",
+                        "follow-up-actions": ["Archive the review output."],
+                    }
+                ),
+            }
+
+        original_execute_provider = prompt_launch.execute_provider
+        prompt_launch.execute_provider = fake_execute_provider  # type: ignore[assignment]
         request = parse_prompt_launch_request(
-            "@review target=artifact:art_job_0007_impl_plan review-count=1 aggregation=all-pass\n"
-            "Check the artifact against the packet scope.\n",
+            "@r-cline id=job_001 ctx=documentation t=review-default\n",
             surface="cli",
-            provider_id="claude",
+            provider_id="cline",
             session_id="sess_044",
             workflow_profile="standard",
             prompt_id="prm_20260330_0044",
+            project_root=sandbox.repo,
         )
         result = launch_prompt_request(sandbox.repo, request)
-        assert result["status"] == "complete"
-        assert result["decision"] == "approved"
+        assert result["status"] == "open"
         review_root = sandbox.repo / ".audiagentic" / "runtime" / "jobs" / result["job-id"] / "reviews"
         assert any(review_root.glob("review-report.*.json"))
         assert (review_root / "review-bundle.json").exists()
+        report = json.loads(next(review_root.glob("review-report.*.json")).read_text(encoding="utf-8"))
+        assert report["recommendation"] == "pass-with-notes"
+        assert report["findings"][0]["summary"] == "Template-driven review executed."
+        assert report["subject"]["job-id"] == "job_001"
+        assert report["criteria"]
+        packet_ctx = captured["packet_ctx"]
+        assert isinstance(packet_ctx, dict)
+        assert packet_ctx["stream-controls"]["enabled"] is True
+        assert packet_ctx["input-controls"]["capture-stdin"] is True
     finally:
+        prompt_launch.execute_provider = original_execute_provider  # type: ignore[assignment]
         sandbox.cleanup()

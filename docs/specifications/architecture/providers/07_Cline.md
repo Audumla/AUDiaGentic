@@ -26,6 +26,7 @@ Prompt-tag recognition and synchronization are defined in `27_Provider_Prompt_Ta
 - CLI surface mode: wrapper-normalize
 - VS Code surface mode: extension-normalize
 - settings profile: cline-prompt-tags-v1
+- alias and argument names resolve from `.audiagentic/prompt-syntax.yaml`
 
 
 ## Prompt-trigger exposure (Phase 4.6)
@@ -63,6 +64,28 @@ The implementation runbook for Cline prompt-trigger behavior lives at
 
 Use that runbook when turning the shared prompt-trigger contract into Cline-specific
 implementation steps, hook wiring, and smoke tests.
+
+## Phase 4.9 live stream and progress capture
+
+Cline is a first-wave validation provider for the shared live-stream contract because it already
+emits progress events that are useful for console mirroring.
+
+For the first pass:
+- AUDiaGentic should tee live Cline progress to the console if streaming is enabled
+- AUDiaGentic should persist normalized progress records in the job runtime folder
+- Cline should continue to emit progress normally and should not own file persistence
+- final structured artifacts should still be written after the stream completes
+
+## Phase 4.10 live input and interactive session control
+
+Cline is also a first-wave validation provider for the shared live-input contract because its
+CLI behavior already exposes useful interactive turns during a session.
+
+For the first pass:
+- AUDiaGentic should own stdin/input capture and normalized session-input persistence
+- AUDiaGentic should tee control/input turns to the console when interactive mode is enabled
+- Cline should continue to emit responses normally and should not own file persistence
+- the same input contract should remain usable later by Discord or another overlay
 
 ## Required provider-specific decisions before implementation
 - auth reference shape

@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 from pathlib import Path
 from typing import Any
 
 from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.providers.streaming import run_streaming_command
 
 
 def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> str:
@@ -38,18 +38,6 @@ def _cline_executable() -> str:
     return executable
 
 
-def _run_cline(command: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        command,
-        cwd=str(cwd) if cwd is not None else None,
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-
-
 def _parse_output(stdout: str) -> tuple[str, str | None]:
     completion_text = ""
     task_id: str | None = None
@@ -76,6 +64,7 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
     executable = _cline_executable()
     prompt = _build_prompt(packet_ctx, provider_cfg)
     default_model = provider_cfg.get("default-model")
+    timeout_seconds = provider_cfg.get("timeout-seconds", 60)
     working_root = packet_ctx.get("working-root")
     cwd = Path(working_root) if working_root else None
 
@@ -84,15 +73,33 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
         "--json",
         "--auto-approve-all",
     ]
+    if timeout_seconds:
+        command.extend(["--timeout", str(timeout_seconds)])
     if cwd is not None:
         command.extend(["--cwd", str(cwd)])
     if default_model:
         command.extend(["--model", str(default_model)])
     command.append(prompt)
 
-    completed = _run_cline(command, cwd=cwd)
-    stdout = (completed.stdout or "").strip()
-    stderr = (completed.stderr or "").strip()
+    runtime_root = None
+    job_id = packet_ctx.get("job-id")
+    working_root = packet_ctx.get("working-root")
+    if working_root and job_id:
+        runtime_root = Path(working_root) / ".audiagentic" / "runtime" / "jobs" / str(job_id)
+    stream_controls = packet_ctx.get("stream-controls", {})
+    tee_console = bool(stream_controls.get("tee-console", False)) or bool(stream_controls.get("enabled", False))
+    stdout_log = runtime_root / "stdout.log" if runtime_root is not None else None
+    stderr_log = runtime_root / "stderr.log" if runtime_root is not None else None
+
+    completed = run_streaming_command(
+        command,
+        cwd=cwd,
+        stdout_log_path=stdout_log,
+        stderr_log_path=stderr_log,
+        tee_console=tee_console,
+    )
+    stdout = completed.stdout.strip()
+    stderr = completed.stderr.strip()
     output_text, task_id = _parse_output(stdout)
 
     if completed.returncode != 0:

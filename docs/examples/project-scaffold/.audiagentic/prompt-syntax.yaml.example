@@ -1,0 +1,39 @@
+contract-version: v1
+default-profile: shared
+generic-tag: adhoc
+tag-aliases:
+  p: plan
+  i: implement
+  r: review
+  a: audit
+  c: check-in-prep
+provider-aliases:
+  local-openai: local-openai
+  lo: local-openai
+  codex: codex
+  cx: codex
+  claude: claude
+  cld: claude
+  gemini: gemini
+  gm: gemini
+  qwen: qwen
+  qw: qwen
+  copilot: copilot
+  cp: copilot
+  continue: continue
+  ctr: continue
+  cline: cline
+  cln: cline
+directive-aliases:
+  agent: provider
+  subject: id
+  ctx: context
+  out: output
+  t: template
+profiles:
+  shared:
+    prompt-controls:
+      id: id
+      context: context
+      output: output
+      template: template

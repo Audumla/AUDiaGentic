@@ -27,6 +27,13 @@ Current extension slots:
 - `.6` = provider prompt-trigger launch behavior, agent instruction surfaces, and wrapper/bridge invocation
 - `.7` = provider availability, auto-install, and bootstrap orchestration
 - `.8` = project release bootstrap and workflow activation using the project's own release machinery
+- `.9` = provider live stream and progress capture, with Cline and Codex as the first-wave validation providers
+- `.10` = provider live input and interactive session control, with Cline and Codex as the first-wave validation providers
+- prompt tag names, provider shorthands, and argument aliases are configurable through `.audiagentic/prompt-syntax.yaml`
+- prompt-launch now merges project-level default stream and input controls so live output capture and interactive turns stay AUDiaGentic-owned
+
+Stable release baseline:
+- `stable-release-20260331` at merge commit `4e01b4ef962cf80c8f6fe912f1b6a7cba22bcb32`
 
 Do not invent a new suffix until the build registry and roadmap are updated first.
 
@@ -41,10 +48,17 @@ At the time of this pack:
 - `.4` shared surface-contract work is implemented
 - `.5` provider execution compliance docs are staged as the isolated provider-specific implementation layer
 - `.6` prompt-trigger launch behavior is now drafted, with a realistic rollout assessment that splits first-wave and wrapper-first providers; the shared bridge harness is now implemented and the Claude/Cline provider paths have started
+- the prompt-calling mechanics map is now explicit, starting with Codex as the reference bridge/skills path and then mirroring the other provider surfaces
+- Codex now has an explicit preflight contract that validates `AGENTS.md` and the canonical skill files before launch
 - `.7` provider auto-install orchestration is now drafted and awaiting implementation packets
 - `.8` project release bootstrap and workflow activation is complete so the project can install itself using its own release processes
+- `.9` provider live stream and progress capture is drafted so AUDiaGentic can own console mirroring and runtime persistence while providers emit progress
+- `.10` provider live input and interactive session control is in progress; the shared harness is implemented and test-covered, and Cline/Codex are next
+- prompt-syntax profiles now control the canonical shorthand names, so tag and argument aliases can be adjusted without changing the parser code
+- prompt-launch now applies default stream and input controls before provider execution, giving the shared bridge ownership of live output and interactive session capture
 - Phase 2.3 project release bootstrap and workflow activation is verified and using the project's own release machinery
-- later phase work beyond `.8` remains deferred until additional packet definitions are added
+- later phase work beyond `.10` remains deferred until additional packet definitions are added
+- the current open follow-ons are Phase 4.7 provider auto-install orchestration, Phase 4.9 provider live stream and progress capture, Phase 4.10 provider live input and interactive session control, Phase 1.3 provider auto-install policy persistence, the remaining provider-specific prompt-calling hardening, and the optional hard-kill extension for job control
 
 That means new implementors should use the build registry for the next legal packet rather than reopening `.1`, `.2`, or `.3`.
 
@@ -269,6 +283,12 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-30 | Phase 4.6 | PKT-PRV-037 | READY_FOR_REVIEW | Cline prompt-trigger bridge surface implemented with repo-local `.clinerules` guidance |
 | 2026-03-30 | Phase 4.6 | PKT-PRV-038 | READY_FOR_REVIEW | local-openai/qwen prompt-trigger bridge surface implemented with repo-local bridge wrappers |
 | 2026-03-30 | Phase 4.7 | PKT-PRV-039 | DEFERRED_DRAFT | provider availability and auto-install orchestration; shared install policy and provider-specific bootstrap packets drafted |
+| 2026-03-31 | Phase 4.9 | PKT-PRV-048 | DEFERRED_DRAFT | shared live-stream capture contract drafted; console mirroring and runtime persistence remain AUDiaGentic-owned |
+| 2026-03-31 | Phase 4.9 | PKT-PRV-049 | DEFERRED_DRAFT | Codex live-stream capture packet drafted as a first-wave validation provider |
+| 2026-03-31 | Phase 4.9 | PKT-PRV-050 | DEFERRED_DRAFT | Cline live-stream capture packet drafted as a first-wave validation provider |
+| 2026-03-31 | Phase 4.10 | PKT-PRV-051 | READY_FOR_REVIEW | shared live-input harness implemented with session-input persistence and a session-input CLI |
+| 2026-03-31 | Phase 4.10 | PKT-PRV-052 | DEFERRED_DRAFT | Codex live-input capture packet drafted as a first-wave validation provider |
+| 2026-03-31 | Phase 4.10 | PKT-PRV-053 | DEFERRED_DRAFT | Cline live-input capture packet drafted as a first-wave validation provider |
 | 2026-03-30 | Phase 5 | PKT-DSC-001 .. PKT-DSC-004 | READY_TO_START | Discord overlay packet headers normalized; phase 5 is ready to implement after Phase 4.4 verification |
 | 2026-03-30 | Phase 0.1 | PKT-FND-008 | VERIFIED | contract/schema updates for access-mode, model catalog, model-id/model-alias |
 | 2026-03-30 | Phase 1.1 | PKT-LFC-008 | VERIFIED | lifecycle updates to preserve new tracked config fields |

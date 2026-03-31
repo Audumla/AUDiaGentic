@@ -76,8 +76,7 @@ def test_gemini_prompt_trigger_bridge_script_launches_job(tmp_path: Path) -> Non
 
         assert result.returncode == 0, result.stderr
         payload = json.loads(result.stdout)
-        assert payload["status"] == "complete"
-        assert payload["decision"] == "approved"
+        assert payload["status"] == "open"
         assert payload["review-bundle-id"].startswith("rvb_")
     finally:
         sandbox.cleanup()

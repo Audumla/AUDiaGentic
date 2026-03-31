@@ -81,6 +81,20 @@ prompt-launch:
     required-reviews: 2
     aggregation-rule: all-pass
     require-distinct-reviewers: true
+  default-stream-controls:
+    enabled: true
+    tee-console: true
+    capture-stdout: true
+    capture-stderr: true
+    capture-progress: true
+    event-format: ndjson
+  default-input-controls:
+    enabled: true
+    tee-console: true
+    capture-stdin: true
+    capture-input-events: true
+    allow-pause-resume: true
+    event-format: ndjson
 ```
 
 Additive rules:
@@ -90,6 +104,7 @@ Additive rules:
 - `prompt-launch.default-review-policy.required-reviews` must be an integer >= 1.
 - `prompt-launch.default-review-policy.aggregation-rule` supports `all-pass` for MVP and may accept `majority-pass` only as a documented but not yet implemented future extension.
 - `prompt-launch.default-review-policy.require-distinct-reviewers` defaults to `true`.
+- `prompt-launch.default-stream-controls` and `prompt-launch.default-input-controls` are additive defaults for live output capture and interactive turn capture; they should be merged into launch requests when omitted so AUDiaGentic owns the runtime stream artifacts.
 
 ## ComponentConfig
 
@@ -148,6 +163,52 @@ Provider install-orchestration note:
 - Phase 4.7 adds optional install/bootstrap policy fields such as `install-mode`, `install-policy.on-missing`, `install-command`, and `install-check`
 - those fields remain opt-in and project-local; they do not change the canonical provider execution contract
 
+### DRAFT — Provider live stream and progress capture
+
+Phase 4.9 adds additive live-output capture fields so AUDiaGentic can own console mirroring and runtime persistence while providers continue to emit progress normally.
+
+PromptLaunchRequest may include an optional `stream-controls` block:
+
+```yaml
+stream-controls:
+  enabled: true
+  tee-console: true
+  capture-stdout: true
+  capture-stderr: true
+  capture-progress: true
+  event-format: ndjson
+```
+
+Rules:
+- live-stream capture is optional and additive
+- AUDiaGentic owns persistence, file layout, and presentation
+- providers must not be responsible for writing runtime stream artifacts
+- Cline and Codex are the first-wave validation providers for this contract
+- Discord may later consume the same normalized stream without changing provider behavior
+
+### DRAFT — Provider live input and interactive session control
+
+Phase 4.10 adds additive session-input fields so AUDiaGentic can own follow-up turns, pause/resume control, and runtime input persistence while providers continue to emit responses normally.
+
+PromptLaunchRequest may include an optional `input-controls` block:
+
+```yaml
+input-controls:
+  enabled: true
+  tee-console: true
+  capture-stdin: true
+  capture-input-events: true
+  allow-pause-resume: true
+  event-format: ndjson
+```
+
+Rules:
+- live-input capture is optional and additive
+- AUDiaGentic owns persistence, file layout, and presentation
+- providers must not be responsible for writing runtime input artifacts
+- Cline and Codex are the first-wave validation providers for this contract
+- Discord may later consume the same normalized input stream without changing provider behavior
+
 ### Phase 3.4 job-control note
 
 Job cancellation and stop control are tracked separately from approvals and prompt launch.
@@ -181,6 +242,19 @@ Rules:
 Phase 4.3 adds provider-surface metadata that keeps CLI and VS Code prompt tagging synchronized without changing the canonical prompt-launch contract.
 
 ProviderConfig may include an optional `prompt-surface` block with `enabled`, `tag-syntax`, `first-line-policy`, `cli-mode`, `vscode-mode`, and `settings-profile` fields.
+
+Project-local prompt syntax is configurable through `.audiagentic/prompt-syntax.yaml`.
+The selected `settings-profile` names the alias profile that determines:
+- generic tag name
+- tag aliases
+- provider aliases
+- directive aliases such as `ctx`, `out`, `t`, or `agent`
+
+Rules:
+- alias changes are project-local and do not redefine canonical workflow meaning
+- specific provider profiles may extend a shared alias profile
+- `adhoc` remains the generic agent-call baseline unless a project profile changes the alias mapping
+- the same alias profile must be used consistently by the launch bridge and any provider wrappers that forward prompts into `prompt-launch`
 
 ProviderDescriptor may include additive prompt-tag capability fields:
 - `supports-prompt-tag-launch`

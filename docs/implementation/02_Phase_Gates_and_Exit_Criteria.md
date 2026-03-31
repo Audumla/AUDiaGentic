@@ -147,6 +147,20 @@
 - auto-install remains opt-in and project-local
 - provider-specific install packets exist before implementation begins
 
+## Phase 4.9 draft gate
+- shared live-stream and progress capture contract is written down
+- provider capture surfaces are named for the first-wave providers, starting with Cline and Codex
+- console mirroring and runtime persistence are owned by AUDiaGentic, not the provider
+- provider-specific live-stream packets exist before implementation begins
+- Discord remains a later consumer of the same stream contract
+
+## Phase 4.10 draft gate
+- shared live-input and interactive-session control contract is written down
+- provider input surfaces are named for the first-wave providers, starting with Cline and Codex
+- console input capture and runtime persistence are owned by AUDiaGentic, not the provider
+- provider-specific live-input packets exist before implementation begins
+- Discord remains a later consumer of the same input contract
+
 ## Phase 5 exit gate
 - Phase 4.4 gate is verified and provider execution docs are frozen
 - Discord can be fully disabled

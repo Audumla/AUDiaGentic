@@ -60,6 +60,7 @@ This implementation pack is the **end-to-end staged build book** for AUDiaGentic
 - `29_DRAFT_Performance_and_Scale_Guidance.md`
 - `30_DRAFT_Developer_Onboarding.md`
 - `34_DRAFT_Prompt_Tagged_Workflow_Launch_and_Review_Loop.md`
+- `35_DRAFT_Provider_Live_Input_and_Interactive_Session_Control.md`
 - `42_Phase_3_4_Job_Control_and_Running_Job_Cancellation.md`
 - `43_Phase_2_3_Project_Release_Bootstrap_and_Workflow_Activation.md`
 
@@ -72,6 +73,10 @@ This implementation pack is the **end-to-end staged build book** for AUDiaGentic
 - `39_Phase_4_4_Provider_Tag_Execution_Implementation.md`
 - `40_Phase_4_6_Provider_Prompt_Trigger_Launch_Behavior.md`
 - `41_Phase_4_7_Provider_Auto_Install_Orchestration.md`
+- `45_Phase_4_9_Provider_Live_Stream_and_Progress_Capture.md`
+- `46_Phase_4_10_Provider_Live_Input_and_Interactive_Session_Control.md`
+- `29_Provider_Live_Stream_Progress_Capture_Assessment.md`
+- `30_Provider_Live_Input_Interactive_Session_Assessment.md`
 
 ## Reading order for immediate execution
 

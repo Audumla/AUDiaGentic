@@ -198,6 +198,78 @@
         "null"
       ]
     },
+    "prompt-controls": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "context": {
+          "type": "string"
+        },
+        "output": {
+          "type": "string"
+        },
+        "template": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "stream-controls": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "tee-console": {
+          "type": "boolean"
+        },
+        "capture-stdout": {
+          "type": "boolean"
+        },
+        "capture-stderr": {
+          "type": "boolean"
+        },
+        "capture-progress": {
+          "type": "boolean"
+        },
+        "event-format": {
+          "type": "string",
+          "enum": [
+            "ndjson"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "input-controls": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "tee-console": {
+          "type": "boolean"
+        },
+        "capture-stdin": {
+          "type": "boolean"
+        },
+        "capture-input-events": {
+          "type": "boolean"
+        },
+        "allow-pause-resume": {
+          "type": "boolean"
+        },
+        "event-format": {
+          "type": "string",
+          "enum": [
+            "ndjson"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "prompt-body": {
       "type": "string"
     },

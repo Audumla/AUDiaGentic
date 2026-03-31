@@ -1,0 +1,26 @@
+{
+  "contract-version": "v1",
+  "existing-job-id": null,
+  "prompt-body": "Review the current project state and call out any gaps.\nReturn JSON with findings, recommendation, and follow-up-actions.",
+  "prompt-controls": {
+    "context": "documentation",
+    "id": "job_001",
+    "template": "review-default"
+  },
+  "prompt-id": "prm_20260331_062449",
+  "source": {
+    "kind": "interactive-prompt",
+    "model-alias": null,
+    "model-id": null,
+    "provider-id": "cline",
+    "session-id": null,
+    "surface": "cli"
+  },
+  "tag": "review",
+  "target": {
+    "job-id": "job_001",
+    "kind": "job"
+  },
+  "target-origin": "explicit",
+  "workflow-profile": "standard"
+}

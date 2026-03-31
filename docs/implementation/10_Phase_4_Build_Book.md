@@ -29,3 +29,5 @@ Phase 4.3 adds shared provider prompt-tag surface recognition and synchronizatio
 Phase 4.4 adds provider tag execution compliance and isolated provider implementation docs; see `39_Phase_4_4_Provider_Tag_Execution_Implementation.md`.
 Phase 4.6 drafts provider prompt-trigger launch behavior and per-provider bridge/wrapper rollout; see `40_Phase_4_6_Provider_Prompt_Trigger_Launch_Behavior.md` and the realism assessment in `providers/28_Prompt_Trigger_Realistic_Rollout_Assessment.md`.
 Phase 4.7 drafts provider availability and auto-install orchestration; see `41_Phase_4_7_Provider_Auto_Install_Orchestration.md`.
+Phase 4.9 drafts provider live stream and progress capture; see `45_Phase_4_9_Provider_Live_Stream_and_Progress_Capture.md` and the rollout assessment in `providers/29_Provider_Live_Stream_Progress_Capture_Assessment.md`.
+Phase 4.10 is now in progress for the shared live input and interactive session control harness; see `46_Phase_4_10_Provider_Live_Input_and_Interactive_Session_Control.md` and the rollout assessment in `providers/30_Provider_Live_Input_Interactive_Session_Assessment.md`.
