@@ -256,6 +256,16 @@ Leaves behind:
 - Cline and Codex first-wave interactive-session packets
 - later Discord input-consumption guidance
 
+### Phase 4.11 — Provider structured completion and result normalization
+Add a shared canonical completion/result contract so each provider can return its final review or execution result through the most stable available native surface without duplicating the shared bridge or capture harness.
+
+Leaves behind:
+- shared structured completion and result normalization contract
+- canonical final-result payload shape
+- provider-specific preferred completion methods
+- Cline/Codex first-wave normalization guidance
+- later provider result-completion rollout guidance
+
 ### Phase 5 — Discord overlay
 Add Discord as a true overlay using approval + events only.
 

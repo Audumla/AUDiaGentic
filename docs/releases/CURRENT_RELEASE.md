@@ -65,7 +65,7 @@
 - [chg_20260331_0010] Added configurable prompt-syntax profiles and alias normalization for tags, providers, and directive names.
 - [chg_20260331_0005] Formalized the provider prompt-calling mechanics map, starting with Codex as the reference bridge/skills path.
 - [chg_20260331_0006] Added Codex prompt-calling preflight validation and parked Continue as a future integration.
-- [chg_20260331_0011] Wired configurable live-stream and live-input defaults through prompt launch, with shared streaming helpers in the Codex and Cline adapters.
+- [chg_20260331_0011] Wired configurable live-stream and live-input defaults through prompt launch, extended Codex/Cline/Gemini timeout defaults for longer reviews, and added shared streaming helpers in the Codex and Cline adapters.
 
 ### tests
 - [chg_20260330_0016] Added provider/job seam tests.

@@ -29,8 +29,10 @@ Current extension slots:
 - `.8` = project release bootstrap and workflow activation using the project's own release machinery
 - `.9` = provider live stream and progress capture, with Cline and Codex as the first-wave validation providers
 - `.10` = provider live input and interactive session control, with Cline and Codex as the first-wave validation providers
+- `.11` = provider structured completion and result normalization, with Cline and Codex as the first-wave validation providers
 - prompt tag names, provider shorthands, and argument aliases are configurable through `.audiagentic/prompt-syntax.yaml`
 - prompt-launch now merges project-level default stream and input controls so live output capture and interactive turns stay AUDiaGentic-owned
+- Codex, Cline, and Gemini provider configs now use longer timeout defaults to give the streaming review path room to finish long-running tasks
 
 Stable release baseline:
 - `stable-release-20260331` at merge commit `4e01b4ef962cf80c8f6fe912f1b6a7cba22bcb32`
@@ -56,9 +58,12 @@ At the time of this pack:
 - `.10` provider live input and interactive session control is in progress; the shared harness is implemented and test-covered, and Cline/Codex are next
 - prompt-syntax profiles now control the canonical shorthand names, so tag and argument aliases can be adjusted without changing the parser code
 - prompt-launch now applies default stream and input controls before provider execution, giving the shared bridge ownership of live output and interactive session capture
+- provider timeout defaults are now extended for Codex, Cline, and Gemini so review sessions can run long enough to finish while still streaming progress
+- Cline review launches currently execute through the bridge, but still need prompt-shape hardening to reliably return structured JSON instead of a synthetic review bundle
+- `.11` provider structured completion and result normalization is the next feature slice so Cline, Codex, and the remaining providers can return canonical review/output payloads without duplicating the shared bridge harness
 - Phase 2.3 project release bootstrap and workflow activation is verified and using the project's own release machinery
-- later phase work beyond `.10` remains deferred until additional packet definitions are added
-- the current open follow-ons are Phase 4.7 provider auto-install orchestration, Phase 4.9 provider live stream and progress capture, Phase 4.10 provider live input and interactive session control, Phase 1.3 provider auto-install policy persistence, the remaining provider-specific prompt-calling hardening, and the optional hard-kill extension for job control
+- later phase work beyond `.11` remains deferred until additional packet definitions are added
+- the current open follow-ons are Phase 4.7 provider auto-install orchestration, Phase 4.9 provider live stream and progress capture, Phase 4.10 provider live input and interactive session control, Phase 4.11 provider structured completion and result normalization, Phase 1.3 provider auto-install policy persistence, the remaining provider-specific prompt-calling hardening, and the optional hard-kill extension for job control
 
 That means new implementors should use the build registry for the next legal packet rather than reopening `.1`, `.2`, or `.3`.
 

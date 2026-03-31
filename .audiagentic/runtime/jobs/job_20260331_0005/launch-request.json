@@ -1,0 +1,42 @@
+{
+  "contract-version": "v1",
+  "existing-job-id": null,
+  "input-controls": {
+    "allow-pause-resume": true,
+    "capture-input-events": true,
+    "capture-stdin": true,
+    "enabled": true,
+    "event-format": "ndjson",
+    "tee-console": true
+  },
+  "prompt-body": "Review the current project state and call out any gaps.\nReturn findings, recommendation, and follow-up actions as JSON.",
+  "prompt-id": "prm_20260331_093311",
+  "review-policy": {
+    "aggregation-rule": "all-pass",
+    "require-distinct-reviewers": true,
+    "required-reviews": 2
+  },
+  "source": {
+    "kind": "interactive-prompt",
+    "model-alias": null,
+    "model-id": null,
+    "provider-id": "cline",
+    "session-id": null,
+    "surface": "cli"
+  },
+  "stream-controls": {
+    "capture-progress": true,
+    "capture-stderr": true,
+    "capture-stdout": true,
+    "enabled": true,
+    "event-format": "ndjson",
+    "tee-console": true
+  },
+  "tag": "review",
+  "target": {
+    "artifact-path": "docs/implementation/17_Current_State_and_Action_Summary.md",
+    "kind": "artifact"
+  },
+  "target-origin": "explicit",
+  "workflow-profile": "standard"
+}

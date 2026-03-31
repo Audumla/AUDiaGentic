@@ -31,3 +31,4 @@ Phase 4.6 drafts provider prompt-trigger launch behavior and per-provider bridge
 Phase 4.7 drafts provider availability and auto-install orchestration; see `41_Phase_4_7_Provider_Auto_Install_Orchestration.md`.
 Phase 4.9 drafts provider live stream and progress capture; see `45_Phase_4_9_Provider_Live_Stream_and_Progress_Capture.md` and the rollout assessment in `providers/29_Provider_Live_Stream_Progress_Capture_Assessment.md`.
 Phase 4.10 is now in progress for the shared live input and interactive session control harness; see `46_Phase_4_10_Provider_Live_Input_and_Interactive_Session_Control.md` and the rollout assessment in `providers/30_Provider_Live_Input_Interactive_Session_Assessment.md`.
+Phase 4.11 drafts provider structured completion and result normalization; see `47_Phase_4_11_Provider_Structured_Completion_and_Result_Normalization.md` and the rollout matrix in `providers/31_Provider_Structured_Completion_And_Result_Normalization_Matrix.md`.
