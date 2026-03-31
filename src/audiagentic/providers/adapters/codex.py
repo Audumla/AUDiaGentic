@@ -4,12 +4,12 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
 
 from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.providers.streaming import run_streaming_command
 
 
 def _find_packet_doc(working_root: str | None, packet_id: str | None) -> Path | None:
@@ -74,18 +74,6 @@ def _codex_executable() -> str:
     return executable
 
 
-def _run_codex(command: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        command,
-        cwd=str(cwd) if cwd is not None else None,
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-
-
 def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, Any]:
     executable = _codex_executable()
     prompt = _build_prompt(packet_ctx, provider_cfg)
@@ -109,8 +97,23 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
         command.extend(["--model", str(default_model)])
     command.append(prompt)
 
+    runtime_root = None
+    job_id = packet_ctx.get("job-id")
+    if working_root and job_id:
+        runtime_root = Path(working_root) / ".audiagentic" / "runtime" / "jobs" / str(job_id)
+    stream_controls = packet_ctx.get("stream-controls", {})
+    tee_console = bool(stream_controls.get("tee-console", False)) or bool(stream_controls.get("enabled", False))
+    stdout_log = runtime_root / "stdout.log" if runtime_root is not None else None
+    stderr_log = runtime_root / "stderr.log" if runtime_root is not None else None
+
     try:
-        completed = _run_codex(command, cwd=cwd)
+        completed = run_streaming_command(
+            command,
+            cwd=cwd,
+            stdout_log_path=stdout_log,
+            stderr_log_path=stderr_log,
+            tee_console=tee_console,
+        )
         last_message = output_path.read_text(encoding="utf-8").strip() if output_path.exists() else ""
     finally:
         try:

@@ -236,6 +236,26 @@ Leaves behind:
 - install policy packets per provider
 - project-local install configuration examples
 
+### Phase 4.9 — Provider live stream and progress capture
+Add AUDiaGentic-owned live output capture so provider progress can be mirrored to the console and persisted in runtime artifacts without moving persistence responsibility into the provider.
+
+Leaves behind:
+- shared live-stream and progress capture contract
+- normalized progress event records
+- console mirroring switches and runtime output layout
+- Cline and Codex first-wave capture packets
+- later Discord stream-consumption guidance
+
+### Phase 4.10 — Provider live input and interactive session control
+Add AUDiaGentic-owned session-input capture so follow-up prompts, pause/resume instructions, and conversational turns can be injected into a live job session without moving session control responsibility into the provider.
+
+Leaves behind:
+- shared live-input and interactive-session control contract
+- normalized session-input event records
+- console input and runtime input capture switches
+- Cline and Codex first-wave interactive-session packets
+- later Discord input-consumption guidance
+
 ### Phase 5 — Discord overlay
 Add Discord as a true overlay using approval + events only.
 
