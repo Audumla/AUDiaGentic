@@ -10,6 +10,7 @@ Provider auto-install and availability orchestration is drafted in `30_DRAFT_Pro
 Provider live stream and progress capture is drafted in `34_DRAFT_Provider_Live_Stream_and_Progress_Capture.md`.
 Provider live input and interactive session control is drafted in `35_DRAFT_Provider_Live_Input_and_Interactive_Session_Control.md`.
 Provider structured completion and result normalization is drafted in `36_DRAFT_Provider_Structured_Completion_and_Result_Normalization.md`.
+Provider optimization and shared workflow extensibility is drafted in `37_DRAFT_Provider_Optimization_and_Shared_Workflow_Extensibility.md`.
 The provider-specific implementation packs, runbooks, and rollout matrix live in `docs/implementation/providers/11_Provider_Tag_Execution_Conformance_Matrix.md` through `31_Provider_Structured_Completion_And_Result_Normalization_Matrix.md`.
 
 - [Local OpenAI-compatible](01_Local_OpenAI_Compatible.md)
@@ -44,5 +45,7 @@ The provider-specific implementation packs, runbooks, and rollout matrix live in
 - `docs/implementation/45_Phase_4_9_Provider_Live_Stream_and_Progress_Capture.md`
 - `docs/implementation/46_Phase_4_10_Provider_Live_Input_and_Interactive_Session_Control.md`
 - `docs/implementation/47_Phase_4_11_Provider_Structured_Completion_and_Result_Normalization.md`
+- `docs/implementation/48_Phase_4_12_Provider_Optimization_and_Shared_Workflow_Extensibility.md`
 - `docs/implementation/providers/30_Provider_Live_Input_Interactive_Session_Assessment.md`
 - `docs/implementation/providers/31_Provider_Structured_Completion_And_Result_Normalization_Matrix.md`
+- `docs/implementation/providers/32_Provider_Optimization_and_Shared_Workflow_Extensibility_Matrix.md`

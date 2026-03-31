@@ -266,6 +266,16 @@ Leaves behind:
 - Cline/Codex first-wave normalization guidance
 - later provider result-completion rollout guidance
 
+### Phase 4.12 — Provider optimization and shared workflow extensibility
+Add shared optimization seams so repetitive text scanning, editing, summarization, and workflow handoff mechanics can move into scripts, skills, MCP tools, or wrapper helpers without locking the project into a single future workflow engine.
+
+Leaves behind:
+- shared optimization and reuse contract
+- reusable file scan / patch / summarize helpers
+- skill / MCP / wrapper extension points
+- future workflow/task tracker seam
+- provider-neutral token-reduction guidance
+
 ### Phase 5 — Discord overlay
 Add Discord as a true overlay using approval + events only.
 
