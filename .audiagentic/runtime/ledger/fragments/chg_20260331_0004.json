@@ -1,0 +1,27 @@
+{
+  "change-class": "config",
+  "contract-version": "v1",
+  "diff-stats": {
+    "deletions": 3,
+    "files-changed": 2,
+    "insertions": 20
+  },
+  "event-id": "chg_20260331_0004",
+  "files": [
+    ".github/workflows/release-please.audiagentic.yml",
+    "docs/examples/fixtures/release-please-baseline.sample.yml"
+  ],
+  "project-id": "audiagentic",
+  "source": {
+    "job-id": null,
+    "kind": "interactive-prompt",
+    "packet-id": "PKT-RLS-011",
+    "provider-id": "codex",
+    "session-id": "local",
+    "surface": "terminal"
+  },
+  "status": "unreleased",
+  "technical-summary": "Upgraded the managed release workflow from a placeholder echo to a real project-bootstrap workflow that runs the project release bootstrap command and verifies installed state.",
+  "timestamp-utc": "2026-03-31T00:00:00Z",
+  "user-summary-candidate": "Upgraded the release workflow to run the project bootstrap path and verify installed state."
+}

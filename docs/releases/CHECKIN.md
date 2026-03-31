@@ -1,6 +1,6 @@
 # Check-In Summary
 
-Total changes: 51
+Total changes: 52
 
 - Added initial job persistence and state machine with tests.
 - Added workflow profile loading and override validation.
@@ -53,3 +53,4 @@ Total changes: 51
 - Added project release bootstrap and workflow activation so the repo can install itself using its own release machinery.
 - Aligned the release bootstrap docs with the new project-level release-bootstrap entry point.
 - Corrected the project-local bootstrap config to use the real AUDiaGentic identity.
+- Upgraded the release workflow to run the project bootstrap path and verify installed state.

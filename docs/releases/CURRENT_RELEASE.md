@@ -5,6 +5,7 @@
 ### config
 - [chg_20260330_0018] Added schemas for provider health checks and stage results.
 - [chg_20260331_0003] Corrected the project-local bootstrap config to use the real AUDiaGentic identity.
+- [chg_20260331_0004] Upgraded the release workflow to run the project bootstrap path and verify installed state.
 
 ### docs
 - [chg_20260330_0019] Added progress report for Phase 3-4 completion.
