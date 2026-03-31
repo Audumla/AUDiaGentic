@@ -60,4 +60,4 @@ Total events: 58
 - chg_20260331_0008: Drafted Phase 4.10 live input and interactive session control with first-wave Cline/Codex guidance.
 - chg_20260331_0009: Implemented the shared Phase 4.10 live-input harness and session-input CLI, with test coverage.
 - chg_20260331_0010: Added configurable prompt-syntax profiles and alias normalization for tags, providers, and directive names.
-- chg_20260331_0011: Wired configurable live-stream and live-input defaults through prompt launch, with shared streaming helpers in the Codex and Cline adapters.
+- chg_20260331_0011: Wired configurable live-stream and live-input defaults through prompt launch, extended Codex/Cline/Gemini timeout defaults for longer reviews, and added shared streaming helpers in the Codex and Cline adapters.

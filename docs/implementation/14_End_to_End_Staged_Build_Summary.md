@@ -89,6 +89,12 @@
 - Cline and Codex can validate the first interactive-session contract before the broader provider set is enabled.
 - Discord can later consume the same normalized input stream without making providers responsible for persistence.
 
+### After Phase 4.11
+- Provider sessions can return a normalized final completion/result payload without duplicating the shared capture harness.
+- Cline and Codex can validate the first canonical completion contract before the broader provider set is enabled.
+- AUDiaGentic can store, render, and replay final results even when the provider only exposes raw text or a final-message file.
+- Discord and later overlays can consume the same normalized completion result without changing provider ownership.
+
 ### After Phase 5
 - Discord can receive summaries, approvals, and notices.
 - Core behavior is unchanged when Discord is disabled.
