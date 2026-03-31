@@ -12,6 +12,7 @@ This phase is intentionally not a final workflow-model definition. It only defin
 
 - shared script-backed helpers for large text files
 - reusable file scan / find / replace / summarize tooling
+- template-driven rendering for repeated docs and reports
 - skill-backed or MCP-backed callouts where they reduce token usage
 - wrapper-based shortcuts for common operations
 - a future-proof seam for a pluggable workflow/task tracker
@@ -27,11 +28,15 @@ This phase is intentionally not a final workflow-model definition. It only defin
 
 Prefer deterministic tooling over verbose prompt text when the task is repetitive or mechanical.
 
+Scripts and templates should own the repeatable mechanics.
+Agents should only provide the minimal intent, selectors, or parameters needed for the script to do the actual work.
+
 Examples:
 
 - use a script to search/scan a large document instead of asking the model to re-read it in full
 - use a patch helper to edit structured text rather than hand-writing a long diff in chat
 - use a shared summarizer to produce a compact report from a large file set
+- use a template renderer to produce repeatable release or audit documents
 - use a skill or MCP tool to standardize provider-facing instructions
 
 ## Future extension points
@@ -41,6 +46,7 @@ This phase reserves the following seams for later work:
 - shared text search helpers
 - shared text patch helpers
 - shared extraction and summarization helpers
+- shared template rendering helpers
 - provider skill hooks
 - MCP tool hooks
 - future workflow/task tracker adapters
@@ -51,6 +57,7 @@ Once implemented later, the optimization layer should let AUDiaGentic:
 
 - reduce token usage on agent calls
 - keep large-file operations script-backed where possible
+- keep repeatable content generation template-backed where possible
 - avoid duplicating the same helper logic across providers
 - introduce a richer workflow model later without forcing a redesign now
 
@@ -59,6 +66,7 @@ Once implemented later, the optimization layer should let AUDiaGentic:
 - docs-only draft
 - no implementation packet defined yet
 - implementation should wait until the optimization tooling surface is agreed
+- repeatable operations should remain script-first and template-driven when this phase is implemented later
 
 ## Next step
 

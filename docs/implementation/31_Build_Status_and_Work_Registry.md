@@ -133,7 +133,7 @@ Each row in the registry must contain:
 | Phase 4.9 | `DEFERRED_DRAFT` | live stream and progress capture drafted; console mirroring and runtime persistence remain AUDiaGentic-owned; Cline and Codex are the first-wave validation providers |
 | Phase 4.10 | `IN_PROGRESS` | shared live input and interactive session control harness implemented and tested; prompt-launch now merges default stream/input controls so live output capture and interactive turns stay AUDiaGentic-owned; Cline and Codex are the first-wave validation providers |
 | Phase 4.11 | `DEFERRED_DRAFT` | structured completion and result normalization drafted; Cline and Codex are the first-wave completion-normalization providers; AUDiaGentic owns final artifact persistence |
-| Phase 4.12 | `DEFERRED_DRAFT` | provider optimization and shared workflow extensibility drafted; shared helper scripts, skills, MCP tools, and wrapper seams are reserved for later token-reduction work |
+| Phase 4.12 | `DEFERRED_DRAFT` | provider optimization and shared workflow extensibility drafted; shared helper scripts, skills, MCP tools, and wrapper seams are reserved for later token-reduction work; repeatable operations are script-first and template-driven |
 | Phase 5 | `READY_TO_START` | can start once Phase 4.4 gate is verified |
 | Phase 6 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 5 is complete and Phase 6 prerequisites are satisfied |
 
@@ -375,7 +375,7 @@ Later phases should continue this registry pattern using the same fields and sta
 
 | Packet | Title | Status | Owner | Scope | Dependencies | Docs | Updated | Notes |
 |---|---|---|---|---|---|---|---|---|
-| Phase 4.12 | docs-only draft | DEFERRED_DRAFT | Codex | workspace | needs Phase 4.11 DEFERRED_DRAFT + future workflow model definition | 03, 37, 48, providers/32 | 2026-03-31 | shared optimization hooks and workflow tracker extension points are documented; implementation is intentionally deferred until the workflow model is defined |
+| Phase 4.12 | docs-only draft | DEFERRED_DRAFT | Codex | workspace | needs Phase 4.11 DEFERRED_DRAFT + future workflow model definition | 03, 37, 48, providers/32 | 2026-03-31 | shared optimization hooks and workflow tracker extension points are documented; repeatable operations are script-first and template-driven; implementation is intentionally deferred until the workflow model is defined |
 
 ### Later phases
 

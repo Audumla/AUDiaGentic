@@ -31,6 +31,7 @@ Current extension slots:
 - `.10` = provider live input and interactive session control, with Cline and Codex as the first-wave validation providers
 - `.11` = provider structured completion and result normalization, with Cline and Codex as the first-wave validation providers
 - `.12` = provider optimization and shared workflow extensibility, with scripts/skills/MCP/wrapper reuse reserved for later token-reduction work
+- phase 4.12 optimization is script-first and template-driven for repeatable operations; agents should provide only the minimum intent or parameters needed by the helper
 - prompt tag names, provider shorthands, and argument aliases are configurable through `.audiagentic/prompt-syntax.yaml`
 - prompt-launch now merges project-level default stream and input controls so live output capture and interactive turns stay AUDiaGentic-owned
 - Codex, Cline, and Gemini provider configs now use longer timeout defaults to give the streaming review path room to finish long-running tasks
