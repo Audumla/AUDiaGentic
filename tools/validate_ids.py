@@ -55,6 +55,21 @@ def _load_payload(path: Path) -> Any:
     raise ValueError("unsupported file type")
 
 
+def _should_validate_content(path: Path) -> bool:
+    name = path.name.lower()
+    if ".invalid." in name:
+        return False
+    try:
+        resolved = path.resolve()
+    except FileNotFoundError:
+        resolved = path
+    schema_root = (REPO_ROOT / "docs" / "schemas").resolve()
+    try:
+        return schema_root not in resolved.parents and resolved != schema_root
+    except RuntimeError:
+        return True
+
+
 def scan_paths(paths: Iterable[Path]) -> list[dict[str, str]]:
     findings: list[dict[str, str]] = []
     for path in paths:
@@ -65,6 +80,8 @@ def scan_paths(paths: Iterable[Path]) -> list[dict[str, str]]:
         else:
             files = [path]
         for file_path in files:
+            if not _should_validate_content(file_path):
+                continue
             try:
                 payload = _load_payload(file_path)
             except Exception as exc:  # noqa: BLE001
