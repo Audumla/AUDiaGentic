@@ -32,6 +32,7 @@
 - [chg_20260331_0008] Drafted Phase 4.10 live input and interactive session control with first-wave Cline/Codex guidance.
 - [chg_20260331_0009] Implemented the shared Phase 4.10 live-input harness and session-input CLI, with test coverage.
 - [chg_20260331_0012] Drafted Phase 4.12 provider optimization and shared workflow extensibility so shared scripts, skills, MCP tools, and wrappers can reduce token usage without locking in the future workflow model.
+- [chg_20260331_0013] Tightened Phase 4.12 to be explicitly script-first and template-driven for repeatable operations, with agents limited to the minimum intent or parameters needed by the helper.
 
 ### feature
 - [chg_20260330_0001] Added initial job persistence and state machine with tests.

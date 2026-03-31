@@ -6,6 +6,8 @@ This draft defines the next optimization slice for AUDiaGentic:
 
 - reduce token usage on repetitive agent calls
 - prefer shared scripts or helpers for large-text scan/modify operations
+- make repeatable operations script-first and template-driven
+- keep agents focused on the minimum intent needed to call those scripts
 - allow skills, MCP tools, or wrapper scripts to replace verbose prompt callouts where appropriate
 - leave a clean extension seam for a later pluggable workflow/task tracker system
 
@@ -32,9 +34,11 @@ Instead, it defines the extension points that let later implementations swap in:
 The optimization layer should prefer deterministic, non-token-heavy operations when possible:
 
 - use scripts instead of long prompt instructions for search/scan/patch tasks
+- use templates to standardize repeated document and report generation
 - use structured output files instead of lengthy inline summaries
 - reuse shared helpers when multiple providers need the same operation
 - keep the prompt surface short and delegate repetitive text handling to AUDiaGentic-owned tooling
+- have agents supply only the minimal parameters or intent required by the script
 
 ## Extension points
 
@@ -71,6 +75,20 @@ Providers should be able to participate in the optimization layer using whicheve
 
 The shared contract should remain the same even if the underlying mechanism differs.
 
+## Operating rule
+
+Repeatable operations should be implemented as code first.
+
+Examples:
+
+- stream capture
+- release regeneration
+- change-fragment consolidation
+- table or ledger updates from known formats
+- extract/scan/summarize helpers for large tracked docs
+
+Agents should only be used when the step requires judgment, ambiguity resolution, or intent selection.
+
 ## Non-goals
 
 - defining the final tracker schema
@@ -84,5 +102,6 @@ When this phase is implemented later, AUDiaGentic should be able to:
 
 - shorten repetitive prompt callouts
 - offload large text handling to scripts/tools
+- consolidate repeatable file handling into reusable code instead of agent prompts
 - reuse common helpers across providers
 - extend into a richer task/work tracking system without breaking the current contracts

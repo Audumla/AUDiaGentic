@@ -171,6 +171,7 @@
 ## Phase 4.12 draft gate
 - shared optimization and reuse contract is written down
 - provider-neutral helper seams for file scanning, patching, and summarization are named
+- repeatable operations are explicitly script-first and template-driven
 - skill, MCP, and wrapper extension points are documented without forcing a single implementation technology
 - the future workflow/task tracker remains intentionally undefined but not blocked
 - provider-specific token-reduction guidance exists before implementation begins
