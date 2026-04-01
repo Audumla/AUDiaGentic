@@ -116,7 +116,12 @@ graph TD
   PRV51 --> PRV53[PKT-PRV-053]
   PRV9 --> PRV53
   PRV37 --> PRV53
-  P4S((Phase 4 stabilization checkpoint)) --> NOD1[PKT-NOD-001]
+  PRV33[PKT-PRV-033] --> PRV55[PKT-PRV-055]
+  PRV31 --> PRV59[PKT-PRV-059]
+  PRV31 --> PRV60[PKT-PRV-060]
+  PRV59 -.infrastructure.-> NOD1[PKT-NOD-001]
+  PRV60 -.infrastructure.-> NOD1
+  P4S((Phase 4 stabilization checkpoint)) --> NOD1
   NOD1 --> NOD2[PKT-NOD-002]
   NOD1 --> NOD3[PKT-NOD-003]
   NOD1 --> DIS1[PKT-DIS-001]
@@ -173,13 +178,15 @@ The intended order is:
 `.6` adds provider prompt-trigger launch behavior after the shared launch grammar and provider execution layer are already frozen. The intended order is:
 
 1. `PKT-PRV-031`
-2. `PKT-PRV-032`
-3. `PKT-PRV-033`
-4. `PKT-PRV-034`
-5. `PKT-PRV-035`
-6. `PKT-PRV-036`
-7. `PKT-PRV-037`
-8. `PKT-PRV-038`
+2. `PKT-PRV-032` (Codex Option A baseline)
+3. `PKT-PRV-033` (Claude Option A baseline)
+4. `PKT-PRV-034` (Gemini)
+5. `PKT-PRV-035` (Copilot)
+6. `PKT-PRV-036` (Continue)
+7. `PKT-PRV-037` (Cline)
+8. `PKT-PRV-038` (local-openai/Qwen)
+
+Note: `PKT-PRV-055` is Claude Option B (native hook) follow-on, depends on PKT-PRV-033 VERIFIED.
 
 `.7` adds provider availability and auto-install orchestration after the trigger layer and provider execution layer are already frozen. The intended order is:
 
@@ -207,13 +214,19 @@ The intended order is:
 2. `PKT-PRV-052`
 3. `PKT-PRV-053`
 
-`.11` adds structured completion and result normalization after the live input/capture path is already frozen and the shared result contract is written down. This phase is currently docs-only, so it does not yet introduce new packet ids.
+`.11` adds structured completion and result normalization after the live input/capture path is already frozen and the shared result contract is written down. The first packetized implementation order is:
+
+1. `PKT-PRV-056`
+2. `PKT-PRV-057`
+3. `PKT-PRV-058`
 
 `.12` adds provider optimization and shared workflow extensibility after the completion contract is written down. This phase is currently docs-only, so it does not yet introduce new packet ids.
 
+`PKT-PRV-059` is centralized prompt syntax and alias configuration infrastructure. It depends on PKT-PRV-031 (shared bridge) and is available to all providers automatically through the shared prompt parser. It is infrastructure-level and does not block provider implementations.
+
 `PKT-PRV-012` no longer depends on `PKT-JOB-007`; the earlier apparent cycle is resolved by treating provider/model field names as provider-owned contract output first.
 
-The later node/discovery/eventing/coordinator/connectivity extension line is separate from the provider line and begins only after the Phase 4 provider/runtime stabilization checkpoint. Its intended order is:
+The later node/discovery/federation/connectors extension line is separate from the provider line and begins only after the Phase 4 provider/runtime stabilization checkpoint. Its intended order is:
 
 1. `PKT-NOD-001`
 2. `PKT-NOD-002`

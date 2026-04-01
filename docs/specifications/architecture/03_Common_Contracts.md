@@ -29,6 +29,10 @@ This document defines the canonical ids, schemas, return types, and contract rul
 - `provider-layer`
 - `discord-overlay`
 - `optional-server`
+- `nodes`
+- `discovery`
+- `federation`
+- `connectors`
 
 ## Contract versioning
 
@@ -68,10 +72,10 @@ project-name: My Project
 workflow-profile: standard
 tracked-docs-root: docs
 runtime-root: .audiagentic/runtime
-release-strategy: release-please
-workflow-overrides:
-  review:
-    enabled: true
+  release-strategy: release-please
+  workflow-overrides:
+    review:
+      enabled: true
   audit:
     enabled: false
 prompt-launch:
@@ -123,6 +127,14 @@ components:
     enabled: false
   optional-server:
     enabled: false
+  nodes:
+    enabled: false
+  discovery:
+    enabled: false
+  federation:
+    enabled: false
+  connectors:
+    enabled: false
 ```
 
 Dependency validation:
@@ -130,6 +142,10 @@ Dependency validation:
 - `agent-jobs` requires `core-lifecycle`, `release-audit-ledger`, and `provider-layer`
 - `discord-overlay` requires `core-lifecycle`; it may consume jobs and release services when enabled
 - `optional-server` requires `core-lifecycle`
+- `nodes` requires `core-lifecycle` and `release-audit-ledger`
+- `discovery` requires `nodes`
+- `federation` requires `nodes` and `discovery`
+- `connectors` requires `federation`
 
 ## ProviderConfig
 
@@ -183,12 +199,15 @@ Rules:
 - live-stream capture is optional and additive
 - AUDiaGentic owns persistence, file layout, and presentation
 - providers must not be responsible for writing runtime stream artifacts
+- raw session keys, bearer tokens, or other secret session material must not be written to `stdout.log`, `stderr.log`, `events.ndjson`, or tracked docs
+- runtime provenance may keep a non-secret session handle or redacted identifier when needed for correlation
+- a secure session-reference/store seam for sensitive session material is a deferred follow-on feature
 - Cline and Codex are the first-wave validation providers for this contract
 - Discord may later consume the same normalized stream without changing provider behavior
 
 ### DRAFT — Provider live input and interactive session control
 
-Phase 4.10 adds additive session-input fields so AUDiaGentic can own follow-up turns, pause/resume control, and runtime input persistence while providers continue to emit responses normally.
+Phase 4.10 adds additive session-input fields so AUDiaGentic can own follow-up turns, pause/resume control, and runtime input persistence while providers continue to emit responses normally. The current executable pass records and persists session-input artifacts; a fuller long-lived provider-session manager remains a later extension point.
 
 PromptLaunchRequest may include an optional `input-controls` block:
 
@@ -206,6 +225,9 @@ Rules:
 - live-input capture is optional and additive
 - AUDiaGentic owns persistence, file layout, and presentation
 - providers must not be responsible for writing runtime input artifacts
+- raw session keys, bearer tokens, or other secret session material must not be written to `stdin.log`, `input.ndjson`, `input-events.ndjson`, or tracked docs
+- runtime provenance may keep a non-secret session handle or redacted identifier when needed for correlation
+- a secure session-reference/store seam for sensitive session material is a deferred follow-on feature
 - Cline and Codex are the first-wave validation providers for this contract
 - Discord may later consume the same normalized input stream without changing provider behavior
 
@@ -436,7 +458,7 @@ Configured rule:
 - `configured: false` means the provider may be installed but cannot be selected for job execution
 
 Timeout rule:
-- MVP health checks must time out within 5 seconds and return `status: "unknown"` or `status: "unhealthy"` with an error string
+- MVP health checks use a canonical default timeout of 30 seconds and return `status: "unknown"` or `status: "unhealthy"` with an error string when the check cannot complete deterministically
 
 ### Provider selection contract
 
@@ -545,6 +567,7 @@ Rules:
 - `launch-tag` must be one of `plan`, `implement`, `review`, `audit`, `check-in-prep`
 - `launch-target.kind` must be one of `packet`, `job`, `artifact`, `adhoc`
 - `review-bundle-id` is present only after a review loop has been opened
+- `launch-source.session-id` is runtime provenance only and must be treated as a non-secret correlation handle; if a provider exposes a sensitive session key, AUDiaGentic must store only a redacted or indirect reference in general runtime artifacts
 
 ## ChangeEvent
 
@@ -608,6 +631,7 @@ Rules:
 - prompt metadata is runtime provenance and must not be treated as release-visible by default
 - `target-ref` may contain a packet id, job id, artifact id/path token, or adhoc id depending on `target-kind`
 - review-derived events may include `review-id` when a structured review report was emitted
+- `source.session-id` must not contain raw secret session material in release-visible or append-only audit artifacts; a redacted handle or secure reference is required if later phases need stronger session binding
 
 ## ApprovalRequest
 
@@ -959,7 +983,7 @@ Validation rules:
 
 Rules:
 - status enum: `healthy`, `unhealthy`, `unknown`
-- default timeout: 30 seconds
+- canonical default timeout: 30 seconds
 - health checks must not mutate project state
 - `unknown` is valid when configuration exists but the check cannot complete deterministically in MVP
 
@@ -1071,6 +1095,7 @@ Required rules:
 - `existing-job-id` resumes a job only when the target and stage transition are compatible
 - `commit-scope` is advisory metadata for the launcher and does not bypass approval policy
 - provider-owned prompt-trigger behavior is defined separately in Phase 4.6 and must feed this contract rather than replacing it
+- `source.session-id` is for provenance and correlation only; raw provider session secrets or tokens must not be written into the normalized launch envelope
 
 ## ReviewReport
 

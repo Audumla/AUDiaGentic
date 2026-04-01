@@ -75,6 +75,7 @@ For the first pass:
 - AUDiaGentic should persist normalized progress records in the job runtime folder
 - Cline should continue to emit progress normally and should not own file persistence
 - final structured artifacts should still be written after the stream completes
+- Cline should be the reference provider for native event extraction from `cline --json`
 
 ## Phase 4.10 live input and interactive session control
 
@@ -86,6 +87,17 @@ For the first pass:
 - AUDiaGentic should tee control/input turns to the console when interactive mode is enabled
 - Cline should continue to emit responses normally and should not own file persistence
 - the same input contract should remain usable later by Discord or another overlay
+- recorded input is guaranteed now; true mid-run interactive attachment still depends on a later session/process manager
+
+## Phase 4.11 structured completion and result normalization
+
+Cline is a first-wave validation provider for shared structured completion.
+
+For the first pass:
+- prefer JSON completion returned through the `cline --json` path
+- preserve the full NDJSON stream in raw logs
+- persist direct provider findings when parsing succeeds
+- mark synthetic/fallback review results explicitly when parsing fails
 
 ## Required provider-specific decisions before implementation
 - auth reference shape

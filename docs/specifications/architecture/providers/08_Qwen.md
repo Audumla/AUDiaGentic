@@ -70,6 +70,32 @@ The repository already contains the Qwen bridge wrapper:
 
 The experimental hook path remains guarded, but the bridge fallback is now implemented.
 
+## Phase 4.9 live stream and progress capture
+
+Qwen is a bridge-first provider in the first pass.
+
+Recommended method:
+- preserve raw stdout/stderr or endpoint response logs
+- normalize stream milestones only when the concrete runtime surface proves stable
+- keep native hooks guarded until they earn a stronger role
+
+## Phase 4.10 live input and interactive session control
+
+Qwen is a record-first provider in the first pass.
+
+Recommended method:
+- persist input intent and correlation metadata through the shared harness
+- do not claim true live-session continuation until the real provider surface proves it
+
+## Phase 4.11 structured completion and result normalization
+
+Qwen should stay bridge-first for completion normalization.
+
+Recommended method:
+- normalize CLI or endpoint completion into the shared result envelope
+- keep the exact completion surface explicit when implementation begins
+- maintain guarded status for native hook/session claims until proven
+
 ## Required provider-specific decisions before implementation
 - auth reference shape
 - health check command or request

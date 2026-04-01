@@ -130,18 +130,18 @@ The registry records the active baseline phases and the later additive extension
 | Phase 4.2 | `VERIFIED` | provider status/validation CLI complete |
 | Phase 4.3 | `VERIFIED` | shared provider prompt-tag contract verified; provider-specific rollout guidance now lives in Phase 4.4 |
 | Phase 4.4 | `VERIFIED` | provider execution compliance model and isolated provider implementation docs staged |
-| Phase 4.6 | `IN_PROGRESS` | shared prompt-trigger bridge harness and first Claude/Cline/Codex/Gemini/Copilot/local-openai/Qwen provider paths implemented; provider prompt-calling mechanics map is now explicit starting with Codex; Codex preflight now validates required `AGENTS.md` and skill files; Continue is deferred as a future integration; remaining provider instruction surfaces and wrapper/bridge rollout still need packets; realism assessment now documents first-wave vs wrapper-first providers |
+| Phase 4.6 | `IN_PROGRESS` | shared prompt-trigger bridge harness and first Claude/Cline/Codex/Gemini/Copilot/local-openai/Qwen provider paths implemented; provider prompt-calling mechanics map is now explicit starting with Codex; prompt-level `provider=` directives can override a surface default provider so Codex-launched prompts can intentionally hand off to Cline or another supported provider; Codex preflight now validates required `AGENTS.md` and skill files; Continue is deferred as a future integration; remaining provider instruction surfaces and wrapper/bridge rollout still need packets; realism assessment now documents first-wave vs wrapper-first providers |
 | Phase 4.7 | `DEFERRED_DRAFT` | provider availability and auto-install orchestration drafted; install/bootstrap policy and packets still need refinement |
-| Phase 4.9 | `DEFERRED_DRAFT` | live stream and progress capture drafted; part of the shared Phase 4.9–4.11 provider session I/O and completion tranche for implementation reuse only; console mirroring and runtime persistence remain AUDiaGentic-owned; Cline and Codex are the first-wave validation providers |
-| Phase 4.10 | `IN_PROGRESS` | shared live input and interactive session control harness implemented and tested; part of the shared Phase 4.9–4.11 provider session I/O and completion tranche for implementation reuse only; prompt-launch now merges default stream/input controls so live output capture and interactive turns stay AUDiaGentic-owned; Cline and Codex are the first-wave validation providers |
-| Phase 4.11 | `DEFERRED_DRAFT` | structured completion and result normalization drafted; part of the shared Phase 4.9–4.11 provider session I/O and completion tranche for implementation reuse only; Cline and Codex are the first-wave completion-normalization providers; AUDiaGentic owns final artifact persistence |
+| Phase 4.9 | `IN_PROGRESS` | live stream and progress capture harness tees stdout/stderr and owns raw runtime logs; part of the shared Phase 4.9–4.11 provider session I/O and completion tranche for implementation reuse only; normalized progress-event writing remains the next step; Cline and Codex are the first-wave validation providers |
+| Phase 4.10 | `IN_PROGRESS` | shared live input and interactive-session capture harness records and persists session input; part of the shared Phase 4.9–4.11 provider session I/O and completion tranche for implementation reuse only; a full live-session attachment manager is still needed for true mid-run input injection; prompt-launch now merges default stream/input controls so capture stays AUDiaGentic-owned; raw provider session keys are explicitly treated as non-log-safe follow-on material that needs a secure-session-reference seam; Cline and Codex are the first-wave validation providers |
+| Phase 4.11 | `DEFERRED_DRAFT` | structured completion and result normalization is now packetized for implementation; part of the shared Phase 4.9–4.11 provider session I/O and completion tranche for implementation reuse only; Cline and Codex are the first-wave completion-normalization providers; AUDiaGentic owns final artifact persistence |
 | Phase 4.12 | `DEFERRED_DRAFT` | provider optimization and shared workflow extensibility drafted; shared helper scripts, skills, MCP tools, and wrapper seams are reserved for later token-reduction work; repeatable operations are script-first and template-driven |
 | Phase 4.13 | `DEFERRED_DRAFT` | canonical prompt entry and bridge end state drafted; all supported providers and prompt-entry surfaces are documented as converging on the same repo-owned bridge/launcher contract |
-| Phase 7 | `WAITING_ON_DEPENDENCIES` | node execution and federation extension is additive future work |
+| Phase 7 | `WAITING_ON_DEPENDENCIES` | node execution extension is additive future work |
 | Phase 8 | `WAITING_ON_DEPENDENCIES` | discovery and registry extension is additive future work |
-| Phase 9 | `WAITING_ON_DEPENDENCIES` | distributed eventing and control extension is additive future work |
-| Phase 10 | `WAITING_ON_DEPENDENCIES` | coordinator consumption seam is additive future work |
-| Phase 11 | `DEFERRED_DRAFT` | external tool connectivity is a later optional extension |
+| Phase 9 | `WAITING_ON_DEPENDENCIES` | federation and control extension is additive future work |
+| Phase 10 | `WAITING_ON_DEPENDENCIES` | federation consumption seam is additive future work |
+| Phase 11 | `DEFERRED_DRAFT` | external connector connectivity is a later optional extension |
 | Phase 5 | `READY_TO_START` | can start once Phase 4.4 gate is verified |
 | Phase 6 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 5 is complete and Phase 6 prerequisites are satisfied |
 
@@ -336,12 +336,13 @@ Later phases should continue this registry pattern using the same fields and sta
 |---|---|---|---|---|---|---|---|---|
 | PKT-PRV-031 | Shared provider prompt-trigger launch contract + bridge harness | VERIFIED | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-JOB-008 VERIFIED + PKT-JOB-009 VERIFIED | 03, 29, 40, packet | 2026-03-30 | canonical trigger grammar, launcher bridge, and fallback wrapper contract; shared bridge harness implemented and tested |
 | PKT-PRV-032 | Codex prompt-trigger launch integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 VERIFIED + PKT-PRV-005 VERIFIED | 03, 29, 40, packet | 2026-03-30 | AGENTS.md / wrapper path for Codex prompt-trigger launch; Codex repo guidance and wrapper bridge are implemented |
-| PKT-PRV-033 | Claude prompt-trigger launch integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 READY_FOR_REVIEW + PKT-PRV-004 VERIFIED | 03, 29, 40, packet | 2026-03-30 | Claude instruction surface and wrapper path for prompt-trigger launch; Claude repo guidance and wrapper bridge are implemented |
+| PKT-PRV-033 | Claude prompt-trigger launch integration (Option A baseline) | VERIFIED | Codex | workspace | needs PKT-PRV-031 READY_FOR_REVIEW + PKT-PRV-004 VERIFIED | 03, 20, 29, 40, packet | 2026-04-02 | Option A wrapper baseline complete: .claude/skills/{plan,implement,review,audit,check-in-prep}/SKILL.md + REQUIRED_ASSETS validation + uses shared default prompts (provider-specific only when constrained, like Cline's read-only review) + tests passing; Option B native hook integration ready to start (PKT-PRV-055) |
 | PKT-PRV-034 | Gemini prompt-trigger launch integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 VERIFIED + PKT-PRV-006 VERIFIED | 03, 29, 40, packet | 2026-03-30 | Gemini instruction surface and wrapper path for prompt-trigger launch; Gemini repo guidance and wrapper bridge are implemented |
 | PKT-PRV-035 | GitHub Copilot prompt-trigger launch integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 VERIFIED + PKT-PRV-007 VERIFIED | 03, 29, 40, packet | 2026-03-30 | Copilot config / instruction surface and bridge path for prompt-trigger launch; repo-local Copilot bridge assets and wrapper path are implemented |
 | PKT-PRV-036 | Continue prompt-trigger launch integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-031 DEFERRED_DRAFT + PKT-PRV-008 VERIFIED | 03, 29, 40, packet | 2026-03-30 | future integration; Continue config surface and wrapper path for prompt-trigger launch |
 | PKT-PRV-037 | Cline prompt-trigger launch integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 READY_FOR_REVIEW + PKT-PRV-009 VERIFIED | 03, 29, 40, packet | 2026-03-30 | Cline rule/hook surface and wrapper path for prompt-trigger launch; Cline repo guidance and wrapper bridge are implemented |
 | PKT-PRV-038 | local-openai/qwen prompt-trigger bridge integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 VERIFIED + PKT-PRV-003 VERIFIED + PKT-PRV-011 VERIFIED | 03, 29, 40, packet | 2026-03-30 | bridge-owned launch path for backend-only surfaces; local-openai and Qwen bridge wrappers are implemented |
+| PKT-PRV-055 | Claude UserPromptSubmit and PreToolUse native hook integration (Option B) | VERIFIED | Claude | workspace | needs PKT-PRV-033 VERIFIED | 20, 33, 45, packet | 2026-04-02 | Option B native hook path complete: .claude/settings.json hook config + tools/claude_hooks.py handlers + stage restrictions + tests passing; Option A and B now form complete Claude baseline path |
 
 ### Phase 4.7 — Provider Availability and Auto-Install Orchestration
 
@@ -372,12 +373,17 @@ Later phases should continue this registry pattern using the same fields and sta
 | PKT-PRV-051 | Shared provider live-input capture contract + harness | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-048 DEFERRED_DRAFT + PKT-PRV-031 VERIFIED + PKT-PRV-022 VERIFIED | 03, 35, 46, packet | 2026-03-31 | shared input event contract, stdin forwarding helpers, normalized runtime input records, and console input switches; harness implemented and test-covered |
 | PKT-PRV-052 | Codex live-input capture integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-051 READY_FOR_REVIEW + PKT-PRV-005 VERIFIED + PKT-PRV-032 READY_FOR_REVIEW | 03, 35, 46, packet | 2026-03-31 | Codex is the first-wave validation provider for live interactive input and runtime persistence |
 | PKT-PRV-053 | Cline live-input capture integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-051 READY_FOR_REVIEW + PKT-PRV-009 VERIFIED + PKT-PRV-037 READY_FOR_REVIEW | 03, 35, 46, packet | 2026-03-31 | Cline is the first-wave validation provider for live interactive input and runtime persistence |
+| PKT-PRV-054 | Session provenance redaction and secure-session reference seam | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-051 READY_FOR_REVIEW + Phase 4.10 IN_PROGRESS | 03, 35, 46, packet | 2026-04-02 | capture the rule that raw provider session keys are not log-safe; durable runtime artifacts may keep only redacted handles or secure references until a fuller secure-session store is defined |
 
 ### Phase 4.11 — Provider Structured Completion and Result Normalization
 
 | Packet | Title | Status | Owner | Scope | Dependencies | Docs | Updated | Notes |
 |---|---|---|---|---|---|---|---|---|
-| Phase 4.11 | docs-only draft | DEFERRED_DRAFT | Codex | workspace | needs Phase 4.10 IN_PROGRESS + Cline/Codex prompt-trigger paths | 03, 36, 47, providers/31 | 2026-03-31 | shared final-result contract and provider completion-method matrix are documented; implementation is a follow-on after live-input stabilizes |
+| PKT-PRV-056 | Shared provider structured-completion contract + normalization harness | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-048 DEFERRED_DRAFT + PKT-PRV-051 READY_FOR_REVIEW + PKT-PRV-031 VERIFIED | 03, 36, 47, packet | 2026-04-02 | shared final-result contract, direct-vs-fallback result marking, canonical completion persistence, and shared normalization fixtures/tests |
+| PKT-PRV-057 | Codex structured-completion integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-056 DEFERRED_DRAFT + PKT-PRV-005 VERIFIED + PKT-PRV-032 READY_FOR_REVIEW | 03, 36, 47, packet | 2026-04-02 | Codex uses wrapper-first completion with final-message/result-file normalization into the shared result envelope |
+| PKT-PRV-058 | Cline structured-completion integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-056 DEFERRED_DRAFT + PKT-PRV-009 VERIFIED + PKT-PRV-037 READY_FOR_REVIEW | 03, 36, 47, packet | 2026-04-02 | Cline uses stdout/NDJSON completion normalization into the shared result envelope and should eliminate synthetic review fallback when parsing succeeds |
+| PKT-PRV-059 | Centralized prompt syntax and combined alias configuration | VERIFIED | Infrastructure | workspace | needs PKT-PRV-031 VERIFIED + prompt parser already in place | 03, 46, packet | 2026-04-02 | .audiagentic/prompt-syntax.yaml now includes combined-aliases (e.g., @r-cln for @review provider=cline); all 18 tag+provider shortcuts defined; hook handlers simplified to delegate normalization to shared bridge; no code changes needed for new aliases |
+| PKT-PRV-060 | Provider prompt template architecture and defaults | VERIFIED | Infrastructure | workspace | needs PKT-PRV-031 VERIFIED + template loader already in place | 03, 47, packet | 2026-04-02 | shared defaults for all action types; provider-specific variants only when materially justified (read-only constraints, format differences, framework expectations); Cline review variant kept, unnecessary Claude templates removed; DRY principle + guidance for future providers |
 
 ### Phase 4.12 — Provider Optimization and Shared Workflow Extensibility
 
@@ -433,8 +439,8 @@ Later phases should continue this registry pattern using the same fields and sta
 | Phase 4.6 | PKT-PRV-031 .. PKT-PRV-038 | IN_PROGRESS |
 | Phase 4.7 | PKT-PRV-039 .. PKT-PRV-047 | DEFERRED_DRAFT |
 | Phase 4.9 | PKT-PRV-048 .. PKT-PRV-050 | DEFERRED_DRAFT |
-| Phase 4.10 | PKT-PRV-051 .. PKT-PRV-053 | IN_PROGRESS |
-| Phase 4.11 | — | DEFERRED_DRAFT |
+| Phase 4.10 | PKT-PRV-051 .. PKT-PRV-054 | IN_PROGRESS |
+| Phase 4.11 | PKT-PRV-056 .. PKT-PRV-058 | DEFERRED_DRAFT |
 | Phase 4.12 | — | DEFERRED_DRAFT |
 | Phase 4.13 | — | DEFERRED_DRAFT |
 | Phase 7 | PKT-NOD-001 .. PKT-NOD-003 | WAITING_ON_DEPENDENCIES |

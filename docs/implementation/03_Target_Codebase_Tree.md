@@ -59,6 +59,9 @@ src/
       heartbeat.py
       ownership.py
       runtime_state.py
+      status.py
+      registry.py
+      api.py
     discovery/
       registry.py
       locator.py
@@ -109,7 +112,7 @@ tests/
 The later node/discovery/federation/connectors extension line is first-class but optional. When those phases begin implementation, they should use the reserved module paths above rather than creating new parallel trees.
 
 The reservation exists so ownership is explicit before code is written:
-- `src/audiagentic/nodes/` for node identity, heartbeat, ownership, and runtime state
+- `src/audiagentic/nodes/` for node identity, heartbeat, ownership, runtime state, status, registry, and API seams
 - `src/audiagentic/discovery/` for locator providers and registry resolution
 - `src/audiagentic/federation/` for node event and control transport
 - `src/audiagentic/connectors/` for external task / tool connectivity seams
@@ -133,9 +136,9 @@ tools/validate_packet_dependencies.py
 
 ## Future extension additions
 
-The later node/discovery/eventing/connector extension line will add:
+The later node/discovery/federation/connectors extension line will add:
 
 - `src/audiagentic/nodes/`
 - `src/audiagentic/discovery/`
-- `src/audiagentic/eventing/`
+- `src/audiagentic/federation/`
 - `src/audiagentic/connectors/`

@@ -29,7 +29,7 @@ Current extension slots:
 - `.8` = project release bootstrap and workflow activation using the project's own release machinery
 - `.9` = provider live stream and progress capture, with Cline and Codex as the first-wave validation providers
 - `.10` = provider live input and interactive session control, with Cline and Codex as the first-wave validation providers
-- `.11` = provider structured completion and result normalization, with Cline and Codex as the first-wave validation providers
+- `.11` = provider structured completion and result normalization, with packetized first-wave work for shared normalization plus Codex and Cline integrations
 - `.12` = provider optimization and shared workflow extensibility, with scripts/skills/MCP/wrapper reuse reserved for later token-reduction work
 - `.13` = canonical prompt entry and bridge end state, where every supported provider and prompt-entry surface converges on the same repo-owned bridge/launcher contract
 - prompt tag names, provider shorthands, and argument aliases are configurable through `.audiagentic/prompt-syntax.yaml`
@@ -49,12 +49,12 @@ At the time of this pack:
 - `.6` prompt-trigger launch behavior is drafted as the next feature slice
 - `.7` provider availability and auto-install orchestration is drafted as the next feature slice
 - `.8` project release bootstrap and workflow activation is complete so the project can install itself using its own release processes
-- `.9` provider live stream and progress capture is drafted so AUDiaGentic can own console mirroring and runtime persistence while providers emit progress
-- `.10` provider live input and interactive session control is in progress; the shared harness is implemented and test-covered, and Cline/Codex are next
-- `.11` provider structured completion and result normalization is drafted so Cline, Codex, and the remaining providers can return canonical review/output payloads without duplicating the shared bridge harness
+- `.9` provider live stream and progress capture is implementation-ready so AUDiaGentic can own console mirroring and runtime persistence while providers emit progress
+- `.10` provider live input and interactive session control is implementation-ready at the shared-contract and harness layer; true live-session injection still requires provider-specific session management work, and raw provider session keys are explicitly treated as non-log-safe follow-on material
+- `.11` provider structured completion and result normalization is implementation-ready and packetized so Cline, Codex, and the remaining providers can return canonical review/output payloads without duplicating the shared bridge harness
 - `.12` provider optimization and shared workflow extensibility is drafted so shared scripts, skills, MCP tools, and wrappers can reduce token usage without locking in the future workflow model
 - `.13` canonical prompt entry and bridge end state is now explicitly documented so every supported provider and prompt-entry surface converges on the same repo-owned bridge/launcher contract
-- a separate later extension line now exists for Phase 7 through Phase 11: node execution, discovery/registry, distributed eventing/control, coordinator consumption, and external tool connectivity; these are additive backend seams and remain outside the baseline MVP
+- a separate later extension line now exists for Phase 7 through Phase 11: node execution, discovery/registry, federation/control, coordinator consumption, and connector connectivity; these are additive backend seams and remain outside the baseline MVP
 - Phase 5 Discord overlay packets are ready to start once claimed
 - the build registry is the source of truth for any remaining later-phase work
 
@@ -213,9 +213,9 @@ Read:
 - `27_Provider_Prompt_Tag_Recognition_and_Surface_Synchronization.md` when working on `.4`
 - `38_Phase_4_3_Provider_Prompt_Tag_Surface_Integration.md` when working on `.4`
 - `10_Prompt_Tag_Surface_Integration_Shared.md` when working on `.4`
-- `34_DRAFT_Provider_Live_Stream_and_Progress_Capture.md` when working on `.9`
+- `34_Provider_Live_Stream_and_Progress_Capture.md` when working on `.9`
 - `45_Phase_4_9_Provider_Live_Stream_and_Progress_Capture.md` when working on `.9`
-- `35_DRAFT_Provider_Live_Input_and_Interactive_Session_Control.md` when working on `.10`
+- `35_Provider_Live_Input_and_Interactive_Session_Control.md` when working on `.10`
 - `46_Phase_4_10_Provider_Live_Input_and_Interactive_Session_Control.md` when working on `.10`
 - `28_Provider_Tag_Execution_Compliance_Model.md` when working on `.5`
 - `11_Provider_Tag_Execution_Conformance_Matrix.md` when working on `.5`

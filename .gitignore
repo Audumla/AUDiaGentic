@@ -1,1 +1,6 @@
 /.pytest_cache
+/opencode.json
+/.vscode
+/.audiagentic/runtime/
+__pycache__/
+*.py[cod]

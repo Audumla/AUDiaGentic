@@ -3,23 +3,27 @@
 ## Purpose
 
 This runbook turns the shared Phase 4.6 prompt-trigger contract into a Claude-specific
-implementation plan. It is intentionally narrow: it only covers the Claude chat exposure path,
-the required repo-local assets, and the smoke tests that prove a tagged prompt can launch the
-shared workflow runner.
+implementation plan with two phases:
+- **Option A — Baseline (required):** wrapper-driven path with skill definitions and preflight validation
+- **Option B — Native Hook (follow-on):** Claude Code `UserPromptSubmit` and `PreToolUse` integration
+
+It covers the Claude chat exposure paths, required repo-local assets, hook configuration,
+and smoke tests that prove a tagged prompt can launch the shared workflow runner.
 
 ## Scope
 
 This runbook applies to:
-- Claude Code CLI
-- Claude Code VS Code surface
-- the repository-owned Claude hook / instruction surface
+- Claude Code CLI (both phases)
+- Claude Code VS Code surface (both phases)
+- the repository-owned Claude instruction surface (both phases)
+- `.claude/settings.json` hook configuration (Option B only)
 
 It does not define the canonical grammar. The grammar remains shared in the Phase 3.2 and
 Phase 4.3 docs.
 
 ## Required outcomes
 
-Claude must expose the canonical prompt tags through a deterministic in-chat path:
+Both phases must expose the canonical prompt tags through deterministic paths:
 - `@plan`
 - `@implement`
 - `@review`
@@ -30,6 +34,13 @@ Claude must expose the canonical prompt tags through a deterministic in-chat pat
 The first non-empty line in the prompt must be recognized before Claude begins planning.
 The normalized result must enter the shared launch path without changing the canonical grammar.
 
+**Option A (baseline):** Tags route through the wrapper bridge with preflight validation of
+required assets (skills directory, CLAUDE.md, rules).
+
+**Option B (native hook):** Tags route through native Claude Code hooks (UserPromptSubmit,
+PreToolUse) without requiring manual wrapper invocation; falls back to wrapper if hooks
+unavailable.
+
 ## Current repo state
 
 The repo now contains the Claude bridge surface required by this runbook:
@@ -39,64 +50,110 @@ The repo now contains the Claude bridge surface required by this runbook:
 - `.claude/rules/review-policy.md`
 - `tools/claude_prompt_trigger_bridge.py`
 
-## Claude-specific exposure model
+## Option A — Baseline (wrapper-driven path) — PKT-PRV-033
 
-Claude is the clearest native-hook candidate in the current matrix because it has:
-- `CLAUDE.md`
-- `.claude/rules/*.md`
-- `.claude/skills/**/SKILL.md`
-- `UserPromptSubmit`
-- `PreToolUse`
+Claude is supported through a wrapper-driven path with skill definitions and preflight validation.
 
-### Chat exposure flow
+### Exposure flow (Option A)
 
-1. the user types a tagged prompt in Claude Code CLI or the Claude VS Code surface
-2. `UserPromptSubmit` reads the raw prompt before planning starts
-3. the hook resolves the canonical tag and injects the normalized launch metadata
-4. `CLAUDE.md` and `.claude/rules/*` define the repository doctrine
-5. `.claude/skills/*` provide the action-specific behavior after normalization
-6. `PreToolUse` narrows tools and stage behavior for the selected action
+1. user types a tagged prompt in Claude Code CLI or the Claude VS Code surface
+2. user manually invokes the shared bridge or a skill/tool calls the wrapper bridge
+3. `tools/claude_prompt_trigger_bridge.py` reads the raw prompt
+4. bridge validates that required assets exist (AGENTS.md, `.claude/rules/`, `.claude/skills/`)
+5. bridge resolves the canonical tag and normalizes it into shared launch envelope
+6. `CLAUDE.md` and `.claude/rules/*` provide the repository doctrine
+7. `.claude/skills/*` define action-specific behavior after normalization
+8. shared bridge hands off to `prompt-launch` with preserved provenance
 
-### Canonical tag handling
+### Required repo-local assets (Option A)
 
-The hook must:
+- `CLAUDE.md` (instruction surface)
+- `.claude/rules/prompt-tags.md` (tag doctrine)
+- `.claude/rules/review-policy.md` (review restrictions)
+- `.claude/skills/plan/SKILL.md` (plan action)
+- `.claude/skills/implement/SKILL.md` (implement action)
+- `.claude/skills/review/SKILL.md` (review action)
+- `.claude/skills/audit/SKILL.md` (audit action)
+- `.claude/skills/check-in-prep/SKILL.md` (check-in-prep action)
+- `tools/claude_prompt_trigger_bridge.py` (wrapper with preflight validation)
+
+### Canonical tag handling (Option A)
+
+The bridge must:
 - inspect only the first non-empty line for the canonical tag
 - map the tag to the same normalized action as the shared launcher
 - preserve provider, surface, and session provenance
 - preserve the raw prompt text in metadata
+- validate that required skill files exist before launching
 - refuse to invent alternate tag meanings
 
-## Required repo-local assets
+---
 
-Create or update:
-- `CLAUDE.md`
-- `.claude/rules/prompt-tags.md`
-- `.claude/rules/review-policy.md`
-- `.claude/skills/plan/SKILL.md`
-- `.claude/skills/implement/SKILL.md`
-- `.claude/skills/review/SKILL.md`
-- `.claude/skills/audit/SKILL.md`
-- `.claude/skills/check-in-prep/SKILL.md`
-- optional `.claude/skills/adhoc/SKILL.md`
+## Option B — Native Hook (Claude Code hook integration) — PKT-PRV-055
 
-## Hook responsibilities
+Claude Code's native `UserPromptSubmit` and `PreToolUse` hooks provide a seamless in-chat
+experience where tagging a prompt automatically routes it through the shared bridge.
 
-### UserPromptSubmit
+### Exposure flow (Option B)
 
-Responsibilities:
-- inspect the raw user prompt
-- detect the first-line canonical tag
-- normalize the launch action
-- preserve the original prompt in metadata
-- inject launch context so Claude enters the correct skill/rules path
+1. user types a tagged prompt in Claude Code CLI or the Claude VS Code surface
+2. `UserPromptSubmit` hook intercepts the prompt before planning starts
+3. hook resolves the canonical tag and injects the normalized launch metadata
+4. hook invokes the shared bridge (no manual wrapper call needed)
+5. `PreToolUse` hook enforces stage restrictions (e.g., no write tools during review)
+6. `.claude/settings.json` configures the hook chain
+7. `CLAUDE.md` and `.claude/rules/*` define the repository doctrine
+8. shared bridge hands off to `prompt-launch` with preserved provenance
 
-### PreToolUse
+### Required repo-local assets (Option B)
 
-Responsibilities:
-- enforce stage restrictions
-- keep review mode read-focused unless explicitly elevated
-- prevent tracked-doc mutations when the selected action does not permit them
-- keep the tool policy aligned with the canonical stage
+All of Option A assets, plus:
+
+- `.claude/settings.json` (hook configuration for UserPromptSubmit and PreToolUse)
+- hook invocation logic (scripts or embedded) that calls the shared bridge
+- fallback detection to gracefully degrade to wrapper when hooks unavailable
+
+### Canonical tag handling (Option B)
+
+The hook must:
+- inspect only the first non-empty line for the canonical tag
+- route to shared bridge instead of manual wrapper invocation
+- map the tag to the same normalized action as the shared launcher
+- preserve provider, surface, and session provenance
+- preserve the raw prompt text in metadata
+- detect when hook chain is unavailable and fall back to wrapper
+- refuse to invent alternate tag meanings
+
+### Fallback to Option A
+
+If the hook chain is unavailable (hooks not configured, Claude Code version incompatible, etc.):
+- Option A wrapper remains fully functional
+- users can still invoke `tools/claude_prompt_trigger_bridge.py` manually
+- no error or exception blocks the user
+- the shared grammar is unchanged
+
+## Implementation sequence for both options
+
+### Phase 1: Option A (baseline) — PKT-PRV-033
+
+1. add or update `CLAUDE.md`
+2. add prompt-tag and review-policy rules under `.claude/rules/`
+3. add the five canonical skills under `.claude/skills/`
+4. add preflight validation to `tools/claude_prompt_trigger_bridge.py` (check for required assets)
+5. add tests for missing-assets validation error
+6. verify CLI and optional VS Code surfaces can manually invoke the wrapper bridge
+7. update build registry to mark PKT-PRV-033 VERIFIED
+
+### Phase 2: Option B (native hook) — PKT-PRV-055
+
+1. create or update `.claude/settings.json` with UserPromptSubmit and PreToolUse hook config
+2. implement hook-invocation logic that routes to shared bridge
+3. implement PreToolUse stage-restriction enforcement
+4. add hook availability detection and fallback handling
+5. add smoke tests for hook chain
+6. add fallback tests (hook unavailable → wrapper works)
+7. verify CLI and VS Code surfaces behave identically through hook chain
+8. update build registry to mark PKT-PRV-055 VERIFIED
 
 ## Implementation sequence
 
@@ -110,35 +167,80 @@ Responsibilities:
 
 ## Smoke test matrix
 
-### CLI smoke tests
+### Option A (baseline) — CLI smoke tests
 
-- `@plan` should normalize into a plan request and reach the shared launcher
-- `@implement` should normalize into an implementation request and reach the shared launcher
-- `@review` should normalize into a review request and reach the shared launcher
+- `@plan` normalizes and reaches shared launcher via wrapper bridge
+- `@implement` normalizes and reaches shared launcher via wrapper bridge
+- `@review` normalizes and reaches shared launcher via wrapper bridge
+- missing required assets (CLAUDE.md, skills) returns validation error before launch
+- provider override works: `@plan provider=cline` launches Cline job
 
-### VS Code smoke tests
+### Option B (native hook) — Hook smoke tests
 
-- the same three tags must produce the same normalized launch envelope
-- the same repo rules must apply
-- the same tool restrictions must apply
+- `@plan` via hook reaches shared launcher without manual wrapper invocation
+- `@implement` via hook normalizes and reaches shared launcher
+- `@review` via hook normalizes and reaches shared launcher
+- `@plan provider=cline` via hook launches Cline sub-agent
+- `PreToolUse` restricts tools per stage (e.g., no write tools during review)
+- missing hook chain falls back to Option A wrapper bridge (optional fallback test)
+- CLI and VS Code surfaces produce identical normalized requests through hook chain
 
-## Acceptance criteria
+### VS Code smoke tests (both options)
 
-- tagged Claude prompts invoke the shared launcher path
+- the same three tags produce the same normalized launch envelope
+- the same repo rules apply
+- the same tool restrictions apply
+
+## Acceptance criteria for completion
+
+### Option A completion (PKT-PRV-033)
+
+- tagged Claude prompts invoke the shared launcher path via wrapper bridge
 - Claude-specific instructions remain isolated from shared grammar docs
-- the hook chain preserves provenance and raw prompt metadata
-- the fallback bridge works if the hook chain is partial
-- CLI and VS Code behavior remain aligned
+- skill definitions are in place and define action behavior
+- preflight validation prevents launch if required assets are missing
+- wrapper fallback works if hook chain is partial (Option B uses this fallback)
+- CLI and VS Code behavior are aligned
+
+### Option B completion (PKT-PRV-055)
+
+- tagged Claude prompts invoke the shared launcher path via native hook without wrapper invocation
+- hook chain preserves provenance and raw prompt metadata
+- fallback to Option A wrapper bridge works when hook chain is unavailable
+- `PreToolUse` enforces stage restrictions
+- CLI and VS Code surfaces behave identically
+- hook-invoked and wrapper-invoked paths produce identical normalized requests
 
 ## Rollback guidance
 
-- remove the Claude-specific hook and rules first
+### Option A rollback
+
+- revert skill definitions and rule files
+- remove preflight validation from the wrapper bridge
 - leave the shared prompt grammar untouched
 - keep the shared bridge contract intact so other providers remain unaffected
 
+### Option B rollback
+
+- revert `.claude/settings.json` hook configuration
+- leave Option A wrapper and skills untouched
+- remove hook-invocation logic
+- the wrapper fallback (Option A) remains fully functional
+
 ## Related docs
 
-- `docs/specifications/architecture/providers/02_Claude.md`
-- `docs/specifications/architecture/29_DRAFT_Provider_Prompt_Trigger_Launch_Behavior.md`
-- `docs/implementation/packets/phase-4/PKT-PRV-033.md`
+### Baseline (Option A)
+
+- `docs/implementation/packets/phase-4/PKT-PRV-033.md` — baseline wrapper path with skills
 - `docs/implementation/providers/13_Claude_Code_Tag_Execution_Implementation.md`
+
+### Native hook (Option B)
+
+- `docs/specifications/architecture/45_DRAFT_Claude_UserPromptSubmit_Hook_Contract.md` — hook contract
+- `docs/implementation/packets/phase-4/PKT-PRV-055.md` — native hook integration packet
+- `docs/implementation/providers/33_Claude_Native_Hook_Runbook.md` — detailed hook implementation guide
+
+### Shared
+
+- `docs/specifications/architecture/29_DRAFT_Provider_Prompt_Trigger_Launch_Behavior.md`
+- `docs/specifications/architecture/02_Claude.md` (if exists)

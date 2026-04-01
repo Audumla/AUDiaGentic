@@ -55,10 +55,34 @@ def _write_project_and_provider_config(sandbox) -> None:
     )
 
 
+def _write_claude_required_assets(sandbox) -> None:
+    """Write required Claude assets to sandbox."""
+    # CLAUDE.md
+    (sandbox.repo / "CLAUDE.md").write_text("# CLAUDE.md\n", encoding="utf-8")
+
+    # .claude/rules/
+    (sandbox.repo / ".claude" / "rules").mkdir(parents=True, exist_ok=True)
+    (sandbox.repo / ".claude" / "rules" / "prompt-tags.md").write_text(
+        "# Prompt tags\n", encoding="utf-8"
+    )
+    (sandbox.repo / ".claude" / "rules" / "review-policy.md").write_text(
+        "# Review policy\n", encoding="utf-8"
+    )
+
+    # .claude/skills/
+    skills = ["plan", "implement", "review", "audit", "check-in-prep"]
+    for skill in skills:
+        (sandbox.repo / ".claude" / "skills" / skill).mkdir(parents=True, exist_ok=True)
+        (sandbox.repo / ".claude" / "skills" / skill / "SKILL.md").write_text(
+            f"# {skill} skill\n", encoding="utf-8"
+        )
+
+
 def test_claude_prompt_trigger_bridge_script_launches_job(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "claude-prompt-trigger-bridge")
     try:
         _write_project_and_provider_config(sandbox)
+        _write_claude_required_assets(sandbox)
         result = subprocess.run(
             [
                 sys.executable,
@@ -81,5 +105,38 @@ def test_claude_prompt_trigger_bridge_script_launches_job(tmp_path: Path) -> Non
         assert payload["job"]["launch-tag"] == "plan"
         assert payload["job"]["launch-target"]["kind"] == "packet"
         assert payload["job"]["launch-target"]["packet-id"] == "PKT-JOB-008"
+    finally:
+        sandbox.cleanup()
+
+
+def test_claude_prompt_trigger_bridge_missing_assets_returns_validation_error(tmp_path: Path) -> None:
+    """Verify that missing Claude assets trigger validation error before launch."""
+    sandbox = sandbox_helper.create(tmp_path, "claude-prompt-trigger-missing-assets")
+    try:
+        _write_project_and_provider_config(sandbox)
+
+        # Intentionally don't create .claude/skills directory
+        # This simulates the missing assets condition
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "tools" / "claude_prompt_trigger_bridge.py"),
+                "--project-root",
+                str(sandbox.repo),
+            ],
+            cwd=ROOT,
+            input="@plan target=packet:PKT-JOB-008\nContinue implementing.\n",
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 2, result.stderr
+        payload = json.loads(result.stdout)
+        assert payload["status"] == "error"
+        assert payload["kind"] == "validation"
+        assert "missing" in payload
+        assert any("SKILL.md" in m for m in payload["missing"])
     finally:
         sandbox.cleanup()

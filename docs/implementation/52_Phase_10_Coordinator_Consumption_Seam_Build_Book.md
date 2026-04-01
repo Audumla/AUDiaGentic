@@ -2,12 +2,12 @@
 
 ## Goal
 
-Define the AUDiaGentic-side seam that an external coordinator or board may consume.
+Define the AUDiaGentic-side federation consumption seam that an external coordinator or board may consume.
 
 ## Scope
 
 This phase does not build the coordinator UI.
-It builds only the backend query/control seam.
+It builds only the backend query/control seam that consumes the federation layer.
 
 ## Deliverables
 

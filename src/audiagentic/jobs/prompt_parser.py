@@ -10,6 +10,7 @@ from jsonschema import Draft202012Validator
 
 from audiagentic.contracts.errors import AudiaGenticError
 from audiagentic.jobs.prompt_syntax import load_prompt_syntax
+from audiagentic.jobs.prompt_templates import load_prompt_template
 from audiagentic.providers.config import load_provider_config
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -185,6 +186,13 @@ def _default_adhoc_id(prompt_id: str) -> str:
     return f"adh_{suffix}"
 
 
+def _has_default_prompt_template(project_root: Path | None, *, tag: str, provider_id: str | None) -> bool:
+    if project_root is None or provider_id is None:
+        return False
+    template_text, _ = load_prompt_template(project_root, tag=tag, provider_id=provider_id, template_name=None)
+    return bool(template_text)
+
+
 def parse_prompt_launch_request(
     prompt_text: str,
     *,
@@ -279,27 +287,6 @@ def parse_prompt_launch_request(
             message="provider shorthand conflicts with provider directive",
             details={"provider-tag": provider_suffix, "provider": raw_directives.get("provider")},
         )
-    if provider_id_value is not None and provider_token is not None and provider_id_value != provider_token:
-        raise AudiaGenticError(
-            code="JOB-VALIDATION-037",
-            kind="validation",
-            message="provider shorthand conflicts with provided provider-id",
-            details={"provider-tag": provider_token, "provider-id": provider_id},
-        )
-    if provider_id_value is not None and provider_suffix_value is not None and provider_id_value != provider_suffix_value:
-        raise AudiaGenticError(
-            code="JOB-VALIDATION-040",
-            kind="validation",
-            message="provider suffix conflicts with provided provider-id",
-            details={"provider-tag": provider_suffix, "provider-id": provider_id},
-        )
-    if provider_id_value is not None and directive_provider is not None and provider_id_value != directive_provider:
-        raise AudiaGenticError(
-            code="JOB-VALIDATION-038",
-            kind="validation",
-            message="provider directive conflicts with provided provider-id",
-            details={"provider-id": provider_id, "provider": raw_directives.get("provider")},
-        )
     if resolved_provider is None:
         raise AudiaGenticError(
             code="JOB-VALIDATION-036",
@@ -359,7 +346,12 @@ def parse_prompt_launch_request(
         # parser still accepts the request, but execution can stay gated.
         target["adhoc-id"] = target.get("adhoc-id") or "adhoc"
 
-    if normalized_tag not in {"audit", "check-in-prep"} and not body.strip() and not (explicit_adhoc or prompt_controls.get("template")):
+    has_template_fallback = prompt_controls.get("template") or _has_default_prompt_template(
+        project_root,
+        tag=normalized_tag,
+        provider_id=resolved_provider,
+    )
+    if normalized_tag not in {"audit", "check-in-prep"} and not body.strip() and not (explicit_adhoc or has_template_fallback):
         raise AudiaGenticError(
             code="JOB-VALIDATION-032",
             kind="validation",
