@@ -20,11 +20,15 @@ Read it as the provider-surface companion to the Phase 3.2 prompt-launch extensi
 
 The original requirement was not only that jobs could be launched from tagged prompts, but that the provider entry surfaces used by developers — CLI tools and VS Code extensions — could participate in that flow predictably.
 
+The desired end functionality is broader: every supported provider surface, whether CLI-backed, editor-backed, or bridge-backed, must converge on the same canonical prompt-entry contract and the same repo-owned launch path.
+
 That means:
 1. the same tag syntax must work across supported providers
 2. provider surfaces must not invent provider-specific tag semantics
 3. provider-specific settings must be kept in sync with the canonical prompt-launch grammar
 4. differences between providers must be isolated to thin surface adapters, not pushed into the jobs core
+
+This is the user-facing end-state, not just a stopgap implementation note.
 
 ## Scope
 
@@ -235,3 +239,8 @@ Any change to prompt-tag surface behavior must update all of the following toget
 The original requirement is not considered fully restored until:
 - `.2` job-side prompt launch is verified, and
 - `.2` provider-surface integration is verified for every enabled provider surface in the project configuration
+
+The end-state described by this document is not considered complete until:
+- every supported provider surface documents the mechanics it uses to reach the shared bridge
+- provider docs stop defining alternate semantics and instead describe concrete normalization mechanics only
+- all prompt-entry surfaces funnel into the same canonical `PromptLaunchRequest` contract

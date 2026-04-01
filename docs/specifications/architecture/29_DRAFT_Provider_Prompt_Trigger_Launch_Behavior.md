@@ -14,6 +14,10 @@ The goal is not to change the canonical launch grammar. The goal is to make prov
 instruction surfaces, wrappers, hooks, and bridge commands all converge on the same launch
 entry point with the same provenance.
 
+This is the intended end functionality for all supported providers: every CLI or prompt-entry
+surface should be able to accept the canonical workflow syntax and reach the same repo-owned
+bridge/launcher path, even if the concrete mechanics vary by provider.
+
 ## Problem statement
 
 Phase 3.2 defined how a prompt can be parsed into a normalized launch request.
@@ -97,6 +101,7 @@ Realistic rollout note:
 - launch provenance remains visible to the jobs layer
 - the bridge/wrapper can be smoke-tested without editing the shared launch contract
 - provider-specific instructions stay isolated from shared grammar docs
+- the end-state is clearly documented as the same across all supported providers and all CLI/prompt-entry surfaces
 
 ## Non-goals
 

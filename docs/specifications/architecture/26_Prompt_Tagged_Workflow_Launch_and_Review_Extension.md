@@ -32,6 +32,12 @@ The extension must not redesign the core Phase 3 state machine.
 5. Let multiple review reports be aggregated deterministically before commit/check-in.
 6. Keep CLI and VS Code differences out of the jobs core.
 
+## End-state intent
+
+The desired end functionality for all supported providers is that any CLI or prompt-entry surface can accept the canonical launch syntax, normalize it through a repo-owned bridge, and hand the request to the jobs layer without changing workflow meaning.
+
+This extension defines the job-side grammar and target rules. Provider-specific mechanics belong to the provider surface docs and must converge on the same bridge-backed contract.
+
 ## Frozen MVP decisions
 
 ### Prompt syntax
@@ -85,6 +91,8 @@ This keeps parsing and validation consistent across:
 - VS Code extensions
 - Codex/Cline/Continue CLI wrappers
 - future server/UI adapters
+
+This is the canonical prompt-entry behavior the project is aiming for across all supported providers. Where a provider cannot intercept raw prompts directly, a repo-owned wrapper or bridge must take over so the same launch contract still applies.
 
 ### Target kinds
 
