@@ -11,9 +11,13 @@ The current docs remain broadly valid for the baseline lifecycle, release, jobs,
 The extension pack adds new additive backend seams for:
 - multi-instance/node execution
 - discovery/registration
-- node eventing/heartbeat/status
-- coordinator consumption seams
-- external task-system / tool connectivity
+- node federation/heartbeat/status
+- coordinator-facing federation consumption seams
+- external task-system / connector connectivity
+
+Historical docs may still use the older `eventing` / `coordinator` / `connectivity` wording,
+but the canonical taxonomy for the extension line is `nodes`, `discovery`, `federation`, and
+`connectors`.
 
 ## Boundaries
 

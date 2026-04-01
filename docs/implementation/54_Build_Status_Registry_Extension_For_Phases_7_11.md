@@ -11,7 +11,7 @@ Extend `31_Build_Status_and_Work_Registry.md` with the later extension phases wh
 | Phase 7 | WAITING_ON_DEPENDENCIES | starts after current provider/runtime stabilization checkpoint |
 | Phase 8 | WAITING_ON_DEPENDENCIES | starts after node contracts are VERIFIED |
 | Phase 9 | WAITING_ON_DEPENDENCIES | starts after static registry and node status are VERIFIED |
-| Phase 10 | WAITING_ON_DEPENDENCIES | starts after node eventing/control seam is VERIFIED |
+| Phase 10 | WAITING_ON_DEPENDENCIES | starts after federation consumption seam is VERIFIED |
 | Phase 11 | DEFERRED_DRAFT | external systems remain deferred until node/discovery/control seams stabilize |
 
 ## Revision model

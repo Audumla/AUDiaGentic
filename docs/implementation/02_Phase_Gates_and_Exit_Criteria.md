@@ -147,7 +147,7 @@
 - auto-install remains opt-in and project-local
 - provider-specific install packets exist before implementation begins
 
-## Phase 4.9 draft gate
+## Phase 4.9 implementation-readiness gate
 - shared live-stream and progress capture contract is written down
 - provider capture surfaces are named for the first-wave providers, starting with Cline and Codex
 - console mirroring and runtime persistence are owned by AUDiaGentic, not the provider
@@ -160,19 +160,21 @@
 - AUDiaGentic remains the owner of persistence and runtime artifact layout throughout the tranche
 - each packet still has its own gate, acceptance criteria, and review checkpoint; the tranche note is only a planning aid for reuse
 
-## Phase 4.10 draft gate
+## Phase 4.10 implementation-readiness gate
 - shared live-input and interactive-session control contract is written down
 - provider input surfaces are named for the first-wave providers, starting with Cline and Codex
 - console input capture and runtime persistence are owned by AUDiaGentic, not the provider
+- the spec notes that raw provider session keys are not log-safe and require a later secure-session reference seam before durable storage
 - provider-specific live-input packets exist before implementation begins
 - Discord remains a later consumer of the same input contract
 
-## Phase 4.11 draft gate
+## Phase 4.11 implementation-readiness gate
 - shared structured completion and result normalization contract is written down
 - provider completion surfaces are named for the first-wave providers, starting with Cline and Codex
 - final artifact persistence is owned by AUDiaGentic, not the provider
 - provider-specific result-normalization guidance exists before implementation begins
 - Discord and later overlays remain later consumers of the same normalized completion contract
+- packetized first-wave implementation units exist for shared normalization plus Codex and Cline integrations
 
 ## Phase 4.12 draft gate
 - shared optimization and reuse contract is written down

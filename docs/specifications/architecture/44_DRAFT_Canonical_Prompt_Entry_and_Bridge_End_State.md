@@ -40,6 +40,7 @@ When the feature set is complete, the following must be true:
 5. Provider-specific hooks, wrappers, and instruction files are implementation details only; they may vary, but they may not redefine the workflow semantics.
 6. AUDiaGentic owns output capture, runtime artifacts, review records, and job persistence.
 7. The same prompt-entry contract applies to CLI entry, editor entry, and future surface adapters.
+8. A prompt may explicitly choose a different provider with `provider=<provider-id>` even when it is launched from a different surface wrapper; the bridge must treat that resolved provider as canonical for the job.
 
 ## Canonical runtime contract
 
@@ -103,6 +104,18 @@ Review the current project state and call out any gaps.
 ```
 
 The chosen provider surface is responsible for getting that prompt to the bridge; the bridge is responsible for normalizing it into the shared launch contract.
+
+When a provider or shared default template exists for the selected tag, the shortest form is also valid:
+
+```text
+@r-cline
+```
+
+In that case the bridge should:
+- resolve the provider from the suffix
+- load the provider or shared default template
+- create the default job or subject identity when none is supplied
+- preserve the same launch provenance as any longer form
 
 ## Completion rule
 

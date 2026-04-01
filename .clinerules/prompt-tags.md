@@ -16,3 +16,19 @@ Rules:
 - preserve raw prompt text in provenance metadata
 - route tagged prompts through the shared bridge when a native hook path is not stable
 
+## Tag aliases and shortcuts
+
+Centralized in `.audiagentic/prompt-syntax.yaml`. All of these are equivalent:
+
+- `@r` = `@review` (tag alias)
+- `@review provider=cln` = `@review provider=cline` (provider alias)
+- `@r-cln` = `@review provider=cline` (combined shortcut)
+- `@review-cline` = `@review provider=cline` (suffix form)
+
+Use shortcuts for brevity:
+
+```text
+@r-cln target=packet:PKT-PRV-033
+Review the implementation status.
+```
+

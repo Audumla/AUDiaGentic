@@ -30,6 +30,22 @@ directive-aliases:
   ctx: context
   out: output
   t: template
+combined-aliases:
+  p-cln: plan provider=cline
+  p-cld: plan provider=claude
+  p-cx: plan provider=codex
+  i-cln: implement provider=cline
+  i-cld: implement provider=claude
+  i-cx: implement provider=codex
+  r-cln: review provider=cline
+  r-cld: review provider=claude
+  r-cx: review provider=codex
+  a-cln: audit provider=cline
+  a-cld: audit provider=claude
+  a-cx: audit provider=codex
+  c-cln: check-in-prep provider=cline
+  c-cld: check-in-prep provider=claude
+  c-cx: check-in-prep provider=codex
 profiles:
   shared:
     prompt-controls:
