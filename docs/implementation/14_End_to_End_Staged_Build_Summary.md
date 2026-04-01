@@ -95,12 +95,22 @@
 - AUDiaGentic can store, render, and replay final results even when the provider only exposes raw text or a final-message file.
 - Discord and later overlays can consume the same normalized completion result without changing provider ownership.
 
+### Phase 4.9 through 4.11 implementation note
+- These three phases share the same provider-session I/O boundary and are best implemented as one tranche with shared capture/persistence seams.
+- The packets remain separately numbered for tracking and review.
+- No capability is lost by implementing them together; this simply reduces duplicated bridge, artifact, and provider-adapter work.
+
 ### After Phase 4.12
 - Repetitive file scanning, patching, and summarization can move into shared scripts or tools instead of staying inline in prompts.
 - Skills, MCP tools, and wrapper helpers can reuse the same optimization seams across providers without forcing a single workflow engine.
 - A later task/feature tracker can be introduced without rewriting the existing prompt-launch or provider contracts.
 - Token-heavy callouts can be shortened while still preserving the same underlying job, review, and provider ownership model.
 - Repeatable operations stay script-first and template-driven, with agents providing only the minimum intent or parameters needed to invoke them.
+
+### After Phase 4.13
+- Every supported provider and prompt-entry surface is explicitly documented as converging on the same repo-owned bridge/launcher contract.
+- Provider-specific mechanics remain implementation details only; the canonical workflow grammar stays shared.
+- Users can rely on the same end-state launch behavior across CLI, editor, and bridge-backed surfaces.
 
 ### After Phase 5
 - Discord can receive summaries, approvals, and notices.

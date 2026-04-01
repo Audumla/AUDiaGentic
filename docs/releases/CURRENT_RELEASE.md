@@ -10,6 +10,9 @@
 ### docs
 - [chg_20260401_0001] Added the additive Phase 7-11 node/discovery/eventing/coordinator/tool-connectivity extension pack and updated the roadmap, indexes, registry, and target tree to keep it separate from baseline MVP work.
 - [chg_20260401_0002] Cleaned up and aligned the additive Phase 7-11 extension docs, registry rows, and tracker wording so the new line reads consistently as additive future work.
+- [chg_20260401_0003] Added bridge mechanics and defaults-first prompt syntax guidance to `AGENTS.md` so canonical tagged prompts map cleanly into the repo-owned launcher path.
+- [chg_20260401_0004] Added a canonical prompt-entry and bridge end-state spec so every supported provider and prompt-entry surface is explicitly documented as converging on the same repo-owned bridge/launcher contract.
+- [chg_20260401_0005] Consolidated the unimplemented Phase 4.9 through Phase 4.11 runtime interaction work into a single shared provider-session I/O tranche while keeping the packet numbering intact.
 - [chg_20260330_0019] Added progress report for Phase 3-4 completion.
 - [chg_20260330_0021] Planned provider model catalog support and added Phase 4.1 tracking.
 - [chg_20260330_0022] Documented incremental .1 phases and updated tracking before implementation.

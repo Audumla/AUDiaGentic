@@ -27,11 +27,12 @@ Current extension slots:
 - `.6` = provider prompt-trigger launch behavior, agent instruction surfaces, and wrapper/bridge invocation
 - `.7` = provider availability, auto-install, and bootstrap orchestration
 - `.8` = project release bootstrap and workflow activation using the project's own release machinery
-- `.9` = provider live stream and progress capture, with Cline and Codex as the first-wave validation providers
-- `.10` = provider live input and interactive session control, with Cline and Codex as the first-wave validation providers
-- `.11` = provider structured completion and result normalization, with Cline and Codex as the first-wave validation providers
+- `.9` = provider live stream and progress capture, with Cline and Codex as the first-wave validation providers; part of the shared 4.9–4.11 provider session I/O and completion tranche
+- `.10` = provider live input and interactive session control, with Cline and Codex as the first-wave validation providers; part of the shared 4.9–4.11 provider session I/O and completion tranche
+- `.11` = provider structured completion and result normalization, with Cline and Codex as the first-wave validation providers; part of the shared 4.9–4.11 provider session I/O and completion tranche
 - `.12` = provider optimization and shared workflow extensibility, with scripts/skills/MCP/wrapper reuse reserved for later token-reduction work
 - phase 4.12 optimization is script-first and template-driven for repeatable operations; agents should provide only the minimum intent or parameters needed by the helper
+- `.13` = canonical prompt entry and bridge end state, where every supported provider and prompt-entry surface converges on the same repo-owned bridge/launcher contract
 - prompt tag names, provider shorthands, and argument aliases are configurable through `.audiagentic/prompt-syntax.yaml`
 - prompt-launch now merges project-level default stream and input controls so live output capture and interactive turns stay AUDiaGentic-owned
 - Codex, Cline, and Gemini provider configs now use longer timeout defaults to give the streaming review path room to finish long-running tasks
@@ -57,16 +58,16 @@ At the time of this pack:
 - Codex now has an explicit preflight contract that validates `AGENTS.md` and the canonical skill files before launch
 - `.7` provider auto-install orchestration is now drafted and awaiting implementation packets
 - `.8` project release bootstrap and workflow activation is complete so the project can install itself using its own release processes
-- `.9` provider live stream and progress capture is drafted so AUDiaGentic can own console mirroring and runtime persistence while providers emit progress
-- `.10` provider live input and interactive session control is in progress; the shared harness is implemented and test-covered, and Cline/Codex are next
+- `.9` provider live stream and progress capture is drafted so AUDiaGentic can own console mirroring and runtime persistence while providers emit progress; it is part of the shared 4.9–4.11 provider session I/O and completion tranche
+- `.10` provider live input and interactive session control is in progress; the shared harness is implemented and test-covered, and Cline/Codex are next; it is part of the shared 4.9–4.11 provider session I/O and completion tranche
 - prompt-syntax profiles now control the canonical shorthand names, so tag and argument aliases can be adjusted without changing the parser code
 - prompt-launch now applies default stream and input controls before provider execution, giving the shared bridge ownership of live output and interactive session capture
 - provider timeout defaults are now extended for Codex, Cline, and Gemini so review sessions can run long enough to finish while still streaming progress
 - Cline review launches currently execute through the bridge, but still need prompt-shape hardening to reliably return structured JSON instead of a synthetic review bundle
-- `.11` provider structured completion and result normalization is drafted so Cline, Codex, and the remaining providers can return canonical review/output payloads without duplicating the shared bridge harness; `.12` provider optimization and shared workflow extensibility follows as the docs-only token-reduction slice
+- `.11` provider structured completion and result normalization is drafted so Cline, Codex, and the remaining providers can return canonical review/output payloads without duplicating the shared bridge harness; `.12` provider optimization and shared workflow extensibility follows as the docs-only token-reduction slice; `.13` now explicitly states the end-state for all supported providers and prompt-entry surfaces
 - Phase 2.3 project release bootstrap and workflow activation is verified and using the project's own release machinery
-- later phase work beyond `.12` remains deferred until additional packet definitions are added
-- the current open follow-ons are Phase 4.7 provider auto-install orchestration, Phase 4.9 provider live stream and progress capture, Phase 4.10 provider live input and interactive session control, Phase 4.11 provider structured completion and result normalization, Phase 4.12 provider optimization and shared workflow extensibility, Phase 1.3 provider auto-install policy persistence, the remaining provider-specific prompt-calling hardening, and the optional hard-kill extension for job control
+- later phase work beyond `.13` remains deferred until additional packet definitions are added
+- the current open follow-ons are Phase 4.7 provider auto-install orchestration, Phase 4.9 provider live stream and progress capture, Phase 4.10 provider live input and interactive session control, Phase 4.11 provider structured completion and result normalization, Phase 4.12 provider optimization and shared workflow extensibility, Phase 4.13 canonical prompt entry and bridge end state, Phase 1.3 provider auto-install policy persistence, the remaining provider-specific prompt-calling hardening, and the optional hard-kill extension for job control
 
 That means new implementors should use the build registry for the next legal packet rather than reopening `.1`, `.2`, or `.3`.
 

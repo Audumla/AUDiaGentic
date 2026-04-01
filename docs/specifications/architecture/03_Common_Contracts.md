@@ -279,6 +279,19 @@ See `24_DRAFT_Provider_Model_Catalog_and_Selection.md`.
 Prompt-tagged launch consumes provider/model metadata only after the Phase 4.1 contract is frozen. Prompt launch therefore depends on the .1 provider/model contract but does not redefine it.
 
 
+### Canonical prompt-entry end state
+
+The desired end functionality for all supported providers is that every CLI or prompt-entry surface converges on the same repo-owned bridge or launcher contract.
+
+That means:
+- canonical tags and provider shorthands always normalize into `PromptLaunchRequest`
+- provider-specific hooks, wrappers, extensions, and instruction files are implementation details only
+- provider-specific differences may change how the prompt reaches the bridge, but they must not change the workflow semantics or the launch contract
+- AUDiaGentic owns provenance, defaults, runtime capture, and persistence for launched jobs
+- the same canonical end-state applies to Codex, Claude, Gemini, Qwen, Copilot, Continue, Cline, and local-openai
+- provider docs must describe the concrete mechanics they use to reach that end-state, but they must not define alternate meanings for the tags
+
+
 ## ProviderDescriptor
 
 ```json

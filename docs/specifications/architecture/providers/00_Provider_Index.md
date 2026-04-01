@@ -5,6 +5,7 @@ Model catalog and selection rules are defined in `24_DRAFT_Provider_Model_Catalo
 Prompt-tag surface recognition and synchronization are defined in `27_Provider_Prompt_Tag_Recognition_and_Surface_Synchronization.md`.
 Provider execution compliance and isolated provider implementation docs are defined in `28_Provider_Tag_Execution_Compliance_Model.md` and `docs/implementation/providers/11_Provider_Tag_Execution_Conformance_Matrix.md`.
 Provider prompt-trigger launch behavior is drafted in `29_DRAFT_Provider_Prompt_Trigger_Launch_Behavior.md`.
+The canonical prompt-entry and bridge end state for all supported providers is defined in `44_DRAFT_Canonical_Prompt_Entry_and_Bridge_End_State.md`.
 The realistic provider-by-provider rollout assessment for prompt-trigger launch is documented in `docs/implementation/providers/28_Prompt_Trigger_Realistic_Rollout_Assessment.md`.
 Provider auto-install and availability orchestration is drafted in `30_DRAFT_Provider_Auto_Install_and_Availability_Orchestration.md`.
 Provider live stream and progress capture is drafted in `34_DRAFT_Provider_Live_Stream_and_Progress_Capture.md`.
@@ -46,6 +47,7 @@ The provider-specific implementation packs, runbooks, and rollout matrix live in
 - `docs/implementation/46_Phase_4_10_Provider_Live_Input_and_Interactive_Session_Control.md`
 - `docs/implementation/47_Phase_4_11_Provider_Structured_Completion_and_Result_Normalization.md`
 - `docs/implementation/48_Phase_4_12_Provider_Optimization_and_Shared_Workflow_Extensibility.md`
+- `docs/implementation/55_Phase_4_13_Canonical_Prompt_Entry_and_Bridge_End_State.md`
 - `docs/implementation/providers/30_Provider_Live_Input_Interactive_Session_Assessment.md`
 - `docs/implementation/providers/31_Provider_Structured_Completion_And_Result_Normalization_Matrix.md`
 - `docs/implementation/providers/32_Provider_Optimization_and_Shared_Workflow_Extensibility_Matrix.md`

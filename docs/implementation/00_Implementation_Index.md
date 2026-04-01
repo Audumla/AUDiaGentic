@@ -63,6 +63,7 @@ This implementation pack is the **end-to-end staged build book** for AUDiaGentic
 - `35_DRAFT_Provider_Live_Input_and_Interactive_Session_Control.md`
 - `36_DRAFT_Provider_Structured_Completion_and_Result_Normalization.md`
 - `37_DRAFT_Provider_Optimization_and_Shared_Workflow_Extensibility.md`
+- `44_DRAFT_Canonical_Prompt_Entry_and_Bridge_End_State.md`
 - `42_Phase_3_4_Job_Control_and_Running_Job_Cancellation.md`
 - `43_Phase_2_3_Project_Release_Bootstrap_and_Workflow_Activation.md`
 
@@ -79,6 +80,7 @@ This implementation pack is the **end-to-end staged build book** for AUDiaGentic
 - `46_Phase_4_10_Provider_Live_Input_and_Interactive_Session_Control.md`
 - `47_Phase_4_11_Provider_Structured_Completion_and_Result_Normalization.md`
 - `48_Phase_4_12_Provider_Optimization_and_Shared_Workflow_Extensibility.md`
+- `55_Phase_4_13_Canonical_Prompt_Entry_and_Bridge_End_State.md`
 - `49_Phase_7_Node_Execution_Extension_Build_Book.md`
 - `50_Phase_8_Discovery_and_Registry_Extension_Build_Book.md`
 - `51_Phase_9_Distributed_Eventing_and_Control_Extension_Build_Book.md`
