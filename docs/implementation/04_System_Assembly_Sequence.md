@@ -15,6 +15,11 @@ AUDiaGentic is designed so later features layer on top of stable earlier seams. 
 7. **Provider model catalog** — model catalogs extend providers without changing job seams.
 8. **Discord** — Discord only attaches to events and approvals.
 9. **Migration hardening last** — harden rollout after core behavior exists.
+10. **Node execution extension** — add node identity, heartbeat, and ownership after provider/runtime stabilization.
+11. **Discovery and registry extension** — add pluggable locator providers after node contracts are stable.
+12. **Distributed eventing and control extension** — add node-side event/control seams after registry and node status are stable.
+13. **Coordinator consumption seam** — expose backend-only coordinator query/control seams without adding UI dependence.
+14. **External tool connectivity** — add optional external connectors last, after the node/discovery/control seams are stable.
 
 ## Forbidden redesigns by phase
 
@@ -24,3 +29,8 @@ AUDiaGentic is designed so later features layer on top of stable earlier seams. 
 - Phase 4.1 must not redesign provider selection or adapter contracts.
 - Phase 5 must not redesign approvals or events.
 - Phase 6 must not redesign earlier schemas.
+- Phase 7 must not redesign provider/runtime contracts.
+- Phase 8 must not introduce mandatory discovery dependencies.
+- Phase 9 must preserve node-local truth.
+- Phase 10 must stay backend-only and UI-free.
+- Phase 11 must remain optional and non-authoritative.

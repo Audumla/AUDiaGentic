@@ -100,3 +100,12 @@ docs/implementation/24_Cross_Phase_Integration_Testing.md
 docs/implementation/25_Change_Control_and_Document_Update_Rules.md
 tools/validate_packet_dependencies.py
 ```
+
+## Future extension additions
+
+The later node/discovery/eventing/connector extension line will add:
+
+- `src/audiagentic/nodes/`
+- `src/audiagentic/discovery/`
+- `src/audiagentic/eventing/`
+- `src/audiagentic/connectors/`
