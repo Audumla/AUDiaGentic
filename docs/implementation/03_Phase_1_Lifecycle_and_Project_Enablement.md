@@ -14,6 +14,7 @@ Implement safe installation, update, cutover, uninstall, and project enablement 
 - document migration report generation
 - managed workflow replacement warnings
 - provider install/bootstrap policy field preservation for later provider auto-install features
+- installable managed baseline sync so the repository's tracked prompt/provider assets can be applied to other projects
 
 ## Out of scope
 
@@ -32,6 +33,9 @@ Implement safe installation, update, cutover, uninstall, and project enablement 
 6. PKT-LFC-006 — uninstall current AUDiaGentic
 7. PKT-LFC-007 — document migration outcomes and reports
 8. PKT-LFC-010 — preserve provider auto-install policy fields across lifecycle commands
+9. PKT-LFC-011 — installable baseline inventory and sync-mode classification
+10. PKT-LFC-012 — shared baseline sync engine for lifecycle and bootstrap
+11. PKT-LFC-013 — converge fresh-install and release-bootstrap on baseline sync
 
 ## Exit gate
 

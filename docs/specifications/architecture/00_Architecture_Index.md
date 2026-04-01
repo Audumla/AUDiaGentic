@@ -54,6 +54,10 @@ The following areas were strengthened specifically to close pre-implementation g
 - 42_AUDiaGentic_Extension_Scope_Boundaries_for_Coordinator_and_UI.md
 - 43_DRAFT_External_Task_System_and_Pluggable_Tool_Connectivity.md
 - 44_DRAFT_Canonical_Prompt_Entry_and_Bridge_End_State.md
+- 45_DRAFT_Claude_UserPromptSubmit_Hook_Contract.md
+- 46_Centralized_Prompt_Syntax_and_Aliases.md
+- 47_Provider_Prompt_Templates_and_Defaults.md
+- 48_Installable_Project_Baseline_and_Managed_Asset_Synchronization.md
 
 ## Extension docs
 
