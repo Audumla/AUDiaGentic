@@ -73,6 +73,32 @@ The repository already contains the Copilot prompt-trigger bridge surface and wr
 The remaining work for Copilot is therefore operational and validation-oriented rather than
 surface discovery.
 
+## Phase 4.9 live stream and progress capture
+
+Copilot is a wrapper-capture provider in the first pass.
+
+Recommended method:
+- preserve raw stdout/stderr or wrapper output
+- emit bridge-owned milestones rather than depending on a rich native event stream
+- keep durable stream persistence owned by AUDiaGentic
+
+## Phase 4.10 live input and interactive session control
+
+Copilot is a record-first provider in the first pass.
+
+Recommended method:
+- persist input intent and job/session correlation
+- do not claim live session continuation until the provider surface proves it
+
+## Phase 4.11 structured completion and result normalization
+
+Copilot should use instruction files plus wrapper normalization.
+
+Recommended method:
+- keep final completion deterministic through repo-owned prompt files or agent files
+- normalize wrapper/provider output into the shared result envelope
+- avoid depending on interactive-only behavior for the core completion path
+
 ## Required provider-specific decisions before implementation
 - auth reference shape
 - health check command or request

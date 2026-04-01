@@ -8,11 +8,11 @@ Provider prompt-trigger launch behavior is drafted in `29_DRAFT_Provider_Prompt_
 The canonical prompt-entry and bridge end state for all supported providers is defined in `44_DRAFT_Canonical_Prompt_Entry_and_Bridge_End_State.md`.
 The realistic provider-by-provider rollout assessment for prompt-trigger launch is documented in `docs/implementation/providers/28_Prompt_Trigger_Realistic_Rollout_Assessment.md`.
 Provider auto-install and availability orchestration is drafted in `30_DRAFT_Provider_Auto_Install_and_Availability_Orchestration.md`.
-Provider live stream and progress capture is drafted in `34_DRAFT_Provider_Live_Stream_and_Progress_Capture.md`.
-Provider live input and interactive session control is drafted in `35_DRAFT_Provider_Live_Input_and_Interactive_Session_Control.md`.
-Provider structured completion and result normalization is drafted in `36_DRAFT_Provider_Structured_Completion_and_Result_Normalization.md`.
+Provider live stream and progress capture is implementation-ready in `34_Provider_Live_Stream_and_Progress_Capture.md`.
+Provider live input and interactive session control is implementation-ready in `35_Provider_Live_Input_and_Interactive_Session_Control.md`.
+Provider structured completion and result normalization is implementation-ready in `36_Provider_Structured_Completion_and_Result_Normalization.md` and packetized for first-wave implementation in Phase 4.11.
 Provider optimization and shared workflow extensibility is drafted in `37_DRAFT_Provider_Optimization_and_Shared_Workflow_Extensibility.md`.
-The provider-specific implementation packs, runbooks, and rollout matrix live in `docs/implementation/providers/11_Provider_Tag_Execution_Conformance_Matrix.md` through `31_Provider_Structured_Completion_And_Result_Normalization_Matrix.md`.
+The provider-specific implementation packs, runbooks, and rollout matrices live in `docs/implementation/providers/11_Provider_Tag_Execution_Conformance_Matrix.md` through `32_Provider_Optimization_and_Shared_Workflow_Extensibility_Matrix.md`.
 
 - [Local OpenAI-compatible](01_Local_OpenAI_Compatible.md)
 - [Claude](02_Claude.md)
@@ -43,6 +43,7 @@ The provider-specific implementation packs, runbooks, and rollout matrix live in
 - `docs/implementation/providers/19_Qwen_Tag_Execution_Implementation.md`
 - `docs/implementation/providers/27_Qwen_Prompt_Trigger_Runbook.md`
 - `docs/implementation/providers/28_Prompt_Trigger_Realistic_Rollout_Assessment.md`
+- `docs/implementation/providers/29_Provider_Live_Stream_Progress_Capture_Assessment.md`
 - `docs/implementation/45_Phase_4_9_Provider_Live_Stream_and_Progress_Capture.md`
 - `docs/implementation/46_Phase_4_10_Provider_Live_Input_and_Interactive_Session_Control.md`
 - `docs/implementation/47_Phase_4_11_Provider_Structured_Completion_and_Result_Normalization.md`

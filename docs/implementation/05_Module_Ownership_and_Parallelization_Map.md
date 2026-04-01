@@ -13,7 +13,7 @@
 | Server | `src/audiagentic/server/*` | service seam only | any contract fields |
 | Nodes | `src/audiagentic/nodes/*` | node identity, heartbeat, status, ownership | lifecycle, release, provider core |
 | Discovery | `src/audiagentic/discovery/*` | locator provider contracts and static registry | core node contracts, release core |
-| Eventing | `src/audiagentic/eventing/*` | node events and control request contracts | node identity, discovery, core release |
+| Federation | `src/audiagentic/federation/*` | node events, control request contracts, and transport seams | node identity, discovery, core release |
 | Connectors | `src/audiagentic/connectors/*` | external task-system connectors | core execution truth, release core |
 
 ## Parallel work rules
@@ -25,8 +25,8 @@
 - Discord packets can run in parallel with migration hardening once events and approvals are frozen.
 - Node packets can run in parallel after the Phase 4 provider/runtime stabilization checkpoint and the node contract packet is frozen.
 - Discovery packets can run in parallel after the node identity packet is frozen.
-- Eventing packets can run in parallel after node identity and discovery packets are frozen.
-- Coordinator and connector packets should wait until the node/discovery/eventing seams are frozen.
+- Federation packets can run in parallel after node identity and discovery packets are frozen.
+- Coordinator and connector packets should wait until the node/discovery/federation seams are frozen.
 
 
 ## Extension ownership note

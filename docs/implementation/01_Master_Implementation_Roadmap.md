@@ -266,20 +266,21 @@ Add AUDiaGentic-owned live output capture so provider progress can be mirrored t
 
 Leaves behind:
 - shared live-stream and progress capture contract
-- normalized progress event records
+- normalized progress event records once the shared writer is wired in
 - console mirroring switches and runtime output layout
 - Cline and Codex first-wave capture packets
 - later Discord stream-consumption guidance
 
 ### Phase 4.10 — Provider live input and interactive session control
-Add AUDiaGentic-owned session-input capture so follow-up prompts, pause/resume instructions, and conversational turns can be injected into a live job session without moving session control responsibility into the provider.
+Add AUDiaGentic-owned session-input capture so follow-up prompts, pause/resume instructions, and conversational turns can be recorded and persisted without moving session control responsibility into the provider. A later live-session manager can attach those records to a live provider process when the provider adapter supports it.
 
 Leaves behind:
 - shared live-input and interactive-session control contract
-- normalized session-input event records
+- normalized session-input event records once the session manager is wired in
 - console input and runtime input capture switches
 - Cline and Codex first-wave interactive-session packets
 - later Discord input-consumption guidance
+- a follow-on seam for secure session references so raw provider session keys do not need to enter durable runtime logs
 
 ### Phase 4.11 — Provider structured completion and result normalization
 Add a shared canonical completion/result contract so each provider can return its final review or execution result through the most stable available native surface without duplicating the shared bridge or capture harness.
@@ -290,6 +291,7 @@ Leaves behind:
 - provider-specific preferred completion methods
 - Cline/Codex first-wave normalization guidance
 - later provider result-completion rollout guidance
+- packetized first-wave implementation units for shared normalization plus Codex and Cline integrations
 
 ### Phase 4.12 — Provider optimization and shared workflow extensibility
 Add shared optimization seams so repetitive text scanning, editing, summarization, and workflow handoff mechanics can move into scripts, skills, MCP tools, or wrapper helpers without locking the project into a single future workflow engine.
@@ -351,7 +353,7 @@ Leaves behind:
 
 ### Phase 9 — Distributed eventing and control extension
 
-Add coordinator-consumable eventing and node-side control request validation while preserving node-local truth.
+Add federation-consumable event and node-side control request validation while preserving node-local truth.
 
 Leaves behind:
 - node event families
@@ -371,7 +373,7 @@ Leaves behind:
 
 ### Phase 11 — Pluggable external tool connectivity
 
-Add connector seams for external task systems and tools after the node/discovery/control seams are stable.
+Add connector seams for external task systems and tools after the node/discovery/federation seams are stable.
 
 Leaves behind:
 - external connector contract

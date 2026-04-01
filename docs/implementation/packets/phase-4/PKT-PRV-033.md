@@ -7,13 +7,34 @@
 ## Objective
 Wire Claude Code or its repo-local instruction files to the shared trigger bridge so tagged prompts launch the shared workflow runner.
 
-## Current implementation
+## Current implementation state
 
-- `CLAUDE.md` now records the canonical tag doctrine and bridge usage
-- `.claude/rules/prompt-tags.md` and `.claude/rules/review-policy.md` exist
-- `tools/claude_prompt_trigger_bridge.py` provides the Claude-specific wrapper path to the shared bridge
+### ✅ Already in place
+
+- `CLAUDE.md` records the canonical tag doctrine and bridge usage
+- `.claude/rules/prompt-tags.md` and `.claude/rules/review-policy.md` exist and define tag/review doctrine
+- `tools/claude_prompt_trigger_bridge.py` provides the Claude-specific wrapper path to shared bridge
 - the shared bridge harness is already implemented and test-covered
+- `tests/integration/providers/test_claude_prompt_trigger_bridge.py` proves the wrapper works
 
+### ❌ Missing for Option A completion
+
+- `.claude/skills/{plan,implement,review,audit,check-in-prep}/SKILL.md` — skill definitions
+- preflight validation in `tools/claude_prompt_trigger_bridge.py` — check for required assets before launch
+- test that verifies missing assets return validation error before launch
+- documentation of Option A as baseline + Option B as future hook follow-on
+
+## Option A completion steps
+
+1. Create `.claude/skills/` directory with five skill definition files (mirror Codex `.agents/skills/` pattern)
+2. Update `tools/claude_prompt_trigger_bridge.py` to add REQUIRED_ASSETS validation and _missing_assets() check
+3. Add test: missing assets return structured validation error (JSON status: error, kind: validation)
+4. Verify all tests pass
+5. Mark PKT-PRV-033 VERIFIED in build registry
+
+## Future: Option B native hook
+
+After PKT-PRV-033 is VERIFIED, Option B (native UserPromptSubmit + PreToolUse hooks) will be tracked as **PKT-PRV-055**.
 
 ## Prompt-trigger exposure details
 

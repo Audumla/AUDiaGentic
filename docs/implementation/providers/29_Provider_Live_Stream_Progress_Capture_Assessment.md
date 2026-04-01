@@ -5,37 +5,84 @@ Scope: Phase 4.9 provider live stream and progress capture
 
 ## Purpose
 
-Assess the realistic rollout order for the Phase 4.9 live-stream capture work.
+Assess the realistic rollout order and implementation method for Phase 4.9.
 
 The primary question is not whether providers can run at all; it is whether AUDiaGentic can
-reliably capture their progress while preserving the final structured result.
+reliably capture their progress while preserving the final structured result and keeping
+persistence provider-neutral.
 
-## First-wave candidates
+## Method categories
 
-| Provider | Realistic first-pass fit | Why |
-|---|---|---|
-| Cline | High | Emits visible progress events and command notices that make streaming capture easy to validate |
-| Codex | High | Has a stable wrapper path and a clear prompt-to-job launch flow already in place |
+- `native-event-stream`: provider already emits structured progress events worth normalizing directly
+- `stdout-extract`: provider emits raw or semi-structured stdout that can be normalized
+- `wrapper-milestones`: provider needs AUDiaGentic-owned wrapper milestone events plus raw log capture
+- `response-only`: provider mainly returns a final response and contributes little live progress detail
 
-## Follow-on candidates
+## Provider matrix
 
-| Provider | Realistic follow-on fit | Why |
-|---|---|---|
-| Claude | Medium | Likely workable, but the native execution and stream shape should be validated after the first wave |
-| Gemini | Medium | Works, but long-running task shape is still more sensitive to prompt framing and timeout policy |
-| Copilot | Medium | Can likely be captured through the same bridge model, but the runtime behavior is more CLI-dependent |
-| local-openai | Medium | Bridge-only capture should work, but the backend may not emit rich progress events |
-| Qwen | Medium | Likely workable through the same bridge model, but stream richness may vary |
-| Continue | Future integration | Deferred until the prompt-trigger and install behavior are reintroduced into active rollout |
+| Provider | Method | First-pass fit | Executable now | Why | Main blocker |
+|---|---|---|---|---|---|
+| Cline | native-event-stream | High | Yes | `cline --json` already emits rich NDJSON event families | normalized `events.ndjson` writer still needs implementation |
+| Codex | wrapper-milestones | High | Partial | stable wrapper path already exists | richer runtime milestone normalization still needs implementation |
+| Claude | wrapper-milestones | Medium | Partial | wrapper path is workable, native hooks can add later richness | native hook/stream behavior still needs confirmation |
+| Gemini | stdout-extract | Medium | Partial | wrapper-first path is workable | task-shaped prompt/runtime behavior still needs tuning |
+| Copilot | stdout-extract | Medium | Partial | repo instruction path can feed shared capture | noninteractive/runtime behavior still needs validation |
+| local-openai | response-only | Medium | Partial | bridge-only path is straightforward | little native progress richness to normalize |
+| Qwen | stdout-extract | Medium | Partial | bridge-first path is workable | native stream richness still unproven |
+| Continue | future integration | Future | No | out of active rollout | intentionally deferred |
 
-## Recommendation
+## Recommended first-wave build order
 
-Start with:
-1. shared stream capture contract
+1. shared stream capture contract + shared writer
 2. Cline
 3. Codex
+4. Claude
+5. Gemini
+6. Copilot
+7. local-openai
+8. Qwen
+9. Continue later
 
-Then decide whether the other providers should use:
-- CLI stdout/stderr capture only
-- progress-event normalization
-- or a richer provider-native event stream
+## Provider-specific guidance
+
+### Cline
+
+- Preferred path: normalize native `--json` event families
+- Raw retention: keep full NDJSON in `stdout.log`
+- Canonical event source: direct provider events
+
+### Codex
+
+- Preferred path: wrapper-owned milestone events plus raw stdout/stderr retention
+- Raw retention: keep raw logs for diagnosis
+- Canonical event source: AUDiaGentic wrapper milestones until richer native events are worth integrating
+
+### Claude
+
+- Preferred path: wrapper milestones first, hook-derived stream enrichment later
+- Raw retention: preserve wrapper/provider output
+- Canonical event source: wrapper milestones in the first pass
+
+### Gemini
+
+- Preferred path: bounded wrapper prompt plus stdout extraction
+- Raw retention: preserve stdout/stderr
+- Canonical event source: extracted stdout milestones where safe
+
+### Copilot
+
+- Preferred path: wrapper capture plus stdout extraction
+- Raw retention: preserve stdout/stderr
+- Canonical event source: wrapper milestones until a more stable event surface exists
+
+### local-openai
+
+- Preferred path: response-only
+- Raw retention: preserve response body and transport diagnostics
+- Canonical event source: synthetic launch/complete milestones from the bridge
+
+### Qwen
+
+- Preferred path: bridge-first stdout extraction
+- Raw retention: preserve stdout/stderr
+- Canonical event source: extracted stdout milestones or wrapper milestones depending on real stream richness
