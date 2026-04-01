@@ -35,6 +35,7 @@ Current extension slots:
 - prompt tag names, provider shorthands, and argument aliases are configurable through `.audiagentic/prompt-syntax.yaml`
 - prompt-launch now merges project-level default stream and input controls so live output capture and interactive turns stay AUDiaGentic-owned
 - Codex, Cline, and Gemini provider configs now use longer timeout defaults to give the streaming review path room to finish long-running tasks
+- a separate later extension line now exists for Phase 7 through Phase 11: node execution, discovery/registry, distributed eventing/control, coordinator consumption, and external tool connectivity; these remain additive backend seams and do not replace the baseline phases
 
 Stable release baseline:
 - `stable-release-20260331` at merge commit `4e01b4ef962cf80c8f6fe912f1b6a7cba22bcb32`

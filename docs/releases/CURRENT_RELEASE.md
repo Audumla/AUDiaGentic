@@ -8,6 +8,8 @@
 - [chg_20260331_0004] Upgraded the release workflow to run the project bootstrap path and verify installed state.
 
 ### docs
+- [chg_20260401_0001] Added the additive Phase 7-11 node/discovery/eventing/coordinator/tool-connectivity extension pack and updated the roadmap, indexes, registry, and target tree to keep it separate from baseline MVP work.
+- [chg_20260401_0002] Cleaned up and aligned the additive Phase 7-11 extension docs, registry rows, and tracker wording so the new line reads consistently as additive future work.
 - [chg_20260330_0019] Added progress report for Phase 3-4 completion.
 - [chg_20260330_0021] Planned provider model catalog support and added Phase 4.1 tracking.
 - [chg_20260330_0022] Documented incremental .1 phases and updated tracking before implementation.

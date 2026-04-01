@@ -79,10 +79,24 @@ This implementation pack is the **end-to-end staged build book** for AUDiaGentic
 - `46_Phase_4_10_Provider_Live_Input_and_Interactive_Session_Control.md`
 - `47_Phase_4_11_Provider_Structured_Completion_and_Result_Normalization.md`
 - `48_Phase_4_12_Provider_Optimization_and_Shared_Workflow_Extensibility.md`
+- `49_Phase_7_Node_Execution_Extension_Build_Book.md`
+- `50_Phase_8_Discovery_and_Registry_Extension_Build_Book.md`
+- `51_Phase_9_Distributed_Eventing_and_Control_Extension_Build_Book.md`
+- `52_Phase_10_Coordinator_Consumption_Seam_Build_Book.md`
+- `53_Phase_11_Pluggable_External_Tool_Connectivity_Build_Book.md`
+- `54_Build_Status_Registry_Extension_For_Phases_7_11.md`
 - `29_Provider_Live_Stream_Progress_Capture_Assessment.md`
 - `30_Provider_Live_Input_Interactive_Session_Assessment.md`
 - `31_Provider_Structured_Completion_And_Result_Normalization_Matrix.md`
 - `32_Provider_Optimization_and_Shared_Workflow_Extensibility_Matrix.md`
+
+## Future extension packet directories
+
+- `packets/phase-7/`
+- `packets/phase-8/`
+- `packets/phase-9/`
+- `packets/phase-10/`
+- `packets/phase-11/`
 
 ## Reading order for immediate execution
 

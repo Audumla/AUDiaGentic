@@ -1,7 +1,9 @@
 # Audit Summary
 
-Total events: 60
+Total events: 62
 
+- chg_20260401_0001: Added the additive Phase 7-11 node/discovery/eventing/coordinator/tool-connectivity extension pack and updated the roadmap, indexes, registry, and target tree to keep it separate from baseline MVP work.
+- chg_20260401_0002: Cleaned up and aligned the additive Phase 7-11 extension docs, registry rows, and tracker wording so the new line reads consistently as additive future work.
 - chg_20260330_0001: Added job record contract helpers, store, and state machine with unit tests and registry updates.
 - chg_20260330_0002: Added workflow profile loader/validator with override parsing and fixtures.
 - chg_20260330_0003: Added packet runner with stub provider seam and integration tests.

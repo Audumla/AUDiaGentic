@@ -47,6 +47,12 @@ The following areas were strengthened specifically to close pre-implementation g
 - 35_DRAFT_Provider_Live_Input_and_Interactive_Session_Control.md
 - 36_DRAFT_Provider_Structured_Completion_and_Result_Normalization.md
 - 37_DRAFT_Provider_Optimization_and_Shared_Workflow_Extensibility.md
+- 38_Current_Docs_Validity_and_Implementation_Match_Review.md
+- 39_Node_Execution_and_Federation_Extension.md
+- 40_Discovery_Registration_and_Locator_Provider_Extension.md
+- 41_Node_Eventing_Heartbeat_and_Status_Extension.md
+- 42_AUDiaGentic_Extension_Scope_Boundaries_for_Coordinator_and_UI.md
+- 43_DRAFT_External_Task_System_and_Pluggable_Tool_Connectivity.md
 
 ## Extension docs
 

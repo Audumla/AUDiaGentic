@@ -33,3 +33,5 @@ Phase 4.9 drafts provider live stream and progress capture; see `45_Phase_4_9_Pr
 Phase 4.10 is now in progress for the shared live input and interactive session control harness; see `46_Phase_4_10_Provider_Live_Input_and_Interactive_Session_Control.md` and the rollout assessment in `providers/30_Provider_Live_Input_Interactive_Session_Assessment.md`.
 Phase 4.11 drafts provider structured completion and result normalization; see `47_Phase_4_11_Provider_Structured_Completion_and_Result_Normalization.md` and the rollout matrix in `providers/31_Provider_Structured_Completion_And_Result_Normalization_Matrix.md`.
 Phase 4.12 drafts provider optimization and shared workflow extensibility; see `48_Phase_4_12_Provider_Optimization_and_Shared_Workflow_Extensibility.md` and the reuse matrix in `providers/32_Provider_Optimization_and_Shared_Workflow_Extensibility_Matrix.md`. This phase is explicitly script-first and template-driven for repeatable work.
+
+The later node/discovery/eventing/coordinator/connectivity extension line starts at Phase 7 and is additive only; it does not replace or rewrite the Phase 4 provider foundation.
