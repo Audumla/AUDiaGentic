@@ -1,7 +1,8 @@
 # Check-In Summary
 
-Total changes: 63
+Total changes: 68
 
+- Defined Phase 1.4 installable project baseline synchronization so lifecycle and release bootstrap can converge on the repository's real managed baseline instead of a minimal scaffold.
 - Added initial job persistence and state machine with tests.
 - Added workflow profile loading and override validation.
 - Added packet runner to execute workflow stages sequentially.
