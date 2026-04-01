@@ -56,6 +56,8 @@ This map answers the implementation question the same way for every provider:
 - what shared code can be reused
 - what fallback exists if the native surface is partial
 
+Codex is the reference mechanics path for the repo: the other provider entries should describe their own local mechanics, but they must converge on the same repo-owned bridge/launcher contract rather than inventing a separate grammar or launch semantics.
+
 | Provider | Primary instruction surface | First component to see the raw tag line | Shared code / scripts to reuse | Fallback rule |
 |---|---|---|---|---|
 | Codex | `AGENTS.md` + `.agents/skills/**/SKILL.md` | `tools/codex_prompt_trigger_bridge.py` or a Codex editor wrapper | shared `prompt-trigger-bridge`, shared `prompt-launch`, canonical skills | if interception is partial, keep using the wrapper bridge |
@@ -110,6 +112,16 @@ These are implementable, but their first pass should stay conservative:
 - wrapper or bridge fallback must remain available
 - prompt shape and hook ordering need explicit smoke coverage
 - feature flags should gate the more experimental paths
+
+### Guarded-to-active criteria
+
+Gemini and Qwen graduate from guarded to broadly active when all of the following are true:
+
+- the shared bridge path continues to work unchanged
+- the provider-specific wrapper or hook path passes repeatable smoke tests on the local machine
+- the provider-specific prompt shape returns structured output without manual repair
+- the provider-specific hook ordering is stable enough that the repo-owned bridge remains the fallback, not a rescue path
+- the provider docs no longer need special-case warnings beyond the normal fallback note
 
 ## Practical conclusion
 

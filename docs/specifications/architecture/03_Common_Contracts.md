@@ -291,6 +291,102 @@ That means:
 - the same canonical end-state applies to Codex, Claude, Gemini, Qwen, Copilot, Continue, Cline, and local-openai
 - provider docs must describe the concrete mechanics they use to reach that end-state, but they must not define alternate meanings for the tags
 
+### Phase 7+ additive extension contracts
+
+The later node/discovery/federation/connectors extension line is part of the canonical contract set and must be treated as additive optional infrastructure, not as a replacement for the baseline single-node contract.
+
+#### NodeIdentity
+
+```json
+{
+  "contract-version": "v1",
+  "node-id": "node-001",
+  "project-id": "my-project",
+  "display-name": "Primary Node",
+  "capabilities": ["jobs", "release", "provider-runtime"],
+  "created-at": "2026-04-01T00:00:00Z"
+}
+```
+
+Rules:
+- `node-id` must be stable and unique within the project scope
+- `project-id` must match the tracked project identity
+- `capabilities` is additive and may include `jobs`, `release`, `provider-runtime`, `discovery`, `federation`, or `connectors`
+
+#### NodeHeartbeat
+
+```json
+{
+  "contract-version": "v1",
+  "node-id": "node-001",
+  "status": "healthy",
+  "sequence": 42,
+  "checked-at": "2026-04-01T00:00:00Z",
+  "details": {
+    "load": "low"
+  }
+}
+```
+
+Rules:
+- heartbeat updates must be append-safe or atomically replaceable
+- `status` must be one of `healthy`, `degraded`, `unhealthy`, or `unknown`
+- the heartbeat contract must not become required for single-node correctness
+
+#### LocatorProvider
+
+```json
+{
+  "contract-version": "v1",
+  "provider-id": "static",
+  "enabled": true,
+  "scope": "project-local",
+  "endpoints": ["node-001", "node-002"]
+}
+```
+
+Rules:
+- locator providers are pluggable and optional
+- static registry remains the baseline locator provider
+- discovery backends must not be required for node-local operation
+
+#### NodeControlRequest
+
+```json
+{
+  "contract-version": "v1",
+  "request-id": "ctl_001",
+  "node-id": "node-001",
+  "action": "drain",
+  "requested-by": "coordinator",
+  "requested-at": "2026-04-01T00:00:00Z",
+  "reason": "planned maintenance"
+}
+```
+
+Rules:
+- control requests are additive and node-side validated
+- valid actions are implementation-defined but may include `drain`, `resume`, `quarantine`, `assign`, and `release`
+- control requests must not make a coordinator mandatory for node-local operation
+
+#### NodeEventEnvelope
+
+```json
+{
+  "contract-version": "v1",
+  "event-id": "evt_001",
+  "node-id": "node-001",
+  "event-type": "node.heartbeat",
+  "timestamp": "2026-04-01T00:00:00Z",
+  "payload": {}
+}
+```
+
+Rules:
+- event envelopes are the canonical transport shape for additive node/federation events
+- envelopes must preserve node provenance and event type
+- envelope consumers may be optional; the contract itself is not optional once introduced
+
 
 ## ProviderDescriptor
 
