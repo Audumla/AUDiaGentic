@@ -295,6 +295,57 @@ Leaves behind:
 - cutover runbooks
 - hardened cutover/uninstall validation
 
+### Phase 7 — Node execution and federation extension
+
+Add node identity, heartbeat, ownership, and runtime-local execution metadata without changing single-node correctness.
+
+Leaves behind:
+- node descriptor and heartbeat contracts
+- node-local status persistence
+- additive job ownership fields
+- node runtime module skeleton
+
+### Phase 8 — Discovery and registry extension
+
+Add pluggable node discovery and registration without making discovery a baseline dependency.
+
+Leaves behind:
+- locator provider contract
+- static registry provider
+- optional zeroconf provider seam
+- optional external registry provider seam
+
+### Phase 9 — Distributed eventing and control extension
+
+Add coordinator-consumable eventing and node-side control request validation while preserving node-local truth.
+
+Leaves behind:
+- node event families
+- heartbeat/status publication
+- control request contracts
+- optional stream transport seam
+
+### Phase 10 — Coordinator consumption seam
+
+Define the AUDiaGentic-side query/control seam that a coordinator or board may consume.
+
+Leaves behind:
+- node listing and node status queries
+- job/session/workspace queries by node
+- delegated job request seam
+- runtime stream and recent-event seam
+
+### Phase 11 — Pluggable external tool connectivity
+
+Add connector seams for external task systems and tools after the node/discovery/control seams are stable.
+
+Leaves behind:
+- external connector contract
+- mock/reference connector
+- import/export normalization rules
+- sync and conflict handling rules
+- connector health/status surface
+
 ## Phase gates
 
 Each phase has a hard exit gate. The next phase must not start until the prior phase leaves behind the artifacts documented in `02_Phase_Gates_and_Exit_Criteria.md`.
