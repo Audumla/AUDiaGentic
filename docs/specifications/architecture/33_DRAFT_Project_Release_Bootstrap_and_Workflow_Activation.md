@@ -33,6 +33,9 @@ The bootstrap flow must:
 5. regenerate release views using the same release subsystem used for normal project operation
 6. leave the project in a state that reports as current through the installed-state detector
 
+The bootstrap flow must converge on the same managed baseline sync rules used by lifecycle
+install/update flows rather than preserving a separate hard-coded scaffold copy list.
+
 ## Required outputs
 
 - `.audiagentic/installed.json`
