@@ -134,6 +134,11 @@ Each row in the registry must contain:
 | Phase 4.10 | `IN_PROGRESS` | shared live input and interactive session control harness implemented and tested; prompt-launch now merges default stream/input controls so live output capture and interactive turns stay AUDiaGentic-owned; Cline and Codex are the first-wave validation providers |
 | Phase 4.11 | `DEFERRED_DRAFT` | structured completion and result normalization drafted; Cline and Codex are the first-wave completion-normalization providers; AUDiaGentic owns final artifact persistence |
 | Phase 4.12 | `DEFERRED_DRAFT` | provider optimization and shared workflow extensibility drafted; shared helper scripts, skills, MCP tools, and wrapper seams are reserved for later token-reduction work; repeatable operations are script-first and template-driven |
+| Phase 7 | `WAITING_ON_DEPENDENCIES` | node execution and federation extension is additive future work |
+| Phase 8 | `WAITING_ON_DEPENDENCIES` | discovery and registry extension is additive future work |
+| Phase 9 | `WAITING_ON_DEPENDENCIES` | distributed eventing and control extension is additive future work |
+| Phase 10 | `WAITING_ON_DEPENDENCIES` | coordinator consumption seam is additive future work |
+| Phase 11 | `DEFERRED_DRAFT` | external tool connectivity is a later optional extension |
 | Phase 5 | `READY_TO_START` | can start once Phase 4.4 gate is verified |
 | Phase 6 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 5 is complete and Phase 6 prerequisites are satisfied |
 
@@ -377,6 +382,41 @@ Later phases should continue this registry pattern using the same fields and sta
 |---|---|---|---|---|---|---|---|---|
 | Phase 4.12 | docs-only draft | DEFERRED_DRAFT | Codex | workspace | needs Phase 4.11 DEFERRED_DRAFT + future workflow model definition | 03, 37, 48, providers/32 | 2026-03-31 | shared optimization hooks and workflow tracker extension points are documented; repeatable operations are script-first and template-driven; implementation is intentionally deferred until the workflow model is defined |
 
+### Phase 7 — Node Execution and Federation Extension
+
+| Packet | Title | Status | Owner | Scope | Dependencies | Docs | Updated | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-NOD-001 | Node descriptor and identity module | WAITING_ON_DEPENDENCIES | Codex | workspace | needs current Phase 4 active provider/runtime work stabilized + Phase 7 docs in place | 03, 38, 39, packet | 2026-04-01 | node identity and runtime helpers are additive future work |
+| PKT-NOD-002 | Node heartbeat and status persistence | WAITING_ON_DEPENDENCIES | Codex | workspace | needs PKT-NOD-001 READY_TO_START + Phase 7 docs in place | 03, 38, 41, packet | 2026-04-01 | node heartbeat/status persistence is additive future work |
+| PKT-NOD-003 | Node-aware job ownership fields | WAITING_ON_DEPENDENCIES | Codex | workspace | needs PKT-NOD-001 READY_TO_START + PKT-JOB-001 VERIFIED + PKT-JOB-011 VERIFIED | 03, 38, 39, packet | 2026-04-01 | additive job ownership fields are future work and must not alter single-node behavior |
+
+### Phase 8 — Discovery and Registry Extension
+
+| Packet | Title | Status | Owner | Scope | Dependencies | Docs | Updated | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-DIS-001 | Locator provider contract and static registry provider | WAITING_ON_DEPENDENCIES | Codex | workspace | needs Phase 7 VERIFIED + Phase 8 docs in place | 03, 40, 50, packet | 2026-04-01 | static registry is the first additive discovery backend |
+| PKT-DIS-002 | Zeroconf locator provider (optional) | WAITING_ON_DEPENDENCIES | Codex | workspace | needs PKT-DIS-001 READY_TO_START + explicit operator opt-in | 03, 40, 50, packet | 2026-04-01 | optional same-subnet discovery remains disabled by default |
+| PKT-DIS-003 | External registry provider seam | WAITING_ON_DEPENDENCIES | Codex | workspace | needs PKT-DIS-001 READY_TO_START | 03, 40, 50, packet | 2026-04-01 | external registry seams stay optional and replaceable |
+
+### Phase 9 — Distributed Eventing and Control Extension
+
+| Packet | Title | Status | Owner | Scope | Dependencies | Docs | Updated | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-EVT-001 | Node event families and publisher extension | WAITING_ON_DEPENDENCIES | Codex | workspace | needs Phase 7 VERIFIED + Phase 8 VERIFIED + Phase 9 docs in place | 03, 41, 51, packet | 2026-04-01 | local-first node event publication is future work |
+| PKT-EVT-002 | Node control request contract | WAITING_ON_DEPENDENCIES | Codex | workspace | needs PKT-EVT-001 READY_TO_START + node identity/ownership fields implemented | 03, 41, 51, packet | 2026-04-01 | node-side drain/resume/quarantine/assign/release controls are future work |
+
+### Phase 10 — Coordinator Consumption Seam
+
+| Packet | Title | Status | Owner | Scope | Dependencies | Docs | Updated | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-CRD-001 | Coordinator consumption seam | WAITING_ON_DEPENDENCIES | Codex | workspace | needs Phase 9 VERIFIED + Phase 10 docs in place | 03, 42, 52, packet | 2026-04-01 | coordinator-facing queries and delegated requests are backend-only future seams |
+
+### Phase 11 — Pluggable External Tool Connectivity
+
+| Packet | Title | Status | Owner | Scope | Dependencies | Docs | Updated | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-EXT-001 | External tool/task-system connector contract | DEFERRED_DRAFT | Codex | workspace | needs Phase 10 VERIFIED + Phase 11 docs in place | 03, 43, 53, packet | 2026-04-01 | external connectors are later optional integrations and never the source of truth |
+
 ### Later phases
 
 Later phases should continue this registry pattern using the same fields and status rules. Work may be listed now as `WAITING_ON_DEPENDENCIES`, but active claiming should not occur until earlier phase gates are closed.
@@ -393,6 +433,11 @@ Later phases should continue this registry pattern using the same fields and sta
 | Phase 4.10 | PKT-PRV-051 .. PKT-PRV-053 | IN_PROGRESS |
 | Phase 4.11 | — | DEFERRED_DRAFT |
 | Phase 4.12 | — | DEFERRED_DRAFT |
+| Phase 7 | PKT-NOD-001 .. PKT-NOD-003 | WAITING_ON_DEPENDENCIES |
+| Phase 8 | PKT-DIS-001 .. PKT-DIS-003 | WAITING_ON_DEPENDENCIES |
+| Phase 9 | PKT-EVT-001 .. PKT-EVT-002 | WAITING_ON_DEPENDENCIES |
+| Phase 10 | PKT-CRD-001 | WAITING_ON_DEPENDENCIES |
+| Phase 11 | PKT-EXT-001 | DEFERRED_DRAFT |
 | Phase 0.2 | PKT-FND-009 | VERIFIED |
 | Phase 1.2 | PKT-LFC-009 | VERIFIED |
 | Phase 2.2 | PKT-RLS-010 | VERIFIED |
