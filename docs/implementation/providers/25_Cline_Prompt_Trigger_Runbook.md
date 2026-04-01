@@ -70,6 +70,6 @@ For the first pass:
 - `docs/specifications/architecture/29_DRAFT_Provider_Prompt_Trigger_Launch_Behavior.md`
 - `docs/implementation/packets/phase-4/PKT-PRV-037.md`
 - `docs/implementation/providers/17_Cline_Tag_Execution_Implementation.md`
-- `docs/specifications/architecture/35_DRAFT_Provider_Live_Input_and_Interactive_Session_Control.md`
+- `docs/specifications/architecture/35_Provider_Live_Input_and_Interactive_Session_Control.md`
 - `docs/implementation/46_Phase_4_10_Provider_Live_Input_and_Interactive_Session_Control.md`
 - `docs/implementation/packets/phase-4/PKT-PRV-051.md`

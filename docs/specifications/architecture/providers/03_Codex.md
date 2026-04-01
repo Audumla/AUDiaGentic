@@ -88,6 +88,7 @@ For the first pass:
 - Codex should not be responsible for writing runtime stream artifacts
 - normalized progress records should be written under the job runtime folder
 - final structured artifacts should still be written after the stream completes
+- Codex should use wrapper milestone events plus raw log retention unless and until a richer native event surface proves more stable
 
 ## Phase 4.10 live input and interactive session control
 
@@ -100,6 +101,17 @@ For the first pass:
 - the Codex wrapper should tee live input or control turns to the console when interactive mode is enabled
 - the provider should not be responsible for writing runtime input artifacts
 - the same input contract should remain usable later by Discord or another overlay
+- recorded/queued input is the current guaranteed level; true mid-run live-session attachment remains a later session-manager seam
+
+## Phase 4.11 structured completion and result normalization
+
+Codex is a first-wave validation provider for shared structured completion.
+
+For the first pass:
+- prefer the final-message/result-file path as the canonical completion surface
+- request deterministic JSON in the final Codex result
+- persist direct provider results when parsing succeeds
+- mark wrapper-derived fallback results explicitly when direct JSON is unavailable
 
 ## Required provider-specific decisions before implementation
 - auth reference shape
