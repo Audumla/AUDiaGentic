@@ -53,6 +53,7 @@ The following areas were strengthened specifically to close pre-implementation g
 - 41_Node_Eventing_Heartbeat_and_Status_Extension.md
 - 42_AUDiaGentic_Extension_Scope_Boundaries_for_Coordinator_and_UI.md
 - 43_DRAFT_External_Task_System_and_Pluggable_Tool_Connectivity.md
+- 44_DRAFT_Canonical_Prompt_Entry_and_Bridge_End_State.md
 
 ## Extension docs
 

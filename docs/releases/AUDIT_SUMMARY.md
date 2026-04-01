@@ -1,9 +1,12 @@
 # Audit Summary
 
-Total events: 62
+Total events: 63
 
 - chg_20260401_0001: Added the additive Phase 7-11 node/discovery/eventing/coordinator/tool-connectivity extension pack and updated the roadmap, indexes, registry, and target tree to keep it separate from baseline MVP work.
 - chg_20260401_0002: Cleaned up and aligned the additive Phase 7-11 extension docs, registry rows, and tracker wording so the new line reads consistently as additive future work.
+- chg_20260401_0003: Added bridge mechanics and defaults-first prompt syntax guidance to `AGENTS.md` so canonical tagged prompts map cleanly into the repo-owned launcher path.
+- chg_20260401_0004: Added a canonical prompt-entry and bridge end-state spec so every supported provider and prompt-entry surface is explicitly documented as converging on the same repo-owned bridge/launcher contract.
+- chg_20260401_0005: Consolidated the unimplemented Phase 4.9 through Phase 4.11 runtime interaction work into a single shared provider-session I/O tranche while keeping the packet numbering intact.
 - chg_20260330_0001: Added job record contract helpers, store, and state machine with unit tests and registry updates.
 - chg_20260330_0002: Added workflow profile loader/validator with override parsing and fixtures.
 - chg_20260330_0003: Added packet runner with stub provider seam and integration tests.
