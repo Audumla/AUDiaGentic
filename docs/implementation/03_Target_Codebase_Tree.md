@@ -11,6 +11,7 @@ src/
       validation.py
       glossary.py
     lifecycle/
+      baseline_sync.py
       detector.py
       manifest.py
       checkpoints.py

@@ -46,6 +46,13 @@
 - no breaking changes to Phase 1 lifecycle artifacts
 - fresh install/update/cutover tests prove the fields are retained deterministically
 
+## Phase 1.4 exit gate
+- the installable AUDiaGentic baseline is explicitly classified into tracked baseline assets, generated outputs, and runtime-only state
+- `.audiagentic/runtime/` is excluded from install baseline behavior
+- fresh install and release bootstrap use the same shared baseline sync seam
+- prompt syntax, prompt templates, and managed provider instruction assets are all covered by install/refresh rules
+- tests prove clean-project install and existing-project refresh both apply the intended baseline deterministically
+
 ## Phase 2 exit gate
 
 - release core works with no jobs and no providers

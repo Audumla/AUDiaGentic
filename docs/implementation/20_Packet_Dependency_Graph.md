@@ -53,6 +53,9 @@ graph TD
   RLS6 --> RLS11[PKT-RLS-011]
   RLS8 --> RLS11
   LFC3 --> RLS11
+  RLS11 --> LFC11[PKT-LFC-011]
+  LFC11 --> LFC12[PKT-LFC-012]
+  LFC12 --> LFC13[PKT-LFC-013]
   JOB6 --> JOB7
   JOB7 --> JOB8[PKT-JOB-008]
   FND9 --> JOB8
@@ -201,6 +204,12 @@ Note: `PKT-PRV-055` is Claude Option B (native hook) follow-on, depends on PKT-P
 9. `PKT-PRV-047`
 
 `.8` is the project release bootstrap extension tracked under Phase 2.3, so it is not repeated in this provider-facing cluster.
+
+Phase 1.4 is the installability correction layer that follows Phase 1 and Phase 2.3. Its intended order is:
+
+1. `PKT-LFC-011`
+2. `PKT-LFC-012`
+3. `PKT-LFC-013`
 
 `.9` adds live stream and progress capture after the trigger layer is already frozen and the shared stream contract is written down. The intended order is:
 
