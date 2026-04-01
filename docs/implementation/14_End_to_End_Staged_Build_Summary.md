@@ -96,9 +96,9 @@
 - Discord and later overlays can consume the same normalized completion result without changing provider ownership.
 
 ### Phase 4.9 through 4.11 implementation note
-- These three phases share the same provider-session I/O boundary and are best implemented as one tranche with shared capture/persistence seams.
+- These three phases share the same provider-session I/O boundary and are best implemented as one tranche for reuse, but they remain separate packets with separate gates and review points.
 - The packets remain separately numbered for tracking and review.
-- No capability is lost by implementing them together; this simply reduces duplicated bridge, artifact, and provider-adapter work.
+- No capability is lost by keeping them distinct; the shared note simply reduces duplicated bridge, artifact, and provider-adapter work.
 
 ### After Phase 4.12
 - Repetitive file scanning, patching, and summarization can move into shared scripts or tools instead of staying inline in prompts.
