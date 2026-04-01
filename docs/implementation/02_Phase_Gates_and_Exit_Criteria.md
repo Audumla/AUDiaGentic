@@ -158,6 +158,7 @@
 - phases 4.9, 4.10, and 4.11 share the same runtime interaction boundary and should be implemented as one coordinated tranche
 - the packets stay separately numbered for tracking, but the implementation order should keep shared stream, input, and completion code together where possible
 - AUDiaGentic remains the owner of persistence and runtime artifact layout throughout the tranche
+- each packet still has its own gate, acceptance criteria, and review checkpoint; the tranche note is only a planning aid for reuse
 
 ## Phase 4.10 draft gate
 - shared live-input and interactive-session control contract is written down

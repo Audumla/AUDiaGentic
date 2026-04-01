@@ -27,9 +27,9 @@ Current extension slots:
 - `.6` = provider prompt-trigger launch behavior, agent instruction surfaces, and wrapper/bridge invocation
 - `.7` = provider availability, auto-install, and bootstrap orchestration
 - `.8` = project release bootstrap and workflow activation using the project's own release machinery
-- `.9` = provider live stream and progress capture, with Cline and Codex as the first-wave validation providers; part of the shared 4.9–4.11 provider session I/O and completion tranche
-- `.10` = provider live input and interactive session control, with Cline and Codex as the first-wave validation providers; part of the shared 4.9–4.11 provider session I/O and completion tranche
-- `.11` = provider structured completion and result normalization, with Cline and Codex as the first-wave validation providers; part of the shared 4.9–4.11 provider session I/O and completion tranche
+- `.9` = provider live stream and progress capture, with Cline and Codex as the first-wave validation providers; part of the shared 4.9–4.11 provider session I/O and completion tranche for implementation reuse only
+- `.10` = provider live input and interactive session control, with Cline and Codex as the first-wave validation providers; part of the shared 4.9–4.11 provider session I/O and completion tranche for implementation reuse only
+- `.11` = provider structured completion and result normalization, with Cline and Codex as the first-wave validation providers; part of the shared 4.9–4.11 provider session I/O and completion tranche for implementation reuse only
 - `.12` = provider optimization and shared workflow extensibility, with scripts/skills/MCP/wrapper reuse reserved for later token-reduction work
 - phase 4.12 optimization is script-first and template-driven for repeatable operations; agents should provide only the minimum intent or parameters needed by the helper
 - `.13` = canonical prompt entry and bridge end state, where every supported provider and prompt-entry surface converges on the same repo-owned bridge/launcher contract

@@ -239,6 +239,11 @@ Leaves behind:
 ### Phase 4.9 through 4.11 — Provider session I/O and completion tranche
 Phases 4.9, 4.10, and 4.11 share the same runtime interaction boundary and should be implemented as one coordinated tranche even though the packets stay separately numbered for tracking.
 
+Important implementation note:
+- the packets remain distinct and should still be claimed/reviewed separately
+- the shared tranche language is only there to encourage code reuse across the three related runtime layers
+- do not collapse the packet structure or acceptance criteria into a single merged work item
+
 This tranche covers:
 - live output capture
 - live input / interactive turns

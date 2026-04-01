@@ -28,7 +28,7 @@ The current state is:
 - `.11` provider structured completion and result normalization is drafted so each provider can use its best native surface while AUDiaGentic owns the canonical result shape
 - `.12` provider optimization and shared workflow extensibility is drafted so shared scripts, skills, MCP tools, and wrappers can reduce token usage without locking in the future workflow model; Phase 4.12 is explicitly script-first and template-driven for repeatable operations, and agents should only supply the minimum intent or parameters needed for the helper to do the work
 - `.13` canonical prompt entry and bridge end state now explicitly states that every supported provider and prompt-entry surface converges on the same repo-owned bridge/launcher contract
-- `.9` through `.11` are best implemented as one shared provider-session I/O and completion tranche so stream capture, interactive input, and result normalization can share the same bridge and persistence seams
+- `.9` through `.11` are best implemented as one shared provider-session I/O and completion tranche for reuse, but they remain separate implementation packets with separate gates and review checkpoints
 - a new future extension line now exists for Phase 7 through Phase 11: node execution, discovery/registry, distributed eventing/control, coordinator consumption, and external tool connectivity; these are additive backend seams and remain outside the baseline MVP
 - The shared prompt-trigger bridge harness for `PKT-PRV-031` is now implemented and test-covered
 - Project release bootstrap and workflow activation is implemented so the repository can install and refresh itself using the same tracked release machinery it already owns
@@ -118,7 +118,7 @@ packet-level status and the exact follow-on limitations.
 ## What is now required
 
 1. continue using the build registry as the single live source of packet status
-2. keep `.4` tracked as the shared provider-surface feature set, `.5` as the provider execution compliance layer, `.6` as the provider prompt-trigger launch bridge, `.7` as the provider availability/bootstrap layer, `.8` as the project release bootstrap layer, `.9` as the provider live-stream capture layer, `.10` as the live-input capture layer, `.11` as the structured completion/result layer, `.12` as the optimization layer, and `.13` as the canonical prompt-entry end-state layer
+2. keep `.4` tracked as the shared provider-surface feature set, `.5` as the provider execution compliance layer, `.6` as the provider prompt-trigger launch bridge, `.7` as the provider availability/bootstrap layer, `.8` as the project release bootstrap layer, `.9` as the provider live-stream capture layer, `.10` as the live-input capture layer, `.11` as the structured completion/result layer, `.12` as the optimization layer, and `.13` as the canonical prompt-entry end-state layer; do not merge `.9` through `.11` into one packet even though they share implementation seams
 3. use the prompt-trigger rollout assessment to decide the safest provider implementation order
 4. avoid silently introducing alternate tracked config files or alternate prompt parsers
 5. record prompt-launch, prompt-surface, provider-execution, provider-install, provider-live-stream, provider-live-input, provider-completion, and provider-optimization enhancements under their numbered slots
