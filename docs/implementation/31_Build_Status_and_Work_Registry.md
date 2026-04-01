@@ -130,10 +130,11 @@ Each row in the registry must contain:
 | Phase 4.4 | `VERIFIED` | provider execution compliance model and isolated provider implementation docs staged |
 | Phase 4.6 | `IN_PROGRESS` | shared prompt-trigger bridge harness and first Claude/Cline/Codex/Gemini/Copilot/local-openai/Qwen provider paths implemented; provider prompt-calling mechanics map is now explicit starting with Codex; Codex preflight now validates required `AGENTS.md` and skill files; Continue is deferred as a future integration; remaining provider instruction surfaces and wrapper/bridge rollout still need packets; realism assessment now documents first-wave vs wrapper-first providers |
 | Phase 4.7 | `DEFERRED_DRAFT` | provider availability and auto-install orchestration drafted; install/bootstrap policy and packets still need refinement |
-| Phase 4.9 | `DEFERRED_DRAFT` | live stream and progress capture drafted; console mirroring and runtime persistence remain AUDiaGentic-owned; Cline and Codex are the first-wave validation providers |
-| Phase 4.10 | `IN_PROGRESS` | shared live input and interactive session control harness implemented and tested; prompt-launch now merges default stream/input controls so live output capture and interactive turns stay AUDiaGentic-owned; Cline and Codex are the first-wave validation providers |
-| Phase 4.11 | `DEFERRED_DRAFT` | structured completion and result normalization drafted; Cline and Codex are the first-wave completion-normalization providers; AUDiaGentic owns final artifact persistence |
+| Phase 4.9 | `DEFERRED_DRAFT` | live stream and progress capture drafted; part of the shared Phase 4.9–4.11 provider session I/O and completion tranche; console mirroring and runtime persistence remain AUDiaGentic-owned; Cline and Codex are the first-wave validation providers |
+| Phase 4.10 | `IN_PROGRESS` | shared live input and interactive session control harness implemented and tested; part of the shared Phase 4.9–4.11 provider session I/O and completion tranche; prompt-launch now merges default stream/input controls so live output capture and interactive turns stay AUDiaGentic-owned; Cline and Codex are the first-wave validation providers |
+| Phase 4.11 | `DEFERRED_DRAFT` | structured completion and result normalization drafted; part of the shared Phase 4.9–4.11 provider session I/O and completion tranche; Cline and Codex are the first-wave completion-normalization providers; AUDiaGentic owns final artifact persistence |
 | Phase 4.12 | `DEFERRED_DRAFT` | provider optimization and shared workflow extensibility drafted; shared helper scripts, skills, MCP tools, and wrapper seams are reserved for later token-reduction work; repeatable operations are script-first and template-driven |
+| Phase 4.13 | `DEFERRED_DRAFT` | canonical prompt entry and bridge end state drafted; all supported providers and prompt-entry surfaces are documented as converging on the same repo-owned bridge/launcher contract |
 | Phase 7 | `WAITING_ON_DEPENDENCIES` | node execution and federation extension is additive future work |
 | Phase 8 | `WAITING_ON_DEPENDENCIES` | discovery and registry extension is additive future work |
 | Phase 9 | `WAITING_ON_DEPENDENCIES` | distributed eventing and control extension is additive future work |
@@ -433,6 +434,7 @@ Later phases should continue this registry pattern using the same fields and sta
 | Phase 4.10 | PKT-PRV-051 .. PKT-PRV-053 | IN_PROGRESS |
 | Phase 4.11 | — | DEFERRED_DRAFT |
 | Phase 4.12 | — | DEFERRED_DRAFT |
+| Phase 4.13 | — | DEFERRED_DRAFT |
 | Phase 7 | PKT-NOD-001 .. PKT-NOD-003 | WAITING_ON_DEPENDENCIES |
 | Phase 8 | PKT-DIS-001 .. PKT-DIS-003 | WAITING_ON_DEPENDENCIES |
 | Phase 9 | PKT-EVT-001 .. PKT-EVT-002 | WAITING_ON_DEPENDENCIES |

@@ -236,6 +236,26 @@ Leaves behind:
 - install policy packets per provider
 - project-local install configuration examples
 
+### Phase 4.9 through 4.11 — Provider session I/O and completion tranche
+Phases 4.9, 4.10, and 4.11 share the same runtime interaction boundary and should be implemented as one coordinated tranche even though the packets stay separately numbered for tracking.
+
+This tranche covers:
+- live output capture
+- live input / interactive turns
+- structured completion / final-result normalization
+
+The shared rules are:
+- AUDiaGentic owns persistence and runtime artifact layout
+- providers emit output/input/completion data; they do not own persistence policy
+- Cline and Codex remain the first-wave validation providers
+- Discord is a later consumer of the same normalized stream/input/completion artifacts
+
+Leaves behind:
+- shared stream/input/completion contracts
+- normalized event and artifact layouts
+- provider-specific first-wave guidance and smoke tests
+- later Discord consumption guidance
+
 ### Phase 4.9 — Provider live stream and progress capture
 Add AUDiaGentic-owned live output capture so provider progress can be mirrored to the console and persisted in runtime artifacts without moving persistence responsibility into the provider.
 
@@ -276,6 +296,15 @@ Leaves behind:
 - skill / MCP / wrapper extension points
 - future workflow/task tracker seam
 - provider-neutral token-reduction guidance
+
+### Phase 4.13 — Canonical prompt entry and bridge end state
+Document the explicit end-state that every supported provider CLI or prompt-entry surface converges on the same repo-owned bridge/launcher contract.
+
+Leaves behind:
+- one authoritative end-state spec for canonical prompt entry
+- provider-specific mechanics that all converge on the same launch grammar
+- bridge-owned provenance, defaults, capture, and persistence rules
+- provider docs that describe implementation mechanics without redefining semantics
 
 ### Phase 5 — Discord overlay
 Add Discord as a true overlay using approval + events only.

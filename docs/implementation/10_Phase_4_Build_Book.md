@@ -34,4 +34,6 @@ Phase 4.10 is now in progress for the shared live input and interactive session 
 Phase 4.11 drafts provider structured completion and result normalization; see `47_Phase_4_11_Provider_Structured_Completion_and_Result_Normalization.md` and the rollout matrix in `providers/31_Provider_Structured_Completion_And_Result_Normalization_Matrix.md`.
 Phase 4.12 drafts provider optimization and shared workflow extensibility; see `48_Phase_4_12_Provider_Optimization_and_Shared_Workflow_Extensibility.md` and the reuse matrix in `providers/32_Provider_Optimization_and_Shared_Workflow_Extensibility_Matrix.md`. This phase is explicitly script-first and template-driven for repeatable work.
 
+Phase 4.13 documents the canonical prompt-entry and bridge end state; see `55_Phase_4_13_Canonical_Prompt_Entry_and_Bridge_End_State.md`. It states the desired end functionality for all supported providers and prompt-entry surfaces: they converge on the same repo-owned bridge/launcher contract.
+
 The later node/discovery/eventing/coordinator/connectivity extension line starts at Phase 7 and is additive only; it does not replace or rewrite the Phase 4 provider foundation.

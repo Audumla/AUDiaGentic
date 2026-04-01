@@ -5,7 +5,7 @@
 The documentation set is no longer at Phase 0 kickoff.
 The current state is:
 
-- Phases 1 through 4 core implementation are documented, while the provider-specific Phase 4.3 / 4.4 / 4.9 / 4.10 / 4.11 / 4.12 work is staged separately
+- Phases 1 through 4 core implementation are documented, while the provider-specific Phase 4.3 / 4.4 / 4.9 / 4.10 / 4.11 / 4.12 / 4.13 work is staged separately
 - Phase 4.1 (`PKT-PRV-012`) is verified
 - Phase 4.2 (`PKT-PRV-013`) is verified
 - Phase 4.3 shared packet (`PKT-PRV-014`) is verified
@@ -27,6 +27,8 @@ The current state is:
 - Prompt tags, provider shorthands, and directive aliases are configurable through `.audiagentic/prompt-syntax.yaml`
 - `.11` provider structured completion and result normalization is drafted so each provider can use its best native surface while AUDiaGentic owns the canonical result shape
 - `.12` provider optimization and shared workflow extensibility is drafted so shared scripts, skills, MCP tools, and wrappers can reduce token usage without locking in the future workflow model; Phase 4.12 is explicitly script-first and template-driven for repeatable operations, and agents should only supply the minimum intent or parameters needed for the helper to do the work
+- `.13` canonical prompt entry and bridge end state now explicitly states that every supported provider and prompt-entry surface converges on the same repo-owned bridge/launcher contract
+- `.9` through `.11` are best implemented as one shared provider-session I/O and completion tranche so stream capture, interactive input, and result normalization can share the same bridge and persistence seams
 - a new future extension line now exists for Phase 7 through Phase 11: node execution, discovery/registry, distributed eventing/control, coordinator consumption, and external tool connectivity; these are additive backend seams and remain outside the baseline MVP
 - The shared prompt-trigger bridge harness for `PKT-PRV-031` is now implemented and test-covered
 - Project release bootstrap and workflow activation is implemented so the repository can install and refresh itself using the same tracked release machinery it already owns
@@ -94,6 +96,7 @@ These are the intentional gaps still visible in the build registry:
 - Cline review launches are executing through the bridge, but the provider still needs prompt-shape hardening to reliably return structured JSON instead of falling back to a synthetic review bundle.
 - `Phase 4.11` provider structured completion and result normalization is the next feature slice so Cline, Codex, and the remaining providers can return canonical review/output payloads without duplicating the shared bridge harness.
 - `Phase 4.12` provider optimization and shared workflow extensibility is the following slice so scripts, skills, MCP tools, and wrappers can reduce token usage without locking in the future workflow model, and it is script-first/template-driven for repeatable operations with agents limited to the minimum intent or parameters needed for the helper to do the work.
+- `Phase 4.13` canonical prompt entry and bridge end state explicitly states that every supported provider and prompt-entry surface converges on the same repo-owned bridge/launcher contract.
 - `Phase 7` through `Phase 11` are new additive backend extension phases and are intentionally future work; they must not change baseline lifecycle, release, job, or provider contracts.
 - The remaining prompt-calling work is now mostly documentation and provider-instruction hardening: Codex is the reference mechanics path, and the other provider surfaces reuse the same shared bridge contract with provider-specific surfaces.
 
@@ -115,7 +118,7 @@ packet-level status and the exact follow-on limitations.
 ## What is now required
 
 1. continue using the build registry as the single live source of packet status
-2. keep `.4` tracked as the shared provider-surface feature set, `.5` as the provider execution compliance layer, `.6` as the provider prompt-trigger launch bridge, `.7` as the provider availability/bootstrap layer, `.8` as the project release bootstrap layer, `.9` as the provider live-stream capture layer, `.10` as the live-input capture layer, and `.11` as the structured completion/result layer
+2. keep `.4` tracked as the shared provider-surface feature set, `.5` as the provider execution compliance layer, `.6` as the provider prompt-trigger launch bridge, `.7` as the provider availability/bootstrap layer, `.8` as the project release bootstrap layer, `.9` as the provider live-stream capture layer, `.10` as the live-input capture layer, `.11` as the structured completion/result layer, `.12` as the optimization layer, and `.13` as the canonical prompt-entry end-state layer
 3. use the prompt-trigger rollout assessment to decide the safest provider implementation order
 4. avoid silently introducing alternate tracked config files or alternate prompt parsers
 5. record prompt-launch, prompt-surface, provider-execution, provider-install, provider-live-stream, provider-live-input, provider-completion, and provider-optimization enhancements under their numbered slots
@@ -126,5 +129,5 @@ packet-level status and the exact follow-on limitations.
 1. Use `PKT-PRV-014` as the shared prompt-tag surface reference already in place
 2. Start `PKT-PRV-015` through `PKT-PRV-021` against the documented provider rollout guidance when ready
 3. Use `PKT-PRV-022` as the shared provider-execution compliance reference
-4. Keep `.4`, `.5`, `.6`, `.7`, `.8`, `.9`, `.10`, `.11`, and `.12` tracked separately so the surface layer, execution layer, trigger layer, install layer, release-bootstrap layer, live-stream layer, live-input layer, completion layer, and optimization layer stay isolated
+4. Keep `.4`, `.5`, `.6`, `.7`, `.8`, `.9`, `.10`, `.11`, `.12`, and `.13` tracked separately so the surface layer, execution layer, trigger layer, install layer, release-bootstrap layer, live-stream layer, live-input layer, completion layer, optimization layer, and canonical prompt-entry end-state layer stay isolated
 5. Continue using the build registry as the single live source of packet status
