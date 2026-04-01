@@ -54,6 +54,26 @@ src/
         copilot.py
         continue_.py
         cline.py
+    nodes/
+      identity.py
+      heartbeat.py
+      ownership.py
+      runtime_state.py
+    discovery/
+      registry.py
+      locator.py
+      providers/
+        static.py
+        zeroconf.py
+        external.py
+    federation/
+      events.py
+      control.py
+      transport.py
+    connectors/
+      external_tasks.py
+      tool_registry.py
+      sync.py
     server/
       service_boundary.py
     overlay/
@@ -83,6 +103,16 @@ tests/
 - Tests must mirror the production module structure where practical.
 - Packets must not create alternative parallel module trees.
 - When a packet needs a new module outside this tree, it must update this file before code is written.
+
+## Phase 7+ extension reservation
+
+The later node/discovery/federation/connectors extension line is first-class but optional. When those phases begin implementation, they should use the reserved module paths above rather than creating new parallel trees.
+
+The reservation exists so ownership is explicit before code is written:
+- `src/audiagentic/nodes/` for node identity, heartbeat, ownership, and runtime state
+- `src/audiagentic/discovery/` for locator providers and registry resolution
+- `src/audiagentic/federation/` for node event and control transport
+- `src/audiagentic/connectors/` for external task / tool connectivity seams
 
 
 ## v12 additions

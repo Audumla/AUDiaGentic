@@ -103,6 +103,8 @@ Each row in the registry must contain:
 
 ## Current program state
 
+The registry records the active baseline phases and the later additive extension lines in the same live format. Phase 7+ is not a separate tracking system; it is folded into this registry so the later backend seams use the same packet/phase lifecycle as the baseline work.
+
 ### Phase state summary
 
 | Phase | State | Notes |

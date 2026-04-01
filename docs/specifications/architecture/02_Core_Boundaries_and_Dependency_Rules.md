@@ -12,6 +12,12 @@
 - `discord-overlay`
 - `optional-server`
 
+### Optional extension subsystems
+- `nodes`
+- `discovery`
+- `federation`
+- `connectors`
+
 ## Allowed dependencies
 
 ```mermaid
@@ -27,7 +33,15 @@ flowchart LR
     J --> S[optional-server]
     R --> S
     L --> S
-```
+    L --> N[nodes]
+    R --> N
+    J --> N
+    N --> G[discovery]
+    N --> F[federation]
+    N --> C[connectors]
+    G --> F
+    F --> C
+  ```
 
 ## Forbidden dependencies
 
@@ -36,7 +50,12 @@ flowchart LR
 - `release-audit-ledger` must not require local AI
 - `agent-jobs` must not require Discord for correctness
 - `optional-server` must not become required for in-process execution
+- `nodes`, `discovery`, `federation`, and `connectors` must remain optional extension layers and must not become required for single-node correctness, release correctness, or prompt-launch correctness
+- `discovery` must not become a prerequisite for node-local operation
+- `federation` must not become a prerequisite for node-local operation
+- `connectors` must not become a prerequisite for node-local operation
 
 ## Implication for implementation
 
 Every cross-module interaction must go through a documented contract, schema, or script boundary.
+The later node/discovery/federation/connector layers are additive optional extension subsystems, not replacements for the baseline `core-lifecycle`, `release-audit-ledger`, `agent-jobs`, or `provider-layer` contracts.
