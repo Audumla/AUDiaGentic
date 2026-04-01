@@ -12,6 +12,7 @@ This document defines lifecycle operations for fresh install, update, legacy cut
 - legacy cutover supported
 - current AUDiaGentic uninstall supported
 - lifecycle modules separated by concern and version
+- the installable tracked baseline must be applied from a canonical managed inventory rather than ad hoc copy lists
 
 ## Lifecycle states
 
@@ -119,8 +120,20 @@ Exit codes:
 Default uninstall behavior:
 - remove `.audiagentic/runtime/`
 - preserve tracked docs under `docs/`
-- preserve `.audiagentic/project.yaml`, `components.yaml`, `providers.yaml`
+- preserve `.audiagentic/project.yaml`, `components.yaml`, `providers.yaml`, `prompt-syntax.yaml`, and managed prompt/instruction baseline assets unless explicitly removed by a later baseline-sync policy
 - preserve user-modified managed workflow files unless `--remove-workflows` is explicitly passed
+
+## Installable baseline rule
+
+Fresh install, update, cutover, and bootstrap must distinguish between:
+- tracked installable baseline assets
+- generated tracked outputs
+- runtime-only state
+
+Runtime-only state under `.audiagentic/runtime/` must never be copied as install baseline.
+Tracked prompt templates, prompt syntax, and managed provider instruction assets are part of
+the installable baseline and must be handled by the shared baseline sync rules once that
+extension lands.
 
 
 ## Recovery procedures by checkpoint

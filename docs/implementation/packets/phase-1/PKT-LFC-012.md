@@ -1,0 +1,34 @@
+# PKT-LFC-012 — Shared baseline sync engine for lifecycle and bootstrap
+
+**Phase:** Phase 1.4  
+**Status:** WAITING_ON_DEPENDENCIES  
+**Owner:** Lifecycle  
+**Scope:** workspace
+
+## Goal
+
+Implement a shared baseline sync engine that applies the managed install baseline to a target project according to sync-mode rules instead of using multiple hard-coded copy lists.
+
+## Dependencies
+
+- `PKT-LFC-011` VERIFIED
+
+## Expected implementation surface
+
+- `src/audiagentic/lifecycle/baseline_sync.py`
+- `tools/seed_example_project.py`
+- supporting tests for inventory and copy/preserve behavior
+
+## Must support
+
+- required-managed assets
+- create-if-missing assets
+- generated-managed outputs reported but not copied
+- runtime-only exclusions
+- machine-readable sync report
+
+## Acceptance criteria
+
+- one shared sync seam exists for lifecycle/bootstrap
+- sync results distinguish created, refreshed, preserved, skipped, and excluded paths
+- runtime-only paths cannot be copied as baseline assets

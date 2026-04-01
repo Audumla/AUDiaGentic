@@ -47,6 +47,7 @@ Implement the generic project bootstrap path that uses the project’s own relea
 - if bootstrap writes partial files, rerun the command after restoring the sandbox
 - if the installed-state detector regresses, restore the legacy marker set only if later phase requirements depend on it
 - if the release workflow baseline path changes, update the packet and release docs together rather than forking a separate installer path
+- if the managed install baseline grows, keep bootstrap aligned with the shared lifecycle baseline sync seam rather than adding new hard-coded file copy logic here
 
 ## Current implementation status
 
