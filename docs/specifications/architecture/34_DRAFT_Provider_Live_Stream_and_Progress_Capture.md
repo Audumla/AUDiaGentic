@@ -10,6 +10,11 @@ This extension is intentionally about **capture and presentation**, not provider
 logic. The provider emits progress; AUDiaGentic owns persistence, rendering, and later
 fan-out to other consumers.
 
+Implementation note:
+- this phase is part of the shared Phase 4.9 through 4.11 provider-session I/O boundary
+- it shares the same launch-envelope defaults and runtime persistence seams as live input and structured completion
+- the packets stay separate, but the implementation should reuse the same bridge and artifact layout where possible
+
 ## Relationship to existing phases
 
 This is a Phase 4.9 extension that sits after prompt-trigger launch behavior and before the

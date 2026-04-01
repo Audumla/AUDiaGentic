@@ -10,6 +10,11 @@ This extension is intentionally about **session input and control**, not provide
 logic. The provider receives input; AUDiaGentic owns sequencing, persistence, and later fan-out
 to other consumers.
 
+Implementation note:
+- this phase is part of the shared Phase 4.9 through 4.11 provider-session I/O boundary
+- it reuses the same launch-envelope defaults and runtime persistence seams introduced by live-stream capture
+- the packets stay separate, but the implementation should share bridge plumbing with live-stream and structured completion where possible
+
 ## Relationship to existing phases
 
 This is a Phase 4.10 extension that sits after live-stream capture and before Discord or other
