@@ -31,9 +31,9 @@ Phase 4.6 drafts provider prompt-trigger launch behavior and per-provider bridge
 Phase 4.7 drafts provider availability and auto-install orchestration; see `41_Phase_4_7_Provider_Auto_Install_Orchestration.md`.
 Phase 4.9 drafts provider live stream and progress capture; see `45_Phase_4_9_Provider_Live_Stream_and_Progress_Capture.md` and the rollout assessment in `providers/29_Provider_Live_Stream_Progress_Capture_Assessment.md`.
 Phase 4.10 is now in progress for the shared live input and interactive session control harness; see `46_Phase_4_10_Provider_Live_Input_and_Interactive_Session_Control.md` and the rollout assessment in `providers/30_Provider_Live_Input_Interactive_Session_Assessment.md`.
-Phase 4.11 drafts provider structured completion and result normalization; see `47_Phase_4_11_Provider_Structured_Completion_and_Result_Normalization.md` and the rollout matrix in `providers/31_Provider_Structured_Completion_And_Result_Normalization_Matrix.md`.
+Phase 4.11 now has packetized first-wave structured completion work; see `47_Phase_4_11_Provider_Structured_Completion_and_Result_Normalization.md`, the rollout matrix in `providers/31_Provider_Structured_Completion_And_Result_Normalization_Matrix.md`, and packets `PKT-PRV-056` through `PKT-PRV-058`.
 Phase 4.12 drafts provider optimization and shared workflow extensibility; see `48_Phase_4_12_Provider_Optimization_and_Shared_Workflow_Extensibility.md` and the reuse matrix in `providers/32_Provider_Optimization_and_Shared_Workflow_Extensibility_Matrix.md`. This phase is explicitly script-first and template-driven for repeatable work.
 
 Phase 4.13 documents the canonical prompt-entry and bridge end state; see `55_Phase_4_13_Canonical_Prompt_Entry_and_Bridge_End_State.md`. It states the desired end functionality for all supported providers and prompt-entry surfaces: they converge on the same repo-owned bridge/launcher contract.
 
-The later node/discovery/eventing/coordinator/connectivity extension line starts at Phase 7 and is additive only; it does not replace or rewrite the Phase 4 provider foundation.
+The later node/discovery/federation/connectors extension line starts at Phase 7 and is additive only; it does not replace or rewrite the Phase 4 provider foundation.

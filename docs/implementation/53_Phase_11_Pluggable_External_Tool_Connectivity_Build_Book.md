@@ -9,7 +9,7 @@ Add pluggable external-task-system / tool connectivity as a later extension.
 External systems should not be integrated until:
 - node contracts are stable
 - registry/discovery contracts are stable
-- coordinator consumption seam is stable
+- federation consumption seam is stable
 
 ## Deliverables
 

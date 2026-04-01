@@ -60,6 +60,18 @@ The implementation runbook for Continue prompt-trigger behavior lives at
 Use that runbook when turning the shared prompt-trigger contract into Continue-specific
 implementation steps, wrapper routing, and smoke tests.
 
+## Phase 4.9 through 4.11 status
+
+Continue remains a future integration outside the active rollout.
+
+For now:
+- do not claim first-wave live stream support
+- do not claim first-wave live input/session support
+- do not claim first-wave structured completion support
+
+These provider-session features should be revisited only after Continue returns to the active
+prompt-trigger and provider rollout.
+
 ## Required provider-specific decisions before implementation
 - auth reference shape
 - health check command or request

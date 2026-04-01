@@ -17,9 +17,9 @@ AUDiaGentic is designed so later features layer on top of stable earlier seams. 
 9. **Migration hardening last** — harden rollout after core behavior exists.
 10. **Node execution extension** — add node identity, heartbeat, and ownership after provider/runtime stabilization.
 11. **Discovery and registry extension** — add pluggable locator providers after node contracts are stable.
-12. **Distributed eventing and control extension** — add node-side event/control seams after registry and node status are stable.
+12. **Federation and control extension** — add node-side federation/event/control seams after registry and node status are stable.
 13. **Coordinator consumption seam** — expose backend-only coordinator query/control seams without adding UI dependence.
-14. **External tool connectivity** — add optional external connectors last, after the node/discovery/control seams are stable.
+14. **External tool connectivity** — add optional external connectors last, after the node/discovery/federation seams are stable.
 
 ## Forbidden redesigns by phase
 

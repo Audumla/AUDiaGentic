@@ -34,6 +34,10 @@ src/audiagentic/nodes/
   api.py
 ```
 
+The canonical reserved tree for Phase 7 is `src/audiagentic/nodes/`. If a packet wants to
+distinguish status or registry helpers internally, those may still live in the same reserved
+package; they should not create a separate `eventing` or `coordinator` subtree.
+
 ## Phase exit gate
 
 This phase is complete when:

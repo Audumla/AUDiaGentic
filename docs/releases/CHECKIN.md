@@ -63,7 +63,8 @@ Total changes: 63
 - Implemented the shared Phase 4.10 live-input harness and session-input CLI, with test coverage.
 - Drafted Phase 4.12 provider optimization and shared workflow extensibility so shared scripts, skills, MCP tools, and wrappers can reduce token usage without locking in the future workflow model.
 - Tightened Phase 4.12 to be explicitly script-first and template-driven for repeatable operations, with agents limited to the minimum intent or parameters needed by the helper.
-- Added the additive Phase 7-11 node/discovery/eventing/coordinator/tool-connectivity extension pack and updated the roadmap, indexes, registry, and target tree to keep it separate from baseline MVP work.
+- Deepened the Phase 4.9 through 4.11 provider-session docs into build-ready specs, packetized Phase 4.11 completion work, and aligned per-provider streaming/input/completion methods.
+- Added the additive Phase 7-11 node/discovery/federation/coordinator/connectors extension pack and updated the roadmap, indexes, registry, and target tree to keep it separate from baseline MVP work.
 - Cleaned up and aligned the additive Phase 7-11 extension docs, registry rows, and tracker wording so the new line reads consistently as additive future work.
 - Added bridge mechanics and defaults-first prompt syntax guidance to `AGENTS.md` so canonical tagged prompts map cleanly into the repo-owned launcher path.
 - Added a canonical prompt-entry and bridge end-state spec so every supported provider and prompt-entry surface is explicitly documented as converging on the same repo-owned bridge/launcher contract.

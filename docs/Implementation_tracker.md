@@ -36,7 +36,7 @@ Current extension slots:
 - prompt tag names, provider shorthands, and argument aliases are configurable through `.audiagentic/prompt-syntax.yaml`
 - prompt-launch now merges project-level default stream and input controls so live output capture and interactive turns stay AUDiaGentic-owned
 - Codex, Cline, and Gemini provider configs now use longer timeout defaults to give the streaming review path room to finish long-running tasks
-- a separate later extension line now exists for Phase 7 through Phase 11: node execution, discovery/registry, distributed eventing/control, coordinator consumption, and external tool connectivity; these remain additive backend seams and do not replace the baseline phases
+- a separate later extension line now exists for Phase 7 through Phase 11: node execution, discovery/registry, federation/control, coordinator consumption, and connector connectivity; these remain additive backend seams and do not replace the baseline phases
 
 Stable release baseline:
 - `stable-release-20260331` at merge commit `4e01b4ef962cf80c8f6fe912f1b6a7cba22bcb32`
@@ -58,16 +58,16 @@ At the time of this pack:
 - Codex now has an explicit preflight contract that validates `AGENTS.md` and the canonical skill files before launch
 - `.7` provider auto-install orchestration is now drafted and awaiting implementation packets
 - `.8` project release bootstrap and workflow activation is complete so the project can install itself using its own release processes
-- `.9` provider live stream and progress capture is drafted so AUDiaGentic can own console mirroring and runtime persistence while providers emit progress; it is part of the shared 4.9–4.11 provider session I/O and completion tranche
+- `.9` provider live stream and progress capture is now implementation-ready at the spec/build-doc level so AUDiaGentic can own console mirroring and runtime persistence while providers emit progress; it is part of the shared 4.9–4.11 provider session I/O and completion tranche
 - `.10` provider live input and interactive session control is in progress; the shared harness is implemented and test-covered, and Cline/Codex are next; it is part of the shared 4.9–4.11 provider session I/O and completion tranche
 - prompt-syntax profiles now control the canonical shorthand names, so tag and argument aliases can be adjusted without changing the parser code
 - prompt-launch now applies default stream and input controls before provider execution, giving the shared bridge ownership of live output and interactive session capture
 - provider timeout defaults are now extended for Codex, Cline, and Gemini so review sessions can run long enough to finish while still streaming progress
 - Cline review launches currently execute through the bridge, but still need prompt-shape hardening to reliably return structured JSON instead of a synthetic review bundle
-- `.11` provider structured completion and result normalization is drafted so Cline, Codex, and the remaining providers can return canonical review/output payloads without duplicating the shared bridge harness; `.12` provider optimization and shared workflow extensibility follows as the docs-only token-reduction slice; `.13` now explicitly states the end-state for all supported providers and prompt-entry surfaces
+- `.11` provider structured completion and result normalization is now implementation-ready and packetized so Cline, Codex, and the remaining providers can return canonical review/output payloads without duplicating the shared bridge harness; `.12` provider optimization and shared workflow extensibility follows as the docs-only token-reduction slice; `.13` now explicitly states the end-state for all supported providers and prompt-entry surfaces
 - Phase 2.3 project release bootstrap and workflow activation is verified and using the project's own release machinery
 - later phase work beyond `.13` remains deferred until additional packet definitions are added
-- the current open follow-ons are Phase 4.7 provider auto-install orchestration, Phase 4.9 provider live stream and progress capture, Phase 4.10 provider live input and interactive session control, Phase 4.11 provider structured completion and result normalization, Phase 4.12 provider optimization and shared workflow extensibility, Phase 4.13 canonical prompt entry and bridge end state, Phase 1.3 provider auto-install policy persistence, the remaining provider-specific prompt-calling hardening, and the optional hard-kill extension for job control
+- the current open follow-ons are Phase 4.7 provider auto-install orchestration, Phase 4.9 provider live stream and progress capture, Phase 4.10 provider live input and interactive session control, PKT-PRV-054 session provenance redaction and secure-session reference handling, Phase 4.11 provider structured completion and result normalization, Phase 4.12 provider optimization and shared workflow extensibility, Phase 4.13 canonical prompt entry and bridge end state, Phase 1.3 provider auto-install policy persistence, the remaining provider-specific prompt-calling hardening, and the optional hard-kill extension for job control
 
 That means new implementors should use the build registry for the next legal packet rather than reopening `.1`, `.2`, or `.3`.
 
@@ -298,6 +298,10 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-31 | Phase 4.10 | PKT-PRV-051 | READY_FOR_REVIEW | shared live-input harness implemented with session-input persistence and a session-input CLI |
 | 2026-03-31 | Phase 4.10 | PKT-PRV-052 | DEFERRED_DRAFT | Codex live-input capture packet drafted as a first-wave validation provider |
 | 2026-03-31 | Phase 4.10 | PKT-PRV-053 | DEFERRED_DRAFT | Cline live-input capture packet drafted as a first-wave validation provider |
+| 2026-04-02 | Phase 4.10 | PKT-PRV-054 | DEFERRED_DRAFT | session provenance redaction and secure-session reference seam captured so raw provider session keys are not treated as log-safe runtime data |
+| 2026-04-02 | Phase 4.11 | PKT-PRV-056 | DEFERRED_DRAFT | shared structured-completion contract and normalization harness packetized for implementation |
+| 2026-04-02 | Phase 4.11 | PKT-PRV-057 | DEFERRED_DRAFT | Codex structured-completion integration packetized for implementation |
+| 2026-04-02 | Phase 4.11 | PKT-PRV-058 | DEFERRED_DRAFT | Cline structured-completion integration packetized for implementation |
 | 2026-03-30 | Phase 5 | PKT-DSC-001 .. PKT-DSC-004 | READY_TO_START | Discord overlay packet headers normalized; phase 5 is ready to implement after Phase 4.4 verification |
 | 2026-03-30 | Phase 0.1 | PKT-FND-008 | VERIFIED | contract/schema updates for access-mode, model catalog, model-id/model-alias |
 | 2026-03-30 | Phase 1.1 | PKT-LFC-008 | VERIFIED | lifecycle updates to preserve new tracked config fields |
