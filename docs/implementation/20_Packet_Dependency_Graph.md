@@ -116,6 +116,17 @@ graph TD
   PRV51 --> PRV53[PKT-PRV-053]
   PRV9 --> PRV53
   PRV37 --> PRV53
+  P4S((Phase 4 stabilization checkpoint)) --> NOD1[PKT-NOD-001]
+  NOD1 --> NOD2[PKT-NOD-002]
+  NOD1 --> NOD3[PKT-NOD-003]
+  NOD1 --> DIS1[PKT-DIS-001]
+  DIS1 --> DIS2[PKT-DIS-002]
+  DIS1 --> DIS3[PKT-DIS-003]
+  NOD1 --> EVT1[PKT-EVT-001]
+  DIS1 --> EVT1
+  EVT1 --> EVT2[PKT-EVT-002]
+  EVT1 --> CRD1[PKT-CRD-001]
+  CRD1 --> EXT1[PKT-EXT-001]
 ```
 
 ## Clarification on extension ordering
@@ -201,6 +212,19 @@ The intended order is:
 `.12` adds provider optimization and shared workflow extensibility after the completion contract is written down. This phase is currently docs-only, so it does not yet introduce new packet ids.
 
 `PKT-PRV-012` no longer depends on `PKT-JOB-007`; the earlier apparent cycle is resolved by treating provider/model field names as provider-owned contract output first.
+
+The later node/discovery/eventing/coordinator/connectivity extension line is separate from the provider line and begins only after the Phase 4 provider/runtime stabilization checkpoint. Its intended order is:
+
+1. `PKT-NOD-001`
+2. `PKT-NOD-002`
+3. `PKT-NOD-003`
+4. `PKT-DIS-001`
+5. `PKT-DIS-002`
+6. `PKT-DIS-003`
+7. `PKT-EVT-001`
+8. `PKT-EVT-002`
+9. `PKT-CRD-001`
+10. `PKT-EXT-001`
 
 ## Clarification on Phase 3 and Phase 4
 

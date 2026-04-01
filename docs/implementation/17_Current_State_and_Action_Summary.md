@@ -27,6 +27,7 @@ The current state is:
 - Prompt tags, provider shorthands, and directive aliases are configurable through `.audiagentic/prompt-syntax.yaml`
 - `.11` provider structured completion and result normalization is drafted so each provider can use its best native surface while AUDiaGentic owns the canonical result shape
 - `.12` provider optimization and shared workflow extensibility is drafted so shared scripts, skills, MCP tools, and wrappers can reduce token usage without locking in the future workflow model; Phase 4.12 is explicitly script-first and template-driven for repeatable operations, and agents should only supply the minimum intent or parameters needed for the helper to do the work
+- a new future extension line now exists for Phase 7 through Phase 11: node execution, discovery/registry, distributed eventing/control, coordinator consumption, and external tool connectivity; these are additive backend seams and remain outside the baseline MVP
 - The shared prompt-trigger bridge harness for `PKT-PRV-031` is now implemented and test-covered
 - Project release bootstrap and workflow activation is implemented so the repository can install and refresh itself using the same tracked release machinery it already owns
 - Codex has its first provider-specific bridge path implemented through repo-local `AGENTS.md` and `.agents/skills` guidance plus a Codex wrapper bridge
@@ -93,6 +94,7 @@ These are the intentional gaps still visible in the build registry:
 - Cline review launches are executing through the bridge, but the provider still needs prompt-shape hardening to reliably return structured JSON instead of falling back to a synthetic review bundle.
 - `Phase 4.11` provider structured completion and result normalization is the next feature slice so Cline, Codex, and the remaining providers can return canonical review/output payloads without duplicating the shared bridge harness.
 - `Phase 4.12` provider optimization and shared workflow extensibility is the following slice so scripts, skills, MCP tools, and wrappers can reduce token usage without locking in the future workflow model, and it is script-first/template-driven for repeatable operations with agents limited to the minimum intent or parameters needed for the helper to do the work.
+- `Phase 7` through `Phase 11` are new additive backend extension phases and are intentionally future work; they must not change baseline lifecycle, release, job, or provider contracts.
 - The remaining prompt-calling work is now mostly documentation and provider-instruction hardening: Codex is the reference mechanics path, and the other provider surfaces reuse the same shared bridge contract with provider-specific surfaces.
 
 ## Issue / work tracking process

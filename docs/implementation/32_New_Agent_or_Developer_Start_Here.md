@@ -52,6 +52,7 @@ At the time of this pack:
 - `.10` provider live input and interactive session control is in progress; the shared harness is implemented and test-covered, and Cline/Codex are next
 - `.11` provider structured completion and result normalization is drafted so Cline, Codex, and the remaining providers can return canonical review/output payloads without duplicating the shared bridge harness
 - `.12` provider optimization and shared workflow extensibility is drafted so shared scripts, skills, MCP tools, and wrappers can reduce token usage without locking in the future workflow model
+- a separate later extension line now exists for Phase 7 through Phase 11: node execution, discovery/registry, distributed eventing/control, coordinator consumption, and external tool connectivity; these are additive backend seams and remain outside the baseline MVP
 - Phase 5 Discord overlay packets are ready to start once claimed
 - the build registry is the source of truth for any remaining later-phase work
 
