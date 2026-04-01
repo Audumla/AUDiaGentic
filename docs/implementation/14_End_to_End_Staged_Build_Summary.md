@@ -109,3 +109,18 @@
 
 ### After Phase 6
 - Legacy projects can be migrated and cutover can be hardened with runbooks and reports.
+
+### After Phase 7
+- Nodes can describe themselves, emit heartbeats, and carry additive ownership metadata.
+
+### After Phase 8
+- Static node registry and optional discovery backends can resolve nodes deterministically.
+
+### After Phase 9
+- Node events and control requests can be published and validated without a coordinator dependency.
+
+### After Phase 10
+- A non-UI coordinator consumer can query and control nodes through stable AUDiaGentic seams.
+
+### After Phase 11
+- External task systems and pluggable tools can synchronize references without owning source of truth.

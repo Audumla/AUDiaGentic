@@ -186,3 +186,25 @@
 - legacy migration examples pass
 - provider migration reports are deterministic
 - cutover recovery runbooks are validated in sandbox repos
+
+## Phase 7 exit gate
+- node identity can be generated without network/discovery dependencies
+- node heartbeat/status can be written and read atomically
+- additive node ownership fields do not alter single-node behavior
+
+## Phase 8 exit gate
+- static registry can register, resolve, list, and expire nodes deterministically
+- discovery can be disabled without breaking node-local operation
+
+## Phase 9 exit gate
+- node events append locally first
+- control requests are validated node-side
+- no coordinator is required for the node to function
+
+## Phase 10 exit gate
+- a non-UI consumer can coordinate multiple nodes using stable AUDiaGentic contracts
+- the same AUDiaGentic node still works without any coordinator attached
+
+## Phase 11 exit gate
+- external connectors can synchronize task references without becoming source of truth
+- disabling connectors leaves AUDiaGentic fully functional
