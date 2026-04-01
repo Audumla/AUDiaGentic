@@ -5,7 +5,7 @@
 | Group | Owns | May edit directly | Must not edit directly |
 |---|---|---|---|
 | Contracts | `src/audiagentic/contracts/*`, `docs/schemas/*`, glossary, canonical ids | contracts, validators, fixtures | lifecycle, release, jobs, providers |
-| Lifecycle | `src/audiagentic/lifecycle/*`, lifecycle CLI behavior | lifecycle modules, lifecycle tests | release core internals, jobs internals |
+| Lifecycle | `src/audiagentic/lifecycle/*`, lifecycle CLI behavior | lifecycle modules, lifecycle tests, managed baseline sync | release core internals, jobs internals |
 | Release | `src/audiagentic/release/*`, tracked release docs behavior | release modules, release tests, release fixtures | lifecycle detection, jobs state machine |
 | Jobs | `src/audiagentic/jobs/*` | job modules/tests | release file formats, lifecycle manifests |
 | Providers | `src/audiagentic/providers/*` | provider modules/tests | release core, lifecycle core |

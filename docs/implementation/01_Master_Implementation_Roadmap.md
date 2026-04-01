@@ -81,6 +81,18 @@ Leaves behind:
 - lifecycle validation for provider auto-install policy fields
 - stable `.audiagentic/providers.yaml` and `.audiagentic/project.yaml` handling for install/bootstrap policy fields
 
+### Phase 1.4 — Installable project baseline and managed asset synchronization
+Define the real installable AUDiaGentic baseline so lifecycle install and project bootstrap can
+apply the repository's tracked prompt/provider/workflow assets to clean or existing projects
+without copying runtime state.
+
+Leaves behind:
+- installable baseline asset inventory and sync modes
+- shared baseline sync seam for lifecycle/bootstrap
+- inclusion of prompt syntax, prompt templates, and provider instruction assets in the managed baseline
+- explicit exclusion of `.audiagentic/runtime/**` from install baseline behavior
+- converged fresh-install and release-bootstrap baseline rules
+
 ### Phase 2 — Release / audit / ledger / Release Please
 
 Build the release core independent of jobs.

@@ -116,6 +116,7 @@ The registry records the active baseline phases and the later additive extension
 | Phase 1.1 | `VERIFIED` | lifecycle preservation of .1 config fields complete |
 | Phase 1.2 | `VERIFIED` | lifecycle preservation of prompt-launch config complete |
 | Phase 1.3 | `DEFERRED_DRAFT` | lifecycle preservation of provider auto-install policy fields drafted |
+| Phase 1.4 | `READY_TO_START` | installable project baseline and managed asset synchronization is now defined as the lifecycle/installability correction layer |
 | Phase 2 | `VERIFIED` | phase 2 gate complete |
 | Phase 2.1 | `VERIFIED` | release/ledger updates for .1 fields complete |
 | Phase 2.2 | `VERIFIED` | release/audit handling for prompt/review metadata complete |
@@ -202,6 +203,14 @@ The registry records the active baseline phases and the later additive extension
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
 | PKT-LFC-010 | Provider auto-install policy persistence and lifecycle roundtrip | DEFERRED_DRAFT | Codex | workspace | needs Phase 1 VERIFIED + PKT-FND-008 VERIFIED + PKT-PRV-039 DEFERRED_DRAFT (seam: lifecycle roundtrip will preserve future provider install policy fields) | 05, 30, 41, packet | 2026-03-30 | preserve provider install/bootstrap policy fields across lifecycle commands |
+
+### Phase 1.4 — Installable Project Baseline and Managed Asset Synchronization
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-LFC-011 | Installable baseline inventory and sync-mode classification | READY_TO_START | Codex | workspace | needs Phase 1 VERIFIED + Phase 2.3 VERIFIED | 04, 05, 48, packet | 2026-04-02 | classify tracked baseline assets vs generated outputs vs runtime-only state so install/bootstrap stop relying on a minimal scaffold worldview |
+| PKT-LFC-012 | Shared baseline sync engine for lifecycle and bootstrap | WAITING_ON_DEPENDENCIES | Codex | workspace | needs PKT-LFC-011 VERIFIED | 05, 48, 56, packet | 2026-04-02 | introduce a common baseline sync seam instead of ad hoc file copy lists in lifecycle/bootstrap paths |
+| PKT-LFC-013 | Converge fresh-install and release-bootstrap on baseline sync | WAITING_ON_DEPENDENCIES | Codex | workspace | needs PKT-LFC-012 VERIFIED + PKT-RLS-011 VERIFIED | 05, 33, 43, 48, 56, packet | 2026-04-02 | make clean-project install, existing-project refresh, and self-host bootstrap use the same managed baseline rules |
 
 ### Phase 2 — Release / Audit / Ledger / Release Please
 

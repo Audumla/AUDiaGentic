@@ -24,6 +24,7 @@ AUDiaGentic is designed so later features layer on top of stable earlier seams. 
 ## Forbidden redesigns by phase
 
 - Phase 2 must not redesign lifecycle.
+- Phase 1.4 may refine how lifecycle/bootstrap apply the managed project baseline, but it must do so by converging install/bootstrap onto one shared sync seam rather than creating a second installer model.
 - Phase 3 must not redesign release file ownership.
 - Phase 4 must not redesign job state.
 - Phase 4.1 must not redesign provider selection or adapter contracts.
