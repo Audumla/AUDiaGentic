@@ -65,6 +65,19 @@ Prefer the short, defaults-first form:
 Review the current project state and call out any gaps.
 ```
 
+When a provider/tag default template exists under `.audiagentic/prompts/<tag>/`, the shortest
+form is also valid:
+
+```text
+@r-cline
+```
+
+In that case the bridge should:
+- resolve the provider from the suffix
+- load the provider or shared default template
+- create the default job/subject identity if none is supplied
+- preserve provenance through normalization
+
 The bridge should accept the long-form canonical names as well:
 
 - `provider`
@@ -78,6 +91,33 @@ and the common aliases:
 - `ctx` -> `context`
 - `out` -> `output`
 - `t` -> `template`
+
+## Tag and provider aliases
+
+Centralized in `.audiagentic/prompt-syntax.yaml`. Available shortcuts:
+
+**Tag aliases:**
+
+- `@p` → `@plan`
+- `@i` → `@implement`
+- `@r` → `@review`
+- `@a` → `@audit`
+- `@c` → `@check-in-prep`
+
+**Provider aliases:**
+
+- `cln` → `cline`
+- `cld` → `claude`
+- `cx` → `codex`
+- `gm` → `gemini`
+- `cp` → `copilot`
+
+**Combined shortcuts:**
+
+- `@r-cln` → `@review provider=cline`
+- `@i-cld` → `@implement provider=claude`
+- `@p-cx` → `@plan provider=codex`
+- (and all other tag+provider combinations)
 
 ## Skills
 

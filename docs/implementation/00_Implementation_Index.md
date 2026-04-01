@@ -47,12 +47,18 @@ This implementation pack is the **end-to-end staged build book** for AUDiaGentic
 ## Packet directories
 
 - `packets/phase-0/`
+- `packets/phase-0-1/`
+- `packets/phase-0-2/`
 - `packets/phase-1/`
+- `packets/phase-1-1/` through `phase-1-3/`
 - `packets/phase-2/`
+- `packets/phase-2-1/` through `phase-2-3/`
 - `packets/phase-3/`
-- `packets/phase-4/`
-- `packets/phase-5/`
-- `packets/phase-6/`
+- `packets/phase-3-1/` through `phase-3-4/`
+- `packets/phase-4/` (includes PKT-PRV-001 through PKT-PRV-055 + PKT-SRV-001)
+- `packets/phase-5/` (future)
+- `packets/phase-6/` (future)
+- `packets/phase-7/` through `phase-11/` (future extensions)
 
 ## Draft docs
 
@@ -60,8 +66,8 @@ This implementation pack is the **end-to-end staged build book** for AUDiaGentic
 - `29_DRAFT_Performance_and_Scale_Guidance.md`
 - `30_DRAFT_Developer_Onboarding.md`
 - `34_DRAFT_Prompt_Tagged_Workflow_Launch_and_Review_Loop.md`
-- `35_DRAFT_Provider_Live_Input_and_Interactive_Session_Control.md`
-- `36_DRAFT_Provider_Structured_Completion_and_Result_Normalization.md`
+- `35_Provider_Live_Input_and_Interactive_Session_Control.md`
+- `36_Provider_Structured_Completion_and_Result_Normalization.md`
 - `37_DRAFT_Provider_Optimization_and_Shared_Workflow_Extensibility.md`
 - `44_DRAFT_Canonical_Prompt_Entry_and_Bridge_End_State.md`
 - `42_Phase_3_4_Job_Control_and_Running_Job_Cancellation.md`
@@ -87,6 +93,19 @@ This implementation pack is the **end-to-end staged build book** for AUDiaGentic
 - `52_Phase_10_Coordinator_Consumption_Seam_Build_Book.md`
 - `53_Phase_11_Pluggable_External_Tool_Connectivity_Build_Book.md`
 - `54_Build_Status_Registry_Extension_For_Phases_7_11.md`
+
+## Claude-specific provider docs (Phase 4.6 extensions)
+
+**Overview:**
+- `20_Claude_Prompt_Trigger_Runbook.md` (both Option A + Option B phases)
+
+**Option A (baseline wrapper — PKT-PRV-033):**
+- `34_Claude_Option_A_Completion_Checklist.md` (detailed step-by-step, ~30 min)
+
+**Option B (native hooks — PKT-PRV-055):**
+- `33_Claude_Native_Hook_Runbook.md` (high-level runbook)
+- `35_Claude_Option_B_Implementation_Guide.md` (detailed step-by-step with code, ~70 min)
+- `specifications/architecture/45_DRAFT_Claude_UserPromptSubmit_Hook_Contract.md` (hook contract spec)
 - `29_Provider_Live_Stream_Progress_Capture_Assessment.md`
 - `30_Provider_Live_Input_Interactive_Session_Assessment.md`
 - `31_Provider_Structured_Completion_And_Result_Normalization_Matrix.md`

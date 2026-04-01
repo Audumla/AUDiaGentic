@@ -73,6 +73,33 @@ The repository already contains the local-openai bridge wrapper:
 The remaining work for local-openai is any future hookless UI integration beyond the existing
 bridge path.
 
+## Phase 4.9 live stream and progress capture
+
+local-openai is a bridge-only provider for this phase.
+
+Recommended method:
+- preserve raw response/output transport details in runtime logs
+- emit AUDiaGentic-owned stream milestones from the bridge
+- do not expect rich native progress events from the backend
+
+## Phase 4.10 live input and interactive session control
+
+local-openai is a record-first provider for this phase.
+
+Recommended method:
+- capture input intent and persist it against the job
+- treat request/response correlation as the current executable reality
+- do not claim a durable live conversational session unless the backend explicitly provides one
+
+## Phase 4.11 structured completion and result normalization
+
+local-openai should normalize directly from the response body.
+
+Recommended method:
+- use the response body as the canonical raw result source
+- map endpoint output into the shared final-result envelope
+- avoid provider-specific hook or file-based completion machinery unless a later backend actually needs it
+
 ## Required provider-specific decisions before implementation
 - auth reference shape
 - health check command or request

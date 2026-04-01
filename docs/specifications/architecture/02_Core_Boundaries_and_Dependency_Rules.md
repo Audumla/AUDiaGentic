@@ -18,6 +18,10 @@
 - `federation`
 - `connectors`
 
+Historical docs may still mention the older `eventing` / `coordinator` / `connectivity`
+split. The canonical extension taxonomy is now `nodes`, `discovery`, `federation`, and
+`connectors`; later docs should use those names even when describing the same future seams.
+
 ## Allowed dependencies
 
 ```mermaid

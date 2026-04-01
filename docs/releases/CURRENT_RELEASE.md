@@ -8,7 +8,7 @@
 - [chg_20260331_0004] Upgraded the release workflow to run the project bootstrap path and verify installed state.
 
 ### docs
-- [chg_20260401_0001] Added the additive Phase 7-11 node/discovery/eventing/coordinator/tool-connectivity extension pack and updated the roadmap, indexes, registry, and target tree to keep it separate from baseline MVP work.
+- [chg_20260401_0001] Added the additive Phase 7-11 node/discovery/federation/coordinator/connectors extension pack and updated the roadmap, indexes, registry, and target tree to keep it separate from baseline MVP work.
 - [chg_20260401_0002] Cleaned up and aligned the additive Phase 7-11 extension docs, registry rows, and tracker wording so the new line reads consistently as additive future work.
 - [chg_20260401_0003] Added bridge mechanics and defaults-first prompt syntax guidance to `AGENTS.md` so canonical tagged prompts map cleanly into the repo-owned launcher path.
 - [chg_20260401_0004] Added a canonical prompt-entry and bridge end-state spec so every supported provider and prompt-entry surface is explicitly documented as converging on the same repo-owned bridge/launcher contract.
@@ -40,6 +40,7 @@
 - [chg_20260331_0009] Implemented the shared Phase 4.10 live-input harness and session-input CLI, with test coverage.
 - [chg_20260331_0012] Drafted Phase 4.12 provider optimization and shared workflow extensibility so shared scripts, skills, MCP tools, and wrappers can reduce token usage without locking in the future workflow model.
 - [chg_20260331_0013] Tightened Phase 4.12 to be explicitly script-first and template-driven for repeatable operations, with agents limited to the minimum intent or parameters needed by the helper.
+- [chg_20260402_0001] Deepened the Phase 4.9 through 4.11 specs and implementation docs into build-ready shared contracts, added packetized Phase 4.11 completion work, and aligned each provider with an explicit streaming/input/completion method.
 
 ### feature
 - [chg_20260330_0001] Added initial job persistence and state machine with tests.

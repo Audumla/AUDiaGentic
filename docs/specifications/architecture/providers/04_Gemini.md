@@ -65,6 +65,32 @@ The implementation runbook for Gemini prompt-trigger behavior lives at
 Use that runbook when turning the shared prompt-trigger contract into Gemini-specific
 implementation steps, hook-or-bridge wiring, and smoke tests.
 
+## Phase 4.9 live stream and progress capture
+
+Gemini is a stdout-extract provider in the first pass.
+
+Recommended method:
+- preserve raw stdout/stderr in runtime logs
+- extract only stable stream milestones from bounded wrapper output
+- keep richer event normalization guarded until the runtime shape is proven
+
+## Phase 4.10 live input and interactive session control
+
+Gemini is a record-first provider in the first pass.
+
+Recommended method:
+- persist controlled input records and correlation metadata
+- do not claim true live-session continuation until the wrapper/runtime path proves it
+
+## Phase 4.11 structured completion and result normalization
+
+Gemini should remain wrapper-first for structured completion.
+
+Recommended method:
+- use bounded prompts that request JSON-only final completion
+- normalize wrapper output into the shared result envelope
+- keep the provider in guarded status until deterministic completion parsing is proven
+
 ## Required provider-specific decisions before implementation
 - auth reference shape
 - health check command or request

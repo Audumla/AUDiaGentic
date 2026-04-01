@@ -38,6 +38,8 @@ In practice, that means the first-line tag or provider shorthand must be able to
 - if a provider cannot intercept raw prompts reliably, a repo-owned wrapper must be used
 - all trigger paths must normalize into the same `PromptLaunchRequest` shape used by Phase 3.2
 - the launcher must preserve `source.surface`, `source.provider-id`, and session provenance when available
+- a prompt may explicitly override the surface default provider via `provider=<provider-id>` in the prompt body; that resolved provider-id is the one the bridge must launch
+- a prompt consisting only of a tag or tag-provider shorthand is valid when a provider or shared default template exists for that tag; in that case the bridge supplies the template-backed default request shape
 - `@adhoc` stays feature-gated in the first launch path unless a provider packet explicitly enables it
 
 ## Trigger model

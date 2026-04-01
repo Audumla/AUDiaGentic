@@ -65,6 +65,33 @@ The implementation runbook for Claude prompt-trigger behavior lives at
 Use that runbook when turning the shared prompt-trigger contract into Claude-specific
 implementation steps, hook wiring, and smoke tests.
 
+## Phase 4.9 live stream and progress capture
+
+Claude is a wrapper-milestone provider in the first pass.
+
+Recommended method:
+- capture raw provider output through the shared bridge
+- emit AUDiaGentic-owned wrapper milestones until a stable hook-backed stream path is proven
+- keep durable stream persistence owned by AUDiaGentic
+
+## Phase 4.10 live input and interactive session control
+
+Claude is a record-first provider in the first pass.
+
+Recommended method:
+- capture and persist input intent through the shared harness
+- keep hook-assisted live-session continuation as a later enhancement, not an MVP guarantee
+- avoid claiming mid-run live input attachment until the real session behavior is proven
+
+## Phase 4.11 structured completion and result normalization
+
+Claude should prefer hook-backed or wrapper-bounded JSON completion with wrapper fallback.
+
+Recommended method:
+- request JSON-only final completion when the surface is stable enough
+- fall back to wrapper-derived normalization when the hook path is partial
+- keep the direct-versus-fallback distinction visible in persisted artifacts
+
 ## Required provider-specific decisions before implementation
 - auth reference shape
 - health check command or request
