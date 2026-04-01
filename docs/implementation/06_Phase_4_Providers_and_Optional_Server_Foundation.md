@@ -45,5 +45,6 @@ Provider live stream and progress capture are drafted in Phase 4.9.
 Provider live input and interactive session control is in progress in Phase 4.10.
 Provider structured completion and result normalization is drafted in Phase 4.11.
 Provider optimization and shared workflow extensibility is drafted in Phase 4.12.
+Canonical prompt entry and bridge end state is documented in Phase 4.13.
 
 The later Phase 7 through Phase 11 node/discovery/eventing/coordinator/connectivity line is intentionally separate and additive; it should not be treated as a rewrite of the provider foundation.

@@ -154,6 +154,11 @@
 - provider-specific live-stream packets exist before implementation begins
 - Discord remains a later consumer of the same stream contract
 
+## Phase 4.9 through 4.11 implementation tranche note
+- phases 4.9, 4.10, and 4.11 share the same runtime interaction boundary and should be implemented as one coordinated tranche
+- the packets stay separately numbered for tracking, but the implementation order should keep shared stream, input, and completion code together where possible
+- AUDiaGentic remains the owner of persistence and runtime artifact layout throughout the tranche
+
 ## Phase 4.10 draft gate
 - shared live-input and interactive-session control contract is written down
 - provider input surfaces are named for the first-wave providers, starting with Cline and Codex
@@ -175,6 +180,12 @@
 - skill, MCP, and wrapper extension points are documented without forcing a single implementation technology
 - the future workflow/task tracker remains intentionally undefined but not blocked
 - provider-specific token-reduction guidance exists before implementation begins
+
+## Phase 4.13 draft gate
+- the desired end-state for all supported providers and all CLI/prompt-entry surfaces is explicitly documented
+- the bridge/launcher contract is named as the authoritative convergence point
+- provider-specific mechanics are described as implementation details only
+- provider docs reference the end-state spec instead of redefining canonical tag meaning
 
 ## Phase 5 exit gate
 - Phase 4.4 gate is verified and provider execution docs are frozen
