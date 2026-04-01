@@ -68,3 +68,5 @@ Total changes: 63
 - Added bridge mechanics and defaults-first prompt syntax guidance to `AGENTS.md` so canonical tagged prompts map cleanly into the repo-owned launcher path.
 - Added a canonical prompt-entry and bridge end-state spec so every supported provider and prompt-entry surface is explicitly documented as converging on the same repo-owned bridge/launcher contract.
 - Consolidated the unimplemented Phase 4.9 through Phase 4.11 runtime interaction work into a single shared provider-session I/O tranche while keeping the packet numbering intact.
+- Folded the Phase 7+ node/discovery/federation/connectors extension layers into the canonical dependency rules, common contracts, target code tree, and live build registry.
+- Tightened the prompt-trigger rollout assessment and the live-stream/live-input specs with explicit Codex reference mechanics, guarded-provider graduation criteria, and the shared 4.9–4.11 runtime boundary notes.
