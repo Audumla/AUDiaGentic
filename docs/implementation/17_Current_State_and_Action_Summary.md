@@ -21,13 +21,13 @@ The current state is:
 - prompt-level `provider=` directives now explicitly override a surface default provider, so a Codex-launched prompt can intentionally hand off to Cline or another supported provider when the prompt asks for it
 - Codex now has an explicit preflight contract that validates `AGENTS.md` and the canonical skill files before prompt-trigger launch
 - `.8` project release bootstrap and workflow activation is complete so the repository can install itself using its own release processes
-- `Phase 0.3` repository domain refactor and package realignment is now defined as the next structural checkpoint; it freezes the migration map, target tree, ownership boundaries, and compatibility rules before more non-refactor implementation resumes
+- `Phase 0.3` repository domain refactor and package realignment is now verified end to end: the checkpoint docs are frozen, the code/package move is complete, and the final validation gate has passed
 - the refactor brief needed additional detail around package/import strategy, compatibility shims, deterministic tool placement, installable-baseline preservation, contracts/schemas location, test layout, and cross-domain dependency rules; those clarifications are now captured in the new Phase 0.3 spec and packets
-- the Phase 0.3 checkpoint now has a stronger operational freeze note in the live registry, and later `READY_TO_START` non-refactor packets explicitly note that they are paused by the checkpoint
-- `PKT-FND-010` now requires `repository-inventory.md`, `migration-map.md`, `ambiguity-report.md`, and `public-import-surface.md`, all created from canonical templates under `docs/implementation/refactor/phase-0-3/`
-- `PKT-FND-011` is now explicitly responsible for freezing the new target tree, ownership map, repository-domain dependency rules, public import surface, shim scope, extension-root placement, and the definition of broad code motion before `PKT-FND-012` may start
+- the Phase 0.3 checkpoint freeze did its job during the refactor window; with `PKT-FND-013` verified, later packets are now governed by their own dependencies again
+- `PKT-FND-010` is now complete at the checkpoint-doc level: `repository-inventory.md`, `migration-map.md`, `ambiguity-report.md`, and `public-import-surface.md` exist and capture the live repository baseline for the refactor
+- `PKT-FND-011` is now complete at the checkpoint-doc level: the new target tree, ownership map, repository-domain dependency rules, public import surface, shim scope, extension-root placement, and broad-code-motion definition are frozen before `PKT-FND-012`
 - `Phase 1.4` installable project baseline sync is now in motion, with the first packet freezing the real managed baseline inventory so lifecycle/bootstrap can converge on it instead of a minimal scaffold
-- only review/merge completion of `PKT-LFC-011` should continue during the checkpoint; no new `Phase 1.4` implementation beyond that should start until `PKT-FND-013` is verified
+- `Phase 1.4` is no longer blocked by the structural checkpoint; the next remaining gate is review/verification of `PKT-LFC-011` before `PKT-LFC-012` can begin
 - `.9` provider live stream and progress capture is in progress; the current executable pass tees stdout/stderr and persists raw runtime logs, while normalized progress records remain the next shared writer step
 - `.10` provider live input and interactive session control is in progress; the current harness records and persists session input, while full live-session attachment remains a later manager-level extension
 - raw provider session keys are now explicitly treated as non-log-safe material; AUDiaGentic should preserve only redacted session handles in general runtime artifacts until a later secure-session reference/store seam is implemented
@@ -139,9 +139,7 @@ packet-level status and the exact follow-on limitations.
 
 ## Immediate action list
 
-1. Start `PKT-FND-010` and complete the Phase 0.3 repository inventory/migration map before new non-refactor implementation resumes
-2. Freeze the refactor target tree, ownership map, and dependency rules through `PKT-FND-011` before broad code motion begins
-3. Implement the package/import migration and compatibility-shim rules in `PKT-FND-012` only after the structural target is frozen
-4. Finish the structural checkpoint with `PKT-FND-013` so docs, tests, and validation reflect only the refactored layout
-5. Resume `PKT-LFC-012` and `PKT-LFC-013` after the Phase 0.3 checkpoint is verified
-6. Continue using the build registry as the single live source of packet status
+1. Review and merge `PKT-LFC-011` so the installable-baseline sync engine can start on top of the verified refactored structure
+2. Start `PKT-LFC-012` once `PKT-LFC-011` is verified
+3. Continue using the build registry as the single live source of packet status
+4. Keep the legacy shim roots stable for one checkpoint while new work targets the canonical repository-domain paths

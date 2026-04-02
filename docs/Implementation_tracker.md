@@ -27,7 +27,7 @@ Current extension slots and checkpoints:
 - `.6` = provider prompt-trigger launch behavior, agent instruction surfaces, and wrapper/bridge invocation
 - `.7` = provider availability, auto-install, and bootstrap orchestration
 - `.8` = project release bootstrap and workflow activation using the project's own release machinery
-- `Phase 0.3` = repository domain refactor and package realignment checkpoint; execute this structural correction before new non-refactor implementation resumes
+- `Phase 0.3` = repository domain refactor and package realignment checkpoint; discovery, freeze, code move, and final validation are now complete
 - `Phase 1.4` = installable project baseline and managed asset synchronization for clean/existing project setup
 - `.9` = provider live stream and progress capture, with Cline and Codex as the first-wave validation providers; part of the shared 4.9–4.11 provider session I/O and completion tranche for implementation reuse only
 - `.10` = provider live input and interactive session control, with Cline and Codex as the first-wave validation providers; part of the shared 4.9–4.11 provider session I/O and completion tranche for implementation reuse only
@@ -60,9 +60,9 @@ At the time of this pack:
 - Codex now has an explicit preflight contract that validates `AGENTS.md` and the canonical skill files before launch
 - `.7` provider auto-install orchestration is now drafted and awaiting implementation packets
 - `.8` project release bootstrap and workflow activation is complete so the project can install itself using its own release processes
-- `Phase 0.3` is now defined as the next structural checkpoint so the repository domain refactor, target tree freeze, import strategy, and cleanup work happen before new non-refactor implementation resumes
+- `Phase 0.3` is now verified: repository inventory, migration mapping, ambiguity capture, structural freeze, code/package movement, and final validation are all complete in the refactor branch
 - `Phase 1.4` is now defined and its first packet has frozen the managed install baseline inventory so lifecycle/bootstrap can converge on the repository's real installable baseline instead of a minimal scaffold
-- only review/merge completion of `PKT-LFC-011` should continue during the checkpoint; no new `Phase 1.4` implementation beyond that should start until `PKT-FND-013` is verified
+- `Phase 1.4` is no longer held by the structural checkpoint; `PKT-LFC-011` review/verification is now the next gate before `PKT-LFC-012` resumes
 - `.9` provider live stream and progress capture is now implementation-ready at the spec/build-doc level so AUDiaGentic can own console mirroring and runtime persistence while providers emit progress; it is part of the shared 4.9–4.11 provider session I/O and completion tranche
 - `.10` provider live input and interactive session control is in progress; the shared harness is implemented and test-covered, and Cline/Codex are next; it is part of the shared 4.9–4.11 provider session I/O and completion tranche
 - prompt-syntax profiles now control the canonical shorthand names, so tag and argument aliases can be adjusted without changing the parser code

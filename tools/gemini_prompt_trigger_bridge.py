@@ -11,7 +11,7 @@ if str(REPO_ROOT) not in sys.path:
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from audiagentic.jobs.prompt_trigger_bridge import run
+from audiagentic.execution.jobs.prompt_trigger_bridge import run
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 # PKT-FND-013 — Documentation, tests, and validation cleanup after refactor
 
 **Phase:** Phase 0.3  
-**Status:** WAITING_ON_DEPENDENCIES  
+**Status:** VERIFIED  
 **Owner:** Foundations + Docs  
 **Scope:** workspace
 
@@ -35,3 +35,7 @@ Finish the refactor by cleaning docs, tests, configuration paths, and validation
 - refactor mapping and refactor notes exist
 - docs, tests, and build references use the new structure consistently
 - the repository is ready for post-refactor implementation work
+
+## Verification note
+
+Verified on 2026-04-02 after active docs/examples/build references were updated to canonical refactored paths, `docs/implementation/refactor/phase-0-3/final-validation-report.md` was created, and the checkpoint validation suite plus legacy-path scan passed.

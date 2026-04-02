@@ -12,7 +12,7 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from tests.helpers import sandbox as sandbox_helper
-from audiagentic.release.fragments import record_change_event
+from audiagentic.runtime.release.fragments import record_change_event
 
 
 def test_release_bootstrap_creates_install_and_release_artifacts(tmp_path: Path) -> None:
