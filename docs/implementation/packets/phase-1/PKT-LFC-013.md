@@ -13,6 +13,7 @@ Refactor fresh install and project release bootstrap to use the shared baseline 
 
 - `PKT-LFC-012` VERIFIED
 - `PKT-RLS-011` VERIFIED
+- `PKT-FND-013` VERIFIED
 
 ## Expected implementation surface
 

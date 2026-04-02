@@ -48,6 +48,16 @@ Leaves behind:
 - prompt-launch policy block in ProjectConfig
 - fixtures for ad hoc targets and multi-review aggregation
 
+### Phase 0.3 — Repository domain refactor and package realignment
+
+Execute the repository-wide structural refactor before further non-refactor implementation continues so later work lands on a maintained domain-oriented structure rather than the legacy layout.
+
+Leaves behind:
+- repository inventory and migration map
+- frozen target tree, ownership boundaries, and dependency directions for the new domains
+- package/import strategy and compatibility-shim rules
+- refactor cleanup plan for docs, tests, and build configuration
+
 ### Phase 1 — Lifecycle and project enablement
 
 Build installation, update, cutover, uninstall, and project enablement into `.audiagentic/`.
