@@ -29,7 +29,7 @@ Implement Cline-specific session-input handling on top of the shared live-input 
 
 ## Files likely to change
 
-- `src/audiagentic/providers/adapters/cline.py`
+- `src/audiagentic/execution/providers/adapters/cline.py`
 - `tools/cline_prompt_trigger_bridge.py`
 - `docs/implementation/providers/25_Cline_Prompt_Trigger_Runbook.md`
 - Cline provider spec notes

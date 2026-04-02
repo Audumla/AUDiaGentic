@@ -29,7 +29,7 @@ This packet must support the following job-level model selection data:
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/jobs/*`
+- `src/audiagentic/execution/jobs/*`
 - job tests under `tests/unit/jobs/` and `tests/integration/jobs/`
 
 ### It may read from
@@ -51,12 +51,12 @@ This packet owns the following implementation surface:
 
 ## Integration points
 
-- `src/audiagentic/jobs/records.py`
-- `src/audiagentic/jobs/store.py`
-- `src/audiagentic/jobs/state_machine.py`
-- `src/audiagentic/jobs/packet_runner.py`
-- `src/audiagentic/jobs/stages.py`
-- `src/audiagentic/jobs/release_bridge.py`
+- `src/audiagentic/execution/jobs/records.py`
+- `src/audiagentic/execution/jobs/store.py`
+- `src/audiagentic/execution/jobs/state_machine.py`
+- `src/audiagentic/execution/jobs/packet_runner.py`
+- `src/audiagentic/execution/jobs/stages.py`
+- `src/audiagentic/execution/jobs/release_bridge.py`
 
 ## Tests to add or update
 

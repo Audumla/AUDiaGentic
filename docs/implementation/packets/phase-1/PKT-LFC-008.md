@@ -28,7 +28,7 @@ This packet must recognize and preserve the new tracked config fields introduced
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/lifecycle/*` (validation and install/update logic)
+- `src/audiagentic/runtime/lifecycle/*` (validation and install/update logic)
 - lifecycle tests under `tests/unit/lifecycle/` and `tests/e2e/lifecycle/`
 
 ### It may read from
@@ -49,10 +49,10 @@ This packet owns the following implementation surface:
 
 ## Integration points
 
-- `src/audiagentic/lifecycle/fresh_install.py`
-- `src/audiagentic/lifecycle/update_dispatch.py`
-- `src/audiagentic/lifecycle/cutover.py`
-- `src/audiagentic/lifecycle/uninstall.py`
+- `src/audiagentic/runtime/lifecycle/fresh_install.py`
+- `src/audiagentic/runtime/lifecycle/update_dispatch.py`
+- `src/audiagentic/runtime/lifecycle/cutover.py`
+- `src/audiagentic/runtime/lifecycle/uninstall.py`
 - `tests/integration/test_example_scaffold.py`
 - `tests/e2e/lifecycle/test_fresh_install.py`
 

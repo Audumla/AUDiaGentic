@@ -16,12 +16,11 @@ If this document is not updated, the implementation state is considered unreliab
 
 ## Structural checkpoint freeze
 
-While `Phase 0.3` is active:
-- no packet outside `Phase 0.3` may be newly claimed unless explicitly exempted in this registry
-- review or merge completion of already-near-complete work may continue only when the relevant phase note explicitly allows it
-- `Phase 1.4` is on checkpoint hold except for review or merge completion of `PKT-LFC-011`
+The `Phase 0.3` structural checkpoint is now complete.
 
-This freeze note overrides older packet-local `READY_TO_START` states until `PKT-FND-013` is verified.
+Historical note:
+- while `Phase 0.3` was active, later packet-local readiness was overridden by the checkpoint freeze
+- that temporary freeze ended when `PKT-FND-013` was verified
 
 ---
 
@@ -128,7 +127,7 @@ The registry records the active baseline phases and the later additive extension
 | Phase 1.1 | `VERIFIED` | lifecycle preservation of .1 config fields complete |
 | Phase 1.2 | `VERIFIED` | lifecycle preservation of prompt-launch config complete |
 | Phase 1.3 | `DEFERRED_DRAFT` | lifecycle preservation of provider auto-install policy fields drafted |
-| Phase 1.4 | `IN_PROGRESS` | installable project baseline and managed asset synchronization is no longer on checkpoint hold; `PKT-FND-013` is verified, so the next remaining gate is review/verification of `PKT-LFC-011` before `PKT-LFC-012` can start |
+| Phase 1.4 | `VERIFIED` | installable project baseline and managed asset synchronization is complete: inventory freeze, shared baseline-sync engine, and lifecycle/bootstrap convergence are all verified |
 | Phase 2 | `VERIFIED` | phase 2 gate complete |
 | Phase 2.1 | `VERIFIED` | release/ledger updates for .1 fields complete |
 | Phase 2.2 | `VERIFIED` | release/audit handling for prompt/review metadata complete |
@@ -192,7 +191,7 @@ The registry records the active baseline phases and the later additive extension
 |---|---|---|---|---|---|---|---|---|
 | PKT-FND-010 | Repository inventory, migration map, and ambiguity report | VERIFIED | Codex | workspace | needs current baseline verified + 49 spec in place | 02, 03, 49, 57, packet | 2026-04-02 | repository inventory, migration map, ambiguity report, and public import surface are now seeded and reviewed against the current repo state |
 | PKT-FND-011 | Target tree, ownership, and dependency freeze for domain refactor | VERIFIED | Codex | workspace | needs PKT-FND-010 VERIFIED | 02, 03, 05, 49, 57, packet | 2026-04-02 | target tree, ownership map, and canonical repository-domain dependency rules are frozen for the refactor checkpoint |
-| PKT-FND-012 | Package/import strategy, compatibility shims, and code movement | VERIFIED | Codex | workspace | needs PKT-FND-011 VERIFIED | 03, 49, 57, packet | 2026-04-02 | slices `12A` through `12E` completed; canonical modules now live under the frozen repository domains with forwarding shims preserved for the public import surface |
+| PKT-FND-012 | Package/import strategy, compatibility shims, and code movement | VERIFIED | Codex | workspace | needs PKT-FND-011 VERIFIED | 03, 49, 57, packet | 2026-04-02 | slices `12A` through `12E` completed; canonical modules now live under the frozen repository domains and the temporary shim roots have been retired |
 | PKT-FND-013 | Documentation, tests, and validation cleanup after refactor | VERIFIED | Codex | workspace | needs PKT-FND-012 VERIFIED | 02, 03, 49, 57, packet | 2026-04-02 | active docs/examples/build references now use the refactored structure, final validation is recorded, and the checkpoint is complete |
 
 ### Phase 1 — Lifecycle and Project Enablement
@@ -229,9 +228,9 @@ The registry records the active baseline phases and the later additive extension
 
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
-| PKT-LFC-011 | Installable baseline inventory and sync-mode classification | READY_FOR_REVIEW | Codex | workspace | needs Phase 1 VERIFIED + Phase 2.3 VERIFIED | 04, 05, 48, packet | 2026-04-02 | canonical inventory table and sync modes are now frozen so install/bootstrap no longer treat the minimal scaffold as the full install baseline |
-| PKT-LFC-012 | Shared baseline sync engine for lifecycle and bootstrap | WAITING_ON_DEPENDENCIES | Codex | workspace | needs PKT-LFC-011 VERIFIED + PKT-FND-013 VERIFIED (checkpoint: structural refactor completes before baseline-sync engine implementation resumes) | 05, 48, 56, packet | 2026-04-02 | introduce a common baseline sync seam instead of ad hoc file copy lists in lifecycle/bootstrap paths |
-| PKT-LFC-013 | Converge fresh-install and release-bootstrap on baseline sync | WAITING_ON_DEPENDENCIES | Codex | workspace | needs PKT-LFC-012 VERIFIED + PKT-RLS-011 VERIFIED + PKT-FND-013 VERIFIED | 05, 33, 43, 48, 56, packet | 2026-04-02 | make clean-project install, existing-project refresh, and self-host bootstrap use the same managed baseline rules after the structural checkpoint completes |
+| PKT-LFC-011 | Installable baseline inventory and sync-mode classification | VERIFIED | Codex | workspace | needs Phase 1 VERIFIED + Phase 2.3 VERIFIED | 04, 05, 48, packet | 2026-04-02 | canonical inventory table and sync modes are frozen and reviewed; this packet now unlocks the shared baseline-sync engine work |
+| PKT-LFC-012 | Shared baseline sync engine for lifecycle and bootstrap | VERIFIED | Codex | workspace | needs PKT-LFC-011 VERIFIED + PKT-FND-013 VERIFIED (checkpoint: structural refactor completes before baseline-sync engine implementation resumes) | 05, 48, 56, packet | 2026-04-02 | `runtime/lifecycle/baseline_sync.py` now provides the shared managed-baseline seam with created/refreshed/preserved/skipped/excluded reporting, and baseline seeding/bootstrap have been rewired onto it |
+| PKT-LFC-013 | Converge fresh-install and release-bootstrap on baseline sync | VERIFIED | Codex | workspace | needs PKT-LFC-012 VERIFIED + PKT-RLS-011 VERIFIED + PKT-FND-013 VERIFIED | 05, 33, 43, 48, 56, packet | 2026-04-02 | fresh install, legacy cutover, and release bootstrap now all use the shared managed baseline-sync seam and the focused lifecycle/bootstrap validation suite is green |
 
 ### Phase 2 — Release / Audit / Ledger / Release Please
 

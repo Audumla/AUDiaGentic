@@ -33,8 +33,8 @@ This packet must report the following data points:
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/providers/status.py`
-- `src/audiagentic/cli/main.py`
+- `src/audiagentic/execution/providers/status.py`
+- `src/audiagentic/channels/cli/main.py`
 - `tools/provider_status.py`
 - `tests/unit/providers/test_provider_status.py`
 - `tests/integration/providers/test_provider_status_cli.py`
@@ -48,7 +48,7 @@ This packet owns the following implementation surface:
 
 ### It must not edit directly
 - catalog or provider schema files unless a dependency explicitly requires it
-- model selection logic in `src/audiagentic/providers/models.py`
+- model selection logic in `src/audiagentic/execution/providers/models.py`
 - release-ledger files
 
 ## Public contracts used
@@ -68,10 +68,10 @@ This packet owns the following implementation surface:
 
 ## Integration points
 
-- `src/audiagentic/providers/catalog.py`
-- `src/audiagentic/providers/health.py`
-- `src/audiagentic/providers/models.py`
-- `src/audiagentic/cli/main.py`
+- `src/audiagentic/config/provider_catalog.py`
+- `src/audiagentic/execution/providers/health.py`
+- `src/audiagentic/execution/providers/models.py`
+- `src/audiagentic/channels/cli/main.py`
 - `tools/provider_status.py`
 - `tests/integration/providers/test_provider_status_cli.py`
 
@@ -86,7 +86,7 @@ This packet owns the following implementation surface:
 ## Recovery procedure
 
 If this packet fails mid-implementation:
-- revert changes in `src/audiagentic/providers/status.py`, `src/audiagentic/cli/main.py`, and `tools/provider_status.py`
+- revert changes in `src/audiagentic/execution/providers/status.py`, `src/audiagentic/channels/cli/main.py`, and `tools/provider_status.py`
 - remove the new provider-status tests
 - restore the registry and tracker rows if they were partially updated
 - rerun the focused provider-status test set before retrying

@@ -20,8 +20,8 @@ This packet is placed in Phase 4 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/providers/selection.py`
-- `src/audiagentic/providers/health.py`
+- `src/audiagentic/execution/providers/selection.py`
+- `src/audiagentic/execution/providers/health.py`
 - `tests/integration/providers/test_selection.py`
 
 ### It may read from

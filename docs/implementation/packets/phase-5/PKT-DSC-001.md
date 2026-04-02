@@ -20,7 +20,7 @@ This packet is placed in Phase 5 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/overlay/discord/subscriber.py`
+- `src/audiagentic/channels/discord/subscriber.py`
 - `tests/unit/discord/test_subscriber.py`
 
 ### It may read from

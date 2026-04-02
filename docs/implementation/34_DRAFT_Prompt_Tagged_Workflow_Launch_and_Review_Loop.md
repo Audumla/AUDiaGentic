@@ -45,7 +45,7 @@ The implementation should choose one syntax and freeze it before coding.
 - `docs/specifications/architecture/25_DRAFT_Prompt_Tagged_Workflow_Launch_and_Review_Loop.md`
 - `docs/specifications/architecture/12_Workflow_Profiles_and_Extensibility.md`
 - `docs/specifications/architecture/08_Agent_Jobs_MVP.md`
-- `src/audiagentic/jobs/`
+- `src/audiagentic/execution/jobs/`
 - CLI or VS Code prompt entry path
 
 ## Next steps

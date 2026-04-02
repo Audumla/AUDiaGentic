@@ -39,11 +39,11 @@ def request_job_control(project_root, job_id, action, reason, requested_by):
 ## Files to create/update
 
 - `docs/specifications/architecture/32_DRAFT_Job_Control_and_Running_Job_Cancellation.md`
-- `src/audiagentic/jobs/state_machine.py`
-- `src/audiagentic/jobs/packet_runner.py`
-- `src/audiagentic/jobs/store.py`
-- `src/audiagentic/jobs/approvals.py`
-- `src/audiagentic/jobs/control.py` or equivalent job-control module
+- `src/audiagentic/execution/jobs/state_machine.py`
+- `src/audiagentic/execution/jobs/packet_runner.py`
+- `src/audiagentic/execution/jobs/store.py`
+- `src/audiagentic/execution/jobs/approvals.py`
+- `src/audiagentic/execution/jobs/control.py` or equivalent job-control module
 - job-control CLI or service surface
 - job-control tests and fixtures
 
@@ -79,12 +79,12 @@ def request_job_control(project_root, job_id, action, reason, requested_by):
 
 ## Likely files or surfaces
 
-- `src/audiagentic/jobs/control.py`
-- `src/audiagentic/jobs/state_machine.py`
-- `src/audiagentic/jobs/packet_runner.py`
-- `src/audiagentic/jobs/store.py`
-- `src/audiagentic/jobs/approvals.py`
-- `src/audiagentic/cli/main.py`
+- `src/audiagentic/execution/jobs/control.py`
+- `src/audiagentic/execution/jobs/state_machine.py`
+- `src/audiagentic/execution/jobs/packet_runner.py`
+- `src/audiagentic/execution/jobs/store.py`
+- `src/audiagentic/execution/jobs/approvals.py`
+- `src/audiagentic/channels/cli/main.py`
 - job-control CLI or service surface
 - job-control tests
 

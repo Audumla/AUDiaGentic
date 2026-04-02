@@ -32,7 +32,7 @@ update, cutover, uninstall, or migration reporting.
 
 ## Likely files or surfaces
 
-- `src/audiagentic/lifecycle/*`
+- `src/audiagentic/runtime/lifecycle/*`
 - `src/audiagentic/contracts/*`
 - `docs/examples/fixtures/*.yaml`
 - `docs/examples/fixtures/*.json`

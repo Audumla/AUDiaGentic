@@ -20,7 +20,7 @@ This packet is placed in Phase 5 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/overlay/discord/approval_publish.py`
+- `src/audiagentic/channels/discord/approval_publish.py`
 - `tests/integration/discord/test_approval_publish.py`
 
 ### It may read from

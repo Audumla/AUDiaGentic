@@ -37,7 +37,7 @@ At minimum classify:
 - `src/audiagentic/jobs`
 - `src/audiagentic/providers`
 - `src/audiagentic/server`
-- `src/audiagentic/overlay/discord`
+- `src/audiagentic/channels/discord`
 - `tools/`
 - `tests/`
 - `docs/schemas/`

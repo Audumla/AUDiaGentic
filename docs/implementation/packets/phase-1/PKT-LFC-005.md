@@ -21,7 +21,7 @@ This packet is placed in Phase 1 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/lifecycle/cutover.py`
+- `src/audiagentic/runtime/lifecycle/cutover.py`
 - `tests/e2e/lifecycle/test_cutover.py`
 
 ### It may read from

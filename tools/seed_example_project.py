@@ -7,7 +7,11 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCAFFOLD_ROOT = REPO_ROOT / "docs" / "examples" / "project-scaffold"
+SRC_ROOT = REPO_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+from audiagentic.runtime.lifecycle.baseline_sync import ensure_project_layout, sync_managed_baseline
 
 
 def seed_example_project(target: Path, overwrite: bool = False) -> None:
@@ -16,18 +20,8 @@ def seed_example_project(target: Path, overwrite: bool = False) -> None:
             raise FileExistsError(f"target not empty: {target}")
     target.mkdir(parents=True, exist_ok=True)
 
-    docs_root = target / "docs"
-    for subdir in ("specifications", "implementation", "releases", "decisions"):
-        (docs_root / subdir).mkdir(parents=True, exist_ok=True)
-
-    audi_root = target / ".audiagentic"
-    audi_root.mkdir(parents=True, exist_ok=True)
-    (audi_root / "runtime").mkdir(parents=True, exist_ok=True)
-
-    for name in ("project", "components", "providers"):
-        source = SCAFFOLD_ROOT / ".audiagentic" / f"{name}.yaml.example"
-        destination = audi_root / f"{name}.yaml"
-        destination.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    ensure_project_layout(target)
+    sync_managed_baseline(target, source_root=REPO_ROOT)
 
 
 def run(argv: list[str]) -> int:

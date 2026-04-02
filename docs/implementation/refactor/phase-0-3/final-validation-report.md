@@ -17,11 +17,11 @@
   - stable provider config/catalog/registry helpers moved to `src/audiagentic/config/*`
   - server seam moved to `src/audiagentic/channels/server/service_boundary.py`
   - provider streaming helper moved to `src/audiagentic/streaming/provider_streaming.py`
-- what is still shimmed:
-  - legacy public package roots under `src/audiagentic/cli/`, `src/audiagentic/lifecycle/`, `src/audiagentic/release/`, `src/audiagentic/jobs/`, `src/audiagentic/providers/`, and `src/audiagentic/server/`
-  - selected legacy adapter/config modules kept as forwarding shims for one checkpoint
+- what was removed after checkpoint validation:
+  - legacy compatibility roots under `src/audiagentic/cli/`, `src/audiagentic/lifecycle/`, `src/audiagentic/release/`, `src/audiagentic/jobs/`, `src/audiagentic/providers/`, `src/audiagentic/server/`, and `src/audiagentic/overlay/`
+  - forwarding shim modules that existed only to preserve the transition window
 - what legacy imports remain and why:
-  - public import surfaces listed in `docs/implementation/refactor/phase-0-3/public-import-surface.md` remain shimmed for one checkpoint so documented entrypoints, tools, workflows, and install/bootstrap paths stay compatible during the transition
+  - no active legacy import roots should remain in the live codebase; any remaining references are historical records or runtime artifacts
 - what failed and is deferred:
   - no structural checkpoint failures remain
   - later cleanup/splitting work is still deferred for `src/audiagentic/execution/jobs/store.py`, the persistence half of `src/audiagentic/execution/jobs/reviews.py`, and any future streaming-adapter extraction beyond `provider_streaming.py`
@@ -47,7 +47,6 @@
 
 ## Unresolved Items
 
-- legacy forwarding shims remain for one structural checkpoint by policy
-- follow-on owner: later cleanup packet or release after shim-removal decision
+- no active shim roots remain; follow-on work should target only canonical domain paths
 - streaming adapter extraction beyond `provider_streaming.py` remains a future refactor, not a Phase 0.3 blocker
 - runtime-state splits for job/review persistence remain future cleanups, not Phase 0.3 blockers

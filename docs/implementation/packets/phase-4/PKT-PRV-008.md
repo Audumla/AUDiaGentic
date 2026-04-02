@@ -20,7 +20,7 @@ This packet is placed in Phase 4 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/providers/adapters/continue_.py`
+- `src/audiagentic/execution/providers/adapters/continue_.py`
 - `tests/integration/providers/test_continue.py`
 
 ### It may read from

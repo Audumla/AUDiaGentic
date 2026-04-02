@@ -9,7 +9,7 @@
 
 ## Public import surface rule
 
-For the Phase 0.3 refactor, the following are treated as public import or path surfaces and must be preserved through approved shims or explicit migration handling:
+For the Phase 0.3 refactor, the following are treated as public import or path surfaces and must be preserved through explicit migration handling and canonical-path updates:
 
 - console-entry and CLI-facing package paths
 - paths imported by `tools/*`
@@ -23,13 +23,13 @@ Internal-only imports may be rewritten directly during `PKT-FND-012`.
 
 | Surface | Why public | Shim/migration expectation |
 |---|---|---|
-| `audiagentic.cli.*` | console-entry and operator-facing CLI surface | preserve via wrapper or compatible import path |
-| `audiagentic.lifecycle.*` | install/update/cutover and baseline lifecycle surface | preserve one checkpoint via shim |
-| `audiagentic.release.*` | release/bootstrap/audit workflow surface | preserve one checkpoint via shim |
-| `audiagentic.jobs.*` | current execution-oriented import surface used by CLI and docs | preserve one checkpoint via shim |
-| `audiagentic.providers.*` | current provider integration surface | preserve one checkpoint via shim |
-| `audiagentic.server.*` | optional server-facing surface | preserve one checkpoint via shim |
-| `audiagentic.overlay.discord.*` | current Discord overlay/channel import surface | preserve one checkpoint via shim |
+| `audiagentic.channels.cli.*` | console-entry and operator-facing CLI surface | canonical public surface; update callers directly |
+| `audiagentic.runtime.lifecycle.*` | install/update/cutover and baseline lifecycle surface | canonical public surface; update callers directly |
+| `audiagentic.runtime.release.*` | release/bootstrap/audit workflow surface | canonical public surface; update callers directly |
+| `audiagentic.execution.jobs.*` | current execution-oriented import surface used by CLI and docs | canonical public surface; update callers directly |
+| `audiagentic.execution.providers.*` | current provider integration surface | canonical public surface; update callers directly |
+| `audiagentic.channels.server.*` | optional server-facing surface | canonical public surface; update callers directly |
+| `audiagentic.channels.discord.*` | current Discord overlay/channel import surface | canonical public surface; update callers directly when implemented |
 | `tools/*` module entrypoints | deterministic wrappers used directly | keep stable as visible entrypoints |
 | `docs/schemas/*` | schema validation inputs | no relocation in this tranche |
 | `docs/examples/*` | examples cited as stable | no relocation in this tranche |
@@ -48,9 +48,9 @@ These are likely internal-only and may be rewritten directly during `PKT-FND-012
 - test-only imports
 - `.audiagentic/runtime/**` artifacts and other local-only runtime records
 
-## Notes for PKT-FND-011
+## Post-checkpoint note
 
-- public roots above should map to forwarding/re-export shims during the checkpoint
-- no new code may be added against those legacy roots once `PKT-FND-012` begins
+- the temporary shim window is now closed because there are no external dependent projects to preserve
+- public callers inside this repo should use the canonical surfaces above directly
 - internal-only imports should be rewritten rather than shimmed
 - `.audiagentic/runtime/**` remains explicitly outside the installable public baseline even though the top-level `.audiagentic/` root stays tracked

@@ -20,7 +20,7 @@ This packet is placed in Phase 4 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/providers/adapters/gemini.py`
+- `src/audiagentic/execution/providers/adapters/gemini.py`
 - `tests/integration/providers/test_gemini.py`
 
 ### It may read from

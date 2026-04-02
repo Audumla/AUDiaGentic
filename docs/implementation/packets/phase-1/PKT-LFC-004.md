@@ -20,7 +20,7 @@ This packet is placed in Phase 1 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/lifecycle/update_dispatch.py`
+- `src/audiagentic/runtime/lifecycle/update_dispatch.py`
 - `tests/unit/lifecycle/test_update_dispatch.py`
 
 ### It may read from

@@ -20,7 +20,7 @@ This packet is placed in Phase 4 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/server/service_boundary.py`
+- `src/audiagentic/channels/server/service_boundary.py`
 - `tests/unit/server/test_service_boundary.py`
 
 ### It may read from

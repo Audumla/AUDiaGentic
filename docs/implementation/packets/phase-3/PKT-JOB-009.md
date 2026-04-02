@@ -32,10 +32,10 @@ This packet must support:
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/jobs/reviews.py`
-- additive updates in `src/audiagentic/jobs/stages.py`
-- additive updates in `src/audiagentic/jobs/records.py`
-- additive updates in `src/audiagentic/jobs/store.py`
+- `src/audiagentic/execution/jobs/reviews.py`
+- additive updates in `src/audiagentic/execution/jobs/stages.py`
+- additive updates in `src/audiagentic/execution/jobs/records.py`
+- additive updates in `src/audiagentic/execution/jobs/store.py`
 - review tests under `tests/unit/jobs/` and `tests/integration/jobs/`
 
 ### It may read from
@@ -68,9 +68,9 @@ This packet must write runtime artifacts such as:
 
 ## Integration points
 
-- `src/audiagentic/jobs/approvals.py`
-- `src/audiagentic/jobs/stages.py`
-- `src/audiagentic/jobs/release_bridge.py`
+- `src/audiagentic/execution/jobs/approvals.py`
+- `src/audiagentic/execution/jobs/stages.py`
+- `src/audiagentic/execution/jobs/release_bridge.py`
 - `docs/specifications/architecture/14_Approval_Core_and_Event_Model.md`
 
 ## Tests to add or update
@@ -97,7 +97,7 @@ Minimum cases:
 ## Recovery procedure
 
 If this packet fails mid-implementation:
-- revert `src/audiagentic/jobs/reviews.py` and additive job edits
+- revert `src/audiagentic/execution/jobs/reviews.py` and additive job edits
 - delete partial runtime review artifacts under `.audiagentic/runtime/jobs/*/reviews/`
 - rerun `python -m pytest tests/unit/jobs/test_review_aggregation.py tests/integration/jobs/test_review_loop.py`
 

@@ -20,9 +20,9 @@ This packet is placed in Phase 3 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/jobs/records.py`
-- `src/audiagentic/jobs/store.py`
-- `src/audiagentic/jobs/state_machine.py`
+- `src/audiagentic/execution/jobs/records.py`
+- `src/audiagentic/execution/jobs/store.py`
+- `src/audiagentic/execution/jobs/state_machine.py`
 - `tests/unit/jobs/test_state_machine.py`
 
 ### It may read from
