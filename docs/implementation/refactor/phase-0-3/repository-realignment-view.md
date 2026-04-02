@@ -18,12 +18,12 @@ Its purpose is to:
 |---|---|---|---|---|
 | `src/audiagentic/contracts/*` | `src/audiagentic/contracts/*` | keep as canonical contract root | high | minimal ambiguity |
 | `src/audiagentic/cli/*` | `src/audiagentic/channels/cli/*` | treat CLI as a human-facing channel surface | high | keep entrypoints thin |
-| `src/audiagentic/lifecycle/*` | `src/audiagentic/runtime/lifecycle/*` | move install/update/cutover/baseline behavior under runtime | high | legacy shim root may persist temporarily |
-| `src/audiagentic/release/*` | `src/audiagentic/runtime/release/*` | place release/audit/bootstrap under runtime concerns | medium-high | some release APIs may also feel platform-wide; keep nested under runtime for this tranche |
-| `src/audiagentic/jobs/*` | mostly `src/audiagentic/execution/jobs/*` | job orchestration, records, packet running, approvals, reviews belong to execution | high | `session_input.py` stays here in first pass, but output adapters move under `streaming/` |
+| `src/audiagentic/runtime/lifecycle/*` | `src/audiagentic/runtime/lifecycle/*` | move install/update/cutover/baseline behavior under runtime | high | legacy shim root may persist temporarily |
+| `src/audiagentic/runtime/release/*` | `src/audiagentic/runtime/release/*` | place release/audit/bootstrap under runtime concerns | medium-high | some release APIs may also feel platform-wide; keep nested under runtime for this tranche |
+| `src/audiagentic/execution/jobs/*` | mostly `src/audiagentic/execution/jobs/*` | job orchestration, records, packet running, approvals, reviews belong to execution | high | `session_input.py` stays here in first pass, but output adapters move under `streaming/` |
 | `src/audiagentic/providers/*` | mostly `src/audiagentic/execution/providers/*` | provider selection/execution/adapters belong to execution | medium | streaming/progress/session pieces may later move or share seams with `streaming/` |
 | `src/audiagentic/server/*` | `src/audiagentic/channels/server/*` | optional server is a channel surface | high | keep thin; do not let it own execution logic |
-| `src/audiagentic/overlay/discord/*` | `src/audiagentic/channels/discord/*` | Discord becomes a channel adapter in the repository-domain model | high | packet tracking may still refer to Discord separately |
+| `src/audiagentic/channels/discord/*` | `src/audiagentic/channels/discord/*` | Discord becomes a channel adapter in the repository-domain model | high | packet tracking may still refer to Discord separately |
 | `tools/*` | `tools/*` entrypoints + reusable logic under `src/audiagentic/*` | keep `tools/` as deterministic visible wrapper root | high | some current tools may need internal library extraction |
 | `tests/*` | `tests/*` mirrored to new domains | preserve centralized test root | high | test module paths will need remirroring |
 | `docs/schemas/*` | keep in place | remain canonical docs-owned schema location for this tranche | high | ownership only, not relocation |
@@ -66,11 +66,11 @@ src/audiagentic/
 
 ### CLI
 
-The CLI currently imports tool modules directly and also imports release and job entrypoints, which makes it a clear channel surface rather than a home for business logic. It should move conceptually to `channels/cli/` while keeping the actual console entrypoint thin. Observed in `src/audiagentic/cli/main.py`. fileciteturn111file0
+The CLI currently imports tool modules directly and also imports release and job entrypoints, which makes it a clear channel surface rather than a home for business logic. It should move conceptually to `channels/cli/` while keeping the actual console entrypoint thin. Observed in `src/audiagentic/channels/cli/main.py`. fileciteturn111file0
 
 ### Jobs / prompt launch
 
-`src/audiagentic/jobs/prompt_launch.py` is clearly execution-heavy: it builds job records, resolves providers/models, launches reviews, and persists launch/runtime artifacts under `.audiagentic/runtime/jobs/...`. That makes it primarily an `execution/jobs` concern with a secondary dependency on runtime persistence. fileciteturn112file0
+`src/audiagentic/execution/jobs/prompt_launch.py` is clearly execution-heavy: it builds job records, resolves providers/models, launches reviews, and persists launch/runtime artifacts under `.audiagentic/runtime/jobs/...`. That makes it primarily an `execution/jobs` concern with a secondary dependency on runtime persistence. fileciteturn112file0
 
 ### Lifecycle and release
 

@@ -20,7 +20,7 @@ This packet is placed in Phase 2 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/release/fragments.py`
+- `src/audiagentic/runtime/release/fragments.py`
 - `tests/unit/release/test_fragments.py`
 
 ### It may read from

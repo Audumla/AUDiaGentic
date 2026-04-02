@@ -64,7 +64,7 @@ def test_release_bootstrap_creates_install_and_release_artifacts(tmp_path: Path)
         result = subprocess.run(
             [
                 sys.executable,
-                str(ROOT / "src" / "audiagentic" / "cli" / "main.py"),
+                str(ROOT / "src" / "audiagentic" / "channels" / "cli" / "main.py"),
                 "release-bootstrap",
                 "--project-root",
                 str(sandbox.repo),
@@ -85,9 +85,12 @@ def test_release_bootstrap_creates_install_and_release_artifacts(tmp_path: Path)
         assert (sandbox.repo / ".audiagentic" / "components.yaml").is_file()
         assert (sandbox.repo / ".audiagentic" / "installed.json").is_file()
         assert (sandbox.repo / ".audiagentic" / "prompt-syntax.yaml").is_file()
+        assert (sandbox.repo / ".audiagentic" / "prompts" / "review" / "default.md").is_file()
+        assert (sandbox.repo / "AGENTS.md").is_file()
         assert (sandbox.repo / ".github" / "workflows" / "release-please.audiagentic.yml").is_file()
         assert (sandbox.repo / "docs" / "releases" / "AUDIT_SUMMARY.md").is_file()
         assert (sandbox.repo / "docs" / "releases" / "CHECKIN.md").is_file()
+        assert payload["baseline-sync-report"]["excluded-paths"] == [".audiagentic/runtime/**"]
         assert "codex" in (sandbox.repo / ".audiagentic" / "providers.yaml").read_text(encoding="utf-8")
 
         current_release = (sandbox.repo / "docs" / "releases" / "CURRENT_RELEASE.md").read_text(

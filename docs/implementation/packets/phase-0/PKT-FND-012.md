@@ -45,7 +45,6 @@ These tools should make the refactor mechanically checkable instead of relying o
 During every slice:
 
 - rewrite imports
-- keep promised shim coverage
 - run refactor smoke
 - update the migration map
 
@@ -53,8 +52,8 @@ During every slice:
 
 - core modules are moved into the frozen target structure
 - build/test entry points still function or failures are explicitly documented
-- stale import paths are either removed or covered by temporary shims
+- stale import paths are either removed or explicitly accounted for in the migration record
 
 ## Verification note
 
-Verified on 2026-04-02 after slices `12A` through `12E` completed, compatibility shims were left in place for the frozen public-import surface, and the checkpoint validation suite plus refactor support scripts passed.
+Verified on 2026-04-02 after slices `12A` through `12E` completed, the canonical domain paths were adopted across the active repo, the temporary shim roots were removed, and the checkpoint validation suite plus refactor support scripts passed.

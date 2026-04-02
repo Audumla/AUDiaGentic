@@ -29,7 +29,7 @@ Implement Codex-specific session-input handling on top of the shared live-input 
 
 ## Files likely to change
 
-- `src/audiagentic/providers/adapters/codex.py`
+- `src/audiagentic/execution/providers/adapters/codex.py`
 - `tools/codex_prompt_trigger_bridge.py`
 - `docs/implementation/providers/22_Codex_Prompt_Trigger_Runbook.md`
 - Codex provider spec notes

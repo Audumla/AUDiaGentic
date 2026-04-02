@@ -4,10 +4,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.runtime.lifecycle.baseline_sync import ensure_project_layout, sync_managed_baseline
 from audiagentic.runtime.lifecycle.checkpoints import write_checkpoint
 from audiagentic.runtime.lifecycle.detector import detect_installed_state
 from audiagentic.runtime.lifecycle.manifest import build_manifest, write_manifest
-from tools.seed_example_project import seed_example_project
 
 DEFAULT_VERSION = "0.1.0"
 
@@ -25,7 +25,8 @@ def apply_fresh_install(project_root: Path) -> dict:
     write_checkpoint(project_root, "planned", {"action": "fresh-install"})
     write_checkpoint(project_root, "pre-destructive", {"action": "fresh-install"})
 
-    seed_example_project(project_root, overwrite=True)
+    ensure_project_layout(project_root)
+    sync_report = sync_managed_baseline(project_root)
 
     manifest_payload = build_manifest(
         installation_kind="fresh",
@@ -42,7 +43,8 @@ def apply_fresh_install(project_root: Path) -> dict:
         "contract-version": "v1",
         "mode": "apply",
         "status": "success",
-        "completed-operations": ["create-.audiagentic", "write-configs", "write-manifest"],
+        "completed-operations": ["ensure-project-layout", "sync-managed-baseline", "write-manifest"],
+        "baseline-sync-report": sync_report,
         "warnings": [],
         "checkpoint-dir": ".audiagentic/runtime/lifecycle/checkpoints",
     }

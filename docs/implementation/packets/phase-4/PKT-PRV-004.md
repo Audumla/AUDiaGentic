@@ -20,7 +20,7 @@ This packet is placed in Phase 4 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/providers/adapters/claude.py`
+- `src/audiagentic/execution/providers/adapters/claude.py`
 - `tests/integration/providers/test_claude.py`
 
 ### It may read from

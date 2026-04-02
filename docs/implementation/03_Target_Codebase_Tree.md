@@ -76,10 +76,13 @@ Interpretation rules for this tranche:
 - `observability/` is reserved for telemetry, diagnostics, reporting, and later monitoring surfaces.
 - `nodes/`, `discovery/`, `federation/`, and `connectors/` remain reserved extension roots during this tranche and are **not** folded into the baseline repository-domain tree.
 
-## Transitional compatibility rule
+## Post-checkpoint cleanup rule
 
-Legacy package roots such as:
+The legacy compatibility roots used during `PKT-FND-012` have now been retired. The canonical tree above is the only live production package layout for current work.
 
+Removed legacy roots:
+
+- `src/audiagentic/cli/`
 - `src/audiagentic/lifecycle/`
 - `src/audiagentic/release/`
 - `src/audiagentic/jobs/`
@@ -87,7 +90,7 @@ Legacy package roots such as:
 - `src/audiagentic/server/`
 - `src/audiagentic/overlay/`
 
-may survive temporarily as compatibility shim roots during the checkpoint, but they are no longer the canonical target shape and must not receive new business logic once `PKT-FND-012` begins.
+Future packets and docs should reference the canonical domain paths directly.
 
 ## Rules
 
