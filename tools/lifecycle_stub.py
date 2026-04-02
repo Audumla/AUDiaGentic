@@ -12,7 +12,7 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from audiagentic.contracts.errors import AudiaGenticError, to_error_envelope
-from audiagentic.lifecycle.checkpoints import write_checkpoint
+from audiagentic.runtime.lifecycle.checkpoints import write_checkpoint
 
 
 def _plan_payload() -> dict:

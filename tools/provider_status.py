@@ -12,7 +12,7 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from audiagentic.contracts.errors import AudiaGenticError, to_error_envelope
-from audiagentic.providers.status import build_provider_status
+from audiagentic.execution.providers.status import build_provider_status
 
 
 def run(argv: list[str]) -> int:

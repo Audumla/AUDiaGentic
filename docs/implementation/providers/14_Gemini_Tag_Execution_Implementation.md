@@ -23,7 +23,7 @@ target Gemini environment.
 Current repo state:
 - `GEMINI.md`
 - `tools/gemini_prompt_trigger_bridge.py`
-- shared bridge harness in `src/audiagentic/jobs/prompt_trigger_bridge.py`
+- shared bridge harness in `src/audiagentic/execution/jobs/prompt_trigger_bridge.py`
 
 ## Related docs
 

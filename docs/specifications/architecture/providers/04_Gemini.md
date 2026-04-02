@@ -55,7 +55,7 @@ first-line tag to select the canonical action before the chat proceeds.
 Current repo state:
 - `GEMINI.md`
 - `tools/gemini_prompt_trigger_bridge.py`
-- shared bridge harness in `src/audiagentic/jobs/prompt_trigger_bridge.py`
+- shared bridge harness in `src/audiagentic/execution/jobs/prompt_trigger_bridge.py`
 
 ## Phase 4.6 implementation runbook
 

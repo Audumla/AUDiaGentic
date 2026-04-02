@@ -1,7 +1,10 @@
 # Audit Summary
 
-Total events: 74
+Total events: 77
 
+- chg_20260402_0011: Completed the initial slice 12B move in PKT-FND-012 by relocating the stable provider config, model-catalog, and provider-registry helpers into src/audiagentic/config/, leaving legacy shim modules in place and keeping the refactor checks green.
+- chg_20260402_0010: Started PKT-FND-012 by adding the Phase 0.3 support scripts, creating the target domain scaffolding and legacy shim placeholders for slice 12A, and recording that slice 12B is the next gated move set.
+- chg_20260402_0009: Completed the Phase 0.3 discovery/freeze checkpoint at the doc-control level by tightening the live repository inventory artifacts, freezing the canonical repository-domain dependency rules, and advancing PKT-FND-012 to READY_TO_START.
 - chg_20260402_0008: Added the remaining Phase 0.3 control details, including a stronger registry freeze note, canonical public-import and refactor artifact templates, support-script cadence rules, extension-root placement, and explicit pauses on later ready packets while the checkpoint is active.
 - chg_20260402_0007: Added Phase 0.3 checkpoint enforcement notes, artifact templates, public-import and extension-root freeze details, support-script contract notes, and baseline-preservation validation guidance so the refactor can proceed without ambiguity before code motion starts.
 - chg_20260402_0006: Tightened the checkpoint wording so Phase 1.4 is explicitly held behind the Phase 0.3 structural refactor, allowing only PKT-LFC-011 review/merge to continue until PKT-FND-013 is verified.
@@ -78,3 +81,4 @@ Total events: 74
 - chg_20260331_0012: Drafted Phase 4.12 provider optimization and shared workflow extensibility so shared scripts, skills, MCP tools, and wrappers can reduce token usage without locking in the future workflow model.
 - chg_20260331_0013: Tightened Phase 4.12 to be explicitly script-first and template-driven for repeatable operations, with agents limited to the minimum intent or parameters needed by the helper.
 - chg_20260402_0001: Expanded the Phase 4.9 through 4.11 provider-session docs into implementation-ready specs, packetized Phase 4.11 structured completion, added a secure-session follow-on seam, and aligned provider-specific streaming/input/completion methods.
+- chg_20260402_0012: Completed the Phase 0.3 repository-domain refactor checkpoint, finished the code/package move, updated active docs/examples to canonical refactored paths, fixed legacy CLI shim execution, and recorded final validation so later work can resume on the frozen structure.

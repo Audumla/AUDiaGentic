@@ -33,6 +33,8 @@ Internal-only imports may be rewritten directly during `PKT-FND-012`.
 | `tools/*` module entrypoints | deterministic wrappers used directly | keep stable as visible entrypoints |
 | `docs/schemas/*` | schema validation inputs | no relocation in this tranche |
 | `docs/examples/*` | examples cited as stable | no relocation in this tranche |
+| `.audiagentic/project.yaml`, `.audiagentic/components.yaml`, `.audiagentic/providers.yaml`, `.audiagentic/prompt-syntax.yaml`, `.audiagentic/prompts/*` | tracked install/bootstrap baseline assets | keep stable and path-valid through refactor |
+| `.audiagentic/installed.json` | lifecycle/reporting path consumed by install/update flows | preserve path; behavior may evolve separately |
 | `.github/workflows/*` references | CI/CD and managed baseline resolution | path-sensitive; must remain valid |
 | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.clinerules*`, `.claude/`, `.agents/skills/` | provider instruction assets | path-sensitive; must remain valid |
 
@@ -44,9 +46,11 @@ These are likely internal-only and may be rewritten directly during `PKT-FND-012
 - deep module imports within `providers/*`
 - implementation helpers under new domain roots once introduced
 - test-only imports
+- `.audiagentic/runtime/**` artifacts and other local-only runtime records
 
 ## Notes for PKT-FND-011
 
 - public roots above should map to forwarding/re-export shims during the checkpoint
 - no new code may be added against those legacy roots once `PKT-FND-012` begins
 - internal-only imports should be rewritten rather than shimmed
+- `.audiagentic/runtime/**` remains explicitly outside the installable public baseline even though the top-level `.audiagentic/` root stays tracked

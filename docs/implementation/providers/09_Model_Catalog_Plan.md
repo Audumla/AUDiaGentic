@@ -48,16 +48,16 @@ Provide a detailed implementation plan for provider model catalog support and de
    - lock draft contract into `03_Common_Contracts.md`
    - add schema and fixtures
 2. **Catalog IO**
-   - `src/audiagentic/providers/catalog.py`
+   - `src/audiagentic/config/provider_catalog.py`
    - helper functions:
      - `load_catalog(project_root, provider_id)`
      - `write_catalog(project_root, provider_id, payload)` (atomic)
      - `validate_catalog(payload)` (schema-backed)
 3. **Model resolution**
-   - `src/audiagentic/providers/models.py`
+   - `src/audiagentic/execution/providers/models.py`
    - `resolve_model(job_record, provider_cfg, catalog)` returns `{model-id, warnings}`
 4. **Selection integration**
-   - update `providers/selection.py` to call resolution and validate against catalog
+   - update `execution/providers/selection.py` to call resolution and validate against catalog
    - emit warnings when catalog is stale or missing
 5. **CLI refresh**
    - `tools/refresh_model_catalog.py`

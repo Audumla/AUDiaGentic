@@ -1,0 +1,65 @@
+from __future__ import annotations
+
+import argparse
+import importlib
+import sys
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SRC_ROOT = REPO_ROOT / "src"
+SMOKE_IMPORTS = [
+    "audiagentic.channels.cli.main",
+    "audiagentic.contracts.canonical_ids",
+    "audiagentic.runtime.lifecycle.fresh_install",
+    "audiagentic.runtime.release.bootstrap",
+    "audiagentic.execution.jobs.prompt_launch",
+    "audiagentic.config.provider_registry",
+]
+REQUIRED_PATHS = [
+    "docs/schemas",
+    "docs/examples",
+    ".audiagentic/project.yaml",
+    ".audiagentic/providers.yaml",
+]
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run lightweight smoke checks for the refactor.")
+    parser.add_argument(
+        "--imports-only",
+        action="store_true",
+        help="Skip path checks and only run import smoke.",
+    )
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    sys.path.insert(0, str(SRC_ROOT))
+    sys.path.insert(0, str(REPO_ROOT))
+    failures: list[str] = []
+
+    for module_name in SMOKE_IMPORTS:
+        try:
+            importlib.import_module(module_name)
+        except Exception as exc:  # pragma: no cover - smoke path
+            failures.append(f"import failed for {module_name}: {exc}")
+
+    if not args.imports_only:
+        for raw_path in REQUIRED_PATHS:
+            if not (REPO_ROOT / raw_path).exists():
+                failures.append(f"missing required path: {raw_path}")
+
+    if failures:
+        print("Refactor smoke failed:")
+        for failure in failures:
+            print(f"- {failure}")
+        return 1
+
+    print("Refactor smoke passed.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

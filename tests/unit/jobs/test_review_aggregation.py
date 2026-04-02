@@ -9,7 +9,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.jobs.reviews import build_review_bundle
+from audiagentic.execution.jobs.reviews import build_review_bundle
 
 
 def _report(review_id: str, reviewer_key: str, recommendation: str) -> dict[str, str]:

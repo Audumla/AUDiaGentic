@@ -8,6 +8,9 @@
 - [chg_20260331_0004] Upgraded the release workflow to run the project bootstrap path and verify installed state.
 
 ### docs
+- [chg_20260402_0011] Completed the initial slice 12B move in PKT-FND-012 by relocating the stable provider config, model-catalog, and provider-registry helpers into `src/audiagentic/config/`, leaving legacy shim modules in place and keeping the refactor checks green.
+- [chg_20260402_0010] Started PKT-FND-012 by adding the Phase 0.3 support scripts, creating the target domain scaffolding and legacy shim placeholders for slice 12A, and recording that slice 12B is the next gated move set.
+- [chg_20260402_0009] Completed the Phase 0.3 discovery/freeze checkpoint at the doc-control level by tightening the live repository inventory artifacts, freezing the canonical repository-domain dependency rules, and advancing PKT-FND-012 to `READY_TO_START`.
 - [chg_20260402_0008] Added the remaining Phase 0.3 control details: a stronger registry freeze note, canonical public-import-surface and refactor artifact templates, broader support-script cadence rules, extension-root placement, and explicit pauses on later ready packets while the checkpoint is active.
 - [chg_20260402_0007] Added Phase 0.3 checkpoint enforcement notes, artifact templates, public-import and extension-root freeze details, support-script contract notes, and baseline-preservation validation guidance so the refactor can be executed without ambiguity before code motion starts.
 - [chg_20260402_0006] Tightened the checkpoint wording so Phase 1.4 is explicitly held behind the Phase 0.3 structural refactor, allowing only `PKT-LFC-011` review/merge to continue until `PKT-FND-013` is verified.
@@ -83,6 +86,7 @@
 - [chg_20260331_0005] Formalized the provider prompt-calling mechanics map, starting with Codex as the reference bridge/skills path.
 - [chg_20260331_0006] Added Codex prompt-calling preflight validation and parked Continue as a future integration.
 - [chg_20260331_0011] Wired configurable live-stream and live-input defaults through prompt launch, extended Codex/Cline/Gemini timeout defaults for longer reviews, and added shared streaming helpers in the Codex and Cline adapters.
+- [chg_20260402_0012] Completed the Phase 0.3 repository-domain refactor checkpoint with canonical path cleanup, final validation, and Phase 1.4 checkpoint release.
 
 ### tests
 - [chg_20260330_0016] Added provider/job seam tests.

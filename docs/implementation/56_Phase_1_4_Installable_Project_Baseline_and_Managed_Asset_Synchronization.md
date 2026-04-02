@@ -26,9 +26,9 @@ Bring the lifecycle and bootstrap model back into alignment with the repository'
 
 ## Files expected to be in scope during implementation
 
-- `src/audiagentic/lifecycle/baseline_sync.py`
-- `src/audiagentic/lifecycle/fresh_install.py`
-- `src/audiagentic/release/bootstrap.py`
+- `src/audiagentic/runtime/lifecycle/baseline_sync.py`
+- `src/audiagentic/runtime/lifecycle/fresh_install.py`
+- `src/audiagentic/runtime/release/bootstrap.py`
 - `tools/seed_example_project.py`
 - `tests/e2e/lifecycle/test_fresh_install.py`
 - `tests/integration/release/test_release_bootstrap.py`

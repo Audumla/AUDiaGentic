@@ -9,7 +9,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.providers.config import validate_provider_config, validate_prompt_surface
+from audiagentic.config.provider_config import validate_provider_config, validate_prompt_surface
 
 
 def test_validate_prompt_surface_accepts_supported_cli_mode() -> None:
