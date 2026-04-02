@@ -62,6 +62,27 @@ These are the source assets AUDiaGentic may install or refresh into a project.
 #### Managed workflow baseline
 - `.github/workflows/release-please.audiagentic.yml`
 
+## Current frozen baseline inventory
+
+The following table is the current installable baseline frozen by Phase 1.4 packet `PKT-LFC-011`.
+
+| Asset group | Source path in this repo | Target path in installed project | Sync mode | Notes |
+|---|---|---|---|---|
+| Project config | `.audiagentic/project.yaml` | `.audiagentic/project.yaml` | `create-if-missing` | project-owned values may later be preserved/refreshed by sync policy |
+| Component config | `.audiagentic/components.yaml` | `.audiagentic/components.yaml` | `create-if-missing` | baseline component enablement/config |
+| Provider config | `.audiagentic/providers.yaml` | `.audiagentic/providers.yaml` | `create-if-missing` | project-owned provider choices/config remain preservable |
+| Prompt syntax config | `.audiagentic/prompt-syntax.yaml` | `.audiagentic/prompt-syntax.yaml` | `create-if-missing` | alias and shorthand source of truth |
+| Shared prompts | `.audiagentic/prompts/**` | `.audiagentic/prompts/**` | `required-managed` | includes action defaults and shared context packs |
+| Codex instruction surface | `AGENTS.md` | `AGENTS.md` | `required-managed` | repo-owned prompt bridge contract |
+| Claude instruction surface | `CLAUDE.md` | `CLAUDE.md` | `required-managed` | shared Claude baseline instructions |
+| Gemini instruction surface | `GEMINI.md` | `GEMINI.md` | `required-managed` | shared Gemini baseline instructions |
+| Cline rule surface | `.clinerules/**` | `.clinerules/**` | `required-managed` | provider-native rule surface |
+| Claude native surface | `.claude/**` | `.claude/**` | `required-managed` | includes rules, skills, and settings baseline |
+| Shared skill baseline | `.agents/skills/**` | `.agents/skills/**` | `required-managed` | canonical action skill inventory |
+| Managed workflow | `.github/workflows/release-please.audiagentic.yml` | `.github/workflows/release-please.audiagentic.yml` | `required-managed` | release workflow baseline |
+| Release summaries | `docs/releases/*.md`, `docs/releases/*.ndjson` | same paths | `generated-managed` | regenerated, not copied as baseline source |
+| Runtime state | `.audiagentic/runtime/**` | `.audiagentic/runtime/**` | `runtime-only` | must never be installed from source baseline |
+
 ### 2. Generated tracked outputs
 
 These are derived from deterministic writers and should be regenerated, not copied as install-source baseline.
@@ -71,6 +92,9 @@ These are derived from deterministic writers and should be regenerated, not copi
 - `docs/releases/CHECKIN.md`
 - `docs/releases/CURRENT_RELEASE_LEDGER.ndjson`
 
+Generated tracked outputs are valid tracked files in a project, but their source is the
+deterministic writer layer, not the install baseline copier.
+
 ### 3. Runtime-only state
 
 These are not installable baseline assets and must remain runtime-only.
@@ -79,6 +103,9 @@ These are not installable baseline assets and must remain runtime-only.
 - per-job logs, launch requests, review bundles, and review reports
 - provider stdout/stderr capture files
 - ledger fragment working state and sync manifests
+
+Runtime-only state may be created by lifecycle/bootstrap commands as operational output, but it
+is never part of the source template applied to another project.
 
 ## Git and persistence rules
 
@@ -107,12 +134,17 @@ Examples:
 - `.audiagentic/providers.yaml`
 - `.audiagentic/prompt-syntax.yaml`
 
+This mode is used where project-local customization is expected and the baseline should seed
+capability without silently overwriting project-owned intent.
+
 ### generated-managed
 AUDiaGentic regenerates these through deterministic writers rather than copying them from the baseline inventory.
 
 Examples:
 - release summary and audit docs
 - release ledger views
+
+This mode exists to keep install behavior and deterministic regeneration separate.
 
 ### runtime-only
 Never copied as installable baseline.
@@ -125,6 +157,10 @@ Examples:
 The tracked baseline assets in this repository are the canonical source definition for installation into other projects.
 
 A shared baseline inventory/sync layer must read from that tracked definition and apply it to a target project according to the sync mode rules above.
+
+The baseline source of truth is the repository root itself, not `docs/examples/project-scaffold/`
+alone. The scaffold remains a minimal example and test fixture, while the tracked repository
+baseline defines the full managed install inventory.
 
 ## Lifecycle requirements
 

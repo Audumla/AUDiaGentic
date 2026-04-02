@@ -1,7 +1,8 @@
 # Check-In Summary
 
-Total changes: 68
+Total changes: 69
 
+- Froze the Phase 1.4 installable baseline inventory and sync modes so install/bootstrap now have one canonical managed asset taxonomy to build from.
 - Defined Phase 1.4 installable project baseline synchronization so lifecycle and release bootstrap can converge on the repository's real managed baseline instead of a minimal scaffold.
 - Added initial job persistence and state machine with tests.
 - Added workflow profile loading and override validation.
