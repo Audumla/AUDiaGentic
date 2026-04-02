@@ -21,6 +21,7 @@ The provider-specific implementation packs, runbooks, and rollout matrices live 
 - [Copilot](05_Copilot.md)
 - [Continue](06_Continue.md)
 - [Cline](07_Cline.md)
+- [Opencode](09_Opencode.md)
 - [Qwen](08_Qwen.md)
 
 ## Provider execution implementation docs
@@ -42,6 +43,9 @@ The provider-specific implementation packs, runbooks, and rollout matrices live 
 - `docs/implementation/providers/26_Local_OpenAI_Compatible_Prompt_Trigger_Runbook.md`
 - `docs/implementation/providers/19_Qwen_Tag_Execution_Implementation.md`
 - `docs/implementation/providers/27_Qwen_Prompt_Trigger_Runbook.md`
+- `docs/implementation/providers/18_Opencode_Plan.md`
+- `docs/implementation/providers/19_Opencode_Tag_Execution_Implementation.md`
+- `docs/implementation/providers/28_Opencode_Prompt_Trigger_Runbook.md`
 - `docs/implementation/providers/28_Prompt_Trigger_Realistic_Rollout_Assessment.md`
 - `docs/implementation/providers/29_Provider_Live_Stream_Progress_Capture_Assessment.md`
 - `docs/implementation/45_Phase_4_9_Provider_Live_Stream_and_Progress_Capture.md`
