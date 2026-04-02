@@ -14,6 +14,7 @@
 
 ## Packet execution rules
 - Do not start coding until all dependencies are merged and marked `VERIFIED` in `31_Build_Status_and_Work_Registry.md`.
+- If the build registry declares an active structural checkpoint freeze, do not start a newly claimable packet outside that checkpoint unless the registry explicitly exempts it.
 - Do not widen packet scope to solve future-phase problems.
 - Prefer library code under `src/audiagentic/` and thin CLI wrappers under `tools/`.
 - Add fixtures in the same packet that adds the behavior.
