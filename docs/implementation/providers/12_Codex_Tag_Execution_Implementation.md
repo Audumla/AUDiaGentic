@@ -19,7 +19,7 @@ official customization material. Therefore exact first-line canonical `@tag` sup
 should be implemented through a thin adapter, not by claiming native tag interception.
 
 Current implementation:
-- `src/audiagentic/providers/adapters/codex.py` now invokes the local `codex exec`
+- `src/audiagentic/execution/providers/adapters/codex.py` now invokes the local `codex exec`
   CLI with a normalized execution envelope
 - the adapter writes the last message to a temp file and normalizes the returned result
 - a live smoke test of the wrapper succeeds when `codex` is available on PATH

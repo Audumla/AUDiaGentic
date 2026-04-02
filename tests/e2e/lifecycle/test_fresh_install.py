@@ -14,7 +14,7 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.lifecycle.fresh_install import apply_fresh_install
+from audiagentic.runtime.lifecycle.fresh_install import apply_fresh_install
 from tests.helpers import sandbox as sandbox_helper
 
 SCHEMA_DIR = ROOT / "docs" / "schemas"

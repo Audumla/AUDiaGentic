@@ -10,7 +10,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.providers import streaming
+from audiagentic.streaming import provider_streaming as streaming
 
 
 def test_run_streaming_command_captures_stdout_and_stderr(monkeypatch, tmp_path: Path) -> None:

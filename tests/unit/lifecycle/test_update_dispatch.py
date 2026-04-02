@@ -10,7 +10,7 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.lifecycle.update_dispatch import parse_version, select_update_module
+from audiagentic.runtime.lifecycle.update_dispatch import parse_version, select_update_module
 
 
 def test_select_update_module_same_major() -> None:

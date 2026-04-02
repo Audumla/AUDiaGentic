@@ -10,7 +10,7 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.jobs.profiles import (
+from audiagentic.execution.jobs.profiles import (
     BUILTIN_PROFILES,
     apply_overrides,
     load_profile,

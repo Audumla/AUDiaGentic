@@ -11,9 +11,9 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.jobs.records import build_job_record
-from audiagentic.jobs.state_machine import LEGAL_TRANSITIONS, transition_and_persist, transition_job
-from audiagentic.jobs.store import read_job_record, write_job_record
+from audiagentic.execution.jobs.records import build_job_record
+from audiagentic.execution.jobs.state_machine import LEGAL_TRANSITIONS, transition_and_persist, transition_job
+from audiagentic.execution.jobs.store import read_job_record, write_job_record
 from tests.helpers import sandbox as sandbox_helper
 
 

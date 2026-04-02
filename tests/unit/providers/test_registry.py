@@ -11,7 +11,7 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.providers.registry import load_provider_registry
+from audiagentic.config.provider_registry import load_provider_registry
 
 
 def _load_fixture(name: str) -> dict:

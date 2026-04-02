@@ -10,7 +10,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.lifecycle.migration import migrate_documents, write_migration_report
+from audiagentic.runtime.lifecycle.migration import migrate_documents, write_migration_report
 from tests.helpers import sandbox as sandbox_helper
 
 

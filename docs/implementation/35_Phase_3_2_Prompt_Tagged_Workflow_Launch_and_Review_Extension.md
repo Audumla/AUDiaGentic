@@ -143,16 +143,16 @@ This keeps generic work traceable without pretending it is a packet.
 ## Minimal file/module plan
 
 Planned additive modules:
-- `src/audiagentic/jobs/prompt_parser.py`
-- `src/audiagentic/jobs/prompt_launch.py`
-- `src/audiagentic/jobs/reviews.py`
+- `src/audiagentic/execution/jobs/prompt_parser.py`
+- `src/audiagentic/execution/jobs/prompt_launch.py`
+- `src/audiagentic/execution/jobs/reviews.py`
 
 Expected touch points:
-- `src/audiagentic/jobs/records.py`
-- `src/audiagentic/jobs/store.py`
-- `src/audiagentic/jobs/packet_runner.py`
-- `src/audiagentic/jobs/stages.py`
-- `src/audiagentic/jobs/approvals.py`
+- `src/audiagentic/execution/jobs/records.py`
+- `src/audiagentic/execution/jobs/store.py`
+- `src/audiagentic/execution/jobs/packet_runner.py`
+- `src/audiagentic/execution/jobs/stages.py`
+- `src/audiagentic/execution/jobs/approvals.py`
 - CLI/editor adapter entry points only for normalization
 
 ## Packet breakdown
