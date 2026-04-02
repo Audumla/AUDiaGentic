@@ -48,6 +48,10 @@ graph TD
   FND8 --> RLS9
   FND8 --> FND9[PKT-FND-009]
   PRV12 --> FND9
+  FND9 --> FND10[PKT-FND-010]
+  FND10 --> FND11[PKT-FND-011]
+  FND11 --> FND12[PKT-FND-012]
+  FND12 --> FND13[PKT-FND-013]
   FND9 --> LFC9[PKT-LFC-009]
   FND9 --> RLS10[PKT-RLS-010]
   RLS6 --> RLS11[PKT-RLS-011]
@@ -55,6 +59,7 @@ graph TD
   LFC3 --> RLS11
   RLS11 --> LFC11[PKT-LFC-011]
   LFC11 --> LFC12[PKT-LFC-012]
+  FND13 --> LFC12
   LFC12 --> LFC13[PKT-LFC-013]
   JOB6 --> JOB7
   JOB7 --> JOB8[PKT-JOB-008]
@@ -204,6 +209,13 @@ Note: `PKT-PRV-055` is Claude Option B (native hook) follow-on, depends on PKT-P
 9. `PKT-PRV-047`
 
 `.8` is the project release bootstrap extension tracked under Phase 2.3, so it is not repeated in this provider-facing cluster.
+
+Phase 0.3 is the repository-structure checkpoint that should complete before additional non-refactor implementation resumes. Its intended order is:
+
+1. `PKT-FND-010`
+2. `PKT-FND-011`
+3. `PKT-FND-012`
+4. `PKT-FND-013`
 
 Phase 1.4 is the installability correction layer that follows Phase 1 and Phase 2.3. Its intended order is:
 

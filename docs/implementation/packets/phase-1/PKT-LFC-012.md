@@ -12,6 +12,7 @@ Implement a shared baseline sync engine that applies the managed install baselin
 ## Dependencies
 
 - `PKT-LFC-011` VERIFIED
+- `PKT-FND-013` VERIFIED (checkpoint: repository domain refactor completes before baseline-sync engine implementation resumes)
 
 ## Expected implementation surface
 
