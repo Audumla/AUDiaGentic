@@ -19,7 +19,16 @@ Finish the refactor by cleaning docs, tests, configuration paths, and validation
 - updated repository structure docs
 - refactor notes and migration map
 - validation/build/test notes
+- `docs/implementation/refactor/phase-0-3/final-validation-report.md`
 - no active docs describing the old structure as current
+
+## Final validation report must include
+
+- what moved
+- what is still shimmed
+- what legacy imports remain and why
+- what failed and is deferred
+- whether the installable baseline model remained intact
 
 ## Acceptance criteria
 
