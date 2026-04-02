@@ -21,6 +21,8 @@ The current state is:
 - prompt-level `provider=` directives now explicitly override a surface default provider, so a Codex-launched prompt can intentionally hand off to Cline or another supported provider when the prompt asks for it
 - Codex now has an explicit preflight contract that validates `AGENTS.md` and the canonical skill files before prompt-trigger launch
 - `.8` project release bootstrap and workflow activation is complete so the repository can install itself using its own release processes
+- `Phase 0.3` repository domain refactor and package realignment is now defined as the next structural checkpoint; it freezes the migration map, target tree, ownership boundaries, and compatibility rules before more non-refactor implementation resumes
+- the refactor brief needed additional detail around package/import strategy, compatibility shims, deterministic tool placement, installable-baseline preservation, contracts/schemas location, test layout, and cross-domain dependency rules; those clarifications are now captured in the new Phase 0.3 spec and packets
 - `Phase 1.4` installable project baseline sync is now in motion, with the first packet freezing the real managed baseline inventory so lifecycle/bootstrap can converge on it instead of a minimal scaffold
 - `.9` provider live stream and progress capture is in progress; the current executable pass tees stdout/stderr and persists raw runtime logs, while normalized progress records remain the next shared writer step
 - `.10` provider live input and interactive session control is in progress; the current harness records and persists session input, while full live-session attachment remains a later manager-level extension
@@ -133,11 +135,9 @@ packet-level status and the exact follow-on limitations.
 
 ## Immediate action list
 
-1. Complete PKT-PRV-033 Option A (Claude wrapper baseline): add .claude/skills/ files and REQUIRED_ASSETS validation to wrapper bridge
-2. Mark PKT-PRV-033 VERIFIED before starting PKT-PRV-055
-3. Plan PKT-PRV-055 (Claude Option B native hooks) as a follow-on after PKT-PRV-033 is verified
-4. Use `PKT-PRV-014` as the shared prompt-tag surface reference already in place
-5. Start `PKT-PRV-015` through `PKT-PRV-021` against the documented provider rollout guidance when ready
-6. Use `PKT-PRV-022` as the shared provider-execution compliance reference
-7. Keep `.4`, `.5`, `.6`, `.7`, `.8`, `.9`, `.10`, `.11`, `.12`, and `.13` tracked separately so the surface layer, execution layer, trigger layer, install layer, release-bootstrap layer, live-stream layer, live-input layer, completion layer, optimization layer, and canonical prompt-entry end-state layer stay isolated
-8. Continue using the build registry as the single live source of packet status
+1. Start `PKT-FND-010` and complete the Phase 0.3 repository inventory/migration map before new non-refactor implementation resumes
+2. Freeze the refactor target tree, ownership map, and dependency rules through `PKT-FND-011` before broad code motion begins
+3. Implement the package/import migration and compatibility-shim rules in `PKT-FND-012` only after the structural target is frozen
+4. Finish the structural checkpoint with `PKT-FND-013` so docs, tests, and validation reflect only the refactored layout
+5. Resume `PKT-LFC-012` and `PKT-LFC-013` after the Phase 0.3 checkpoint is verified
+6. Continue using the build registry as the single live source of packet status

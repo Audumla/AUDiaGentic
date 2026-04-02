@@ -14,11 +14,11 @@ Begin with the **current build state**, then confirm the packet is available, th
 
 ---
 
-## Feature extension numbering
+## Feature extension numbering and structural checkpoints
 
 This project records doc-changing feature extensions with a decimal suffix so later updates do not collide.
 
-Current extension slots:
+Current extension slots and checkpoints:
 - `.1` = provider definition extensions, including access-mode and model catalog work
 - `.2` = prompt-tagged workflow launch, ad hoc execution, and structured review loop
 - `.3` = prompt shorthand and default-launch enhancements, including provider shorthand and inferred default subjects/models
@@ -27,6 +27,7 @@ Current extension slots:
 - `.6` = provider prompt-trigger launch behavior, agent instruction surfaces, and wrapper/bridge invocation
 - `.7` = provider availability, auto-install, and bootstrap orchestration
 - `.8` = project release bootstrap and workflow activation using the project's own release machinery
+- `Phase 0.3` = repository domain refactor and package realignment checkpoint; execute this structural correction before new non-refactor implementation resumes
 - `Phase 1.4` = installable project baseline and managed asset synchronization for lifecycle/bootstrap
 - `.9` = provider live stream and progress capture, with Cline and Codex as the first-wave validation providers
 - `.10` = provider live input and interactive session control, with Cline and Codex as the first-wave validation providers
@@ -50,6 +51,7 @@ At the time of this pack:
 - `.6` prompt-trigger launch behavior is drafted as the next feature slice
 - `.7` provider availability and auto-install orchestration is drafted as the next feature slice
 - `.8` project release bootstrap and workflow activation is complete so the project can install itself using its own release processes
+- `Phase 0.3` is now defined as the next structural checkpoint so the repository domain refactor, target tree freeze, import strategy, and cleanup work happen before new non-refactor implementation resumes
 - `Phase 1.4` installable project baseline sync is the active lifecycle/installability correction; the inventory-freeze packet is ready for review and the sync-engine packets are next
 - `.9` provider live stream and progress capture is implementation-ready so AUDiaGentic can own console mirroring and runtime persistence while providers emit progress
 - `.10` provider live input and interactive session control is implementation-ready at the shared-contract and harness layer; true live-session injection still requires provider-specific session management work, and raw provider session keys are explicitly treated as non-log-safe follow-on material
@@ -178,12 +180,13 @@ Do not work around the issue locally in code.
 
 ## Minimum reading set by packet type
 
-### For Phase 0 / 0.1 / 0.2 work
+### For Phase 0 / 0.1 / 0.2 / 0.3 work
 Read:
 - `27_Phase_0_Kickoff_Checklist.md`
 - `06_Phase_0_Build_Book.md`
 - `03_Common_Contracts.md`
 - `26_Prompt_Tagged_Workflow_Launch_and_Review_Extension.md` when working on `.2`
+- `49_Repository_Domain_Refactor_and_Package_Realignment.md` and `57_Phase_0_3_Repository_Domain_Refactor_and_Package_Realignment.md` when working on Phase 0.3
 - your packet file
 
 ### For Phase 1 / 1.1 / 1.2 work

@@ -6,6 +6,8 @@ Bring the lifecycle and bootstrap model back into alignment with the repository'
 
 ## Read before starting
 
+- `docs/specifications/architecture/49_Repository_Domain_Refactor_and_Package_Realignment.md`
+- `docs/implementation/57_Phase_0_3_Repository_Domain_Refactor_and_Package_Realignment.md`
 - `docs/specifications/architecture/04_Project_Layout_and_Local_State.md`
 - `docs/specifications/architecture/05_Installation_Update_Cutover_and_Uninstall.md`
 - `docs/specifications/architecture/33_DRAFT_Project_Release_Bootstrap_and_Workflow_Activation.md`
@@ -46,8 +48,9 @@ Bring the lifecycle and bootstrap model back into alignment with the repository'
 ## Packet execution order
 
 1. `PKT-LFC-011` freezes the inventory and sync-mode classification
-2. `PKT-LFC-012` implements the shared sync engine
-3. `PKT-LFC-013` converges fresh-install and release-bootstrap on that engine
+2. `PKT-FND-010` through `PKT-FND-013` complete the repository domain refactor checkpoint before additional baseline-sync implementation resumes
+3. `PKT-LFC-012` implements the shared sync engine
+4. `PKT-LFC-013` converges fresh-install and release-bootstrap on that engine
 
 ## Recovery considerations
 

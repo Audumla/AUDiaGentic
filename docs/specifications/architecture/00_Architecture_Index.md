@@ -59,6 +59,10 @@ The following areas were strengthened specifically to close pre-implementation g
 - 47_Provider_Prompt_Templates_and_Defaults.md
 - 48_Installable_Project_Baseline_and_Managed_Asset_Synchronization.md
 
+## Structural correction docs
+
+- 49_Repository_Domain_Refactor_and_Package_Realignment.md
+
 ## Extension docs
 
 - 26_Prompt_Tagged_Workflow_Launch_and_Review_Extension.md

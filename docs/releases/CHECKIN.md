@@ -1,7 +1,8 @@
 # Check-In Summary
 
-Total changes: 69
+Total changes: 70
 
+- Added the pre-implementation Phase 0.3 repository domain refactor checkpoint, captured the missing migration and ownership clarifications from the refactor brief, and made the structural checkpoint explicit across the roadmap, gates, registry, tracker, and install-baseline sequencing.
 - Froze the Phase 1.4 installable baseline inventory and sync modes so install/bootstrap now have one canonical managed asset taxonomy to build from.
 - Defined Phase 1.4 installable project baseline synchronization so lifecycle and release bootstrap can converge on the repository's real managed baseline instead of a minimal scaffold.
 - Added initial job persistence and state machine with tests.

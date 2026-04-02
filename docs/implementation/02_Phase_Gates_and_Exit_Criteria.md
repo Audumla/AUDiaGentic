@@ -22,6 +22,13 @@
 - fixtures cover `target.kind=adhoc` and distinct-reviewer counting inputs
 - change log recorded with prompt/review contract rationale
 
+## Phase 0.3 exit gate
+- the repository target structure is frozen before broad code motion begins
+- package/import strategy and compatibility-shim rules are explicitly documented
+- the installable baseline model is preserved through the planned moves
+- updated target tree, ownership map, and dependency rules agree on the new domain layout
+- migration map and cleanup plan are published before further non-refactor implementation resumes
+
 ## Phase 1 exit gate
 
 - fresh install, update dispatch, cutover planning, uninstall planning all work in sandbox repos
