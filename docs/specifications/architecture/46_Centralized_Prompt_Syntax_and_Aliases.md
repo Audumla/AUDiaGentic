@@ -7,7 +7,28 @@
 
 ## Overview
 
-Prompt tag syntax and aliases are centralized in `.audiagentic/prompt-syntax.yaml` and shared across all provider implementations. This ensures consistent tag handling across CLI, VS Code, and provider-specific surfaces without duplicating alias definitions.
+Prompt tag syntax and aliases are centralized in `.audiagentic/prompt-syntax.yaml` and shared across all provider implementations.
+
+Canonical workflow tags use the `ag-*` form:
+
+- `ag-plan`
+- `ag-implement`
+- `ag-review`
+- `ag-audit`
+- `ag-check-in-prep`
+
+Those names are config-managed so the same tag vocabulary can be rendered consistently across:
+
+- CLI and editor surfaces
+- provider bridges
+- skill surfaces
+- instruction docs
+
+Whenever aliases or canonical names change, regenerate the derived surfaces with:
+
+```powershell
+python tools/regenerate_tag_surfaces.py --project-root .
+```
 
 ---
 
@@ -21,14 +42,19 @@ Map shorthand tags to canonical actions:
 
 ```yaml
 tag-aliases:
-  p: plan
-  i: implement
-  r: review
-  a: audit
-  c: check-in-prep
+  agp: ag-plan
+  agi: ag-implement
+  agr: ag-review
+  aga: ag-audit
+  agc: ag-check-in-prep
+  p: ag-plan
+  i: ag-implement
+  r: ag-review
+  a: ag-audit
+  c: ag-check-in-prep
 ```
 
-Usage: `@p` expands to `@plan`
+Usage: `@agp` expands to `@ag-plan`
 
 ### Provider Aliases
 
@@ -43,7 +69,7 @@ provider-aliases:
   cp: copilot
 ```
 
-Usage: `@plan provider=cln` expands to `@plan provider=cline`
+Usage: `@ag-plan provider=cln` expands to `@ag-plan provider=cline`
 
 ### Combined Aliases
 
@@ -51,12 +77,12 @@ Direct tag+provider combinations for convenience:
 
 ```yaml
 combined-aliases:
-  r-cln: review provider=cline
-  i-cld: implement provider=claude
-  p-cx: plan provider=codex
+  agr-cln: ag-review provider=cline
+  agi-cld: ag-implement provider=claude
+  agp-cx: ag-plan provider=codex
 ```
 
-Usage: `@r-cln` directly expands to `@review provider=cline`
+Usage: `@agr-cln` directly expands to `@ag-review provider=cline`
 
 ---
 
@@ -64,11 +90,11 @@ Usage: `@r-cln` directly expands to `@review provider=cline`
 
 All of these are equivalent and resolve to the same request:
 
-```
-@review provider=cline
-@r provider=cline
-@r-cline
-@r-cln
+```text
+@ag-review provider=cline
+@agr provider=cline
+@ag-review-cline
+@agr-cln
 ```
 
 ---
@@ -110,17 +136,17 @@ combined-aliases:
   t-p: tag provider=provider
 ```
 
-### Step 2: No provider-specific changes needed
+### Step 2: Re-generate derived surfaces
 
-All providers automatically recognize new aliases through the shared parser.
+Run the shared regeneration tool so instruction surfaces and skill files stay in sync:
 
-### Step 3: Document in provider-specific instruction files (optional)
+```powershell
+python tools/regenerate_tag_surfaces.py --project-root .
+```
 
-For discoverability, add to:
-- `CLAUDE.md` (Claude instructions)
-- `.clinerules/` (Cline rules)
-- `AGENTS.md` (Codex agents)
-- Provider-specific instruction surfaces
+### Step 3: No provider-specific changes needed
+
+All providers automatically recognize new aliases through the shared parser and bridge.
 
 ---
 
@@ -140,6 +166,7 @@ For discoverability, add to:
 - `src/audiagentic/execution/jobs/prompt_parser.py` — Tag resolution logic
 - `src/audiagentic/execution/jobs/prompt_syntax.py` — Config loading
 - `docs/schemas/prompt-syntax.schema.json` — Schema definition
+- `tools/regenerate_tag_surfaces.py` — Derived instruction surface regeneration
 - `tools/claude_hooks.py` — Hook-based tag detection
 - `tools/claude_prompt_trigger_bridge.py` — Claude bridge
 - `CLAUDE.md` — Claude-specific instructions
@@ -150,6 +177,6 @@ For discoverability, add to:
 
 1. **Centralized:** Single source of truth in `.audiagentic/prompt-syntax.yaml`
 2. **Consistent:** All providers use the same resolved aliases
-3. **Discoverable:** Aliases documented in provider-specific instruction files
+3. **Discoverable:** Aliases are documented in provider-specific instruction files
 4. **Extensible:** New aliases added without code changes
 5. **Safe:** Unknown tags rejected before execution

@@ -78,7 +78,7 @@ def test_local_openai_prompt_trigger_bridge_script_launches_job(tmp_path: Path) 
         payload = json.loads(result.stdout)
         assert payload["status"] == "created"
         assert payload["job"]["provider-id"] == "local-openai"
-        assert payload["job"]["launch-tag"] == "plan"
+        assert payload["job"]["launch-tag"] == "ag-plan"
         assert payload["job"]["launch-target"]["kind"] == "packet"
         assert payload["job"]["launch-target"]["packet-id"] == "PKT-JOB-008"
     finally:

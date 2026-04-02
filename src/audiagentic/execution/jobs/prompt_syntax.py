@@ -11,12 +11,38 @@ DEFAULT_PROMPT_SYNTAX: dict[str, Any] = {
     "contract-version": "v1",
     "default-profile": "shared",
     "generic-tag": "adhoc",
+    "no-body-required-tags": [
+        "ag-audit",
+        "ag-check-in-prep",
+    ],
+    "review-tag": "ag-review",
+    "implement-tag": "ag-implement",
+    "canonical-tags": [
+        "ag-plan",
+        "ag-implement",
+        "ag-review",
+        "ag-audit",
+        "ag-check-in-prep",
+    ],
     "tag-aliases": {
-        "p": "plan",
-        "i": "implement",
-        "r": "review",
-        "a": "audit",
-        "c": "check-in-prep",
+        # new short forms
+        "agp": "ag-plan",
+        "agi": "ag-implement",
+        "agr": "ag-review",
+        "aga": "ag-audit",
+        "agc": "ag-check-in-prep",
+        # backward-compat short forms
+        "p": "ag-plan",
+        "i": "ag-implement",
+        "r": "ag-review",
+        "a": "ag-audit",
+        "c": "ag-check-in-prep",
+        # backward-compat full names
+        "plan": "ag-plan",
+        "implement": "ag-implement",
+        "review": "ag-review",
+        "audit": "ag-audit",
+        "check-in-prep": "ag-check-in-prep",
     },
     "provider-aliases": {
         "local-openai": "local-openai",
@@ -44,6 +70,30 @@ DEFAULT_PROMPT_SYNTAX: dict[str, Any] = {
         "t": "template",
     },
 }
+
+
+def load_no_body_required_tags(syntax: dict[str, Any]) -> set[str]:
+    """Return the set of tags that do not require a prompt body."""
+    tags = syntax.get("no-body-required-tags")
+    if isinstance(tags, list):
+        return {t for t in tags if isinstance(t, str) and t}
+    return set(DEFAULT_PROMPT_SYNTAX["no-body-required-tags"])
+
+
+def load_review_tag(syntax: dict[str, Any]) -> str:
+    """Return the canonical review tag name."""
+    value = syntax.get("review-tag")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return str(DEFAULT_PROMPT_SYNTAX["review-tag"])
+
+
+def load_canonical_tags(syntax: dict[str, Any]) -> set[str]:
+    """Return the set of canonical tag names from a loaded syntax dict."""
+    tags = syntax.get("canonical-tags")
+    if isinstance(tags, list):
+        return {t for t in tags if isinstance(t, str) and t}
+    return set(DEFAULT_PROMPT_SYNTAX["canonical-tags"])
 
 
 def _merge_dict(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:

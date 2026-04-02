@@ -4,10 +4,12 @@ This repository uses canonical prompt tags to launch AUDiaGentic workflow jobs.
 
 ## Canonical rule
 
-- Do not reinterpret `@plan`, `@implement`, `@review`, `@audit`, or `@check-in-prep`.
+- Do not reinterpret `@ag-plan`, `@ag-implement`, `@ag-review`, `@ag-audit`, `@ag-check-in-prep`.
 - Route the raw tagged prompt through the repo-owned bridge instead of inventing a separate
   workflow semantics layer.
 - Keep provenance visible: provider id, surface, and session id should survive normalization.
+- Canonical names are config-managed in `.audiagentic/prompt-syntax.yaml`; run
+  `python tools/regenerate_tag_surfaces.py --project-root .` after renaming tags or aliases.
 
 ## Bridge
 
@@ -25,20 +27,35 @@ shared launch grammar unchanged.
 
 Tag and provider aliases are centralized in `.audiagentic/prompt-syntax.yaml` and work in all surfaces:
 
-**Tag aliases:** `@p` = plan, `@i` = implement, `@r` = review, `@a` = audit, `@c` = check-in-prep
+Canonical tags:
 
-**Provider aliases:** `@review provider=cln` = cline, `@review provider=cld` = claude, `@review provider=cx` = codex
+- ag-plan
+- ag-implement
+- ag-review
+- ag-audit
+- ag-check-in-prep
 
-**Combined shortcuts:** `@r-cln` = review provider=cline, `@i-cld` = implement provider=claude, `@p-cx` = plan provider=codex
+- `agp` -> `ag-plan`
+- `agi` -> `ag-implement`
+- `agr` -> `ag-review`
+- `aga` -> `ag-audit`
+- `agc` -> `ag-check-in-prep`
+
+- `cx` -> `codex`
+- `cld` -> `claude`
+- `cln` -> `cline`
+- `gm` -> `gemini`
+- `cp` -> `copilot`
 
 All of these are equivalent:
 
 ```text
+@ag-review provider=cline
+@agr provider=cline
 @review provider=cline
 @r provider=cline
-@review-cline
+@ag-review-cline
 @r-cline
-@r-cln
 ```
 
 ## Review doctrine
@@ -46,4 +63,3 @@ All of these are equivalent:
 - review prompts should stay read-focused unless the normalized request explicitly allows more
 - do not broaden review into implementation work
 - keep tracked docs and release artifacts synchronized with the job record
-

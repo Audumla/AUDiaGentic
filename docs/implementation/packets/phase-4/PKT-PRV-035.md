@@ -1,71 +1,139 @@
 # PKT-PRV-035 — GitHub Copilot prompt-trigger launch integration
 
 **Phase:** Phase 4.6
-**Status:** READY_FOR_REVIEW
+**Status:** IN_PROGRESS
 **Owner:** GitHub Copilot
 
 ## Objective
-Wire Copilot instruction files or custom agents to the shared trigger bridge so tagged prompts launch the shared workflow runner.
 
-## Current implementation
+Wire Copilot instruction files and custom agents to the shared trigger bridge so tagged prompts
+launch the shared workflow runner.  All prompt and agent files must have substantive content
+before this packet is READY_FOR_REVIEW.
 
-- `.github/copilot-instructions.md` now records the canonical tag doctrine and bridge usage
-- `.github/prompts/*.prompt.md` exists for the canonical action set
-- `.github/agents/*.agent.md` exists for the canonical action set
-- `tools/copilot_prompt_trigger_bridge.py` provides the Copilot-specific wrapper path to the shared bridge
-- the shared bridge harness is already implemented and test-covered
+## What is implemented
 
+- `.github/copilot-instructions.md` records the canonical tag doctrine and bridge usage
+- `.github/prompts/*.prompt.md` exists for all 5 canonical tags (stubs only)
+- `.github/agents/planner.agent.md` and `reviewer.agent.md` exist (stubs only)
+- `tools/copilot_prompt_trigger_bridge.py` provides the Copilot-specific wrapper path to the
+  shared bridge
+- the shared bridge harness is implemented and test-covered
+
+## What is NOT yet implemented (blockers for READY_FOR_REVIEW)
+
+- **Prompt files are stubs** — all 5 `.github/prompts/*.prompt.md` files contain only a
+  YAML header and a single placeholder sentence; they have no Copilot-specific instruction
+  content, trigger details, do/do-not rules, or bridge invocation guidance
+- **Agent files are stubs** — `planner.agent.md` and `reviewer.agent.md` contain only a
+  YAML header and a single placeholder sentence
+- **Missing agents** — no `implement.agent.md`, `audit.agent.md`, or
+  `check-in-prep.agent.md`; only plan and review have agents at all
+- **No smoke tests** — no integration tests for the Copilot prompt-trigger path
+
+## Required instruction surface
+
+### Prompt files (`.github/prompts/`)
+
+Each prompt file must contain substantive Copilot-specific content following the same
+Trigger / Do / Do not pattern used by all other providers:
+
+```yaml
+---
+description: <one-line description>
+---
+
+# <action> prompt
+
+Trigger:
+- first non-empty line resolves to `<action>`
+
+Do:
+- <provider-specific instruction matching shared contract>
+
+Do not:
+- <restriction matching shared contract>
+
+## Bridge invocation
+
+Route tagged prompts through the shared bridge:
+  python tools/copilot_prompt_trigger_bridge.py --project-root .
+```
+
+### Agent files (`.github/agents/`)
+
+Each agent file must cover one canonical action and include Copilot-specific agent-mode
+guidance:
+
+```yaml
+---
+name: <agent-name>
+description: <one-line description>
+---
+
+# <action> agent
+
+Instructions matching the shared canonical contract for this action.
+```
+
+Required agents: `planner`, `implementer`, `reviewer`, `auditor`, `checkin-preparer`
 
 ## Prompt-trigger exposure details
 
-Copilot exposes tags indirectly through repository instructions and custom prompt/agent
-assets. The wrapper is what turns the raw tagged prompt into the Copilot surface that should
-run.
-
 ### User-facing flow
+
 1. user types the tagged prompt in Copilot Chat, Copilot CLI, or VS Code agent mode
-2. the wrapper reads the first non-empty line and resolves the canonical action
-3. the wrapper selects the correct prompt file or custom agent and forwards the normalized
-   envelope
+2. the bridge reads the first non-empty line and resolves the canonical action
+3. the bridge selects the matching `.github/prompts/*.prompt.md` or agent file and forwards
+   the normalized envelope
 4. Copilot loads repository instructions and performs the requested stage
 
-### Required files/settings
-- `.github/copilot-instructions.md`
-- `.github/prompts/*.prompt.md`
-- `.github/agents/*.agent.md`
-- optional repo `AGENTS.md`
-- repo-owned wrapper or bridge command
-
-### Verification focus
-- CLI smoke test for `@plan`
-- CLI smoke test for `@review`
-- VS Code agent-mode smoke test with the same wrapper path
-
 ### Failure mode
-If the wrapper is bypassed, exact canonical tag support is not guaranteed and must not be
-claimed in the provider docs.
+
+If the bridge is bypassed, canonical tag support is not guaranteed and must not be claimed
+in the provider docs.
 
 ## Prerequisites
-- PKT-PRV-031 is drafted
-- PKT-PRV-007 is verified
+
+- PKT-PRV-031 verified
+- PKT-PRV-007 verified
 
 ## Implementation steps
-1. define or update `.github/copilot-instructions.md` and any custom agent guidance
-2. bridge Copilot prompt submission to the shared launch wrapper
-3. keep the bridge narrow so Copilot semantics stay isolated
-4. add Copilot prompt-trigger smoke tests
+
+1. Replace stub content in all 5 `.github/prompts/*.prompt.md` files with substantive
+   Trigger / Do / Do not instructions and bridge invocation guidance
+2. Replace stub content in `planner.agent.md` and `reviewer.agent.md`
+3. Create `implement.agent.md`, `audit.agent.md`, and `check-in-prep.agent.md`
+4. Update `.github/copilot-instructions.md` with surface-specific guidance beyond the
+   single bridge reference
+5. Add smoke tests for `@plan` and `@review` via the Copilot bridge
 
 ## Acceptance criteria
-- tagged Copilot prompts reach the shared launcher path
-- Copilot instructions remain repository-owned and isolated
-- the fallback bridge works when Copilot needs interactive approval constraints
 
-## Likely files or surfaces
-- .github/copilot-instructions.md
-- custom Copilot agent prompts
+- all 5 `.github/prompts/*.prompt.md` files have substantive content (not stubs)
+- all 5 canonical tags have corresponding `.github/agents/*.agent.md` files
+- each prompt and agent file follows the shared Trigger / Do / Do not structure
+- tagged Copilot prompts reach the shared launcher path
+- Copilot instructions do not redefine the canonical grammar
+- smoke tests pass for at least `@plan` and `@review`
+
+## Files to create or update
+
+- `.github/prompts/plan.prompt.md` — replace stub with full content
+- `.github/prompts/implement.prompt.md` — replace stub with full content
+- `.github/prompts/review.prompt.md` — replace stub with full content
+- `.github/prompts/audit.prompt.md` — replace stub with full content
+- `.github/prompts/check-in-prep.prompt.md` — replace stub with full content
+- `.github/agents/planner.agent.md` — replace stub with full content
+- `.github/agents/reviewer.agent.md` — replace stub with full content
+- `.github/agents/implementer.agent.md` — new
+- `.github/agents/auditor.agent.md` — new
+- `.github/agents/checkin-preparer.agent.md` — new
+- `.github/copilot-instructions.md` — expand from single bridge reference
 - `docs/implementation/providers/23_Copilot_Prompt_Trigger_Runbook.md`
 - Copilot prompt-trigger smoke tests
 
 ## Rollback guidance
-- revert the provider-specific trigger surface changes only
+
+- revert `.github/prompts/`, `.github/agents/`, and `.github/copilot-instructions.md` only
 - leave the shared launch grammar untouched
+- the bridge tool remains in place

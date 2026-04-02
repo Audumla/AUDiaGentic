@@ -42,14 +42,14 @@ Documents:
 ### 2. Cleanup and Consistency
 
 Removed unnecessary provider-specific templates:
-- ❌ `.audiagentic/prompts/plan/claude.md`
-- ❌ `.audiagentic/prompts/implement/claude.md`
-- ❌ `.audiagentic/prompts/audit/claude.md`
-- ❌ `.audiagentic/prompts/check-in-prep/claude.md`
-- ❌ `.audiagentic/prompts/review/claude.md`
+- ❌ `.audiagentic/prompts/ag-plan/claude.md`
+- ❌ `.audiagentic/prompts/ag-implement/claude.md`
+- ❌ `.audiagentic/prompts/ag-audit/claude.md`
+- ❌ `.audiagentic/prompts/ag-check-in-prep/claude.md`
+- ❌ `.audiagentic/prompts/ag-review/claude.md`
 
 Kept justified variant:
-- ✅ `.audiagentic/prompts/review/cline.md` (read-only constraints)
+- ✅ `.audiagentic/prompts/ag-review/cline.md` (read-only constraints)
 
 **Status:** ✅ COMPLETE
 

@@ -1,14 +1,22 @@
-# audit skill
+---
+name: ag-audit
+description: Use for canonical @ag-audit launches. Checks tracked docs, release artifacts, and state consistency.
+---
 
-Use this skill for canonical `@audit` launches.
+# ag-audit skill
+
+Use this skill for canonical `@ag-audit` launches.
 
 Trigger:
-- first non-empty line resolves to `audit`
+- first non-empty line resolves to `ag-audit` or the backward-compatible `audit` alias
 
 Do:
-- check the work against contracts, docs, and tests
-- call out omissions or mismatches clearly
+- audit tracked docs, release artifacts, and state consistency
+- note drift, missing evidence, or stale references
+- avoid implementation work unless explicitly asked
 
 Do not:
-- mutate unrelated files
+- do not mutate tracked docs without approval
+- do not hide drift behind vague summaries
 
+Root surface: `legacy compatibility surface for `ag-audit``

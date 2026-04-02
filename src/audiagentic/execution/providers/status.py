@@ -1,4 +1,5 @@
 """Provider status inspection helpers."""
+
 from __future__ import annotations
 
 import shutil
@@ -7,7 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.config.provider_catalog import catalog_is_stale, read_model_catalog, runtime_catalog_path
+from audiagentic.config.provider_catalog import (
+    catalog_is_stale,
+    read_model_catalog,
+    runtime_catalog_path,
+)
 from audiagentic.config.provider_config import load_provider_config
 from audiagentic.execution.providers.health import health_check
 from audiagentic.execution.providers.models import resolve_model_selection
@@ -20,6 +25,7 @@ CLI_PROBES: dict[str, list[str]] = {
     "copilot": ["gh", "copilot", "--help"],
     "continue": ["continue", "--version"],
     "cline": ["cline", "--version"],
+    "opencode": ["opencode", "--version"],
 }
 
 
@@ -70,7 +76,9 @@ def _provider_entry(
     project_root: Path,
     now_fn=None,
 ) -> dict[str, Any]:
-    health = health_check(provider_id, {"provider-id": provider_id}, provider_cfg, now_fn=now_fn)
+    health = health_check(
+        provider_id, {"provider-id": provider_id}, provider_cfg, now_fn=now_fn
+    )
     entry: dict[str, Any] = {
         "provider-id": provider_id,
         "enabled": provider_cfg.get("enabled", False),
@@ -95,7 +103,10 @@ def _provider_entry(
             "settings-profile": prompt_surface.get("settings-profile"),
             "supported-modes": [
                 mode
-                for mode in (prompt_surface.get("cli-mode"), prompt_surface.get("vscode-mode"))
+                for mode in (
+                    prompt_surface.get("cli-mode"),
+                    prompt_surface.get("vscode-mode"),
+                )
                 if mode and mode != "unsupported"
             ],
         }
@@ -129,7 +140,9 @@ def _provider_entry(
             refresh = provider_cfg.get("catalog-refresh", {})
             max_age = refresh.get("max-age-hours")
             if isinstance(max_age, int) and max_age > 0:
-                entry["catalog-stale"] = catalog_is_stale(catalog, max_age_hours=max_age, now_fn=now_fn)
+                entry["catalog-stale"] = catalog_is_stale(
+                    catalog, max_age_hours=max_age, now_fn=now_fn
+                )
             try:
                 resolved = resolve_model_selection(
                     provider_id=provider_id,
@@ -151,14 +164,22 @@ def _provider_entry(
                 if "catalog-warning" in resolved:
                     entry["catalog-warning"] = resolved["catalog-warning"]
 
-    if provider_cfg.get("access-mode") == "cli" and entry.get("cli-check", {}).get("available"):
+    if provider_cfg.get("access-mode") == "cli" and entry.get("cli-check", {}).get(
+        "available"
+    ):
         entry["status"] = "healthy" if entry["configured"] else "unhealthy"
-        if entry.get("catalog-present") and entry.get("catalog-error") is None and entry.get("model-selection-error") is None:
+        if (
+            entry.get("catalog-present")
+            and entry.get("catalog-error") is None
+            and entry.get("model-selection-error") is None
+        ):
             entry["status"] = "healthy"
     return entry
 
 
-def build_provider_status(project_root: Path, provider_id: str | None = None, *, now_fn=None) -> dict[str, Any]:
+def build_provider_status(
+    project_root: Path, provider_id: str | None = None, *, now_fn=None
+) -> dict[str, Any]:
     provider_config = load_provider_config(project_root)
     providers = provider_config.get("providers", {})
     if provider_id is not None:
@@ -177,7 +198,12 @@ def build_provider_status(project_root: Path, provider_id: str | None = None, *,
         "ok": True,
         "project-root": str(project_root),
         "providers": [
-            _provider_entry(provider_id=item, provider_cfg=providers[item], project_root=project_root, now_fn=now_fn)
+            _provider_entry(
+                provider_id=item,
+                provider_cfg=providers[item],
+                project_root=project_root,
+                now_fn=now_fn,
+            )
             for item in provider_ids
         ],
     }

@@ -17,26 +17,61 @@ persistence.
 - a stable data path that Discord can subscribe to later
 - first-wave provider guidance for Cline and Codex
 
+## Sink architecture (required — not optional)
+
+PKT-PRV-048 must implement a generic pluggable `StreamSink` interface.  The hardcoded
+`tee_console` flag and `_append_text` path in `provider_streaming.py` must be replaced.
+This is not a style preference — it is the only architecture that allows Discord, replay,
+and future sinks to be added without touching the reader loop.
+
+Required built-in sinks in `src/audiagentic/streaming/sinks.py`:
+
+- `ConsoleSink` — replaces `tee_console=True`
+- `RawLogSink(path)` — replaces `_append_text(log_path, line)`
+- `NormalizedEventSink(path)` — new; writes `events.ndjson`
+
+`run_streaming_command` signature change:
+
+```python
+# Before (hardcoded)
+run_streaming_command(cmd, stdout_log_path=p, tee_console=True)
+
+# After (sink list)
+run_streaming_command(cmd,
+    stdout_sinks=[ConsoleSink(), RawLogSink(stdout_log), NormalizedEventSink(events_log)],
+    stderr_sinks=[ConsoleSink(sys.stderr), RawLogSink(stderr_log)],
+)
+```
+
+Provider-specific extraction (Cline NDJSON, Codex milestones) is a sink registered by the
+adapter — the shared harness never parses provider output directly.
+
+Per-sink error isolation is required: a sink that raises must not abort the reader thread
+or affect other sinks.
+
 ## Scope
 
-### Shared work
+### Shared work (PKT-PRV-048)
 
-- define the live-stream event format
-- define runtime file layout for captured output
-- add shared capture helpers for stdout/stderr and raw runtime logs first
-- layer in normalized progress-event writing when the stream writer exists
-- add CLI/bridge flags for live streaming
-- add tests for stream capture and final artifact persistence
-- keep console teeing resilient so encoding/rendering issues cannot crash a successful provider run
+- define the `StreamSink` protocol
+- implement `ConsoleSink`, `RawLogSink`, `NormalizedEventSink` in `sinks.py`
+- refactor `_reader` in `provider_streaming.py` to call each registered sink
+- update `run_streaming_command` to accept `stdout_sinks` / `stderr_sinks` lists
+- add per-sink error isolation
+- define the live-stream event format and `events.ndjson` path convention
+- wire default sinks in `execution.py` so existing paths keep working
+- add tests: each sink independently, multiple sinks, one-sink-failure isolation
+- keep console teeing resilient so encoding issues cannot crash a successful provider run
 
-### Provider first run
+### Provider first run (PKT-PRV-049 / PKT-PRV-050)
 
-The first implementation pass should target:
-- Cline
-- Codex
+The first implementation pass should target Cline and Codex.  Each registers its own
+extractor sink — the shared harness is not modified:
 
-Those two providers already have stable CLI execution paths and can prove the stream capture
-contract before the broader provider set is enabled.
+- **Cline** (`ClineEventExtractor` in `adapters/cline.py`) — parses native NDJSON
+- **Codex** (`CodexEventExtractor` in `adapters/codex.py`) — parses wrapper milestone lines
+
+Both extractors forward canonical `provider-stream-event` records to `NormalizedEventSink`.
 
 ## Runtime outputs
 

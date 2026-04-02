@@ -4,10 +4,12 @@ This repository uses canonical prompt tags to launch AUDiaGentic workflow jobs.
 
 ## Canonical rule
 
-- Do not reinterpret `@plan`, `@implement`, `@review`, `@audit`, or `@check-in-prep`.
+- Do not reinterpret `@ag-plan`, `@ag-implement`, `@ag-review`, `@ag-audit`, `@ag-check-in-prep`.
 - Route the raw tagged prompt through the repo-owned bridge instead of inventing a separate
   workflow semantics layer.
 - Keep provenance visible: provider id, surface, and session id should survive normalization.
+- Canonical names are config-managed in `.audiagentic/prompt-syntax.yaml`; run
+  `python tools/regenerate_tag_surfaces.py --project-root .` after renaming tags or aliases.
 
 ## Prompt-calling protocol
 
@@ -24,11 +26,11 @@ The bridge is the execution boundary for tagged prompts.
 - Preserve provenance fields through normalization: provider id, surface, and session id.
 - Apply project defaults when the prompt omits `id`, `context`, `output`, or `template`.
 - Treat the canonical action tags as workflow selectors, not as free-form instructions:
-  - `@plan`
-  - `@implement`
-  - `@review`
-  - `@audit`
-  - `@check-in-prep`
+- `@ag-plan`
+- `@ag-implement`
+- `@ag-review`
+- `@ag-audit`
+- `@ag-check-in-prep`
 - Treat provider shorthands as provider selectors that still route through the same normalized
   launch contract.
 - If the prompt is tagged but no explicit subject is supplied, let the bridge create the default
@@ -61,7 +63,7 @@ grammar unchanged.
 Prefer the short, defaults-first form:
 
 ```text
-@review provider=codex id=job_001 ctx=documentation t=review-default
+@ag-review provider=codex id=job_001 ctx=documentation t=review-default
 Review the current project state and call out any gaps.
 ```
 
@@ -69,7 +71,7 @@ When a provider/tag default template exists under `.audiagentic/prompts/<tag>/`,
 form is also valid:
 
 ```text
-@r-cline
+@ag-review
 ```
 
 In that case the bridge should:
@@ -96,38 +98,26 @@ and the common aliases:
 
 Centralized in `.audiagentic/prompt-syntax.yaml`. Available shortcuts:
 
-**Tag aliases:**
-
-- `@p` → `@plan`
-- `@i` → `@implement`
-- `@r` → `@review`
-- `@a` → `@audit`
-- `@c` → `@check-in-prep`
-
-**Provider aliases:**
-
-- `cln` → `cline`
-- `cld` → `claude`
-- `cx` → `codex`
-- `gm` → `gemini`
-- `cp` → `copilot`
-
-**Combined shortcuts:**
-
-- `@r-cln` → `@review provider=cline`
-- `@i-cld` → `@implement provider=claude`
-- `@p-cx` → `@plan provider=codex`
-- (and all other tag+provider combinations)
+- `agp` -> `ag-plan`
+- `agi` -> `ag-implement`
+- `agr` -> `ag-review`
+- `aga` -> `ag-audit`
+- `agc` -> `ag-check-in-prep`
+- `cx` -> `codex`
+- `cld` -> `claude`
+- `cln` -> `cline`
+- `gm` -> `gemini`
+- `cp` -> `copilot`
 
 ## Skills
 
 Each canonical action maps to a focused skill under `.agents/skills/`:
 
-- plan
-- implement
-- review
-- audit
-- check-in-prep
+- `ag-plan`
+- `ag-implement`
+- `ag-review`
+- `ag-audit`
+- `ag-check-in-prep`
 
 ## Review doctrine
 
