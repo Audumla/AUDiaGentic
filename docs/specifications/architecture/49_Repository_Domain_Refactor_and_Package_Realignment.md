@@ -20,6 +20,22 @@ The current repository has accumulated multiple later features on top of an earl
 
 This phase freezes the structural target and migration rules before more code is added.
 
+## Execution model
+
+Treat this phase as a two-part checkpoint:
+
+1. decision freeze and inventory
+2. code/package moves only after the freeze is complete
+
+The packet execution order is therefore strict:
+
+1. `PKT-FND-010`
+2. `PKT-FND-011`
+3. `PKT-FND-012`
+4. `PKT-FND-013`
+
+Do not start broad repository code motion before `PKT-FND-011` is verified.
+
 ## Scope
 
 This phase covers:
@@ -64,6 +80,11 @@ Before moving code, the refactor must explicitly choose whether the target shape
 
 For this phase, the refactor contract must preserve a stable public Python import path for AUDiaGentic unless a deliberate migration shim strategy is written down.
 
+Frozen decision for this checkpoint:
+- use a domain-oriented reorganization under `src/audiagentic/`
+- do not convert the repository into a literal top-level `/apps` + `/packages` monorepo in this tranche
+- preserve stable public Python import paths with compatibility shims during the transition
+
 ### 2. Compatibility and migration policy
 
 The refactor must state:
@@ -71,6 +92,13 @@ The refactor must state:
 - whether old import paths remain for one transition phase
 - how stale paths are detected and removed
 - when code may stop importing from old locations
+
+Frozen decision for this checkpoint:
+- temporary compatibility shims are allowed
+- old import paths may remain for one structural checkpoint
+- stale paths must be detectable mechanically
+- no new code may be added against legacy paths once `PKT-FND-012` begins
+- stale import cleanup belongs to `PKT-FND-013`
 
 ### 3. Deterministic script/tool placement
 
@@ -80,6 +108,11 @@ This phase must explicitly define whether:
 - `tools/` remains as a deterministic utility root
 - selected tools move into `apps/`
 - both coexist during migration
+
+Frozen decision for this checkpoint:
+- keep `tools/` as the repository-visible deterministic utility root
+- move shared reusable logic into `src/audiagentic/...` where appropriate
+- keep tool entry points thin
 
 ### 4. Installable baseline preservation
 
@@ -99,11 +132,20 @@ The refactor must explicitly decide whether those become:
 - true top-level roots, or
 - remain under `docs/` with updated internal ownership only
 
+Frozen decision for this checkpoint:
+- keep `docs/schemas/` and `docs/examples/` canonical in this tranche
+- do not move them to top-level roots during the same tranche as the package refactor
+
 ### 6. Test layout strategy
 
 The refactor must define whether tests stay centralized under `/tests` with mirrored domain structure or become partially domain-local.
 
 The initial requirement is to preserve the current centralized test root unless there is a strong reason to change it.
+
+Frozen decision for this checkpoint:
+- keep centralized `tests/`
+- mirror the new domain structure inside `tests/`
+- do not introduce mixed domain-local tests during this refactor tranche
 
 ### 7. Cross-domain dependency rules
 
@@ -114,6 +156,25 @@ At minimum:
 - `execution` may depend on `contracts`, `core`, and selected `runtime` ports, but not directly on channel formatting logic
 - `streaming` may bridge `execution`, `runtime`, and `channels`, but must not become the home of telemetry storage
 - `observability` must remain distinct from live interaction flow
+
+Frozen dependency directions for this checkpoint:
+- `contracts` may be imported by every domain
+- `core` may be imported by every domain; `tests/` and `tools/` should prefer stable APIs
+- `config` may be imported by `execution`, `runtime`, `channels`, `streaming`, and `observability`
+- `scoping` may depend on `contracts`, `core`, and `config`
+- `execution` may depend on `contracts`, `core`, `config`, and selected `runtime` ports
+- `runtime` may depend on `contracts`, `core`, and `config`
+- `channels` may depend on `contracts`, `core`, `config`, and selected presentation-facing runtime records
+- `streaming` may depend on `execution`, `runtime`, `channels`, `contracts`, and `core`
+- `observability` may depend on `runtime`, `contracts`, `core`, and `config`
+
+Forbidden dependency directions for this checkpoint:
+- `scoping -> channels`
+- `scoping -> observability`
+- `execution ->` channel formatting or rendering internals
+- `observability ->` live interaction control
+- `channels ->` execution internals
+- `runtime -> channels`
 
 ## Canonical object model alignment
 
@@ -142,6 +203,55 @@ This phase does not require reckless bulk renaming. It requires the migration pl
 - Keep app entry points thin; business logic belongs in packages/modules.
 - Preserve behavior unless a documented structural blocker requires change.
 
+## Required inventory outputs
+
+`PKT-FND-010` must create and maintain:
+- `docs/implementation/refactor/phase-0-3/repository-inventory.md`
+- `docs/implementation/refactor/phase-0-3/migration-map.md`
+- `docs/implementation/refactor/phase-0-3/ambiguity-report.md`
+
+`PKT-FND-013` must also create:
+- `docs/implementation/refactor/phase-0-3/final-validation-report.md`
+
+The inventory must at minimum classify:
+- `src/audiagentic/contracts`
+- `src/audiagentic/lifecycle`
+- `src/audiagentic/release`
+- `src/audiagentic/jobs`
+- `src/audiagentic/providers`
+- `src/audiagentic/server`
+- `src/audiagentic/overlay/discord`
+- `tools/`
+- `tests/`
+- `docs/schemas/`
+- `docs/examples/`
+- managed baseline assets such as `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.clinerules*`, `.claude/`, `.agents/skills/`, and `.github/workflows/`
+
+Each ambiguity record should capture:
+- current path
+- dominant responsibility
+- secondary responsibility
+- target domain recommendation
+- split-or-keep recommendation for the first pass
+- whether a compatibility shim is required
+
+Expected hotspots include:
+- prompt-trigger and bridge code spanning jobs, providers, and tooling
+- stream/input/completion logic spanning jobs and provider adapters
+- provider instruction assets versus install-baseline handling
+- `docs/examples/` and `docs/schemas/` ownership
+
+## Support scripts required before broad code motion
+
+Before broad code/package movement in `PKT-FND-012`, the refactor should add deterministic helper scripts for:
+- `tools/inventory_imports.py`
+- `tools/check_cross_domain_imports.py`
+- `tools/find_legacy_paths.py`
+- `tools/check_baseline_assets.py`
+- `tools/refactor_smoke.py`
+
+These scripts should own repetitive scan/check/smoke behavior so the refactor remains script-first and low-risk.
+
 ## Required outputs from the refactor
 
 The refactor must leave behind:
@@ -157,11 +267,21 @@ The refactor must leave behind:
 1. inventory and path mapping
 2. target tree + ownership + dependency freeze
 3. package/import strategy freeze
-4. code moves and module splits
-5. import repair and compatibility shims
-6. terminology cleanup
-7. docs/test/build-config cleanup
-8. final validation
+4. support-script and checker preparation
+5. code moves and module splits
+6. import repair and compatibility shims
+7. terminology cleanup
+8. docs/test/build-config cleanup
+9. final validation
+
+Recommended internal slices for `PKT-FND-012`:
+- Slice 12A: create target scaffolding and compatibility-shim placeholders
+- Slice 12B: move pure/shared code first (`contracts`, low-level `core`, stable `config`)
+- Slice 12C: move lifecycle/release shared internals
+- Slice 12D: move jobs / execution / runtime seams
+- Slice 12E: move channels / streaming / observability
+
+Run smoke and legacy-path checks after every slice.
 
 ## Dependencies
 
@@ -174,3 +294,11 @@ The refactor must leave behind:
 ## Notes
 
 This phase is intentionally placed before further non-refactor implementation work. The goal is to prevent the repository from accumulating more functionality on top of a structure that is about to move.
+
+Stop the refactor immediately if:
+- `PKT-FND-011` cannot decide the package strategy
+- `PKT-FND-011` cannot decide canonical docs/schemas/examples placement
+- `PKT-FND-011` cannot define allowed dependency directions cleanly
+- `PKT-FND-012` reveals the installable baseline model breaks without more policy
+- `PKT-FND-012` requires hidden feature redesign rather than structural movement
+- `PKT-FND-013` cannot make the old structure disappear from current docs cleanly
