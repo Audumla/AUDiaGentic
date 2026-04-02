@@ -70,3 +70,6 @@ The tracked files under `.audiagentic/`, the managed prompt templates, and the m
 provider instruction surfaces together define the installable AUDiaGentic project baseline.
 They are not runtime output and must remain visible to Git so they can be applied to other
 projects.
+
+See `48_Installable_Project_Baseline_and_Managed_Asset_Synchronization.md` for the canonical
+asset inventory and sync-mode classification.

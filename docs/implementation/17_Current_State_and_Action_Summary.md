@@ -21,7 +21,7 @@ The current state is:
 - prompt-level `provider=` directives now explicitly override a surface default provider, so a Codex-launched prompt can intentionally hand off to Cline or another supported provider when the prompt asks for it
 - Codex now has an explicit preflight contract that validates `AGENTS.md` and the canonical skill files before prompt-trigger launch
 - `.8` project release bootstrap and workflow activation is complete so the repository can install itself using its own release processes
-- `Phase 1.4` installable project baseline sync is now defined so lifecycle/bootstrap can converge on the real managed baseline instead of a minimal scaffold
+- `Phase 1.4` installable project baseline sync is now in motion, with the first packet freezing the real managed baseline inventory so lifecycle/bootstrap can converge on it instead of a minimal scaffold
 - `.9` provider live stream and progress capture is in progress; the current executable pass tees stdout/stderr and persists raw runtime logs, while normalized progress records remain the next shared writer step
 - `.10` provider live input and interactive session control is in progress; the current harness records and persists session input, while full live-session attachment remains a later manager-level extension
 - raw provider session keys are now explicitly treated as non-log-safe material; AUDiaGentic should preserve only redacted session handles in general runtime artifacts until a later secure-session reference/store seam is implemented
@@ -49,7 +49,7 @@ The current state is:
 - `.7` provider availability and auto-install orchestration is now drafted as the next feature slice
 - Phase 2.3 project release bootstrap and workflow activation is implemented and now tracked as a verified release-core extension
 - Phase 1.3 provider auto-install policy persistence is drafted as a lifecycle follow-on
-- Phase 1.4 installable project baseline and managed asset synchronization is now the install-focused correction layer that brings clean/existing project setup back into line with the repository's real tracked baseline
+- Phase 1.4 installable project baseline and managed asset synchronization is now the install-focused correction layer that brings clean/existing project setup back into line with the repository's real tracked baseline; `PKT-LFC-011` has frozen the inventory and is ready for review
 - Phase 3.4 job control and running-job cancellation is implemented and ready for review
 - PKT-JOB-011 now has a concrete implementation packet with files, tests, and recovery steps
 - The focused job-control test pass is green

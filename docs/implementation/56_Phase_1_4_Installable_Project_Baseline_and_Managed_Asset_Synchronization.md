@@ -43,6 +43,12 @@ Bring the lifecycle and bootstrap model back into alignment with the repository'
 - clean-project and existing-project behavior are both covered by tests
 - this repository remains usable as a self-hosting validation target without becoming a special-case installer
 
+## Packet execution order
+
+1. `PKT-LFC-011` freezes the inventory and sync-mode classification
+2. `PKT-LFC-012` implements the shared sync engine
+3. `PKT-LFC-013` converges fresh-install and release-bootstrap on that engine
+
 ## Recovery considerations
 
 - if the baseline inventory changes, update the asset classification and install tests together
