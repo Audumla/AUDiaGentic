@@ -1,3 +1,8 @@
+---
+name: adhoc
+description: Optional skill for @adhoc launches when the project feature gate is enabled. Handles ad hoc subjects conservatively.
+---
+
 # adhoc skill
 
 Optional skill for `@adhoc` launches when feature-gated.
@@ -11,4 +16,4 @@ Do:
 
 Do not:
 - enable ad hoc execution if the project gate disables it
-
+- redefine the canonical grammar

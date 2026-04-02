@@ -114,7 +114,7 @@ def test_prompt_launch_creates_job_and_launch_artifact(tmp_path: Path) -> None:
         result = launch_prompt_request(sandbox.repo, request)
         assert result["status"] == "created"
         job = result["job"]
-        assert job["launch-tag"] == "plan"
+        assert job["launch-tag"] == "ag-plan"
         assert job["model-id"] == "gpt-5.4-mini"
         assert job_record_path(sandbox.repo, job["job-id"]).exists()
         launch_path = sandbox.repo / ".audiagentic" / "runtime" / "jobs" / job["job-id"] / "launch-request.json"
