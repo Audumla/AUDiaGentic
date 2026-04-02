@@ -8,6 +8,9 @@
 - [chg_20260331_0004] Upgraded the release workflow to run the project bootstrap path and verify installed state.
 
 ### docs
+- [chg_20260402_0008] Added the remaining Phase 0.3 control details: a stronger registry freeze note, canonical public-import-surface and refactor artifact templates, broader support-script cadence rules, extension-root placement, and explicit pauses on later ready packets while the checkpoint is active.
+- [chg_20260402_0007] Added Phase 0.3 checkpoint enforcement notes, artifact templates, public-import and extension-root freeze details, support-script contract notes, and baseline-preservation validation guidance so the refactor can be executed without ambiguity before code motion starts.
+- [chg_20260402_0006] Tightened the checkpoint wording so Phase 1.4 is explicitly held behind the Phase 0.3 structural refactor, allowing only `PKT-LFC-011` review/merge to continue until `PKT-FND-013` is verified.
 - [chg_20260402_0005] Deepened the Phase 0.3 repository refactor spec and packets with the freeze-first execution model, explicit structural decisions, required artifact outputs, support scripts, code-move slices, and stop rules.
 - [chg_20260402_0004] Added the pre-implementation Phase 0.3 repository domain refactor checkpoint, froze the missing migration/ownership/import clarifications from the refactor brief, and made the structural checkpoint explicit in the roadmap, gates, registry, tracker, and install-baseline sequencing.
 - [chg_20260402_0003] Froze the Phase 1.4 installable baseline inventory and sync modes so install/bootstrap now have one canonical managed asset taxonomy to build from.
