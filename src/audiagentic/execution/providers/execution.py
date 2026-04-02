@@ -1,4 +1,5 @@
 """Provider execution dispatch helpers."""
+
 from __future__ import annotations
 
 from importlib import import_module
@@ -17,6 +18,7 @@ _ADAPTER_MODULES: dict[str, str] = {
     "cline": "audiagentic.execution.providers.adapters.cline",
     "local-openai": "audiagentic.execution.providers.adapters.local_openai",
     "qwen": "audiagentic.execution.providers.adapters.qwen",
+    "opencode": "audiagentic.execution.providers.adapters.opencode",
 }
 
 

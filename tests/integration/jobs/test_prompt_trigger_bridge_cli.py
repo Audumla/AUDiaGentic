@@ -83,7 +83,7 @@ def test_prompt_trigger_bridge_launches_from_stdin(tmp_path: Path, capsys) -> No
         payload = json.loads(capsys.readouterr().out)
         assert payload["status"] == "created"
         assert payload["job"]["provider-id"] == "claude"
-        assert payload["job"]["launch-tag"] == "implement"
+        assert payload["job"]["launch-tag"] == "ag-implement"
         assert payload["job"]["launch-target"]["kind"] == "adhoc"
         assert payload["job"]["launch-source"]["surface"] == "vscode"
         assert payload["job"]["launch-source"]["session-id"] == "sess_100"

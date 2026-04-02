@@ -17,11 +17,11 @@ REQUIRED_ASSETS = (
     Path("CLAUDE.md"),
     Path(".claude/rules/prompt-tags.md"),
     Path(".claude/rules/review-policy.md"),
-    Path(".claude/skills/plan/SKILL.md"),
-    Path(".claude/skills/implement/SKILL.md"),
-    Path(".claude/skills/review/SKILL.md"),
-    Path(".claude/skills/audit/SKILL.md"),
-    Path(".claude/skills/check-in-prep/SKILL.md"),
+    Path(".claude/skills/ag-plan/SKILL.md"),
+    Path(".claude/skills/ag-implement/SKILL.md"),
+    Path(".claude/skills/ag-review/SKILL.md"),
+    Path(".claude/skills/ag-audit/SKILL.md"),
+    Path(".claude/skills/ag-check-in-prep/SKILL.md"),
 )
 
 

@@ -33,7 +33,7 @@ def test_fresh_install_creates_scaffold_and_manifest(tmp_path: Path) -> None:
         assert (sandbox.repo / ".audiagentic" / "components.yaml").is_file()
         assert (sandbox.repo / ".audiagentic" / "providers.yaml").is_file()
         assert (sandbox.repo / ".audiagentic" / "prompt-syntax.yaml").is_file()
-        assert (sandbox.repo / ".audiagentic" / "prompts" / "review" / "default.md").is_file()
+        assert (sandbox.repo / ".audiagentic" / "prompts" / "ag-review" / "default.md").is_file()
         assert (sandbox.repo / "AGENTS.md").is_file()
         assert (sandbox.repo / ".audiagentic" / "installed.json").is_file()
         assert result["baseline-sync-report"]["excluded-paths"] == [".audiagentic/runtime/**"]

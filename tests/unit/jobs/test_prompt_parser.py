@@ -23,7 +23,7 @@ def test_parse_prompt_launch_request_normalizes_plan_prompt() -> None:
         workflow_profile="standard",
         prompt_id="prm_20260330_0001",
     )
-    assert request["tag"] == "plan"
+    assert request["tag"] == "ag-plan"
     assert request["target"] == {"kind": "packet", "packet-id": "PKT-JOB-008"}
     assert request["source"]["provider-id"] == "codex"
     assert request["source"]["model-id"] == "gpt-5.4-mini"
@@ -39,7 +39,7 @@ def test_parse_prompt_launch_request_accepts_provider_shorthand() -> None:
         workflow_profile="standard",
         prompt_id="prm_20260330_0002",
     )
-    assert request["tag"] == "implement"
+    assert request["tag"] == "ag-implement"
     assert request["source"]["provider-id"] == "codex"
     assert request["target"] == {"kind": "adhoc", "adhoc-id": "adh_20260330_0002"}
     assert request["target-origin"] == "default"
@@ -56,7 +56,7 @@ def test_parse_prompt_launch_request_accepts_short_tag_alias() -> None:
         workflow_profile="standard",
         prompt_id="prm_20260330_0003",
     )
-    assert request["tag"] == "implement"
+    assert request["tag"] == "ag-implement"
     assert request["source"]["provider-id"] == "codex"
     assert request["target"] == {"kind": "packet", "packet-id": "PKT-JOB-008"}
     assert request["target-origin"] == "explicit"
@@ -72,7 +72,7 @@ def test_parse_prompt_launch_request_accepts_provider_suffix_and_prompt_controls
         prompt_id="prm_20260330_0004",
         project_root=Path("."),
     )
-    assert request["tag"] == "review"
+    assert request["tag"] == "ag-review"
     assert request["source"]["provider-id"] == "cline"
     assert request["target"] == {"kind": "job", "job-id": "job_001"}
     assert request["prompt-controls"] == {
@@ -101,7 +101,7 @@ def test_parse_prompt_launch_request_accepts_short_review_tag_with_default_templ
         project_root=project_root,
     )
 
-    assert request["tag"] == "review"
+    assert request["tag"] == "ag-review"
     assert request["source"]["provider-id"] == "cline"
     assert request["target"]["kind"] == "adhoc"
     assert request["prompt-body"] == ""
@@ -116,7 +116,7 @@ def test_parse_prompt_launch_request_allows_prompt_provider_override_from_surfac
         workflow_profile="standard",
         prompt_id="prm_20260330_0004a",
     )
-    assert request["tag"] == "review"
+    assert request["tag"] == "ag-review"
     assert request["source"]["provider-id"] == "cline"
     assert request["target"] == {"kind": "job", "job-id": "job_001"}
     assert request["target-origin"] == "explicit"
@@ -132,7 +132,7 @@ def test_parse_prompt_launch_request_accepts_adhoc_baseline() -> None:
         prompt_id="prm_20260330_0002",
         allow_adhoc_target=False,
     )
-    assert request["tag"] == "implement"
+    assert request["tag"] == "ag-implement"
     assert request["target"]["kind"] == "adhoc"
     assert request["target-origin"] == "explicit"
 
@@ -190,7 +190,7 @@ def test_parse_prompt_launch_request_uses_configurable_syntax_aliases(tmp_path: 
         project_root=project_root,
     )
 
-    assert request["tag"] == "implement"
+    assert request["tag"] == "ag-implement"
     assert request["source"]["provider-id"] == "cline"
     assert request["target"] == {"kind": "job", "job-id": "job_001"}
     assert request["prompt-controls"] == {

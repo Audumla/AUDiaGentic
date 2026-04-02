@@ -51,6 +51,10 @@ These are the source assets AUDiaGentic may install or refresh into a project.
 - `.audiagentic/prompt-syntax.yaml`
 - `.audiagentic/prompts/**`
 
+Prompt templates are canonicalized under `ag-*` action directories in the template repo
+(`.audiagentic/prompts/ag-plan/`, `.audiagentic/prompts/ag-review/`, and so on). The
+runtime loader keeps a compatibility lookup for legacy directory names during migration.
+
 #### Provider instruction baseline
 - `AGENTS.md`
 - `CLAUDE.md`
@@ -72,7 +76,7 @@ The following table is the current installable baseline frozen by Phase 1.4 pack
 | Component config | `.audiagentic/components.yaml` | `.audiagentic/components.yaml` | `create-if-missing` | baseline component enablement/config |
 | Provider config | `.audiagentic/providers.yaml` | `.audiagentic/providers.yaml` | `create-if-missing` | project-owned provider choices/config remain preservable |
 | Prompt syntax config | `.audiagentic/prompt-syntax.yaml` | `.audiagentic/prompt-syntax.yaml` | `create-if-missing` | alias and shorthand source of truth |
-| Shared prompts | `.audiagentic/prompts/**` | `.audiagentic/prompts/**` | `required-managed` | includes action defaults and shared context packs |
+| Shared prompts | `.audiagentic/prompts/**` | `.audiagentic/prompts/**` | `required-managed` | canonical action directories use `ag-*`; compatibility lookup remains for legacy directory names |
 | Codex instruction surface | `AGENTS.md` | `AGENTS.md` | `required-managed` | repo-owned prompt bridge contract |
 | Claude instruction surface | `CLAUDE.md` | `CLAUDE.md` | `required-managed` | shared Claude baseline instructions |
 | Gemini instruction surface | `GEMINI.md` | `GEMINI.md` | `required-managed` | shared Gemini baseline instructions |
@@ -181,6 +185,13 @@ Provider-specific instruction assets may be installed in one of two ways:
 
 The initial implementation may use baseline-all if that keeps behavior deterministic, but the sync contract must leave a seam for provider-selected installation later.
 
+The tracked instruction surfaces and skill manifests are regenerated from the prompt-syntax
+contract with:
+
+```powershell
+python tools/regenerate_tag_surfaces.py --project-root .
+```
+
 ## Required implementation seam
 
 A shared baseline sync engine must:
@@ -216,4 +227,4 @@ The sync engine must produce a machine-readable report containing at least:
 
 ## Notes
 
-This extension is intended to stabilize installation and bootstrap behavior before further provider features expand the managed baseline again.
+This extension is intended to stabilize installation and bootstrap behavior before further provider features expand the managed baseline again. The template repo remains the source definition, and the regeneration tool keeps instruction surfaces synchronized with the canonical `ag-*` tag names.

@@ -1,6 +1,6 @@
 # Provider Live Stream and Progress Capture
 
-Status: implementation-ready spec
+Status: implementation-ready spec — sink architecture locked
 
 ## Purpose
 
@@ -45,19 +45,56 @@ Related earlier work:
 - No provider-owned persistence rules.
 - No requirement that every provider emits the same shape on day one.
 
+## Sink architecture (required — not optional)
+
+The capture layer must use a **generic pluggable sink interface**, not hardcoded destinations.
+This is a hard requirement, not an implementation suggestion.
+
+```python
+class StreamSink(Protocol):
+    def write(self, line: str) -> None: ...
+    def flush(self) -> None: ...
+    def close(self) -> None: ...
+```
+
+Built-in sinks (in `src/audiagentic/streaming/sinks.py`):
+
+| Sink                        | Responsibility                                    |
+| --------------------------- | ------------------------------------------------- |
+| `ConsoleSink`               | Mirror lines to terminal                          |
+| `RawLogSink(path)`          | Append raw lines to `stdout.log` / `stderr.log`   |
+| `NormalizedEventSink(path)` | Write canonical records to `events.ndjson`        |
+
+The reader loop calls each registered sink in sequence.  A sink that raises must not abort
+the reader or affect other sinks (per-sink error isolation).
+
+`run_streaming_command` must accept `stdout_sinks` and `stderr_sinks` as lists, replacing the
+`tee_console` flag and `log_path` parameters.  Console mirroring is controlled by the
+presence of a `ConsoleSink`, not a boolean.
+
+Provider-specific event extraction (e.g. Cline NDJSON parsing, Codex milestone parsing) is
+implemented as an additional sink registered by the provider adapter — not by modifying the
+shared harness.
+
+This is the only sanctioned persistence path for streaming output.  No provider or bridge
+may introduce a parallel file-writing path outside this sink chain.
+
 ## Current executable reality
 
 The current runtime already supports:
 
-- raw `stdout`/`stderr` capture
-- optional console teeing
-- provider-specific raw stream preservation under the job runtime folder
+- raw `stdout`/`stderr` capture via `provider_streaming.py`
+- optional console teeing (hardcoded `tee_console` flag — to be replaced by `ConsoleSink`)
+- raw log append (hardcoded `_append_text` — to be replaced by `RawLogSink`)
 
-The current runtime does **not yet** fully support:
+The current runtime does **not yet** implement:
 
-- canonical `events.ndjson` writing for every provider event
-- a uniform provider-progress normalization layer across all providers
-- replay-aware or transport-aware stream publication
+- the `StreamSink` protocol or pluggable sink registration
+- `ConsoleSink`, `RawLogSink`, `NormalizedEventSink` as named, testable classes
+- `stdout_sinks` / `stderr_sinks` list parameters on `run_streaming_command`
+- canonical `events.ndjson` writing
+- provider-specific extractor sinks (`ClineEventExtractor`, `CodexEventExtractor`)
+- per-sink error isolation
 
 This distinction matters for implementation planning:
 
