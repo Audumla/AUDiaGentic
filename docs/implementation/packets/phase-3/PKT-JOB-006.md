@@ -22,7 +22,7 @@ This packet is placed in Phase 3 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/jobs/release_bridge.py`
+- `src/audiagentic/execution/jobs/release_bridge.py`
 - `tests/integration/jobs/test_release_bridge.py`
 
 ### It may read from

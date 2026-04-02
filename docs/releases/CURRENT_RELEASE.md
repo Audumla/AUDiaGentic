@@ -90,3 +90,6 @@
 
 ### tests
 - [chg_20260330_0016] Added provider/job seam tests.
+- [chg_20260402_0013] Verified `PKT-LFC-011`, implemented and verified `PKT-LFC-012`, and unlocked `PKT-LFC-013` with the shared baseline-sync engine now driving managed baseline seeding and bootstrap.
+- [chg_20260402_0014] Verified `PKT-LFC-013` and closed Phase 1.4 after aligning fresh-install, legacy-cutover, and release-bootstrap to the shared managed baseline-sync seam.
+- [chg_20260402_0015] Removed the retired legacy shim roots from `src/audiagentic/`, updated active repo references to canonical domain paths, and revalidated the repo on the post-shim structure.

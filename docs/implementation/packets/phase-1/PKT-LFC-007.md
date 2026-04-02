@@ -19,7 +19,7 @@ This packet is placed in Phase 1 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/lifecycle/migration.py`
+- `src/audiagentic/runtime/lifecycle/migration.py`
 - `tests/integration/lifecycle/test_doc_migration.py`
 
 ### It may read from

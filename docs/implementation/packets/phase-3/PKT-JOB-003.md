@@ -20,7 +20,7 @@ This packet is placed in Phase 3 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/jobs/packet_runner.py`
+- `src/audiagentic/execution/jobs/packet_runner.py`
 - `tests/integration/jobs/test_packet_runner.py`
 
 ### It may read from

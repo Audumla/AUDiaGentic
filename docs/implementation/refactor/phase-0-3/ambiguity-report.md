@@ -11,7 +11,7 @@
 
 ### Record 1
 
-- current path: prompt-trigger / bridge logic across `src/audiagentic/jobs/*`, `src/audiagentic/providers/*`, and `tools/*`
+- current path: prompt-trigger / bridge logic across `src/audiagentic/execution/jobs/*`, `src/audiagentic/providers/*`, and `tools/*`
 - dominant responsibility: execution-side request normalization and job launch orchestration
 - secondary responsibility: provider surface handoff and deterministic wrapper entrypoints
 - target domain recommendation: keep normalization/launch logic under `src/audiagentic/execution/jobs/*`, keep provider adapters under `src/audiagentic/execution/providers/*`, keep `tools/*` as thin wrappers only
@@ -21,7 +21,7 @@
 
 ### Record 2
 
-- current path: `src/audiagentic/providers/streaming.py`
+- current path: `src/audiagentic/streaming/provider_streaming.py`
 - dominant responsibility: shared streaming command execution helper
 - secondary responsibility: provider adapter support
 - target domain recommendation: likely `src/audiagentic/streaming/*` later; may remain temporarily colocated with provider execution during initial move
@@ -31,7 +31,7 @@
 
 ### Record 3
 
-- current path: `src/audiagentic/jobs/store.py`
+- current path: `src/audiagentic/execution/jobs/store.py`
 - dominant responsibility: durable job record persistence and runtime-path layout
 - secondary responsibility: execution support
 - target domain recommendation: later candidate for `src/audiagentic/runtime/state/*`
@@ -41,7 +41,7 @@
 
 ### Record 4
 
-- current path: persistence helpers inside `src/audiagentic/jobs/reviews.py`
+- current path: persistence helpers inside `src/audiagentic/execution/jobs/reviews.py`
 - dominant responsibility: review artifact persistence and runtime-path layout
 - secondary responsibility: review domain logic
 - target domain recommendation: later candidate for `src/audiagentic/runtime/state/*`
@@ -51,7 +51,7 @@
 
 ### Record 5
 
-- current path: `src/audiagentic/jobs/session_input.py`
+- current path: `src/audiagentic/execution/jobs/session_input.py`
 - dominant responsibility: execution-side session input record creation
 - secondary responsibility: hard-coded disk persistence
 - target domain recommendation: `execution/jobs/session_input.py` plus output adapters under `streaming/`

@@ -7,6 +7,7 @@ from typing import Any
 
 import yaml
 
+from audiagentic.runtime.lifecycle.baseline_sync import ensure_project_layout, sync_managed_baseline
 from audiagentic.runtime.lifecycle.detector import detect_installed_state
 from audiagentic.runtime.lifecycle.manifest import build_manifest, read_manifest, write_manifest
 from audiagentic.runtime.release.audit import generate_audit_and_checkin
@@ -15,16 +16,6 @@ from audiagentic.runtime.release.release_please import ensure_release_please_bas
 from audiagentic.runtime.release.sync import sync_current_release_ledger
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-SCAFFOLD_ROOT = REPO_ROOT / "docs" / "examples" / "project-scaffold" / ".audiagentic"
-
-
-def _copy_example_if_missing(project_root: Path, filename: str, created: list[str]) -> None:
-    destination = project_root / ".audiagentic" / filename
-    if destination.exists():
-        return
-    source = SCAFFOLD_ROOT / f"{filename}.example"
-    destination.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
-    created.append(str(destination))
 
 
 def _provider_summary(project_root: Path) -> dict[str, str]:
@@ -44,13 +35,11 @@ def _provider_summary(project_root: Path) -> dict[str, str]:
 
 def bootstrap_release_workflow(project_root: Path, *, release_id: str = "rel_0001") -> dict[str, Any]:
     project_root = project_root.resolve()
+    ensure_project_layout(project_root)
     audi_root = project_root / ".audiagentic"
-    audi_root.mkdir(parents=True, exist_ok=True)
-    (audi_root / "runtime").mkdir(parents=True, exist_ok=True)
 
-    created_files: list[str] = []
-    for filename in ("project.yaml", "components.yaml", "providers.yaml", "prompt-syntax.yaml"):
-        _copy_example_if_missing(project_root, filename, created_files)
+    sync_report = sync_managed_baseline(project_root, source_root=REPO_ROOT)
+    created_files = list(sync_report.get("created-files", []))
 
     current_manifest = None
     manifest_path = audi_root / "installed.json"
@@ -87,6 +76,7 @@ def bootstrap_release_workflow(project_root: Path, *, release_id: str = "rel_000
         "release-id": release_id,
         "installed-state": installed_state.state,
         "created-files": created_files,
+        "baseline-sync-report": sync_report,
         "manifest-path": str(manifest_path),
         "release-workflow-state": release_state.get("state"),
         "release-workflow-warnings": release_state.get("warnings", []),

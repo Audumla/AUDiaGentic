@@ -31,8 +31,8 @@ shared Phase 4.9 stream harness.
 ## Files likely to change
 
 - `tools/codex_prompt_trigger_bridge.py`
-- `src/audiagentic/providers/adapters/codex.py`
-- `src/audiagentic/jobs/prompt_launch.py`
+- `src/audiagentic/execution/providers/adapters/codex.py`
+- `src/audiagentic/execution/jobs/prompt_launch.py`
 - tests for streaming capture
 
 ## Acceptance criteria

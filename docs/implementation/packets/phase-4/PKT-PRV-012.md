@@ -37,10 +37,10 @@ This packet owns the following implementation surface:
 - `docs/examples/fixtures/provider-model-catalog.valid.json`
 - `docs/examples/fixtures/provider-model-catalog.invalid.json`
 - `docs/examples/project-scaffold/.audiagentic/providers.yaml.example`
-- `src/audiagentic/providers/catalog.py`
-- `src/audiagentic/providers/models.py`
-- `src/audiagentic/providers/health.py`
-- `src/audiagentic/providers/selection.py`
+- `src/audiagentic/config/provider_catalog.py`
+- `src/audiagentic/execution/providers/models.py`
+- `src/audiagentic/execution/providers/health.py`
+- `src/audiagentic/execution/providers/selection.py`
 - `tools/refresh_model_catalog.py`
 - `tests/unit/providers/test_model_catalog.py`
 - `tests/integration/providers/test_model_selection.py`
@@ -68,8 +68,8 @@ This packet owns the following implementation surface:
 1. Finalize the model catalog contract and add the provider-model-catalog schema.
 2. Add fixtures for valid and invalid model catalogs and wire into schema validation.
 3. Extend provider config to include `model-aliases` and `catalog-refresh` fields.
-4. Implement model catalog read/write helpers under `src/audiagentic/providers/catalog.py`.
-5. Implement model resolution logic under `src/audiagentic/providers/models.py`.
+4. Implement model catalog read/write helpers under `src/audiagentic/config/provider_catalog.py`.
+5. Implement model resolution logic under `src/audiagentic/execution/providers/models.py`.
 6. Update provider selection to validate resolved model against catalog when present.
 7. Add `tools/refresh_model_catalog.py` CLI to write runtime catalogs.
 8. Update provider docs with model catalog guidance and examples.
@@ -78,11 +78,11 @@ This packet owns the following implementation surface:
 
 ## Integration points
 
-- `src/audiagentic/providers/registry.py`
-- `src/audiagentic/providers/selection.py`
-- `src/audiagentic/providers/health.py`
-- `src/audiagentic/jobs/packet_runner.py`
-- `src/audiagentic/jobs/records.py`
+- `src/audiagentic/config/provider_registry.py`
+- `src/audiagentic/execution/providers/selection.py`
+- `src/audiagentic/execution/providers/health.py`
+- `src/audiagentic/execution/jobs/packet_runner.py`
+- `src/audiagentic/execution/jobs/records.py`
 - `tools/seed_example_project.py`
 - `tools/validate_schemas.py`
 - `tests/integration/providers/test_selection.py`

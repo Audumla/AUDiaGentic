@@ -11,8 +11,8 @@ Add additive job record fields for node ownership and execution mode.
 - `PKT-JOB-011` state must be stable enough to avoid reopening control semantics
 
 ## Ownership boundary
-- `src/audiagentic/jobs/records.py`
-- `src/audiagentic/jobs/store.py`
+- `src/audiagentic/execution/jobs/records.py`
+- `src/audiagentic/execution/jobs/store.py`
 - `tests/unit/jobs/test_node_ownership_fields.py`
 
 ## Fields

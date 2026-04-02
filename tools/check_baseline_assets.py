@@ -24,6 +24,7 @@ REQUIRED_PATHS = [
     ".agents/skills/review/SKILL.md",
     ".github/workflows/release-please.audiagentic.yml",
     "tools/seed_example_project.py",
+    "src/audiagentic/runtime/lifecycle/baseline_sync.py",
     "src/audiagentic/runtime/release/bootstrap.py",
 ]
 

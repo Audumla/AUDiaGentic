@@ -21,7 +21,7 @@ This packet is placed in Phase 2 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/release/finalize.py`
+- `src/audiagentic/runtime/release/finalize.py`
 - `tests/e2e/release/test_finalize.py`
 
 ### It may read from

@@ -20,8 +20,8 @@ This packet is placed in Phase 0 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/cli/main.py`
-- `src/audiagentic/lifecycle/checkpoints.py`
+- `src/audiagentic/channels/cli/main.py`
+- `src/audiagentic/runtime/lifecycle/checkpoints.py`
 - `tools/lifecycle_stub.py`
 - `tests/integration/lifecycle/test_stub.py`
 

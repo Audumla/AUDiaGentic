@@ -1,6 +1,6 @@
 # Audit Summary
 
-Total events: 77
+Total events: 81
 
 - chg_20260402_0011: Completed the initial slice 12B move in PKT-FND-012 by relocating the stable provider config, model-catalog, and provider-registry helpers into src/audiagentic/config/, leaving legacy shim modules in place and keeping the refactor checks green.
 - chg_20260402_0010: Started PKT-FND-012 by adding the Phase 0.3 support scripts, creating the target domain scaffolding and legacy shim placeholders for slice 12A, and recording that slice 12B is the next gated move set.
@@ -82,3 +82,6 @@ Total events: 77
 - chg_20260331_0013: Tightened Phase 4.12 to be explicitly script-first and template-driven for repeatable operations, with agents limited to the minimum intent or parameters needed by the helper.
 - chg_20260402_0001: Expanded the Phase 4.9 through 4.11 provider-session docs into implementation-ready specs, packetized Phase 4.11 structured completion, added a secure-session follow-on seam, and aligned provider-specific streaming/input/completion methods.
 - chg_20260402_0012: Completed the Phase 0.3 repository-domain refactor checkpoint, finished the code/package move, updated active docs/examples to canonical refactored paths, fixed legacy CLI shim execution, and recorded final validation so later work can resume on the frozen structure.
+- chg_20260402_0013: Verified PKT-LFC-011, implemented PKT-LFC-012 with a shared managed baseline-sync engine, rewired baseline seeding and release bootstrap onto it, and unlocked PKT-LFC-013.
+- chg_20260402_0014: Verified PKT-LFC-013, closed Phase 1.4, and aligned fresh-install, legacy-cutover, and release-bootstrap to the shared managed baseline-sync seam.
+- chg_20260402_0015: Removed the retired legacy shim roots, rewrote active repo references to canonical domain paths, and revalidated the post-shim repository layout.
