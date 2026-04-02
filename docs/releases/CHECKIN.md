@@ -1,7 +1,10 @@
 # Check-In Summary
 
-Total changes: 71
+Total changes: 74
 
+- Added the remaining Phase 0.3 control details, including a stronger registry freeze note, canonical public-import and refactor artifact templates, support-script cadence rules, extension-root placement, and explicit pauses on later ready packets while the checkpoint is active.
+- Added Phase 0.3 checkpoint enforcement notes, artifact templates, public-import and extension-root freeze details, support-script contract notes, and baseline-preservation validation guidance so the refactor can proceed without ambiguity before code motion starts.
+- Tightened the checkpoint wording so Phase 1.4 is explicitly held behind the Phase 0.3 structural refactor, allowing only `PKT-LFC-011` review/merge to continue until `PKT-FND-013` is verified.
 - Deepened the Phase 0.3 repository refactor spec and packets with the freeze-first execution model, explicit structural decisions, required artifact outputs, support scripts, code-move slices, and stop rules.
 - Added the pre-implementation Phase 0.3 repository domain refactor checkpoint, captured the missing migration and ownership clarifications from the refactor brief, and made the structural checkpoint explicit across the roadmap, gates, registry, tracker, and install-baseline sequencing.
 - Froze the Phase 1.4 installable baseline inventory and sync modes so install/bootstrap now have one canonical managed asset taxonomy to build from.

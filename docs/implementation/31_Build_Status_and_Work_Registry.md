@@ -14,6 +14,17 @@ If this document is not updated, the implementation state is considered unreliab
 
 ---
 
+## Structural checkpoint freeze
+
+While `Phase 0.3` is active:
+- no packet outside `Phase 0.3` may be newly claimed unless explicitly exempted in this registry
+- review or merge completion of already-near-complete work may continue only when the relevant phase note explicitly allows it
+- `Phase 1.4` is on checkpoint hold except for review or merge completion of `PKT-LFC-011`
+
+This freeze note overrides older packet-local `READY_TO_START` states until `PKT-FND-013` is verified.
+
+---
+
 ## Mandatory usage rules
 
 1. **Read this document first** before starting any work.
@@ -117,7 +128,7 @@ The registry records the active baseline phases and the later additive extension
 | Phase 1.1 | `VERIFIED` | lifecycle preservation of .1 config fields complete |
 | Phase 1.2 | `VERIFIED` | lifecycle preservation of prompt-launch config complete |
 | Phase 1.3 | `DEFERRED_DRAFT` | lifecycle preservation of provider auto-install policy fields drafted |
-| Phase 1.4 | `IN_PROGRESS` | installable project baseline and managed asset synchronization is underway; the inventory-freeze packet is ready for review and the sync-engine packets remain queued behind it |
+| Phase 1.4 | `IN_PROGRESS` | installable project baseline and managed asset synchronization is in a checkpoint hold: only review/merge completion of `PKT-LFC-011` may continue, and no new Phase 1.4 implementation beyond that may start until `PKT-FND-013` is verified |
 | Phase 2 | `VERIFIED` | phase 2 gate complete |
 | Phase 2.1 | `VERIFIED` | release/ledger updates for .1 fields complete |
 | Phase 2.2 | `VERIFIED` | release/audit handling for prompt/review metadata complete |
@@ -144,7 +155,7 @@ The registry records the active baseline phases and the later additive extension
 | Phase 9 | `WAITING_ON_DEPENDENCIES` | federation and control extension is additive future work |
 | Phase 10 | `WAITING_ON_DEPENDENCIES` | federation consumption seam is additive future work |
 | Phase 11 | `DEFERRED_DRAFT` | external connector connectivity is a later optional extension |
-| Phase 5 | `READY_TO_START` | can start once Phase 4.4 gate is verified |
+| Phase 5 | `READY_TO_START` | paused by Phase 0.3 checkpoint; may not be newly claimed until `PKT-FND-013` is verified even though its earlier prerequisites were already satisfied |
 | Phase 6 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 5 is complete and Phase 6 prerequisites are satisfied |
 
 ---
@@ -327,12 +338,12 @@ Later phases should continue this registry pattern using the same fields and sta
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
 | PKT-PRV-014 | Shared prompt-tag surface contract + sync harness | VERIFIED | Codex | workspace | needs PKT-PRV-012 VERIFIED + PKT-FND-009 VERIFIED + PKT-LFC-009 VERIFIED + PKT-RLS-010 VERIFIED + PKT-JOB-008 VERIFIED + PKT-JOB-009 VERIFIED | 03, 27, 38, packet | 2026-03-30 | shared prompt-surface config/descriptor fields and sync harness |
-| PKT-PRV-015 | codex prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-005 VERIFIED | 03, 27, 38, packet | 2026-03-30 | codex wrapper/extension prompt-tag rollout |
-| PKT-PRV-016 | claude prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-004 VERIFIED | 03, 27, 38, packet | 2026-03-30 | claude wrapper/extension prompt-tag rollout |
+| PKT-PRV-015 | codex prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-005 VERIFIED | 03, 27, 38, packet | 2026-03-30 | codex wrapper/extension prompt-tag rollout; paused by Phase 0.3 checkpoint |
+| PKT-PRV-016 | claude prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-004 VERIFIED | 03, 27, 38, packet | 2026-03-30 | claude wrapper/extension prompt-tag rollout; paused by Phase 0.3 checkpoint |
 | PKT-PRV-017 | gemini prompt-tag surface integration | READY_FOR_REVIEW | Gemini CLI | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-006 VERIFIED | 03, 27, 38, packet | 2026-03-30 | implemented prompt-tag detection and normalization; smoke tests simulated |
-| PKT-PRV-018 | copilot prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-007 VERIFIED | 03, 27, 38, packet | 2026-03-30 | copilot surface rollout |
+| PKT-PRV-018 | copilot prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-007 VERIFIED | 03, 27, 38, packet | 2026-03-30 | copilot surface rollout; paused by Phase 0.3 checkpoint |
 | PKT-PRV-019 | continue prompt-tag surface integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-008 VERIFIED | 03, 27, 38, packet | 2026-03-30 | future integration; not part of the active prompt-calling rollout |
-| PKT-PRV-020 | cline prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-009 VERIFIED | 03, 27, 38, packet | 2026-03-30 | cline wrapper/extension prompt-tag rollout |
+| PKT-PRV-020 | cline prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-009 VERIFIED | 03, 27, 38, packet | 2026-03-30 | cline wrapper/extension prompt-tag rollout; paused by Phase 0.3 checkpoint |
 | PKT-PRV-021 | local-openai/qwen bridge-wrapper prompt-tag integration | VERIFIED | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-003 VERIFIED + PKT-PRV-011 VERIFIED | 03, 27, 38, packet | 2026-03-30 | bridge-wrapper surface wiring for local-openai and qwen; bridge wrappers and smoke tests are implemented |
 
 ### Phase 4.4 — Provider Tag Execution Compliance and Isolated Provider Implementations
@@ -340,13 +351,13 @@ Later phases should continue this registry pattern using the same fields and sta
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
 | PKT-PRV-022 | Provider tag execution compliance model + conformance matrix | VERIFIED | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-012 VERIFIED + PKT-PRV-013 VERIFIED | 03, 27, 28, 39, packet | 2026-03-30 | shared provider execution compliance model and matrix |
-| PKT-PRV-023 | Codex tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-005 VERIFIED | 28, 39, packet | 2026-03-30 | isolated Codex execution doc and smoke-test guidance |
-| PKT-PRV-024 | Claude Code tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-004 VERIFIED | 28, 39, packet | 2026-03-30 | isolated Claude execution doc and smoke-test guidance |
+| PKT-PRV-023 | Codex tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-005 VERIFIED | 28, 39, packet | 2026-03-30 | isolated Codex execution doc and smoke-test guidance; paused by Phase 0.3 checkpoint |
+| PKT-PRV-024 | Claude Code tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-004 VERIFIED | 28, 39, packet | 2026-03-30 | isolated Claude execution doc and smoke-test guidance; paused by Phase 0.3 checkpoint |
 | PKT-PRV-025 | Gemini tag execution implementation | READY_FOR_REVIEW | Gemini CLI | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-006 VERIFIED | 28, 39, packet | 2026-03-30 | implemented native intercept guidance and GEMINI.md |
-| PKT-PRV-026 | GitHub Copilot tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-007 VERIFIED | 28, 39, packet | 2026-03-30 | isolated Copilot execution doc and smoke-test guidance |
+| PKT-PRV-026 | GitHub Copilot tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-007 VERIFIED | 28, 39, packet | 2026-03-30 | isolated Copilot execution doc and smoke-test guidance; paused by Phase 0.3 checkpoint |
 | PKT-PRV-027 | Continue tag execution implementation | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-008 VERIFIED | 28, 39, packet | 2026-03-30 | future integration; isolated Continue execution doc and smoke-test guidance are deferred |
 | PKT-PRV-028 | Cline tag execution implementation | VERIFIED | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-009 VERIFIED | 28, 39, packet | 2026-03-30 | CLI-backed wrapper implemented and smoke-tested; hook-native path remains feature-gated |
-| PKT-PRV-029 | local OpenAI-compatible tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-003 VERIFIED + PKT-PRV-011 VERIFIED | 28, 39, packet | 2026-03-30 | backend-only provider execution doc and smoke-test guidance |
+| PKT-PRV-029 | local OpenAI-compatible tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-003 VERIFIED + PKT-PRV-011 VERIFIED | 28, 39, packet | 2026-03-30 | backend-only provider execution doc and smoke-test guidance; paused by Phase 0.3 checkpoint |
 | PKT-PRV-030 | Qwen Code tag execution implementation | VERIFIED | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-003 VERIFIED + PKT-PRV-011 VERIFIED | 28, 39, packet | 2026-03-30 | CLI-backed wrapper implemented and smoke-tested; hook-native path remains feature-gated |
 
 ### Phase 4.6 — Provider Prompt-Trigger Launch Behavior
