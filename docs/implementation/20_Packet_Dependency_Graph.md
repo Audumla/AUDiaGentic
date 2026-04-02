@@ -11,6 +11,8 @@ A packet is **ready** only when:
 - transitive dependencies are merged
 - any contract freeze point for the ownership group has passed
 
+While `Phase 0.3` is active, no new non-refactor packet claim should start unless the live registry explicitly exempts it. Treat that checkpoint freeze as an additional global readiness rule on top of packet-local dependency edges.
+
 ## High-level dependency graph
 
 ```mermaid
