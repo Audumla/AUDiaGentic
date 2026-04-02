@@ -8,6 +8,7 @@
 - [chg_20260331_0004] Upgraded the release workflow to run the project bootstrap path and verify installed state.
 
 ### docs
+- [chg_20260402_0005] Deepened the Phase 0.3 repository refactor spec and packets with the freeze-first execution model, explicit structural decisions, required artifact outputs, support scripts, code-move slices, and stop rules.
 - [chg_20260402_0004] Added the pre-implementation Phase 0.3 repository domain refactor checkpoint, froze the missing migration/ownership/import clarifications from the refactor brief, and made the structural checkpoint explicit in the roadmap, gates, registry, tracker, and install-baseline sequencing.
 - [chg_20260402_0003] Froze the Phase 1.4 installable baseline inventory and sync modes so install/bootstrap now have one canonical managed asset taxonomy to build from.
 - [chg_20260402_0002] Defined Phase 1.4 installable project baseline synchronization so lifecycle and release bootstrap can converge on the repository's real managed baseline instead of a minimal scaffold.
