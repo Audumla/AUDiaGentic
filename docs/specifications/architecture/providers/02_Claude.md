@@ -46,11 +46,11 @@ normalize the request into the shared launch envelope.
 - `CLAUDE.md`
 - `.claude/rules/prompt-tags.md`
 - `.claude/rules/review-policy.md`
-- `.claude/skills/plan/SKILL.md`
-- `.claude/skills/implement/SKILL.md`
-- `.claude/skills/review/SKILL.md`
-- `.claude/skills/audit/SKILL.md`
-- `.claude/skills/check-in-prep/SKILL.md`
+- `.claude/skills/ag-plan/SKILL.md`
+- `.claude/skills/ag-implement/SKILL.md`
+- `.claude/skills/ag-review/SKILL.md`
+- `.claude/skills/ag-audit/SKILL.md`
+- `.claude/skills/ag-check-in-prep/SKILL.md`
 
 ### Fallback path
 - if the hook chain is partial, the same normalized request must be emitted by the shared

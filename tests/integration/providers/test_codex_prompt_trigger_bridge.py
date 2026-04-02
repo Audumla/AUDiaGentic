@@ -21,7 +21,7 @@ def _write_project_and_provider_config(sandbox) -> None:
                 "",
                 "## Canonical rule",
                 "",
-                "- Do not reinterpret `@plan`, `@implement`, `@review`, `@audit`, or `@check-in-prep`.",
+        "- Do not reinterpret `@ag-plan`, `@ag-implement`, `@ag-review`, `@ag-audit`, or `@ag-check-in-prep`.",
                 "- Route the raw tagged prompt through the repo-owned bridge instead of inventing a separate workflow semantics layer.",
                 "- Keep provenance visible: provider id, surface, and session id should survive normalization.",
             ]
@@ -29,7 +29,7 @@ def _write_project_and_provider_config(sandbox) -> None:
         encoding="utf-8",
     )
     skills_root = sandbox.repo / ".agents" / "skills"
-    for skill_name in ("plan", "implement", "review", "audit", "check-in-prep"):
+    for skill_name in ("ag-plan", "ag-implement", "ag-review", "ag-audit", "ag-check-in-prep"):
         skill_dir = skills_root / skill_name
         skill_dir.mkdir(parents=True, exist_ok=True)
         (skill_dir / "SKILL.md").write_text(
@@ -89,7 +89,7 @@ def _write_project_and_provider_config(sandbox) -> None:
         ),
         encoding="utf-8",
     )
-    review_prompt_root = sandbox.repo / ".audiagentic" / "prompts" / "review"
+    review_prompt_root = sandbox.repo / ".audiagentic" / "prompts" / "ag-review"
     review_prompt_root.mkdir(parents=True, exist_ok=True)
     (review_prompt_root / "default.md").write_text(
         "\n".join(
@@ -239,7 +239,7 @@ def test_codex_prompt_trigger_bridge_script_launches_job(tmp_path: Path) -> None
         payload = json.loads(result.stdout)
         assert payload["status"] == "created"
         assert payload["job"]["provider-id"] == "codex"
-        assert payload["job"]["launch-tag"] == "implement"
+        assert payload["job"]["launch-tag"] == "ag-implement"
         assert payload["job"]["launch-target"]["kind"] == "packet"
         assert payload["job"]["launch-target"]["packet-id"] == "PKT-JOB-008"
     finally:

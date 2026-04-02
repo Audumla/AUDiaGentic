@@ -18,11 +18,11 @@ from audiagentic.execution.jobs.prompt_trigger_bridge import run as shared_run
 
 REQUIRED_ASSETS = (
     Path("AGENTS.md"),
-    Path(".agents/skills/plan/SKILL.md"),
-    Path(".agents/skills/implement/SKILL.md"),
-    Path(".agents/skills/review/SKILL.md"),
-    Path(".agents/skills/audit/SKILL.md"),
-    Path(".agents/skills/check-in-prep/SKILL.md"),
+    Path(".agents/skills/ag-plan/SKILL.md"),
+    Path(".agents/skills/ag-implement/SKILL.md"),
+    Path(".agents/skills/ag-review/SKILL.md"),
+    Path(".agents/skills/ag-audit/SKILL.md"),
+    Path(".agents/skills/ag-check-in-prep/SKILL.md"),
 )
 
 

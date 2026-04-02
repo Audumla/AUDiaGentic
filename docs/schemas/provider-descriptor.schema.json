@@ -26,7 +26,8 @@
         "qwen",
         "copilot",
         "continue",
-        "cline"
+        "cline",
+        "opencode"
       ]
     },
     "install-mode": {

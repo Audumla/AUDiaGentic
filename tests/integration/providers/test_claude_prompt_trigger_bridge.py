@@ -70,7 +70,7 @@ def _write_claude_required_assets(sandbox) -> None:
     )
 
     # .claude/skills/
-    skills = ["plan", "implement", "review", "audit", "check-in-prep"]
+    skills = ["ag-plan", "ag-implement", "ag-review", "ag-audit", "ag-check-in-prep"]
     for skill in skills:
         (sandbox.repo / ".claude" / "skills" / skill).mkdir(parents=True, exist_ok=True)
         (sandbox.repo / ".claude" / "skills" / skill / "SKILL.md").write_text(
@@ -102,7 +102,7 @@ def test_claude_prompt_trigger_bridge_script_launches_job(tmp_path: Path) -> Non
         payload = json.loads(result.stdout)
         assert payload["status"] == "created"
         assert payload["job"]["provider-id"] == "claude"
-        assert payload["job"]["launch-tag"] == "plan"
+        assert payload["job"]["launch-tag"] == "ag-plan"
         assert payload["job"]["launch-target"]["kind"] == "packet"
         assert payload["job"]["launch-target"]["packet-id"] == "PKT-JOB-008"
     finally:

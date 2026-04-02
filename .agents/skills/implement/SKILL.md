@@ -1,15 +1,22 @@
-# implement skill
+---
+name: ag-implement
+description: Use for canonical @ag-implement launches. Carries out the requested change.
+---
 
-Use this skill for canonical `@implement` launches.
+# ag-implement skill
+
+Use this skill for canonical `@ag-implement` launches.
 
 Trigger:
-- first non-empty line resolves to `implement`
+- first non-empty line resolves to `ag-implement` or the backward-compatible `implement` alias
 
 Do:
-- carry out the requested change
-- preserve the normalized request envelope
+- carry out the requested implementation work
+- prefer shared helpers and repository-owned scripts
+- preserve the tracked-doc and baseline contracts
 
 Do not:
-- broaden into unrelated design work
-- redefine the canonical grammar
+- do not broaden scope beyond the requested change
+- do not rewrite contracts without change control
 
+Root surface: `legacy compatibility surface for `ag-implement``

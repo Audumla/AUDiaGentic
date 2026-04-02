@@ -9,7 +9,7 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.execution.jobs.prompt_syntax import load_prompt_syntax
+from audiagentic.execution.jobs.prompt_syntax import load_canonical_tags, load_no_body_required_tags, load_review_tag, load_prompt_syntax
 from audiagentic.execution.jobs.prompt_templates import load_prompt_template
 from audiagentic.config.provider_config import load_provider_config
 
@@ -18,7 +18,8 @@ SCHEMA_PATH = REPO_ROOT / "docs" / "schemas" / "prompt-launch-request.schema.jso
 
 SHORT_TAG_PROVIDER_SEPARATOR = "-"
 DEFAULT_TARGET_KIND = "adhoc"
-ALLOWED_TAGS = {"plan", "implement", "review", "audit", "check-in-prep"}
+# Fallback used before a project root is available; overridden per-call from config.
+ALLOWED_TAGS = load_canonical_tags({})
 ALLOWED_DIRECTIVES = {
     "target",
     "job",
@@ -104,7 +105,7 @@ def _parse_target(value: str, *, adhoc_requested: bool) -> dict[str, Any]:
     )
 
 
-def _infer_target_from_id(value: str, *, tag: str) -> dict[str, Any]:
+def _infer_target_from_id(value: str, *, tag: str, review_tag: str) -> dict[str, Any]:
     normalized = value.strip()
     if not normalized:
         return {"kind": DEFAULT_TARGET_KIND, "adhoc-id": normalized}
@@ -116,7 +117,7 @@ def _infer_target_from_id(value: str, *, tag: str) -> dict[str, Any]:
         return {"kind": "job", "job-id": normalized}
     if "/" in normalized or "\\" in normalized or normalized.endswith(".md") or normalized.endswith(".json"):
         return {"kind": "artifact", "artifact-path": normalized}
-    if tag == "review":
+    if tag == review_tag:
         return {"kind": "job", "job-id": normalized}
     return {"kind": DEFAULT_TARGET_KIND, "adhoc-id": normalized}
 
@@ -140,12 +141,12 @@ def _split_prompt_text(prompt_text: str) -> tuple[str, str]:
     return header, body
 
 
-def _split_tag_and_provider(raw_tag: str, *, tag_aliases: dict[str, str], generic_tag: str) -> tuple[str, str | None]:
+def _split_tag_and_provider(raw_tag: str, *, tag_aliases: dict[str, str], generic_tag: str, allowed_tags: set[str]) -> tuple[str, str | None]:
     tag_token = raw_tag[1:]
     if SHORT_TAG_PROVIDER_SEPARATOR not in tag_token:
         return tag_token, None
     tag_part, provider_part = tag_token.split(SHORT_TAG_PROVIDER_SEPARATOR, 1)
-    if tag_part in tag_aliases or tag_part in ALLOWED_TAGS or tag_part == generic_tag:
+    if tag_part in tag_aliases or tag_part in allowed_tags or tag_part == generic_tag:
         return tag_part, provider_part or None
     return tag_token, None
 
@@ -224,24 +225,28 @@ def parse_prompt_launch_request(
     tag_aliases = _normalize_alias_map(prompt_syntax.get("tag-aliases"))
     provider_aliases = _normalize_alias_map(prompt_syntax.get("provider-aliases"))
     generic_tag = str(prompt_syntax.get("generic-tag") or "adhoc")
+    allowed_tags = load_canonical_tags(prompt_syntax)
+    no_body_required_tags = load_no_body_required_tags(prompt_syntax)
+    review_tag = load_review_tag(prompt_syntax)
+    implement_tag = str(prompt_syntax.get("implement-tag") or "ag-implement")
 
-    tag_token, provider_suffix = _split_tag_and_provider(raw_tag, tag_aliases=tag_aliases, generic_tag=generic_tag)
+    tag_token, provider_suffix = _split_tag_and_provider(raw_tag, tag_aliases=tag_aliases, generic_tag=generic_tag, allowed_tags=allowed_tags)
     provider_token = provider_aliases.get(tag_token)
     explicit_adhoc = False
     if tag_token == generic_tag:
-        normalized_tag = "implement"
+        normalized_tag = implement_tag
         explicit_adhoc = True
     elif tag_token in tag_aliases:
         alias_value = tag_aliases[tag_token]
         if alias_value == generic_tag:
-            normalized_tag = "implement"
+            normalized_tag = implement_tag
             explicit_adhoc = True
         else:
             normalized_tag = alias_value
-    elif tag_token in ALLOWED_TAGS:
+    elif tag_token in allowed_tags:
         normalized_tag = tag_token
     elif provider_token is not None:
-        normalized_tag = "implement"
+        normalized_tag = implement_tag
     else:
         raise AudiaGenticError(
             code="JOB-VALIDATION-028",
@@ -337,7 +342,7 @@ def parse_prompt_launch_request(
         target = _parse_target(target_value, adhoc_requested=tag_token == generic_tag)
         target_origin = "explicit"
     elif id_value:
-        target = _infer_target_from_id(id_value, tag=normalized_tag)
+        target = _infer_target_from_id(id_value, tag=normalized_tag, review_tag=review_tag)
         target_origin = "explicit"
     else:
         target = {"kind": DEFAULT_TARGET_KIND, "adhoc-id": _default_adhoc_id(prompt_id_value)}
@@ -351,7 +356,7 @@ def parse_prompt_launch_request(
         tag=normalized_tag,
         provider_id=resolved_provider,
     )
-    if normalized_tag not in {"audit", "check-in-prep"} and not body.strip() and not (explicit_adhoc or has_template_fallback):
+    if normalized_tag not in no_body_required_tags and not body.strip() and not (explicit_adhoc or has_template_fallback):
         raise AudiaGenticError(
             code="JOB-VALIDATION-032",
             kind="validation",

@@ -24,11 +24,11 @@ Phase 4.3 docs.
 ## Required outcomes
 
 Both phases must expose the canonical prompt tags through deterministic paths:
-- `@plan`
-- `@implement`
-- `@review`
-- `@audit`
-- `@check-in-prep`
+- `@ag-plan`
+- `@ag-implement`
+- `@ag-review`
+- `@ag-audit`
+- `@ag-check-in-prep`
 - optional `@adhoc` only if the feature gate is enabled
 
 The first non-empty line in the prompt must be recognized before Claude begins planning.
@@ -70,11 +70,11 @@ Claude is supported through a wrapper-driven path with skill definitions and pre
 - `CLAUDE.md` (instruction surface)
 - `.claude/rules/prompt-tags.md` (tag doctrine)
 - `.claude/rules/review-policy.md` (review restrictions)
-- `.claude/skills/plan/SKILL.md` (plan action)
-- `.claude/skills/implement/SKILL.md` (implement action)
-- `.claude/skills/review/SKILL.md` (review action)
-- `.claude/skills/audit/SKILL.md` (audit action)
-- `.claude/skills/check-in-prep/SKILL.md` (check-in-prep action)
+- `.claude/skills/ag-plan/SKILL.md` (plan action)
+- `.claude/skills/ag-implement/SKILL.md` (implement action)
+- `.claude/skills/ag-review/SKILL.md` (review action)
+- `.claude/skills/ag-audit/SKILL.md` (audit action)
+- `.claude/skills/ag-check-in-prep/SKILL.md` (check-in-prep action)
 - `tools/claude_prompt_trigger_bridge.py` (wrapper with preflight validation)
 
 ### Canonical tag handling (Option A)
@@ -163,24 +163,24 @@ If the hook chain is unavailable (hooks not configured, Claude Code version inco
 4. wire `UserPromptSubmit` to the shared trigger bridge
 5. wire `PreToolUse` to the stage restriction policy
 6. verify CLI and VS Code surfaces use the same normalized request shape
-7. add smoke tests for `@plan`, `@implement`, and `@review`
+7. add smoke tests for `@ag-plan`, `@ag-implement`, and `@ag-review`
 
 ## Smoke test matrix
 
 ### Option A (baseline) — CLI smoke tests
 
-- `@plan` normalizes and reaches shared launcher via wrapper bridge
-- `@implement` normalizes and reaches shared launcher via wrapper bridge
-- `@review` normalizes and reaches shared launcher via wrapper bridge
+- `@ag-plan` normalizes and reaches shared launcher via wrapper bridge
+- `@ag-implement` normalizes and reaches shared launcher via wrapper bridge
+- `@ag-review` normalizes and reaches shared launcher via wrapper bridge
 - missing required assets (CLAUDE.md, skills) returns validation error before launch
-- provider override works: `@plan provider=cline` launches Cline job
+- provider override works: `@ag-plan provider=cline` launches Cline job
 
 ### Option B (native hook) — Hook smoke tests
 
-- `@plan` via hook reaches shared launcher without manual wrapper invocation
-- `@implement` via hook normalizes and reaches shared launcher
-- `@review` via hook normalizes and reaches shared launcher
-- `@plan provider=cline` via hook launches Cline sub-agent
+- `@ag-plan` via hook reaches shared launcher without manual wrapper invocation
+- `@ag-implement` via hook normalizes and reaches shared launcher
+- `@ag-review` via hook normalizes and reaches shared launcher
+- `@ag-plan provider=cline` via hook launches Cline sub-agent
 - `PreToolUse` restricts tools per stage (e.g., no write tools during review)
 - missing hook chain falls back to Option A wrapper bridge (optional fallback test)
 - CLI and VS Code surfaces produce identical normalized requests through hook chain
@@ -210,6 +210,23 @@ If the hook chain is unavailable (hooks not configured, Claude Code version inco
 - `PreToolUse` enforces stage restrictions
 - CLI and VS Code surfaces behave identically
 - hook-invoked and wrapper-invoked paths produce identical normalized requests
+
+## Live stream expectations (Phase 4.9)
+
+Claude is a follow-on candidate for live console and runtime progress capture after the
+first-wave providers (Cline, Codex) have validated the harness.
+
+Implementation uses the PKT-PRV-048 generic sink harness.  Claude does not own any
+persistence logic; stdout/stderr are captured by AUDiaGentic via sinks.
+
+For the first pass:
+
+- the bridge registers `ConsoleSink`, `RawLogSink`, and `NormalizedEventSink` for each Claude run
+- console mirroring is controlled by `ConsoleSink` presence, not a boolean flag
+- `events.ndjson` is written to the job runtime folder for every streaming-enabled run
+- disabling streaming means not registering the sinks; the bridge path is otherwise unchanged
+- a provider-specific event extractor may be added later if Claude emits structured progress
+  output; until then, raw stdout lines pass through to `NormalizedEventSink` directly
 
 ## Rollback guidance
 
@@ -244,3 +261,4 @@ If the hook chain is unavailable (hooks not configured, Claude Code version inco
 
 - `docs/specifications/architecture/29_DRAFT_Provider_Prompt_Trigger_Launch_Behavior.md`
 - `docs/specifications/architecture/02_Claude.md` (if exists)
+- `docs/implementation/packets/phase-4/PKT-PRV-048.md` — shared sink harness

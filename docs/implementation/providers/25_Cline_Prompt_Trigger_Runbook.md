@@ -34,9 +34,9 @@ The repo now contains the Cline bridge surface required by this runbook:
 
 ## Smoke tests
 
-- `@plan` reaches the shared launcher
-- `@implement` reaches the shared launcher
-- `@review` reaches the shared launcher
+- `@ag-plan` reaches the shared launcher
+- `@ag-implement` reaches the shared launcher
+- `@ag-review` reaches the shared launcher
 
 ## Acceptance
 
@@ -48,11 +48,19 @@ The repo now contains the Cline bridge surface required by this runbook:
 
 Cline is a first-wave candidate for live console and runtime progress capture.
 
+Implementation uses the PKT-PRV-048 generic sink harness.  Cline does not own any
+persistence logic; it emits to stdout/stderr as normal and AUDiaGentic captures via sinks.
+
 For the first pass:
-- AUDiaGentic should tee live Cline progress to the console when streaming is enabled
-- AUDiaGentic should persist normalized progress records in the job runtime folder
-- Cline should continue to emit progress normally and should not own persistence
-- the same stream contract should remain usable later by Discord
+
+- the bridge registers `ConsoleSink`, `RawLogSink`, and `NormalizedEventSink` for each Cline run
+- a `ClineEventExtractor` sink (owned by the Cline adapter) translates Cline native NDJSON
+  task-progress lines into canonical `provider-stream-event` records before they reach
+  `NormalizedEventSink`
+- console mirroring is controlled by `ConsoleSink` presence, not a boolean flag
+- `events.ndjson` is written to the job runtime folder for every streaming-enabled run
+- disabling streaming means not registering the sinks; the bridge path is otherwise unchanged
+- the same sink interface is reusable later by Discord and other consumers without harness changes
 
 ## Live input expectations (Phase 4.10)
 
@@ -73,3 +81,5 @@ For the first pass:
 - `docs/specifications/architecture/35_Provider_Live_Input_and_Interactive_Session_Control.md`
 - `docs/implementation/46_Phase_4_10_Provider_Live_Input_and_Interactive_Session_Control.md`
 - `docs/implementation/packets/phase-4/PKT-PRV-051.md`
+- `docs/implementation/packets/phase-4/PKT-PRV-048.md` — shared sink harness
+- `docs/implementation/packets/phase-4/PKT-PRV-050.md` — Cline stream capture integration

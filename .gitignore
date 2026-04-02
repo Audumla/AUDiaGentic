@@ -3,4 +3,5 @@
 /.vscode
 /.audiagentic/runtime/
 __pycache__/
-*.py[cod]
+.py[cod]
+**/*.pyc
