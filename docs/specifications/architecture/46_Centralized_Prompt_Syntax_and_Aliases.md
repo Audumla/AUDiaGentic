@@ -75,7 +75,7 @@ All of these are equivalent and resolve to the same request:
 
 ## How Aliases Work
 
-1. **Prompt Parser** (`src/audiagentic/jobs/prompt_parser.py`)
+1. **Prompt Parser** (`src/audiagentic/execution/jobs/prompt_parser.py`)
    - Loads `.audiagentic/prompt-syntax.yaml` at startup
    - Resolves tag aliases before bridge invocation
    - Resolves provider aliases from directives and suffixes
@@ -137,8 +137,8 @@ For discoverability, add to:
 
 ## Related Files
 
-- `src/audiagentic/jobs/prompt_parser.py` — Tag resolution logic
-- `src/audiagentic/jobs/prompt_syntax.py` — Config loading
+- `src/audiagentic/execution/jobs/prompt_parser.py` — Tag resolution logic
+- `src/audiagentic/execution/jobs/prompt_syntax.py` — Config loading
 - `docs/schemas/prompt-syntax.schema.json` — Schema definition
 - `tools/claude_hooks.py` — Hook-based tag detection
 - `tools/claude_prompt_trigger_bridge.py` — Claude bridge

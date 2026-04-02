@@ -11,7 +11,7 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.jobs.stages import execute_stage, stage_output_path
+from audiagentic.execution.jobs.stages import execute_stage, stage_output_path
 from tests.helpers import sandbox as sandbox_helper
 
 

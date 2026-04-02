@@ -9,7 +9,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.jobs import control as job_control
+from audiagentic.execution.jobs import control as job_control
 
 
 def test_build_job_control_request_requires_supported_action() -> None:

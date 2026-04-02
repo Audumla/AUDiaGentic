@@ -26,9 +26,9 @@ Implement the generic project bootstrap path that uses the project’s own relea
 
 ## Files in scope
 
-- `src/audiagentic/release/bootstrap.py`
-- `src/audiagentic/cli/main.py`
-- `src/audiagentic/lifecycle/detector.py`
+- `src/audiagentic/runtime/release/bootstrap.py`
+- `src/audiagentic/channels/cli/main.py`
+- `src/audiagentic/runtime/lifecycle/detector.py`
 - `tests/integration/release/test_release_bootstrap.py`
 - `tests/unit/lifecycle/test_detector.py`
 - `docs/implementation/packets/phase-2/PKT-RLS-011.md`

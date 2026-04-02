@@ -10,7 +10,7 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.jobs.prompt_parser import parse_prompt_launch_request
+from audiagentic.execution.jobs.prompt_parser import parse_prompt_launch_request
 
 
 def test_parse_prompt_launch_request_normalizes_plan_prompt() -> None:

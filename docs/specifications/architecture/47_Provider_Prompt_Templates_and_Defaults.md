@@ -107,6 +107,6 @@ When adding a new provider, start with defaults. Add a variant only if:
 ## Related Files
 
 - `.audiagentic/prompts/` — template directory
-- `src/audiagentic/jobs/prompt_templates.py` — loader logic
+- `src/audiagentic/execution/jobs/prompt_templates.py` — loader logic
 - `PKT-PRV-033` — Claude baseline (uses defaults)
 - `PKT-PRV-037` — Cline baseline (has review variant)

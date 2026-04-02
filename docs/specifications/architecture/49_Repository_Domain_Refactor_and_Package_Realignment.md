@@ -183,9 +183,9 @@ Frozen dependency directions for this checkpoint:
 - `core` may be imported by every domain; `tests/` and `tools/` should prefer stable APIs
 - `config` may be imported by `execution`, `runtime`, `channels`, `streaming`, and `observability`
 - `scoping` may depend on `contracts`, `core`, and `config`
-- `execution` may depend on `contracts`, `core`, `config`, and selected `runtime` ports
+- `execution` may depend on `contracts`, `core`, `config`, selected `runtime` ports, and selected `streaming` ports/adapters
 - `runtime` may depend on `contracts`, `core`, and `config`
-- `channels` may depend on `contracts`, `core`, `config`, and selected presentation-facing runtime records
+- `channels` may depend on `contracts`, `core`, `config`, selected presentation-facing runtime records, and selected execution entrypoints/facades
 - `streaming` may depend on `execution`, `runtime`, `channels`, `contracts`, and `core`
 - `observability` may depend on `runtime`, `contracts`, `core`, and `config`
 
@@ -194,7 +194,7 @@ Forbidden dependency directions for this checkpoint:
 - `scoping -> observability`
 - `execution ->` channel formatting or rendering internals
 - `observability ->` live interaction control
-- `channels ->` execution internals
+- `channels ->` execution internals beyond approved entrypoint/facade seams
 - `runtime -> channels`
 
 ## Extension-root placement
