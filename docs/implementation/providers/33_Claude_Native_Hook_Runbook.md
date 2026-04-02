@@ -84,7 +84,7 @@ Create (or reference) hook handler scripts that:
 **For `UserPromptSubmit`:**
 1. Read raw prompt text
 2. Extract first non-empty line
-3. Detect canonical tag using `audiagentic.jobs.prompt_parser`
+3. Detect canonical tag using `audiagentic.execution.jobs.prompt_parser`
 4. Normalize tag + parameters into bridge args
 5. Call `tools/claude_prompt_trigger_bridge.py --project-root . <prompt>`
 6. Parse result JSON

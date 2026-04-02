@@ -1,7 +1,7 @@
 # PKT-FND-012 — Package/import strategy, compatibility shims, and code movement
 
 **Phase:** Phase 0.3  
-**Status:** WAITING_ON_DEPENDENCIES  
+**Status:** VERIFIED  
 **Owner:** Foundations + Runtime  
 **Scope:** workspace
 
@@ -54,3 +54,7 @@ During every slice:
 - core modules are moved into the frozen target structure
 - build/test entry points still function or failures are explicitly documented
 - stale import paths are either removed or covered by temporary shims
+
+## Verification note
+
+Verified on 2026-04-02 after slices `12A` through `12E` completed, compatibility shims were left in place for the frozen public-import surface, and the checkpoint validation suite plus refactor support scripts passed.

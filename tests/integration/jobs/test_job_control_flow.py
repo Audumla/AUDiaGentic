@@ -9,10 +9,10 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.jobs import control as job_control
-from audiagentic.jobs.packet_runner import run_packet
-from audiagentic.jobs.records import build_job_record
-from audiagentic.jobs.store import read_job_record, write_job_record
+from audiagentic.execution.jobs import control as job_control
+from audiagentic.execution.jobs.packet_runner import run_packet
+from audiagentic.execution.jobs.records import build_job_record
+from audiagentic.execution.jobs.store import read_job_record, write_job_record
 from tests.helpers import sandbox as sandbox_helper
 
 

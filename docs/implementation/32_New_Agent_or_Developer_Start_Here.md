@@ -27,7 +27,7 @@ Current extension slots and checkpoints:
 - `.6` = provider prompt-trigger launch behavior, agent instruction surfaces, and wrapper/bridge invocation
 - `.7` = provider availability, auto-install, and bootstrap orchestration
 - `.8` = project release bootstrap and workflow activation using the project's own release machinery
-- `Phase 0.3` = repository domain refactor and package realignment checkpoint; execute this structural correction before new non-refactor implementation resumes
+- `Phase 0.3` = repository domain refactor and package realignment checkpoint; the structural correction is now verified through discovery, freeze, code/package movement, and final validation
 - `Phase 1.4` = installable project baseline and managed asset synchronization for lifecycle/bootstrap
 - `.9` = provider live stream and progress capture, with Cline and Codex as the first-wave validation providers
 - `.10` = provider live input and interactive session control, with Cline and Codex as the first-wave validation providers
@@ -51,9 +51,9 @@ At the time of this pack:
 - `.6` prompt-trigger launch behavior is drafted as the next feature slice
 - `.7` provider availability and auto-install orchestration is drafted as the next feature slice
 - `.8` project release bootstrap and workflow activation is complete so the project can install itself using its own release processes
-- `Phase 0.3` is now defined as the next structural checkpoint so the repository domain refactor, target tree freeze, import strategy, and cleanup work happen before new non-refactor implementation resumes
+- `Phase 0.3` is now verified; the repository-domain refactor, target tree freeze, import strategy, package movement, and cleanup gate are complete in the current branch
 - `Phase 1.4` installable project baseline sync is the active lifecycle/installability correction; the inventory-freeze packet is ready for review and the sync-engine packets are next
-- only review/merge completion of `PKT-LFC-011` should continue during the checkpoint; no new `Phase 1.4` implementation beyond that should start until `PKT-FND-013` is verified
+- `Phase 1.4` is no longer blocked by the structural checkpoint; `PKT-LFC-011` review/verification is now the next gate before `PKT-LFC-012` can start
 - `.9` provider live stream and progress capture is implementation-ready so AUDiaGentic can own console mirroring and runtime persistence while providers emit progress
 - `.10` provider live input and interactive session control is implementation-ready at the shared-contract and harness layer; true live-session injection still requires provider-specific session management work, and raw provider session keys are explicitly treated as non-log-safe follow-on material
 - `.11` provider structured completion and result normalization is implementation-ready and packetized so Cline, Codex, and the remaining providers can return canonical review/output payloads without duplicating the shared bridge harness

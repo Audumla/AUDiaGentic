@@ -9,7 +9,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.providers.adapters import local_openai
+from audiagentic.execution.providers.adapters import local_openai
 
 
 def test_local_openai_adapter_contract() -> None:
