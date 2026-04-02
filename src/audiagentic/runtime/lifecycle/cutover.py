@@ -5,10 +5,10 @@ import json
 from pathlib import Path
 
 from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.runtime.lifecycle.baseline_sync import ensure_project_layout, sync_managed_baseline
 from audiagentic.runtime.lifecycle.checkpoints import write_checkpoint
 from audiagentic.runtime.lifecycle.detector import detect_installed_state
 from audiagentic.runtime.lifecycle.manifest import build_manifest, write_manifest
-from tools.seed_example_project import seed_example_project
 
 LEGACY_WORKFLOW = Path(".github/workflows/release-please.yml")
 RENAMED_WORKFLOW = Path(".github/workflows/release-please.legacy.yml")
@@ -35,7 +35,8 @@ def apply_cutover(project_root: Path) -> dict:
     write_checkpoint(project_root, "planned", {"action": "legacy-cutover"})
     write_checkpoint(project_root, "pre-destructive", {"action": "legacy-cutover"})
 
-    seed_example_project(project_root, overwrite=True)
+    ensure_project_layout(project_root)
+    sync_report = sync_managed_baseline(project_root)
 
     legacy_path = project_root / LEGACY_WORKFLOW
     renamed_path = project_root / RENAMED_WORKFLOW
@@ -72,11 +73,13 @@ def apply_cutover(project_root: Path) -> dict:
         "mode": "apply",
         "status": "success",
         "completed-operations": [
-            "create-.audiagentic",
+            "ensure-project-layout",
+            "sync-managed-baseline",
             "rename-legacy-workflow",
             "write-migration-report",
             "write-manifest",
         ],
+        "baseline-sync-report": sync_report,
         "warnings": [],
         "checkpoint-dir": ".audiagentic/runtime/lifecycle/checkpoints",
     }

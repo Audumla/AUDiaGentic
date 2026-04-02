@@ -20,7 +20,7 @@ This packet is placed in Phase 2 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/release/history_import.py`
+- `src/audiagentic/runtime/release/history_import.py`
 - `tests/integration/release/test_history_import.py`
 
 ### It may read from

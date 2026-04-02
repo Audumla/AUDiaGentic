@@ -36,9 +36,9 @@ jobs:
       - name: Install runtime dependencies
         run: python -m pip install --upgrade pip pyyaml jsonschema
       - name: Bootstrap release-managed state
-        run: python src/audiagentic/cli/main.py release-bootstrap --project-root . --release-id \"$RELEASE_ID\"
+        run: python src/audiagentic/channels/cli/main.py release-bootstrap --project-root . --release-id \"$RELEASE_ID\"
       - name: Verify installed state
-        run: python src/audiagentic/cli/main.py providers-status --project-root .
+        run: python src/audiagentic/channels/cli/main.py providers-status --project-root .
 """
 
 MANAGED_NAME = "release-please.audiagentic.yml"

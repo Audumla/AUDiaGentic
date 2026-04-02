@@ -32,9 +32,9 @@ The bootstrap command:
 
 ### Code
 
-- `src/audiagentic/release/bootstrap.py`
-- `src/audiagentic/cli/main.py`
-- `src/audiagentic/lifecycle/detector.py`
+- `src/audiagentic/runtime/release/bootstrap.py`
+- `src/audiagentic/channels/cli/main.py`
+- `src/audiagentic/runtime/lifecycle/detector.py`
 
 ### Tests
 

@@ -26,8 +26,7 @@ The current state is:
 - the Phase 0.3 checkpoint freeze did its job during the refactor window; with `PKT-FND-013` verified, later packets are now governed by their own dependencies again
 - `PKT-FND-010` is now complete at the checkpoint-doc level: `repository-inventory.md`, `migration-map.md`, `ambiguity-report.md`, and `public-import-surface.md` exist and capture the live repository baseline for the refactor
 - `PKT-FND-011` is now complete at the checkpoint-doc level: the new target tree, ownership map, repository-domain dependency rules, public import surface, shim scope, extension-root placement, and broad-code-motion definition are frozen before `PKT-FND-012`
-- `Phase 1.4` installable project baseline sync is now in motion, with the first packet freezing the real managed baseline inventory so lifecycle/bootstrap can converge on it instead of a minimal scaffold
-- `Phase 1.4` is no longer blocked by the structural checkpoint; the next remaining gate is review/verification of `PKT-LFC-011` before `PKT-LFC-012` can begin
+- `Phase 1.4` installable project baseline sync is now fully verified: the inventory freeze, shared baseline-sync engine, and lifecycle/bootstrap convergence all landed on top of the verified refactored structure
 - `.9` provider live stream and progress capture is in progress; the current executable pass tees stdout/stderr and persists raw runtime logs, while normalized progress records remain the next shared writer step
 - `.10` provider live input and interactive session control is in progress; the current harness records and persists session input, while full live-session attachment remains a later manager-level extension
 - raw provider session keys are now explicitly treated as non-log-safe material; AUDiaGentic should preserve only redacted session handles in general runtime artifacts until a later secure-session reference/store seam is implemented
@@ -55,7 +54,7 @@ The current state is:
 - `.7` provider availability and auto-install orchestration is now drafted as the next feature slice
 - Phase 2.3 project release bootstrap and workflow activation is implemented and now tracked as a verified release-core extension
 - Phase 1.3 provider auto-install policy persistence is drafted as a lifecycle follow-on
-- Phase 1.4 installable project baseline and managed asset synchronization is now the install-focused correction layer that brings clean/existing project setup back into line with the repository's real tracked baseline; `PKT-LFC-011` has frozen the inventory and is ready for review
+- Phase 1.4 installable project baseline and managed asset synchronization is now the install-focused correction layer that brings clean/existing project setup back into line with the repository's real tracked baseline; `PKT-LFC-011`, `PKT-LFC-012`, and `PKT-LFC-013` are all verified
 - Phase 3.4 job control and running-job cancellation is implemented and ready for review
 - PKT-JOB-011 now has a concrete implementation packet with files, tests, and recovery steps
 - The focused job-control test pass is green
@@ -139,7 +138,7 @@ packet-level status and the exact follow-on limitations.
 
 ## Immediate action list
 
-1. Review and merge `PKT-LFC-011` so the installable-baseline sync engine can start on top of the verified refactored structure
-2. Start `PKT-LFC-012` once `PKT-LFC-011` is verified
-3. Continue using the build registry as the single live source of packet status
-4. Keep the legacy shim roots stable for one checkpoint while new work targets the canonical repository-domain paths
+1. Continue using the build registry as the single live source of packet status
+2. Keep the installable-baseline inventory and runtime exclusion rules aligned as future baseline assets evolve
+3. Keep all new work on the canonical repository-domain paths only; the legacy shim roots have been retired
+4. Resume the next legal non-checkpoint packet from the registry

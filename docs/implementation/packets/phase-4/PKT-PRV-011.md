@@ -24,7 +24,7 @@ This packet owns the following implementation surface:
 - `docs/examples/fixtures/provider-config.valid.json`
 - `docs/examples/fixtures/provider-config.invalid.json`
 - `docs/examples/project-scaffold/.audiagentic/providers.yaml.example`
-- `src/audiagentic/providers/health.py`
+- `src/audiagentic/execution/providers/health.py`
 - `tests/integration/providers/test_selection.py`
 - `tests/unit/contracts/test_schema_validation.py`
 - `tests/integration/test_example_scaffold.py`

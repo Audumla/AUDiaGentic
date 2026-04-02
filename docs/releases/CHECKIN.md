@@ -1,6 +1,6 @@
 # Check-In Summary
 
-Total changes: 77
+Total changes: 81
 
 - Completed the initial slice `12B` move in `PKT-FND-012` by relocating the stable provider config, model-catalog, and provider-registry helpers into `src/audiagentic/config/`, leaving legacy shim modules in place and keeping the refactor checks green.
 - Started `PKT-FND-012` by adding the Phase 0.3 support scripts, creating the target domain scaffolding and legacy shim placeholders for slice `12A`, and recording that slice `12B` is the next gated move set.
@@ -82,3 +82,6 @@ Total changes: 77
 - Folded the Phase 7+ node/discovery/federation/connectors extension layers into the canonical dependency rules, common contracts, target code tree, and live build registry.
 - Tightened the prompt-trigger rollout assessment and the live-stream/live-input specs with explicit Codex reference mechanics, guarded-provider graduation criteria, and the shared 4.9–4.11 runtime boundary notes.
 - Completed the Phase 0.3 repository-domain refactor checkpoint with canonical path cleanup, final validation, and Phase 1.4 checkpoint release.
+- Verified PKT-LFC-011, implemented PKT-LFC-012, and unlocked PKT-LFC-013 with the shared baseline-sync engine now in place.
+- Verified PKT-LFC-013 and closed Phase 1.4 on the shared managed baseline-sync seam.
+- Removed the retired legacy shim roots, updated active repo references to canonical domain paths, and revalidated the repo on the post-shim structure.
