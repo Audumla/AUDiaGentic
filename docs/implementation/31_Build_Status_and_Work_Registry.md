@@ -112,6 +112,7 @@ The registry records the active baseline phases and the later additive extension
 | Phase 0 | `VERIFIED` | phase 0 gate complete |
 | Phase 0.1 | `VERIFIED` | .1 contract/schema updates for provider model catalog and model selection complete |
 | Phase 0.2 | `VERIFIED` | prompt/review contract extension complete with gated `@adhoc` support |
+| Phase 0.3 | `READY_TO_START` | repository domain refactor and package realignment is the next structural checkpoint and should complete before further non-refactor implementation resumes |
 | Phase 1 | `VERIFIED` | phase 1 gate complete |
 | Phase 1.1 | `VERIFIED` | lifecycle preservation of .1 config fields complete |
 | Phase 1.2 | `VERIFIED` | lifecycle preservation of prompt-launch config complete |
@@ -174,6 +175,15 @@ The registry records the active baseline phases and the later additive extension
 |---|---|---|---|---|---|---|---|---|
 | PKT-FND-009 | Prompt launch + review bundle contracts and schemas | VERIFIED | Codex | workspace | needs Phase 0 VERIFIED + PKT-FND-008 + PKT-PRV-012 (seam: prompt-launch and review bundle contracts align with provider launch surface) | 03, 26, 35, packet | 2026-03-30 | contracts: PromptLaunchRequest, ReviewReport, ReviewBundle, project prompt-launch policy, adhoc target |
 
+### Phase 0.3 — Repository Domain Refactor and Package Realignment
+
+| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
+|---|---|---|---|---|---|---|---|---|
+| PKT-FND-010 | Repository inventory, migration map, and ambiguity report | READY_TO_START | Codex | workspace | needs current baseline verified + 49 spec in place | 02, 03, 49, 57, packet | 2026-04-02 | next structural checkpoint; classify existing modules into target domains and capture ambiguity before code moves begin |
+| PKT-FND-011 | Target tree, ownership, and dependency freeze for domain refactor | WAITING_ON_DEPENDENCIES | Codex | workspace | needs PKT-FND-010 VERIFIED | 02, 03, 05, 49, 57, packet | 2026-04-02 | freeze one canonical repository shape before broad code motion begins |
+| PKT-FND-012 | Package/import strategy, compatibility shims, and code movement | WAITING_ON_DEPENDENCIES | Codex | workspace | needs PKT-FND-011 VERIFIED | 03, 49, 57, packet | 2026-04-02 | perform code/package moves under the frozen migration strategy without widening feature scope |
+| PKT-FND-013 | Documentation, tests, and validation cleanup after refactor | WAITING_ON_DEPENDENCIES | Codex | workspace | needs PKT-FND-012 VERIFIED | 02, 03, 49, 57, packet | 2026-04-02 | make the refactored structure the only documented current shape before new implementation resumes |
+
 ### Phase 1 — Lifecycle and Project Enablement
 
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
@@ -209,8 +219,8 @@ The registry records the active baseline phases and the later additive extension
 | Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
 |---|---|---|---|---|---|---|---|---|
 | PKT-LFC-011 | Installable baseline inventory and sync-mode classification | READY_FOR_REVIEW | Codex | workspace | needs Phase 1 VERIFIED + Phase 2.3 VERIFIED | 04, 05, 48, packet | 2026-04-02 | canonical inventory table and sync modes are now frozen so install/bootstrap no longer treat the minimal scaffold as the full install baseline |
-| PKT-LFC-012 | Shared baseline sync engine for lifecycle and bootstrap | WAITING_ON_DEPENDENCIES | Codex | workspace | needs PKT-LFC-011 VERIFIED | 05, 48, 56, packet | 2026-04-02 | introduce a common baseline sync seam instead of ad hoc file copy lists in lifecycle/bootstrap paths |
-| PKT-LFC-013 | Converge fresh-install and release-bootstrap on baseline sync | WAITING_ON_DEPENDENCIES | Codex | workspace | needs PKT-LFC-012 VERIFIED + PKT-RLS-011 VERIFIED | 05, 33, 43, 48, 56, packet | 2026-04-02 | make clean-project install, existing-project refresh, and self-host bootstrap use the same managed baseline rules |
+| PKT-LFC-012 | Shared baseline sync engine for lifecycle and bootstrap | WAITING_ON_DEPENDENCIES | Codex | workspace | needs PKT-LFC-011 VERIFIED + PKT-FND-013 VERIFIED (checkpoint: structural refactor completes before baseline-sync engine implementation resumes) | 05, 48, 56, packet | 2026-04-02 | introduce a common baseline sync seam instead of ad hoc file copy lists in lifecycle/bootstrap paths |
+| PKT-LFC-013 | Converge fresh-install and release-bootstrap on baseline sync | WAITING_ON_DEPENDENCIES | Codex | workspace | needs PKT-LFC-012 VERIFIED + PKT-RLS-011 VERIFIED + PKT-FND-013 VERIFIED | 05, 33, 43, 48, 56, packet | 2026-04-02 | make clean-project install, existing-project refresh, and self-host bootstrap use the same managed baseline rules after the structural checkpoint completes |
 
 ### Phase 2 — Release / Audit / Ledger / Release Please
 
