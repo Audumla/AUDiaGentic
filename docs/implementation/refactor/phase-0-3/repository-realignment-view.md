@@ -20,7 +20,7 @@ Its purpose is to:
 | `src/audiagentic/cli/*` | `src/audiagentic/channels/cli/*` | treat CLI as a human-facing channel surface | high | keep entrypoints thin |
 | `src/audiagentic/lifecycle/*` | `src/audiagentic/runtime/lifecycle/*` | move install/update/cutover/baseline behavior under runtime | high | legacy shim root may persist temporarily |
 | `src/audiagentic/release/*` | `src/audiagentic/runtime/release/*` | place release/audit/bootstrap under runtime concerns | medium-high | some release APIs may also feel platform-wide; keep nested under runtime for this tranche |
-| `src/audiagentic/jobs/*` | mostly `src/audiagentic/execution/jobs/*` | job orchestration, records, packet running, approvals, reviews belong to execution | medium | session input and some runtime-persistence helpers may split later |
+| `src/audiagentic/jobs/*` | mostly `src/audiagentic/execution/jobs/*` | job orchestration, records, packet running, approvals, reviews belong to execution | high | `session_input.py` stays here in first pass, but output adapters move under `streaming/` |
 | `src/audiagentic/providers/*` | mostly `src/audiagentic/execution/providers/*` | provider selection/execution/adapters belong to execution | medium | streaming/progress/session pieces may later move or share seams with `streaming/` |
 | `src/audiagentic/server/*` | `src/audiagentic/channels/server/*` | optional server is a channel surface | high | keep thin; do not let it own execution logic |
 | `src/audiagentic/overlay/discord/*` | `src/audiagentic/channels/discord/*` | Discord becomes a channel adapter in the repository-domain model | high | packet tracking may still refer to Discord separately |
@@ -88,41 +88,42 @@ Both are interaction surfaces. They should move under `channels/` and remain thi
 
 ### 1. Prompt-trigger / bridge placement
 
-Current concern:
-- bridge and trigger behavior spans CLI, jobs, providers, and tool wrappers
+Status:
+- resolved for this tranche
 
-Likely first-pass answer:
-- keep canonical orchestration in `execution/jobs`
-- keep surfaces thin under `channels/cli` or future channel adapters
-- keep wrappers in `tools/` thin only
+Frozen decision:
+- prompt-trigger bridge stays under `execution/jobs`
+- prompt parser stays under `execution/jobs`
+- no separate shared trigger-normalization domain or seam is required in Phase 0.3
 
-Decision still needed:
-- whether any shared trigger-normalization helpers deserve a `core/` or `config/` seam rather than living entirely under execution
+Implementation note:
+- any future extraction of generic alias/profile/schema helpers is optional follow-on cleanup, not part of the structural checkpoint
 
 ### 2. Session input / live interaction placement
 
 Current concern:
-- current session input handling is under `jobs`, but shared provider-session I/O is one of the reasons `streaming/` exists as a target domain
+- current `session_input.py` is under `jobs` and currently writes directly to runtime files on disk
+- the desired future shape is to let session-input output attach through adapters rather than being hard-coded to disk
 
-Likely first-pass answer:
-- keep existing logic operationally under `execution/jobs` during the initial move
-- move only clearly stream-oriented helpers toward `streaming/` once seams are explicit
+Frozen first-pass answer:
+- `session_input.py` remains under `execution/jobs`
+- session-input output must become adapter-driven rather than hard-coded to files
+- streaming adapters live under `streaming/`
+- a default disk adapter should preserve the current runtime-file behavior
 
 Decision still needed:
-- what minimum code qualifies as `streaming` in Phase 0.3 versus later follow-on refactors
+- only the exact first-pass adapter interface and naming need to be frozen; the higher-level streaming unifier may be deferred to later follow-on work
 
 ### 3. Provider progress / streaming / completion boundaries
 
-Current concern:
-- provider execution, progress capture, streaming, and structured completion are closely related but should not collapse into one catch-all domain
-
-Likely first-pass answer:
+Frozen first-pass answer:
 - provider execution remains in `execution/providers`
-- stream transport and live I/O orchestration align with `streaming`
-- telemetry/reporting aligns with `observability`
+- move code as-is in the first pass rather than over-splitting immediately
+- streaming transport or output adapters belong under `streaming/`
+- telemetry/reporting belongs under `observability`
 
-Decision still needed:
-- whether any current provider helper modules should be split in Phase 0.3 or merely relocated intact first
+Remaining low-level ambiguity:
+- whether helper modules such as the current shared provider streaming helper should move to `streaming/` in Phase 0.3 or remain temporarily colocated until the adapter pattern is in place
 
 ### 4. Runtime state versus execution records
 
@@ -135,30 +136,29 @@ Likely first-pass answer:
 
 Decision still needed:
 - whether job-store and record-writing helpers remain under execution in this tranche or get split between `execution/jobs` and `runtime/state`
+- whether the runtime path layout APIs should be centralized in `runtime/state` even if higher-level record creation stays under `execution/jobs`
 
 ### 5. Scoping domain scope
 
 Current concern:
 - the frozen target model includes `scoping`, but the current repository has no explicit `src/audiagentic/scoping/` root yet
 
+Interpretation:
+- `scoping/` is a code domain, not a documentation location
+- it is intended for request/scope/plan-shaping logic, not for markdown specs or packet docs
+
 Likely first-pass answer:
-- create `scoping/` as a new reserved baseline domain
-- move only clearly scope/request/plan shaping logic there when the inventory proves it exists cleanly
+- create `scoping/` as a new reserved baseline code domain
+- move only clearly scope/request/plan-shaping logic there when the inventory proves it exists cleanly
 
 Decision still needed:
 - whether scoping gets substantive code in Phase 0.3 or remains mostly a prepared root for later separation
 
 ### 6. Terminology blur
 
-Current concern:
-- terms such as Request, Scope, Plan, Task, WorkPackage, Job, Run, Session, and Artifact are not fully separated in the current repository language
-
-Likely first-pass answer:
-- do not bulk rename in Phase 0.3
-- capture terminology ambiguity during inventory so later cleanup is guided, not improvised
-
-Decision still needed:
-- whether the ambiguity report should add a dedicated terminology section or whether a separate terminology note is preferred
+Frozen first-pass answer:
+- do not rename terms in Phase 0.3
+- capture terminology ambiguity during inventory for a later dedicated cleanup pass
 
 ## Immediate next actions
 
