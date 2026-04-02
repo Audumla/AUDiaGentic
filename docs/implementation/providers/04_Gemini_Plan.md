@@ -23,8 +23,8 @@ Implement the `gemini` adapter on top of the frozen provider contract from Phase
 - do not bypass provider selection rules
 - do not change common contracts in this packet
 - keep provider-specific auth handling within `env:` policy for MVP
-- use `audiagentic.jobs.prompt_parser` for tag recognition
-- use `audiagentic.jobs.prompt_launch` for forwarding to core
+- use `audiagentic.execution.jobs.prompt_parser` for tag recognition
+- use `audiagentic.execution.jobs.prompt_launch` for forwarding to core
 
 ## Surface Configuration
 - CLI mode: `wrapper-normalize`

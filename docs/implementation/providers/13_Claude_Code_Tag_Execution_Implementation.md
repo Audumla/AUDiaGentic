@@ -18,7 +18,7 @@ This makes Claude Code the strongest native-hook candidate for canonical prompt 
 wrapper fallback still worth keeping until the hook path is fully hardened.
 
 Current implementation:
-- `src/audiagentic/providers/adapters/claude.py` now invokes the local `claude`
+- `src/audiagentic/execution/providers/adapters/claude.py` now invokes the local `claude`
   CLI with a normalized execution envelope
 - the wrapper passes the prompt through stdin so multiline packet context survives
 - a live smoke test of the wrapper succeeds when `claude` is available on PATH

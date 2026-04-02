@@ -13,8 +13,8 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.lifecycle.checkpoints import write_checkpoint
-from audiagentic.lifecycle.manifest import (
+from audiagentic.runtime.lifecycle.checkpoints import write_checkpoint
+from audiagentic.runtime.lifecycle.manifest import (
     build_manifest,
     read_manifest,
     validate_manifest,

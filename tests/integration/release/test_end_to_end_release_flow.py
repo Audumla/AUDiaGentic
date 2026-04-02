@@ -10,11 +10,11 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.release.audit import generate_audit_and_checkin
-from audiagentic.release.current_summary import regenerate_current_release
-from audiagentic.release.finalize import finalize_release
-from audiagentic.release.fragments import record_change_event
-from audiagentic.release.sync import sync_current_release_ledger
+from audiagentic.runtime.release.audit import generate_audit_and_checkin
+from audiagentic.runtime.release.current_summary import regenerate_current_release
+from audiagentic.runtime.release.finalize import finalize_release
+from audiagentic.runtime.release.fragments import record_change_event
+from audiagentic.runtime.release.sync import sync_current_release_ledger
 from tests.helpers import sandbox as sandbox_helper
 
 FIXTURES = ROOT / "docs" / "examples" / "fixtures"

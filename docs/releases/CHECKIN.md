@@ -1,7 +1,10 @@
 # Check-In Summary
 
-Total changes: 74
+Total changes: 77
 
+- Completed the initial slice `12B` move in `PKT-FND-012` by relocating the stable provider config, model-catalog, and provider-registry helpers into `src/audiagentic/config/`, leaving legacy shim modules in place and keeping the refactor checks green.
+- Started `PKT-FND-012` by adding the Phase 0.3 support scripts, creating the target domain scaffolding and legacy shim placeholders for slice `12A`, and recording that slice `12B` is the next gated move set.
+- Completed the Phase 0.3 discovery/freeze checkpoint at the doc-control level by tightening the live repository inventory artifacts, freezing the canonical repository-domain dependency rules, and advancing `PKT-FND-012` to `READY_TO_START`.
 - Added the remaining Phase 0.3 control details, including a stronger registry freeze note, canonical public-import and refactor artifact templates, support-script cadence rules, extension-root placement, and explicit pauses on later ready packets while the checkpoint is active.
 - Added Phase 0.3 checkpoint enforcement notes, artifact templates, public-import and extension-root freeze details, support-script contract notes, and baseline-preservation validation guidance so the refactor can proceed without ambiguity before code motion starts.
 - Tightened the checkpoint wording so Phase 1.4 is explicitly held behind the Phase 0.3 structural refactor, allowing only `PKT-LFC-011` review/merge to continue until `PKT-FND-013` is verified.
@@ -78,3 +81,4 @@ Total changes: 74
 - Consolidated the unimplemented Phase 4.9 through Phase 4.11 runtime interaction work into a single shared provider-session I/O tranche while keeping the packet numbering intact.
 - Folded the Phase 7+ node/discovery/federation/connectors extension layers into the canonical dependency rules, common contracts, target code tree, and live build registry.
 - Tightened the prompt-trigger rollout assessment and the live-stream/live-input specs with explicit Codex reference mechanics, guarded-provider graduation criteria, and the shared 4.9–4.11 runtime boundary notes.
+- Completed the Phase 0.3 repository-domain refactor checkpoint with canonical path cleanup, final validation, and Phase 1.4 checkpoint release.

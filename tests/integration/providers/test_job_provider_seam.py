@@ -10,9 +10,9 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.jobs.packet_runner import run_packet
-from audiagentic.jobs.store import job_record_path
-from audiagentic.providers.selection import select_provider
+from audiagentic.execution.jobs.packet_runner import run_packet
+from audiagentic.execution.jobs.store import job_record_path
+from audiagentic.execution.providers.selection import select_provider
 from tests.helpers import sandbox as sandbox_helper
 
 

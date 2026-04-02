@@ -10,15 +10,15 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.jobs.approvals import (
+from audiagentic.execution.jobs.approvals import (
     build_approval_request,
     check_job_approval,
     request_approval,
     request_job_approval,
 )
-from audiagentic.jobs.records import build_job_record
-from audiagentic.jobs.reviews import build_review_bundle, persist_review_bundle
-from audiagentic.jobs.store import read_job_record, write_job_record
+from audiagentic.execution.jobs.records import build_job_record
+from audiagentic.execution.jobs.reviews import build_review_bundle, persist_review_bundle
+from audiagentic.execution.jobs.store import read_job_record, write_job_record
 from tests.helpers import sandbox as sandbox_helper
 
 

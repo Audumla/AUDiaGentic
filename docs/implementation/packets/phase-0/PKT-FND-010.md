@@ -1,7 +1,7 @@
 # PKT-FND-010 — Repository inventory, migration map, and ambiguity report
 
 **Phase:** Phase 0.3  
-**Status:** READY_TO_START  
+**Status:** VERIFIED  
 **Owner:** Foundations  
 **Scope:** workspace
 

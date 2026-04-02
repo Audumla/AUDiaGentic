@@ -11,7 +11,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.cli.main import main
+from audiagentic.channels.cli.main import main
 from tests.helpers import sandbox as sandbox_helper
 
 

@@ -11,9 +11,9 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.cli.main import main
-from audiagentic.jobs.records import build_job_record
-from audiagentic.jobs.store import read_job_record, write_job_record
+from audiagentic.channels.cli.main import main
+from audiagentic.execution.jobs.records import build_job_record
+from audiagentic.execution.jobs.store import read_job_record, write_job_record
 from tests.helpers import sandbox as sandbox_helper
 
 

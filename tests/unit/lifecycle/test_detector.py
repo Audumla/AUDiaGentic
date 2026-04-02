@@ -9,7 +9,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.lifecycle.detector import detect_installed_state
+from audiagentic.runtime.lifecycle.detector import detect_installed_state
 
 
 def test_detect_none(tmp_path: Path) -> None:

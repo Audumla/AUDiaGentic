@@ -10,10 +10,10 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.jobs.prompt_launch import launch_prompt_request
-from audiagentic.jobs import prompt_launch
-from audiagentic.jobs.prompt_parser import parse_prompt_launch_request
-from audiagentic.jobs.store import job_record_path
+from audiagentic.execution.jobs.prompt_launch import launch_prompt_request
+from audiagentic.execution.jobs import prompt_launch
+from audiagentic.execution.jobs.prompt_parser import parse_prompt_launch_request
+from audiagentic.execution.jobs.store import job_record_path
 from tests.helpers import sandbox as sandbox_helper
 
 
