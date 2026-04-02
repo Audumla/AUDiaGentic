@@ -135,6 +135,9 @@ Tracked prompt templates, prompt syntax, and managed provider instruction assets
 the installable baseline and must be handled by the shared baseline sync rules once that
 extension lands.
 
+The canonical install inventory and sync-mode classification live in
+`48_Installable_Project_Baseline_and_Managed_Asset_Synchronization.md`.
+
 
 ## Recovery procedures by checkpoint
 
