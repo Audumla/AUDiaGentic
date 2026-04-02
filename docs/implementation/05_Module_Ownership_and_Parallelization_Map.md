@@ -1,34 +1,36 @@
 # Module Ownership and Parallelization Map
 
-## Ownership groups
+## Frozen ownership groups for the Phase 0.3 target shape
 
 | Group | Owns | May edit directly | Must not edit directly |
 |---|---|---|---|
-| Contracts | `src/audiagentic/contracts/*`, `docs/schemas/*`, glossary, canonical ids | contracts, validators, fixtures | lifecycle, release, jobs, providers |
-| Lifecycle | `src/audiagentic/lifecycle/*`, lifecycle CLI behavior | lifecycle modules, lifecycle tests, managed baseline sync | release core internals, jobs internals |
-| Release | `src/audiagentic/release/*`, tracked release docs behavior | release modules, release tests, release fixtures | lifecycle detection, jobs state machine |
-| Jobs | `src/audiagentic/jobs/*` | job modules/tests | release file formats, lifecycle manifests |
-| Providers | `src/audiagentic/providers/*` | provider modules/tests | release core, lifecycle core |
-| Discord | `src/audiagentic/overlay/discord/*` | discord modules/tests | core state shapes |
-| Server | `src/audiagentic/server/*` | service seam only | any contract fields |
-| Nodes | `src/audiagentic/nodes/*` | node identity, heartbeat, status, ownership | lifecycle, release, provider core |
-| Discovery | `src/audiagentic/discovery/*` | locator provider contracts and static registry | core node contracts, release core |
-| Federation | `src/audiagentic/federation/*` | node events, control request contracts, and transport seams | node identity, discovery, core release |
-| Connectors | `src/audiagentic/connectors/*` | external task-system connectors | core execution truth, release core |
+| Contracts | `src/audiagentic/contracts/*`, `docs/schemas/*`, canonical ids, glossary, validation fixtures | contract modules, validators, fixtures | execution, runtime, channels, streaming, observability |
+| CoreConfig | `src/audiagentic/core/*`, `src/audiagentic/config/*` | shared core helpers, config loaders, stable APIs | feature-specific execution/runtime/channel logic |
+| Scoping | `src/audiagentic/scoping/*` | request/scope/plan shaping, scoping tests/docs | runtime internals, channel implementations |
+| Execution | `src/audiagentic/execution/*` | jobs, provider execution, execution tests/docs | runtime persistence internals, channel formatting/rendering |
+| Runtime | `src/audiagentic/runtime/*` | lifecycle, release, runtime state, runtime tests/docs | execution orchestration internals, channel rendering |
+| Channels | `src/audiagentic/channels/*` | CLI, Discord, optional server-facing channel adapters | execution orchestration semantics, runtime persistence internals |
+| Streaming | `src/audiagentic/streaming/*` | live input/output flow, stream bridges, stream capture helpers | telemetry storage, durable observability concerns |
+| Observability | `src/audiagentic/observability/*` | diagnostics, telemetry/reporting, monitoring-oriented helpers | live interaction control or channel/session steering |
+| Nodes | `src/audiagentic/nodes/*` | node identity, heartbeat, ownership, status | baseline lifecycle/release/provider core |
+| Discovery | `src/audiagentic/discovery/*` | locator providers and registry resolution | baseline node contracts, release core |
+| Federation | `src/audiagentic/federation/*` | node events, control transport, federation seams | baseline node identity/discovery ownership |
+| Connectors | `src/audiagentic/connectors/*` | external task-system / tool connectivity | baseline execution truth, release core |
 
 ## Parallel work rules
 
 - Two packets may run in parallel only if they do not share primary ownership.
-- Any packet touching `docs/schemas/*` or `03_Common_Contracts.md` blocks parallel packets touching contracts.
-- Any packet touching tracked files under `docs/releases/` must coordinate through the release owner.
-- Provider adapter packets can run in parallel after `PKT-PRV-001` and `PKT-PRV-002` are merged.
-- Discord packets can run in parallel with migration hardening once events and approvals are frozen.
-- Node packets can run in parallel after the Phase 4 provider/runtime stabilization checkpoint and the node contract packet is frozen.
-- Discovery packets can run in parallel after the node identity packet is frozen.
-- Federation packets can run in parallel after node identity and discovery packets are frozen.
-- Coordinator and connector packets should wait until the node/discovery/federation seams are frozen.
+- Any packet touching `docs/schemas/*` or `03_Common_Contracts.md` blocks parallel packets touching `Contracts`.
+- Any packet touching tracked files under `docs/releases/` must coordinate through the `Runtime` owner while Phase 0.3 is active.
+- `Execution` and `Channels` work may proceed in parallel only after the Phase 0.3 dependency rules are frozen and the affected interfaces are explicitly documented.
+- `Streaming` and `Observability` must not be refactored in the same packet unless the packet explicitly freezes the interaction boundary between them first.
+- `Nodes`, `Discovery`, `Federation`, and `Connectors` remain future extension ownership groups and should not be claimed as part of the baseline Phase 0.3 code move except to preserve their reserved paths.
+- Discord overlay behavior is now treated as part of `Channels` for the repository-domain refactor tranche. Future Discord feature packets may still be tracked separately at the packet level, but they should not redefine channel ownership boundaries.
 
+## Transitional compatibility note
 
-## Extension ownership note
+Legacy ownership group names such as `Lifecycle`, `Release`, `Jobs`, `Providers`, `Server`, or `Discord` may still appear in older docs or shim paths during the checkpoint. They are no longer the canonical ownership model once `PKT-FND-011` is verified.
 
-Phase 3.2 prompt launch and review implementation remains in the **Jobs** ownership group even when adapters are triggered from CLI or VS Code. CLI or editor surfaces must remain thin normalization adapters and must not duplicate job orchestration logic.
+## Execution-boundary note
+
+Phase 3.2 prompt launch and review implementation now belongs to the **Execution** ownership group even when surfaced through CLI, VS Code, Discord, or other channels. Channel adapters must remain thin normalization or interaction surfaces and must not duplicate execution semantics.
