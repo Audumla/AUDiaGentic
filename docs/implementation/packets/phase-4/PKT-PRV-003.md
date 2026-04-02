@@ -20,7 +20,7 @@ This packet is placed in Phase 4 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/providers/adapters/local_openai.py`
+- `src/audiagentic/execution/providers/adapters/local_openai.py`
 - `tests/integration/providers/test_local_openai.py`
 
 ### It may read from

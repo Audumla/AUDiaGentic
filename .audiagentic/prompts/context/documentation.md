@@ -2,8 +2,8 @@ Review scope:
 - docs/Implementation_tracker.md
 - docs/implementation/31_Build_Status_and_Work_Registry.md
 - docs/implementation/providers/25_Cline_Prompt_Trigger_Runbook.md
-- src/audiagentic/jobs/prompt_launch.py
-- src/audiagentic/providers/adapters/cline.py
+- src/audiagentic/execution/jobs/prompt_launch.py
+- src/audiagentic/execution/providers/adapters/cline.py
 
 Focus on:
 - whether the prompt-trigger path is real

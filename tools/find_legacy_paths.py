@@ -63,6 +63,8 @@ def main() -> int:
             missing.append(str(root))
             continue
         for path in iter_files(root):
+            if path == Path(__file__).resolve():
+                continue
             try:
                 text = path.read_text(encoding="utf-8")
             except UnicodeDecodeError:

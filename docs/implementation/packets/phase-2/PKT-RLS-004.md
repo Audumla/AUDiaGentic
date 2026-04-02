@@ -20,7 +20,7 @@ This packet is placed in Phase 2 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/release/audit.py`
+- `src/audiagentic/runtime/release/audit.py`
 - `tests/integration/release/test_audit_summary.py`
 
 ### It may read from

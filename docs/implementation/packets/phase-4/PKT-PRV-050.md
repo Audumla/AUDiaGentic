@@ -31,8 +31,8 @@ normalized, and mirrored by AUDiaGentic.
 ## Files likely to change
 
 - `tools/cline_prompt_trigger_bridge.py`
-- `src/audiagentic/providers/adapters/cline.py`
-- `src/audiagentic/jobs/prompt_launch.py`
+- `src/audiagentic/execution/providers/adapters/cline.py`
+- `src/audiagentic/execution/jobs/prompt_launch.py`
 - tests for streaming capture and review output
 
 ## Acceptance criteria

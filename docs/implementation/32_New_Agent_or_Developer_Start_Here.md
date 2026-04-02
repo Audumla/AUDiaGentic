@@ -28,7 +28,7 @@ Current extension slots and checkpoints:
 - `.7` = provider availability, auto-install, and bootstrap orchestration
 - `.8` = project release bootstrap and workflow activation using the project's own release machinery
 - `Phase 0.3` = repository domain refactor and package realignment checkpoint; the structural correction is now verified through discovery, freeze, code/package movement, and final validation
-- `Phase 1.4` = installable project baseline and managed asset synchronization for lifecycle/bootstrap
+- `Phase 1.4` = installable project baseline and managed asset synchronization for lifecycle/bootstrap, now verified
 - `.9` = provider live stream and progress capture, with Cline and Codex as the first-wave validation providers
 - `.10` = provider live input and interactive session control, with Cline and Codex as the first-wave validation providers
 - `.11` = provider structured completion and result normalization, with packetized first-wave work for shared normalization plus Codex and Cline integrations
@@ -52,8 +52,8 @@ At the time of this pack:
 - `.7` provider availability and auto-install orchestration is drafted as the next feature slice
 - `.8` project release bootstrap and workflow activation is complete so the project can install itself using its own release processes
 - `Phase 0.3` is now verified; the repository-domain refactor, target tree freeze, import strategy, package movement, and cleanup gate are complete in the current branch
-- `Phase 1.4` installable project baseline sync is the active lifecycle/installability correction; the inventory-freeze packet is ready for review and the sync-engine packets are next
-- `Phase 1.4` is no longer blocked by the structural checkpoint; `PKT-LFC-011` review/verification is now the next gate before `PKT-LFC-012` can start
+- `Phase 1.4` installable project baseline sync is now verified end to end; the inventory freeze, shared sync engine, and lifecycle/bootstrap convergence are complete
+- lifecycle/bootstrap work should now build on the shared managed baseline-sync seam rather than reintroducing scaffold-only copy paths
 - `.9` provider live stream and progress capture is implementation-ready so AUDiaGentic can own console mirroring and runtime persistence while providers emit progress
 - `.10` provider live input and interactive session control is implementation-ready at the shared-contract and harness layer; true live-session injection still requires provider-specific session management work, and raw provider session keys are explicitly treated as non-log-safe follow-on material
 - `.11` provider structured completion and result normalization is implementation-ready and packetized so Cline, Codex, and the remaining providers can return canonical review/output payloads without duplicating the shared bridge harness

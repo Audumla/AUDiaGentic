@@ -20,7 +20,7 @@ This packet is placed in Phase 4 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/providers/adapters/copilot.py`
+- `src/audiagentic/execution/providers/adapters/copilot.py`
 - `tests/integration/providers/test_copilot.py`
 
 ### It may read from

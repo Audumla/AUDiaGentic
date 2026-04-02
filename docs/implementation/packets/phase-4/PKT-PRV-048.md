@@ -35,10 +35,10 @@ provider.
 
 ## Files likely to change
 
-- `src/audiagentic/jobs/stream_capture.py`
-- `src/audiagentic/jobs/prompt_trigger_bridge.py`
-- `src/audiagentic/jobs/prompt_launch.py`
-- `src/audiagentic/providers/execution.py`
+- `src/audiagentic/execution/jobs/stream_capture.py`
+- `src/audiagentic/execution/jobs/prompt_trigger_bridge.py`
+- `src/audiagentic/execution/jobs/prompt_launch.py`
+- `src/audiagentic/execution/providers/execution.py`
 - `docs/schemas/provider-stream-event.schema.json`
 - `docs/schemas/provider-stream-manifest.schema.json`
 - tests for stream capture and console mirroring

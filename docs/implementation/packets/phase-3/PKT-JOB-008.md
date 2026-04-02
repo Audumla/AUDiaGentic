@@ -36,11 +36,11 @@ This packet owns the following implementation surface:
 
 - `docs/specifications/architecture/26_Prompt_Tagged_Workflow_Launch_and_Review_Extension.md`
 - `docs/implementation/35_Phase_3_2_Prompt_Tagged_Workflow_Launch_and_Review_Extension.md`
-- `src/audiagentic/jobs/prompt_parser.py`
-- `src/audiagentic/jobs/prompt_launch.py`
-- additive updates in `src/audiagentic/jobs/records.py`
-- additive updates in `src/audiagentic/jobs/store.py`
-- additive updates in `src/audiagentic/jobs/packet_runner.py`
+- `src/audiagentic/execution/jobs/prompt_parser.py`
+- `src/audiagentic/execution/jobs/prompt_launch.py`
+- additive updates in `src/audiagentic/execution/jobs/records.py`
+- additive updates in `src/audiagentic/execution/jobs/store.py`
+- additive updates in `src/audiagentic/execution/jobs/packet_runner.py`
 - job tests under `tests/unit/jobs/` and `tests/integration/jobs/`
 
 ### It may read from
@@ -78,10 +78,10 @@ It must not create tracked docs.
 
 ## Integration points
 
-- `src/audiagentic/jobs/state_machine.py`
-- `src/audiagentic/jobs/stages.py`
-- `src/audiagentic/jobs/approvals.py`
-- `src/audiagentic/jobs/release_bridge.py`
+- `src/audiagentic/execution/jobs/state_machine.py`
+- `src/audiagentic/execution/jobs/stages.py`
+- `src/audiagentic/execution/jobs/approvals.py`
+- `src/audiagentic/execution/jobs/release_bridge.py`
 - CLI/editor adapter entry points that call into jobs
 
 ## Tests to add or update
@@ -115,7 +115,7 @@ Minimum cases:
 ## Recovery procedure
 
 If this packet fails mid-implementation:
-- revert changes in `src/audiagentic/jobs/prompt_parser.py`, `prompt_launch.py`, and additive job-module edits
+- revert changes in `src/audiagentic/execution/jobs/prompt_parser.py`, `prompt_launch.py`, and additive job-module edits
 - delete partial runtime launch artifacts under `.audiagentic/runtime/jobs/*/launch-request.json`
 - delete partial ad hoc subject manifests under `.audiagentic/runtime/jobs/*/subject.json`
 - rerun `python -m pytest tests/unit/jobs/test_prompt_parser.py tests/unit/jobs/test_prompt_launch_validation.py tests/integration/jobs/test_prompt_launch_flow.py`

@@ -35,10 +35,10 @@ persistence into the provider.
 
 ## Files likely to change
 
-- `src/audiagentic/jobs/session_input.py`
-- `src/audiagentic/jobs/prompt_trigger_bridge.py`
-- `src/audiagentic/jobs/prompt_launch.py`
-- `src/audiagentic/providers/execution.py`
+- `src/audiagentic/execution/jobs/session_input.py`
+- `src/audiagentic/execution/jobs/prompt_trigger_bridge.py`
+- `src/audiagentic/execution/jobs/prompt_launch.py`
+- `src/audiagentic/execution/providers/execution.py`
 - `docs/schemas/provider-session-input.schema.json`
 - `docs/schemas/provider-session-manifest.schema.json`
 - tests for session-input capture and console forwarding

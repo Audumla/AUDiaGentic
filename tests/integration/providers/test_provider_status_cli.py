@@ -12,7 +12,7 @@ def test_provider_status_cli_reports_error_for_missing_config(tmp_path: Path) ->
     result = subprocess.run(
         [
             sys.executable,
-            str(ROOT / "src" / "audiagentic" / "cli" / "main.py"),
+            str(ROOT / "src" / "audiagentic" / "channels" / "cli" / "main.py"),
             "providers-status",
             "--project-root",
             str(tmp_path),
