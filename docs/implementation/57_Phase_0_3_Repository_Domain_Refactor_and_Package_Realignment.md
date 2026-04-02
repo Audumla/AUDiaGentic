@@ -56,7 +56,10 @@ This phase should write its working artifacts under:
 - `docs/implementation/refactor/phase-0-3/repository-inventory.md`
 - `docs/implementation/refactor/phase-0-3/migration-map.md`
 - `docs/implementation/refactor/phase-0-3/ambiguity-report.md`
+- `docs/implementation/refactor/phase-0-3/public-import-surface.md`
 - `docs/implementation/refactor/phase-0-3/final-validation-report.md`
+
+Use the templates in `docs/implementation/refactor/phase-0-3/*.template.md` when creating the live artifacts.
 
 ## Support scripts expected before broad code motion
 
@@ -69,6 +72,24 @@ This phase should write its working artifacts under:
 - `tools/refactor_smoke.py`
 
 These scripts reduce the amount of manual reasoning needed during the move and keep the refactor aligned with the project's script-first doctrine.
+
+## Baseline preservation smoke matrix
+
+`final-validation-report.md` should explicitly record the outcome of:
+
+- baseline asset inventory still resolves correctly
+- `.audiagentic/runtime/**` remains excluded from install-baseline behavior
+- provider instruction assets remain locatable from the managed baseline
+- managed workflow asset paths still resolve correctly
+- example project seeding still resolves the expected managed baseline paths
+
+## What PKT-FND-011 must freeze before PKT-FND-012 starts
+
+- the real post-refactor target tree in `03_Target_Codebase_Tree.md`
+- the real post-refactor ownership map in `05_Module_Ownership_and_Parallelization_Map.md`
+- the canonical repository-domain dependency rules in `02_Core_Boundaries_and_Dependency_Rules.md`
+- the public import surface and shim scope
+- the placement of `nodes`, `discovery`, `federation`, and `connectors` relative to the main repository-domain model
 
 ## Acceptance criteria
 
@@ -94,6 +115,13 @@ Run refactor smoke, legacy-path checks, and cross-domain dependency checks after
 - `phase-0-3-fnd-011-freeze`
 - `phase-0-3-fnd-012-refactor`
 - `phase-0-3-fnd-013-cleanup`
+
+These branches or worktrees are sequential, not parallel:
+
+- `011` branches from `010`
+- `012` branches from `011`
+- `013` branches from `012`
+- they merge in order
 
 After that checkpoint completes, resume:
 

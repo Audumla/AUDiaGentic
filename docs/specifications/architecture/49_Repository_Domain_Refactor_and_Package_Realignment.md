@@ -36,6 +36,15 @@ The packet execution order is therefore strict:
 
 Do not start broad repository code motion before `PKT-FND-011` is verified.
 
+Broad code motion for this checkpoint means:
+- any move, rename, or import rewrite inside `src/audiagentic/` that changes canonical module ownership or public/internal import paths
+
+Not broad code motion for this checkpoint:
+- docs-only updates
+- support scripts
+- inventory and freeze artifacts
+- target scaffolding and empty shim placeholders created under the frozen plan
+
 ## Scope
 
 This phase covers:
@@ -84,6 +93,18 @@ Frozen decision for this checkpoint:
 - use a domain-oriented reorganization under `src/audiagentic/`
 - do not convert the repository into a literal top-level `/apps` + `/packages` monorepo in this tranche
 - preserve stable public Python import paths with compatibility shims during the transition
+
+Public import surface for this checkpoint:
+- any import path explicitly referenced by tracked docs, examples, workflows, install/bootstrap assets, or provider instruction assets
+- stable package-facing paths intentionally used by repo-owned entry points and external project setup guidance
+
+Internal-only import surface for this checkpoint:
+- leaf modules not referenced by tracked docs, workflows, install/bootstrap assets, or cross-project guidance
+- test-only imports and one-off script-local imports
+
+Shim rule for this checkpoint:
+- moved public import paths require compatibility shims during the transition window
+- internal-only paths may be rewritten directly once the migration map is frozen
 
 ### 2. Compatibility and migration policy
 
@@ -176,6 +197,21 @@ Forbidden dependency directions for this checkpoint:
 - `channels ->` execution internals
 - `runtime -> channels`
 
+## Extension-root placement
+
+The later optional extension roots:
+- `nodes`
+- `discovery`
+- `federation`
+- `connectors`
+
+remain reserved top-level extension roots under `src/audiagentic/` during this tranche.
+
+For this checkpoint:
+- do not collapse them into the main repository-domain taxonomy
+- do not let them redefine the primary repository-domain ownership model
+- treat them as parallel reserved extension seams that may align conceptually with `runtime`, `channels`, `streaming`, or `observability` later without changing their reserved root paths now
+
 ## Canonical object model alignment
 
 The repository should converge on the following vocabulary:
@@ -209,6 +245,7 @@ This phase does not require reckless bulk renaming. It requires the migration pl
 - `docs/implementation/refactor/phase-0-3/repository-inventory.md`
 - `docs/implementation/refactor/phase-0-3/migration-map.md`
 - `docs/implementation/refactor/phase-0-3/ambiguity-report.md`
+- `docs/implementation/refactor/phase-0-3/public-import-surface.md`
 
 `PKT-FND-013` must also create:
 - `docs/implementation/refactor/phase-0-3/final-validation-report.md`
@@ -251,6 +288,16 @@ Before broad code/package movement in `PKT-FND-012`, the refactor should add det
 - `tools/refactor_smoke.py`
 
 These scripts should own repetitive scan/check/smoke behavior so the refactor remains script-first and low-risk.
+
+Minimum support-script contract for this checkpoint:
+
+| Script | Primary owner | Minimum output | Failure behavior | Required cadence |
+|---|---|---|---|---|
+| `tools/inventory_imports.py` | `PKT-FND-012` | import inventory grouped by current path/domain | non-zero exit on unreadable files or unresolved internal imports | before first broad code motion and after every move slice |
+| `tools/check_cross_domain_imports.py` | `PKT-FND-012` | explicit pass/fail against frozen dependency directions | non-zero exit on forbidden dependency edges | after every move slice and at final validation |
+| `tools/find_legacy_paths.py` | `PKT-FND-012` | list of stale imports and legacy paths across code/docs/tests/tools | non-zero exit when required scan roots cannot be processed | after every move slice and at final validation |
+| `tools/check_baseline_assets.py` | `PKT-FND-012` | pass/fail report for installable baseline asset visibility and runtime exclusions | non-zero exit on missing managed baseline assets or runtime-exclusion violations | after lifecycle/release moves, after channels/streaming moves, and at final validation |
+| `tools/refactor_smoke.py` | `PKT-FND-012` | aggregate smoke report for imports, lifecycle, release bootstrap, and schema/example paths | non-zero exit on smoke failure | after every move slice and at final validation |
 
 ## Required outputs from the refactor
 
