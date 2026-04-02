@@ -19,7 +19,7 @@ This packet is placed in Phase 2 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/release/sync.py`
+- `src/audiagentic/runtime/release/sync.py`
 - `tests/integration/release/test_sync.py`
 
 ### It may read from

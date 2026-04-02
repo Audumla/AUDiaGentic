@@ -10,7 +10,7 @@ Expose a stable AUDiaGentic-side query/control seam for coordinators and boards.
 - optional server seam remains additive
 
 ## Ownership boundary
-- `src/audiagentic/server/node_api.py`
+- `src/audiagentic/channels/server/node_api.py`
 - `tests/integration/server/test_node_api.py`
 
 ## Acceptance

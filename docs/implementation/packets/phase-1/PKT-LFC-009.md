@@ -31,7 +31,7 @@ This packet must recognize and preserve:
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/lifecycle/*`
+- `src/audiagentic/runtime/lifecycle/*`
 - lifecycle tests under `tests/unit/lifecycle/` and `tests/e2e/lifecycle/`
 - example scaffold yaml generation if lifecycle owns it in code
 

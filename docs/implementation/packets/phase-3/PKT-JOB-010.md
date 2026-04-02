@@ -35,9 +35,9 @@ This packet owns the following implementation surface:
 - `docs/specifications/architecture/08_Agent_Jobs_MVP.md`
 - `docs/specifications/architecture/26_Prompt_Tagged_Workflow_Launch_and_Review_Extension.md`
 - `docs/implementation/37_Phase_3_3_Prompt_Tagged_Workflow_Shortcuts_and_Defaults.md`
-- `src/audiagentic/jobs/prompt_parser.py`
-- `src/audiagentic/jobs/prompt_launch.py`
-- `src/audiagentic/providers/config.py`
+- `src/audiagentic/execution/jobs/prompt_parser.py`
+- `src/audiagentic/execution/jobs/prompt_launch.py`
+- `src/audiagentic/config/provider_config.py`
 - `docs/schemas/prompt-launch-request.schema.json`
 - `tests/unit/jobs/test_prompt_parser.py`
 - `tests/integration/jobs/test_prompt_launch_flow.py`
@@ -65,11 +65,11 @@ This packet owns the following implementation surface:
 
 ## Integration points
 
-- `src/audiagentic/jobs/prompt_parser.py`
-- `src/audiagentic/jobs/prompt_launch.py`
-- `src/audiagentic/providers/config.py`
-- `src/audiagentic/providers/models.py`
-- `src/audiagentic/providers/status.py`
+- `src/audiagentic/execution/jobs/prompt_parser.py`
+- `src/audiagentic/execution/jobs/prompt_launch.py`
+- `src/audiagentic/config/provider_config.py`
+- `src/audiagentic/execution/providers/models.py`
+- `src/audiagentic/execution/providers/status.py`
 - `tests/unit/jobs/test_prompt_parser.py`
 - `tests/integration/jobs/test_prompt_launch_flow.py`
 

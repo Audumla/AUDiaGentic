@@ -37,6 +37,10 @@ def test_scaffold_seed_creates_layout(tmp_path: Path) -> None:
     assert (target / ".audiagentic" / "project.yaml").is_file()
     assert (target / ".audiagentic" / "components.yaml").is_file()
     assert (target / ".audiagentic" / "providers.yaml").is_file()
+    assert (target / ".audiagentic" / "prompt-syntax.yaml").is_file()
+    assert (target / ".audiagentic" / "prompts" / "review" / "default.md").is_file()
+    assert (target / "AGENTS.md").is_file()
+    assert (target / ".github" / "workflows" / "release-please.audiagentic.yml").is_file()
 
 
 def test_scaffold_configs_validate(tmp_path: Path) -> None:
@@ -45,6 +49,7 @@ def test_scaffold_configs_validate(tmp_path: Path) -> None:
     _validate("project-config", _load_yaml(target / ".audiagentic" / "project.yaml"))
     _validate("component-config", _load_yaml(target / ".audiagentic" / "components.yaml"))
     _validate("provider-config", _load_yaml(target / ".audiagentic" / "providers.yaml"))
+    _validate("prompt-syntax", _load_yaml(target / ".audiagentic" / "prompt-syntax.yaml"))
 
 
 def test_seed_refuses_non_empty_target(tmp_path: Path) -> None:

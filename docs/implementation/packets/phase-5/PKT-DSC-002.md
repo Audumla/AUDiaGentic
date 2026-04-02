@@ -21,7 +21,7 @@ This packet is placed in Phase 5 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `src/audiagentic/overlay/discord/release_publish.py`
+- `src/audiagentic/channels/discord/release_publish.py`
 - `tests/integration/discord/test_release_publish.py`
 
 ### It may read from

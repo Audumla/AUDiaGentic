@@ -28,7 +28,7 @@ Current extension slots and checkpoints:
 - `.7` = provider availability, auto-install, and bootstrap orchestration
 - `.8` = project release bootstrap and workflow activation using the project's own release machinery
 - `Phase 0.3` = repository domain refactor and package realignment checkpoint; discovery, freeze, code move, and final validation are now complete
-- `Phase 1.4` = installable project baseline and managed asset synchronization for clean/existing project setup
+- `Phase 1.4` = installable project baseline and managed asset synchronization for clean/existing project setup, now verified
 - `.9` = provider live stream and progress capture, with Cline and Codex as the first-wave validation providers; part of the shared 4.9–4.11 provider session I/O and completion tranche for implementation reuse only
 - `.10` = provider live input and interactive session control, with Cline and Codex as the first-wave validation providers; part of the shared 4.9–4.11 provider session I/O and completion tranche for implementation reuse only
 - `.11` = provider structured completion and result normalization, with Cline and Codex as the first-wave validation providers; part of the shared 4.9–4.11 provider session I/O and completion tranche for implementation reuse only
@@ -62,7 +62,7 @@ At the time of this pack:
 - `.8` project release bootstrap and workflow activation is complete so the project can install itself using its own release processes
 - `Phase 0.3` is now verified: repository inventory, migration mapping, ambiguity capture, structural freeze, code/package movement, and final validation are all complete in the refactor branch
 - `Phase 1.4` is now defined and its first packet has frozen the managed install baseline inventory so lifecycle/bootstrap can converge on the repository's real installable baseline instead of a minimal scaffold
-- `Phase 1.4` is no longer held by the structural checkpoint; `PKT-LFC-011` review/verification is now the next gate before `PKT-LFC-012` resumes
+- `PKT-LFC-011`, `PKT-LFC-012`, and `PKT-LFC-013` are now verified, so the installable-baseline correction layer is complete
 - `.9` provider live stream and progress capture is now implementation-ready at the spec/build-doc level so AUDiaGentic can own console mirroring and runtime persistence while providers emit progress; it is part of the shared 4.9–4.11 provider session I/O and completion tranche
 - `.10` provider live input and interactive session control is in progress; the shared harness is implemented and test-covered, and Cline/Codex are next; it is part of the shared 4.9–4.11 provider session I/O and completion tranche
 - prompt-syntax profiles now control the canonical shorthand names, so tag and argument aliases can be adjusted without changing the parser code
@@ -72,7 +72,7 @@ At the time of this pack:
 - `.11` provider structured completion and result normalization is now implementation-ready and packetized so Cline, Codex, and the remaining providers can return canonical review/output payloads without duplicating the shared bridge harness; `.12` provider optimization and shared workflow extensibility follows as the docs-only token-reduction slice; `.13` now explicitly states the end-state for all supported providers and prompt-entry surfaces
 - Phase 2.3 project release bootstrap and workflow activation is verified and using the project's own release machinery
 - later phase work beyond `.13` remains deferred until additional packet definitions are added
-- the current open follow-ons are the remaining Phase 1.4 baseline-sync engine packets, Phase 4.7 provider auto-install orchestration, Phase 4.9 provider live stream and progress capture, Phase 4.10 provider live input and interactive session control, PKT-PRV-054 session provenance redaction and secure-session reference handling, Phase 4.11 provider structured completion and result normalization, Phase 4.12 provider optimization and shared workflow extensibility, Phase 4.13 canonical prompt entry and bridge end state, Phase 1.3 provider auto-install policy persistence, the remaining provider-specific prompt-calling hardening, and the optional hard-kill extension for job control
+- the current open follow-ons are Phase 4.7 provider auto-install orchestration, Phase 4.9 provider live stream and progress capture, Phase 4.10 provider live input and interactive session control, PKT-PRV-054 session provenance redaction and secure-session reference handling, Phase 4.11 provider structured completion and result normalization, Phase 4.12 provider optimization and shared workflow extensibility, Phase 4.13 canonical prompt entry and bridge end state, Phase 1.3 provider auto-install policy persistence, the remaining provider-specific prompt-calling hardening, and the optional hard-kill extension for job control
 
 That means new implementors should use the build registry for the next legal packet rather than reopening `.1`, `.2`, or `.3`.
 
