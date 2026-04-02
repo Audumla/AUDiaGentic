@@ -41,7 +41,7 @@ itself.
 1. the user types a canonical tag on the first non-empty line
 2. the repo-owned wrapper reads the raw prompt and preserves provenance
 3. `AGENTS.md` instructs Codex to treat the tag as a launch request
-4. `.agents/skills/*/SKILL.md` maps the canonical action to a narrow action shape
+4. `.agents/skills/ag-*/SKILL.md` maps the canonical action to a narrow action shape
 5. the bridge preflights `AGENTS.md` and the five canonical skill files
 6. the bridge hands the normalized envelope to `prompt-launch`
 7. the jobs layer persists the job record and review/release artifacts
@@ -51,17 +51,17 @@ itself.
 - the wrapper reads the first non-empty line and resolves the canonical action
 - the wrapper validates the required prompt-calling assets before launch
 - `AGENTS.md` provides the project doctrine and the tag-to-skill guidance
-- `.agents/skills/**/SKILL.md` provides the action-specific prompt shape after normalization
+- `.agents/skills/ag-*/SKILL.md` provides the action-specific prompt shape after normalization
 - the wrapper injects the normalized envelope and then launches Codex through the selected
   skill or execution mode
 
 ### Required local assets
 - `AGENTS.md`
-- `.agents/skills/plan/SKILL.md`
-- `.agents/skills/implement/SKILL.md`
-- `.agents/skills/review/SKILL.md`
-- `.agents/skills/audit/SKILL.md`
-- `.agents/skills/check-in-prep/SKILL.md`
+- `.agents/skills/ag-plan/SKILL.md`
+- `.agents/skills/ag-implement/SKILL.md`
+- `.agents/skills/ag-review/SKILL.md`
+- `.agents/skills/ag-audit/SKILL.md`
+- `.agents/skills/ag-check-in-prep/SKILL.md`
 - repo-owned wrapper or bridge command
 
 ### Fallback path

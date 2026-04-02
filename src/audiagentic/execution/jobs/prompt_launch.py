@@ -25,6 +25,7 @@ from audiagentic.execution.jobs.reviews import (
 from audiagentic.config.provider_config import load_provider_config
 from audiagentic.execution.providers.execution import execute_provider
 from audiagentic.execution.providers.models import resolve_model_selection
+from audiagentic.execution.jobs.prompt_syntax import load_prompt_syntax, load_review_tag
 from audiagentic.execution.jobs.prompt_templates import load_prompt_context, load_prompt_template, render_prompt_template
 from audiagentic.execution.jobs.state_machine import TERMINAL_STATES
 
@@ -230,6 +231,7 @@ def _resume_job_from_request(project_root: Path, request: dict[str, Any], *, now
 
 def _launch_review_request(project_root: Path, request: dict[str, Any], *, now_fn=None) -> dict[str, Any]:
     job_id = _resolve_job_id(project_root, request, now_fn=now_fn)
+    review_tag = load_review_tag(load_prompt_syntax(project_root))
     subject = subject_from_target(request["target"], existing_job_id=request.get("existing-job-id"))
     review_id = f"rvr_{request['prompt-id'].split('_', 1)[-1]}"
     reviewer = {
@@ -372,6 +374,7 @@ def launch_prompt_request(
     now_fn=None,
 ) -> dict[str, Any]:
     request = _apply_launch_defaults(project_root, request)
+    review_tag = load_review_tag(load_prompt_syntax(project_root))
     prompt_launch = load_project_config(project_root).get("prompt-launch", {})
     if (
         request["target"]["kind"] == "adhoc"
@@ -383,7 +386,7 @@ def launch_prompt_request(
             "reason": "adhoc target disabled",
             "prompt-id": request["prompt-id"],
         }
-    if request["tag"] == "review":
+    if request["tag"] == review_tag:
         return {"status": "ok", **_launch_review_request(project_root, request, now_fn=now_fn)}
     if request.get("existing-job-id") or request["target"]["kind"] == "job":
         job = _resume_job_from_request(project_root, request, now_fn=now_fn)

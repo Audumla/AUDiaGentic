@@ -38,7 +38,7 @@ def test_scaffold_seed_creates_layout(tmp_path: Path) -> None:
     assert (target / ".audiagentic" / "components.yaml").is_file()
     assert (target / ".audiagentic" / "providers.yaml").is_file()
     assert (target / ".audiagentic" / "prompt-syntax.yaml").is_file()
-    assert (target / ".audiagentic" / "prompts" / "review" / "default.md").is_file()
+    assert (target / ".audiagentic" / "prompts" / "ag-review" / "default.md").is_file()
     assert (target / "AGENTS.md").is_file()
     assert (target / ".github" / "workflows" / "release-please.audiagentic.yml").is_file()
 

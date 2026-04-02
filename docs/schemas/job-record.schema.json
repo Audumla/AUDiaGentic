@@ -110,11 +110,11 @@
     "launch-tag": {
       "type": "string",
       "enum": [
-        "plan",
-        "implement",
-        "review",
-        "audit",
-        "check-in-prep"
+        "ag-plan",
+        "ag-implement",
+        "ag-review",
+        "ag-audit",
+        "ag-check-in-prep"
       ]
     },
     "launch-target": {

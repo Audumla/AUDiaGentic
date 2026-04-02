@@ -27,7 +27,7 @@ The current state is:
 - `PKT-FND-010` is now complete at the checkpoint-doc level: `repository-inventory.md`, `migration-map.md`, `ambiguity-report.md`, and `public-import-surface.md` exist and capture the live repository baseline for the refactor
 - `PKT-FND-011` is now complete at the checkpoint-doc level: the new target tree, ownership map, repository-domain dependency rules, public import surface, shim scope, extension-root placement, and broad-code-motion definition are frozen before `PKT-FND-012`
 - `Phase 1.4` installable project baseline sync is now fully verified: the inventory freeze, shared baseline-sync engine, and lifecycle/bootstrap convergence all landed on top of the verified refactored structure
-- `.9` provider live stream and progress capture is in progress; the current executable pass tees stdout/stderr and persists raw runtime logs, while normalized progress records remain the next shared writer step
+- `.9` provider live stream and progress capture: spec 34 and implementation doc 45 are locked with a required generic `StreamSink` protocol; PKT-PRV-048/049/050 are READY_TO_START; PKT-PRV-048 replaces the hardcoded `tee_console`/`_append_text` approach with `ConsoleSink`, `RawLogSink`, and `NormalizedEventSink` built-in sinks plus a `stdout_sinks`/`stderr_sinks` list API on `run_streaming_command`
 - `.10` provider live input and interactive session control is in progress; the current harness records and persists session input, while full live-session attachment remains a later manager-level extension
 - raw provider session keys are now explicitly treated as non-log-safe material; AUDiaGentic should preserve only redacted session handles in general runtime artifacts until a later secure-session reference/store seam is implemented
 - prompt-launch now applies configurable default stream and input controls, so the shared bridge can tee live output and capture interactive turns without the provider owning persistence policy
@@ -43,9 +43,9 @@ The current state is:
 - Project release bootstrap and workflow activation is implemented so the repository can install and refresh itself using the same tracked release machinery it already owns
 - Codex has its first provider-specific bridge path implemented through repo-local `AGENTS.md` and `.agents/skills` guidance plus a Codex wrapper bridge
 - Claude has two planned paths: Option A baseline (wrapper + skills, PKT-PRV-033) missing skills + preflight validation; Option B native hook (UserPromptSubmit/PreToolUse, PKT-PRV-055) deferred pending Option A completion
-- Gemini has its first provider-specific bridge path implemented through repo-local `GEMINI.md` guidance plus a Gemini wrapper bridge
-- Copilot has its first provider-specific bridge path implemented through repo-local `.github/copilot-instructions.md`, prompt files, agent files, and a Copilot wrapper bridge
-- Cline now has its first provider-specific bridge path implemented through repo-local `.clinerules` guidance plus a Cline wrapper bridge
+- Gemini has a bridge wrapper and `GEMINI.md` doctrine; PKT-PRV-034 is IN_PROGRESS — `.gemini/commands/` per-tag templates and `BeforeAgent` hook config do not yet exist
+- Copilot has a bridge wrapper and `.github/` scaffold; PKT-PRV-035 is IN_PROGRESS — all prompt/agent files are stubs and implement/audit/check-in-prep agents are missing
+- Cline has `.clinerules/` doctrine and a bridge wrapper; PKT-PRV-037 is IN_PROGRESS — `.clinerules/skills/` per-tag files and hook config do not yet exist
 - local-openai now has its bridge-only prompt-trigger path implemented through the repo-owned wrapper bridge
 - Qwen now has its bridge fallback prompt-trigger path implemented through the repo-owned wrapper bridge
 - Claude and Cline are the strongest first-wave candidates for hook-backed rollout
@@ -99,7 +99,7 @@ These are the intentional gaps still visible in the build registry:
 - `PKT-PRV-017` / Gemini prompt-trigger behavior is implemented through the bridge path, but the native hook surface still needs runtime hardening before it should be treated as the strongest path.
 - `Continue` is now deferred as a future integration and is intentionally outside the active prompt-calling rollout.
 - `PKT-JOB-011` currently provides cooperative cancellation; a true hard OS-level kill remains a follow-on if we decide we need it.
-- `Phase 4.9` provider live stream and progress capture is in progress; the current executable pass tees stdout/stderr and persists raw runtime logs, while normalized progress records remain the next shared writer step.
+- `Phase 4.9` provider live stream and progress capture: PKT-PRV-048/049/050 are READY_TO_START; PKT-PRV-048 requires the generic `StreamSink` protocol and built-in sink classes before PKT-PRV-049/050 can begin.
 - `Phase 4.10` provider live input and interactive session control is in progress; the current harness records and persists session input, while full live-session attachment remains a later manager-level extension.
 - `PKT-PRV-054` captures the follow-on requirement that raw provider session keys must not be written into durable runtime logs; a secure-session reference/store seam is deferred for a later slice.
 - prompt-launch now merges project-level default stream and input controls before provider execution, so live output capture and interactive session recording stay AUDiaGentic-owned.
