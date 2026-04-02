@@ -94,6 +94,7 @@ This implementation pack is the **end-to-end staged build book** for AUDiaGentic
 - `53_Phase_11_Pluggable_External_Tool_Connectivity_Build_Book.md`
 - `54_Build_Status_Registry_Extension_For_Phases_7_11.md`
 - `56_Phase_1_4_Installable_Project_Baseline_and_Managed_Asset_Synchronization.md`
+- `57_Phase_0_3_Repository_Domain_Refactor_and_Package_Realignment.md`
 
 ## Claude-specific provider docs (Phase 4.6 extensions)
 
