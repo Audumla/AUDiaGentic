@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -55,10 +56,46 @@ def _write_project_and_provider_config(sandbox) -> None:
     )
 
 
+def _write_fake_gemini_command(bin_root: Path) -> None:
+    bin_root.mkdir(parents=True, exist_ok=True)
+    fake_script = bin_root / "gemini-fake.py"
+    fake_script.write_text(
+        "\n".join(
+            [
+                "from __future__ import annotations",
+                "",
+                "import sys",
+                "",
+                "args = sys.argv[1:]",
+                "if '-o' in args and 'text' in args:",
+                "    print('{\"findings\": [], \"recommendation\": \"pass-with-notes\", \"follow-up-actions\": []}')",
+                "else:",
+                "    print('gemini fake ok')",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    gemini_cmd = bin_root / "gemini.cmd"
+    gemini_cmd.write_text(
+        "\r\n".join(
+            [
+                "@echo off",
+                f"\"{sys.executable}\" \"%~dp0gemini-fake.py\" %*",
+            ]
+        )
+        + "\r\n",
+        encoding="utf-8",
+    )
+
+
 def test_gemini_prompt_trigger_bridge_script_launches_job(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "gemini-prompt-trigger-bridge")
     try:
         _write_project_and_provider_config(sandbox)
+        fake_bin = sandbox.repo / ".fake-bin"
+        _write_fake_gemini_command(fake_bin)
+        env = os.environ.copy()
+        env["PATH"] = str(fake_bin) + os.pathsep + env.get("PATH", "")
         result = subprocess.run(
             [
                 sys.executable,
@@ -67,6 +104,7 @@ def test_gemini_prompt_trigger_bridge_script_launches_job(tmp_path: Path) -> Non
                 str(sandbox.repo),
             ],
             cwd=ROOT,
+            env=env,
             input="@review target=artifact:art_job_0007_impl_plan provider=gemini\n"
             "Review the artifact for completeness.\n",
             capture_output=True,

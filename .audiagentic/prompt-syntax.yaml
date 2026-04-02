@@ -1,12 +1,31 @@
 contract-version: v1
 default-profile: shared
 generic-tag: adhoc
+canonical-tags:
+  - ag-plan
+  - ag-implement
+  - ag-review
+  - ag-audit
+  - ag-check-in-prep
 tag-aliases:
-  p: plan
-  i: implement
-  r: review
-  a: audit
-  c: check-in-prep
+  # new short forms
+  agp: ag-plan
+  agi: ag-implement
+  agr: ag-review
+  aga: ag-audit
+  agc: ag-check-in-prep
+  # backward-compat short forms
+  p: ag-plan
+  i: ag-implement
+  r: ag-review
+  a: ag-audit
+  c: ag-check-in-prep
+  # backward-compat full names
+  plan: ag-plan
+  implement: ag-implement
+  review: ag-review
+  audit: ag-audit
+  check-in-prep: ag-check-in-prep
 provider-aliases:
   local-openai: local-openai
   lo: local-openai
@@ -24,6 +43,8 @@ provider-aliases:
   ctr: continue
   cline: cline
   cln: cline
+  opencode: opencode
+  opc: opencode
 directive-aliases:
   agent: provider
   subject: id
@@ -31,21 +52,49 @@ directive-aliases:
   out: output
   t: template
 combined-aliases:
-  p-cln: plan provider=cline
-  p-cld: plan provider=claude
-  p-cx: plan provider=codex
-  i-cln: implement provider=cline
-  i-cld: implement provider=claude
-  i-cx: implement provider=codex
-  r-cln: review provider=cline
-  r-cld: review provider=claude
-  r-cx: review provider=codex
-  a-cln: audit provider=cline
-  a-cld: audit provider=claude
-  a-cx: audit provider=codex
-  c-cln: check-in-prep provider=cline
-  c-cld: check-in-prep provider=claude
-  c-cx: check-in-prep provider=codex
+  # ag- prefixed forms
+  agr-cln: ag-review provider=cline
+  agr-cld: ag-review provider=claude
+  agr-cx: ag-review provider=codex
+  agp-cln: ag-plan provider=cline
+  agp-cld: ag-plan provider=claude
+  agp-cx: ag-plan provider=codex
+  agi-cln: ag-implement provider=cline
+  agi-cld: ag-implement provider=claude
+  agi-cx: ag-implement provider=codex
+  aga-cln: ag-audit provider=cline
+  aga-cld: ag-audit provider=claude
+  aga-cx: ag-audit provider=codex
+  agc-cln: ag-check-in-prep provider=cline
+  agc-cld: ag-check-in-prep provider=claude
+  agc-cx: ag-check-in-prep provider=codex
+  # backward-compat combined forms
+  p-cln: ag-plan provider=cline
+  p-cld: ag-plan provider=claude
+  p-cx: ag-plan provider=codex
+  i-cln: ag-implement provider=cline
+  i-cld: ag-implement provider=claude
+  i-cx: ag-implement provider=codex
+  r-cln: ag-review provider=cline
+  r-cld: ag-review provider=claude
+  r-cx: ag-review provider=codex
+  a-cln: ag-audit provider=cline
+  a-cld: ag-audit provider=claude
+  a-cx: ag-audit provider=codex
+  c-cln: ag-check-in-prep provider=cline
+  c-cld: ag-check-in-prep provider=claude
+  c-cx: ag-check-in-prep provider=codex
+  # opencode combined forms
+  p-opc: ag-plan provider=opencode
+  i-opc: ag-implement provider=opencode
+  r-opc: ag-review provider=opencode
+  a-opc: ag-audit provider=opencode
+  c-opc: ag-check-in-prep provider=opencode
+  agp-opc: ag-plan provider=opencode
+  agi-opc: ag-implement provider=opencode
+  agr-opc: ag-review provider=opencode
+  aga-opc: ag-audit provider=opencode
+  agc-opc: ag-check-in-prep provider=opencode
 profiles:
   shared:
     prompt-controls:
@@ -66,4 +115,6 @@ profiles:
   cline-prompt-tags-v1:
     extends: shared
   openai-bridge-prompt-tags-v1:
+    extends: shared
+  opencode-prompt-tags-v1:
     extends: shared

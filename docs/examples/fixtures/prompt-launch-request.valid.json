@@ -9,7 +9,7 @@
     "model-id": "gpt-5.4-mini",
     "model-alias": "fast-default"
   },
-  "tag": "implement",
+  "tag": "ag-implement",
   "target": {
     "kind": "packet",
     "packet-id": "PKT-JOB-008"
