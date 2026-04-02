@@ -24,8 +24,22 @@
 - likely shim-heavy areas:
 - areas that should not be over-split in the first pass:
 
+## Terminology Ambiguity Findings
+
+For Phase 0.3 inventory, also capture any blurred canonical terms that may affect later cleanup.
+
+### Term Record N
+
+- current term:
+- location/path:
+- competing or overlapping term:
+- why the meaning is blurred:
+- affects structure now or later:
+- recommended follow-up:
+
 ## Decisions Required from PKT-FND-011
 
 - target-tree questions:
 - ownership questions:
 - dependency-rule questions:
+- terminology questions that must not remain ambiguous through code motion:
