@@ -1,60 +1,31 @@
 # Target Codebase Tree
 
+## Frozen Phase 0.3 target shape
+
 ```text
 src/
   audiagentic/
-    cli/
-      main.py
     contracts/
       canonical_ids.py
       schemas.py
       validation.py
       glossary.py
-    lifecycle/
-      baseline_sync.py
-      detector.py
-      manifest.py
-      checkpoints.py
-      fresh_install.py
-      update_dispatch.py
-      cutover.py
-      uninstall.py
-      migration.py
-      workflow_management.py
-    release/
-      fragments.py
-      sync.py
-      current_summary.py
-      audit.py
-      finalize.py
-      release_please.py
-      history_import.py
-    jobs/
-      records.py
-      store.py
-      state_machine.py
-      profiles.py
-      packet_runner.py
-      stages.py
-      approvals.py
-      release_bridge.py
-      prompt_parser.py
-      prompt_launch.py
-      reviews.py
-    providers/
-      registry.py
-      selection.py
-      health.py
-      catalog.py
-      models.py
-      adapters/
-        local_openai.py
-        claude.py
-        codex.py
-        gemini.py
-        copilot.py
-        continue_.py
-        cline.py
+    core/
+    config/
+    scoping/
+    execution/
+      jobs/
+      providers/
+    runtime/
+      lifecycle/
+      release/
+      state/
+    channels/
+      cli/
+      discord/
+      server/
+    streaming/
+    observability/
     nodes/
       identity.py
       heartbeat.py
@@ -78,18 +49,10 @@ src/
       external_tasks.py
       tool_registry.py
       sync.py
-    server/
-      service_boundary.py
-    overlay/
-      discord/
-        subscriber.py
-        release_publish.py
-        approval_publish.py
-        notices.py
-        models.py
 tools/
   validate_ids.py
   validate_schemas.py
+  validate_packet_dependencies.py
   seed_example_project.py
   lifecycle_stub.py
   refresh_model_catalog.py
@@ -100,46 +63,48 @@ tests/
   e2e/
 ```
 
+## Phase 0.3 mapping notes
+
+This file now describes the **post-refactor target structure** that `PKT-FND-011` must freeze before `PKT-FND-012` begins.
+
+Interpretation rules for this tranche:
+
+- `execution/` is the home of job orchestration and provider execution behavior.
+- `runtime/` is the home of lifecycle, release, and durable runtime/project state concerns.
+- `channels/` is the home of human-facing entry or interaction surfaces such as CLI, Discord, and optional server adapters.
+- `streaming/` is reserved for live input/output flow and stream-bridging behavior.
+- `observability/` is reserved for telemetry, diagnostics, reporting, and later monitoring surfaces.
+- `nodes/`, `discovery/`, `federation/`, and `connectors/` remain reserved extension roots during this tranche and are **not** folded into the baseline repository-domain tree.
+
+## Transitional compatibility rule
+
+Legacy package roots such as:
+
+- `src/audiagentic/lifecycle/`
+- `src/audiagentic/release/`
+- `src/audiagentic/jobs/`
+- `src/audiagentic/providers/`
+- `src/audiagentic/server/`
+- `src/audiagentic/overlay/`
+
+may survive temporarily as compatibility shim roots during the checkpoint, but they are no longer the canonical target shape and must not receive new business logic once `PKT-FND-012` begins.
+
 ## Rules
 
 - All production code lives under `src/audiagentic/`.
-- All standalone utility entry points live under `tools/` but should call library code under `src/audiagentic/`.
-- Tests must mirror the production module structure where practical.
-- Packets must not create alternative parallel module trees.
+- All standalone deterministic utility entry points live under `tools/`, but should call library code under `src/audiagentic/`.
+- Tests remain centralized under `tests/` and should mirror the frozen domain structure where practical.
+- Packets must not create alternative parallel module trees outside the frozen target shape.
 - When a packet needs a new module outside this tree, it must update this file before code is written.
+- `nodes/`, `discovery/`, `federation/`, and `connectors/` remain optional extension roots and must not become baseline prerequisites during this tranche.
 
-## Phase 7+ extension reservation
+## Future extension note
 
-The later node/discovery/federation/connectors extension line is first-class but optional. When those phases begin implementation, they should use the reserved module paths above rather than creating new parallel trees.
-
-The reservation exists so ownership is explicit before code is written:
-- `src/audiagentic/nodes/` for node identity, heartbeat, ownership, runtime state, status, registry, and API seams
-- `src/audiagentic/discovery/` for locator providers and registry resolution
-- `src/audiagentic/federation/` for node event and control transport
-- `src/audiagentic/connectors/` for external task / tool connectivity seams
-
-
-## v12 additions
-
-The following files/directories are now part of the target baseline:
-
-```text
-docs/specifications/architecture/20_Error_Envelope_and_Error_Codes.md
-docs/implementation/19_CI_CD_and_Testing_Infrastructure.md
-docs/implementation/20_Packet_Dependency_Graph.md
-docs/implementation/21_Destructive_Test_Sandbox.md
-docs/implementation/22_Secret_Management.md
-docs/implementation/23_Release_Please_Invocation.md
-docs/implementation/24_Cross_Phase_Integration_Testing.md
-docs/implementation/25_Change_Control_and_Document_Update_Rules.md
-tools/validate_packet_dependencies.py
-```
-
-## Future extension additions
-
-The later node/discovery/federation/connectors extension line will add:
+The later extension line still uses the reserved roots above:
 
 - `src/audiagentic/nodes/`
 - `src/audiagentic/discovery/`
 - `src/audiagentic/federation/`
 - `src/audiagentic/connectors/`
+
+Those roots are intentionally preserved now so future implementation does not need another structural rename just to begin.
