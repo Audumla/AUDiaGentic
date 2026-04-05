@@ -1,6 +1,7 @@
 # PKT-PRV-005 — codex provider adapter
 
 **Phase:** Phase 4  
+**Status:** VERIFIED
 **Primary owner group:** Providers
 
 ## Goal

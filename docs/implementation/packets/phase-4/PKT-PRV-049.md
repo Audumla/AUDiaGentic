@@ -1,7 +1,7 @@
 # PKT-PRV-049 — Codex live-stream capture integration
 
 **Phase:** Phase 4.9
-**Status:** DEFERRED_DRAFT
+**Status:** READY_TO_START
 **Primary owner group:** Codex
 
 ## Purpose
@@ -15,6 +15,9 @@ captured, mirrored, and normalized without Codex owning any persistence logic.
 - add a `CodexEventExtractor` sink that parses Codex wrapper milestone lines into canonical
   stream events before forwarding to `NormalizedEventSink`
 - wire `ConsoleSink` for live console mirroring during Codex runs
+- make `src/audiagentic/execution/providers/adapters/codex.py` the Codex-owned home of
+  provider-specific stream extraction, sink wiring helpers, and any Codex-only parsing needed
+  for this packet
 - preserve final structured output after the run
 - keep bridge behavior unchanged when streaming is disabled (no sinks registered)
 
@@ -42,7 +45,14 @@ Codex-owned and does not belong in the shared harness.
 
 - `tools/codex_prompt_trigger_bridge.py` — register sinks before launch
 - `src/audiagentic/execution/providers/adapters/codex.py` — `CodexEventExtractor` sink
+- Codex-focused streaming tests and fixtures
 - tests for Codex stream capture and extractor
+
+## Ownership boundary
+
+This packet owns Codex-specific changes in `src/audiagentic/execution/providers/adapters/codex.py`
+and the Codex bridge registration seam. Shared sink primitives, sink protocols, and generic
+runtime persistence remain owned by `PKT-PRV-048`.
 
 ## Acceptance criteria
 
@@ -52,3 +62,4 @@ Codex-owned and does not belong in the shared harness.
 - final structured output remains available after the run
 - the bridge still works when streaming is disabled (no sinks registered)
 - the shared harness is not modified by this packet
+- Codex-specific extraction and registration logic lives in `src/audiagentic/execution/providers/adapters/codex.py`

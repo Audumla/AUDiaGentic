@@ -298,16 +298,16 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-30 | Phase 4.6 | PKT-PRV-037 | READY_FOR_REVIEW | Cline prompt-trigger bridge surface implemented with repo-local `.clinerules` guidance |
 | 2026-03-30 | Phase 4.6 | PKT-PRV-038 | READY_FOR_REVIEW | local-openai/qwen prompt-trigger bridge surface implemented with repo-local bridge wrappers |
 | 2026-03-30 | Phase 4.7 | PKT-PRV-039 | DEFERRED_DRAFT | provider availability and auto-install orchestration; shared install policy and provider-specific bootstrap packets drafted |
-| 2026-03-31 | Phase 4.9 | PKT-PRV-048 | DEFERRED_DRAFT | shared live-stream capture contract drafted; console mirroring and runtime persistence remain AUDiaGentic-owned |
-| 2026-03-31 | Phase 4.9 | PKT-PRV-049 | DEFERRED_DRAFT | Codex live-stream capture packet drafted as a first-wave validation provider |
-| 2026-03-31 | Phase 4.9 | PKT-PRV-050 | DEFERRED_DRAFT | Cline live-stream capture packet drafted as a first-wave validation provider |
+| 2026-03-31 | Phase 4.9 | PKT-PRV-048 | READY_FOR_REVIEW | shared live-stream capture contract and sink harness are implemented; console mirroring and runtime persistence remain AUDiaGentic-owned |
+| 2026-03-31 | Phase 4.9 | PKT-PRV-049 | READY_TO_START | Codex live-stream capture packet is now an active first-wave validation follow-on behind PKT-PRV-048 |
+| 2026-03-31 | Phase 4.9 | PKT-PRV-050 | READY_TO_START | Cline live-stream capture packet is now an active first-wave validation follow-on behind PKT-PRV-048 |
 | 2026-03-31 | Phase 4.10 | PKT-PRV-051 | READY_FOR_REVIEW | shared live-input harness implemented with session-input persistence and a session-input CLI |
-| 2026-03-31 | Phase 4.10 | PKT-PRV-052 | DEFERRED_DRAFT | Codex live-input capture packet drafted as a first-wave validation provider |
-| 2026-03-31 | Phase 4.10 | PKT-PRV-053 | DEFERRED_DRAFT | Cline live-input capture packet drafted as a first-wave validation provider |
-| 2026-04-02 | Phase 4.10 | PKT-PRV-054 | DEFERRED_DRAFT | session provenance redaction and secure-session reference seam captured so raw provider session keys are not treated as log-safe runtime data |
-| 2026-04-02 | Phase 4.11 | PKT-PRV-056 | DEFERRED_DRAFT | shared structured-completion contract and normalization harness packetized for implementation |
-| 2026-04-02 | Phase 4.11 | PKT-PRV-057 | DEFERRED_DRAFT | Codex structured-completion integration packetized for implementation |
-| 2026-04-02 | Phase 4.11 | PKT-PRV-058 | DEFERRED_DRAFT | Cline structured-completion integration packetized for implementation |
+| 2026-03-31 | Phase 4.10 | PKT-PRV-052 | WAITING_ON_DEPENDENCIES | Codex live-input capture packet is now waiting on the shared harness and launch-packet prerequisites |
+| 2026-03-31 | Phase 4.10 | PKT-PRV-053 | WAITING_ON_DEPENDENCIES | Cline live-input capture packet is now waiting on the shared harness and launch-packet prerequisites |
+| 2026-04-02 | Phase 4.10 | PKT-PRV-054 | WAITING_ON_DEPENDENCIES | session provenance redaction and secure-session reference seam is tracked as a follow-on behind the shared live-input harness |
+| 2026-04-02 | Phase 4.11 | PKT-PRV-056 | READY_TO_START | shared structured-completion contract and normalization harness are packetized and ready to begin |
+| 2026-04-02 | Phase 4.11 | PKT-PRV-057 | WAITING_ON_DEPENDENCIES | Codex structured-completion integration is defined behind the shared normalization harness |
+| 2026-04-02 | Phase 4.11 | PKT-PRV-058 | WAITING_ON_DEPENDENCIES | Cline structured-completion integration is defined behind the shared normalization harness |
 | 2026-03-30 | Phase 5 | PKT-DSC-001 .. PKT-DSC-004 | READY_TO_START | Discord overlay packet headers normalized; phase 5 is ready to implement after Phase 4.4 verification |
 | 2026-03-30 | Phase 0.1 | PKT-FND-008 | VERIFIED | contract/schema updates for access-mode, model catalog, model-id/model-alias |
 | 2026-03-30 | Phase 1.1 | PKT-LFC-008 | VERIFIED | lifecycle updates to preserve new tracked config fields |

@@ -41,7 +41,7 @@ The repo contains these assets for the native hook path:
 - `CLAUDE.md` (doctr)
 - `.claude/rules/prompt-tags.md` (tag doctrine)
 - `.claude/rules/review-policy.md` (review doctrine)
-- `.claude/skills/{plan,implement,review,audit,check-in-prep}/SKILL.md` (from PKT-PRV-033)
+- `.claude/skills/ag-{plan,implement,review,audit,check-in-prep}/SKILL.md` (from PKT-PRV-033)
 - `tools/claude_prompt_trigger_bridge.py` (shared bridge wrapper)
 
 **Missing before this packet:**

@@ -1,7 +1,7 @@
 # PKT-PRV-031 — Shared provider prompt-trigger launch contract + bridge harness
 
 **Phase:** Phase 4.6
-**Status:** DEFERRED_DRAFT
+**Status:** VERIFIED
 **Owner:** shared
 
 ## Objective

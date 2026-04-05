@@ -1,6 +1,7 @@
 # PKT-PRV-013 — Provider CLI/status inspection
 
 **Phase:** Phase 4.2  
+**Status:** VERIFIED
 **Primary owner group:** Providers
 
 ## Goal

@@ -30,11 +30,11 @@ request.
 
 ### Required files/settings
 - `AGENTS.md`
-- `.agents/skills/plan/SKILL.md`
-- `.agents/skills/implement/SKILL.md`
-- `.agents/skills/review/SKILL.md`
-- `.agents/skills/audit/SKILL.md`
-- `.agents/skills/check-in-prep/SKILL.md`
+- `.agents/skills/ag-plan/SKILL.md`
+- `.agents/skills/ag-implement/SKILL.md`
+- `.agents/skills/ag-review/SKILL.md`
+- `.agents/skills/ag-audit/SKILL.md`
+- `.agents/skills/ag-check-in-prep/SKILL.md`
 - repo-owned CLI or VS Code wrapper
 
 ### Verification focus

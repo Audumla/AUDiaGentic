@@ -77,7 +77,7 @@ Input:
 
 Expected:
 - provider enters review mode
-- provider uses review prompt/skill/agent/workflow
+- provider uses the review instruction/function surface appropriate to that provider
 - provider returns structured review output or equivalent normalized review artifact
 
 ### ST-04 unsupported tag

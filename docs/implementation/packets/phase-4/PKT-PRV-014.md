@@ -1,6 +1,7 @@
 # PKT-PRV-014 — Shared prompt-tag surface contract + sync harness
 
 **Phase:** Phase 4.3  
+**Status:** VERIFIED
 **Primary owner group:** Providers
 
 ## Goal

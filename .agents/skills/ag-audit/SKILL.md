@@ -1,3 +1,5 @@
+<!-- MANAGED_BY_AUDIAGENTIC: do not edit directly. -->
+
 ---
 name: ag-audit
 description: Use for canonical @ag-audit launches. Checks tracked docs, release artifacts, and state consistency.
@@ -8,7 +10,7 @@ description: Use for canonical @ag-audit launches. Checks tracked docs, release 
 Use this skill for canonical `@ag-audit` launches.
 
 Trigger:
-- first non-empty line resolves to `ag-audit` or the backward-compatible `audit` alias
+- first non-empty line resolves to `ag-audit` or a configured alias
 
 Do:
 - audit tracked docs, release artifacts, and state consistency

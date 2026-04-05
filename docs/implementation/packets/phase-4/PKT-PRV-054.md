@@ -1,7 +1,7 @@
 # PKT-PRV-054 — Session provenance redaction and secure-session reference seam
 
 **Phase:** Phase 4.10
-**Status:** DEFERRED_DRAFT
+**Status:** WAITING_ON_DEPENDENCIES
 **Owner:** Codex
 
 ## Objective

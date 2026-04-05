@@ -33,7 +33,7 @@ The repo now contains the Codex bridge surface required by this runbook:
 - `.agents/skills/ag-review/SKILL.md`
 - `.agents/skills/ag-audit/SKILL.md`
 - `.agents/skills/ag-check-in-prep/SKILL.md`
-- `.agents/skills/adhoc/SKILL.md`
+- no dedicated adhoc skill file; generic-tag launches are handled by the parser/bridge
 - `tools/codex_prompt_trigger_bridge.py`
 
 ## Codex preflight contract
@@ -56,7 +56,7 @@ and prevents the prompt-calling spec from drifting away from the actual repo sta
 - `.agents/skills/ag-review/SKILL.md`
 - `.agents/skills/ag-audit/SKILL.md`
 - `.agents/skills/ag-check-in-prep/SKILL.md`
-- optional `.agents/skills/adhoc/SKILL.md`
+- no dedicated adhoc skill file; generic-tag launches are handled by the parser/bridge
 - repo-owned wrapper or bridge command
 
 ## Smoke tests
@@ -86,10 +86,16 @@ For the first pass:
 - the bridge registers `ConsoleSink`, `RawLogSink`, and `NormalizedEventSink` for each Codex run
 - a `CodexEventExtractor` sink (owned by the Codex adapter) translates Codex wrapper milestone
   lines into canonical `provider-stream-event` records before they reach `NormalizedEventSink`
+- `src/audiagentic/execution/providers/adapters/codex.py` is the owned implementation home for
+  Codex-specific stream parsing and extractor registration added by `PKT-PRV-049`
 - console mirroring is controlled by `ConsoleSink` presence, not a boolean flag
 - `events.ndjson` is written to the job runtime folder for every streaming-enabled run
 - disabling streaming means not registering the sinks; the bridge path is otherwise unchanged
 - the same sink interface is reusable later by Discord and other consumers without harness changes
+
+Implementation note:
+- `PKT-PRV-049` owns Codex-specific work in `src/audiagentic/execution/providers/adapters/codex.py`
+- `PKT-PRV-048` continues to own only the shared sink harness
 
 ## Live input expectations (Phase 4.10)
 

@@ -14,7 +14,8 @@ reliable available path.
 - a shared structured completion/result contract
 - a canonical final-result payload shape
 - shared normalization rules for direct versus fallback-derived results
-- first-wave provider completion integrations for Codex and Cline
+- primary-provider completion integrations for Codex, Cline, Claude, and opencode
+- a planned Gemini completion packet so the shared result architecture does not need to be reopened later
 - a provider matrix for later-provider rollout without duplicating the shared harness
 
 ## Shared outcome
@@ -52,6 +53,18 @@ Providers own:
 - the prompt execution surface
 - any native hooks or wrapper mechanics
 - the final structured output or the raw material needed to normalize it
+
+If provider-specific completion prompting needs to change, the behavioral source stays generic
+and is rendered into provider-specific surfaces by the shared regeneration facade using
+provider-owned renderer definitions. Phase 4.11 must not create separate hand-authored
+canonical provider-function definitions per provider.
+
+At the current repository state, that generic provider-function source has now been seeded into
+`.audiagentic/skills/`, but the migration/regeneration line is not yet fully complete. That means `PKT-PRV-056` can begin immediately,
+while provider-specific packets that need completion prompt/surface changes should wait for
+`PKT-PRV-070`. Gemini is included in the planned completion family now so the shared
+normalization and provider-surface architecture account for it from the first pass even
+though its runtime path remains guarded.
 
 ## Recommended provider methods
 
@@ -168,9 +181,12 @@ Deferred.
 2. Add a shared normalization helper that marks direct versus fallback-derived results.
 3. Implement Codex structured completion integration.
 4. Implement Cline structured completion integration.
-5. Ensure review-report and review-bundle persistence can preserve direct provider findings when parsing succeeds.
-6. Ensure fallback-derived results remain explicit rather than silently masquerading as direct provider output.
-7. Use the provider matrix to plan later-provider rollouts.
+5. Implement Claude structured completion integration.
+6. Implement opencode structured completion integration.
+7. Implement Gemini structured completion integration.
+8. Ensure review-report and review-bundle persistence can preserve direct provider findings when parsing succeeds.
+9. Ensure fallback-derived results remain explicit rather than silently masquerading as direct provider output.
+10. Use the provider matrix to plan later-provider rollouts.
 
 ## Tests to add
 
@@ -178,6 +194,9 @@ Deferred.
 - shared normalizer marks fallback-derived results explicitly
 - Codex integration parses final-message JSON into the canonical result
 - Cline integration parses completion JSON into the canonical result
+- Claude integration normalizes hook-backed or wrapper-bounded completion into the canonical result
+- opencode integration normalizes CLI JSON or explicit fallback into the canonical result
+- Gemini integration normalizes bounded wrapper-driven JSON completion into the canonical result
 - review persistence uses direct provider results when available
 - raw result material remains available for diagnosis after normalization
 
@@ -202,3 +221,6 @@ Deferred.
 - `PKT-PRV-056` - shared provider structured-completion contract + normalization harness
 - `PKT-PRV-057` - Codex structured-completion integration
 - `PKT-PRV-058` - Cline structured-completion integration
+- `PKT-PRV-068` - Claude structured-completion integration
+- `PKT-PRV-069` - opencode structured-completion integration
+- `PKT-PRV-071` - Gemini structured-completion integration

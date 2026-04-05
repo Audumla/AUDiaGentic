@@ -1,3 +1,5 @@
+<!-- MANAGED_BY_AUDIAGENTIC: do not edit directly. -->
+
 # AGENTS.md
 
 This repository uses canonical prompt tags to launch AUDiaGentic workflow jobs.
@@ -107,11 +109,10 @@ Centralized in `.audiagentic/prompt-syntax.yaml`. Available shortcuts:
 - `cld` -> `claude`
 - `cln` -> `cline`
 - `gm` -> `gemini`
+- `opc` -> `opencode`
 - `cp` -> `copilot`
 
 ## Skills
-
-Each canonical action maps to a focused skill under `.agents/skills/`:
 
 - `ag-plan`
 - `ag-implement`

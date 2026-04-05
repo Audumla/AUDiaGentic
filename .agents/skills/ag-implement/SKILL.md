@@ -1,3 +1,5 @@
+<!-- MANAGED_BY_AUDIAGENTIC: do not edit directly. -->
+
 ---
 name: ag-implement
 description: Use for canonical @ag-implement launches. Carries out the requested change.
@@ -8,7 +10,7 @@ description: Use for canonical @ag-implement launches. Carries out the requested
 Use this skill for canonical `@ag-implement` launches.
 
 Trigger:
-- first non-empty line resolves to `ag-implement` or the backward-compatible `implement` alias
+- first non-empty line resolves to `ag-implement` or a configured alias
 
 Do:
 - carry out the requested implementation work

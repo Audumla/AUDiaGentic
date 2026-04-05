@@ -1,7 +1,7 @@
 # PKT-PRV-057 — Codex structured-completion integration
 
 **Phase:** Phase 4.11
-**Status:** DEFERRED_DRAFT
+**Status:** WAITING_ON_DEPENDENCIES
 **Owner:** Codex
 
 ## Objective
