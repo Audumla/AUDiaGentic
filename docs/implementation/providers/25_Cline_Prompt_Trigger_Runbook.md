@@ -23,14 +23,25 @@ The repo now contains the Cline bridge surface required by this runbook:
 
 - `.clinerules/prompt-tags.md`
 - `.clinerules/review-policy.md`
+- `.clinerules/skills/ag-*.md`
 - `tools/cline_prompt_trigger_bridge.py`
 
 ## Required assets
 
-- `.clinerules/*.md`
+- `.clinerules/prompt-tags.md`
+- `.clinerules/review-policy.md`
+- `.clinerules/skills/ag-plan.md`
+- `.clinerules/skills/ag-implement.md`
+- `.clinerules/skills/ag-review.md`
+- `.clinerules/skills/ag-audit.md`
+- `.clinerules/skills/ag-check-in-prep.md`
 - Cline hook configuration
 - Cline workflow files or task definitions
 - repo-owned fallback bridge
+
+These are provider-owned rendered surfaces. They are generated from the canonical
+provider-function source under `.audiagentic/skills/`; Cline does not consume a single
+generic provider-ready skill file format.
 
 ## Smoke tests
 
@@ -57,10 +68,16 @@ For the first pass:
 - a `ClineEventExtractor` sink (owned by the Cline adapter) translates Cline native NDJSON
   task-progress lines into canonical `provider-stream-event` records before they reach
   `NormalizedEventSink`
+- `src/audiagentic/execution/providers/adapters/cline.py` is the owned implementation home for
+  Cline-specific NDJSON parsing and extractor registration added by `PKT-PRV-050`
 - console mirroring is controlled by `ConsoleSink` presence, not a boolean flag
 - `events.ndjson` is written to the job runtime folder for every streaming-enabled run
 - disabling streaming means not registering the sinks; the bridge path is otherwise unchanged
 - the same sink interface is reusable later by Discord and other consumers without harness changes
+
+Implementation note:
+- `PKT-PRV-050` owns Cline-specific work in `src/audiagentic/execution/providers/adapters/cline.py`
+- `PKT-PRV-048` continues to own only the shared sink harness
 
 ## Live input expectations (Phase 4.10)
 

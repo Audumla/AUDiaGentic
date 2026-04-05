@@ -14,6 +14,7 @@ CANONICAL_PROVIDER_IDS = (
     "copilot",
     "continue",
     "cline",
+    "opencode",
 )
 
 CANONICAL_COMPONENT_IDS = (
@@ -42,6 +43,8 @@ CANONICAL_SCHEMA_IDS = (
     "provider-descriptor",
     "provider-model-catalog",
     "provider-health",
+    "provider-stream-event",
+    "provider-stream-manifest",
     "provider-session-input",
     "provider-session-manifest",
     "review-bundle",

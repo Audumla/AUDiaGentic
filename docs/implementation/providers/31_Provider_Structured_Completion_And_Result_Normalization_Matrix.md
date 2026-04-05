@@ -6,6 +6,10 @@ for prompt-triggered work.
 The goal is to keep runtime capture and persistence owned by AUDiaGentic while allowing each
 provider to use the most stable native surface available.
 
+Architectural note:
+- Gemini is included in the planned completion family now so the shared completion harness and
+  provider-surface generation line do not need to be reopened later just to add Gemini.
+
 ## Shared rule
 
 All providers must normalize to the same canonical result shape after execution:
@@ -37,10 +41,11 @@ All providers must normalize to the same canonical result shape after execution:
 | Cline | stdout-json | 1 | launch/stream path works, final review still falls back when JSON is not reliable | prompt-shape hardening and deterministic completion parsing |
 | Codex | result-file | 2 | wrapper-first path works | deterministic final-message JSON path |
 | Claude | wrapper-derived -> native-json | 3 | wrapper path is viable, hook path is promising | stable JSON completion guidance and hook fallback rules |
-| Gemini | wrapper-derived -> stdout-json | 4 | wrapper path exists but task shape is sensitive | bounded prompt and deterministic JSON completion |
-| Copilot | wrapper-derived | 5 | wrapper/instruction path exists | stable noninteractive final result shaping |
-| local-openai | response-body | 6 | direct endpoint path is straightforward | canonical mapping from response body to result envelope |
-| Qwen | stdout-json or response-body | 7 | bridge-first path exists | stable completion surface and parsing rules |
+| opencode | wrapper-derived -> stdout-json | 4 | wrapper-first path works and CLI output can be normalized | stable JSON completion guidance and fallback parsing rules |
+| Gemini | wrapper-derived -> stdout-json | 5 | wrapper path exists but task shape is sensitive | bounded prompt and deterministic JSON completion |
+| Copilot | wrapper-derived | 6 | wrapper/instruction path exists | stable noninteractive final result shaping |
+| local-openai | response-body | 7 | direct endpoint path is straightforward | canonical mapping from response body to result envelope |
+| Qwen | stdout-json or response-body | 8 | bridge-first path exists | stable completion surface and parsing rules |
 | Continue | future integration | later | out of active rollout | deferred |
 
 ## Provider methods
@@ -72,6 +77,15 @@ All providers must normalize to the same canonical result shape after execution:
 - Rules:
   - hook-native completion may be used when stable
   - wrapper fallback remains mandatory for portability
+
+### opencode
+
+- Preferred method: wrapper-bounded JSON completion with stdout fallback parsing
+- Native surface: `tools/opencode_prompt_trigger_bridge.py`, `opencode run --format json`
+- Rules:
+  - prefer direct JSON lines when the CLI returns them
+  - preserve raw stdout/stderr separately for diagnosis
+  - mark wrapper-derived results explicitly when direct JSON is unavailable
 
 ### Gemini
 

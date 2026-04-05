@@ -8,7 +8,7 @@ This runbook describes how to set up and use prompt-trigger launch with opencode
 
 1. opencode CLI installed and available on PATH
 2. AUDiaGentic project initialized
-3. PKT-PRV-064 verified (opencode adapter implemented)
+3. PKT-PRV-064 in progress or better (opencode adapter implemented, but still under validation)
 
 ## Architecture
 
@@ -56,6 +56,10 @@ providers:
       settings-profile: opencode-prompt-tags-v1
 ```
 
+Current repository note:
+- this config block now exists in the live `.audiagentic/providers.yaml`
+- remaining work is adapter hardening and end-to-end validation, not provider-config parity
+
 ### Step 3: Verify Bridge Availability
 
 ```bash
@@ -65,6 +69,14 @@ ls -la tools/opencode_prompt_trigger_bridge.py
 Expected: File exists and is executable
 
 ## Usage
+
+opencode uses the shared bridge for launch. The current live wrapper path still validates
+`AGENTS.md` plus `.agents/skills/ag-*/SKILL.md`.
+
+Separately, the provider-owned generated opencode surface now lives under
+`.opencode/skills/ag-*/SKILL.md`. That surface is generated from the canonical
+provider-function source under `.audiagentic/skills/`; it is not a shared generic skill file
+format reused directly across providers, and it is not yet the active wrapper dependency.
 
 ### Basic Usage
 

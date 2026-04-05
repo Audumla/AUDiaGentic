@@ -1,6 +1,7 @@
 # PKT-PRV-018 — copilot prompt-tag surface integration
 
 **Phase:** Phase 4.3  
+**Status:** READY_TO_START
 **Primary owner group:** Providers
 
 ## Goal

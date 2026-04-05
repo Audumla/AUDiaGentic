@@ -38,6 +38,7 @@ native-intercept candidate for canonical tags when the hook ordering is stable.
 Current repo state:
 - `.clinerules/prompt-tags.md`
 - `.clinerules/review-policy.md`
+- `.clinerules/skills/ag-*.md`
 - `tools/cline_prompt_trigger_bridge.py`
 
 ### Chat exposure path
@@ -48,7 +49,13 @@ Current repo state:
 - the normalized request is handed to the matching workflow or task mode
 
 ### Required local assets
-- `.clinerules/*.md`
+- `.clinerules/prompt-tags.md`
+- `.clinerules/review-policy.md`
+- `.clinerules/skills/ag-plan.md`
+- `.clinerules/skills/ag-implement.md`
+- `.clinerules/skills/ag-review.md`
+- `.clinerules/skills/ag-audit.md`
+- `.clinerules/skills/ag-check-in-prep.md`
 - Cline hook configuration
 - Cline workflow files or task definitions
 - repo-owned fallback bridge for environments where hooks are feature-gated
