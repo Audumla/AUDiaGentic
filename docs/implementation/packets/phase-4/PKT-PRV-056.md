@@ -38,3 +38,13 @@ This packet owns:
 
 - this packet does not pick one single provider completion mechanism
 - this packet exists to keep result normalization shared and provider-neutral
+
+## Integration Seam
+
+This packet defines the shared harness but does not wire it into the main execution flow. Provider-specific integration packets (e.g., `PKT-PRV-057`, `PKT-PRV-069`) are responsible for utilizing this seam. The intended call flow is:
+
+1. Provider adapter executes and receives raw stdout/stderr and returncode.
+2. Adapter parses specific output or falls back (using `try_extract_json_from_stdout`).
+3. Adapter creates a canonical completion via `normalize_provider_result()` or `build_synthetic_fallback()`.
+4. Adapter persists the artifact to disk by calling `persist_completion()`.
+5. The execution engine (e.g., `prompt_launch.py`) reads this completion artifact to update job state and review bundles.
