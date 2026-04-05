@@ -61,6 +61,8 @@ DEFAULT_PROMPT_SYNTAX: dict[str, Any] = {
         "ctr": "continue",
         "cline": "cline",
         "cln": "cline",
+        "opencode": "opencode",
+        "opc": "opencode",
     },
     "directive-aliases": {
         "agent": "provider",

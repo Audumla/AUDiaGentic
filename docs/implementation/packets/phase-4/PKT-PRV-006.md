@@ -1,6 +1,7 @@
 # PKT-PRV-006 — gemini provider adapter
 
 **Phase:** Phase 4  
+**Status:** VERIFIED
 **Primary owner group:** Providers
 
 ## Goal

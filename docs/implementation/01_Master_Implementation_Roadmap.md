@@ -326,6 +326,14 @@ Leaves behind:
 - future workflow/task tracker seam
 - provider-neutral token-reduction guidance
 
+### Phase 4.4.1 — Canonical Provider Function Source and Provider Surface Generation
+
+This sub-enhancement sits directly under the provider-surface foundation. It owns the generic
+provider-function source, provider-specific surface generation, and managed-surface
+installation contract used by all providers. The shared tooling is a facade; provider-specific
+rendering details stay in provider-owned definitions. Later phases consume this infrastructure;
+they do not redefine it.
+
 ### Phase 4.13 — Canonical prompt entry and bridge end state
 Document the explicit end-state that every supported provider CLI or prompt-entry surface converges on the same repo-owned bridge/launcher contract.
 

@@ -1,3 +1,5 @@
+<!-- MANAGED_BY_AUDIAGENTIC: do not edit directly. -->
+
 # Prompt tag doctrine
 
 Canonical tags:
@@ -32,6 +34,7 @@ Centralized in `.audiagentic/prompt-syntax.yaml`. All of these are equivalent:
 - `cld` -> `claude`
 - `cln` -> `cline`
 - `gm` -> `gemini`
+- `opc` -> `opencode`
 - `cp` -> `copilot`
 
 Use shortcuts for brevity:

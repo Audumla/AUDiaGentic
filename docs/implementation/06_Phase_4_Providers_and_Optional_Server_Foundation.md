@@ -39,12 +39,13 @@ See `11_Phase_4_1_Provider_Model_Catalog_and_Selection.md`.
 Provider status/validation behavior is defined in Phase 4.2.
 Prompt-tag surface recognition and synchronization are defined in Phase 4.3.
 Provider execution compliance and isolated per-provider implementation docs are defined in Phase 4.4.
-Provider prompt-trigger launch behavior is drafted in Phase 4.6.
+Provider prompt-trigger launch behavior is active in Phase 4.6.
 Provider availability and auto-install orchestration is drafted in Phase 4.7.
-Provider live stream and progress capture are drafted in Phase 4.9.
+Provider live stream and progress capture are active in Phase 4.9.
 Provider live input and interactive session control is in progress in Phase 4.10.
-Provider structured completion and result normalization is defined in Phase 4.11 with a packetized first-wave implementation path for shared normalization plus Codex/Cline integrations.
-Provider optimization and shared workflow extensibility is drafted in Phase 4.12.
+Canonical provider-function source and provider surface generation are tracked as foundational shared infrastructure in Phase 4.4.1.
+Provider structured completion and result normalization is defined in Phase 4.11 with a packetized implementation path for shared normalization plus Codex/Cline/Claude/opencode integrations, with Gemini already folded into the planned packet family so later completion work does not require reopening the architecture.
+Provider optimization and shared workflow extensibility remains deferred in Phase 4.12.
 Canonical prompt entry and bridge end state is documented in Phase 4.13.
 
 The later Phase 7 through Phase 11 node/discovery/federation/connectors line is intentionally separate and additive; it should not be treated as a rewrite of the provider foundation.

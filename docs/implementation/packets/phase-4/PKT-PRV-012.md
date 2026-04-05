@@ -1,6 +1,7 @@
 # PKT-PRV-012 — Provider model catalog + selection rules
 
 **Phase:** Phase 4.1  
+**Status:** VERIFIED
 **Primary owner group:** Providers
 
 ## Goal
