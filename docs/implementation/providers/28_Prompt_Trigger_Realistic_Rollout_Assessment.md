@@ -31,6 +31,7 @@ Current local availability observed in the workspace:
 - `gemini` available
 - `qwen` available
 - `cline` available
+- `opencode` available
 - `continue` not found on PATH
 - `gh` available, which matters for Copilot-flavoured workflows
 
@@ -40,6 +41,7 @@ Current local availability observed in the workspace:
 |---|---|---:|---|---|
 | Codex | High for wrapper-based launch | No | repo-owned wrapper + `AGENTS.md` + skills | Strongest path is adapter-first; do not rely on undocumented native interception. |
 | Claude | High for hook-backed launch | Likely yes, once project hooks are wired | `CLAUDE.md` + `.claude/rules` + `UserPromptSubmit` / `PreToolUse` | Best candidate for a native-hook rollout, but still keep a wrapper fallback. |
+| opencode | High for wrapper-based launch | No | repo-owned wrapper + prompt-trigger bridge + provider config | Treat as a primary wrapper-first provider; keep canonical grammar in the shared bridge. |
 | Gemini | Medium | Maybe, but treat as unproven until hook behavior is confirmed | wrapper-normalize first, then hook hardening | Prompt shape sensitivity makes this a tuning-heavy path. |
 | GitHub Copilot | High for adapter-based launch | No | `.github/copilot-instructions.md` + prompt files + custom agents + wrapper | Exact literal tag support should stay outside Copilot's semantic routing. |
 | Continue | Future integration | No | `config.yaml` + invokable prompts + wrapper | Not part of the active rollout; keep deferred until PATH availability and provider guidance are revisited. |
@@ -62,6 +64,7 @@ Codex is the reference mechanics path for the repo: the other provider entries s
 |---|---|---|---|---|
 | Codex | `AGENTS.md` + `.agents/skills/**/SKILL.md` | `tools/codex_prompt_trigger_bridge.py` or a Codex editor wrapper | shared `prompt-trigger-bridge`, shared `prompt-launch`, canonical skills | if interception is partial, keep using the wrapper bridge |
 | Claude | `CLAUDE.md` + `.claude/rules/**` | `tools/claude_prompt_trigger_bridge.py` and/or project hooks | shared `prompt-trigger-bridge`, shared `prompt-launch` | if hook ordering is partial, fall back to the bridge and keep canonical tags unchanged |
+| opencode | `AGENTS.md` + repo prompt/config assets | `tools/opencode_prompt_trigger_bridge.py` | shared `prompt-trigger-bridge`, shared `prompt-launch` | wrapper remains the source of truth; do not invent provider-local grammar |
 | Gemini | `GEMINI.md` | `tools/gemini_prompt_trigger_bridge.py` and/or a Gemini command template | shared `prompt-trigger-bridge`, shared `prompt-launch` | if native hooks are unstable, keep the bridge authoritative |
 | GitHub Copilot | `.github/copilot-instructions.md` + `.github/agents/**` + prompt files | `tools/copilot_prompt_trigger_bridge.py` | shared `prompt-trigger-bridge`, shared `prompt-launch`, repo prompt/agent assets | if the surface cannot route custom tags, use the wrapper path only |
 | Continue | future integration | `tools/continue_prompt_trigger_bridge.py` | shared `prompt-trigger-bridge`, shared `prompt-launch`, config-driven prompts | keep deferred until the provider is reintroduced into the active rollout |
@@ -90,6 +93,7 @@ surface and the surface adapter that sees the raw prompt first.
 - Claude
 - Cline
 - Codex
+- opencode
 
 These give the best balance of deterministic trigger behavior and maintainable local
 configuration surfaces.
@@ -129,7 +133,7 @@ The realistic answer is that every provider in scope can participate in Phase 4.
 all of them can do it the same way.
 
 - Claude and Cline are the best candidates for native-hook style rollout.
-- Codex, Copilot, and local-openai should be treated as wrapper/bridge-first.
+- Codex and opencode are primary wrapper/bridge-first providers; Copilot and local-openai remain workable secondary wrapper/bridge-first providers.
 - Gemini and Qwen should be rolled out conservatively with fallback paths and smoke tests.
 - Continue remains a future integration and is intentionally excluded from the active rollout at this stage.
 

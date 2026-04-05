@@ -21,7 +21,7 @@
 
 3. **Build registry updated** to track both phases
    - PKT-PRV-033 (Option A): marked with missing items
-   - PKT-PRV-055 (Option B): marked as WAITING_ON_DEPENDENCIES, ready to start immediately after Option A
+   - PKT-PRV-055 (Option B): now VERIFIED alongside Option A as part of the complete Claude baseline path
 
 ---
 
@@ -30,11 +30,11 @@
 ### Phase 1: Option A Completion (PKT-PRV-033) — ~30 minutes
 
 **Files created:**
-- `.claude/skills/plan/SKILL.md`
-- `.claude/skills/implement/SKILL.md`
-- `.claude/skills/review/SKILL.md`
-- `.claude/skills/audit/SKILL.md`
-- `.claude/skills/check-in-prep/SKILL.md`
+- `.claude/skills/ag-plan/SKILL.md`
+- `.claude/skills/ag-implement/SKILL.md`
+- `.claude/skills/ag-review/SKILL.md`
+- `.claude/skills/ag-audit/SKILL.md`
+- `.claude/skills/ag-check-in-prep/SKILL.md`
 
 **Code updates:**
 - `tools/claude_prompt_trigger_bridge.py` — add REQUIRED_ASSETS validation + _missing_assets()
@@ -144,7 +144,7 @@
 
 3. `docs/implementation/31_Build_Status_and_Work_Registry.md`
    - Updated PKT-PRV-033 row with missing items
-   - Added PKT-PRV-055 row (WAITING_ON_DEPENDENCIES → ready to start immediately after)
+   - Added PKT-PRV-055 row and later advanced it through the native-hook completion path to VERIFIED
 
 4. `docs/implementation/20_Packet_Dependency_Graph.md`
    - Added Mermaid edge: PRV033 → PRV055

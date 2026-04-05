@@ -1,7 +1,7 @@
 # PKT-PRV-056 — Shared provider structured-completion contract and normalization harness
 
 **Phase:** Phase 4.11
-**Status:** DEFERRED_DRAFT
+**Status:** READY_TO_START
 **Owner:** Codex
 
 ## Objective

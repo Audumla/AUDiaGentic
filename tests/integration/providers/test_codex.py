@@ -22,16 +22,14 @@ def test_codex_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
         command,
         *,
         cwd=None,
-        stdout_log_path=None,
-        stderr_log_path=None,
-        tee_console=False,
         input_text=None,
+        stdout_sinks=None,
+        stderr_sinks=None,
     ):
         captured["command"] = command
         captured["cwd"] = cwd
-        captured["stdout_log_path"] = stdout_log_path
-        captured["stderr_log_path"] = stderr_log_path
-        captured["tee_console"] = tee_console
+        captured["stdout_sinks"] = stdout_sinks
+        captured["stderr_sinks"] = stderr_sinks
         output_path = Path(command[command.index("--output-last-message") + 1])
         output_path.write_text("codex completed", encoding="utf-8")
 
@@ -64,7 +62,8 @@ def test_codex_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
     assert captured["command"][1:4] == ["exec", "--ephemeral", "--skip-git-repo-check"]
     assert captured["command"][-1].startswith("AUDiaGentic Codex provider execution request.")
     assert captured["cwd"] == tmp_path
-    assert captured["tee_console"] is False
+    assert captured["stdout_sinks"]
+    assert captured["stderr_sinks"]
 
 
 def test_codex_adapter_requires_command(monkeypatch) -> None:

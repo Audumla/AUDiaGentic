@@ -1,6 +1,7 @@
 # PKT-PRV-019 — continue prompt-tag surface integration
 
 **Phase:** Phase 4.3  
+**Status:** DEFERRED_DRAFT
 **Primary owner group:** Providers
 
 ## Goal

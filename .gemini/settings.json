@@ -1,0 +1,31 @@
+{
+  "_comment": "MANAGED_BY_AUDIAGENTIC: do not edit directly.",
+  "_description": "Gemini configuration for AUDiaGentic prompt-trigger integration",
+  "_hook_status": "fallback-only",
+  "_hook_notes": "Gemini CLI does not expose a native BeforeAgent hook in the current version. The repository uses the fallback bridge path exclusively for prompt-trigger launches.",
+  "bridge": {
+    "path": "tools/gemini_prompt_trigger_bridge.py",
+    "args": ["--project-root", "."]
+  },
+  "commands": {
+    "location": ".gemini/commands/",
+    "files": [
+      "ag-plan.md",
+      "ag-implement.md",
+      "ag-review.md",
+      "ag-audit.md",
+      "ag-check-in-prep.md"
+    ]
+  },
+  "canonical_tags": {
+    "ag-plan": "Planning and execution strategy",
+    "ag-implement": "Implementation work",
+    "ag-review": "Read-focused validation and review",
+    "ag-audit": "Documentation and state consistency audit",
+    "ag-check-in-prep": "Check-in preparation"
+  },
+  "fallback_path": {
+    "enabled": true,
+    "description": "Use the bridge for all prompt-trigger launches since native hook is unavailable"
+  }
+}

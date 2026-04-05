@@ -11,6 +11,11 @@ The primary question is not whether providers can run at all; it is whether AUDi
 reliably capture and eventually attach follow-up input to a live session while preserving the
 final structured result.
 
+Architectural note:
+- Gemini remains guarded in rollout priority, but it is part of the provider-function and
+  generated-surface set from the first implementation pass so later session work consumes the
+  same shared provider architecture.
+
 ## Session-support categories
 
 - `record-only`: persist input as durable runtime intent, but do not promise live process attachment yet
@@ -25,6 +30,7 @@ final structured result.
 | Cline | stdin-attach | High | Partial | best current candidate for real interactive CLI turns | needs a real live-session/process manager to prove mid-run attachment |
 | Codex | record-only -> stdin-attach | High | Partial | stable wrapper path and strong provenance handling | live-session attachment behavior still needs a dedicated session layer |
 | Claude | record-only | Medium | Partial | wrapper/hook path can preserve durable input intent | live-session continuation path not yet proven |
+| opencode | record-only | Medium | Partial | wrapper-first CLI path can preserve durable input intent and provenance | live-session attachment behavior still needs a dedicated session layer |
 | Gemini | record-only | Medium | Partial | wrapper path is workable | interactive continuation still sensitive to prompt/runtime behavior |
 | Copilot | record-only | Medium | Partial | wrapper path can preserve input intent | live-session continuation still unproven |
 | local-openai | response-only | Medium | Partial | input can be captured against the job even without a session | no strong live conversational/session seam yet |
@@ -37,11 +43,12 @@ final structured result.
 2. Cline
 3. Codex
 4. Claude
-5. Gemini
-6. Copilot
-7. local-openai
-8. Qwen
-9. Continue later
+5. opencode
+6. Gemini
+7. Copilot
+8. local-openai
+9. Qwen
+10. Continue later
 
 ## Provider-specific guidance
 
@@ -59,6 +66,11 @@ final structured result.
 
 - First-pass claim: recorded input and hook/wrapper provenance
 - Do not overclaim: hook presence does not automatically imply stable mid-run continuation
+
+### opencode
+
+- First-pass claim: recorded input and wrapper-side provenance
+- Do not overclaim: a wrapper-backed CLI path is not yet a live-session manager
 
 ### Gemini
 
