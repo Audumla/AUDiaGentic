@@ -1,6 +1,7 @@
 # PKT-PRV-027 — Continue tag execution implementation
 
 **Phase:** Phase 4.4  
+**Status:** DEFERRED_DRAFT
 **Primary owner group:** Providers
 
 ## Goal

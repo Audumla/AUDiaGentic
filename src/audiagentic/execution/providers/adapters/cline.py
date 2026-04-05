@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.streaming.provider_streaming import run_streaming_command
+from audiagentic.streaming.provider_streaming import build_provider_stream_sinks, run_streaming_command
 
 
 def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> str:
@@ -81,22 +81,17 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
         command.extend(["--model", str(default_model)])
     command.append(prompt)
 
-    runtime_root = None
-    job_id = packet_ctx.get("job-id")
-    working_root = packet_ctx.get("working-root")
-    if working_root and job_id:
-        runtime_root = Path(working_root) / ".audiagentic" / "runtime" / "jobs" / str(job_id)
     stream_controls = packet_ctx.get("stream-controls", {})
-    tee_console = bool(stream_controls.get("tee-console", False)) or bool(stream_controls.get("enabled", False))
-    stdout_log = runtime_root / "stdout.log" if runtime_root is not None else None
-    stderr_log = runtime_root / "stderr.log" if runtime_root is not None else None
+    stdout_sinks, stderr_sinks = build_provider_stream_sinks(
+        packet_ctx=packet_ctx,
+        stream_controls=stream_controls,
+    )
 
     completed = run_streaming_command(
         command,
         cwd=cwd,
-        stdout_log_path=stdout_log,
-        stderr_log_path=stderr_log,
-        tee_console=tee_console,
+        stdout_sinks=stdout_sinks,
+        stderr_sinks=stderr_sinks,
     )
     stdout = completed.stdout.strip()
     stderr = completed.stderr.strip()

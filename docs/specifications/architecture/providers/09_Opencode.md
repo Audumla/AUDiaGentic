@@ -36,7 +36,10 @@ opencode exposes tags through repo guidance files plus a wrapper that normalizes
 - user types the tagged prompt into opencode CLI or a wrapper surface
 - the wrapper reads the first non-empty line and resolves the canonical action
 - `AGENTS.md` instructs the repository contract for tagged prompts
-- `.agents/skills/ag-*/SKILL.md` carries the action-specific prompt shape after normalization
+- the current live wrapper path validates `AGENTS.md` plus `.agents/skills/ag-*/SKILL.md`
+- the canonical provider-function source lives under `.audiagentic/skills/ag-*/skill.md`
+- provider-owned rendered opencode surfaces live under `.opencode/skills/ag-*/SKILL.md`, but
+  they are not yet the active prompt-trigger dependency for the wrapper path
 - the wrapper injects the normalized envelope and launches opencode through the selected mode
 
 ### Required local assets
@@ -47,6 +50,11 @@ opencode exposes tags through repo guidance files plus a wrapper that normalizes
 - `.agents/skills/ag-audit/SKILL.md`
 - `.agents/skills/ag-check-in-prep/SKILL.md`
 - repo-owned wrapper or bridge command
+- matching `opencode` provider entry in `.audiagentic/providers.yaml` so provider selection,
+  health checks, and model resolution can treat opencode as a first-class configured provider
+
+Provider-owned opencode surfaces under `.opencode/skills/` are generated and available, but the
+wrapper path still depends on the shared `AGENTS.md` / `.agents/skills/` contract today.
 
 ### Fallback path
 - if the wrapper cannot intercept the raw prompt, exact tag support must be treated as unavailable for that surface

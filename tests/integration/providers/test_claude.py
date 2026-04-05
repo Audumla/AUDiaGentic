@@ -18,15 +18,19 @@ def test_claude_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(claude.shutil, "which", lambda _: r"C:\\Tools\\claude.exe")
 
-    def fake_run(command, *, cwd=None, check=None, capture_output=None, text=None, encoding=None, errors=None, input=None):  # type: ignore[no-untyped-def]
+    def fake_run_streaming_command(
+        command,
+        *,
+        cwd=None,
+        input_text=None,
+        stdout_sinks=None,
+        stderr_sinks=None,
+    ):
         captured["command"] = command
         captured["cwd"] = cwd
-        captured["check"] = check
-        captured["capture_output"] = capture_output
-        captured["text"] = text
-        captured["encoding"] = encoding
-        captured["errors"] = errors
-        captured["input"] = input
+        captured["input_text"] = input_text
+        captured["stdout_sinks"] = stdout_sinks
+        captured["stderr_sinks"] = stderr_sinks
 
         class Completed:
             returncode = 0
@@ -35,7 +39,7 @@ def test_claude_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
         return Completed()
 
-    monkeypatch.setattr(claude.subprocess, "run", fake_run)
+    monkeypatch.setattr(claude, "run_streaming_command", fake_run_streaming_command)
 
     result = claude.run(
         {
@@ -55,13 +59,10 @@ def test_claude_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
     assert result["output"] == "claude completed"
     assert captured["command"][0] == r"C:\\Tools\\claude.exe"
     assert captured["command"][1:4] == ["--print", "--output-format", "text"]
-    assert captured["input"].startswith("AUDiaGentic Claude provider execution request.")
-    assert captured["cwd"] == str(tmp_path)
-    assert captured["check"] is False
-    assert captured["capture_output"] is True
-    assert captured["text"] is True
-    assert captured["encoding"] == "utf-8"
-    assert captured["errors"] == "replace"
+    assert captured["input_text"].startswith("AUDiaGentic Claude provider execution request.")
+    assert captured["cwd"] == tmp_path
+    assert captured["stdout_sinks"]
+    assert captured["stderr_sinks"]
 
 
 def test_claude_adapter_requires_command(monkeypatch) -> None:

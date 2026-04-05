@@ -22,16 +22,14 @@ def test_cline_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
         command,
         *,
         cwd=None,
-        stdout_log_path=None,
-        stderr_log_path=None,
-        tee_console=False,
         input_text=None,
+        stdout_sinks=None,
+        stderr_sinks=None,
     ):
         captured["command"] = command
         captured["cwd"] = cwd
-        captured["stdout_log_path"] = stdout_log_path
-        captured["stderr_log_path"] = stderr_log_path
-        captured["tee_console"] = tee_console
+        captured["stdout_sinks"] = stdout_sinks
+        captured["stderr_sinks"] = stderr_sinks
 
         class Result:
             returncode = 0
@@ -70,7 +68,8 @@ def test_cline_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
     assert "--auto-approve-all" in captured["command"]
     assert "--cwd" in captured["command"]
     assert str(captured["cwd"]) == str(tmp_path)
-    assert captured["tee_console"] is False
+    assert captured["stdout_sinks"]
+    assert captured["stderr_sinks"]
     assert str(captured["command"][-1]).startswith("AUDiaGentic Cline provider execution request.")
 
 

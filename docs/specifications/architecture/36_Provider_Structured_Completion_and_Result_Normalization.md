@@ -125,7 +125,7 @@ The current runtime already supports:
 
 The current runtime does **not yet** fully support:
 
-- deterministic structured completion for every first-wave provider
+- deterministic structured completion for every primary provider
 - consistent provider-specific final-result parsing and provenance tagging
 - a canonical explicit marker that distinguishes direct provider JSON from fallback-derived review output
 
@@ -233,6 +233,9 @@ That means Phase 4.11 is the contract-hardening layer that closes the gap betwee
 - make the runtime capture and normalization AUDiaGentic-owned
 - keep raw provider output available for diagnosis
 - preserve provider-specific hooks or wrappers where they are the most reliable choice
+- keep completion behavior authored as a generic provider-function source that can be rendered into
+  provider-specific files by provider-owned renderer definitions rather than defining separate
+  canonical provider-only source files
 
 ## First packet set
 
@@ -241,5 +244,7 @@ The first executable pass for this phase should be packetized as:
 - shared completion/result contract plus shared normalization harness
 - Codex structured completion integration
 - Cline structured completion integration
+- Claude structured completion integration
+- opencode structured completion integration
 
-Later providers should follow only after the first-wave normalization path is stable.
+Later providers should follow only after the primary-provider normalization path is stable.

@@ -198,6 +198,12 @@
 - the future workflow/task tracker remains intentionally undefined but not blocked
 - provider-specific token-reduction guidance exists before implementation begins
 
+## Phase 4.4.1 implementation-readiness gate
+- canonical generic provider-function source format is defined
+- provider-specific surface generation contract is defined
+- managed-surface installation/update policy is defined
+- regeneration tooling and provider-function source migration packets are tracked as shared infrastructure
+
 ## Phase 4.13 draft gate
 - the desired end-state for all supported providers and all CLI/prompt-entry surfaces is explicitly documented
 - the bridge/launcher contract is named as the authoritative convergence point

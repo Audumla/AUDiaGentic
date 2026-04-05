@@ -230,6 +230,8 @@ Phase 1.4 is the installability correction layer that follows Phase 1 and Phase 
 1. `PKT-PRV-048`
 2. `PKT-PRV-049`
 3. `PKT-PRV-050`
+4. `PKT-PRV-072`
+5. `PKT-PRV-073`
 
 `.10` adds live input and interactive session control after live-stream capture is already frozen and the shared input contract is written down. The intended order is:
 

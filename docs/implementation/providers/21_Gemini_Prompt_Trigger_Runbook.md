@@ -20,12 +20,12 @@ Phase 4.3 docs.
 ## Required outcomes
 
 Gemini must expose the canonical prompt tags through a deterministic in-chat path:
-- `@plan`
-- `@implement`
-- `@review`
-- `@audit`
-- `@check-in-prep`
-- optional `@adhoc` only when the feature gate is enabled
+- `@ag-plan`
+- `@ag-implement`
+- `@ag-review`
+- `@ag-audit`
+- `@ag-check-in-prep`
+- optional generic-tag flow only when the feature gate is enabled
 
 The first non-empty line must be recognized before the chat loop continues. The normalized
 request must enter the shared launch path without changing the canonical grammar.
@@ -68,9 +68,17 @@ The Gemini path must:
 
 Create or update:
 - `GEMINI.md`
-- command templates for `plan`, `implement`, `review`, `audit`, and `check-in-prep`
+- `.gemini/commands/ag-plan.md`
+- `.gemini/commands/ag-implement.md`
+- `.gemini/commands/ag-review.md`
+- `.gemini/commands/ag-audit.md`
+- `.gemini/commands/ag-check-in-prep.md`
 - optional hook scripts if the active build supports submit-time interception
 - the Gemini prompt-tag settings profile
+
+These command files are generated provider surfaces. They are rendered from the canonical
+provider-function source under `.audiagentic/skills/`; Gemini does not consume a shared
+generic skill file directly.
 
 ## Hook-or-bridge responsibilities
 
@@ -97,15 +105,15 @@ Responsibilities:
 3. wire the hook if the active Gemini build supports reliable pre-agent interception
 4. keep the repo bridge as the fallback path
 5. verify CLI and editor surfaces use the same normalized request shape
-6. add smoke tests for `@plan`, `@implement`, and `@review`
+6. add smoke tests for `@ag-plan`, `@ag-implement`, and `@ag-review`
 
 ## Smoke test matrix
 
 ### CLI smoke tests
 
-- `@plan` should normalize into a plan request and reach the shared launcher
-- `@implement` should normalize into an implementation request and reach the shared launcher
-- `@review` should normalize into a review request and reach the shared launcher
+- `@ag-plan` should normalize into a plan request and reach the shared launcher
+- `@ag-implement` should normalize into an implementation request and reach the shared launcher
+- `@ag-review` should normalize into a review request and reach the shared launcher
 
 ### Editor smoke tests
 
