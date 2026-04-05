@@ -1,6 +1,7 @@
 # PKT-PRV-024 — Claude Code tag execution implementation
 
 **Phase:** Phase 4.4  
+**Status:** READY_FOR_REVIEW
 **Primary owner group:** Providers
 
 ## Goal

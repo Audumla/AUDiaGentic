@@ -1,3 +1,5 @@
+<!-- MANAGED_BY_AUDIAGENTIC: do not edit directly. -->
+
 ---
 name: ag-check-in-prep
 description: Use for canonical @ag-check-in-prep launches. Prepares the repository for a stable check-in.
@@ -8,7 +10,7 @@ description: Use for canonical @ag-check-in-prep launches. Prepares the reposito
 Use this skill for canonical `@ag-check-in-prep` launches.
 
 Trigger:
-- first non-empty line resolves to `ag-check-in-prep` or the backward-compatible `check-in-prep` alias
+- first non-empty line resolves to `ag-check-in-prep` or a configured alias
 
 Do:
 - prepare the repo for a stable check-in

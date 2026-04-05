@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "job-id",
+    "provider-id",
+    "event-kind",
+    "message",
+    "timestamp"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "job-id": {
+      "type": "string"
+    },
+    "prompt-id": {
+      "type": "string"
+    },
+    "provider-id": {
+      "type": "string"
+    },
+    "surface": {
+      "type": "string"
+    },
+    "stage": {
+      "type": "string"
+    },
+    "event-kind": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string"
+    },
+    "details": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

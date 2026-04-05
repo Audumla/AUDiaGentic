@@ -44,7 +44,11 @@ first-line tag to select the canonical action before the chat proceeds.
 
 ### Required local assets
 - `GEMINI.md`
-- command templates for plan / implement / review / audit / check-in-prep
+- `.gemini/commands/ag-plan.md`
+- `.gemini/commands/ag-implement.md`
+- `.gemini/commands/ag-review.md`
+- `.gemini/commands/ag-audit.md`
+- `.gemini/commands/ag-check-in-prep.md`
 - optional hook or bridge script used by the active Gemini surface
 
 ### Fallback path

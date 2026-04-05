@@ -1,7 +1,7 @@
 # PKT-PRV-052 — Codex live-input capture integration
 
 **Phase:** Phase 4.10
-**Status:** DEFERRED_DRAFT
+**Status:** WAITING_ON_DEPENDENCIES
 **Primary owner:** Codex
 
 ## Purpose

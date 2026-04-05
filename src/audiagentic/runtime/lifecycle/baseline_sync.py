@@ -1,4 +1,8 @@
-"""Managed install-baseline inventory and synchronization helpers."""
+"""Managed install-baseline inventory and synchronization helpers.
+
+See spec 50 for the required-managed/create-if-missing/generated-managed/runtime-only
+contract that this inventory enforces.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -34,9 +38,11 @@ BASELINE_ASSETS: tuple[BaselineAsset, ...] = (
     BaselineAsset("AGENTS.md", "AGENTS.md", MODE_REQUIRED_MANAGED),
     BaselineAsset("CLAUDE.md", "CLAUDE.md", MODE_REQUIRED_MANAGED),
     BaselineAsset("GEMINI.md", "GEMINI.md", MODE_REQUIRED_MANAGED),
+    BaselineAsset(".gemini", ".gemini", MODE_REQUIRED_MANAGED, recursive=True),
     BaselineAsset(".clinerules", ".clinerules", MODE_REQUIRED_MANAGED, recursive=True),
     BaselineAsset(".claude", ".claude", MODE_REQUIRED_MANAGED, recursive=True),
     BaselineAsset(".agents/skills", ".agents/skills", MODE_REQUIRED_MANAGED, recursive=True),
+    BaselineAsset(".opencode", ".opencode", MODE_REQUIRED_MANAGED, recursive=True),
     BaselineAsset(
         ".github/workflows/release-please.audiagentic.yml",
         ".github/workflows/release-please.audiagentic.yml",

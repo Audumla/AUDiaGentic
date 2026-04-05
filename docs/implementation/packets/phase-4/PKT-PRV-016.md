@@ -1,6 +1,7 @@
 # PKT-PRV-016 — claude prompt-tag surface integration
 
 **Phase:** Phase 4.3  
+**Status:** READY_FOR_REVIEW
 **Primary owner group:** Providers
 
 ## Goal

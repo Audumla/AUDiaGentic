@@ -1,7 +1,7 @@
 # PKT-PRV-033 — Claude prompt-trigger launch integration
 
 **Phase:** Phase 4.6
-**Status:** READY_FOR_REVIEW
+**Status:** VERIFIED
 **Owner:** Claude
 
 ## Objective
@@ -17,20 +17,14 @@ Wire Claude Code or its repo-local instruction files to the shared trigger bridg
 - the shared bridge harness is already implemented and test-covered
 - `tests/integration/providers/test_claude_prompt_trigger_bridge.py` proves the wrapper works
 
-### ❌ Missing for Option A completion
+### ✅ Option A completion state
 
-- `.claude/skills/{plan,implement,review,audit,check-in-prep}/SKILL.md` — skill definitions
-- preflight validation in `tools/claude_prompt_trigger_bridge.py` — check for required assets before launch
-- test that verifies missing assets return validation error before launch
-- documentation of Option A as baseline + Option B as future hook follow-on
-
-## Option A completion steps
-
-1. Create `.claude/skills/` directory with five skill definition files (mirror Codex `.agents/skills/` pattern)
-2. Update `tools/claude_prompt_trigger_bridge.py` to add REQUIRED_ASSETS validation and _missing_assets() check
-3. Add test: missing assets return structured validation error (JSON status: error, kind: validation)
-4. Verify all tests pass
-5. Mark PKT-PRV-033 VERIFIED in build registry
+- `.claude/skills/ag-{plan,implement,review,audit,check-in-prep}/SKILL.md` — canonical
+  managed skill definitions
+- preflight validation in `tools/claude_prompt_trigger_bridge.py` — required assets checked
+  before launch
+- tests verify missing assets return validation error before launch
+- Option A is the baseline and Option B remains the native-hook follow-on
 
 ## Future: Option B native hook
 
@@ -51,11 +45,11 @@ normalize the tag before planning starts.
 - `CLAUDE.md`
 - `.claude/rules/prompt-tags.md`
 - `.claude/rules/review-policy.md`
-- `.claude/skills/plan/SKILL.md`
-- `.claude/skills/implement/SKILL.md`
-- `.claude/skills/review/SKILL.md`
-- `.claude/skills/audit/SKILL.md`
-- `.claude/skills/check-in-prep/SKILL.md`
+- `.claude/skills/ag-plan/SKILL.md`
+- `.claude/skills/ag-implement/SKILL.md`
+- `.claude/skills/ag-review/SKILL.md`
+- `.claude/skills/ag-audit/SKILL.md`
+- `.claude/skills/ag-check-in-prep/SKILL.md`
 - hook configuration for `UserPromptSubmit` and `PreToolUse`
 
 ### Verification focus
@@ -68,7 +62,7 @@ If the hook chain is partial, the provider must fall back to the shared bridge w
 keep the canonical grammar unchanged.
 
 ## Prerequisites
-- PKT-PRV-031 is drafted
+- PKT-PRV-031 is verified
 - PKT-PRV-004 is verified
 
 ## Implementation steps

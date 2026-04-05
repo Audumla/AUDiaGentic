@@ -1,6 +1,7 @@
 # PKT-PRV-011 — Provider access-mode contract + health config rules
 
 **Phase:** Phase 4  
+**Status:** VERIFIED
 **Primary owner group:** Providers
 
 ## Goal

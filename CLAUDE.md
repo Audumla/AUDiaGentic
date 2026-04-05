@@ -1,3 +1,5 @@
+<!-- MANAGED_BY_AUDIAGENTIC: do not edit directly. -->
+
 # CLAUDE.md
 
 This repository uses canonical prompt tags to launch AUDiaGentic workflow jobs.
@@ -8,8 +10,6 @@ This repository uses canonical prompt tags to launch AUDiaGentic workflow jobs.
 - Route the raw tagged prompt through the repo-owned bridge instead of inventing a separate
   workflow semantics layer.
 - Keep provenance visible: provider id, surface, and session id should survive normalization.
-- Canonical names are config-managed in `.audiagentic/prompt-syntax.yaml`; run
-  `python tools/regenerate_tag_surfaces.py --project-root .` after renaming tags or aliases.
 
 ## Bridge
 
@@ -45,6 +45,7 @@ Canonical tags:
 - `cld` -> `claude`
 - `cln` -> `cline`
 - `gm` -> `gemini`
+- `opc` -> `opencode`
 - `cp` -> `copilot`
 
 All of these are equivalent:

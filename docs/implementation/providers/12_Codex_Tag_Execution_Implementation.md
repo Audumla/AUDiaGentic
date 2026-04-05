@@ -26,12 +26,12 @@ Current implementation:
 
 Current repo state:
 - `AGENTS.md`
-- `.agents/skills/plan/SKILL.md`
-- `.agents/skills/implement/SKILL.md`
-- `.agents/skills/review/SKILL.md`
-- `.agents/skills/audit/SKILL.md`
-- `.agents/skills/check-in-prep/SKILL.md`
-- `.agents/skills/adhoc/SKILL.md`
+- `.agents/skills/ag-plan/SKILL.md`
+- `.agents/skills/ag-implement/SKILL.md`
+- `.agents/skills/ag-review/SKILL.md`
+- `.agents/skills/ag-audit/SKILL.md`
+- `.agents/skills/ag-check-in-prep/SKILL.md`
+- no dedicated adhoc skill file; generic-tag launches are handled by the parser/bridge
 - `tools/codex_prompt_trigger_bridge.py`
 
 Known limitation:
@@ -61,12 +61,12 @@ Purpose:
 
 ### Skills
 Create one Codex skill per canonical function:
-- `.agents/skills/plan/SKILL.md`
-- `.agents/skills/implement/SKILL.md`
-- `.agents/skills/review/SKILL.md`
-- `.agents/skills/audit/SKILL.md`
-- `.agents/skills/check-in-prep/SKILL.md`
-- optional `.agents/skills/adhoc/SKILL.md`
+- `.agents/skills/ag-plan/SKILL.md`
+- `.agents/skills/ag-implement/SKILL.md`
+- `.agents/skills/ag-review/SKILL.md`
+- `.agents/skills/ag-audit/SKILL.md`
+- `.agents/skills/ag-check-in-prep/SKILL.md`
+- no dedicated adhoc skill file; generic-tag launches are handled by the parser/bridge
 
 Each skill should:
 - state exactly when it should trigger
@@ -128,11 +128,11 @@ The adapter must preserve the raw original prompt in metadata.
 
 Repo files:
 - `AGENTS.md`
-- `.agents/skills/plan/SKILL.md`
-- `.agents/skills/implement/SKILL.md`
-- `.agents/skills/review/SKILL.md`
-- `.agents/skills/audit/SKILL.md`
-- `.agents/skills/check-in-prep/SKILL.md`
+- `.agents/skills/ag-plan/SKILL.md`
+- `.agents/skills/ag-implement/SKILL.md`
+- `.agents/skills/ag-review/SKILL.md`
+- `.agents/skills/ag-audit/SKILL.md`
+- `.agents/skills/ag-check-in-prep/SKILL.md`
 
 Local / wrapper files:
 - wrapper executable or script

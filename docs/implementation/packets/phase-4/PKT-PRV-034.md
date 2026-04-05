@@ -1,7 +1,7 @@
 # PKT-PRV-034 — Gemini prompt-trigger launch integration
 
 **Phase:** Phase 4.6
-**Status:** IN_PROGRESS
+**Status:** READY_FOR_REVIEW
 **Owner:** Gemini
 
 ## Objective
@@ -16,16 +16,22 @@ file surface before this packet is READY_FOR_REVIEW.
 - `tools/gemini_prompt_trigger_bridge.py` provides the Gemini-specific wrapper path to the
   shared bridge
 - the shared bridge harness is implemented and test-covered
+- the adapter contains a partial tag-handling path, but that path is transitional and does
+  not replace the shared bridge as the canonical launch surface
 
 ## What is NOT yet implemented (blockers for READY_FOR_REVIEW)
 
-- **No command templates** — `.gemini/commands/` directory does not exist; no per-tag
-  instruction files for plan / implement / review / audit / check-in-prep
-- **No `BeforeAgent` hook configuration** — `.gemini/settings.json` or equivalent hook wiring
-  is absent
-- **No Gemini prompt-tag settings profile** — tag mapping is undocumented in any
-  Gemini-native config file
 - **No smoke tests** — no integration tests for the Gemini prompt-trigger path
+- **Adapter path is not canonical yet** — adapter-side prompt-tag handling still exists and
+  should not be treated as the stable launch mechanism while native Gemini surfaces remain
+  incomplete
+
+## What WAS implemented to reach READY_FOR_REVIEW
+
+- **Generated command templates** — `.gemini/commands/ag-*.md` files exist for all 5 canonical tags
+- **Hook configuration documented** — `.gemini/settings.json` documents the fallback-only path
+  (no native `BeforeAgent` hook available in current Gemini CLI version)
+- **Bridge remains canonical** — shared bridge is the authoritative launch mechanism
 
 ## Required instruction surface
 
@@ -35,11 +41,11 @@ file layout is:
 ```text
 .gemini/
   commands/
-    plan.md          # @plan command template
-    implement.md     # @implement command template
-    review.md        # @review command template
-    audit.md         # @audit command template
-    check-in-prep.md # @check-in-prep command template
+    ag-plan.md
+    ag-implement.md
+    ag-review.md
+    ag-audit.md
+    ag-check-in-prep.md
   settings.json      # BeforeAgent hook config (optional, use bridge as fallback)
 ```
 
@@ -72,7 +78,9 @@ with the same Trigger / Do / Do not structure — do not invent alternate semant
 ### Failure mode
 
 If the active Gemini build does not expose a stable `BeforeAgent` hook, the repository
-bridge remains authoritative and the native hook path is treated as partial.
+bridge remains authoritative and the native hook path is treated as partial. The current
+adapter-side tag path is transitional and should be removed or reduced once the canonical
+bridge-or-native-surface decision is implemented.
 
 ## Prerequisites
 

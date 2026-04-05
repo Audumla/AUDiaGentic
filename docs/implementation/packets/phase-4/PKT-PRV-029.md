@@ -1,6 +1,7 @@
 # PKT-PRV-029 — local OpenAI-compatible tag execution implementation
 
 **Phase:** Phase 4.4  
+**Status:** READY_TO_START
 **Primary owner group:** Providers
 
 ## Goal

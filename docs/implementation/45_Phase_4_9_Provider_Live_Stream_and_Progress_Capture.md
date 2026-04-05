@@ -15,12 +15,12 @@ persistence.
 - raw stdout/stderr capture for provider tasks
 - console mirroring switches for operator visibility
 - a stable data path that Discord can subscribe to later
-- first-wave provider guidance for Cline and Codex
+- primary-provider baseline guidance for Codex, Cline, Claude, and opencode
 
 ## Sink architecture (required — not optional)
 
-PKT-PRV-048 must implement a generic pluggable `StreamSink` interface.  The hardcoded
-`tee_console` flag and `_append_text` path in `provider_streaming.py` must be replaced.
+PKT-PRV-048 now implements a generic pluggable `StreamSink` interface. The hardcoded
+`tee_console` flag and `_append_text` path in `provider_streaming.py` have been replaced.
 This is not a style preference — it is the only architecture that allows Discord, replay,
 and future sinks to be added without touching the reader loop.
 
@@ -63,10 +63,20 @@ or affect other sinks.
 - add tests: each sink independently, multiple sinks, one-sink-failure isolation
 - keep console teeing resilient so encoding issues cannot crash a successful provider run
 
+Current shared status:
+- PKT-PRV-048 is implemented and ready for review
+- provider-specific extractor sinks remain follow-on work under PKT-PRV-049 and PKT-PRV-050
+- Gemini is not yet on the shared sink harness; its adapter still uses raw subprocess execution,
+  so Gemini does not currently satisfy the shared Phase 4.9 stream-persistence contract;
+  `PKT-PRV-072` explicitly owns that uplift
+- Qwen is also still outside the shared sink harness today; `PKT-PRV-073` explicitly owns the
+  Qwen/native backend uplift rather than leaving it as implied follow-on work
+
 ### Provider first run (PKT-PRV-049 / PKT-PRV-050)
 
-The first implementation pass should target Cline and Codex.  Each registers its own
-extractor sink — the shared harness is not modified:
+The shared sink harness and baseline adapter uplift now apply to the full primary provider
+set: Codex, Cline, Claude, and opencode. Provider-specific extraction still starts with Cline
+and Codex. Each registers its own extractor sink — the shared harness is not modified:
 
 - **Cline** (`ClineEventExtractor` in `adapters/cline.py`) — parses native NDJSON
 - **Codex** (`CodexEventExtractor` in `adapters/codex.py`) — parses wrapper milestone lines
@@ -83,9 +93,9 @@ Recommended runtime files per job:
 .audiagentic/runtime/jobs/<job-id>/stderr.log
 ```
 
-At the current implementation stage, the bridge can tee stdout/stderr and preserve raw logs.
-The normalized `events.ndjson` stream is the target shape for the shared writer and should be
-treated as the canonical stream record once the writer is wired in.
+At the current implementation stage, the shared harness tees stdout/stderr, preserves raw
+logs, and writes canonical `events.ndjson` records. Provider-specific extractor sinks are the
+remaining follow-on layer for richer event mapping.
 
 Final artifacts remain provider-specific:
 - review jobs still write `review-report.*.json`
@@ -115,7 +125,7 @@ Provider-specific integrations own only:
 3. implement Cline event extraction because it already emits rich NDJSON
 4. implement Codex wrapper-milestone event emission
 5. add normalized event fixtures and provider-specific integration tests
-6. update provider matrices/specs only after the shared writer and first-wave extractions are stable
+6. update provider matrices/specs only after the shared writer and first-wave extractions are stable, while keeping the primary provider set aligned on the shared sink harness
 
 ## Detailed implementation steps
 
@@ -150,6 +160,8 @@ Provider-specific integrations own only:
 - `PKT-PRV-048` - shared live-stream capture contract and harness
 - `PKT-PRV-049` - Codex live-stream capture integration
 - `PKT-PRV-050` - Cline live-stream capture integration
+- `PKT-PRV-072` - Gemini sink-harness uplift
+- `PKT-PRV-073` - Qwen sink-harness uplift
 
 ## Notes
 

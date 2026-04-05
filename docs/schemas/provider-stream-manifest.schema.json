@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "job-id",
+    "provider-id",
+    "stdout-log",
+    "stderr-log",
+    "events-log"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "job-id": {
+      "type": "string"
+    },
+    "provider-id": {
+      "type": "string"
+    },
+    "stdout-log": {
+      "type": "string"
+    },
+    "stderr-log": {
+      "type": "string"
+    },
+    "events-log": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

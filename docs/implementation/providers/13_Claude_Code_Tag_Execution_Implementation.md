@@ -50,12 +50,12 @@ Purpose:
 
 ### Skills
 Create:
-- `.claude/skills/plan/SKILL.md`
-- `.claude/skills/implement/SKILL.md`
-- `.claude/skills/review/SKILL.md`
-- `.claude/skills/audit/SKILL.md`
-- `.claude/skills/check-in-prep/SKILL.md`
-- optional `.claude/skills/adhoc/SKILL.md`
+- `.claude/skills/ag-plan/SKILL.md`
+- `.claude/skills/ag-implement/SKILL.md`
+- `.claude/skills/ag-review/SKILL.md`
+- `.claude/skills/ag-audit/SKILL.md`
+- `.claude/skills/ag-check-in-prep/SKILL.md`
+- no dedicated adhoc skill file; generic-tag launches are handled by the parser/bridge
 
 ### Hooks
 Required:
@@ -102,11 +102,11 @@ Repo files:
 - `CLAUDE.md`
 - `.claude/rules/prompt-tags.md`
 - `.claude/rules/review-policy.md`
-- `.claude/skills/plan/SKILL.md`
-- `.claude/skills/implement/SKILL.md`
-- `.claude/skills/review/SKILL.md`
-- `.claude/skills/audit/SKILL.md`
-- `.claude/skills/check-in-prep/SKILL.md`
+- `.claude/skills/ag-plan/SKILL.md`
+- `.claude/skills/ag-implement/SKILL.md`
+- `.claude/skills/ag-review/SKILL.md`
+- `.claude/skills/ag-audit/SKILL.md`
+- `.claude/skills/ag-check-in-prep/SKILL.md`
 
 Config:
 - merge hook entries into existing Claude settings rather than overwriting

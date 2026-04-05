@@ -47,7 +47,7 @@ This phase reserves the following seams for later work:
 - shared text patch helpers
 - shared extraction and summarization helpers
 - shared template rendering helpers
-- provider skill hooks
+- provider instruction/function surface hooks
 - MCP tool hooks
 - future workflow/task tracker adapters
 

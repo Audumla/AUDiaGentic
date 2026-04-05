@@ -6,6 +6,14 @@
 
 opencode is a CLI-based AI coding assistant that integrates with the AUDiaGentic framework as a provider. This document outlines the repository-aligned integration plan for opencode and matches the canonical `ag-*` prompt surface.
 
+Important architectural rule:
+- the repo does not define one shared provider-ready skill format for every provider
+- instead, `.audiagentic/skills/` stores the canonical provider-function source
+- opencode owns its rendered provider surface under `.opencode/skills/`
+- the shared regeneration facade turns the canonical source into provider-specific outputs
+- current live prompt-trigger execution still depends on `AGENTS.md` plus
+  `.agents/skills/ag-*/SKILL.md` through the wrapper bridge
+
 ### Provider Classification
 
 | Attribute | Value |
@@ -26,7 +34,7 @@ The canonical provider specification lives in `docs/specifications/architecture/
 |------------|-----------|
 | Jobs | Yes |
 | Interactive | Yes |
-| Skill Wrapper | No |
+| Provider Function / Skill Surfaces | Yes (via generated provider surfaces) |
 | Structured Output | Partial |
 | Server Session | No |
 | Baseline Healthcheck | Yes |
@@ -44,7 +52,7 @@ The canonical provider specification lives in `docs/specifications/architecture/
 - Parse structured responses
 - Handle errors gracefully
 
-**Status:** Scaffolded (stub implementation)
+**Status:** Implemented and test-covered, but still in progress until final adapter hardening and validation land
 
 #### 2. Prompt-Tag Surface Integration (PKT-PRV-065)
 
@@ -65,7 +73,7 @@ providers:
       settings-profile: opencode-prompt-tags-v1
 ```
 
-**Status:** Documented
+**Status:** In progress; documentation is aligned and `.audiagentic/providers.yaml` now includes the `opencode` entry required for provider-config parity, while adapter hardening and validation still remain
 
 #### 3. Tag Execution Implementation (PKT-PRV-066)
 
@@ -76,7 +84,7 @@ providers:
 User prompt with ag-* tag → Wrapper detects tag → Shared bridge → Job creation → opencode adapter execution
 ```
 
-**Status:** Documented
+**Status:** In progress while adapter/config fixes are still outstanding
 
 #### 4. Prompt-Trigger Launch Integration (PKT-PRV-067)
 
@@ -87,7 +95,7 @@ User prompt with ag-* tag → Wrapper detects tag → Shared bridge → Job crea
 python tools/opencode_prompt_trigger_bridge.py --project-root . --surface cli
 ```
 
-**Status:** Scaffolded
+**Status:** Implemented and test-covered; bridge path is ready for review even though the adapter/config line still needs completion
 
 ### Installation Requirements
 
@@ -159,14 +167,15 @@ echo "@ag-plan provider=opencode\nPlan the implementation." | \
 
 | Packet | Status |
 |--------|--------|
-| PKT-PRV-064 (Adapter) | READY_TO_START |
-| PKT-PRV-065 (Surface) | READY_TO_START |
-| PKT-PRV-066 (Execution) | READY_TO_START |
-| PKT-PRV-067 (Trigger) | READY_TO_START |
+| PKT-PRV-064 (Adapter) | IN_PROGRESS |
+| PKT-PRV-065 (Surface) | IN_PROGRESS |
+| PKT-PRV-066 (Execution) | IN_PROGRESS |
+| PKT-PRV-067 (Trigger) | READY_FOR_REVIEW |
 
 ### Next Steps
 
-1. Implement opencode adapter per PKT-PRV-064
-2. Add opencode-specific smoke tests
-3. Verify prompt-tag recognition via wrapper
-4. Document any opencode-specific limitations or workarounds
+1. Remove the invalid `--dir` adapter flag and verify the real CLI argument shape against a live `opencode` run
+2. Verify the `opencode` entry in `.audiagentic/providers.yaml` stays aligned with the adapter and docs as implementation hardening continues
+3. Add adapter tests for non-zero return codes, empty output, and mixed JSON/text output
+4. Decide whether opencode should get provider-specific stream milestone extraction beyond the shared sink harness
+5. Add structured-completion normalization when Phase 4.11 moves forward for the primary provider set

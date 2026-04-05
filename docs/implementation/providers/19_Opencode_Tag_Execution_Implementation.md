@@ -87,6 +87,11 @@ opencode supports model selection via:
 2. **Model alias**: `@ag-plan provider=opencode model-alias=<alias>`
 3. **Default model**: Configured in `.audiagentic/providers.yaml`
 
+Current repository note:
+- the live `.audiagentic/providers.yaml` now includes the `opencode` entry and must stay aligned with adapter/runtime behavior
+- provider selection and default-model resolution are therefore not yet in parity with the
+  documented wrapper/bridge path
+
 ### Streaming Output
 
 opencode adapter supports streaming output capture:
@@ -101,6 +106,10 @@ When enabled:
 - stdout captured to `.audiagentic/runtime/jobs/<job-id>/stdout.log`
 - stderr captured to `.audiagentic/runtime/jobs/<job-id>/stderr.log`
 - Output optionally tee'd to console
+
+Provider-facing instruction content should ultimately come from the Phase 4.4.1 canonical
+provider-function source and generated provider surfaces. opencode is not a special “no skills”
+exception; it consumes the shared provider-surface model through wrapper-first execution.
 
 ## Configuration
 

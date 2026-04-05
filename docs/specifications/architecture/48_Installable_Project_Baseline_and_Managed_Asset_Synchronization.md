@@ -17,7 +17,7 @@ The repository now contains more managed project assets than the original minima
 - prompt syntax configuration
 - prompt templates and context packs
 - provider instruction surfaces
-- provider skill assets
+- provider function/instruction assets
 - managed workflow files
 
 The lifecycle and release-bootstrap paths must install or refresh those assets deterministically if AUDiaGentic is to behave as an installable template rather than a one-off repository.

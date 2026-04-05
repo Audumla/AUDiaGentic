@@ -597,7 +597,7 @@ Once all tests pass and integration verified:
 
 File: `docs/implementation/31_Build_Status_and_Work_Registry.md`
 
-Change PKT-PRV-055 status from `WAITING_ON_DEPENDENCIES` to `READY_FOR_REVIEW` after verification.
+Update PKT-PRV-055 status through review and verification checkpoints as the native-hook path lands; the current registry now records this packet as VERIFIED.
 
 **Task:** Update build registry
 

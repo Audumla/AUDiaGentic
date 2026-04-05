@@ -1,6 +1,7 @@
 # PKT-PRV-009 — cline provider adapter
 
 **Phase:** Phase 4  
+**Status:** VERIFIED
 **Primary owner group:** Providers
 
 ## Goal

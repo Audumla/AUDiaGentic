@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 from pathlib import Path
 from typing import Any
 
 from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.streaming.provider_streaming import build_provider_stream_sinks, run_streaming_command
 
 
 def _find_packet_doc(working_root: str | None, packet_id: str | None) -> Path | None:
@@ -71,24 +71,6 @@ def _claude_executable() -> str:
     return executable
 
 
-def _run_claude(
-    command: list[str],
-    *,
-    cwd: Path | None = None,
-    input_text: str | None = None,
-) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        command,
-        cwd=str(cwd) if cwd is not None else None,
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        input=input_text,
-    )
-
-
 def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, Any]:
     executable = _claude_executable()
     prompt = _build_prompt(packet_ctx, provider_cfg)
@@ -107,7 +89,18 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
     if default_model:
         command.extend(["--model", str(default_model)])
 
-    completed = _run_claude(command, cwd=cwd, input_text=prompt)
+    stream_controls = packet_ctx.get("stream-controls", {})
+    stdout_sinks, stderr_sinks = build_provider_stream_sinks(
+        packet_ctx=packet_ctx,
+        stream_controls=stream_controls,
+    )
+    completed = run_streaming_command(
+        command,
+        cwd=cwd,
+        input_text=prompt,
+        stdout_sinks=stdout_sinks,
+        stderr_sinks=stderr_sinks,
+    )
     output_text = completed.stdout.strip()
 
     if completed.returncode != 0:

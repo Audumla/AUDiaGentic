@@ -1,6 +1,7 @@
 # PKT-PRV-002 — Provider selection and health check service
 
 **Phase:** Phase 4  
+**Status:** VERIFIED
 **Primary owner group:** Providers
 
 ## Goal

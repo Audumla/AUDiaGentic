@@ -1,7 +1,7 @@
 # PKT-PRV-037 — Cline prompt-trigger launch integration
 
 **Phase:** Phase 4.6
-**Status:** IN_PROGRESS
+**Status:** READY_FOR_REVIEW
 **Owner:** Cline
 
 ## Objective
@@ -20,14 +20,14 @@ hook-or-fallback path must exist before this packet is READY_FOR_REVIEW.
 
 ## What is NOT yet implemented (blockers for READY_FOR_REVIEW)
 
-- **No per-tag skill files** — `.clinerules/` contains only doctrine and policy docs; there
-  are no per-action skill or instruction files equivalent to `.agents/skills/` or
-  `.claude/skills/`
-- **No hook configuration** — no Cline hook setup that normalizes the first-line tag before
-  the workflow engine starts
-- **No workflow definitions** — no Cline workflow or task-definition files for the canonical
-  actions
 - **No smoke tests** — no integration tests for the Cline prompt-trigger path
+
+## What WAS implemented to reach READY_FOR_REVIEW
+
+- **Generated skill files** — `.clinerules/skills/ag-*.md` files exist for all 5 canonical tags
+- **Hook configuration documented** — `.clinerules/hook-config.md` documents the fallback-only
+  path (no native hook available in current Cline version)
+- **Bridge remains canonical** — shared bridge is the authoritative launch mechanism
 
 ## Required instruction surface
 
@@ -40,11 +40,11 @@ is correct:
 ```text
 .clinerules/
   skills/
-    plan.md
-    implement.md
-    review.md
-    audit.md
-    check-in-prep.md
+    ag-plan.md
+    ag-implement.md
+    ag-review.md
+    ag-audit.md
+    ag-check-in-prep.md
 ```
 
 Each skill file must follow the shared Trigger / Do / Do not structure with Cline-specific

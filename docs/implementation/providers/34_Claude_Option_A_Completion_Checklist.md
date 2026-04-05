@@ -5,7 +5,7 @@ so Option B (native hooks) can begin immediately.
 
 ## Files to Create
 
-### 1. `.claude/skills/plan/SKILL.md`
+### 1. `.claude/skills/ag-plan/SKILL.md`
 
 ```markdown
 # plan skill
@@ -28,7 +28,7 @@ Do not:
 
 ---
 
-### 2. `.claude/skills/implement/SKILL.md`
+### 2. `.claude/skills/ag-implement/SKILL.md`
 
 ```markdown
 # implement skill
@@ -52,7 +52,7 @@ Do not:
 
 ---
 
-### 3. `.claude/skills/review/SKILL.md`
+### 3. `.claude/skills/ag-review/SKILL.md`
 
 ```markdown
 # review skill
@@ -78,7 +78,7 @@ Do not:
 
 ---
 
-### 4. `.claude/skills/audit/SKILL.md`
+### 4. `.claude/skills/ag-audit/SKILL.md`
 
 ```markdown
 # audit skill
@@ -102,7 +102,7 @@ Do not:
 
 ---
 
-### 5. `.claude/skills/check-in-prep/SKILL.md`
+### 5. `.claude/skills/ag-check-in-prep/SKILL.md`
 
 ```markdown
 # check-in-prep skill
@@ -139,11 +139,11 @@ REQUIRED_ASSETS = (
     Path("CLAUDE.md"),
     Path(".claude/rules/prompt-tags.md"),
     Path(".claude/rules/review-policy.md"),
-    Path(".claude/skills/plan/SKILL.md"),
-    Path(".claude/skills/implement/SKILL.md"),
-    Path(".claude/skills/review/SKILL.md"),
-    Path(".claude/skills/audit/SKILL.md"),
-    Path(".claude/skills/check-in-prep/SKILL.md"),
+    Path(".claude/skills/ag-plan/SKILL.md"),
+    Path(".claude/skills/ag-implement/SKILL.md"),
+    Path(".claude/skills/ag-review/SKILL.md"),
+    Path(".claude/skills/ag-audit/SKILL.md"),
+    Path(".claude/skills/ag-check-in-prep/SKILL.md"),
 )
 
 
@@ -273,7 +273,7 @@ Expected: Returns JSON with `"status": "created"` and job details.
 
 ```bash
 # Temporarily remove a skill file
-mv .claude/skills/plan/SKILL.md .claude/skills/plan/SKILL.md.bak
+mv .claude/skills/ag-plan/SKILL.md .claude/skills/ag-plan/SKILL.md.bak
 
 python tools/claude_prompt_trigger_bridge.py --project-root . <<EOF
 @plan target=packet:PKT-PRV-033
@@ -282,7 +282,7 @@ EOF
 
 # Should return error with status "error", kind "validation", missing assets list
 # Restore the file
-mv .claude/skills/plan/SKILL.md.bak .claude/skills/plan/SKILL.md
+mv .claude/skills/ag-plan/SKILL.md.bak .claude/skills/ag-plan/SKILL.md
 ```
 
 Expected: Returns JSON with `"status": "error"`, `"kind": "validation"`, lists missing file.
