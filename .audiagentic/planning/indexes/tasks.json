@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-07T23:52:36.351420+00:00",
+  "generated_at": "2026-04-07T23:52:58.314731+00:00",
   "items": [
     {
       "id": "task-0008-output",
@@ -511,6 +511,24 @@
       "label": "PKT-PRV-018: Provider Metrics",
       "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0095.md"
+    },
+    {
+      "id": "task-0096",
+      "label": "PKT-PRV-019: Provider Tracing",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0096.md"
+    },
+    {
+      "id": "task-0097",
+      "label": "PKT-PRV-020: Provider Configuration Management",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0097.md"
+    },
+    {
+      "id": "task-0098",
+      "label": "PKT-PRV-021: Provider Discovery",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0098.md"
     }
   ]
 }
