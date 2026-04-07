@@ -107,11 +107,11 @@ bridge-or-native-surface decision is implemented.
 
 ## Files to create or update
 
-- `.gemini/commands/plan.md`
-- `.gemini/commands/implement.md`
-- `.gemini/commands/review.md`
-- `.gemini/commands/audit.md`
-- `.gemini/commands/check-in-prep.md`
+- `.gemini/commands/ag-plan.md`
+- `.gemini/commands/ag-implement.md`
+- `.gemini/commands/ag-review.md`
+- `.gemini/commands/ag-audit.md`
+- `.gemini/commands/ag-check-in-prep.md`
 - `.gemini/settings.json` (hook config or documented fallback note)
 - `docs/implementation/providers/21_Gemini_Prompt_Trigger_Runbook.md`
 - Gemini prompt-trigger smoke tests

@@ -115,6 +115,8 @@ These are the intentional gaps still visible in the build registry:
 - Cline review launches are executing through the bridge, but the provider still needs prompt-shape hardening to reliably return structured JSON instead of falling back to a synthetic review bundle.
 - `Phase 4.11` provider structured completion and result normalization is the next feature slice so Codex, Cline, Claude, and opencode can return canonical review/output payloads without duplicating the shared bridge harness, with Gemini already added to the planned packet family so the completion architecture does not need to be reopened later.
 - `PKT-PRV-056` through `PKT-PRV-058` plus `PKT-PRV-068`, `PKT-PRV-069`, and `PKT-PRV-071` now define the primary packet path for structured completion and result normalization.
+- The shared `try_extract_json_from_stdout` extraction helper is now adopted across all primary and guarded providers, replacing redundant bespoke output parsers (e.g. in `cline` and `opencode`).
+- **Outstanding Provider Discrepancies:** While the core streaming and completion harnesses are unified, providers are not yet fully functionally equivalent. Packet documentation injection (`_find_packet_doc` / `_packet_doc_excerpt`) is currently only implemented in `claude` and `codex`, leaving other providers blind to specific packet requirements. Furthermore, prompt-tag interception (`_handle_prompt_tags`) is currently unique to `gemini` and not standardized across the other adapters.
 - the active Phase 4 critical path is now `Phase 4.4.1` canonical provider-function generation followed by `PKT-PRV-056` shared structured completion and then the primary-provider completion packets; older `READY_TO_START` rows in Phase 4.3 / 4.4 are mostly legacy documentation closeout rather than the main implementation path
 - `Phase 4.12` provider optimization and shared workflow extensibility is the following slice so scripts, skills, MCP tools, and wrappers can reduce token usage without locking in the future workflow model, and it is script-first/template-driven for repeatable operations with agents limited to the minimum intent or parameters needed for the helper to do the work.
 - `Phase 4.4.1` canonical provider-function source and provider surface generation is the foundational shared generation slice; `PKT-PRV-061`, `PKT-PRV-062`, `PKT-PRV-063`, and `PKT-PRV-070` own the generic source, shared regeneration facade, provider-owned renderer pattern, and managed-surface policy for every provider.
@@ -156,3 +158,6 @@ packet-level status and the exact follow-on limitations.
 2. Keep the installable-baseline inventory and runtime exclusion rules aligned as future baseline assets evolve
 3. Keep all new work on the canonical repository-domain paths only; the legacy shim roots have been retired
 4. Resume the next legal non-checkpoint packet from the registry
+
+
+Phase 4 remaining implementation work should now be executed with `56_Phase_4_Remaining_Work_Execution_Guide.md` open beside the packet docs so file ownership, config locations, runtime artifacts, tests, and spec hooks stay explicit for each packet.

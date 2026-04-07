@@ -21,7 +21,7 @@ This phase is intentionally not a final workflow-model definition. It only defin
 
 - it is not a new job engine
 - it is not a replacement for the current prompt-launch contract
-- it is not a provider-specific execution rewrite
+- it is not a provider-specific execution rewrite, but it may define shared execution-policy config that adapters consume consistently
 - it is not a decision on the final tracker schema
 
 ## Shared design rule
@@ -48,6 +48,7 @@ This phase reserves the following seams for later work:
 - shared extraction and summarization helpers
 - shared template rendering helpers
 - provider instruction/function surface hooks
+- provider execution-policy config seams for flags, formats, safety modes, and timeout defaults
 - MCP tool hooks
 - future workflow/task tracker adapters
 
@@ -61,13 +62,31 @@ Once implemented later, the optimization layer should let AUDiaGentic:
 - avoid duplicating the same helper logic across providers
 - introduce a richer workflow model later without forcing a redesign now
 
+## Packetized follow-on work
+
+Phase 4.12 now also owns the shared cross-provider cleanup needed to remove hardcoded execution
+policy from adapters. This work is intentionally packetized separately from the active Phase 4.6,
+4.9, and 4.11 delivery slices so providers can keep building while shared policy is normalized.
+
+- `PKT-PRV-077` - provider execution policy config contract
+- `PKT-PRV-078` - adapter execution flag normalization across providers
+
+`PKT-PRV-077` should define config-driven execution-policy keys in `.audiagentic/providers.yaml`
+for provider-specific runtime flags such as output format, permission mode, safety posture,
+auto-approval/full-auto behavior, ephemeral mode, target type, and timeout defaults.
+
+`PKT-PRV-078` should refactor adapters to read those settings from config instead of embedding
+provider behavior in hardcoded literals where policy belongs in tracked config.
+
 ## Current status
 
-- docs-only draft
-- no implementation packet defined yet
-- implementation should wait until the optimization tooling surface is agreed
-- repeatable operations should remain script-first and template-driven when this phase is implemented later
+- docs-first phase with packetized follow-on work now defined
+- implementation remains deferred until the active Phase 4 runtime slices stabilize enough to
+  absorb shared policy normalization cleanly
+- repeatable operations should remain script-first and template-driven when this phase is
+  implemented later
 
 ## Next step
 
-Use this draft as the placeholder phase for later optimization packets and future tracker/workflow extensions.
+Use this phase as the home for later optimization packets, execution-policy normalization, and
+future tracker/workflow extensions.

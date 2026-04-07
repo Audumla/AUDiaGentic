@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from . import claude, cline, codex, gemini, opencode
+from . import claude, cline, codex, copilot, gemini, opencode, qwen
 from .base import ProviderSurfaceRenderer
 
 
@@ -9,6 +9,8 @@ def load_renderer_registry() -> dict[str, ProviderSurfaceRenderer]:
         "claude": claude.render,
         "codex": codex.render,
         "cline": cline.render,
+        "copilot": copilot.render,
         "gemini": gemini.render,
         "opencode": opencode.render,
+        "qwen": qwen.render,
     }

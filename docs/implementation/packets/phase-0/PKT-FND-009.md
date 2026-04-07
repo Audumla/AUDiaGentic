@@ -35,12 +35,12 @@ This packet owns the following implementation surface:
 
 - `docs/specifications/architecture/03_Common_Contracts.md`
 - `docs/specifications/architecture/26_Prompt_Tagged_Workflow_Launch_and_Review_Extension.md`
-- `docs/schemas/project-config.schema.json`
-- `docs/schemas/job-record.schema.json`
-- `docs/schemas/change-event.schema.json`
-- `docs/schemas/prompt-launch-request.schema.json`
-- `docs/schemas/review-report.schema.json`
-- `docs/schemas/review-bundle.schema.json`
+- `src/audiagentic/contracts/schemas/project-config.schema.json`
+- `src/audiagentic/contracts/schemas/job-record.schema.json`
+- `src/audiagentic/contracts/schemas/change-event.schema.json`
+- `src/audiagentic/contracts/schemas/prompt-launch-request.schema.json`
+- `src/audiagentic/contracts/schemas/review-report.schema.json`
+- `src/audiagentic/contracts/schemas/review-bundle.schema.json`
 - new fixtures under `docs/examples/fixtures/`
 - `tools/validate_schemas.py`
 - `tests/unit/contracts/test_schema_validation.py`
