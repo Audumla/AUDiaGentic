@@ -29,8 +29,10 @@ class PlanningAPI:
         self.root = Path(root)
         self.config = Config(self.root)
         self.paths = Paths(self.root)
-        self.events = EventLog(self.root / '.audiagentic/planning/events/events.jsonl')
-        self.claims_store = Claims(self.root / '.audiagentic/planning/claims/claims.json')
+        self.events = EventLog(self.root / ".audiagentic/planning/events/events.jsonl")
+        self.claims_store = Claims(
+            self.root / ".audiagentic/planning/claims/claims.json"
+        )
         self.indexer = Indexer(self.root)
         self.validator = Validator(self.root)
         self.extracts = Extracts(self.root)
@@ -48,14 +50,14 @@ class PlanningAPI:
 
     def _find(self, id_: str):
         for item in self._scan():
-            if item.data['id'] == id_:
+            if item.data["id"] == id_:
                 return item
         raise KeyError(id_)
 
     def validate(self, raise_on_error: bool = False):
         errors = self.validator.validate_all()
         if raise_on_error and errors:
-            raise RuntimeError('\n'.join(errors))
+            raise RuntimeError("\n".join(errors))
         return errors
 
     def index(self):
@@ -64,54 +66,271 @@ class PlanningAPI:
     def reconcile(self):
         result = self.reconciler.run()
         self.index()
-        self.hooks.run('after_reconcile', 'planning', {'orphans': result['orphans']})
+        self.hooks.run("after_reconcile", "planning", {"orphans": result["orphans"]})
         return result
 
-    def new(self, kind: str, label: str, summary: str, domain: str | None = None, spec: str | None = None, plan: str | None = None, parent: str | None = None, target: str | None = None, workflow: str | None = None, request_refs: list[str] | None = None):
-        kind = {'req': 'request', 'request': 'request', 'sp': 'spec', 'spec': 'spec', 'pl': 'plan', 'plan': 'plan', 'task': 'task', 'wp': 'wp', 'standard': 'standard'}.get(kind, kind)
-        self.hooks.run('before_create', kind, {'label': label})
+    def new(
+        self,
+        kind: str,
+        label: str,
+        summary: str,
+        domain: str | None = None,
+        spec: str | None = None,
+        plan: str | None = None,
+        parent: str | None = None,
+        target: str | None = None,
+        workflow: str | None = None,
+        request_refs: list[str] | None = None,
+    ):
+        kind = {
+            "req": "request",
+            "request": "request",
+            "sp": "spec",
+            "spec": "spec",
+            "pl": "plan",
+            "plan": "plan",
+            "task": "task",
+            "wp": "wp",
+            "standard": "standard",
+        }.get(kind, kind)
+        self.hooks.run("before_create", kind, {"label": label})
         id_ = next_id(self.root, kind)
-        if kind == 'request':
+        if kind == "request":
             path = self.req_mgr.create(id_, label, summary)
-        elif kind == 'spec':
-            path = self.spec_mgr.create(id_, label, summary, request_refs=request_refs or [])
-        elif kind == 'plan':
-            path = self.plan_mgr.create(id_, label, summary, spec_refs=[spec] if spec else [])
-        elif kind == 'task':
+        elif kind == "spec":
+            path = self.spec_mgr.create(
+                id_, label, summary, request_refs=request_refs or []
+            )
+        elif kind == "plan":
+            path = self.plan_mgr.create(
+                id_, label, summary, spec_refs=[spec] if spec else []
+            )
+        elif kind == "task":
             if not spec:
-                raise ValueError('task requires --spec')
-            path = self.task_mgr.create(id_, label, summary, spec_ref=spec, domain=domain or 'core', parent_task_ref=parent, target=target, workflow=workflow)
-        elif kind == 'wp':
+                raise ValueError("task requires --spec")
+            path = self.task_mgr.create(
+                id_,
+                label,
+                summary,
+                spec_ref=spec,
+                domain=domain or "core",
+                parent_task_ref=parent,
+                target=target,
+                workflow=workflow,
+            )
+        elif kind == "wp":
             if not plan:
-                raise ValueError('wp requires --plan')
-            path = self.wp_mgr.create(id_, label, summary, plan_ref=plan, task_refs=[], domain=domain or 'core', workflow=workflow)
-        elif kind == 'standard':
+                raise ValueError("wp requires --plan")
+            path = self.wp_mgr.create(
+                id_,
+                label,
+                summary,
+                plan_ref=plan,
+                task_refs=[],
+                domain=domain or "core",
+                workflow=workflow,
+            )
+        elif kind == "standard":
             path = self.std_mgr.create(id_, label, summary)
         else:
             raise ValueError(kind)
-        self.hooks.run('after_create', kind, {'id': id_, 'path': str(path.relative_to(self.root))})
+        self.hooks.run(
+            "after_create", kind, {"id": id_, "path": str(path.relative_to(self.root))}
+        )
         self.index()
         return self._find(id_)
 
-    def update(self, id_: str, label: str | None = None, summary: str | None = None, body_append: str | None = None):
+    def create_with_content(
+        self,
+        kind: str,
+        label: str,
+        summary: str,
+        content: str,
+        domain: str | None = None,
+        spec: str | None = None,
+        plan: str | None = None,
+        parent: str | None = None,
+        target: str | None = None,
+        workflow: str | None = None,
+        request_refs: list[str] | None = None,
+    ):
+        """Create planning object with full content.
+
+        Args:
+            kind: Object type (plan/request/spec/task/wp/standard)
+            label: Object label
+            summary: Object summary
+            content: Full markdown content (without YAML frontmatter)
+            domain: Domain for task/wp
+            spec: Spec reference for plan/task
+            plan: Plan reference for wp
+            parent: Parent task reference
+            target: Target reference
+            workflow: Workflow name
+            request_refs: Request references for spec
+        """
+        kind = {
+            "req": "request",
+            "request": "request",
+            "sp": "spec",
+            "spec": "spec",
+            "pl": "plan",
+            "plan": "plan",
+            "task": "task",
+            "wp": "wp",
+            "standard": "standard",
+        }.get(kind, kind)
+        self.hooks.run("before_create", kind, {"label": label})
+        id_ = next_id(self.root, kind)
+        if kind == "request":
+            path = self.req_mgr.create(id_, label, summary)
+            self.update_content(id_, content)
+        elif kind == "spec":
+            path = self.spec_mgr.create(
+                id_, label, summary, request_refs=request_refs or []
+            )
+            self.update_content(id_, content)
+        elif kind == "plan":
+            path = self.plan_mgr.create(
+                id_, label, summary, spec_refs=[spec] if spec else []
+            )
+            self.update_content(id_, content)
+        elif kind == "task":
+            if not spec:
+                raise ValueError("task requires --spec")
+            path = self.task_mgr.create(
+                id_,
+                label,
+                summary,
+                spec_ref=spec,
+                domain=domain or "core",
+                parent_task_ref=parent,
+                target=target,
+                workflow=workflow,
+            )
+            self.update_content(id_, content)
+        elif kind == "wp":
+            if not plan:
+                raise ValueError("wp requires --plan")
+            path = self.wp_mgr.create(
+                id_,
+                label,
+                summary,
+                plan_ref=plan,
+                task_refs=[],
+                domain=domain or "core",
+                workflow=workflow,
+            )
+            self.update_content(id_, content)
+        elif kind == "standard":
+            path = self.std_mgr.create(id_, label, summary)
+            self.update_content(id_, content)
+        else:
+            raise ValueError(kind)
+        self.hooks.run(
+            "after_create", kind, {"id": id_, "path": str(path.relative_to(self.root))}
+        )
+        self.index()
+        return self._find(id_)
+
+    def update(
+        self,
+        id_: str,
+        label: str | None = None,
+        summary: str | None = None,
+        body_append: str | None = None,
+    ):
         item = self._find(id_)
-        self.hooks.run('before_update', item.kind, {'id': id_})
+        self.hooks.run("before_update", item.kind, {"id": id_})
         data, body = parse_markdown(item.path)
         if label:
-            data['label'] = label
+            data["label"] = label
         if summary:
-            data['summary'] = summary
+            data["summary"] = summary
         if body_append:
-            body = body.rstrip() + '\n\n' + body_append.strip() + '\n'
+            body = body.rstrip() + "\n\n" + body_append.strip() + "\n"
         dump_markdown(item.path, data, body)
-        self.hooks.run('after_update', item.kind, {'id': id_})
+        self.hooks.run("after_update", item.kind, {"id": id_})
+        self.reconcile()
+        return self._find(id_)
+
+    def get_content(self, id_: str) -> str:
+        """Get markdown content without YAML frontmatter."""
+        item = self._find(id_)
+        _, body = parse_markdown(item.path)
+        return body
+
+    def update_content(
+        self,
+        id_: str,
+        content: str,
+        mode: str = "replace",
+        section: str | None = None,
+        position: int | None = None,
+    ):
+        """Update file content with various modes.
+
+        Args:
+            id_: Object ID to update
+            content: Markdown content to write
+            mode: 'replace', 'append', 'insert', or 'section'
+            section: Section header to update (for mode='section')
+            position: Line position to insert (for mode='insert')
+        """
+        import re
+
+        item = self._find(id_)
+        self.hooks.run("before_update", item.kind, {"id": id_})
+        data, body = parse_markdown(item.path)
+
+        if mode == "replace":
+            body = content.rstrip() + "\n"
+        elif mode == "append":
+            body = body.rstrip() + "\n\n" + content.rstrip() + "\n"
+        elif mode == "insert":
+            if position is None:
+                raise ValueError("position required for insert mode")
+            lines = body.split("\n")
+            if position < 1 or position > len(lines) + 1:
+                raise ValueError(
+                    f"position {position} out of range (1-{len(lines) + 1})"
+                )
+            lines.insert(position - 1, content.rstrip())
+            body = "\n".join(lines) + "\n"
+        elif mode == "section":
+            if section is None:
+                raise ValueError("section header required for section mode")
+            # Find section header (e.g., "# Requirements" or "## Requirements")
+            section_pattern = re.compile(
+                rf"^({re.escape(section)})\n(.*)$", re.M | re.S
+            )
+            match = section_pattern.search(body)
+            if not match:
+                # Section not found, append it
+                body = body.rstrip() + f"\n\n{section}\n{content.rstrip()}\n"
+            else:
+                # Replace section content
+                start = match.start()
+                end = match.end()
+                # Find end of section (next header or end of file)
+                next_section = re.search(r"\n#{1,6}\s+", body[end:])
+                if next_section:
+                    end += next_section.start()
+                body = (
+                    body[:start] + section + "\n" + content.rstrip() + "\n" + body[end:]
+                )
+        else:
+            raise ValueError(f"unknown mode: {mode}")
+
+        dump_markdown(item.path, data, body)
+        self.hooks.run("after_update", item.kind, {"id": id_})
         self.reconcile()
         return self._find(id_)
 
     def move(self, id_: str, domain: str):
         item = self._find(id_)
-        if item.kind not in {'task', 'wp'}:
-            raise ValueError('only task/wp can move by domain')
+        if item.kind not in {"task", "wp"}:
+            raise ValueError("only task/wp can move by domain")
         dest_dir = self.paths.kind_dir(item.kind, domain)
         dest = dest_dir / item.path.name
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -122,83 +341,126 @@ class PlanningAPI:
     def state(self, id_: str, new_state: str):
         item = self._find(id_)
         data, body = parse_markdown(item.path)
-        wf_name = data.get('workflow')
+        wf_name = data.get("workflow")
         wf = self.config.workflow_for(item.kind, wf_name)
-        old = data['state']
-        if new_state not in wf['values']:
-            raise ValueError(f'unknown state {new_state} for workflow')
-        if new_state not in wf['transitions'].get(old, []):
-            raise ValueError(f'invalid transition {old} -> {new_state}')
-        self.hooks.run('before_state_change', item.kind, {'id': id_, 'old_state': old, 'new_state': new_state})
-        data['state'] = new_state
+        old = data["state"]
+        if new_state not in wf["values"]:
+            raise ValueError(f"unknown state {new_state} for workflow")
+        if new_state not in wf["transitions"].get(old, []):
+            raise ValueError(f"invalid transition {old} -> {new_state}")
+        self.hooks.run(
+            "before_state_change",
+            item.kind,
+            {"id": id_, "old_state": old, "new_state": new_state},
+        )
+        data["state"] = new_state
         dump_markdown(item.path, data, body)
-        self.hooks.run('after_state_change', item.kind, {'id': id_, 'old_state': old, 'new_state': new_state})
+        self.hooks.run(
+            "after_state_change",
+            item.kind,
+            {"id": id_, "old_state": old, "new_state": new_state},
+        )
         self.index()
         return self._find(id_)
 
-    def relink(self, src_id: str, field: str, dst_id: str, seq: int | None = None, display: str | None = None):
+    def relink(
+        self,
+        src_id: str,
+        field: str,
+        dst_id: str,
+        seq: int | None = None,
+        display: str | None = None,
+    ):
         item = self._find(src_id)
         data, body = parse_markdown(item.path)
-        if field in {'request_refs', 'spec_refs', 'standard_refs'}:
+        if field in {"request_refs", "spec_refs", "standard_refs"}:
             vals = list(data.get(field, []) or [])
             if dst_id not in vals:
                 vals.append(dst_id)
             data[field] = vals
-        elif field in {'plan_ref', 'spec_ref', 'parent_task_ref'}:
+        elif field in {"plan_ref", "spec_ref", "parent_task_ref"}:
             data[field] = dst_id
-        elif field in {'task_refs', 'work_package_refs'}:
-            data[field] = Relationships.ensure_rel_list(data.get(field), dst_id, seq, display)
+        elif field in {"task_refs", "work_package_refs"}:
+            data[field] = Relationships.ensure_rel_list(
+                data.get(field), dst_id, seq, display
+            )
         else:
-            raise ValueError(f'unsupported field {field}')
+            raise ValueError(f"unsupported field {field}")
         dump_markdown(item.path, data, body)
         self.index()
         return self._find(src_id)
 
-    def package(self, plan_ref: str, task_ids: list[str], label: str, summary: str, domain: str = 'core', workflow: str | None = None):
-        item = self.new('wp', label=label, summary=summary, plan=plan_ref, domain=domain, workflow=workflow)
+    def package(
+        self,
+        plan_ref: str,
+        task_ids: list[str],
+        label: str,
+        summary: str,
+        domain: str = "core",
+        workflow: str | None = None,
+    ):
+        item = self.new(
+            "wp",
+            label=label,
+            summary=summary,
+            plan=plan_ref,
+            domain=domain,
+            workflow=workflow,
+        )
         data, body = parse_markdown(item.path)
         rels = []
         seq = 1000
         for tid in task_ids:
-            rels.append({'ref': tid, 'seq': seq})
+            rels.append({"ref": tid, "seq": seq})
             seq += 1000
-        data['task_refs'] = rels
+        data["task_refs"] = rels
         dump_markdown(item.path, data, body)
         self.index()
-        return self._find(item.data['id'])
+        return self._find(item.data["id"])
 
     def claim(self, kind: str, id_: str, holder: str, ttl: int | None = None):
         rec = self.claims_store.claim(kind, id_, holder, ttl)
-        self.events.emit(f'{kind}.claimed', rec)
+        self.events.emit(f"{kind}.claimed", rec)
         self.index()
         return rec
 
     def unclaim(self, id_: str):
         ok = self.claims_store.unclaim(id_)
         if ok:
-            self.events.emit('planning.unclaimed', {'id': id_})
+            self.events.emit("planning.unclaimed", {"id": id_})
             self.index()
         return ok
 
     def claims(self, kind: str | None = None):
-        claims = self.claims_store.load()['claims']
-        return [c for c in claims if kind is None or c['kind'] == kind]
+        claims = self.claims_store.load()["claims"]
+        return [c for c in claims if kind is None or c["kind"] == kind]
 
-    def next_items(self, kind: str = 'task', state: str = 'ready', domain: str | None = None):
-        items = [i for i in self._scan() if i.kind == kind and i.data['state'] == state]
-        claimed = {c['id'] for c in self.claims()}
+    def next_items(
+        self, kind: str = "task", state: str = "ready", domain: str | None = None
+    ):
+        items = [i for i in self._scan() if i.kind == kind and i.data["state"] == state]
+        claimed = {c["id"] for c in self.claims()}
         out = []
         for i in items:
-            if i.data['id'] in claimed:
+            if i.data["id"] in claimed:
                 continue
             if domain and i.path.parent.name != domain:
                 continue
-            out.append({'id': i.data['id'], 'label': i.data['label'], 'path': str(i.path.relative_to(self.root))})
+            out.append(
+                {
+                    "id": i.data["id"],
+                    "label": i.data["label"],
+                    "path": str(i.path.relative_to(self.root)),
+                }
+            )
         return out
 
     def standards(self, id_: str):
         from .standards import effective_standard_refs
-        items = {i.data['id']: ItemView(i.kind, i.path, i.data, i.body) for i in self._scan()}
+
+        items = {
+            i.data["id"]: ItemView(i.kind, i.path, i.data, i.body) for i in self._scan()
+        }
         return effective_standard_refs(items[id_], items)
 
     def hooks_info(self):
@@ -208,5 +470,6 @@ class PlanningAPI:
         """Seed persisted counters from existing docs. Run once after install."""
         from .id_gen import sync_counter
         from ..domain.states import CANONICAL_KINDS
+
         for kind in CANONICAL_KINDS:
             sync_counter(self.root, kind)
