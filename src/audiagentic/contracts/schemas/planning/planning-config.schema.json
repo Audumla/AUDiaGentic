@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "planning": {
+      "type": "object",
+      "required": [
+        "convention_version",
+        "dirs"
+      ],
+      "properties": {
+        "convention_version": {
+          "type": "integer"
+        },
+        "dirs": {
+          "type": "object"
+        },
+        "task_domains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "work_package_domains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "planning"
+  ]
+}

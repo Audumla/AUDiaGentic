@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "id",
+    "label",
+    "state",
+    "summary",
+    "spec_ref"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "label": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "workflow": {
+      "type": "string"
+    },
+    "standard_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "meta": {
+      "type": "object"
+    },
+    "spec_ref": {
+      "type": "string"
+    },
+    "parent_task_ref": {
+      "type": "string"
+    },
+    "target": {
+      "type": "string",
+      "description": "AUDiaGentic dispatch target. Accepts bare packet IDs (e.g. PKT-PRV-061), formatted targets (packet:PKT-PRV-061, job:job_20240407_001, adhoc), or omit for adhoc. Normalized at dispatch time."
+    },
+    "packet_ref": {
+      "type": "string",
+      "description": "Explicit AUDiaGentic packet ID binding (e.g. PKT-PRV-061). Takes precedence over target field when dispatching a job."
+    },
+    "request_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}
