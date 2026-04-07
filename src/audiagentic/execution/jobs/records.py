@@ -10,9 +10,9 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.contracts.schema_registry import read_schema
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-SCHEMA_PATH = REPO_ROOT / "docs" / "schemas" / "job-record.schema.json"
 
 
 @dataclass(frozen=True)
@@ -43,7 +43,7 @@ def _now_timestamp() -> str:
 
 
 def validate_job_record(payload: dict[str, Any]) -> list[str]:
-    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    schema = read_schema("job-record")
     validator = Draft202012Validator(schema)
     errors = [error.message for error in validator.iter_errors(payload)]
     return sorted(errors)

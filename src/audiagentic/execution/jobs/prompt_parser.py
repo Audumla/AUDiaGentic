@@ -9,12 +9,12 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.contracts.schema_registry import read_schema
 from audiagentic.execution.jobs.prompt_syntax import load_canonical_tags, load_no_body_required_tags, load_review_tag, load_prompt_syntax
 from audiagentic.execution.jobs.prompt_templates import load_prompt_template
 from audiagentic.config.provider_config import load_provider_config
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-SCHEMA_PATH = REPO_ROOT / "docs" / "schemas" / "prompt-launch-request.schema.json"
 
 SHORT_TAG_PROVIDER_SEPARATOR = "-"
 DEFAULT_TARGET_KIND = "adhoc"
@@ -54,7 +54,7 @@ def generate_prompt_id(*, now_fn=None) -> str:
 
 
 def validate_prompt_launch_request(payload: dict[str, Any]) -> list[str]:
-    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    schema = read_schema("prompt-launch-request")
     validator = Draft202012Validator(schema)
     return sorted(error.message for error in validator.iter_errors(payload))
 

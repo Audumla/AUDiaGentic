@@ -40,7 +40,7 @@ At minimum classify:
 - `src/audiagentic/channels/discord`
 - `tools/`
 - `tests/`
-- `docs/schemas/`
+- `src/audiagentic/contracts/schemas/`
 - `docs/examples/`
 - managed baseline assets including `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.clinerules*`, `.claude/`, `.agents/skills/`, and `.github/workflows/`
 
@@ -71,7 +71,7 @@ Expected hotspots include:
 - prompt-trigger and bridge code spanning jobs, providers, and tooling
 - stream/input/completion logic spanning jobs and provider adapters
 - provider instruction assets versus install-baseline handling
-- `docs/examples/` and `docs/schemas/` ownership
+- `docs/examples/` and `src/audiagentic/contracts/schemas/` ownership
 
 ## Public import surface output
 

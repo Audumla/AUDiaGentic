@@ -64,12 +64,18 @@
    ```json
    {
      "hooks": {
-       "UserPromptSubmit": {
-         "handler": "tools.claude_hooks:UserPromptSubmit_handler"
-       },
-       "PreToolUse": {
-         "handler": "tools.claude_hooks:PreToolUse_handler"
-       }
+       "UserPromptSubmit": [
+         {
+           "matcher": "",
+           "hooks": [{"type": "command", "command": "python tools/claude_hooks.py user-prompt-submit"}]
+         }
+       ],
+       "PreToolUse": [
+         {
+           "matcher": "",
+           "hooks": [{"type": "command", "command": "python tools/claude_hooks.py pre-tool-use"}]
+         }
+       ]
      }
    }
    ```
@@ -199,7 +205,7 @@
 
 ### Option B (PKT-PRV-055)
 
-- [ ] Create `.claude/settings.json` with hook configuration
+- [ ] Create `.claude/settings.json` with command-hook configuration
 - [ ] Create `tools/claude_hooks.py` with UserPromptSubmit + PreToolUse handlers
 - [ ] Create `tests/integration/providers/test_claude_hooks.py` unit tests
 - [ ] Create `tests/integration/providers/test_claude_hook_chain.py` integration tests

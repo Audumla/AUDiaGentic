@@ -31,7 +31,7 @@ Internal-only imports may be rewritten directly during `PKT-FND-012`.
 | `audiagentic.channels.server.*` | optional server-facing surface | canonical public surface; update callers directly |
 | `audiagentic.channels.discord.*` | current Discord overlay/channel import surface | canonical public surface; update callers directly when implemented |
 | `tools/*` module entrypoints | deterministic wrappers used directly | keep stable as visible entrypoints |
-| `docs/schemas/*` | schema validation inputs | no relocation in this tranche |
+| `src/audiagentic/contracts/schemas/*` | schema validation inputs | no relocation in this tranche |
 | `docs/examples/*` | examples cited as stable | no relocation in this tranche |
 | `.audiagentic/project.yaml`, `.audiagentic/components.yaml`, `.audiagentic/providers.yaml`, `.audiagentic/prompt-syntax.yaml`, `.audiagentic/prompts/*` | tracked install/bootstrap baseline assets | keep stable and path-valid through refactor |
 | `.audiagentic/installed.json` | lifecycle/reporting path consumed by install/update flows | preserve path; behavior may evolve separately |

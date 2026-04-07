@@ -1,7 +1,7 @@
 # PKT-PRV-065 — opencode prompt-surface integration
 
 **Phase:** Phase 4.4
-**Status:** IN_PROGRESS
+**Status:** READY_FOR_REVIEW
 **Owner:** opencode
 
 ## Objective

@@ -26,7 +26,7 @@ Its purpose is to:
 | `src/audiagentic/channels/discord/*` | `src/audiagentic/channels/discord/*` | Discord becomes a channel adapter in the repository-domain model | high | packet tracking may still refer to Discord separately |
 | `tools/*` | `tools/*` entrypoints + reusable logic under `src/audiagentic/*` | keep `tools/` as deterministic visible wrapper root | high | some current tools may need internal library extraction |
 | `tests/*` | `tests/*` mirrored to new domains | preserve centralized test root | high | test module paths will need remirroring |
-| `docs/schemas/*` | keep in place | remain canonical docs-owned schema location for this tranche | high | ownership only, not relocation |
+| `src/audiagentic/contracts/schemas/*` | keep in place | remain canonical docs-owned schema location for this tranche | high | ownership only, not relocation |
 | `docs/examples/*` | keep in place | remain canonical docs-owned example location for this tranche | high | ownership only, not relocation |
 | `.github/workflows/*` | keep in place | managed baseline/workflow assets, not part of domain relocation | high | must stay visible to baseline checks |
 | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.clinerules*`, `.claude/`, `.agents/skills/` | keep in place | managed provider instruction assets; baseline-sensitive | high | path-sensitive during install/baseline sync |

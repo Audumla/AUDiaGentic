@@ -51,3 +51,46 @@ This packet owns:
   standalone Gemini-only canonical definition for this packet
 - if packet work stays strictly inside result parsing/normalization, it may proceed after
   `PKT-PRV-056`; if it requires prompt/provider-surface changes, `PKT-PRV-070` must land first
+
+## Entry criteria
+
+Before starting, confirm all of the following are true:
+
+- `PKT-PRV-056` is at least `IN_PROGRESS`
+- `PKT-PRV-034` remains the active Gemini prompt-trigger launch path
+- `PKT-PRV-062` and `PKT-PRV-070` are available if prompt/provider-surface shaping must change
+- the shared completion schema exists in `src/audiagentic/contracts/schemas/provider-completion.schema.json`
+- if Gemini shared streaming uplift is required by the implementation path, coordinate with `PKT-PRV-072`
+
+## Config, files, and artifacts
+
+- shared completion helpers live in `src/audiagentic/streaming/completion.py`
+- Gemini adapter seam: `src/audiagentic/execution/providers/adapters/gemini.py`
+- generated Gemini surfaces live under `.gemini/commands/`; do not hand-edit them for packet-specific behavior
+- runtime completion artifact must be written to:
+  - `.audiagentic/runtime/jobs/<job-id>/completions/completion.gemini.json`
+
+## Implementation checklist
+
+1. identify the bounded Gemini JSON completion source available through the wrapper/adapter path
+2. parse direct Gemini result data in `src/audiagentic/execution/providers/adapters/gemini.py`
+3. call `normalize_provider_result()` when direct parsing succeeds
+4. call `build_synthetic_fallback()` when parsing fails
+5. persist the canonical artifact with `persist_completion()`
+6. if prompt shaping must change, update canonical source/renderers and regenerate instead of editing generated files directly
+7. add integration tests for direct parse success and fallback behavior
+
+## Exit criteria
+
+- Gemini writes `completion.gemini.json` using the shared schema
+- direct JSON result and fallback are distinguishable in the stored artifact
+- generated Gemini surfaces remain managed outputs
+- no Gemini-only canonical completion contract is introduced
+
+## Validation commands
+
+```powershell
+python -m pytest tests/integration/providers/test_gemini.py -q
+python -m pytest tests/unit/streaming/test_completion.py -q
+python tools/regenerate_tag_surfaces.py --project-root . --check
+```

@@ -147,14 +147,14 @@ That means the refactor must explicitly account for:
 
 ### 5. Contracts and schemas location
 
-The brief proposes top-level `/schemas` and `/examples`, while the current repo uses `docs/schemas/` and `docs/examples/`.
+The brief proposes top-level `/schemas` and `/examples`, while the current repo uses `src/audiagentic/contracts/schemas/` and `docs/examples/`.
 
 The refactor must explicitly decide whether those become:
 - true top-level roots, or
 - remain under `docs/` with updated internal ownership only
 
 Frozen decision for this checkpoint:
-- keep `docs/schemas/` and `docs/examples/` canonical in this tranche
+- keep `src/audiagentic/contracts/schemas/` and `docs/examples/` canonical in this tranche
 - do not move them to top-level roots during the same tranche as the package refactor
 
 ### 6. Test layout strategy
@@ -260,7 +260,7 @@ The inventory must at minimum classify:
 - `src/audiagentic/channels/discord`
 - `tools/`
 - `tests/`
-- `docs/schemas/`
+- `src/audiagentic/contracts/schemas/`
 - `docs/examples/`
 - managed baseline assets such as `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.clinerules*`, `.claude/`, `.agents/skills/`, and `.github/workflows/`
 
@@ -276,7 +276,7 @@ Expected hotspots include:
 - prompt-trigger and bridge code spanning jobs, providers, and tooling
 - stream/input/completion logic spanning jobs and provider adapters
 - provider instruction assets versus install-baseline handling
-- `docs/examples/` and `docs/schemas/` ownership
+- `docs/examples/` and `src/audiagentic/contracts/schemas/` ownership
 
 ## Support scripts required before broad code motion
 
@@ -344,7 +344,7 @@ This phase is intentionally placed before further non-refactor implementation wo
 
 Stop the refactor immediately if:
 - `PKT-FND-011` cannot decide the package strategy
-- `PKT-FND-011` cannot decide canonical docs/schemas/examples placement
+- `PKT-FND-011` cannot decide canonical src/audiagentic/contracts/schemas/examples placement
 - `PKT-FND-011` cannot define allowed dependency directions cleanly
 - `PKT-FND-012` reveals the installable baseline model breaks without more policy
 - `PKT-FND-012` requires hidden feature redesign rather than structural movement

@@ -14,7 +14,7 @@ Provide a detailed implementation plan for provider model catalog support and de
 
 - Spec: `docs/specifications/architecture/24_DRAFT_Provider_Model_Catalog_and_Selection.md`
 - Contract updates: `docs/specifications/architecture/03_Common_Contracts.md`
-- Schema: `docs/schemas/provider-model-catalog.schema.json`
+- Schema: `src/audiagentic/contracts/schemas/provider-model-catalog.schema.json`
 - Runtime catalog: `.audiagentic/runtime/providers/<provider-id>/model-catalog.json`
 - Config extensions: `.audiagentic/providers.yaml` additions for `model-aliases` and `catalog-refresh`
 

@@ -148,6 +148,55 @@
                 }
               }
             ]
+          },
+          "execution-policy": {
+            "type": "object",
+            "properties": {
+              "output-format": {
+                "type": "string",
+                "enum": [
+                  "text",
+                  "json",
+                  "stream-json"
+                ]
+              },
+              "permission-mode": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "acceptEdits",
+                  "bypassPermissions",
+                  "default",
+                  "dontAsk",
+                  "plan"
+                ]
+              },
+              "safety-mode": {
+                "type": "string",
+                "enum": [
+                  "standard",
+                  "relaxed",
+                  "strict"
+                ]
+              },
+              "auto-approve": {
+                "type": "boolean"
+              },
+              "full-auto": {
+                "type": "boolean"
+              },
+              "ephemeral": {
+                "type": "boolean"
+              },
+              "target-type": {
+                "type": "string"
+              },
+              "timeout-seconds": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
           }
         },
         "allOf": [

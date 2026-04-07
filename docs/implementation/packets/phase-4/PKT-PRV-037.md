@@ -106,11 +106,11 @@ Provider-specific workflow details stay isolated from the shared grammar docs.
 
 ## Files to create or update
 
-- `.clinerules/skills/plan.md`
-- `.clinerules/skills/implement.md`
-- `.clinerules/skills/review.md`
-- `.clinerules/skills/audit.md`
-- `.clinerules/skills/check-in-prep.md`
+- `.clinerules/skills/ag-plan.md`
+- `.clinerules/skills/ag-implement.md`
+- `.clinerules/skills/ag-review.md`
+- `.clinerules/skills/ag-audit.md`
+- `.clinerules/skills/ag-check-in-prep.md`
 - Cline hook config (or documented fallback-only decision)
 - `docs/implementation/providers/25_Cline_Prompt_Trigger_Runbook.md` — update with hook status
 - Cline prompt-trigger smoke tests

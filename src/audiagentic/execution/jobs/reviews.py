@@ -11,28 +11,25 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from audiagentic.contracts.errors import AudiaGenticError
-
-REPO_ROOT = Path(__file__).resolve().parents[4]
-REPORT_SCHEMA_PATH = REPO_ROOT / "docs" / "schemas" / "review-report.schema.json"
-BUNDLE_SCHEMA_PATH = REPO_ROOT / "docs" / "schemas" / "review-bundle.schema.json"
+from audiagentic.contracts.schema_registry import read_schema
 
 
 def _now_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _validate(path: Path, payload: dict[str, Any]) -> list[str]:
-    schema = json.loads(path.read_text(encoding="utf-8"))
+def _validate(schema_name: str, payload: dict[str, Any]) -> list[str]:
+    schema = read_schema(schema_name)
     validator = Draft202012Validator(schema)
     return sorted(error.message for error in validator.iter_errors(payload))
 
 
 def validate_review_report(payload: dict[str, Any]) -> list[str]:
-    return _validate(REPORT_SCHEMA_PATH, payload)
+    return _validate("review-report", payload)
 
 
 def validate_review_bundle(payload: dict[str, Any]) -> list[str]:
-    return _validate(BUNDLE_SCHEMA_PATH, payload)
+    return _validate("review-bundle", payload)
 
 
 def reviewer_key_from_source(source: dict[str, Any]) -> str:

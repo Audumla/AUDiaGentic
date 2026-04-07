@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://audiagentic.dev/schemas/provider-completion.schema.json",
+  "title": "Provider Completion",
+  "description": "Canonical provider completion result envelope",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "provider-id",
+    "status",
+    "recommendation",
+    "result-source",
+    "normalization-method"
+  ],
+  "properties": {
+    "contract-version": {
+      "type": "string",
+      "const": "v1",
+      "description": "Schema version"
+    },
+    "provider-id": {
+      "type": "string",
+      "description": "Provider identifier"
+    },
+    "job-id": {
+      "type": ["string", "null"],
+      "description": "Job identifier"
+    },
+    "prompt-id": {
+      "type": ["string", "null"],
+      "description": "Prompt identifier"
+    },
+    "surface": {
+      "type": ["string", "null"],
+      "description": "Provider surface"
+    },
+    "stage": {
+      "type": ["string", "null"],
+      "description": "Workflow stage"
+    },
+    "subject": {
+      "type": ["object", "null"],
+      "description": "Subject of the completion",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["job", "packet", "artifact", "adhoc"]
+        },
+        "job-id": {"type": "string"},
+        "packet-id": {"type": "string"},
+        "artifact-id": {"type": "string"},
+        "adhoc-id": {"type": "string"}
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ok", "error", "partial", "timeout"],
+      "description": "Completion status"
+    },
+    "decision": {
+      "type": ["string", "null"],
+      "enum": ["approved", "blocked", "rework", "pending", null],
+      "description": "Review decision"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {"type": "string"},
+          "severity": {"type": "string", "enum": ["info", "warning", "error", "blocker"]},
+          "message": {"type": "string"},
+          "location": {"type": "string"},
+          "evidence": {"type": ["string", "array", "object"]}
+        }
+      },
+      "description": "Review findings"
+    },
+    "recommendation": {
+      "type": "string",
+      "enum": ["pass", "pass-with-notes", "rework", "block"],
+      "description": "Review recommendation"
+    },
+    "follow-up-actions": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Recommended follow-up actions"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {"type": "string"},
+          "path": {"type": "string"},
+          "content": {"type": ["string", "object"]}
+        }
+      },
+      "description": "Supporting evidence"
+    },
+    "notes": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Additional notes"
+    },
+    "stdout": {
+      "type": "string",
+      "description": "Captured stdout"
+    },
+    "stderr": {
+      "type": "string",
+      "description": "Captured stderr"
+    },
+    "returncode": {
+      "type": "integer",
+      "description": "Process return code"
+    },
+    "result-source": {
+      "type": "string",
+      "enum": [
+        "stdout-json",
+        "stdout-text",
+        "result-file",
+        "hook-summary",
+        "response-body",
+        "fallback-synthetic"
+      ],
+      "description": "Where the final result was obtained"
+    },
+    "normalization-method": {
+      "type": "string",
+      "enum": [
+        "provider-native-json",
+        "stdout-json-block",
+        "stdout-text-parse",
+        "file-json-parse",
+        "fallback-derived"
+      ],
+      "description": "How AUDiaGentic derived the canonical shape"
+    },
+    "raw-result-path": {
+      "type": ["string", "null"],
+      "description": "Path to raw provider output"
+    },
+    "created-at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    }
+  },
+  "additionalProperties": false
+}

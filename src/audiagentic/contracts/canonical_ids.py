@@ -1,4 +1,5 @@
 """Canonical id registry for AUDiaGentic."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -40,6 +41,7 @@ CANONICAL_SCHEMA_IDS = (
     "prompt-launch-request",
     "prompt-syntax",
     "provider-config",
+    "provider-completion",
     "provider-descriptor",
     "provider-model-catalog",
     "provider-health",

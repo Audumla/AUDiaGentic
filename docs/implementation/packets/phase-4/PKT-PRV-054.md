@@ -59,3 +59,44 @@ This packet should eventually define:
 - the docs distinguish non-secret session provenance from sensitive provider session material
 - the follow-on secure-session store/reference seam is named without over-specifying it
 - later implementation packets can apply the rule without redefining provider workflow semantics
+
+## Entry criteria
+
+Before starting, confirm all of the following are true:
+
+- `PKT-PRV-051` is at least `READY_FOR_REVIEW`
+- the current stream/input artifact list is stable enough to document redaction rules
+- common contract docs and Phase 4.9 / 4.10 docs are available to update in the same change
+
+## Security/config boundary
+
+This packet is documentation-first. It should define:
+
+- which provider session fields are never log-safe
+- which values may be persisted as redacted or correlation-safe handles
+- where future secure references would live conceptually
+- which current runtime artifacts are affected by the rule
+
+Do not invent a vault implementation in this packet.
+
+## Implementation checklist
+
+1. update the common contracts doc with the log-safe vs non-log-safe session rule
+2. update the Phase 4.9 and 4.10 docs so stdout/stderr/input artifacts are covered consistently
+3. add explicit examples of allowed provenance fields versus prohibited secret session material
+4. identify future implementation seams without designing the full secure store
+5. ensure provider runbooks do not contradict the redaction rule
+
+## Exit criteria
+
+- common contracts explicitly distinguish redacted provenance from secret session material
+- Phase 4.9 and 4.10 docs apply the same rule consistently
+- later implementation packets can reference one clear rule instead of re-defining it
+
+## Validation commands
+
+No code test is required for the first pass. Validate by searching for contradictory wording:
+
+```powershell
+rg -n "session|token|stdin.log|input-events.ndjson|stdout.log|stderr.log" docs/implementation docs/specifications
+```

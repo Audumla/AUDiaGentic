@@ -1,7 +1,7 @@
 # PKT-PRV-064 — opencode provider adapter
 
 **Phase:** Phase 4
-**Status:** IN_PROGRESS
+**Status:** READY_FOR_REVIEW
 **Owner:** opencode
 
 ## Objective

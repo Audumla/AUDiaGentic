@@ -18,14 +18,18 @@ def test_gemini_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(gemini.shutil, "which", lambda _: r"C:\\Tools\\gemini.exe")
 
-    def fake_run(command, *, cwd=None, check=None, capture_output=None, text=None, encoding=None, errors=None):  # type: ignore[no-untyped-def]
+    def fake_run_streaming_command(
+        command,
+        *,
+        cwd=None,
+        input_text=None,
+        stdout_sinks=None,
+        stderr_sinks=None,
+    ):
         captured["command"] = command
         captured["cwd"] = cwd
-        captured["check"] = check
-        captured["capture_output"] = capture_output
-        captured["text"] = text
-        captured["encoding"] = encoding
-        captured["errors"] = errors
+        captured["stdout_sinks"] = stdout_sinks
+        captured["stderr_sinks"] = stderr_sinks
 
         class Completed:
             returncode = 0
@@ -34,7 +38,7 @@ def test_gemini_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
         return Completed()
 
-    monkeypatch.setattr(gemini.subprocess, "run", fake_run)
+    monkeypatch.setattr(gemini, "run_streaming_command", fake_run_streaming_command)
 
     result = gemini.run(
         {
@@ -54,14 +58,14 @@ def test_gemini_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
     assert result["output"] == "gemini completed"
     assert captured["command"][0] == r"C:\\Tools\\gemini.exe"
     assert captured["command"][1] == "-p"
-    assert str(captured["command"][2]).startswith("AUDiaGentic Gemini provider execution request.")
-    assert captured["command"][3:6] == ["-o", "text", "--yolo"]
-    assert captured["cwd"] == str(tmp_path)
-    assert captured["check"] is False
-    assert captured["capture_output"] is True
-    assert captured["text"] is True
-    assert captured["encoding"] == "utf-8"
-    assert captured["errors"] == "replace"
+    assert str(captured["command"][2]).startswith(
+        "AUDiaGentic Gemini provider execution request."
+    )
+    assert captured["command"][3:5] == ["-o", "text"]
+    assert "--yolo" not in captured["command"]
+    assert captured["cwd"] == tmp_path
+    assert captured["stdout_sinks"]
+    assert captured["stderr_sinks"]
 
 
 def test_gemini_adapter_requires_command(monkeypatch) -> None:

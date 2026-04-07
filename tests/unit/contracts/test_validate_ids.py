@@ -68,9 +68,11 @@ components:
 
 
 def test_validate_ids_ignores_schema_contents(tmp_path: Path, monkeypatch) -> None:
-    docs_schemas = tmp_path / "docs" / "schemas"
-    docs_schemas.mkdir(parents=True)
-    (docs_schemas / "provider-config.schema.json").write_text(
+    docs_root = tmp_path / "docs"
+    docs_root.mkdir()
+    schema_dir = tmp_path / "src" / "audiagentic" / "contracts" / "schemas"
+    schema_dir.mkdir(parents=True)
+    (schema_dir / "provider-config.schema.json").write_text(
         """
 {
   "type": "object",
@@ -84,6 +86,7 @@ def test_validate_ids_ignores_schema_contents(tmp_path: Path, monkeypatch) -> No
         encoding="utf-8",
     )
     monkeypatch.setattr(validate_ids, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(validate_ids, "SCHEMA_DIR", schema_dir)
     monkeypatch.setattr(validate_ids, "validate_schema_files", lambda _path: [])
-    findings = validate_ids.scan_paths([tmp_path / "docs"])
+    findings = validate_ids.scan_paths([docs_root])
     assert findings == []

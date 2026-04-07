@@ -22,7 +22,7 @@ No business logic starts before this phase is complete.
 
 ## Required outputs
 
-1. `docs/schemas/*.schema.json` populated and versioned
+1. `src/audiagentic/contracts/schemas/*.schema.json` populated and versioned
 2. `docs/examples/fixtures/*` valid and invalid fixtures
 3. naming validator script
 4. schema validator script

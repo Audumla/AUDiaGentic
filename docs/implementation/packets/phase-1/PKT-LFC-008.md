@@ -32,7 +32,7 @@ This packet owns the following implementation surface:
 - lifecycle tests under `tests/unit/lifecycle/` and `tests/e2e/lifecycle/`
 
 ### It may read from
-- updated contract schemas under `docs/schemas/`
+- updated contract schemas under `src/audiagentic/contracts/schemas/`
 - packet build sheets that introduce new config fields
 
 ### It must not edit directly

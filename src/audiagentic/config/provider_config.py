@@ -9,9 +9,7 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from audiagentic.contracts.errors import AudiaGenticError
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SCHEMA_PATH = REPO_ROOT / "docs" / "schemas" / "provider-config.schema.json"
+from audiagentic.contracts.schema_registry import read_schema
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -19,7 +17,7 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 
 def validate_provider_config(payload: dict[str, Any]) -> list[str]:
-    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    schema = read_schema("provider-config")
     validator = Draft202012Validator(schema)
     issues = sorted(error.message for error in validator.iter_errors(payload))
     providers = payload.get("providers", {})

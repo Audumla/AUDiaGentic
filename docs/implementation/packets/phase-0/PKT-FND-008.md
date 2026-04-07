@@ -36,7 +36,7 @@ This packet is expected to finalize and validate the following fields and schema
 This packet owns the following implementation surface:
 
 - `docs/specifications/architecture/03_Common_Contracts.md`
-- `docs/schemas/*` (new or updated schemas)
+- `src/audiagentic/contracts/schemas/*` (new or updated schemas)
 - `docs/examples/fixtures/*` (fixtures for new schemas)
 - `tools/validate_schemas.py`
 - `tests/unit/contracts/test_schema_validation.py`
@@ -53,7 +53,7 @@ This packet owns the following implementation surface:
 
 1. Collect the finalized contract deltas from `PKT-PRV-011` and `PKT-PRV-012`.
 2. Update `03_Common_Contracts.md` with the exact field names and validation rules.
-3. Add or update schemas under `docs/schemas/` for each concrete contract shape.
+3. Add or update schemas under `src/audiagentic/contracts/schemas/` for each concrete contract shape.
 4. Add valid and invalid fixtures under `docs/examples/fixtures/` for each schema.
 5. Update schema validation tooling if a new schema family requires lookup changes.
 6. Ensure the example scaffold and validation tests reference the exact field set.

@@ -63,3 +63,50 @@ runtime persistence remain owned by `PKT-PRV-048`.
 - the bridge still works when streaming is disabled (no sinks registered)
 - the shared harness is not modified by this packet
 - Codex-specific extraction and registration logic lives in `src/audiagentic/execution/providers/adapters/codex.py`
+
+## Entry criteria
+
+Before starting, confirm all of the following are true:
+
+- `PKT-PRV-048` is at least `READY_FOR_REVIEW`
+- `PKT-PRV-032` remains `READY_FOR_REVIEW` or better
+- Codex runs already succeed without extractor changes
+- shared stream artifacts already exist for at least one Codex job under `.audiagentic/runtime/jobs/<job-id>/`
+
+## Config and runtime contract
+
+- read `stream-controls` from the normalized launch request / packet context
+- project defaults currently come from `.audiagentic/project.yaml` under `prompt-launch.default-stream-controls`
+- do not add Codex-only stream config keys in this packet
+- do not change runtime artifact locations; continue using:
+  - `.audiagentic/runtime/jobs/<job-id>/stdout.log`
+  - `.audiagentic/runtime/jobs/<job-id>/stderr.log`
+  - `.audiagentic/runtime/jobs/<job-id>/events.ndjson`
+
+## Implementation checklist
+
+1. read the shared sink contract in `src/audiagentic/streaming/provider_streaming.py` and `src/audiagentic/streaming/sinks.py`
+2. add or finish `CodexEventExtractor` in `src/audiagentic/execution/providers/adapters/codex.py`
+3. map Codex milestone lines into canonical event kinds before forwarding to `NormalizedEventSink`
+4. keep Codex sink registration in the Codex-owned adapter/bridge seam only
+5. verify the non-streaming path still works when `stream-controls.enabled` is false
+6. add provider integration tests for event extraction and artifact creation
+
+## Exit criteria
+
+This packet is ready for review when all of the following are true:
+
+- Codex writes canonical records into `events.ndjson`
+- Codex extractor logic lives only in `src/audiagentic/execution/providers/adapters/codex.py`
+- shared harness files are unchanged except for test/support changes explicitly required by this packet
+- streaming-disabled runs still succeed
+- docs and packet notes still describe Codex as a provider-owned extractor on top of the shared harness
+
+## Validation commands
+
+Run at minimum:
+
+```powershell
+python -m pytest tests/integration/providers/test_codex.py -q
+python -m pytest tests/unit/providers/test_streaming.py -q
+```

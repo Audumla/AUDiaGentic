@@ -27,21 +27,23 @@ Create the file `h:\development\projects\AUDia\AUDiaGentic\.claude\settings.json
     ".claude/skills"
   ],
   "hooks": {
-    "UserPromptSubmit": {
-      "enabled": true,
-      "description": "Detect canonical prompt tags and route to shared bridge",
-      "handler": "detect_and_launch_prompt_tag"
-    },
-    "PreToolUse": {
-      "enabled": true,
-      "description": "Enforce stage restrictions per action tag",
-      "handler": "enforce_stage_restrictions"
-    }
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [{"type": "command", "command": "python tools/claude_hooks.py user-prompt-submit"}]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [{"type": "command", "command": "python tools/claude_hooks.py pre-tool-use"}]
+      }
+    ]
   }
 }
 ```
 
-**Task:** Create `.claude/settings.json` with hook configuration
+**Task:** Create `.claude/settings.json` with command-hook configuration
 
 ---
 
@@ -311,21 +313,23 @@ Update the hooks section in `.claude/settings.json`:
 ```json
 {
   "hooks": {
-    "UserPromptSubmit": {
-      "enabled": true,
-      "description": "Detect canonical prompt tags and route to shared bridge",
-      "handler": "tools.claude_hooks:UserPromptSubmit_handler"
-    },
-    "PreToolUse": {
-      "enabled": true,
-      "description": "Enforce stage restrictions per action tag",
-      "handler": "tools.claude_hooks:PreToolUse_handler"
-    }
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [{"type": "command", "command": "python tools/claude_hooks.py user-prompt-submit"}]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [{"type": "command", "command": "python tools/claude_hooks.py pre-tool-use"}]
+      }
+    ]
   }
 }
 ```
 
-**Task:** Update `.claude/settings.json` hook handler references
+**Task:** Update `.claude/settings.json` command-hook references
 
 ---
 
@@ -605,7 +609,7 @@ Update PKT-PRV-055 status through review and verification checkpoints as the nat
 
 ## Acceptance Criteria
 
-- [ ] `.claude/settings.json` created with hook configuration
+- [ ] `.claude/settings.json` created with command-hook configuration
 - [ ] `tools/claude_hooks.py` implements UserPromptSubmit handler
 - [ ] `tools/claude_hooks.py` implements PreToolUse handler
 - [ ] Stage restriction policy enforced correctly per action tag
