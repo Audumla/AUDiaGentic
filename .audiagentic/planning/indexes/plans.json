@@ -1,0 +1,24 @@
+{
+  "convention_version": 1,
+  "generated_at": "2026-04-07T23:52:36.351420+00:00",
+  "items": [
+    {
+      "id": "plan-0004",
+      "label": "Comprehensive implementation docs migration plan",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-0004-comprehensive-implementation-docs-migration-plan.md"
+    },
+    {
+      "id": "plan-0005",
+      "label": "Implement archive functionality in planning core",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-0005-implement-archive-functionality-in-planning-core.md"
+    },
+    {
+      "id": "plan-0006",
+      "label": "Phase 0 Build Book",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-0006-phase-0-build-book.md"
+    }
+  ]
+}
