@@ -11,9 +11,7 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from audiagentic.contracts.errors import AudiaGenticError
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SCHEMA_PATH = REPO_ROOT / "docs" / "schemas" / "provider-model-catalog.schema.json"
+from audiagentic.contracts.schema_registry import read_schema
 
 
 def _now_timestamp() -> str:
@@ -29,7 +27,7 @@ def runtime_catalog_path(project_root: Path, provider_id: str) -> Path:
 
 
 def validate_model_catalog(payload: dict[str, Any]) -> list[str]:
-    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    schema = read_schema("provider-model-catalog")
     validator = Draft202012Validator(schema)
     return sorted(error.message for error in validator.iter_errors(payload))
 

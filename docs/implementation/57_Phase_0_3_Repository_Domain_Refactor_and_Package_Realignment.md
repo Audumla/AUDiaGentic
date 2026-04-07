@@ -45,7 +45,7 @@ Do not start broad repository code motion until `PKT-FND-011` is verified.
 - use a domain-oriented reorganization under `src/audiagentic/`
 - preserve stable public Python imports with temporary compatibility shims
 - keep `tools/` as the deterministic repo utility root
-- keep `docs/schemas/` and `docs/examples/` in place for this tranche
+- keep `src/audiagentic/contracts/schemas/` and `docs/examples/` in place for this tranche
 - keep centralized `tests/` and mirror the new domain structure inside it
 - require explicit cross-domain dependency directions before code motion
 
@@ -135,7 +135,7 @@ This phase is a controlled structural correction, not a feature expansion. It sh
 
 Stop and return to decision work if:
 - the package strategy cannot be decided cleanly
-- the canonical docs/schemas/examples placement cannot be decided cleanly
+- the canonical src/audiagentic/contracts/schemas/examples placement cannot be decided cleanly
 - cross-domain dependency directions remain ambiguous
 - the installable baseline model breaks without new policy
 - the move requires hidden feature redesign instead of structural movement

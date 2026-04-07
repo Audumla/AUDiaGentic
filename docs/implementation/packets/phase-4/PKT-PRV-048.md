@@ -83,8 +83,8 @@ replay, session observer) are added there without modifying the harness.
 - `src/audiagentic/streaming/provider_streaming.py` — replace hard-coded sinks with sink list
 - `src/audiagentic/streaming/sinks.py` — new file: `ConsoleSink`, `RawLogSink`, `NormalizedEventSink`
 - `src/audiagentic/streaming/__init__.py`
-- `docs/schemas/provider-stream-event.schema.json`
-- `docs/schemas/provider-stream-manifest.schema.json`
+- `src/audiagentic/contracts/schemas/provider-stream-event.schema.json`
+- `src/audiagentic/contracts/schemas/provider-stream-manifest.schema.json`
 - `src/audiagentic/execution/providers/adapters/codex.py`
 - `src/audiagentic/execution/providers/adapters/cline.py`
 - `src/audiagentic/execution/providers/adapters/claude.py`

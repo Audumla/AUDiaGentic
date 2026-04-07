@@ -24,6 +24,18 @@ prompt-launch:
     capture-stderr: true
     capture-progress: true
     event-format: ndjson
+    timeout-warning-seconds: null
+    timeout-seconds: null
+    sink-error-policy: warn
+    control-validation-policy: normalize
+    termination-policy: warn-only
+    invalid-event-policy: quarantine
+    event-write-policy: locked-append
+    event-schema-validation: true
+    in-memory-max-bytes: null
+    large-output-warning-bytes: null
+    overflow-policy: warn-only
+    overflow-marker-text: "\n[OUTPUT TRUNCATED]\n"
   default-input-controls:
     enabled: true
     tee-console: true

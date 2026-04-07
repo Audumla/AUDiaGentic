@@ -12,6 +12,7 @@ for path in (str(ROOT), str(SRC)):
 from audiagentic.execution.providers.adapters import gemini
 from tests.helpers import sandbox as sandbox_helper
 
+
 def test_gemini_adapter_recognizes_tag(monkeypatch, tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "gemini-tag")
     try:
@@ -19,21 +20,33 @@ def test_gemini_adapter_recognizes_tag(monkeypatch, tmp_path: Path) -> None:
         (sandbox.repo / ".audiagentic").mkdir(parents=True, exist_ok=True)
         (sandbox.repo / ".audiagentic" / "project.yaml").write_text(
             "project-id: test-project\nprompt-launch:\n  allow-adhoc-target: true\n",
-            encoding="utf-8"
+            encoding="utf-8",
         )
 
         captured: dict[str, object] = {}
         monkeypatch.setattr(gemini.shutil, "which", lambda _: "gemini")
 
-        def fake_run(command, **kwargs):
+        def fake_run_streaming_command(
+            command,
+            *,
+            cwd=None,
+            input_text=None,
+            stdout_sinks=None,
+            stderr_sinks=None,
+        ):
             captured["command"] = command
+            captured["cwd"] = cwd
+            captured["stdout_sinks"] = stdout_sinks
+            captured["stderr_sinks"] = stderr_sinks
+
             class Completed:
                 returncode = 0
                 stdout = "gemini processed plan"
                 stderr = ""
+
             return Completed()
 
-        monkeypatch.setattr(gemini.subprocess, "run", fake_run)
+        monkeypatch.setattr(gemini, "run_streaming_command", fake_run_streaming_command)
 
         # Run with a tagged prompt
         packet_ctx = {
@@ -42,7 +55,7 @@ def test_gemini_adapter_recognizes_tag(monkeypatch, tmp_path: Path) -> None:
             "working-root": str(sandbox.repo),
             "project-id": "test-project",
             "workflow-profile": "standard",
-            "surface": "cli"
+            "surface": "cli",
         }
         provider_cfg = {"default-model": "gemini-1.5", "access-mode": "cli"}
 
@@ -50,11 +63,15 @@ def test_gemini_adapter_recognizes_tag(monkeypatch, tmp_path: Path) -> None:
 
         assert result["status"] == "ok"
         # Check the normalized execution prompt reaches gemini
-        assert "AUDiaGentic Gemini provider execution request." in captured["command"][2]
+        assert (
+            "AUDiaGentic Gemini provider execution request." in captured["command"][2]
+        )
         assert "Do the work." in captured["command"][2]
     finally:
         sandbox.cleanup()
 
+
 if __name__ == "__main__":
     import pytest
+
     sys.exit(pytest.main([__file__]))
