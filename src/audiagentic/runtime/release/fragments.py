@@ -10,13 +10,11 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from audiagentic.contracts.errors import AudiaGenticError
-
-REPO_ROOT = Path(__file__).resolve().parents[4]
-SCHEMA_PATH = REPO_ROOT / "docs" / "schemas" / "change-event.schema.json"
+from audiagentic.contracts.schema_registry import read_schema
 
 
 def _validate_change_event(payload: dict[str, Any]) -> None:
-    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    schema = read_schema("change-event")
     validator = Draft202012Validator(schema)
     errors = list(validator.iter_errors(payload))
     if errors:

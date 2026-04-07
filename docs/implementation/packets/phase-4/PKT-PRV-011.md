@@ -21,7 +21,7 @@ Provider access assumptions must be explicit before more providers and overlays 
 This packet owns the following implementation surface:
 
 - `docs/specifications/architecture/03_Common_Contracts.md`
-- `docs/schemas/provider-config.schema.json`
+- `src/audiagentic/contracts/schemas/provider-config.schema.json`
 - `docs/examples/fixtures/provider-config.valid.json`
 - `docs/examples/fixtures/provider-config.invalid.json`
 - `docs/examples/project-scaffold/.audiagentic/providers.yaml.example`
@@ -79,7 +79,7 @@ Allowed `access-mode` values for MVP:
 
 If this packet fails mid-implementation:
 - revert edits to `docs/specifications/architecture/03_Common_Contracts.md`
-- revert edits to `docs/schemas/provider-config.schema.json`
+- revert edits to `src/audiagentic/contracts/schemas/provider-config.schema.json`
 - revert updated fixtures and scaffold example
 - rerun `python -m pytest tests/unit/contracts/test_schema_validation.py tests/integration/providers/test_selection.py tests/integration/test_example_scaffold.py`
 

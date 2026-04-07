@@ -4,7 +4,7 @@
 
 | Group | Owns | May edit directly | Must not edit directly |
 |---|---|---|---|
-| Contracts | `src/audiagentic/contracts/*`, `docs/schemas/*`, canonical ids, glossary, validation fixtures | contract modules, validators, fixtures | execution, runtime, channels, streaming, observability |
+| Contracts | `src/audiagentic/contracts/*`, `src/audiagentic/contracts/schemas/*`, canonical ids, glossary, validation fixtures | contract modules, validators, fixtures | execution, runtime, channels, streaming, observability |
 | CoreConfig | `src/audiagentic/core/*`, `src/audiagentic/config/*` | shared core helpers, config loaders, stable APIs | feature-specific execution/runtime/channel logic |
 | Scoping | `src/audiagentic/scoping/*` | request/scope/plan shaping, scoping tests/docs | runtime internals, channel implementations |
 | Execution | `src/audiagentic/execution/*` | jobs, provider execution, execution tests/docs | runtime persistence internals, channel formatting/rendering |
@@ -20,7 +20,7 @@
 ## Parallel work rules
 
 - Two packets may run in parallel only if they do not share primary ownership.
-- Any packet touching `docs/schemas/*` or `03_Common_Contracts.md` blocks parallel packets touching `Contracts`.
+- Any packet touching `src/audiagentic/contracts/schemas/*` or `03_Common_Contracts.md` blocks parallel packets touching `Contracts`.
 - Any packet touching tracked files under `docs/releases/` must coordinate through the `Runtime` owner while Phase 0.3 is active.
 - `Execution` and `Channels` work may proceed in parallel only after the Phase 0.3 dependency rules are frozen and the affected interfaces are explicitly documented.
 - `Streaming` and `Observability` must not be refactored in the same packet unless the packet explicitly freezes the interaction boundary between them first.

@@ -128,9 +128,15 @@ skill-surfaces:
   cline:
     renderer: cline
     path: .clinerules/skills/{tag}.md
+  copilot:
+    renderer: copilot
+    path: .copilot/commands/{tag}.md
   gemini:
     renderer: gemini
     path: .gemini/commands/{tag}.md
   opencode:
     renderer: opencode
     path: .opencode/skills/{tag}/SKILL.md
+  qwen:
+    renderer: qwen
+    path: .qwen/commands/{tag}.md

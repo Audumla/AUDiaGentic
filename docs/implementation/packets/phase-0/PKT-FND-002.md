@@ -19,7 +19,7 @@ This packet is placed in Phase 0 because later packets depend on its outputs and
 
 This packet owns the following implementation surface:
 
-- `docs/schemas/*.schema.json`
+- `src/audiagentic/contracts/schemas/*.schema.json`
 - `tools/validate_schemas.py`
 - `tests/unit/contracts/test_schema_validation.py`
 

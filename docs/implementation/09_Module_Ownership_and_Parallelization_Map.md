@@ -16,7 +16,7 @@ Owns:
 - `docs/specifications/architecture/03_Common_Contracts.md`
 - `docs/specifications/architecture/18_File_Ownership_Matrix.md`
 - `docs/specifications/architecture/19_Glossary.md`
-- `docs/schemas/`
+- `src/audiagentic/contracts/schemas/`
 - `docs/examples/fixtures/`
 - validator scripts and CLI stubs
 

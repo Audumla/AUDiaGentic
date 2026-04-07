@@ -11,12 +11,11 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.contracts.schema_registry import read_schema
 from audiagentic.execution.jobs import store
 from audiagentic.execution.jobs.reviews import read_review_bundle
 from audiagentic.execution.jobs.state_machine import transition_and_persist
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-SCHEMA_PATH = REPO_ROOT / "docs" / "schemas" / "approval-request.schema.json"
 DEFAULT_TTL = timedelta(hours=8)
 
 
@@ -33,7 +32,7 @@ def _approval_path(project_root: Path, approval_id: str) -> Path:
 
 
 def _validate_approval(payload: dict[str, Any]) -> list[str]:
-    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    schema = read_schema("approval-request")
     validator = Draft202012Validator(schema)
     return sorted(error.message for error in validator.iter_errors(payload))
 
