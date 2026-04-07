@@ -1,7 +1,7 @@
 # PKT-PRV-066 — opencode tag execution implementation
 
 **Phase:** Phase 4.5
-**Status:** IN_PROGRESS
+**Status:** READY_FOR_REVIEW
 **Owner:** opencode
 
 ## Objective

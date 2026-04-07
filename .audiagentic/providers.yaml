@@ -24,6 +24,15 @@ providers:
       cli-mode: bridge-wrapper
       vscode-mode: bridge-wrapper
       settings-profile: openai-bridge-prompt-tags-v1
+    execution-policy:
+      output-format: json
+      permission-mode: auto
+      safety-mode: standard
+      auto-approve: false
+      full-auto: false
+      ephemeral: true
+      target-type: default
+      timeout-seconds: 120
   qwen:
     enabled: true
     install-mode: external-configured
@@ -47,6 +56,15 @@ providers:
       cli-mode: bridge-wrapper
       vscode-mode: bridge-wrapper
       settings-profile: openai-bridge-prompt-tags-v1
+    execution-policy:
+      output-format: text
+      permission-mode: auto
+      safety-mode: standard
+      auto-approve: false
+      full-auto: false
+      ephemeral: true
+      target-type: default
+      timeout-seconds: 120
   codex:
     enabled: true
     install-mode: external-configured
@@ -71,6 +89,15 @@ providers:
       cli-mode: wrapper-normalize
       vscode-mode: extension-normalize
       settings-profile: codex-prompt-tags-v1
+    execution-policy:
+      output-format: text
+      permission-mode: auto
+      safety-mode: standard
+      auto-approve: false
+      full-auto: true
+      ephemeral: true
+      target-type: default
+      timeout-seconds: 300
   claude:
     enabled: true
     install-mode: external-configured
@@ -94,6 +121,15 @@ providers:
       cli-mode: wrapper-normalize
       vscode-mode: extension-normalize
       settings-profile: claude-prompt-tags-v1
+    execution-policy:
+      output-format: text
+      permission-mode: auto
+      safety-mode: standard
+      auto-approve: false
+      full-auto: false
+      ephemeral: false
+      target-type: default
+      timeout-seconds: 300
   gemini:
     enabled: true
     install-mode: external-configured
@@ -118,6 +154,15 @@ providers:
       cli-mode: wrapper-normalize
       vscode-mode: extension-normalize
       settings-profile: gemini-prompt-tags-v1
+    execution-policy:
+      output-format: text
+      permission-mode: auto
+      safety-mode: standard
+      auto-approve: false
+      full-auto: false
+      ephemeral: false
+      target-type: default
+      timeout-seconds: 300
   copilot:
     enabled: true
     install-mode: external-configured
@@ -140,6 +185,15 @@ providers:
       cli-mode: bridge-wrapper
       vscode-mode: extension-normalize
       settings-profile: copilot-prompt-tags-v1
+    execution-policy:
+      output-format: text
+      permission-mode: auto
+      safety-mode: standard
+      auto-approve: false
+      full-auto: false
+      ephemeral: false
+      target-type: default
+      timeout-seconds: 120
   continue:
     enabled: false
     install-mode: external-configured
@@ -155,6 +209,15 @@ providers:
     catalog-refresh:
       source: cli
       max-age-hours: 168
+    execution-policy:
+      output-format: text
+      permission-mode: auto
+      safety-mode: standard
+      auto-approve: false
+      full-auto: false
+      ephemeral: false
+      target-type: default
+      timeout-seconds: 120
   cline:
     enabled: true
     install-mode: external-configured
@@ -179,6 +242,15 @@ providers:
       cli-mode: wrapper-normalize
       vscode-mode: extension-normalize
       settings-profile: cline-prompt-tags-v1
+    execution-policy:
+      output-format: json
+      permission-mode: auto
+      safety-mode: standard
+      auto-approve: true
+      full-auto: false
+      ephemeral: false
+      target-type: default
+      timeout-seconds: 300
   opencode:
     enabled: true
     install-mode: external-configured
@@ -203,3 +275,12 @@ providers:
       cli-mode: wrapper-normalize
       vscode-mode: unsupported
       settings-profile: opencode-prompt-tags-v1
+    execution-policy:
+      output-format: json
+      permission-mode: auto
+      safety-mode: standard
+      auto-approve: false
+      full-auto: false
+      ephemeral: false
+      target-type: default
+      timeout-seconds: 120

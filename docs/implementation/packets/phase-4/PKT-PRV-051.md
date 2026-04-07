@@ -39,8 +39,8 @@ persistence into the provider.
 - `src/audiagentic/execution/jobs/prompt_trigger_bridge.py`
 - `src/audiagentic/execution/jobs/prompt_launch.py`
 - `src/audiagentic/execution/providers/execution.py`
-- `docs/schemas/provider-session-input.schema.json`
-- `docs/schemas/provider-session-manifest.schema.json`
+- `src/audiagentic/contracts/schemas/provider-session-input.schema.json`
+- `src/audiagentic/contracts/schemas/provider-session-manifest.schema.json`
 - tests for session-input capture and console forwarding
 
 ## Implementation sequence

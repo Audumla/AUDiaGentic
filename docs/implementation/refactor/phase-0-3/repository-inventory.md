@@ -26,7 +26,7 @@
 | `.audiagentic/runtime/**` | runtime jobs, ledger fragments, and transient session artifacts | runtime state | local diagnostics | keep in place and remain excluded from install baseline | no | yes | exclusion is as important as the path itself |
 | `tools/*` | deterministic utility entrypoints | tools/wrappers | internal library callers | `tools/*` wrappers + library logic under `src/audiagentic/*` | yes | yes | do not absorb tool entrypoints into package root |
 | `tests/*` | centralized tests | tests | mirrors package structure | `tests/*` | no | yes | remap to new domains |
-| `docs/schemas/*` | canonical schemas | contracts/docs | validation source | keep in place | yes | yes | ownership only, not relocation |
+| `src/audiagentic/contracts/schemas/*` | canonical schemas | contracts/docs | validation source | keep in place | yes | yes | ownership only, not relocation |
 | `docs/examples/*` | canonical examples | docs/examples | onboarding/reference | keep in place | yes | yes | ownership only, not relocation |
 | `.github/workflows/*` | workflow automation | baseline asset | CI/CD | keep in place | yes | yes | path-sensitive during baseline checks |
 | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.clinerules*`, `.claude/`, `.agents/skills/` | provider instruction assets | baseline asset | provider guidance | keep in place | yes | yes | path-sensitive during install/baseline sync |
@@ -42,7 +42,7 @@
 - `.audiagentic/installed.json` path stability and lifecycle expectations
 - `.github/workflows/*`
 - provider instruction assets (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.clinerules*`, `.claude/`, `.agents/skills/`)
-- `docs/schemas/*`
+- `src/audiagentic/contracts/schemas/*`
 - `docs/examples/*`
 - CLI entrypoints and tool wrappers
 

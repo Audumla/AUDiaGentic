@@ -27,7 +27,7 @@
 | persistence half of `src/audiagentic/execution/jobs/reviews.py` | later candidate: `src/audiagentic/runtime/state/reviews.py` | defer split | no | no | low | deferred | keep file intact in first pass unless split becomes trivial |
 | `.audiagentic/*.yaml` + `.audiagentic/prompts/*` | keep in place | preserve | no | yes | yes | frozen | installable baseline asset roots are path-sensitive and should not be relocated in this tranche |
 | `.audiagentic/runtime/**` | keep in place, remain excluded from baseline sync | preserve/exclude | no | no | yes | frozen | runtime exclusion must continue to hold after the refactor |
-| `docs/schemas/*`, `docs/examples/*` | keep in place | preserve | no | yes | yes | frozen | ownership may change, path does not |
+| `src/audiagentic/contracts/schemas/*`, `docs/examples/*` | keep in place | preserve | no | yes | yes | frozen | ownership may change, path does not |
 
 ## Legacy Path Notes
 

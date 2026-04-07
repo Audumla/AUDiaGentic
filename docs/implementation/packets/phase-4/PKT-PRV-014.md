@@ -25,8 +25,8 @@ This packet owns the following documentation and provider-surface delta:
 - `docs/specifications/architecture/03_Common_Contracts.md`
 - `docs/implementation/38_Phase_4_3_Provider_Prompt_Tag_Surface_Integration.md`
 - `docs/implementation/providers/10_Prompt_Tag_Surface_Integration_Shared.md`
-- `docs/schemas/provider-config.schema.json`
-- `docs/schemas/provider-descriptor.schema.json`
+- `src/audiagentic/contracts/schemas/provider-config.schema.json`
+- `src/audiagentic/contracts/schemas/provider-descriptor.schema.json`
 
 ## Detailed build steps
 

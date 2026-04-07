@@ -1,7 +1,7 @@
 # PKT-PRV-067 — opencode prompt-trigger launch integration
 
 **Phase:** Phase 4.6
-**Status:** WAITING_ON_DEPENDENCIES
+**Status:** READY_FOR_REVIEW
 **Owner:** opencode
 
 ## Objective

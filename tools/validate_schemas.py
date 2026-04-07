@@ -10,7 +10,12 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCHEMA_DIR = REPO_ROOT / "docs" / "schemas"
+SRC_ROOT = REPO_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+from audiagentic.contracts.schema_registry import SCHEMA_DIR, schema_filename
+
 FIXTURES_DIR = REPO_ROOT / "docs" / "examples" / "fixtures"
 
 
@@ -28,7 +33,7 @@ def _schema_path_for_fixture(fixture_path: Path) -> Path:
         raise ValueError("fixture file must end in .valid.json or .invalid.json")
     if "." in stem:
         stem = stem.split(".", 1)[0]
-    return SCHEMA_DIR / f"{stem}.schema.json"
+    return SCHEMA_DIR / schema_filename(stem)
 
 
 def validate_fixture(schema_path: Path, fixture_path: Path) -> list[dict[str, str]]:

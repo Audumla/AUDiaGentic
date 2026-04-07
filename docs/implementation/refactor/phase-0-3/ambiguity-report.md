@@ -91,7 +91,7 @@
 
 ### Record 9
 
-- current path: `docs/schemas/*` and `docs/examples/*`
+- current path: `src/audiagentic/contracts/schemas/*` and `docs/examples/*`
 - dominant responsibility: canonical contract fixtures, examples, and validation inputs
 - secondary responsibility: onboarding/reference documentation
 - target domain recommendation: keep in place; ownership follows contracts/docs rather than package movement

@@ -13,6 +13,7 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.contracts.schema_registry import read_schema
 from audiagentic.runtime.lifecycle.checkpoints import write_checkpoint
 from audiagentic.runtime.lifecycle.manifest import (
     build_manifest,
@@ -20,9 +21,6 @@ from audiagentic.runtime.lifecycle.manifest import (
     validate_manifest,
     write_manifest,
 )
-
-SCHEMA = ROOT / "docs" / "schemas" / "installed-state.schema.json"
-
 
 def test_manifest_roundtrip(tmp_path: Path) -> None:
     payload = build_manifest(
@@ -58,8 +56,7 @@ def test_manifest_invalid_read_raises(tmp_path: Path) -> None:
 
 
 def test_manifest_fixtures_validate() -> None:
-    schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
-    validator = Draft202012Validator(schema)
+    validator = Draft202012Validator(read_schema("installed-state"))
     fixtures = ROOT / "docs" / "examples" / "fixtures"
     for name in ("installed-state.fresh.valid.json", "installed-state.cutover.valid.json"):
         payload = json.loads((fixtures / name).read_text(encoding="utf-8"))

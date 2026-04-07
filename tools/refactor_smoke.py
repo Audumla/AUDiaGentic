@@ -17,7 +17,7 @@ SMOKE_IMPORTS = [
     "audiagentic.config.provider_registry",
 ]
 REQUIRED_PATHS = [
-    "docs/schemas",
+    "src/audiagentic/contracts/schemas",
     "docs/examples",
     ".audiagentic/project.yaml",
     ".audiagentic/providers.yaml",

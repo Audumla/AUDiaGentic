@@ -56,14 +56,18 @@ Define `UserPromptSubmit` hook:
 ```json
 {
   "hooks": {
-    "UserPromptSubmit": {
-      "description": "Detect canonical prompt tags and route to shared bridge",
-      "invoke": "tools/detect_and_launch_prompt_tag.py"
-    },
-    "PreToolUse": {
-      "description": "Enforce stage restrictions per action tag",
-      "invoke": "tools/enforce_stage_restrictions.py"
-    }
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [{"type": "command", "command": "python tools/claude_hooks.py user-prompt-submit"}]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [{"type": "command", "command": "python tools/claude_hooks.py pre-tool-use"}]
+      }
+    ]
   },
   "instruction-files": [
     "CLAUDE.md"

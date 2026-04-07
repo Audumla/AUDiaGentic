@@ -14,10 +14,9 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.contracts.schema_registry import read_schema
 from audiagentic.runtime.lifecycle.fresh_install import apply_fresh_install
 from tests.helpers import sandbox as sandbox_helper
-
-SCHEMA_DIR = ROOT / "docs" / "schemas"
 
 
 def _load_yaml(path: Path) -> dict:
@@ -42,25 +41,17 @@ def test_fresh_install_creates_scaffold_and_manifest(tmp_path: Path) -> None:
         component_cfg = _load_yaml(sandbox.repo / ".audiagentic" / "components.yaml")
         provider_cfg = _load_yaml(sandbox.repo / ".audiagentic" / "providers.yaml")
 
-        validator = Draft202012Validator(
-            json.loads((SCHEMA_DIR / "project-config.schema.json").read_text(encoding="utf-8"))
-        )
+        validator = Draft202012Validator(read_schema("project-config"))
         assert not list(validator.iter_errors(project_cfg))
-        validator = Draft202012Validator(
-            json.loads((SCHEMA_DIR / "component-config.schema.json").read_text(encoding="utf-8"))
-        )
+        validator = Draft202012Validator(read_schema("component-config"))
         assert not list(validator.iter_errors(component_cfg))
-        validator = Draft202012Validator(
-            json.loads((SCHEMA_DIR / "provider-config.schema.json").read_text(encoding="utf-8"))
-        )
+        validator = Draft202012Validator(read_schema("provider-config"))
         assert not list(validator.iter_errors(provider_cfg))
 
         manifest_payload = json.loads(
             (sandbox.repo / ".audiagentic" / "installed.json").read_text(encoding="utf-8")
         )
-        validator = Draft202012Validator(
-            json.loads((SCHEMA_DIR / "installed-state.schema.json").read_text(encoding="utf-8"))
-        )
+        validator = Draft202012Validator(read_schema("installed-state"))
         assert not list(validator.iter_errors(manifest_payload))
     finally:
         sandbox.cleanup()

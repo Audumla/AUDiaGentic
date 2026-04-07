@@ -20,6 +20,7 @@ from audiagentic.contracts.canonical_ids import (
     validate_ids,
     validate_schema_files,
 )
+from audiagentic.contracts.schema_registry import SCHEMA_DIR
 
 
 def _extract_ids(payload: Any) -> tuple[list[str], list[str]]:
@@ -63,7 +64,7 @@ def _should_validate_content(path: Path) -> bool:
         resolved = path.resolve()
     except FileNotFoundError:
         resolved = path
-    schema_root = (REPO_ROOT / "docs" / "schemas").resolve()
+    schema_root = SCHEMA_DIR.resolve()
     try:
         return schema_root not in resolved.parents and resolved != schema_root
     except RuntimeError:
@@ -92,9 +93,9 @@ def scan_paths(paths: Iterable[Path]) -> list[dict[str, str]]:
                 findings.append({"path": str(file_path), "issue": issue})
             for issue in validate_ids(components, CANONICAL_COMPONENT_IDS):
                 findings.append({"path": str(file_path), "issue": issue})
-    schema_findings = validate_schema_files(REPO_ROOT / "docs" / "schemas")
+    schema_findings = validate_schema_files(SCHEMA_DIR)
     for issue in schema_findings:
-        findings.append({"path": "docs/schemas", "issue": issue})
+        findings.append({"path": str(SCHEMA_DIR.relative_to(REPO_ROOT)), "issue": issue})
     return findings
 
 
