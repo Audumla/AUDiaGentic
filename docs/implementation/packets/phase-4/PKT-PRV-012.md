@@ -34,7 +34,7 @@ This packet owns the following implementation surface:
 
 - `docs/specifications/architecture/24_DRAFT_Provider_Model_Catalog_and_Selection.md`
 - `docs/specifications/architecture/03_Common_Contracts.md`
-- `docs/schemas/provider-model-catalog.schema.json`
+- `src/audiagentic/contracts/schemas/provider-model-catalog.schema.json`
 - `docs/examples/fixtures/provider-model-catalog.valid.json`
 - `docs/examples/fixtures/provider-model-catalog.invalid.json`
 - `docs/examples/project-scaffold/.audiagentic/providers.yaml.example`
@@ -118,7 +118,7 @@ If a catalog exists:
 ## Recovery procedure
 
 If this packet fails mid-implementation:
-- revert schema and fixture changes in `docs/schemas/` and `docs/examples/fixtures/`
+- revert schema and fixture changes in `src/audiagentic/contracts/schemas/` and `docs/examples/fixtures/`
 - delete any partially written runtime catalogs under `.audiagentic/runtime/providers/`
 - revert provider selection and health changes
 - rerun `python -m pytest tests/unit/contracts/test_schema_validation.py tests/unit/providers/test_model_catalog.py tests/integration/providers/test_model_selection.py`

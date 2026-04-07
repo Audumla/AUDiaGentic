@@ -26,7 +26,7 @@ Freeze the new repository target tree, ownership boundaries, and allowed depende
 - compatibility policy: temporary shims allowed for one structural checkpoint; no new code on legacy imports once `PKT-FND-012` begins
 - public import surface versus internal-only import surface
 - deterministic tool placement: keep `tools/` as the utility root
-- contracts/examples/schemas placement: keep `docs/schemas/` and `docs/examples/` in place for this tranche
+- contracts/examples/schemas placement: keep `src/audiagentic/contracts/schemas/` and `docs/examples/` in place for this tranche
 - test strategy: keep centralized `tests/` and mirror the new domain structure inside it
 - cross-domain dependency rules for `contracts`, `core`, `config`, `scoping`, `execution`, `runtime`, `channels`, `streaming`, and `observability`
 - placement of `nodes`, `discovery`, `federation`, and `connectors` as reserved extension roots relative to the main repository-domain model

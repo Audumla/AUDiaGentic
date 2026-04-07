@@ -7,12 +7,13 @@ import yaml
 from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+SRC = ROOT / "src"
+for path in (str(ROOT), str(SRC)):
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
+from audiagentic.contracts.schema_registry import read_schema
 import tools.seed_example_project as seed_example_project
-
-SCHEMA_DIR = ROOT / "docs" / "schemas"
 
 
 def _load_yaml(path: Path) -> dict:
@@ -20,8 +21,7 @@ def _load_yaml(path: Path) -> dict:
 
 
 def _validate(schema_name: str, payload: dict) -> None:
-    schema = (SCHEMA_DIR / f"{schema_name}.schema.json").read_text(encoding="utf-8")
-    validator = Draft202012Validator(yaml.safe_load(schema))
+    validator = Draft202012Validator(read_schema(schema_name))
     errors = list(validator.iter_errors(payload))
     assert not errors
 

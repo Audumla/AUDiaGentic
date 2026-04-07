@@ -38,7 +38,7 @@ This packet owns the following implementation surface:
 - `src/audiagentic/execution/jobs/prompt_parser.py`
 - `src/audiagentic/execution/jobs/prompt_launch.py`
 - `src/audiagentic/config/provider_config.py`
-- `docs/schemas/prompt-launch-request.schema.json`
+- `src/audiagentic/contracts/schemas/prompt-launch-request.schema.json`
 - `tests/unit/jobs/test_prompt_parser.py`
 - `tests/integration/jobs/test_prompt_launch_flow.py`
 

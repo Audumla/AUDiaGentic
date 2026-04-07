@@ -199,6 +199,10 @@ Rules:
 - live-stream capture is optional and additive
 - AUDiaGentic owns persistence, file layout, and presentation
 - providers must not be responsible for writing runtime stream artifacts
+- the canonical project-level defaults live in `.audiagentic/project.yaml` under `prompt-launch.default-stream-controls`
+- current runtime behavior merges project defaults with request-time `stream-controls` values
+- provider-specific defaults are the planned Phase 4.9.1 extension and should live in `.audiagentic/providers.yaml` under `providers.<provider-id>.stream-controls` once the hardening packets are implemented
+- target precedence for the completed hardening slice is: request `stream-controls` -> provider `stream-controls` -> project `default-stream-controls`
 - raw session keys, bearer tokens, or other secret session material must not be written to `stdout.log`, `stderr.log`, `events.ndjson`, or tracked docs
 - runtime provenance may keep a non-secret session handle or redacted identifier when needed for correlation
 - a secure session-reference/store seam for sensitive session material is a deferred follow-on feature

@@ -50,3 +50,45 @@ This packet owns:
   standalone Claude-only canonical definition for this packet
 - if packet work stays strictly inside result parsing/normalization, it may proceed after
   `PKT-PRV-056`; if it requires prompt/provider-surface changes, `PKT-PRV-070` must land first
+
+## Entry criteria
+
+Before starting, confirm all of the following are true:
+
+- `PKT-PRV-056` is at least `IN_PROGRESS`
+- `PKT-PRV-033` and `PKT-PRV-055` are verified enough that Claude launch/hook paths are stable
+- `PKT-PRV-062` and `PKT-PRV-070` are available if prompt/provider-surface shaping must change
+- the shared completion schema exists in `src/audiagentic/contracts/schemas/provider-completion.schema.json`
+
+## Config, files, and artifacts
+
+- shared completion helpers live in `src/audiagentic/streaming/completion.py`
+- Claude adapter seam: `src/audiagentic/execution/providers/adapters/claude.py`
+- generated Claude surfaces live under `.claude/skills/` and `CLAUDE.md`; do not hand-edit them for packet-specific behavior
+- runtime completion artifact must be written to:
+  - `.audiagentic/runtime/jobs/<job-id>/completions/completion.claude.json`
+
+## Implementation checklist
+
+1. choose the most stable Claude completion source: hook-backed JSON or wrapper-bounded JSON
+2. parse direct Claude result data in `src/audiagentic/execution/providers/adapters/claude.py`
+3. call `normalize_provider_result()` when direct parsing succeeds
+4. call `build_synthetic_fallback()` when direct parsing fails
+5. persist the canonical artifact with `persist_completion()`
+6. if prompt shaping must change, update canonical source/renderers and regenerate instead of editing generated files directly
+7. add integration tests for direct parse success and fallback behavior
+
+## Exit criteria
+
+- Claude writes `completion.claude.json` using the shared schema
+- hook-backed or wrapper-derived direct result and fallback are distinguishable in the stored artifact
+- generated Claude surfaces remain managed outputs
+- no Claude-only canonical completion contract is introduced
+
+## Validation commands
+
+```powershell
+python -m pytest tests/integration/providers/test_claude.py -q
+python -m pytest tests/unit/streaming/test_completion.py -q
+python tools/regenerate_tag_surfaces.py --project-root . --check
+```

@@ -1,10 +1,13 @@
 """Claude Code hook handlers for prompt-trigger bridge integration."""
 
+from __future__ import annotations
+
+import argparse
 import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 # Canonical tags recognized by the shared bridge
 CANONICAL_TAGS = {'plan', 'implement', 'review', 'audit', 'check-in-prep'}
@@ -249,3 +252,71 @@ def PreToolUse_handler(
 ) -> dict[str, Any]:
     """Exported hook handler for Claude settings.json PreToolUse."""
     return enforce_stage_restrictions(action_tag, tools_requested, session_metadata)
+
+
+def _load_hook_payload() -> dict[str, Any]:
+    raw = sys.stdin.read().strip()
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _session_metadata_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "workspace_root": payload.get("workspaceRoot")
+        or payload.get("workspace_root")
+        or payload.get("cwd")
+        or ".",
+        "surface": payload.get("surface") or "claude",
+        "session_id": payload.get("sessionId") or payload.get("session_id") or "",
+    }
+
+
+def _handle_user_prompt_submit_cli() -> int:
+    payload = _load_hook_payload()
+    raw_prompt = (
+        payload.get("prompt")
+        or payload.get("rawPrompt")
+        or payload.get("raw_prompt")
+        or ""
+    )
+    result = UserPromptSubmit_handler(raw_prompt, _session_metadata_from_payload(payload))
+    if result:
+        print(json.dumps(result))
+    return 0
+
+
+def _handle_pre_tool_use_cli() -> int:
+    payload = _load_hook_payload()
+    tool_name = payload.get("tool_name") or payload.get("toolName") or payload.get("tool") or ""
+    action_tag = (
+        payload.get("action_tag")
+        or payload.get("actionTag")
+        or payload.get("stage")
+        or ""
+    )
+    result = PreToolUse_handler(
+        str(action_tag),
+        [str(tool_name)] if tool_name else [],
+        _session_metadata_from_payload(payload),
+    )
+    if result:
+        print(json.dumps(result))
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Claude hook command adapter.")
+    parser.add_argument("hook", choices=["user-prompt-submit", "pre-tool-use"])
+    args = parser.parse_args(argv)
+    if args.hook == "user-prompt-submit":
+        return _handle_user_prompt_submit_cli()
+    return _handle_pre_tool_use_cli()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -18,14 +18,18 @@ def test_qwen_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(qwen.shutil, "which", lambda _: r"C:\\Tools\\qwen.exe")
 
-    def fake_run(command, *, cwd=None, check=None, capture_output=None, text=None, encoding=None, errors=None):  # type: ignore[no-untyped-def]
+    def fake_run_streaming_command(
+        command,
+        *,
+        cwd=None,
+        input_text=None,
+        stdout_sinks=None,
+        stderr_sinks=None,
+    ):
         captured["command"] = command
         captured["cwd"] = cwd
-        captured["check"] = check
-        captured["capture_output"] = capture_output
-        captured["text"] = text
-        captured["encoding"] = encoding
-        captured["errors"] = errors
+        captured["stdout_sinks"] = stdout_sinks
+        captured["stderr_sinks"] = stderr_sinks
 
         class Completed:
             returncode = 0
@@ -34,7 +38,7 @@ def test_qwen_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
         return Completed()
 
-    monkeypatch.setattr(qwen.subprocess, "run", fake_run)
+    monkeypatch.setattr(qwen, "run_streaming_command", fake_run_streaming_command)
 
     result = qwen.run(
         {
@@ -53,14 +57,16 @@ def test_qwen_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
     assert result["model"] == "qwen-coder"
     assert result["output"] == "qwen completed"
     assert captured["command"][0] == r"C:\\Tools\\qwen.exe"
-    assert captured["command"][1:4] == ["-p", captured["command"][2], "-o"]
-    assert str(captured["command"][2]).startswith("AUDiaGentic Qwen provider execution request.")
-    assert captured["cwd"] == str(tmp_path)
-    assert captured["check"] is False
-    assert captured["capture_output"] is True
-    assert captured["text"] is True
-    assert captured["encoding"] == "utf-8"
-    assert captured["errors"] == "replace"
+    # New format: qwen [-m model] prompt (positional argument)
+    assert "-m" in captured["command"]
+    assert "qwen-coder" in captured["command"]
+    # Prompt should be the last argument
+    assert captured["command"][-1].startswith(
+        "AUDiaGentic Qwen provider execution request."
+    )
+    assert captured["cwd"] == tmp_path
+    assert captured["stdout_sinks"]
+    assert captured["stderr_sinks"]
 
 
 def test_qwen_adapter_requires_command(monkeypatch) -> None:

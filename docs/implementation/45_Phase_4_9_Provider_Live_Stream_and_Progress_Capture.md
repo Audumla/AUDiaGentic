@@ -169,3 +169,57 @@ Provider-specific integrations own only:
 - This phase does not require provider execution semantics to change.
 - This phase does not make Discord a dependency of the core runtime.
 - later providers should only be added after the first-wave shared event writer is stable
+
+## Post-Hardening Slice (Phase 4.9.1)
+
+The baseline Phase 4.9 harness intentionally stops short of full operational hardening.
+After `PKT-PRV-048` through `PKT-PRV-050` and the guarded harness uplift packets land, the
+next streaming follow-on slice should address:
+
+- configuration-driven timeout support for long-running or stalled provider stream sessions
+- configuration-driven bounded `InMemorySink` capture or documented truncation policy
+- observable sink failures without allowing one sink to crash the run
+- schema-validated normalized event writes before appending to `events.ndjson`
+- serialized or otherwise coordinated normalized event writing
+- explicit validation of stream-controls input/config
+
+The policy for this slice should be:
+
+- limits and timeouts are configuration-driven rather than hardcoded
+- the shared contract lives under `stream-controls` in the normalized runtime request shape
+- operators may choose long-running providers and large-output workflows explicitly
+- limit crossings should default to warnings, overflow markers, quarantine artifacts, or degraded
+  capture before they become hard failures
+- hard-stop behavior should be opt-in and reserved for clearly configured enforcement modes
+
+Config location and precedence for this slice:
+
+- project defaults live in `.audiagentic/project.yaml` under `prompt-launch.default-stream-controls`
+- current runtime defaults live in `.audiagentic/project.yaml` and are overridden by per-request values in the normalized launch request under `stream-controls`
+- provider overrides are the intended Phase 4.9.1 extension and should live in `.audiagentic/providers.yaml` under `providers.<provider-id>.stream-controls` once implemented
+- target precedence for the completed hardening slice is: request `stream-controls` -> provider `stream-controls` -> project `default-stream-controls`
+
+The first implementation-ready config keys for this slice are:
+
+- `timeout-warning-seconds`
+- `timeout-seconds`
+- `sink-error-policy`
+- `control-validation-policy`
+- `invalid-event-policy`
+- `event-write-policy`
+- `event-quarantine-path`
+- `event-schema-validation`
+- `in-memory-max-bytes`
+- `large-output-warning-bytes`
+- `overflow-policy`
+- `overflow-marker-text`
+
+Default posture:
+
+- warning-first and quarantine-friendly
+- no hard timeout unless explicitly configured
+- no assumption that provider output is small or short-lived
+
+This follow-on hardening slice does not own backpressure, retry, compression, authentication,
+monitoring, or network-stream concerns. Those are future platform concerns, not part of the
+current local provider-process streaming contract.
