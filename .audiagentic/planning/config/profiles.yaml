@@ -1,0 +1,18 @@
+planning:
+  stack_profiles:
+    default:
+      on_request_create: [request, specification, task]
+      task_refinement:
+        allow_child_tasks: true
+        leaf_profile: impl_leaf
+  object_profiles:
+    spec_precise:
+      applies_to: spec
+      required_sections: [Purpose, Scope, Requirements, Constraints, Acceptance Criteria]
+    task_brief:
+      applies_to: task
+      required_sections: [Description]
+      suggested_sections: [Acceptance Criteria, Notes, Implementation Notes]
+    wp_standard:
+      applies_to: wp
+      required_sections: [Objective, Scope of This Package, Inputs, Instructions, Required Outputs, Acceptance Checks, Non-Goals]

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "planning": {
+      "type": "object",
+      "properties": {
+        "stack_profiles": {
+          "type": "object"
+        },
+        "object_profiles": {
+          "type": "object"
+        }
+      }
+    }
+  },
+  "required": [
+    "planning"
+  ]
+}

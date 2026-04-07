@@ -52,6 +52,11 @@ REQUIRED_PATHS = [
     "tools/seed_example_project.py",
     "src/audiagentic/runtime/lifecycle/baseline_sync.py",
     "src/audiagentic/runtime/release/bootstrap.py",
+    ".audiagentic/planning/config/planning.yaml",
+    ".audiagentic/planning/config/profiles.yaml",
+    ".audiagentic/planning/config/workflows.yaml",
+    ".audiagentic/planning/config/automations.yaml",
+    ".audiagentic/planning/config/hooks.yaml",
 ]
 MANAGED_HEADER_PATHS = [
     "AGENTS.md",

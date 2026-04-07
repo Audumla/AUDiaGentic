@@ -180,6 +180,14 @@
         "string",
         "null"
       ]
+    },
+    "planning-task-id": {
+      "type": "string",
+      "description": "Planning task that originated this job (e.g. task-0003). Set at dispatch time by the planning dispatch hook."
+    },
+    "planning-wp-id": {
+      "type": "string",
+      "description": "Planning work-package associated with this job (e.g. wp-0001). Optional; set when a WP-level dispatch is used."
     }
   }
 }
