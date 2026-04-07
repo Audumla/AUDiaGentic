@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "id",
+    "label",
+    "state",
+    "summary"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "label": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "workflow": {
+      "type": "string"
+    },
+    "standard_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "meta": {
+      "type": "object"
+    },
+    "source_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "current_understanding": {
+      "type": "string"
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

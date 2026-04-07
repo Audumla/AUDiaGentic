@@ -50,6 +50,12 @@ BASELINE_ASSETS: tuple[BaselineAsset, ...] = (
     ),
     BaselineAsset("docs/releases", "docs/releases", MODE_GENERATED_MANAGED, recursive=True),
     BaselineAsset(".audiagentic/runtime", ".audiagentic/runtime", MODE_RUNTIME_ONLY, recursive=True),
+    BaselineAsset(
+        ".audiagentic/planning/config",
+        ".audiagentic/planning/config",
+        MODE_CREATE_IF_MISSING,
+        recursive=True,
+    ),
 )
 
 
