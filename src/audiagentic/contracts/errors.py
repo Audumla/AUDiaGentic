@@ -23,7 +23,7 @@ ERROR_CODE_PREFIXES = (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(eq=True)
 class AudiaGenticError(Exception):
     code: str
     kind: str
