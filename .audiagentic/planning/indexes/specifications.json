@@ -1,0 +1,72 @@
+{
+  "convention_version": 1,
+  "generated_at": "2026-04-07T23:52:36.351420+00:00",
+  "items": [
+    {
+      "id": "spec-0002",
+      "label": "Comprehensive migration specification with reference resolution",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0002-comprehensive-migration-specification-with-reference-resolution.md"
+    },
+    {
+      "id": "spec-0003",
+      "label": "Archive state workflow specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0003-archive-state-workflow-specification.md"
+    },
+    {
+      "id": "spec-0004",
+      "label": "Phase 0 Contracts and Scaffolding",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0004-phase-0-contracts-and-scaffolding.md"
+    },
+    {
+      "id": "spec-0005",
+      "label": "Executable Packets Foundation and Contracts",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0005-executable-packets-foundation-and-contracts.md"
+    },
+    {
+      "id": "spec-0006",
+      "label": "CI/CD and Testing Infrastructure",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0006-ci-cd-and-testing-infrastructure.md"
+    },
+    {
+      "id": "spec-0007",
+      "label": "Destructive Test Sandbox",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0007-destructive-test-sandbox.md"
+    },
+    {
+      "id": "spec-0008",
+      "label": "Secret Management",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0008-secret-management.md"
+    },
+    {
+      "id": "spec-0009",
+      "label": "Phase 1 Lifecycle and Project Enablement",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0009-phase-1-lifecycle-and-project-enablement.md"
+    },
+    {
+      "id": "spec-0010",
+      "label": "Phase 2 Release Audit Ledger and Release Please",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0010-phase-2-release-audit-ledger-and-release-please.md"
+    },
+    {
+      "id": "spec-0011",
+      "label": "Phase 3 Jobs and Simple Workflows",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0011-phase-3-jobs-and-simple-workflows.md"
+    },
+    {
+      "id": "spec-0012",
+      "label": "Phase 4 Providers and Optional Server Foundation",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0012-phase-4-providers-and-optional-server-foundation.md"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "convention_version": 1,
+  "generated_at": "2026-04-07T23:52:36.351420+00:00",
+  "items": [
+    {
+      "id": "wp-0002",
+      "label": "Complete implementation docs migration",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-0002-complete-implementation-docs-migration.md"
+    },
+    {
+      "id": "wp-0003",
+      "label": "Implement archive functionality",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-0003-implement-archive-functionality.md"
+    },
+    {
+      "id": "wp-0004",
+      "label": "Implement archive state workflow",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-0004-implement-archive-state-workflow.md"
+    }
+  ]
+}
