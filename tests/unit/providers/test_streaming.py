@@ -23,6 +23,9 @@ def test_run_streaming_command_captures_stdout_and_stderr(monkeypatch, tmp_path:
             self.stderr = io.StringIO("stderr-one\n")
             self.stdin = None
 
+        def poll(self) -> int:
+            return 0
+
         def wait(self) -> int:
             return 0
 
@@ -74,6 +77,9 @@ def test_run_streaming_command_isolates_sink_failures(monkeypatch, tmp_path: Pat
             self.stdout = io.StringIO("hello\n")
             self.stderr = io.StringIO("")
             self.stdin = None
+
+        def poll(self) -> int:
+            return 0
 
         def wait(self) -> int:
             return 0

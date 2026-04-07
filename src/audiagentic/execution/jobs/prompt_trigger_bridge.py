@@ -32,7 +32,8 @@ def run(argv: list[str] | None = None) -> int:
 
     prompt_text = _read_prompt_text(args.prompt_file)
     try:
-        stream_controls = json.loads(args.stream_controls_json) if args.stream_controls_json else None
+        stream_controls = json.loads(args.stream_controls_json) if args.stream_controls_json else {}
+        stream_controls.setdefault("tee-console", False)
         input_controls = json.loads(args.input_controls_json) if args.input_controls_json else None
     except json.JSONDecodeError as exc:
         print(
