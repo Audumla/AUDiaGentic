@@ -100,7 +100,37 @@
             "event-format": {
               "type": "string",
               "enum": ["ndjson"]
-            }
+            },
+            "timeout-warning-seconds": { "type": ["number", "null"] },
+            "timeout-seconds": { "type": ["number", "null"] },
+            "sink-error-policy": {
+              "type": "string",
+              "enum": ["warn", "fail", "normalize"]
+            },
+            "control-validation-policy": {
+              "type": "string",
+              "enum": ["normalize", "warn", "fail"]
+            },
+            "termination-policy": {
+              "type": "string",
+              "enum": ["graceful-kill", "warn-only"]
+            },
+            "invalid-event-policy": {
+              "type": "string",
+              "enum": ["quarantine", "fail", "warn"]
+            },
+            "event-write-policy": {
+              "type": "string",
+              "enum": ["locked-append", "append"]
+            },
+            "event-schema-validation": { "type": "boolean" },
+            "in-memory-max-bytes": { "type": ["integer", "null"] },
+            "large-output-warning-bytes": { "type": ["integer", "null"] },
+            "overflow-policy": {
+              "type": "string",
+              "enum": ["warn-only", "fail", "truncate-head", "truncate-tail"]
+            },
+            "overflow-marker-text": { "type": "string" }
           },
           "required": [
             "enabled",
