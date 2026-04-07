@@ -1,0 +1,516 @@
+{
+  "convention_version": 1,
+  "generated_at": "2026-04-07T23:52:36.351420+00:00",
+  "items": [
+    {
+      "id": "task-0008-output",
+      "label": "Migration Reference Map",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0008-output.md"
+    },
+    {
+      "id": "task-0008",
+      "label": "Inventory all implementation docs and build reference map",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0008.md"
+    },
+    {
+      "id": "task-0009",
+      "label": "Migrate Phase 0 docs (contracts and scaffolding)",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0009.md"
+    },
+    {
+      "id": "task-0010",
+      "label": "Migrate Phase 1 docs (lifecycle and project enablement)",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0010.md"
+    },
+    {
+      "id": "task-0011",
+      "label": "Migrate Phase 2 docs (release, audit, ledger)",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0011.md"
+    },
+    {
+      "id": "task-0012",
+      "label": "Migrate Phase 3 docs (jobs and workflows)",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0012.md"
+    },
+    {
+      "id": "task-0013",
+      "label": "Migrate Phase 4 docs (providers and server seam)",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0013.md"
+    },
+    {
+      "id": "task-0014",
+      "label": "Migrate Phase 5-6 docs (Discord overlay and migration hardening)",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0014.md"
+    },
+    {
+      "id": "task-0015",
+      "label": "Migrate Phase 7-11 docs (federation and external connectivity)",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0015.md"
+    },
+    {
+      "id": "task-0016",
+      "label": "Resolve all cross-references between planning objects",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0016.md"
+    },
+    {
+      "id": "task-0017",
+      "label": "Validate migration and clean up old files",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0017.md"
+    },
+    {
+      "id": "task-0018",
+      "label": "Implement archive state in planning core",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0018.md"
+    },
+    {
+      "id": "task-0019",
+      "label": "Update tm_list with archive filter",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0019.md"
+    },
+    {
+      "id": "task-0020",
+      "label": "Update tm_validate with archive rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0020.md"
+    },
+    {
+      "id": "task-0021",
+      "label": "Update tm_show to include archive metadata",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0021.md"
+    },
+    {
+      "id": "task-0022",
+      "label": "Add archived state to planning state machine",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0022.md"
+    },
+    {
+      "id": "task-0023",
+      "label": "Implement tm_archive and tm_restore functions",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0023.md"
+    },
+    {
+      "id": "task-0024",
+      "label": "Update tm_list with archive filter parameter",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0024.md"
+    },
+    {
+      "id": "task-0025",
+      "label": "Update tm_validate with archive validation rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0025.md"
+    },
+    {
+      "id": "task-0026",
+      "label": "Update tm_show to include archive metadata",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0026.md"
+    },
+    {
+      "id": "task-0027",
+      "label": "Extend planning tools with full content management",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0027.md"
+    },
+    {
+      "id": "task-0032",
+      "label": "PKT-FND-001: Canonical IDs and Naming Normalization",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0032.md"
+    },
+    {
+      "id": "task-0033",
+      "label": "PKT-FND-002: Schema Package and Fixtures",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0033.md"
+    },
+    {
+      "id": "task-0034",
+      "label": "PKT-FND-003: Example Project Scaffold",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0034.md"
+    },
+    {
+      "id": "task-0035",
+      "label": "PKT-FND-004: Lifecycle CLI Stub",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0035.md"
+    },
+    {
+      "id": "task-0036",
+      "label": "PKT-FND-005: Packet/Test Harness Scaffolding",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0036.md"
+    },
+    {
+      "id": "task-0037",
+      "label": "PKT-FND-006: Naming Validator Script",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0037.md"
+    },
+    {
+      "id": "task-0038",
+      "label": "PKT-FND-007: Schema Validator Script",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0038.md"
+    },
+    {
+      "id": "task-0039",
+      "label": "PKT-FND-008: Checkpoint Writer",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0039.md"
+    },
+    {
+      "id": "task-0040",
+      "label": "PKT-FND-009: Fixture Generator",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0040.md"
+    },
+    {
+      "id": "task-0041",
+      "label": "PKT-FND-010: Integration Tests",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0041.md"
+    },
+    {
+      "id": "task-0042",
+      "label": "PKT-FND-011: Documentation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0042.md"
+    },
+    {
+      "id": "task-0043",
+      "label": "PKT-FND-012: Migration Runbook",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0043.md"
+    },
+    {
+      "id": "task-0044",
+      "label": "PKT-FND-013: Exit Gate Validation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0044.md"
+    },
+    {
+      "id": "task-0045",
+      "label": "PKT-LFC-001: Installed-State Detector",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0045.md"
+    },
+    {
+      "id": "task-0046",
+      "label": "PKT-LFC-002: Lifecycle Manifest and Checkpoint Writer",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0046.md"
+    },
+    {
+      "id": "task-0047",
+      "label": "PKT-LFC-003: Fresh Install Apply/Validate",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0047.md"
+    },
+    {
+      "id": "task-0048",
+      "label": "PKT-LFC-004: Update Dispatch and Version Module Selection",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0048.md"
+    },
+    {
+      "id": "task-0049",
+      "label": "PKT-LFC-005: Legacy Cutover",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0049.md"
+    },
+    {
+      "id": "task-0050",
+      "label": "PKT-LFC-006: Uninstall Current AUDiaGentic",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0050.md"
+    },
+    {
+      "id": "task-0051",
+      "label": "PKT-LFC-007: Document Migration Outcomes and Reports",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0051.md"
+    },
+    {
+      "id": "task-0052",
+      "label": "PKT-LFC-010: Preserve Provider Auto-Install Policy Fields",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0052.md"
+    },
+    {
+      "id": "task-0053",
+      "label": "PKT-LFC-011: Installable Baseline Inventory and Sync-Mode Classification",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0053.md"
+    },
+    {
+      "id": "task-0054",
+      "label": "PKT-LFC-012: Shared Baseline Sync Engine for Lifecycle and Bootstrap",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0054.md"
+    },
+    {
+      "id": "task-0055",
+      "label": "PKT-LFC-013: Converge Fresh-Install and Release-Bootstrap on Baseline Sync",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0055.md"
+    },
+    {
+      "id": "task-0056",
+      "label": "PKT-RLS-001: Fragment Capture",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0056.md"
+    },
+    {
+      "id": "task-0057",
+      "label": "PKT-RLS-002: Sync with Locking and Idempotency",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0057.md"
+    },
+    {
+      "id": "task-0058",
+      "label": "PKT-RLS-003: Current Release Summary",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0058.md"
+    },
+    {
+      "id": "task-0059",
+      "label": "PKT-RLS-004: Audit/Check-in Summary Generation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0059.md"
+    },
+    {
+      "id": "task-0060",
+      "label": "PKT-RLS-005: Finalization with Exactly-Once Historical Append",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0060.md"
+    },
+    {
+      "id": "task-0061",
+      "label": "PKT-RLS-006: Release Please Baseline Workflow",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0061.md"
+    },
+    {
+      "id": "task-0062",
+      "label": "PKT-RLS-007: Release Please Config Management",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0062.md"
+    },
+    {
+      "id": "task-0063",
+      "label": "PKT-RLS-008: Ledger Integration",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0063.md"
+    },
+    {
+      "id": "task-0064",
+      "label": "PKT-RLS-009: Audit Trail",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0064.md"
+    },
+    {
+      "id": "task-0065",
+      "label": "PKT-RLS-010: Release Validation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0065.md"
+    },
+    {
+      "id": "task-0066",
+      "label": "PKT-RLS-011: Release Documentation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0066.md"
+    },
+    {
+      "id": "task-0067",
+      "label": "PKT-JOB-001: Job Records and Store",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0067.md"
+    },
+    {
+      "id": "task-0068",
+      "label": "PKT-JOB-002: State Machine",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0068.md"
+    },
+    {
+      "id": "task-0069",
+      "label": "PKT-JOB-003: Workflow Profiles",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0069.md"
+    },
+    {
+      "id": "task-0070",
+      "label": "PKT-JOB-004: Packet Runner",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0070.md"
+    },
+    {
+      "id": "task-0071",
+      "label": "PKT-JOB-005: Approval Handling",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0071.md"
+    },
+    {
+      "id": "task-0072",
+      "label": "PKT-JOB-006: Release Bridge",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0072.md"
+    },
+    {
+      "id": "task-0073",
+      "label": "PKT-JOB-007: Job Validation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0073.md"
+    },
+    {
+      "id": "task-0074",
+      "label": "PKT-JOB-008: Job Monitoring",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0074.md"
+    },
+    {
+      "id": "task-0075",
+      "label": "PKT-JOB-009: Job Cancellation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0075.md"
+    },
+    {
+      "id": "task-0076",
+      "label": "PKT-JOB-010: Job Documentation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0076.md"
+    },
+    {
+      "id": "task-0077",
+      "label": "PKT-JOB-011: Job Testing",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0077.md"
+    },
+    {
+      "id": "task-0078",
+      "label": "PKT-PRV-001: Provider Registry",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0078.md"
+    },
+    {
+      "id": "task-0079",
+      "label": "PKT-PRV-002: Health Checks",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0079.md"
+    },
+    {
+      "id": "task-0080",
+      "label": "PKT-PRV-003: Provider Selection",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0080.md"
+    },
+    {
+      "id": "task-0081",
+      "label": "PKT-PRV-004: Provider Adapters",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0081.md"
+    },
+    {
+      "id": "task-0082",
+      "label": "PKT-PRV-005: Service Seam",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0082.md"
+    },
+    {
+      "id": "task-0083",
+      "label": "PKT-PRV-006: Provider Implementation Template",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0083.md"
+    },
+    {
+      "id": "task-0084",
+      "label": "PKT-PRV-007: Provider Configuration Schema",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0084.md"
+    },
+    {
+      "id": "task-0085",
+      "label": "PKT-PRV-008: Provider Documentation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0085.md"
+    },
+    {
+      "id": "task-0086",
+      "label": "PKT-PRV-009: Provider Testing Framework",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0086.md"
+    },
+    {
+      "id": "task-0087",
+      "label": "PKT-PRV-010: Provider Performance Benchmarks",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0087.md"
+    },
+    {
+      "id": "task-0088",
+      "label": "PKT-PRV-011: Provider Security Audit",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0088.md"
+    },
+    {
+      "id": "task-0089",
+      "label": "PKT-PRV-012: Provider Version Management",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0089.md"
+    },
+    {
+      "id": "task-0090",
+      "label": "PKT-PRV-013: Provider Feature Flags",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0090.md"
+    },
+    {
+      "id": "task-0091",
+      "label": "PKT-PRV-014: Provider Rate Limiting",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0091.md"
+    },
+    {
+      "id": "task-0092",
+      "label": "PKT-PRV-015: Provider Caching",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0092.md"
+    },
+    {
+      "id": "task-0093",
+      "label": "PKT-PRV-016: Provider Error Handling",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0093.md"
+    },
+    {
+      "id": "task-0094",
+      "label": "PKT-PRV-017: Provider Logging",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0094.md"
+    },
+    {
+      "id": "task-0095",
+      "label": "PKT-PRV-018: Provider Metrics",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0095.md"
+    }
+  ]
+}

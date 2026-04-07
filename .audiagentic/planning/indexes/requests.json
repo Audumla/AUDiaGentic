@@ -1,0 +1,18 @@
+{
+  "convention_version": 1,
+  "generated_at": "2026-04-07T23:52:36.351420+00:00",
+  "items": [
+    {
+      "id": "request-0002",
+      "label": "Comprehensive implementation docs migration",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-0002.md"
+    },
+    {
+      "id": "request-0003",
+      "label": "Add archive functionality to planning core",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-0003.md"
+    }
+  ]
+}
