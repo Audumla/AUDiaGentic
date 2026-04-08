@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-07T23:52:58.314731+00:00",
+  "generated_at": "2026-04-08T00:06:57.409427+00:00",
   "items": [
     {
       "id": "spec-0002",
@@ -67,6 +67,54 @@
       "label": "Phase 4 Providers and Optional Server Foundation",
       "state": "draft",
       "path": "docs\\planning\\specifications\\spec-0012-phase-4-providers-and-optional-server-foundation.md"
+    },
+    {
+      "id": "spec-0013",
+      "label": "Phase 5 Discord Overlay",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0013-phase-5-discord-overlay.md"
+    },
+    {
+      "id": "spec-0014",
+      "label": "Phase 6 Migration Hardening and Cutover Completion",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0014-phase-6-migration-hardening-and-cutover-completion.md"
+    },
+    {
+      "id": "spec-0015",
+      "label": "Phase 7 Node Execution and Federation Extension",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0015-phase-7-node-execution-and-federation-extension.md"
+    },
+    {
+      "id": "spec-0016",
+      "label": "Phase 8 Discovery and Registry Extension",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0016-phase-8-discovery-and-registry-extension.md"
+    },
+    {
+      "id": "spec-0017",
+      "label": "Phase 9 Distributed Eventing and Control Extension",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0017-phase-9-distributed-eventing-and-control-extension.md"
+    },
+    {
+      "id": "spec-0018",
+      "label": "Phase 10 Coordinator Consumption Seam",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0018-phase-10-coordinator-consumption-seam.md"
+    },
+    {
+      "id": "spec-0019",
+      "label": "Phase 11 Pluggable External Tool Connectivity",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0019-phase-11-pluggable-external-tool-connectivity.md"
+    },
+    {
+      "id": "spec-0020",
+      "label": "Phase 12 Remaining Implementation Docs",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0020-phase-12-remaining-implementation-docs.md"
     }
   ]
 }
