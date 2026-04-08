@@ -15,28 +15,28 @@ This build book documents the complete implementation of Phase 0 - Contracts and
 
 ## Implementation Sequence
 
-### Foundation Packets (PKT-FND-001 to PKT-FND-005)
+### Foundation Packets ([PKT-FND-001](task-0032) to [PKT-FND-005](task-0036))
 
-1. **PKT-FND-001**: Canonical IDs and naming normalization
-2. **PKT-FND-002**: Schema package and fixtures
-3. **PKT-FND-003**: Example project scaffold
-4. **PKT-FND-004**: Lifecycle CLI stub
-5. **PKT-FND-005**: Packet/test harness scaffolding
+1. **[PKT-FND-001](task-0032)**: Canonical IDs and naming normalization
+2. **[PKT-FND-002](task-0033)**: Schema package and fixtures
+3. **[PKT-FND-003](task-0034)**: Example project scaffold
+4. **[PKT-FND-004](task-0035)**: Lifecycle CLI stub
+5. **[PKT-FND-005](task-0036)**: Packet/test harness scaffolding
 
-### Supporting Packets (PKT-FND-006 to PKT-FND-013)
+### Supporting Packets ([PKT-FND-006](task-0037) to [PKT-FND-013](task-0044))
 
-6. **PKT-FND-006**: Naming validator script
-7. **PKT-FND-007**: Schema validator script
-8. **PKT-FND-008**: Checkpoint writer
-9. **PKT-FND-009**: Fixture generator
-10. **PKT-FND-010**: Integration tests
-11. **PKT-FND-011**: Documentation
-12. **PKT-FND-012**: Migration runbook
-13. **PKT-FND-013**: Exit gate validation
+6. **[PKT-FND-006](task-0037)**: Naming validator script
+7. **[PKT-FND-007](task-0038)**: Schema validator script
+8. **[PKT-FND-008](task-0039)**: Checkpoint writer
+9. **[PKT-FND-009](task-0040)**: Fixture generator
+10. **[PKT-FND-010](task-0041)**: Integration tests
+11. **[PKT-FND-011](task-0042)**: Documentation
+12. **[PKT-FND-012](task-0043)**: Migration runbook
+13. **[PKT-FND-013](task-0044)**: Exit gate validation
 
 ## Dependencies
 
-- spec-0004: Phase 0 Contracts and Scaffolding
+- [spec-0004](spec-0004): Phase 0 Contracts and Scaffolding
 
 ## Exit Criteria
 
