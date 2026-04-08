@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-08T00:06:57.409427+00:00",
+  "generated_at": "2026-04-08T03:06:15.709211+00:00",
   "items": [
     {
       "id": "plan-0004",
@@ -147,6 +147,90 @@
       "claimed": false
     },
     {
+      "id": "task-0032",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0033",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0034",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0035",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0036",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0037",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0038",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0039",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0040",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0041",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0042",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0043",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0044",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0173",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
       "id": "task-0008-output",
       "kind": "task",
       "state": "done",
@@ -273,79 +357,163 @@
       "claimed": false
     },
     {
-      "id": "task-0032",
+      "id": "task-0158",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0033",
+      "id": "task-0159",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0034",
+      "id": "task-0160",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0035",
+      "id": "task-0161",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0036",
+      "id": "task-0168",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0037",
+      "id": "task-0169",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0038",
+      "id": "task-0170",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0039",
+      "id": "task-0171",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0040",
+      "id": "task-0172",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0041",
+      "id": "task-0174",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0042",
+      "id": "task-0175",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0043",
+      "id": "task-0176",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0044",
+      "id": "task-0177",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0178",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0179",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0180",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0067",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0068",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0069",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0070",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0071",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0072",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0073",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0074",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0075",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0076",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0077",
       "kind": "task",
       "state": "draft",
       "claimed": false
@@ -417,133 +585,37 @@
       "claimed": false
     },
     {
-      "id": "task-0056",
+      "id": "task-0162",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0057",
+      "id": "task-0163",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0058",
+      "id": "task-0164",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0059",
+      "id": "task-0165",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0060",
+      "id": "task-0166",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0061",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0062",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0063",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0064",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0065",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0066",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0067",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0068",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0069",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0070",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0071",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0072",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0073",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0074",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0075",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0076",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0077",
+      "id": "task-0167",
       "kind": "task",
       "state": "draft",
       "claimed": false
@@ -1023,139 +1095,67 @@
       "claimed": false
     },
     {
-      "id": "task-0158",
+      "id": "task-0056",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0159",
+      "id": "task-0057",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0160",
+      "id": "task-0058",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0161",
+      "id": "task-0059",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0162",
+      "id": "task-0060",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0163",
+      "id": "task-0061",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0164",
+      "id": "task-0062",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0165",
+      "id": "task-0063",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0166",
+      "id": "task-0064",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0167",
+      "id": "task-0065",
       "kind": "task",
       "state": "draft",
       "claimed": false
     },
     {
-      "id": "task-0168",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0169",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0170",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0171",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0172",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0173",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0174",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0175",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0176",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0177",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0178",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0179",
-      "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0180",
+      "id": "task-0066",
       "kind": "task",
       "state": "draft",
       "claimed": false

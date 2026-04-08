@@ -23,7 +23,7 @@ Define the AUDiaGentic-side query/control seam for coordinator or board consumpt
 
 ## Implementation order
 
-1. PKT-CRD-001 — coordinator consumption seam
+1. [PKT-CRD-001](task-0173) — coordinator consumption seam
 
 ## Exit gate
 

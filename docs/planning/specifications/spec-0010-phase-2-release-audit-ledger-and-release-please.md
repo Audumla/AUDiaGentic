@@ -31,17 +31,17 @@ Build the release core independent of jobs.
 
 ## Implementation order
 
-1. PKT-RLS-001 — fragment capture
-2. PKT-RLS-002 — sync with locking and idempotency
-3. PKT-RLS-003 — current release summary
-4. PKT-RLS-004 — audit/check-in summary generation
-5. PKT-RLS-005 — finalization with exactly-once append
-6. PKT-RLS-006 — Release Please baseline workflow
-7. PKT-RLS-007 — Release Please config management
-8. PKT-RLS-008 — ledger integration
-9. PKT-RLS-009 — audit trail
-10. PKT-RLS-010 — release validation
-11. PKT-RLS-011 — release documentation
+1. [PKT-RLS-001](task-0056) — fragment capture
+2. [PKT-RLS-002](task-0057) — sync with locking and idempotency
+3. [PKT-RLS-003](task-0058) — current release summary
+4. [PKT-RLS-004](task-0059) — audit/check-in summary generation
+5. [PKT-RLS-005](task-0060) — finalization with exactly-once append
+6. [PKT-RLS-006](task-0061) — Release Please baseline workflow
+7. [PKT-RLS-007](task-0062) — Release Please config management
+8. [PKT-RLS-008](task-0063) — ledger integration
+9. [PKT-RLS-009](task-0064) — audit trail
+10. [PKT-RLS-010](task-0065) — release validation
+11. [PKT-RLS-011](task-0066) — release documentation
 
 ## Exit gate
 

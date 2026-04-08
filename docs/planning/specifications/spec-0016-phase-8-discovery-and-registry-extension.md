@@ -23,9 +23,9 @@ Add pluggable node discovery and registration.
 
 ## Implementation order
 
-1. PKT-DIS-001 — locator provider contract
-2. PKT-DIS-002 — static registry provider
-3. PKT-DIS-003 — optional provider seams
+1. [PKT-DIS-001](task-0168) — locator provider contract
+2. [PKT-DIS-002](task-0169) — static registry provider
+3. [PKT-DIS-003](task-0170) — optional provider seams
 
 ## Exit gate
 
