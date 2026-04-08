@@ -444,3 +444,359 @@
 {"ts": "2026-04-07T23:52:58.132521+00:00", "event": "planning.after_reconcile", "orphans": []}
 {"ts": "2026-04-07T23:52:58.184259+00:00", "event": "planning.after_reconcile", "orphans": []}
 {"ts": "2026-04-07T23:52:58.250055+00:00", "event": "task.after_create", "id": "task-0098", "path": "docs\\planning\\tasks\\core\\task-0098.md"}
+{"ts": "2026-04-07T23:53:05.447255+00:00", "event": "task.after_update", "id": "task-0099"}
+{"ts": "2026-04-07T23:53:05.574554+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:53:05.616470+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:53:05.699842+00:00", "event": "task.after_create", "id": "task-0099", "path": "docs\\planning\\tasks\\core\\task-0099.md"}
+{"ts": "2026-04-07T23:53:13.009044+00:00", "event": "task.after_update", "id": "task-0100"}
+{"ts": "2026-04-07T23:53:13.109665+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:53:13.150754+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:53:13.216466+00:00", "event": "task.after_create", "id": "task-0100", "path": "docs\\planning\\tasks\\core\\task-0100.md"}
+{"ts": "2026-04-07T23:53:20.382368+00:00", "event": "task.after_update", "id": "task-0101"}
+{"ts": "2026-04-07T23:53:20.508235+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:53:20.549789+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:53:20.631485+00:00", "event": "task.after_create", "id": "task-0101", "path": "docs\\planning\\tasks\\core\\task-0101.md"}
+{"ts": "2026-04-07T23:53:27.983866+00:00", "event": "task.after_update", "id": "task-0102"}
+{"ts": "2026-04-07T23:53:28.200058+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:53:28.266060+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:53:28.384005+00:00", "event": "task.after_create", "id": "task-0102", "path": "docs\\planning\\tasks\\core\\task-0102.md"}
+{"ts": "2026-04-07T23:53:35.666431+00:00", "event": "task.after_update", "id": "task-0103"}
+{"ts": "2026-04-07T23:53:35.881443+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:53:35.948462+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:53:36.087879+00:00", "event": "task.after_create", "id": "task-0103", "path": "docs\\planning\\tasks\\core\\task-0103.md"}
+{"ts": "2026-04-07T23:53:43.786614+00:00", "event": "task.after_update", "id": "task-0104"}
+{"ts": "2026-04-07T23:53:43.994830+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:53:44.064324+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:53:44.188639+00:00", "event": "task.after_create", "id": "task-0104", "path": "docs\\planning\\tasks\\core\\task-0104.md"}
+{"ts": "2026-04-07T23:53:52.117197+00:00", "event": "task.after_update", "id": "task-0105"}
+{"ts": "2026-04-07T23:53:52.346652+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:53:52.424254+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:53:52.553561+00:00", "event": "task.after_create", "id": "task-0105", "path": "docs\\planning\\tasks\\core\\task-0105.md"}
+{"ts": "2026-04-07T23:54:00.558895+00:00", "event": "task.after_update", "id": "task-0106"}
+{"ts": "2026-04-07T23:54:00.802390+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:54:00.874343+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:54:00.997718+00:00", "event": "task.after_create", "id": "task-0106", "path": "docs\\planning\\tasks\\core\\task-0106.md"}
+{"ts": "2026-04-07T23:54:08.889337+00:00", "event": "task.after_update", "id": "task-0107"}
+{"ts": "2026-04-07T23:54:09.119883+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:54:09.185571+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:54:09.323398+00:00", "event": "task.after_create", "id": "task-0107", "path": "docs\\planning\\tasks\\core\\task-0107.md"}
+{"ts": "2026-04-07T23:54:17.169820+00:00", "event": "task.after_update", "id": "task-0108"}
+{"ts": "2026-04-07T23:54:17.410782+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:54:17.492282+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:54:17.620241+00:00", "event": "task.after_create", "id": "task-0108", "path": "docs\\planning\\tasks\\core\\task-0108.md"}
+{"ts": "2026-04-07T23:54:25.133662+00:00", "event": "task.after_update", "id": "task-0109"}
+{"ts": "2026-04-07T23:54:25.357043+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:54:25.439957+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:54:25.596257+00:00", "event": "task.after_create", "id": "task-0109", "path": "docs\\planning\\tasks\\core\\task-0109.md"}
+{"ts": "2026-04-07T23:54:33.840402+00:00", "event": "task.after_update", "id": "task-0110"}
+{"ts": "2026-04-07T23:54:34.067359+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:54:34.133365+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:54:34.272281+00:00", "event": "task.after_create", "id": "task-0110", "path": "docs\\planning\\tasks\\core\\task-0110.md"}
+{"ts": "2026-04-07T23:54:42.034601+00:00", "event": "task.after_update", "id": "task-0111"}
+{"ts": "2026-04-07T23:54:42.281175+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:54:42.349864+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:54:42.477817+00:00", "event": "task.after_create", "id": "task-0111", "path": "docs\\planning\\tasks\\core\\task-0111.md"}
+{"ts": "2026-04-07T23:54:50.734646+00:00", "event": "task.after_update", "id": "task-0112"}
+{"ts": "2026-04-07T23:54:50.957733+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:54:51.033710+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:54:51.190663+00:00", "event": "task.after_create", "id": "task-0112", "path": "docs\\planning\\tasks\\core\\task-0112.md"}
+{"ts": "2026-04-07T23:54:59.817438+00:00", "event": "task.after_update", "id": "task-0113"}
+{"ts": "2026-04-07T23:55:00.078756+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:55:00.166729+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:55:00.334022+00:00", "event": "task.after_create", "id": "task-0113", "path": "docs\\planning\\tasks\\core\\task-0113.md"}
+{"ts": "2026-04-07T23:55:08.118650+00:00", "event": "task.after_update", "id": "task-0114"}
+{"ts": "2026-04-07T23:55:08.348173+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:55:08.414686+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:55:08.575356+00:00", "event": "task.after_create", "id": "task-0114", "path": "docs\\planning\\tasks\\core\\task-0114.md"}
+{"ts": "2026-04-07T23:55:16.527411+00:00", "event": "task.after_update", "id": "task-0115"}
+{"ts": "2026-04-07T23:55:16.779874+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:55:16.847715+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:55:16.999016+00:00", "event": "task.after_create", "id": "task-0115", "path": "docs\\planning\\tasks\\core\\task-0115.md"}
+{"ts": "2026-04-07T23:55:32.324840+00:00", "event": "task.after_update", "id": "task-0117"}
+{"ts": "2026-04-07T23:55:32.570815+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:55:32.643948+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:55:32.784516+00:00", "event": "task.after_create", "id": "task-0117", "path": "docs\\planning\\tasks\\core\\task-0117.md"}
+{"ts": "2026-04-07T23:55:40.396060+00:00", "event": "task.after_update", "id": "task-0118"}
+{"ts": "2026-04-07T23:55:40.658554+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:55:40.743243+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:55:40.894020+00:00", "event": "task.after_create", "id": "task-0118", "path": "docs\\planning\\tasks\\core\\task-0118.md"}
+{"ts": "2026-04-07T23:55:48.486578+00:00", "event": "task.after_update", "id": "task-0119"}
+{"ts": "2026-04-07T23:55:48.736328+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:55:48.816903+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:55:48.965153+00:00", "event": "task.after_create", "id": "task-0119", "path": "docs\\planning\\tasks\\core\\task-0119.md"}
+{"ts": "2026-04-07T23:55:56.784743+00:00", "event": "task.after_update", "id": "task-0120"}
+{"ts": "2026-04-07T23:55:57.003659+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:55:57.075866+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:55:57.204480+00:00", "event": "task.after_create", "id": "task-0120", "path": "docs\\planning\\tasks\\core\\task-0120.md"}
+{"ts": "2026-04-07T23:56:05.109498+00:00", "event": "task.after_update", "id": "task-0121"}
+{"ts": "2026-04-07T23:56:05.323225+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:56:05.390704+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:56:05.534239+00:00", "event": "task.after_create", "id": "task-0121", "path": "docs\\planning\\tasks\\core\\task-0121.md"}
+{"ts": "2026-04-07T23:56:13.435817+00:00", "event": "task.after_update", "id": "task-0122"}
+{"ts": "2026-04-07T23:56:13.591037+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:56:13.632217+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:56:13.725881+00:00", "event": "task.after_create", "id": "task-0122", "path": "docs\\planning\\tasks\\core\\task-0122.md"}
+{"ts": "2026-04-07T23:56:22.010198+00:00", "event": "task.after_update", "id": "task-0123"}
+{"ts": "2026-04-07T23:56:22.171857+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:56:22.219757+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:56:22.300498+00:00", "event": "task.after_create", "id": "task-0123", "path": "docs\\planning\\tasks\\core\\task-0123.md"}
+{"ts": "2026-04-07T23:56:29.967920+00:00", "event": "task.after_update", "id": "task-0124"}
+{"ts": "2026-04-07T23:56:30.216726+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:56:30.291917+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:56:30.447373+00:00", "event": "task.after_create", "id": "task-0124", "path": "docs\\planning\\tasks\\core\\task-0124.md"}
+{"ts": "2026-04-07T23:56:38.924495+00:00", "event": "task.after_update", "id": "task-0125"}
+{"ts": "2026-04-07T23:56:39.155217+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:56:39.231439+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:56:39.393359+00:00", "event": "task.after_create", "id": "task-0125", "path": "docs\\planning\\tasks\\core\\task-0125.md"}
+{"ts": "2026-04-07T23:56:48.119429+00:00", "event": "task.after_update", "id": "task-0126"}
+{"ts": "2026-04-07T23:56:48.367872+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:56:48.441771+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:56:48.605138+00:00", "event": "task.after_create", "id": "task-0126", "path": "docs\\planning\\tasks\\core\\task-0126.md"}
+{"ts": "2026-04-07T23:56:56.555961+00:00", "event": "task.after_update", "id": "task-0127"}
+{"ts": "2026-04-07T23:56:56.801332+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:56:56.896646+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:56:57.041076+00:00", "event": "task.after_create", "id": "task-0127", "path": "docs\\planning\\tasks\\core\\task-0127.md"}
+{"ts": "2026-04-07T23:57:05.251054+00:00", "event": "task.after_update", "id": "task-0128"}
+{"ts": "2026-04-07T23:57:05.494869+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:57:05.580871+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:57:05.736828+00:00", "event": "task.after_create", "id": "task-0128", "path": "docs\\planning\\tasks\\core\\task-0128.md"}
+{"ts": "2026-04-07T23:57:13.764632+00:00", "event": "task.after_update", "id": "task-0129"}
+{"ts": "2026-04-07T23:57:13.996684+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:57:14.080155+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:57:14.252752+00:00", "event": "task.after_create", "id": "task-0129", "path": "docs\\planning\\tasks\\core\\task-0129.md"}
+{"ts": "2026-04-07T23:57:23.493380+00:00", "event": "task.after_update", "id": "task-0130"}
+{"ts": "2026-04-07T23:57:23.743891+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:57:23.828884+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:57:24.011436+00:00", "event": "task.after_create", "id": "task-0130", "path": "docs\\planning\\tasks\\core\\task-0130.md"}
+{"ts": "2026-04-07T23:57:32.279475+00:00", "event": "task.after_update", "id": "task-0131"}
+{"ts": "2026-04-07T23:57:32.567673+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:57:32.661601+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:57:32.834742+00:00", "event": "task.after_create", "id": "task-0131", "path": "docs\\planning\\tasks\\core\\task-0131.md"}
+{"ts": "2026-04-07T23:57:40.568987+00:00", "event": "task.after_update", "id": "task-0132"}
+{"ts": "2026-04-07T23:57:40.796815+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:57:40.876223+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:57:41.047291+00:00", "event": "task.after_create", "id": "task-0132", "path": "docs\\planning\\tasks\\core\\task-0132.md"}
+{"ts": "2026-04-07T23:57:49.602536+00:00", "event": "task.after_update", "id": "task-0133"}
+{"ts": "2026-04-07T23:57:49.861224+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:57:49.953021+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:57:50.138506+00:00", "event": "task.after_create", "id": "task-0133", "path": "docs\\planning\\tasks\\core\\task-0133.md"}
+{"ts": "2026-04-07T23:57:58.384972+00:00", "event": "task.after_update", "id": "task-0134"}
+{"ts": "2026-04-07T23:57:58.662489+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:57:58.754020+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:57:58.929979+00:00", "event": "task.after_create", "id": "task-0134", "path": "docs\\planning\\tasks\\core\\task-0134.md"}
+{"ts": "2026-04-07T23:58:06.928561+00:00", "event": "task.after_update", "id": "task-0135"}
+{"ts": "2026-04-07T23:58:07.203100+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:58:07.301597+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:58:07.480323+00:00", "event": "task.after_create", "id": "task-0135", "path": "docs\\planning\\tasks\\core\\task-0135.md"}
+{"ts": "2026-04-07T23:58:15.539377+00:00", "event": "task.after_update", "id": "task-0136"}
+{"ts": "2026-04-07T23:58:15.802709+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:58:15.881176+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:58:16.053246+00:00", "event": "task.after_create", "id": "task-0136", "path": "docs\\planning\\tasks\\core\\task-0136.md"}
+{"ts": "2026-04-07T23:58:24.154904+00:00", "event": "task.after_update", "id": "task-0137"}
+{"ts": "2026-04-07T23:58:24.433374+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:58:24.521239+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:58:24.699406+00:00", "event": "task.after_create", "id": "task-0137", "path": "docs\\planning\\tasks\\core\\task-0137.md"}
+{"ts": "2026-04-07T23:58:32.850768+00:00", "event": "task.after_update", "id": "task-0138"}
+{"ts": "2026-04-07T23:58:33.104156+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:58:33.196949+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:58:33.378812+00:00", "event": "task.after_create", "id": "task-0138", "path": "docs\\planning\\tasks\\core\\task-0138.md"}
+{"ts": "2026-04-07T23:58:42.130411+00:00", "event": "task.after_update", "id": "task-0139"}
+{"ts": "2026-04-07T23:58:42.396493+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:58:42.488295+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:58:42.669570+00:00", "event": "task.after_create", "id": "task-0139", "path": "docs\\planning\\tasks\\core\\task-0139.md"}
+{"ts": "2026-04-07T23:58:50.764778+00:00", "event": "task.after_update", "id": "task-0140"}
+{"ts": "2026-04-07T23:58:50.968601+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:58:51.014333+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:58:51.099219+00:00", "event": "task.after_create", "id": "task-0140", "path": "docs\\planning\\tasks\\core\\task-0140.md"}
+{"ts": "2026-04-07T23:58:59.324339+00:00", "event": "task.after_update", "id": "task-0141"}
+{"ts": "2026-04-07T23:58:59.481073+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:58:59.522319+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:58:59.600396+00:00", "event": "task.after_create", "id": "task-0141", "path": "docs\\planning\\tasks\\core\\task-0141.md"}
+{"ts": "2026-04-07T23:59:08.086521+00:00", "event": "task.after_update", "id": "task-0142"}
+{"ts": "2026-04-07T23:59:08.211917+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:59:08.262215+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:59:08.375589+00:00", "event": "task.after_create", "id": "task-0142", "path": "docs\\planning\\tasks\\core\\task-0142.md"}
+{"ts": "2026-04-07T23:59:16.441606+00:00", "event": "task.after_update", "id": "task-0143"}
+{"ts": "2026-04-07T23:59:16.570520+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:59:16.610105+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:59:16.687560+00:00", "event": "task.after_create", "id": "task-0143", "path": "docs\\planning\\tasks\\core\\task-0143.md"}
+{"ts": "2026-04-07T23:59:25.001274+00:00", "event": "task.after_update", "id": "task-0144"}
+{"ts": "2026-04-07T23:59:25.173127+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:59:25.236077+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:59:25.359819+00:00", "event": "task.after_create", "id": "task-0144", "path": "docs\\planning\\tasks\\core\\task-0144.md"}
+{"ts": "2026-04-07T23:59:33.573261+00:00", "event": "task.after_update", "id": "task-0145"}
+{"ts": "2026-04-07T23:59:33.727542+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:59:33.796245+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:59:33.886530+00:00", "event": "task.after_create", "id": "task-0145", "path": "docs\\planning\\tasks\\core\\task-0145.md"}
+{"ts": "2026-04-07T23:59:41.861095+00:00", "event": "task.after_update", "id": "task-0146"}
+{"ts": "2026-04-07T23:59:42.084822+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:59:42.177339+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:59:42.307391+00:00", "event": "task.after_create", "id": "task-0146", "path": "docs\\planning\\tasks\\core\\task-0146.md"}
+{"ts": "2026-04-07T23:59:50.955132+00:00", "event": "task.after_update", "id": "task-0147"}
+{"ts": "2026-04-07T23:59:51.086925+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:59:51.134862+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-07T23:59:51.268588+00:00", "event": "task.after_create", "id": "task-0147", "path": "docs\\planning\\tasks\\core\\task-0147.md"}
+{"ts": "2026-04-07T23:59:59.891893+00:00", "event": "task.after_update", "id": "task-0148"}
+{"ts": "2026-04-08T00:00:00.053632+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:00:00.121333+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:00:00.235085+00:00", "event": "task.after_create", "id": "task-0148", "path": "docs\\planning\\tasks\\core\\task-0148.md"}
+{"ts": "2026-04-08T00:00:09.446183+00:00", "event": "task.after_update", "id": "task-0149"}
+{"ts": "2026-04-08T00:00:09.627462+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:00:09.671464+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:00:09.773970+00:00", "event": "task.after_create", "id": "task-0149", "path": "docs\\planning\\tasks\\core\\task-0149.md"}
+{"ts": "2026-04-08T00:00:17.898799+00:00", "event": "task.after_update", "id": "task-0150"}
+{"ts": "2026-04-08T00:00:18.063655+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:00:18.120441+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:00:18.234959+00:00", "event": "task.after_create", "id": "task-0150", "path": "docs\\planning\\tasks\\core\\task-0150.md"}
+{"ts": "2026-04-08T00:00:26.683821+00:00", "event": "task.after_update", "id": "task-0151"}
+{"ts": "2026-04-08T00:00:26.870852+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:00:26.938616+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:00:27.033105+00:00", "event": "task.after_create", "id": "task-0151", "path": "docs\\planning\\tasks\\core\\task-0151.md"}
+{"ts": "2026-04-08T00:00:35.965904+00:00", "event": "task.after_update", "id": "task-0152"}
+{"ts": "2026-04-08T00:00:36.165783+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:00:36.232993+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:00:36.329546+00:00", "event": "task.after_create", "id": "task-0152", "path": "docs\\planning\\tasks\\core\\task-0152.md"}
+{"ts": "2026-04-08T00:00:45.250722+00:00", "event": "task.after_update", "id": "task-0153"}
+{"ts": "2026-04-08T00:00:45.424658+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:00:45.466321+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:00:45.547964+00:00", "event": "task.after_create", "id": "task-0153", "path": "docs\\planning\\tasks\\core\\task-0153.md"}
+{"ts": "2026-04-08T00:00:54.583713+00:00", "event": "task.after_update", "id": "task-0154"}
+{"ts": "2026-04-08T00:00:54.715242+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:00:54.757339+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:00:54.838069+00:00", "event": "task.after_create", "id": "task-0154", "path": "docs\\planning\\tasks\\core\\task-0154.md"}
+{"ts": "2026-04-08T00:01:04.279099+00:00", "event": "task.after_update", "id": "task-0155"}
+{"ts": "2026-04-08T00:01:04.583597+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:01:04.674408+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:01:04.844578+00:00", "event": "task.after_create", "id": "task-0155", "path": "docs\\planning\\tasks\\core\\task-0155.md"}
+{"ts": "2026-04-08T00:01:14.804286+00:00", "event": "task.after_update", "id": "task-0156"}
+{"ts": "2026-04-08T00:01:15.081113+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:01:15.174895+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:01:15.337243+00:00", "event": "task.after_create", "id": "task-0156", "path": "docs\\planning\\tasks\\core\\task-0156.md"}
+{"ts": "2026-04-08T00:01:24.864323+00:00", "event": "task.after_update", "id": "task-0157"}
+{"ts": "2026-04-08T00:01:25.165691+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:01:25.258683+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:01:25.463787+00:00", "event": "task.after_create", "id": "task-0157", "path": "docs\\planning\\tasks\\core\\task-0157.md"}
+{"ts": "2026-04-08T00:01:37.365199+00:00", "event": "spec.after_update", "id": "spec-0013"}
+{"ts": "2026-04-08T00:01:37.534934+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:01:37.583989+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:01:37.709833+00:00", "event": "spec.after_create", "id": "spec-0013", "path": "docs\\planning\\specifications\\spec-0013-phase-5-discord-overlay.md"}
+{"ts": "2026-04-08T00:01:45.861119+00:00", "event": "task.after_update", "id": "task-0158"}
+{"ts": "2026-04-08T00:01:46.060950+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:01:46.105128+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:01:46.205229+00:00", "event": "task.after_create", "id": "task-0158", "path": "docs\\planning\\tasks\\core\\task-0158.md"}
+{"ts": "2026-04-08T00:01:54.900880+00:00", "event": "task.after_update", "id": "task-0159"}
+{"ts": "2026-04-08T00:01:55.061666+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:01:55.108056+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:01:55.193285+00:00", "event": "task.after_create", "id": "task-0159", "path": "docs\\planning\\tasks\\core\\task-0159.md"}
+{"ts": "2026-04-08T00:02:04.608923+00:00", "event": "task.after_update", "id": "task-0160"}
+{"ts": "2026-04-08T00:02:04.816999+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:02:04.863463+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:02:04.950774+00:00", "event": "task.after_create", "id": "task-0160", "path": "docs\\planning\\tasks\\core\\task-0160.md"}
+{"ts": "2026-04-08T00:02:13.985648+00:00", "event": "task.after_update", "id": "task-0161"}
+{"ts": "2026-04-08T00:02:14.121115+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:02:14.178889+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:02:14.336710+00:00", "event": "task.after_create", "id": "task-0161", "path": "docs\\planning\\tasks\\core\\task-0161.md"}
+{"ts": "2026-04-08T00:02:25.445272+00:00", "event": "spec.after_update", "id": "spec-0014"}
+{"ts": "2026-04-08T00:02:25.587400+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:02:25.634716+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:02:25.719158+00:00", "event": "spec.after_create", "id": "spec-0014", "path": "docs\\planning\\specifications\\spec-0014-phase-6-migration-hardening-and-cutover-completion.md"}
+{"ts": "2026-04-08T00:02:34.028261+00:00", "event": "task.after_update", "id": "task-0162"}
+{"ts": "2026-04-08T00:02:34.337366+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:02:34.451605+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:02:34.682461+00:00", "event": "task.after_create", "id": "task-0162", "path": "docs\\planning\\tasks\\core\\task-0162.md"}
+{"ts": "2026-04-08T00:02:43.624278+00:00", "event": "task.after_update", "id": "task-0163"}
+{"ts": "2026-04-08T00:02:43.939355+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:02:44.062461+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:02:44.272775+00:00", "event": "task.after_create", "id": "task-0163", "path": "docs\\planning\\tasks\\core\\task-0163.md"}
+{"ts": "2026-04-08T00:02:54.424941+00:00", "event": "task.after_update", "id": "task-0164"}
+{"ts": "2026-04-08T00:02:54.748118+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:02:54.858130+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:02:55.071124+00:00", "event": "task.after_create", "id": "task-0164", "path": "docs\\planning\\tasks\\core\\task-0164.md"}
+{"ts": "2026-04-08T00:03:06.794766+00:00", "event": "spec.after_update", "id": "spec-0015"}
+{"ts": "2026-04-08T00:03:07.102105+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:03:07.196429+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:03:07.406624+00:00", "event": "spec.after_create", "id": "spec-0015", "path": "docs\\planning\\specifications\\spec-0015-phase-7-node-execution-and-federation-extension.md"}
+{"ts": "2026-04-08T00:03:16.010021+00:00", "event": "task.after_update", "id": "task-0165"}
+{"ts": "2026-04-08T00:03:16.319816+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:03:16.434399+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:03:16.652474+00:00", "event": "task.after_create", "id": "task-0165", "path": "docs\\planning\\tasks\\core\\task-0165.md"}
+{"ts": "2026-04-08T00:03:26.530388+00:00", "event": "task.after_update", "id": "task-0166"}
+{"ts": "2026-04-08T00:03:26.850423+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:03:26.964864+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:03:27.155862+00:00", "event": "task.after_create", "id": "task-0166", "path": "docs\\planning\\tasks\\core\\task-0166.md"}
+{"ts": "2026-04-08T00:03:37.215386+00:00", "event": "task.after_update", "id": "task-0167"}
+{"ts": "2026-04-08T00:03:37.538268+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:03:37.649746+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:03:37.842756+00:00", "event": "task.after_create", "id": "task-0167", "path": "docs\\planning\\tasks\\core\\task-0167.md"}
+{"ts": "2026-04-08T00:03:48.539469+00:00", "event": "spec.after_update", "id": "spec-0016"}
+{"ts": "2026-04-08T00:03:48.858574+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:03:48.974203+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:03:49.193081+00:00", "event": "spec.after_create", "id": "spec-0016", "path": "docs\\planning\\specifications\\spec-0016-phase-8-discovery-and-registry-extension.md"}
+{"ts": "2026-04-08T00:03:57.912482+00:00", "event": "task.after_update", "id": "task-0168"}
+{"ts": "2026-04-08T00:03:58.248670+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:03:58.361374+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:03:58.560761+00:00", "event": "task.after_create", "id": "task-0168", "path": "docs\\planning\\tasks\\core\\task-0168.md"}
+{"ts": "2026-04-08T00:04:08.417054+00:00", "event": "task.after_update", "id": "task-0169"}
+{"ts": "2026-04-08T00:04:08.756495+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:04:08.853382+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:04:09.069703+00:00", "event": "task.after_create", "id": "task-0169", "path": "docs\\planning\\tasks\\core\\task-0169.md"}
+{"ts": "2026-04-08T00:04:19.441246+00:00", "event": "task.after_update", "id": "task-0170"}
+{"ts": "2026-04-08T00:04:19.759464+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:04:19.880261+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:04:20.087851+00:00", "event": "task.after_create", "id": "task-0170", "path": "docs\\planning\\tasks\\core\\task-0170.md"}
+{"ts": "2026-04-08T00:04:32.073444+00:00", "event": "spec.after_update", "id": "spec-0017"}
+{"ts": "2026-04-08T00:04:32.437504+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:04:32.555323+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:04:32.797208+00:00", "event": "spec.after_create", "id": "spec-0017", "path": "docs\\planning\\specifications\\spec-0017-phase-9-distributed-eventing-and-control-extension.md"}
+{"ts": "2026-04-08T00:04:42.141955+00:00", "event": "task.after_update", "id": "task-0171"}
+{"ts": "2026-04-08T00:04:42.525386+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:04:42.644174+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:04:42.871741+00:00", "event": "task.after_create", "id": "task-0171", "path": "docs\\planning\\tasks\\core\\task-0171.md"}
+{"ts": "2026-04-08T00:04:52.539149+00:00", "event": "task.after_update", "id": "task-0172"}
+{"ts": "2026-04-08T00:04:52.848048+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:04:52.954668+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:04:53.171411+00:00", "event": "task.after_create", "id": "task-0172", "path": "docs\\planning\\tasks\\core\\task-0172.md"}
+{"ts": "2026-04-08T00:05:04.355053+00:00", "event": "spec.after_update", "id": "spec-0018"}
+{"ts": "2026-04-08T00:05:04.691530+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:05:04.817436+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:05:05.016416+00:00", "event": "spec.after_create", "id": "spec-0018", "path": "docs\\planning\\specifications\\spec-0018-phase-10-coordinator-consumption-seam.md"}
+{"ts": "2026-04-08T00:05:14.940384+00:00", "event": "task.after_update", "id": "task-0173"}
+{"ts": "2026-04-08T00:05:15.268977+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:05:15.397784+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:05:15.601459+00:00", "event": "task.after_create", "id": "task-0173", "path": "docs\\planning\\tasks\\core\\task-0173.md"}
+{"ts": "2026-04-08T00:05:28.608537+00:00", "event": "spec.after_update", "id": "spec-0019"}
+{"ts": "2026-04-08T00:05:28.958703+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:05:29.068970+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:05:29.297558+00:00", "event": "spec.after_create", "id": "spec-0019", "path": "docs\\planning\\specifications\\spec-0019-phase-11-pluggable-external-tool-connectivity.md"}
+{"ts": "2026-04-08T00:05:38.812574+00:00", "event": "task.after_update", "id": "task-0174"}
+{"ts": "2026-04-08T00:05:39.129788+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:05:39.254869+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:05:39.518860+00:00", "event": "task.after_create", "id": "task-0174", "path": "docs\\planning\\tasks\\core\\task-0174.md"}
+{"ts": "2026-04-08T00:05:51.218689+00:00", "event": "spec.after_update", "id": "spec-0020"}
+{"ts": "2026-04-08T00:05:51.575829+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:05:51.691496+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:05:51.896427+00:00", "event": "spec.after_create", "id": "spec-0020", "path": "docs\\planning\\specifications\\spec-0020-phase-12-remaining-implementation-docs.md"}
+{"ts": "2026-04-08T00:06:01.604791+00:00", "event": "task.after_update", "id": "task-0175"}
+{"ts": "2026-04-08T00:06:01.963272+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:06:02.072843+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:06:02.271257+00:00", "event": "task.after_create", "id": "task-0175", "path": "docs\\planning\\tasks\\core\\task-0175.md"}
+{"ts": "2026-04-08T00:06:13.732870+00:00", "event": "task.after_update", "id": "task-0176"}
+{"ts": "2026-04-08T00:06:14.084806+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:06:14.190002+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:06:14.432821+00:00", "event": "task.after_create", "id": "task-0176", "path": "docs\\planning\\tasks\\core\\task-0176.md"}
+{"ts": "2026-04-08T00:06:24.659840+00:00", "event": "task.after_update", "id": "task-0177"}
+{"ts": "2026-04-08T00:06:25.007693+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:06:25.136544+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:06:25.349092+00:00", "event": "task.after_create", "id": "task-0177", "path": "docs\\planning\\tasks\\core\\task-0177.md"}
+{"ts": "2026-04-08T00:06:35.127231+00:00", "event": "task.after_update", "id": "task-0178"}
+{"ts": "2026-04-08T00:06:35.493119+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:06:35.608417+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:06:35.821333+00:00", "event": "task.after_create", "id": "task-0178", "path": "docs\\planning\\tasks\\core\\task-0178.md"}
+{"ts": "2026-04-08T00:06:45.668513+00:00", "event": "task.after_update", "id": "task-0179"}
+{"ts": "2026-04-08T00:06:46.026133+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:06:46.156588+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:06:46.396777+00:00", "event": "task.after_create", "id": "task-0179", "path": "docs\\planning\\tasks\\core\\task-0179.md"}
+{"ts": "2026-04-08T00:06:56.519740+00:00", "event": "task.after_update", "id": "task-0180"}
+{"ts": "2026-04-08T00:06:56.871826+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:06:56.973946+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-08T00:06:57.181030+00:00", "event": "task.after_create", "id": "task-0180", "path": "docs\\planning\\tasks\\core\\task-0180.md"}
