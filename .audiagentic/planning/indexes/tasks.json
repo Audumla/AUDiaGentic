@@ -1,7 +1,91 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-08T00:06:57.409427+00:00",
+  "generated_at": "2026-04-08T03:06:15.709211+00:00",
   "items": [
+    {
+      "id": "task-0032",
+      "label": "[PKT-FND-001](task-0032): Canonical IDs and Naming Normalization",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-0032.md"
+    },
+    {
+      "id": "task-0033",
+      "label": "[PKT-FND-002](task-0033): Schema Package and Fixtures",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-0033.md"
+    },
+    {
+      "id": "task-0034",
+      "label": "[PKT-FND-003](task-0034): Example Project Scaffold",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-0034.md"
+    },
+    {
+      "id": "task-0035",
+      "label": "[PKT-FND-004](task-0035): Lifecycle CLI Stub",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-0035.md"
+    },
+    {
+      "id": "task-0036",
+      "label": "[PKT-FND-005](task-0036): Packet/Test Harness Scaffolding",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-0036.md"
+    },
+    {
+      "id": "task-0037",
+      "label": "[PKT-FND-006](task-0037): Naming Validator Script",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-0037.md"
+    },
+    {
+      "id": "task-0038",
+      "label": "[PKT-FND-007](task-0038): Schema Validator Script",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-0038.md"
+    },
+    {
+      "id": "task-0039",
+      "label": "[PKT-FND-008](task-0039): Checkpoint Writer",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-0039.md"
+    },
+    {
+      "id": "task-0040",
+      "label": "[PKT-FND-009](task-0040): Fixture Generator",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-0040.md"
+    },
+    {
+      "id": "task-0041",
+      "label": "[PKT-FND-010](task-0041): Integration Tests",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-0041.md"
+    },
+    {
+      "id": "task-0042",
+      "label": "[PKT-FND-011](task-0042): Documentation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-0042.md"
+    },
+    {
+      "id": "task-0043",
+      "label": "[PKT-FND-012](task-0043): Migration Runbook",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-0043.md"
+    },
+    {
+      "id": "task-0044",
+      "label": "[PKT-FND-013](task-0044): Exit Gate Validation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-0044.md"
+    },
+    {
+      "id": "task-0173",
+      "label": "[PKT-CRD-001](task-0173): Coordinator Consumption Seam",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\coordinator\\task-0173.md"
+    },
     {
       "id": "task-0008-output",
       "label": "Migration Reference Map",
@@ -129,892 +213,808 @@
       "path": "docs\\planning\\tasks\\core\\task-0027.md"
     },
     {
-      "id": "task-0032",
-      "label": "PKT-FND-001: Canonical IDs and Naming Normalization",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0032.md"
-    },
-    {
-      "id": "task-0033",
-      "label": "PKT-FND-002: Schema Package and Fixtures",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0033.md"
-    },
-    {
-      "id": "task-0034",
-      "label": "PKT-FND-003: Example Project Scaffold",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0034.md"
-    },
-    {
-      "id": "task-0035",
-      "label": "PKT-FND-004: Lifecycle CLI Stub",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0035.md"
-    },
-    {
-      "id": "task-0036",
-      "label": "PKT-FND-005: Packet/Test Harness Scaffolding",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0036.md"
-    },
-    {
-      "id": "task-0037",
-      "label": "PKT-FND-006: Naming Validator Script",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0037.md"
-    },
-    {
-      "id": "task-0038",
-      "label": "PKT-FND-007: Schema Validator Script",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0038.md"
-    },
-    {
-      "id": "task-0039",
-      "label": "PKT-FND-008: Checkpoint Writer",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0039.md"
-    },
-    {
-      "id": "task-0040",
-      "label": "PKT-FND-009: Fixture Generator",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0040.md"
-    },
-    {
-      "id": "task-0041",
-      "label": "PKT-FND-010: Integration Tests",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0041.md"
-    },
-    {
-      "id": "task-0042",
-      "label": "PKT-FND-011: Documentation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0042.md"
-    },
-    {
-      "id": "task-0043",
-      "label": "PKT-FND-012: Migration Runbook",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0043.md"
-    },
-    {
-      "id": "task-0044",
-      "label": "PKT-FND-013: Exit Gate Validation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0044.md"
-    },
-    {
-      "id": "task-0045",
-      "label": "PKT-LFC-001: Installed-State Detector",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0045.md"
-    },
-    {
-      "id": "task-0046",
-      "label": "PKT-LFC-002: Lifecycle Manifest and Checkpoint Writer",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0046.md"
-    },
-    {
-      "id": "task-0047",
-      "label": "PKT-LFC-003: Fresh Install Apply/Validate",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0047.md"
-    },
-    {
-      "id": "task-0048",
-      "label": "PKT-LFC-004: Update Dispatch and Version Module Selection",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0048.md"
-    },
-    {
-      "id": "task-0049",
-      "label": "PKT-LFC-005: Legacy Cutover",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0049.md"
-    },
-    {
-      "id": "task-0050",
-      "label": "PKT-LFC-006: Uninstall Current AUDiaGentic",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0050.md"
-    },
-    {
-      "id": "task-0051",
-      "label": "PKT-LFC-007: Document Migration Outcomes and Reports",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0051.md"
-    },
-    {
-      "id": "task-0052",
-      "label": "PKT-LFC-010: Preserve Provider Auto-Install Policy Fields",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0052.md"
-    },
-    {
-      "id": "task-0053",
-      "label": "PKT-LFC-011: Installable Baseline Inventory and Sync-Mode Classification",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0053.md"
-    },
-    {
-      "id": "task-0054",
-      "label": "PKT-LFC-012: Shared Baseline Sync Engine for Lifecycle and Bootstrap",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0054.md"
-    },
-    {
-      "id": "task-0055",
-      "label": "PKT-LFC-013: Converge Fresh-Install and Release-Bootstrap on Baseline Sync",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0055.md"
-    },
-    {
-      "id": "task-0056",
-      "label": "PKT-RLS-001: Fragment Capture",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0056.md"
-    },
-    {
-      "id": "task-0057",
-      "label": "PKT-RLS-002: Sync with Locking and Idempotency",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0057.md"
-    },
-    {
-      "id": "task-0058",
-      "label": "PKT-RLS-003: Current Release Summary",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0058.md"
-    },
-    {
-      "id": "task-0059",
-      "label": "PKT-RLS-004: Audit/Check-in Summary Generation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0059.md"
-    },
-    {
-      "id": "task-0060",
-      "label": "PKT-RLS-005: Finalization with Exactly-Once Historical Append",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0060.md"
-    },
-    {
-      "id": "task-0061",
-      "label": "PKT-RLS-006: Release Please Baseline Workflow",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0061.md"
-    },
-    {
-      "id": "task-0062",
-      "label": "PKT-RLS-007: Release Please Config Management",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0062.md"
-    },
-    {
-      "id": "task-0063",
-      "label": "PKT-RLS-008: Ledger Integration",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0063.md"
-    },
-    {
-      "id": "task-0064",
-      "label": "PKT-RLS-009: Audit Trail",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0064.md"
-    },
-    {
-      "id": "task-0065",
-      "label": "PKT-RLS-010: Release Validation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0065.md"
-    },
-    {
-      "id": "task-0066",
-      "label": "PKT-RLS-011: Release Documentation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0066.md"
-    },
-    {
-      "id": "task-0067",
-      "label": "PKT-JOB-001: Job Records and Store",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0067.md"
-    },
-    {
-      "id": "task-0068",
-      "label": "PKT-JOB-002: State Machine",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0068.md"
-    },
-    {
-      "id": "task-0069",
-      "label": "PKT-JOB-003: Workflow Profiles",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0069.md"
-    },
-    {
-      "id": "task-0070",
-      "label": "PKT-JOB-004: Packet Runner",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0070.md"
-    },
-    {
-      "id": "task-0071",
-      "label": "PKT-JOB-005: Approval Handling",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0071.md"
-    },
-    {
-      "id": "task-0072",
-      "label": "PKT-JOB-006: Release Bridge",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0072.md"
-    },
-    {
-      "id": "task-0073",
-      "label": "PKT-JOB-007: Job Validation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0073.md"
-    },
-    {
-      "id": "task-0074",
-      "label": "PKT-JOB-008: Job Monitoring",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0074.md"
-    },
-    {
-      "id": "task-0075",
-      "label": "PKT-JOB-009: Job Cancellation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0075.md"
-    },
-    {
-      "id": "task-0076",
-      "label": "PKT-JOB-010: Job Documentation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0076.md"
-    },
-    {
-      "id": "task-0077",
-      "label": "PKT-JOB-011: Job Testing",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0077.md"
-    },
-    {
-      "id": "task-0078",
-      "label": "PKT-PRV-001: Provider Registry",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0078.md"
-    },
-    {
-      "id": "task-0079",
-      "label": "PKT-PRV-002: Health Checks",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0079.md"
-    },
-    {
-      "id": "task-0080",
-      "label": "PKT-PRV-003: Provider Selection",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0080.md"
-    },
-    {
-      "id": "task-0081",
-      "label": "PKT-PRV-004: Provider Adapters",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0081.md"
-    },
-    {
-      "id": "task-0082",
-      "label": "PKT-PRV-005: Service Seam",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0082.md"
-    },
-    {
-      "id": "task-0083",
-      "label": "PKT-PRV-006: Provider Implementation Template",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0083.md"
-    },
-    {
-      "id": "task-0084",
-      "label": "PKT-PRV-007: Provider Configuration Schema",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0084.md"
-    },
-    {
-      "id": "task-0085",
-      "label": "PKT-PRV-008: Provider Documentation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0085.md"
-    },
-    {
-      "id": "task-0086",
-      "label": "PKT-PRV-009: Provider Testing Framework",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0086.md"
-    },
-    {
-      "id": "task-0087",
-      "label": "PKT-PRV-010: Provider Performance Benchmarks",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0087.md"
-    },
-    {
-      "id": "task-0088",
-      "label": "PKT-PRV-011: Provider Security Audit",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0088.md"
-    },
-    {
-      "id": "task-0089",
-      "label": "PKT-PRV-012: Provider Version Management",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0089.md"
-    },
-    {
-      "id": "task-0090",
-      "label": "PKT-PRV-013: Provider Feature Flags",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0090.md"
-    },
-    {
-      "id": "task-0091",
-      "label": "PKT-PRV-014: Provider Rate Limiting",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0091.md"
-    },
-    {
-      "id": "task-0092",
-      "label": "PKT-PRV-015: Provider Caching",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0092.md"
-    },
-    {
-      "id": "task-0093",
-      "label": "PKT-PRV-016: Provider Error Handling",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0093.md"
-    },
-    {
-      "id": "task-0094",
-      "label": "PKT-PRV-017: Provider Logging",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0094.md"
-    },
-    {
-      "id": "task-0095",
-      "label": "PKT-PRV-018: Provider Metrics",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0095.md"
-    },
-    {
-      "id": "task-0096",
-      "label": "PKT-PRV-019: Provider Tracing",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0096.md"
-    },
-    {
-      "id": "task-0097",
-      "label": "PKT-PRV-020: Provider Configuration Management",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0097.md"
-    },
-    {
-      "id": "task-0098",
-      "label": "PKT-PRV-021: Provider Discovery",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0098.md"
-    },
-    {
-      "id": "task-0099",
-      "label": "PKT-PRV-022: Provider Lifecycle",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0099.md"
-    },
-    {
-      "id": "task-0100",
-      "label": "PKT-PRV-023: Provider Plugin System",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0100.md"
-    },
-    {
-      "id": "task-0101",
-      "label": "PKT-PRV-024: Provider API Gateway",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0101.md"
-    },
-    {
-      "id": "task-0102",
-      "label": "PKT-PRV-025: Provider Webhook Support",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0102.md"
-    },
-    {
-      "id": "task-0103",
-      "label": "PKT-PRV-026: Provider Event Bus",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0103.md"
-    },
-    {
-      "id": "task-0104",
-      "label": "PKT-PRV-027: Provider Message Queue",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0104.md"
-    },
-    {
-      "id": "task-0105",
-      "label": "PKT-PRV-028: Provider Queue Management",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0105.md"
-    },
-    {
-      "id": "task-0106",
-      "label": "PKT-PRV-029: Provider Batch Processing",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0106.md"
-    },
-    {
-      "id": "task-0107",
-      "label": "PKT-PRV-030: Provider Stream Processing",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0107.md"
-    },
-    {
-      "id": "task-0108",
-      "label": "PKT-PRV-031: Provider Async Support",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0108.md"
-    },
-    {
-      "id": "task-0109",
-      "label": "PKT-PRV-032: Provider Sync Support",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0109.md"
-    },
-    {
-      "id": "task-0110",
-      "label": "PKT-PRV-033: Provider Timeout Handling",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0110.md"
-    },
-    {
-      "id": "task-0111",
-      "label": "PKT-PRV-034: Provider Retry Logic",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0111.md"
-    },
-    {
-      "id": "task-0112",
-      "label": "PKT-PRV-035: Provider Circuit Breaker",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0112.md"
-    },
-    {
-      "id": "task-0113",
-      "label": "PKT-PRV-036: Provider Bulkhead",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0113.md"
-    },
-    {
-      "id": "task-0114",
-      "label": "PKT-PRV-037: Provider Load Balancing",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0114.md"
-    },
-    {
-      "id": "task-0115",
-      "label": "PKT-PRV-038: Provider Connection Pooling",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0115.md"
-    },
-    {
-      "id": "task-0117",
-      "label": "PKT-PRV-039: Provider SSL/TLS Support",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0117.md"
-    },
-    {
-      "id": "task-0118",
-      "label": "PKT-PRV-040: Provider Authentication",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0118.md"
-    },
-    {
-      "id": "task-0119",
-      "label": "PKT-PRV-041: Provider Authorization",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0119.md"
-    },
-    {
-      "id": "task-0120",
-      "label": "PKT-PRV-042: Provider Audit Logging",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0120.md"
-    },
-    {
-      "id": "task-0121",
-      "label": "PKT-PRV-043: Provider Compliance Checks",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0121.md"
-    },
-    {
-      "id": "task-0122",
-      "label": "PKT-PRV-044: Provider Policy Enforcement",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0122.md"
-    },
-    {
-      "id": "task-0123",
-      "label": "PKT-PRV-045: Provider Data Encryption",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0123.md"
-    },
-    {
-      "id": "task-0124",
-      "label": "PKT-PRV-046: Provider Data Masking",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0124.md"
-    },
-    {
-      "id": "task-0125",
-      "label": "PKT-PRV-047: Provider Data Retention",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0125.md"
-    },
-    {
-      "id": "task-0126",
-      "label": "PKT-PRV-048: Provider Data Export",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0126.md"
-    },
-    {
-      "id": "task-0127",
-      "label": "PKT-PRV-049: Provider Data Import",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0127.md"
-    },
-    {
-      "id": "task-0128",
-      "label": "PKT-PRV-050: Provider Data Transformation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0128.md"
-    },
-    {
-      "id": "task-0129",
-      "label": "PKT-PRV-051: Provider Data Validation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0129.md"
-    },
-    {
-      "id": "task-0130",
-      "label": "PKT-PRV-052: Provider Data Quality",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0130.md"
-    },
-    {
-      "id": "task-0131",
-      "label": "PKT-PRV-053: Provider Data Governance",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0131.md"
-    },
-    {
-      "id": "task-0132",
-      "label": "PKT-PRV-054: Provider Data Lineage",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0132.md"
-    },
-    {
-      "id": "task-0133",
-      "label": "PKT-PRV-055: Provider Data Catalog",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0133.md"
-    },
-    {
-      "id": "task-0134",
-      "label": "PKT-PRV-056: Provider Data Dictionary",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0134.md"
-    },
-    {
-      "id": "task-0135",
-      "label": "PKT-PRV-057: Provider Data Standards",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0135.md"
-    },
-    {
-      "id": "task-0136",
-      "label": "PKT-PRV-058: Provider Data Quality Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0136.md"
-    },
-    {
-      "id": "task-0137",
-      "label": "PKT-PRV-059: Provider Data Profiling",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0137.md"
-    },
-    {
-      "id": "task-0138",
-      "label": "PKT-PRV-060: Provider Data Anomaly Detection",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0138.md"
-    },
-    {
-      "id": "task-0139",
-      "label": "PKT-PRV-061: Provider Data Masking Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0139.md"
-    },
-    {
-      "id": "task-0140",
-      "label": "PKT-PRV-062: Provider Data Retention Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0140.md"
-    },
-    {
-      "id": "task-0141",
-      "label": "PKT-PRV-063: Provider Data Export Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0141.md"
-    },
-    {
-      "id": "task-0142",
-      "label": "PKT-PRV-064: Provider Data Import Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0142.md"
-    },
-    {
-      "id": "task-0143",
-      "label": "PKT-PRV-065: Provider Data Transformation Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0143.md"
-    },
-    {
-      "id": "task-0144",
-      "label": "PKT-PRV-066: Provider Data Validation Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0144.md"
-    },
-    {
-      "id": "task-0145",
-      "label": "PKT-PRV-067: Provider Data Quality Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0145.md"
-    },
-    {
-      "id": "task-0146",
-      "label": "PKT-PRV-068: Provider Data Governance Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0146.md"
-    },
-    {
-      "id": "task-0147",
-      "label": "PKT-PRV-069: Provider Data Lineage Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0147.md"
-    },
-    {
-      "id": "task-0148",
-      "label": "PKT-PRV-070: Provider Data Catalog Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0148.md"
-    },
-    {
-      "id": "task-0149",
-      "label": "PKT-PRV-071: Provider Data Dictionary Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0149.md"
-    },
-    {
-      "id": "task-0150",
-      "label": "PKT-PRV-072: Provider Data Standards Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0150.md"
-    },
-    {
-      "id": "task-0151",
-      "label": "PKT-PRV-073: Provider Data Quality Monitoring",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0151.md"
-    },
-    {
-      "id": "task-0152",
-      "label": "PKT-PRV-074: Provider Data Governance Monitoring",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0152.md"
-    },
-    {
-      "id": "task-0153",
-      "label": "PKT-PRV-075: Provider Data Lineage Monitoring",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0153.md"
-    },
-    {
-      "id": "task-0154",
-      "label": "PKT-PRV-076: Provider Data Catalog Monitoring",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0154.md"
-    },
-    {
-      "id": "task-0155",
-      "label": "PKT-PRV-077: Provider Data Dictionary Monitoring",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0155.md"
-    },
-    {
-      "id": "task-0156",
-      "label": "PKT-PRV-078: Provider Data Standards Monitoring",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0156.md"
-    },
-    {
-      "id": "task-0157",
-      "label": "PKT-SRV-001: Provider Service Seam",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0157.md"
-    },
-    {
       "id": "task-0158",
-      "label": "PKT-DSC-001: Event Subscriber",
+      "label": "[PKT-DSC-001](task-0158): Event Subscriber",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0158.md"
+      "path": "docs\\planning\\tasks\\discord\\task-0158.md"
     },
     {
       "id": "task-0159",
-      "label": "PKT-DSC-002: Release Summary Publishing",
+      "label": "[PKT-DSC-002](task-0159): Release Summary Publishing",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0159.md"
+      "path": "docs\\planning\\tasks\\discord\\task-0159.md"
     },
     {
       "id": "task-0160",
-      "label": "PKT-DSC-003: Approval Publishing/Response Handling",
+      "label": "[PKT-DSC-003](task-0160): Approval Publishing/Response Handling",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0160.md"
+      "path": "docs\\planning\\tasks\\discord\\task-0160.md"
     },
     {
       "id": "task-0161",
-      "label": "PKT-DSC-004: Lifecycle/Migration Notices",
+      "label": "[PKT-DSC-004](task-0161): Lifecycle/Migration Notices",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0161.md"
-    },
-    {
-      "id": "task-0162",
-      "label": "PKT-MIG-001: Migration Fixtures and Examples",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0162.md"
-    },
-    {
-      "id": "task-0163",
-      "label": "PKT-MIG-002: Provider Migration Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0163.md"
-    },
-    {
-      "id": "task-0164",
-      "label": "PKT-MIG-003: Cutover Runbooks",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0164.md"
-    },
-    {
-      "id": "task-0165",
-      "label": "PKT-NOD-001: Node Descriptor and Heartbeat",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0165.md"
-    },
-    {
-      "id": "task-0166",
-      "label": "PKT-NOD-002: Node-Local Status Persistence",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0166.md"
-    },
-    {
-      "id": "task-0167",
-      "label": "PKT-NOD-003: Node Runtime Module Skeleton",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0167.md"
+      "path": "docs\\planning\\tasks\\discord\\task-0161.md"
     },
     {
       "id": "task-0168",
-      "label": "PKT-DIS-001: Locator Provider Contract",
+      "label": "[PKT-DIS-001](task-0168): Locator Provider Contract",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0168.md"
+      "path": "docs\\planning\\tasks\\discovery\\task-0168.md"
     },
     {
       "id": "task-0169",
-      "label": "PKT-DIS-002: Static Registry Provider",
+      "label": "[PKT-DIS-002](task-0169): Static Registry Provider",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0169.md"
+      "path": "docs\\planning\\tasks\\discovery\\task-0169.md"
     },
     {
       "id": "task-0170",
-      "label": "PKT-DIS-003: Optional Provider Seams",
+      "label": "[PKT-DIS-003](task-0170): Optional Provider Seams",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0170.md"
+      "path": "docs\\planning\\tasks\\discovery\\task-0170.md"
     },
     {
       "id": "task-0171",
-      "label": "PKT-EVT-001: Node Event Families",
+      "label": "[PKT-EVT-001](task-0171): Node Event Families",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0171.md"
+      "path": "docs\\planning\\tasks\\eventing\\task-0171.md"
     },
     {
       "id": "task-0172",
-      "label": "PKT-EVT-002: Control Request Contracts",
+      "label": "[PKT-EVT-002](task-0172): Control Request Contracts",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0172.md"
-    },
-    {
-      "id": "task-0173",
-      "label": "PKT-CRD-001: Coordinator Consumption Seam",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0173.md"
+      "path": "docs\\planning\\tasks\\eventing\\task-0172.md"
     },
     {
       "id": "task-0174",
-      "label": "PKT-EXT-001: External Connector Contract and Mock",
+      "label": "[PKT-EXT-001](task-0174): External Connector Contract and Mock",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0174.md"
+      "path": "docs\\planning\\tasks\\external-tools\\task-0174.md"
     },
     {
       "id": "task-0175",
       "label": "Phase 1-11 Build Books",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0175.md"
+      "path": "docs\\planning\\tasks\\implementation-docs\\task-0175.md"
     },
     {
       "id": "task-0176",
       "label": "Provider Plans and Runbooks",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0176.md"
+      "path": "docs\\planning\\tasks\\implementation-docs\\task-0176.md"
     },
     {
       "id": "task-0177",
       "label": "Refactor Docs",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0177.md"
+      "path": "docs\\planning\\tasks\\implementation-docs\\task-0177.md"
     },
     {
       "id": "task-0178",
       "label": "Testing and Status Reports",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0178.md"
+      "path": "docs\\planning\\tasks\\implementation-docs\\task-0178.md"
     },
     {
       "id": "task-0179",
       "label": "Reference Resolution",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0179.md"
+      "path": "docs\\planning\\tasks\\implementation-docs\\task-0179.md"
     },
     {
       "id": "task-0180",
       "label": "Final Validation and Cleanup",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0180.md"
+      "path": "docs\\planning\\tasks\\implementation-docs\\task-0180.md"
+    },
+    {
+      "id": "task-0067",
+      "label": "[PKT-JOB-001](task-0067): Job Records and Store",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-0067.md"
+    },
+    {
+      "id": "task-0068",
+      "label": "[PKT-JOB-002](task-0068): State Machine",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-0068.md"
+    },
+    {
+      "id": "task-0069",
+      "label": "[PKT-JOB-003](task-0069): Workflow Profiles",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-0069.md"
+    },
+    {
+      "id": "task-0070",
+      "label": "[PKT-JOB-004](task-0070): Packet Runner",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-0070.md"
+    },
+    {
+      "id": "task-0071",
+      "label": "[PKT-JOB-005](task-0071): Approval Handling",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-0071.md"
+    },
+    {
+      "id": "task-0072",
+      "label": "[PKT-JOB-006](task-0072): Release Bridge",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-0072.md"
+    },
+    {
+      "id": "task-0073",
+      "label": "[PKT-JOB-007](task-0073): Job Validation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-0073.md"
+    },
+    {
+      "id": "task-0074",
+      "label": "[PKT-JOB-008](task-0074): Job Monitoring",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-0074.md"
+    },
+    {
+      "id": "task-0075",
+      "label": "[PKT-JOB-009](task-0075): Job Cancellation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-0075.md"
+    },
+    {
+      "id": "task-0076",
+      "label": "[PKT-JOB-010](task-0076): Job Documentation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-0076.md"
+    },
+    {
+      "id": "task-0077",
+      "label": "[PKT-JOB-011](task-0077): Job Testing",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-0077.md"
+    },
+    {
+      "id": "task-0045",
+      "label": "[PKT-LFC-001](task-0045): Installed-State Detector",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-0045.md"
+    },
+    {
+      "id": "task-0046",
+      "label": "[PKT-LFC-002](task-0046): Lifecycle Manifest and Checkpoint Writer",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-0046.md"
+    },
+    {
+      "id": "task-0047",
+      "label": "[PKT-LFC-003](task-0047): Fresh Install Apply/Validate",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-0047.md"
+    },
+    {
+      "id": "task-0048",
+      "label": "[PKT-LFC-004](task-0048): Update Dispatch and Version Module Selection",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-0048.md"
+    },
+    {
+      "id": "task-0049",
+      "label": "[PKT-LFC-005](task-0049): Legacy Cutover",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-0049.md"
+    },
+    {
+      "id": "task-0050",
+      "label": "[PKT-LFC-006](task-0050): Uninstall Current AUDiaGentic",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-0050.md"
+    },
+    {
+      "id": "task-0051",
+      "label": "[PKT-LFC-007](task-0051): Document Migration Outcomes and Reports",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-0051.md"
+    },
+    {
+      "id": "task-0052",
+      "label": "[PKT-LFC-010](task-0052): Preserve Provider Auto-Install Policy Fields",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-0052.md"
+    },
+    {
+      "id": "task-0053",
+      "label": "[PKT-LFC-011](task-0053): Installable Baseline Inventory and Sync-Mode Classification",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-0053.md"
+    },
+    {
+      "id": "task-0054",
+      "label": "[PKT-LFC-012](task-0054): Shared Baseline Sync Engine for Lifecycle and Bootstrap",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-0054.md"
+    },
+    {
+      "id": "task-0055",
+      "label": "[PKT-LFC-013](task-0055): Converge Fresh-Install and Release-Bootstrap on Baseline Sync",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-0055.md"
+    },
+    {
+      "id": "task-0162",
+      "label": "[PKT-MIG-001](task-0162): Migration Fixtures and Examples",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\migration\\task-0162.md"
+    },
+    {
+      "id": "task-0163",
+      "label": "[PKT-MIG-002](task-0163): Provider Migration Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\migration\\task-0163.md"
+    },
+    {
+      "id": "task-0164",
+      "label": "[PKT-MIG-003](task-0164): Cutover Runbooks",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\migration\\task-0164.md"
+    },
+    {
+      "id": "task-0165",
+      "label": "[PKT-NOD-001](task-0165): Node Descriptor and Heartbeat",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\node-execution\\task-0165.md"
+    },
+    {
+      "id": "task-0166",
+      "label": "[PKT-NOD-002](task-0166): Node-Local Status Persistence",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\node-execution\\task-0166.md"
+    },
+    {
+      "id": "task-0167",
+      "label": "[PKT-NOD-003](task-0167): Node Runtime Module Skeleton",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\node-execution\\task-0167.md"
+    },
+    {
+      "id": "task-0078",
+      "label": "[PKT-PRV-001](task-0078): Provider Registry",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0078.md"
+    },
+    {
+      "id": "task-0079",
+      "label": "[PKT-PRV-002](task-0079): Health Checks",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0079.md"
+    },
+    {
+      "id": "task-0080",
+      "label": "[PKT-PRV-003](task-0080): Provider Selection",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0080.md"
+    },
+    {
+      "id": "task-0081",
+      "label": "[PKT-PRV-004](task-0081): Provider Adapters",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0081.md"
+    },
+    {
+      "id": "task-0082",
+      "label": "[PKT-PRV-005](task-0082): Service Seam",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0082.md"
+    },
+    {
+      "id": "task-0083",
+      "label": "[PKT-PRV-006](task-0083): Provider Implementation Template",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0083.md"
+    },
+    {
+      "id": "task-0084",
+      "label": "[PKT-PRV-007](task-0084): Provider Configuration Schema",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0084.md"
+    },
+    {
+      "id": "task-0085",
+      "label": "[PKT-PRV-008](task-0085): Provider Documentation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0085.md"
+    },
+    {
+      "id": "task-0086",
+      "label": "[PKT-PRV-009](task-0086): Provider Testing Framework",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0086.md"
+    },
+    {
+      "id": "task-0087",
+      "label": "[PKT-PRV-010](task-0087): Provider Performance Benchmarks",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0087.md"
+    },
+    {
+      "id": "task-0088",
+      "label": "[PKT-PRV-011](task-0088): Provider Security Audit",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0088.md"
+    },
+    {
+      "id": "task-0089",
+      "label": "[PKT-PRV-012](task-0089): Provider Version Management",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0089.md"
+    },
+    {
+      "id": "task-0090",
+      "label": "[PKT-PRV-013](task-0090): Provider Feature Flags",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0090.md"
+    },
+    {
+      "id": "task-0091",
+      "label": "[PKT-PRV-014](task-0091): Provider Rate Limiting",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0091.md"
+    },
+    {
+      "id": "task-0092",
+      "label": "[PKT-PRV-015](task-0092): Provider Caching",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0092.md"
+    },
+    {
+      "id": "task-0093",
+      "label": "[PKT-PRV-016](task-0093): Provider Error Handling",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0093.md"
+    },
+    {
+      "id": "task-0094",
+      "label": "[PKT-PRV-017](task-0094): Provider Logging",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0094.md"
+    },
+    {
+      "id": "task-0095",
+      "label": "[PKT-PRV-018](task-0095): Provider Metrics",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0095.md"
+    },
+    {
+      "id": "task-0096",
+      "label": "[PKT-PRV-019](task-0096): Provider Tracing",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0096.md"
+    },
+    {
+      "id": "task-0097",
+      "label": "[PKT-PRV-020](task-0097): Provider Configuration Management",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0097.md"
+    },
+    {
+      "id": "task-0098",
+      "label": "[PKT-PRV-021](task-0098): Provider Discovery",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0098.md"
+    },
+    {
+      "id": "task-0099",
+      "label": "[PKT-PRV-022](task-0099): Provider Lifecycle",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0099.md"
+    },
+    {
+      "id": "task-0100",
+      "label": "[PKT-PRV-023](task-0100): Provider Plugin System",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0100.md"
+    },
+    {
+      "id": "task-0101",
+      "label": "[PKT-PRV-024](task-0101): Provider API Gateway",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0101.md"
+    },
+    {
+      "id": "task-0102",
+      "label": "[PKT-PRV-025](task-0102): Provider Webhook Support",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0102.md"
+    },
+    {
+      "id": "task-0103",
+      "label": "[PKT-PRV-026](task-0103): Provider Event Bus",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0103.md"
+    },
+    {
+      "id": "task-0104",
+      "label": "[PKT-PRV-027](task-0104): Provider Message Queue",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0104.md"
+    },
+    {
+      "id": "task-0105",
+      "label": "[PKT-PRV-028](task-0105): Provider Queue Management",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0105.md"
+    },
+    {
+      "id": "task-0106",
+      "label": "[PKT-PRV-029](task-0106): Provider Batch Processing",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0106.md"
+    },
+    {
+      "id": "task-0107",
+      "label": "[PKT-PRV-030](task-0107): Provider Stream Processing",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0107.md"
+    },
+    {
+      "id": "task-0108",
+      "label": "[PKT-PRV-031](task-0108): Provider Async Support",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0108.md"
+    },
+    {
+      "id": "task-0109",
+      "label": "[PKT-PRV-032](task-0109): Provider Sync Support",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0109.md"
+    },
+    {
+      "id": "task-0110",
+      "label": "[PKT-PRV-033](task-0110): Provider Timeout Handling",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0110.md"
+    },
+    {
+      "id": "task-0111",
+      "label": "[PKT-PRV-034](task-0111): Provider Retry Logic",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0111.md"
+    },
+    {
+      "id": "task-0112",
+      "label": "[PKT-PRV-035](task-0112): Provider Circuit Breaker",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0112.md"
+    },
+    {
+      "id": "task-0113",
+      "label": "[PKT-PRV-036](task-0113): Provider Bulkhead",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0113.md"
+    },
+    {
+      "id": "task-0114",
+      "label": "[PKT-PRV-037](task-0114): Provider Load Balancing",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0114.md"
+    },
+    {
+      "id": "task-0115",
+      "label": "[PKT-PRV-038](task-0115): Provider Connection Pooling",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0115.md"
+    },
+    {
+      "id": "task-0117",
+      "label": "[PKT-PRV-039](task-0117): Provider SSL/TLS Support",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0117.md"
+    },
+    {
+      "id": "task-0118",
+      "label": "[PKT-PRV-040](task-0118): Provider Authentication",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0118.md"
+    },
+    {
+      "id": "task-0119",
+      "label": "[PKT-PRV-041](task-0119): Provider Authorization",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0119.md"
+    },
+    {
+      "id": "task-0120",
+      "label": "[PKT-PRV-042](task-0120): Provider Audit Logging",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0120.md"
+    },
+    {
+      "id": "task-0121",
+      "label": "[PKT-PRV-043](task-0121): Provider Compliance Checks",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0121.md"
+    },
+    {
+      "id": "task-0122",
+      "label": "[PKT-PRV-044](task-0122): Provider Policy Enforcement",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0122.md"
+    },
+    {
+      "id": "task-0123",
+      "label": "[PKT-PRV-045](task-0123): Provider Data Encryption",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0123.md"
+    },
+    {
+      "id": "task-0124",
+      "label": "[PKT-PRV-046](task-0124): Provider Data Masking",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0124.md"
+    },
+    {
+      "id": "task-0125",
+      "label": "[PKT-PRV-047](task-0125): Provider Data Retention",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0125.md"
+    },
+    {
+      "id": "task-0126",
+      "label": "[PKT-PRV-048](task-0126): Provider Data Export",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0126.md"
+    },
+    {
+      "id": "task-0127",
+      "label": "[PKT-PRV-049](task-0127): Provider Data Import",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0127.md"
+    },
+    {
+      "id": "task-0128",
+      "label": "[PKT-PRV-050](task-0128): Provider Data Transformation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0128.md"
+    },
+    {
+      "id": "task-0129",
+      "label": "[PKT-PRV-051](task-0129): Provider Data Validation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0129.md"
+    },
+    {
+      "id": "task-0130",
+      "label": "[PKT-PRV-052](task-0130): Provider Data Quality",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0130.md"
+    },
+    {
+      "id": "task-0131",
+      "label": "[PKT-PRV-053](task-0131): Provider Data Governance",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0131.md"
+    },
+    {
+      "id": "task-0132",
+      "label": "[PKT-PRV-054](task-0132): Provider Data Lineage",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0132.md"
+    },
+    {
+      "id": "task-0133",
+      "label": "[PKT-PRV-055](task-0133): Provider Data Catalog",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0133.md"
+    },
+    {
+      "id": "task-0134",
+      "label": "[PKT-PRV-056](task-0134): Provider Data Dictionary",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0134.md"
+    },
+    {
+      "id": "task-0135",
+      "label": "[PKT-PRV-057](task-0135): Provider Data Standards",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0135.md"
+    },
+    {
+      "id": "task-0136",
+      "label": "[PKT-PRV-058](task-0136): Provider Data Quality Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0136.md"
+    },
+    {
+      "id": "task-0137",
+      "label": "[PKT-PRV-059](task-0137): Provider Data Profiling",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0137.md"
+    },
+    {
+      "id": "task-0138",
+      "label": "[PKT-PRV-060](task-0138): Provider Data Anomaly Detection",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0138.md"
+    },
+    {
+      "id": "task-0139",
+      "label": "[PKT-PRV-061](task-0139): Provider Data Masking Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0139.md"
+    },
+    {
+      "id": "task-0140",
+      "label": "[PKT-PRV-062](task-0140): Provider Data Retention Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0140.md"
+    },
+    {
+      "id": "task-0141",
+      "label": "[PKT-PRV-063](task-0141): Provider Data Export Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0141.md"
+    },
+    {
+      "id": "task-0142",
+      "label": "[PKT-PRV-064](task-0142): Provider Data Import Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0142.md"
+    },
+    {
+      "id": "task-0143",
+      "label": "[PKT-PRV-065](task-0143): Provider Data Transformation Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0143.md"
+    },
+    {
+      "id": "task-0144",
+      "label": "[PKT-PRV-066](task-0144): Provider Data Validation Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0144.md"
+    },
+    {
+      "id": "task-0145",
+      "label": "[PKT-PRV-067](task-0145): Provider Data Quality Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0145.md"
+    },
+    {
+      "id": "task-0146",
+      "label": "[PKT-PRV-068](task-0146): Provider Data Governance Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0146.md"
+    },
+    {
+      "id": "task-0147",
+      "label": "[PKT-PRV-069](task-0147): Provider Data Lineage Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0147.md"
+    },
+    {
+      "id": "task-0148",
+      "label": "[PKT-PRV-070](task-0148): Provider Data Catalog Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0148.md"
+    },
+    {
+      "id": "task-0149",
+      "label": "[PKT-PRV-071](task-0149): Provider Data Dictionary Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0149.md"
+    },
+    {
+      "id": "task-0150",
+      "label": "[PKT-PRV-072](task-0150): Provider Data Standards Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0150.md"
+    },
+    {
+      "id": "task-0151",
+      "label": "[PKT-PRV-073](task-0151): Provider Data Quality Monitoring",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0151.md"
+    },
+    {
+      "id": "task-0152",
+      "label": "[PKT-PRV-074](task-0152): Provider Data Governance Monitoring",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0152.md"
+    },
+    {
+      "id": "task-0153",
+      "label": "[PKT-PRV-075](task-0153): Provider Data Lineage Monitoring",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0153.md"
+    },
+    {
+      "id": "task-0154",
+      "label": "[PKT-PRV-076](task-0154): Provider Data Catalog Monitoring",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0154.md"
+    },
+    {
+      "id": "task-0155",
+      "label": "[PKT-PRV-077](task-0155): Provider Data Dictionary Monitoring",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0155.md"
+    },
+    {
+      "id": "task-0156",
+      "label": "[PKT-PRV-078](task-0156): Provider Data Standards Monitoring",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0156.md"
+    },
+    {
+      "id": "task-0157",
+      "label": "[PKT-SRV-001](task-0157): Provider Service Seam",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-0157.md"
+    },
+    {
+      "id": "task-0056",
+      "label": "[PKT-RLS-001](task-0056): Fragment Capture",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-0056.md"
+    },
+    {
+      "id": "task-0057",
+      "label": "[PKT-RLS-002](task-0057): Sync with Locking and Idempotency",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-0057.md"
+    },
+    {
+      "id": "task-0058",
+      "label": "[PKT-RLS-003](task-0058): Current Release Summary",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-0058.md"
+    },
+    {
+      "id": "task-0059",
+      "label": "[PKT-RLS-004](task-0059): Audit/Check-in Summary Generation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-0059.md"
+    },
+    {
+      "id": "task-0060",
+      "label": "[PKT-RLS-005](task-0060): Finalization with Exactly-Once Historical Append",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-0060.md"
+    },
+    {
+      "id": "task-0061",
+      "label": "[PKT-RLS-006](task-0061): Release Please Baseline Workflow",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-0061.md"
+    },
+    {
+      "id": "task-0062",
+      "label": "[PKT-RLS-007](task-0062): Release Please Config Management",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-0062.md"
+    },
+    {
+      "id": "task-0063",
+      "label": "[PKT-RLS-008](task-0063): Ledger Integration",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-0063.md"
+    },
+    {
+      "id": "task-0064",
+      "label": "[PKT-RLS-009](task-0064): Audit Trail",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-0064.md"
+    },
+    {
+      "id": "task-0065",
+      "label": "[PKT-RLS-010](task-0065): Release Validation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-0065.md"
+    },
+    {
+      "id": "task-0066",
+      "label": "[PKT-RLS-011](task-0066): Release Documentation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-0066.md"
     }
   ]
 }

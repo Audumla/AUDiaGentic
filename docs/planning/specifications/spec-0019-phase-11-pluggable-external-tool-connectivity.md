@@ -24,7 +24,7 @@ Add connector seams for external task systems and tools.
 
 ## Implementation order
 
-1. PKT-EXT-001 — external connector contract and mock
+1. [PKT-EXT-001](task-0174) — external connector contract and mock
 
 ## Exit gate
 

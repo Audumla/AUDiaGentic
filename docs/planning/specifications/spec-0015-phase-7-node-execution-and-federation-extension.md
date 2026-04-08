@@ -23,9 +23,9 @@ Add node identity, heartbeat, ownership, and runtime-local execution metadata.
 
 ## Implementation order
 
-1. PKT-NOD-001 — node descriptor and heartbeat
-2. PKT-NOD-002 — node-local status persistence
-3. PKT-NOD-003 — node runtime module skeleton
+1. [PKT-NOD-001](task-0165) — node descriptor and heartbeat
+2. [PKT-NOD-002](task-0166) — node-local status persistence
+3. [PKT-NOD-003](task-0167) — node runtime module skeleton
 
 ## Exit gate
 
