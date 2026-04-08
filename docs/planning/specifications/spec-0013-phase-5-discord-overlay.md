@@ -28,10 +28,10 @@ Add Discord as a true overlay using approval + events only.
 
 ## Implementation order
 
-1. PKT-DSC-001 — event subscriber
-2. PKT-DSC-002 — release summary publishing
-3. PKT-DSC-003 — approval publishing/response handling
-4. PKT-DSC-004 — lifecycle/migration notices
+1. [PKT-DSC-001](task-0158) — event subscriber
+2. [PKT-DSC-002](task-0159) — release summary publishing
+3. [PKT-DSC-003](task-0160) — approval publishing/response handling
+4. [PKT-DSC-004](task-0161) — lifecycle/migration notices
 
 ## Exit gate
 

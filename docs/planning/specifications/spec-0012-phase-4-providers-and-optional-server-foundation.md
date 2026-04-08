@@ -29,12 +29,12 @@ Add providers and an optional extraction boundary without changing earlier cores
 
 ## Implementation order
 
-1. PKT-PRV-001 — provider registry
-2. PKT-PRV-002 — health checks
-3. PKT-PRV-003 — provider selection
-4. PKT-PRV-004 — provider adapters
-5. PKT-PRV-005 — service seam
-6. PKT-PRV-006 through PKT-PRV-078 — provider-specific implementations
+1. [PKT-PRV-001](task-0078) — provider registry
+2. [PKT-PRV-002](task-0079) — health checks
+3. [PKT-PRV-003](task-0080) — provider selection
+4. [PKT-PRV-004](task-0081) — provider adapters
+5. [PKT-PRV-005](task-0082) — service seam
+6. [PKT-PRV-006](task-0083) through [PKT-PRV-078](task-0156) — provider-specific implementations
 
 ## Exit gate
 

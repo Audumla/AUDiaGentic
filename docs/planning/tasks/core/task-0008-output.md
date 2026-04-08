@@ -110,40 +110,40 @@ Reference map for all implementation docs.
 ### Packet Docs by Phase (154 files)
 
 #### Phase 0 - Contracts and Scaffolding (13 files)
-- PKT-FND-001.md through PKT-FND-013.md
+- [PKT-FND-001](task-0032).md through [PKT-FND-013](task-0044).md
 
 #### Phase 1 - Lifecycle (13 files)
-- PKT-LFC-001.md through PKT-LFC-013.md
+- [PKT-LFC-001](task-0045).md through [PKT-LFC-013](task-0055).md
 
 #### Phase 2 - Release (11 files)
-- PKT-RLS-001.md through PKT-RLS-011.md
+- [PKT-RLS-001](task-0056).md through [PKT-RLS-011](task-0066).md
 
 #### Phase 3 - Jobs (11 files)
-- PKT-JOB-001.md through PKT-JOB-011.md
+- [PKT-JOB-001](task-0067).md through [PKT-JOB-011](task-0077).md
 
 #### Phase 4 - Providers (78 files)
-- PKT-PRV-001.md through PKT-PRV-078.md (includes PKT-SRV-001)
+- [PKT-PRV-001](task-0078).md through [PKT-PRV-078](task-0156).md (includes [PKT-SRV-001](task-0157))
 
 #### Phase 5 - Discord (4 files)
-- PKT-DSC-001.md through PKT-DSC-004.md
+- [PKT-DSC-001](task-0158).md through [PKT-DSC-004](task-0161).md
 
 #### Phase 6 - Migration (3 files)
-- PKT-MIG-001.md through PKT-MIG-003.md
+- [PKT-MIG-001](task-0162).md through [PKT-MIG-003](task-0164).md
 
 #### Phase 7 - Node Execution (3 files)
-- PKT-NOD-001.md through PKT-NOD-003.md
+- [PKT-NOD-001](task-0165).md through [PKT-NOD-003](task-0167).md
 
 #### Phase 8 - Discovery (3 files)
-- PKT-DIS-001.md through PKT-DIS-003.md
+- [PKT-DIS-001](task-0168).md through [PKT-DIS-003](task-0170).md
 
 #### Phase 9 - Eventing (2 files)
-- PKT-EVT-001.md through PKT-EVT-002.md
+- [PKT-EVT-001](task-0171).md through [PKT-EVT-002](task-0172).md
 
 #### Phase 10 - Coordinator (1 file)
-- PKT-CRD-001.md
+- [PKT-CRD-001](task-0173).md
 
 #### Phase 11 - External Tools (1 file)
-- PKT-EXT-001.md
+- [PKT-EXT-001](task-0174).md
 
 ### Provider Plans (19 files)
 - 01_Local_OpenAI_Compatible_Plan.md through 19_Qwen_Tag_Execution_Implementation.md
@@ -209,14 +209,14 @@ Based on dependency analysis, migrate in this order:
 - 22_Secret_Management.md
 - 27_Phase_0_Kickoff_Checklist.md
 - 33_Phase_0_1_2_Readiness_and_Execution_Reference.md
-- PKT-FND-001.md through PKT-FND-013.md
+- [PKT-FND-001](task-0032).md through [PKT-FND-013](task-0044).md
 
 #### Phase 3: Phase 1 Docs
 - 03_Phase_1_Lifecycle_and_Project_Enablement.md
 - 07_Phase_1_Build_Book.md
 - 11_Executable_Packets_Lifecycle.md
 - 56_Phase_1_4_Installable_Project_Baseline_and_Managed_Asset_Synchronization.md
-- PKT-LFC-001.md through PKT-LFC-013.md
+- [PKT-LFC-001](task-0045).md through [PKT-LFC-013](task-0055).md
 
 #### Phase 4: Phase 2 Docs
 - 04_Phase_2_Release_Audit_Ledger_and_Release_Please.md
@@ -224,7 +224,7 @@ Based on dependency analysis, migrate in this order:
 - 12_Executable_Packets_Release_and_Ledger.md
 - 23_Release_Please_Invocation.md
 - 43_Phase_2_3_Project_Release_Bootstrap_and_Workflow_Activation.md
-- PKT-RLS-001.md through PKT-RLS-011.md
+- [PKT-RLS-001](task-0056).md through [PKT-RLS-011](task-0066).md
 
 #### Phase 5: Phase 3 Docs
 - 05_Phase_3_Agent_Jobs_and_Simple_Workflows.md
@@ -234,7 +234,7 @@ Based on dependency analysis, migrate in this order:
 - 36_Prompt_Extension_Readiness_Assessment.md
 - 37_Phase_3_3_Prompt_Tagged_Workflow_Shortcuts_and_Defaults.md
 - 42_Phase_3_4_Job_Control_and_Running_Job_Cancellation.md
-- PKT-JOB-001.md through PKT-JOB-011.md
+- [PKT-JOB-001](task-0067).md through [PKT-JOB-011](task-0077).md
 
 #### Phase 6: Phase 4 Docs (Largest)
 - 06_Phase_4_Providers_and_Optional_Server_Foundation.md
@@ -251,7 +251,7 @@ Based on dependency analysis, migrate in this order:
 - 48_Phase_4_12_Provider_Optimization_and_Shared_Workflow_Extensibility.md
 - 55_Phase_4_13_Canonical_Prompt_Entry_and_Bridge_End_State.md
 - 56_Phase_4_Remaining_Work_Execution_Guide.md
-- PKT-PRV-001.md through PKT-PRV-078.md
+- [PKT-PRV-001](task-0078).md through [PKT-PRV-078](task-0156).md
 - Provider plans and runbooks
 
 #### Phase 7: Phase 5-6 Docs
@@ -259,8 +259,8 @@ Based on dependency analysis, migrate in this order:
 - 08_Phase_6_Migration_and_Cutover_Completion.md
 - 12_Phase_6_Build_Book.md
 - 15_Executable_Packets_Discord_and_Migration.md
-- PKT-DSC-001.md through PKT-DSC-004.md
-- PKT-MIG-001.md through PKT-MIG-003.md
+- [PKT-DSC-001](task-0158).md through [PKT-DSC-004](task-0161).md
+- [PKT-MIG-001](task-0162).md through [PKT-MIG-003](task-0164).md
 
 #### Phase 8: Phase 7-11 Extension Docs
 - 49_Phase_7_Node_Execution_Extension_Build_Book.md
@@ -269,11 +269,11 @@ Based on dependency analysis, migrate in this order:
 - 52_Phase_10_Coordinator_Consumption_Seam_Build_Book.md
 - 53_Phase_11_Pluggable_External_Tool_Connectivity_Build_Book.md
 - 54_Build_Status_Registry_Extension_For_Phases_7_11.md
-- PKT-NOD-001.md through PKT-NOD-003.md
-- PKT-DIS-001.md through PKT-DIS-003.md
-- PKT-EVT-001.md through PKT-EVT-002.md
-- PKT-CRD-001.md
-- PKT-EXT-001.md
+- [PKT-NOD-001](task-0165).md through [PKT-NOD-003](task-0167).md
+- [PKT-DIS-001](task-0168).md through [PKT-DIS-003](task-0170).md
+- [PKT-EVT-001](task-0171).md through [PKT-EVT-002](task-0172).md
+- [PKT-CRD-001](task-0173).md
+- [PKT-EXT-001](task-0174).md
 
 #### Phase 9: Refactor and Testing Docs
 - 57_Phase_0_3_Repository_Domain_Refactor_and_Package_Realignment.md
@@ -290,7 +290,7 @@ Based on dependency analysis, migrate in this order:
    - Pattern: `NN_Phase_X_Build_Book.md`
 
 2. **Packet references:**
-   - `packets/phase-0/PKT-FND-001.md`
+   - `packets/phase-0/[PKT-FND-001](task-0032).md`
    - Pattern: `packets/phase-X/PKT-XXX-NNN.md`
 
 3. **Cross-phase references:**
