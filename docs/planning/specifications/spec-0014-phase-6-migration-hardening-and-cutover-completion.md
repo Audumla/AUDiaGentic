@@ -23,9 +23,9 @@ Harden migration and operator recovery.
 
 ## Implementation order
 
-1. PKT-MIG-001 — migration fixtures and examples
-2. PKT-MIG-002 — provider migration rules
-3. PKT-MIG-003 — cutover runbooks
+1. [PKT-MIG-001](task-0162) — migration fixtures and examples
+2. [PKT-MIG-002](task-0163) — provider migration rules
+3. [PKT-MIG-003](task-0164) — cutover runbooks
 
 ## Exit gate
 

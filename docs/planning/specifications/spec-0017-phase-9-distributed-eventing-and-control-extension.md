@@ -23,8 +23,8 @@ Add federation-consumable event and node-side control request validation.
 
 ## Implementation order
 
-1. PKT-EVT-001 — node event families
-2. PKT-EVT-002 — control request contracts
+1. [PKT-EVT-001](task-0171) — node event families
+2. [PKT-EVT-002](task-0172) — control request contracts
 
 ## Exit gate
 

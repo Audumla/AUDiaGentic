@@ -42,11 +42,19 @@ No business logic starts before this phase is complete.
 
 ## Implementation order
 
-1. PKT-FND-001
-2. PKT-FND-002
-3. PKT-FND-003
-4. PKT-FND-004
-5. PKT-FND-005
+1. [PKT-FND-001](task-0032) — Canonical IDs and Naming Normalization
+2. [PKT-FND-002](task-0033) — Schema Package and Fixtures
+3. [PKT-FND-003](task-0034) — Example Project Scaffold
+4. [PKT-FND-004](task-0035) — Lifecycle CLI Stub
+5. [PKT-FND-005](task-0036) — Packet/Test Harness Scaffolding
+6. [PKT-FND-006](task-0037) — Naming Validator Script
+7. [PKT-FND-007](task-0038) — Schema Validator Script
+8. [PKT-FND-008](task-0039) — Checkpoint Writer
+9. [PKT-FND-009](task-0040) — Fixture Generator
+10. [PKT-FND-010](task-0041) — Integration Tests
+11. [PKT-FND-011](task-0042) — Documentation
+12. [PKT-FND-012](task-0043) — Migration Runbook
+13. [PKT-FND-013](task-0044) — Exit Gate Validation
 
 ## Exit gate
 

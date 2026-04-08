@@ -35,17 +35,17 @@ Implement safe installation, update, cutover, uninstall, and project enablement 
 
 ## Implementation order
 
-1. PKT-LFC-001 — installed-state detector
-2. PKT-LFC-002 — lifecycle manifest and checkpoint writer
-3. PKT-LFC-003 — fresh install apply/validate
-4. PKT-LFC-004 — update dispatch and version module selection
-5. PKT-LFC-005 — legacy cutover
-6. PKT-LFC-006 — uninstall current AUDiaGentic
-7. PKT-LFC-007 — document migration outcomes and reports
-8. PKT-LFC-010 — preserve provider auto-install policy fields across lifecycle commands
-9. PKT-LFC-011 — installable baseline inventory and sync-mode classification
-10. PKT-LFC-012 — shared baseline sync engine for lifecycle and bootstrap
-11. PKT-LFC-013 — converge fresh-install and release-bootstrap on baseline sync
+1. [PKT-LFC-001](task-0045) — installed-state detector
+2. [PKT-LFC-002](task-0046) — lifecycle manifest and checkpoint writer
+3. [PKT-LFC-003](task-0047) — fresh install apply/validate
+4. [PKT-LFC-004](task-0048) — update dispatch and version module selection
+5. [PKT-LFC-005](task-0049) — legacy cutover
+6. [PKT-LFC-006](task-0050) — uninstall current AUDiaGentic
+7. [PKT-LFC-007](task-0051) — document migration outcomes and reports
+8. [PKT-LFC-010](task-0052) — preserve provider auto-install policy fields across lifecycle commands
+9. [PKT-LFC-011](task-0053) — installable baseline inventory and sync-mode classification
+10. [PKT-LFC-012](task-0054) — shared baseline sync engine for lifecycle and bootstrap
+11. [PKT-LFC-013](task-0055) — converge fresh-install and release-bootstrap on baseline sync
 
 ## Exit gate
 
