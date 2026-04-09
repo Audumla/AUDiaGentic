@@ -1,0 +1,30 @@
+# Documentation surfaces config
+# Runtime modes: manual / hybrid / managed
+# Install seeding is controlled separately with seed_on_install.
+planning:
+  documentation:
+    enabled: true
+    root: docs
+    surfaces:
+      - id: readme
+        path: README.md
+        kind: readme
+        mode: hybrid
+        profile: readme_min
+        update_policy: optional
+        seed_on_install: true
+        entry: true
+      - id: changelog
+        path: CHANGELOG.md
+        kind: changelog
+        mode: hybrid
+        profile: changelog_basic
+        update_policy: required_on_complete
+        seed_on_install: true
+      - id: references_index
+        path: docs/references/README.md
+        kind: canonical_doc
+        mode: managed
+        profile: references_index
+        update_policy: optional
+        seed_on_install: true
