@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-08T03:06:15.709211+00:00",
+  "generated_at": "2026-04-09T13:26:50.353288+00:00",
   "items": [
     {
       "id": "wp-0002",
@@ -19,6 +19,42 @@
       "label": "Implement archive state workflow",
       "state": "draft",
       "path": "docs\\planning\\work-packages\\core\\wp-0004-implement-archive-state-workflow.md"
+    },
+    {
+      "id": "wp-0005",
+      "label": "Profile packs and documentation config scaffolding",
+      "state": "done",
+      "path": "docs\\planning\\work-packages\\core\\wp-0005-profile-packs-and-documentation-config-scaffolding.md"
+    },
+    {
+      "id": "wp-0006",
+      "label": "MCP and section navigation expansion",
+      "state": "done",
+      "path": "docs\\planning\\work-packages\\core\\wp-0006-mcp-and-section-navigation-expansion.md"
+    },
+    {
+      "id": "wp-0007",
+      "label": "Supporting docs, subsection access, and documentation sync",
+      "state": "done",
+      "path": "docs\\planning\\work-packages\\core\\wp-0007-supporting-docs-subsection-access-and-documentation-sync.md"
+    },
+    {
+      "id": "wp-0008",
+      "label": "Add MCP wrapper functions for efficient task updates",
+      "state": "done",
+      "path": "docs\\planning\\work-packages\\core\\wp-0008-add-mcp-wrapper-functions-for-efficient-task-updates.md"
+    },
+    {
+      "id": "wp-0009",
+      "label": "Archive state workflow and core functions",
+      "state": "ready",
+      "path": "docs\\planning\\work-packages\\core\\wp-0009-archive-state-workflow-and-core-functions.md"
+    },
+    {
+      "id": "wp-0010",
+      "label": "Critical fixes: schema, delete, and counter sync",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-0010-critical-fixes-schema-delete-and-counter-sync.md"
     }
   ]
 }

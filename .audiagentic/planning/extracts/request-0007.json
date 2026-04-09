@@ -1,0 +1,13 @@
+{
+  "item": {
+    "id": "request-0007",
+    "kind": "request",
+    "label": "Planning module improvements: critical fixes, performance, and API enhancements",
+    "state": "captured",
+    "summary": "Fix schema mismatches, add soft delete, implement duplicate detection caching, add undo/rollback support, improve error messages, and add audit trail for planning operations",
+    "path": "docs\\planning\\requests\\request-0007.md"
+  },
+  "body": "\n\n\n# Notes\n\n## Auto-Reference Updates (NEW)\n\n**Feature:** When creating specs/plans/tasks with `request_refs`, automatically update the referenced request's `source_refs` to create bidirectional traceability.\n\n**Implementation:**\n- Hook in `api.new()` for specs: when `request_refs=[request-0007]` is provided, auto-add `spec-XXXX` to `request-0007.source_refs`\n- Same for plans and tasks\n- Ensures traceability without manual updates\n\n**Status:** Partially implemented (spec auto-update added to api.py), needs:\n- Extension to plans and tasks\n- Validation that referenced requests exist\n- Error handling for missing requests\n- Backfill for existing items\n\n**Priority:** P1 (High - improves traceability significantly)\n",
+  "effective_standard_refs": [],
+  "related": {}
+}

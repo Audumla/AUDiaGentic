@@ -7,6 +7,7 @@ from .config import Config, _PLANNING_SCHEMA_DIR
 from .util import body_has_section
 
 REQ_SECTIONS = {
+    'request': ['Understanding', 'Source Refs', 'Open Questions', 'Notes'],
     'spec': ['Purpose', 'Scope', 'Requirements', 'Constraints', 'Acceptance Criteria'],
     'plan': ['Objectives', 'Delivery Approach', 'Dependencies'],
     'wp': ['Objective', 'Scope of This Package', 'Inputs', 'Instructions', 'Required Outputs', 'Acceptance Checks', 'Non-Goals'],

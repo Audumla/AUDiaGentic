@@ -1,29 +1,36 @@
 ---
 id: wp-0005
 label: Profile packs and documentation config scaffolding
-state: draft
-summary: Define profile-pack, documentation-surface, request-profile, and manifest scaffolding with template-safe ownership rules and validation impacts called out.
+state: done
+summary: Define profile-pack, documentation-surface, request-profile, and manifest
+  scaffolding with template-safe ownership rules and validation impacts called out.
 plan_ref: plan-0007
 task_refs:
-  - ref: task-0181
-    seq: 1000
-  - ref: task-0182
-    seq: 2000
-  - ref: task-0183
-    seq: 3000
-  - ref: task-0184
-    seq: 4000
+- ref: task-0181
+  seq: 1000
+- ref: task-0182
+  seq: 2000
+- ref: task-0183
+  seq: 3000
+- ref: task-0184
+  seq: 4000
 standard_refs:
-  - standard-0001
+- standard-0001
+- standard-0002
 workflow: standard
 meta:
   doc_surface_refs:
-    - readme
-    - changelog
-    - planning_references
+  - readme
+  - changelog
+  - planning_references
   doc_sync_required: true
   doc_sync_status: pending
 ---
+
+
+
+
+
 
 # Objective
 

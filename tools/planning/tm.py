@@ -59,6 +59,10 @@ def main():
     p_new.add_argument('--target')
     p_new.add_argument('--workflow')
     p_new.add_argument('--request-ref', action='append', dest='request_refs')
+    p_new.add_argument('--profile')
+    p_new.add_argument('--source-ref', action='append', dest='source_refs')
+    p_new.add_argument('--understanding', dest='current_understanding')
+    p_new.add_argument('--question', action='append', dest='open_questions')
     p_up = sp.add_parser('update')
     p_up.add_argument('id')
     p_up.add_argument('--label')
@@ -122,7 +126,22 @@ def main():
     args = p.parse_args()
 
     if args.cmd == 'new':
-        item = api.new(args.kind, label=args.label, summary=args.summary, domain=args.domain, spec=args.spec, plan=args.plan, parent=args.parent, target=args.target, workflow=args.workflow, request_refs=args.request_refs)
+        item = api.new(
+            args.kind,
+            label=args.label,
+            summary=args.summary,
+            domain=args.domain,
+            spec=args.spec,
+            plan=args.plan,
+            parent=args.parent,
+            target=args.target,
+            workflow=args.workflow,
+            request_refs=args.request_refs,
+            profile=args.profile,
+            source_refs=args.source_refs,
+            current_understanding=args.current_understanding,
+            open_questions=args.open_questions,
+        )
         print_json({'id': item.data['id'], 'path': str(item.path.relative_to(root))})
     elif args.cmd == 'update':
         item = api.update(args.id, label=args.label, summary=args.summary, body_append=args.append)

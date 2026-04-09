@@ -4,6 +4,7 @@ IDs are persisted as per-kind counters under .audiagentic/planning/ids/.
 Within a process, a threading.Lock prevents races.
 Across processes, an exclusive lock file (O_CREAT|O_EXCL) serializes access.
 """
+
 from __future__ import annotations
 
 import threading
@@ -45,7 +46,11 @@ def next_id(root: Path, kind: str) -> str:
                     )
                 time.sleep(_LOCK_POLL)
         try:
-            n = int(counter_file.read_text(encoding="utf-8").strip()) + 1 if counter_file.exists() else 1
+            n = (
+                int(counter_file.read_text(encoding="utf-8").strip()) + 1
+                if counter_file.exists()
+                else 1
+            )
             counter_file.write_text(str(n), encoding="utf-8")
         finally:
             lock_file.unlink(missing_ok=True)
@@ -58,6 +63,8 @@ def sync_counter(root: Path, kind: str) -> None:
 
     Call this once after installing the planning component into a project that
     already has planning docs, to seed the counter from existing IDs.
+
+    Also fixes corrupted counter values by syncing to actual highest ID.
     """
     from ..fs.scan import scan_items
 
@@ -73,7 +80,6 @@ def sync_counter(root: Path, kind: str) -> None:
             except (IndexError, ValueError):
                 pass
 
-    if max_n > 0:
-        existing = int(counter_file.read_text(encoding="utf-8").strip()) if counter_file.exists() else 0
-        if max_n > existing:
-            counter_file.write_text(str(max_n), encoding="utf-8")
+    # Always write counter file (create if missing, fix if corrupted)
+    # Use max_n as authoritative value (from actual files)
+    counter_file.write_text(str(max_n), encoding="utf-8")

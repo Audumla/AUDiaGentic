@@ -6,10 +6,20 @@ request_profiles:
     defaults:
       meta:
         request_type: feature
+      current_understanding: Initial feature intake captured; desired outcome and implementation boundaries need refinement.
+      open_questions:
+        - What exact outcome is required?
+        - What constraints or non-goals apply?
+        - How will success be verified?
     suggested_sections: [Problem, Desired Outcome, Constraints]
   issue:
     label: Issue report
     defaults:
       meta:
         request_type: issue
+      current_understanding: Initial issue intake captured; impact and reproduction detail still need confirmation.
+      open_questions:
+        - What is the observed impact or failure mode?
+        - How can this be reproduced or verified?
+        - What constraints or non-goals apply?
     suggested_sections: [Problem, Impact, Reproduction, Constraints]

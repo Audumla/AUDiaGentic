@@ -6,12 +6,14 @@ and structured sidecar support-doc visibility. These documentation surfaces are
 queryable through planning MCP in this phase, but they are not promoted to new
 first-class planning kinds in the core scan/index/validator model.
 """
+
 from __future__ import annotations
 
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
+
 
 def _bootstrap_repo_root() -> Path:
     """Find a repo root well enough to import the shared planning helper.
@@ -23,7 +25,12 @@ def _bootstrap_repo_root() -> Path:
         (".audiagentic", "planning"),
         ("tools", "planning", "tm_helper.py"),
     )
-    search_roots = [Path.cwd(), *Path.cwd().parents, Path(__file__).resolve().parent, *Path(__file__).resolve().parent.parents]
+    search_roots = [
+        Path.cwd(),
+        *Path.cwd().parents,
+        Path(__file__).resolve().parent,
+        *Path(__file__).resolve().parent.parents,
+    ]
     for candidate in search_roots:
         if any((candidate / Path(*marker)).exists() for marker in markers):
             return candidate
@@ -125,7 +132,9 @@ async def _compat_stdio_server():
             async with read_stream_writer:
                 while True:
                     try:
-                        payload, use_headers = await anyio.to_thread.run_sync(_read_stdio_message)
+                        payload, use_headers = await anyio.to_thread.run_sync(
+                            _read_stdio_message
+                        )
                     except Exception as exc:
                         await read_stream_writer.send(exc)
                         continue
@@ -175,22 +184,49 @@ async def _run_compat_stdio() -> None:
         )
 
 
-@mcp.tool(description="Create a new Request planning document")
-def tm_new_request(label: str, summary: str) -> dict[str, Any]:
-    return tm.new_request(label, summary)
+@mcp.tool(description="Create a new Request planning document with duplicate detection")
+def tm_new_request(
+    label: str,
+    summary: str,
+    profile: str | None = None,
+    source_refs: list[str] | None = None,
+    current_understanding: str | None = None,
+    open_questions: list[str] | None = None,
+    check_duplicates: bool = True,
+) -> dict[str, Any]:
+    return tm.new_request(
+        label,
+        summary,
+        profile=profile,
+        source_refs=source_refs,
+        current_understanding=current_understanding,
+        open_questions=open_questions,
+        check_duplicates=check_duplicates,
+    )
 
 
-@mcp.tool(description="Create a new Specification planning document, optionally linking to Requests")
-def tm_new_spec(label: str, summary: str, request_refs: list[str] | None = None) -> dict[str, Any]:
-    return tm.new_spec(label, summary, request_refs)
+@mcp.tool(
+    description="Create a new Specification planning document with duplicate detection"
+)
+def tm_new_spec(
+    label: str,
+    summary: str,
+    request_refs: list[str] | None = None,
+    check_duplicates: bool = True,
+) -> dict[str, Any]:
+    return tm.new_spec(label, summary, request_refs, check_duplicates=check_duplicates)
 
 
-@mcp.tool(description="Create a new Plan planning document, optionally linked to a Specification")
+@mcp.tool(
+    description="Create a new Plan planning document, optionally linked to a Specification"
+)
 def tm_new_plan(label: str, summary: str, spec: str | None = None) -> dict[str, Any]:
     return tm.new_plan(label, summary, spec)
 
 
-@mcp.tool(description="Create a new Task planning document with spec, optional target packet, parent, and workflow")
+@mcp.tool(
+    description="Create a new Task planning document with spec, optional target packet, parent, and workflow"
+)
 def tm_new_task(
     label: str,
     summary: str,
@@ -219,21 +255,65 @@ def tm_new_standard(label: str, summary: str) -> dict[str, Any]:
     return tm.new_standard(label, summary)
 
 
-@mcp.tool(description="Change the state of a planning item (e.g., ready → in_progress → done)")
+@mcp.tool(
+    description="Change the state of a planning item (e.g., ready → in_progress → done)"
+)
 def tm_state(id: str, new_state: str) -> dict[str, Any]:
     return tm.state(id, new_state)
 
 
-@mcp.tool(description="Move a planning item to a different domain (e.g., core → contrib)")
+@mcp.tool(
+    description="Move a planning item to a different domain (e.g., core → contrib)"
+)
 def tm_move(id: str, domain: str) -> dict[str, Any]:
     return tm.move(id, domain)
 
 
 @mcp.tool(description="Update label, summary, or body text of a planning item")
 def tm_update(
-    id: str, label: str | None = None, summary: str | None = None, append: str | None = None
+    id: str,
+    label: str | None = None,
+    summary: str | None = None,
+    append: str | None = None,
+    operations: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    return tm.update(id, label, summary, append)
+    """Update a planning item or execute batch operations.
+
+    Supports single updates (label/summary/append) or batch operations:
+    - state: {"op": "state", "value": "done"}
+    - label: {"op": "label", "value": "New Label"}
+    - summary: {"op": "summary", "value": "New summary"}
+    - section: {"op": "section", "name": "Notes", "content": "...", "mode": "set|append"}
+    - content: {"op": "content", "value": "...", "mode": "replace|append"}
+    """
+    return tm.update(id, label, summary, append, operations=operations)
+
+
+@mcp.tool(
+    description="Execute multiple operations on a planning item atomically (state changes, section updates, etc.)"
+)
+def tm_batch_update(
+    id: str,
+    operations: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Execute batch operations atomically.
+
+    Supported operations:
+    - state: {"op": "state", "value": "done"}
+    - label: {"op": "label", "value": "New Label"}
+    - summary: {"op": "summary", "value": "New summary"}
+    - section: {"op": "section", "name": "Notes", "content": "...", "mode": "set|append"}
+    - content: {"op": "content", "value": "...", "mode": "replace|append"}
+    - meta: {"op": "meta", "field": "key", "value": "val"}
+
+    Example:
+    tm_batch_update("task-0001", [
+        {"op": "state", "value": "done"},
+        {"op": "section", "name": "Implementation", "content": "Completed..."},
+        {"op": "label", "value": "Task Completed"}
+    ])
+    """
+    return tm.update(id, operations=operations)
 
 
 @mcp.tool(description="Get the full markdown content of a planning document")
@@ -241,7 +321,9 @@ def tm_get_content(id: str) -> str:
     return tm.get_content(id)
 
 
-@mcp.tool(description="Update content of a planning document (replace, append, or insert at position)")
+@mcp.tool(
+    description="Update content of a planning document (replace, append, or insert at position)"
+)
 def tm_update_content(
     id: str,
     content: str,
@@ -252,7 +334,9 @@ def tm_update_content(
     return tm.update_content(id, content, mode, section, position)
 
 
-@mcp.tool(description="Create a new planning document of any kind with initial content in one operation")
+@mcp.tool(
+    description="Create a new planning document of any kind with initial content in one operation"
+)
 def tm_create_with_content(
     kind: str,
     label: str,
@@ -267,11 +351,23 @@ def tm_create_with_content(
     request_refs: list[str] | None = None,
 ) -> dict[str, Any]:
     return tm.create_with_content(
-        kind, label, summary, content, domain, spec, plan, parent, target, workflow, request_refs
+        kind,
+        label,
+        summary,
+        content,
+        domain,
+        spec,
+        plan,
+        parent,
+        target,
+        workflow,
+        request_refs,
     )
 
 
-@mcp.tool(description="Update a link field in a planning item (e.g., add/change spec, parent, or related items)")
+@mcp.tool(
+    description="Update a link field in a planning item (e.g., add/change spec, parent, or related items)"
+)
 def tm_relink(
     src: str, field: str, dst: str, seq: int | None = None, display: str | None = None
 ) -> dict[str, Any]:
@@ -279,46 +375,82 @@ def tm_relink(
 
 
 @mcp.tool(description="Group multiple Tasks into a new WorkPackage within a Plan")
-def tm_package(plan: str, tasks: list[str], label: str, summary: str, domain: str = "core") -> dict[str, Any]:
+def tm_package(
+    plan: str, tasks: list[str], label: str, summary: str, domain: str = "core"
+) -> dict[str, Any]:
     return tm.package(plan, tasks, label, summary, domain)
 
 
-@mcp.tool(description="List planning items, optionally filtered by kind (request, spec, plan, task, wp, standard)")
+@mcp.tool(
+    description="List planning items, optionally filtered by kind (request, spec, plan, task, wp, standard)"
+)
 def tm_list(kind: str | None = None) -> list[dict[str, Any]]:
     return tm.list_kind(kind)
 
 
-@mcp.tool(description="Get a full view of a planning item with all metadata and relationships")
+@mcp.tool(
+    description="Get a full view of a planning item with all metadata and relationships"
+)
 def tm_show(id: str) -> dict[str, Any]:
     return tm.show(id)
 
 
-@mcp.tool(description="Extract a planning item with optional related items and resource references")
-def tm_extract(id: str, with_related: bool = False, with_resources: bool = False) -> dict[str, Any]:
+@mcp.tool(
+    description="Extract a planning item with optional related items and resource references"
+)
+def tm_extract(
+    id: str, with_related: bool = False, with_resources: bool = False
+) -> dict[str, Any]:
     return tm.extract(id, with_related, with_resources)
 
 
-@mcp.tool(description="List Tasks in a given state (default: ready), optionally filtered by domain")
-def tm_next_tasks(state: str = "ready", domain: str | None = None) -> list[dict[str, Any]]:
+@mcp.tool(
+    description="List Tasks in a given state (default: ready), optionally filtered by domain"
+)
+def tm_next_tasks(
+    state: str = "ready", domain: str | None = None
+) -> list[dict[str, Any]]:
     return tm.next_tasks(state, domain)
 
 
-@mcp.tool(description="List items of a given kind in a given state, optionally filtered by domain")
-def tm_next_items(kind: str = "task", state: str = "ready", domain: str | None = None) -> list[dict[str, Any]]:
+@mcp.tool(
+    description="List items of a given kind in a given state, optionally filtered by domain"
+)
+def tm_next_items(
+    kind: str = "task", state: str = "ready", domain: str | None = None
+) -> list[dict[str, Any]]:
     return tm.next_items(kind, state, domain)
 
 
-@mcp.tool(description="Get summary counts of all planning items grouped by kind and state")
+@mcp.tool(
+    description="Get summary counts of all planning items grouped by kind and state"
+)
 def tm_status() -> dict[str, Any]:
     return tm.status()
 
 
-@mcp.tool(description="List applicable standards (e.g., coding styles, docs requirements) for a planning item")
+@mcp.tool(
+    description="List applicable standards (e.g., coding styles, docs requirements) for a planning item"
+)
 def tm_standards(id: str) -> list[str]:
     return tm.standards(id)
 
 
-@mcp.tool(description="List all documentation surfaces (generated views of planning items for different audiences)")
+@mcp.tool(description="List all standard planning documents")
+def tm_list_standards() -> list[dict[str, Any]]:
+    return tm.list_standards()
+
+
+@mcp.tool(description="Get a standard planning document with metadata and body")
+def tm_get_standard(
+    standard_id: str, with_related: bool = False, with_resources: bool = False
+) -> dict[str, Any]:
+    return tm.get_standard(standard_id, with_related, with_resources)
+
+
+@mcp.tool(
+    description="List all documentation surfaces (generated views of planning items for different audiences)"
+)
 def tm_list_doc_surfaces() -> list[dict[str, Any]]:
     return tm.list_doc_surfaces()
 
@@ -333,7 +465,9 @@ def tm_list_reference_docs() -> list[dict[str, str]]:
     return tm.list_reference_docs()
 
 
-@mcp.tool(description="List available request profiles (templates/configs for creating Requests)")
+@mcp.tool(
+    description="List available request profiles (templates/configs for creating Requests)"
+)
 def tm_list_request_profiles() -> list[dict[str, Any]]:
     return tm.list_request_profiles()
 
@@ -343,12 +477,18 @@ def tm_get_request_profile(profile_id: str) -> dict[str, Any] | None:
     return tm.get_request_profile(profile_id)
 
 
-@mcp.tool(description="List supporting documentation (sidecars) for a planning item or by role")
-def tm_list_support_docs(supports_id: str | None = None, role: str | None = None) -> list[dict[str, Any]]:
+@mcp.tool(
+    description="List supporting documentation (sidecars) for a planning item or by role"
+)
+def tm_list_support_docs(
+    supports_id: str | None = None, role: str | None = None
+) -> list[dict[str, Any]]:
     return tm.list_support_docs(supports_id, role)
 
 
-@mcp.tool(description="Get a named section (heading) from a planning document's markdown content")
+@mcp.tool(
+    description="Get a named section (heading) from a planning document's markdown content"
+)
 def tm_get_section(id: str, section: str) -> dict[str, Any]:
     return tm.get_section(id, section)
 
@@ -363,22 +503,32 @@ def tm_append_section(id: str, section: str, content: str) -> dict[str, Any]:
     return tm.append_section(id, section, content)
 
 
-@mcp.tool(description="Get nested subsection content using dot notation (e.g., 'section.subsection')")
+@mcp.tool(
+    description="Get nested subsection content using dot notation (e.g., 'section.subsection')"
+)
 def tm_get_subsection(id: str, section_path: str) -> dict[str, Any]:
     return tm.get_subsection(id, section_path)
 
 
-@mcp.tool(description="Get documentation sync requirements for a planning item kind and profile pack")
-def tm_doc_sync_requirements(kind: str, profile_pack: str = "standard") -> dict[str, Any]:
+@mcp.tool(
+    description="Get documentation sync requirements for a planning item kind and profile pack"
+)
+def tm_doc_sync_requirements(
+    kind: str, profile_pack: str = "standard"
+) -> dict[str, Any]:
     return tm.get_doc_sync_requirements(kind, profile_pack)
 
 
-@mcp.tool(description="List pending documentation updates needed for a planning item kind")
+@mcp.tool(
+    description="List pending documentation updates needed for a planning item kind"
+)
 def tm_pending_doc_updates(kind: str, profile_pack: str = "standard") -> list[str]:
     return tm.pending_doc_updates(kind, profile_pack)
 
 
-@mcp.tool(description="Claim ownership of a planning item (prevent concurrent edits) with optional TTL")
+@mcp.tool(
+    description="Claim ownership of a planning item (prevent concurrent edits) with optional TTL"
+)
 def tm_claim(kind: str, id: str, holder: str, ttl: int | None = None) -> dict[str, Any]:
     return tm.claim(kind, id, holder, ttl)
 
@@ -388,12 +538,16 @@ def tm_unclaim(id: str) -> bool:
     return tm.unclaim(id)
 
 
-@mcp.tool(description="List active claims on planning items, optionally filtered by kind")
+@mcp.tool(
+    description="List active claims on planning items, optionally filtered by kind"
+)
 def tm_claims(kind: str | None = None) -> list[dict[str, Any]]:
     return tm.claims(kind)
 
 
-@mcp.tool(description="Validate all planning documents against schemas and rules; returns list of errors")
+@mcp.tool(
+    description="Validate all planning documents against schemas and rules; returns list of errors"
+)
 def tm_validate() -> list[str]:
     return tm.validate()
 
@@ -413,7 +567,9 @@ def tm_events(tail: int = 20) -> list[dict[str, Any]]:
     return tm.events(tail)
 
 
-@mcp.tool(description="Verify planning module structure is healthy (directories, configs, API)")
+@mcp.tool(
+    description="Verify planning module structure is healthy (directories, configs, API)"
+)
 def tm_verify_structure() -> dict[str, Any]:
     return tm.verify_structure()
 

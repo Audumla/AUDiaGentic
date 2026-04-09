@@ -12,7 +12,10 @@ class Extracts:
     def show(self, id_: str) -> dict:
         items = {i.data['id']: ItemView(i.kind, i.path, i.data, i.body) for i in scan_items(self.root)}
         item = items[id_]
-        return {'id': item.data['id'], 'kind': item.kind, 'label': item.data['label'], 'state': item.data['state'], 'summary': item.data['summary'], 'path': str(item.path.relative_to(self.root))}
+        out = dict(item.data)
+        out['kind'] = item.kind
+        out['path'] = str(item.path.relative_to(self.root))
+        return out
 
     def extract(self, id_: str, with_related: bool = False, with_resources: bool = False) -> dict:
         items = {i.data['id']: ItemView(i.kind, i.path, i.data, i.body) for i in scan_items(self.root)}
