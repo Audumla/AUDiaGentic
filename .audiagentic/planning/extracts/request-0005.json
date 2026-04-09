@@ -1,0 +1,13 @@
+{
+  "item": {
+    "id": "request-0005",
+    "kind": "request",
+    "label": "Archive functionality for planning items",
+    "state": "captured",
+    "summary": "Implement archive state and functions to archive older or redundant planning items while maintaining historical records",
+    "path": "docs\\planning\\requests\\request-0005.md"
+  },
+  "body": "\n# Understanding\n\nInitial request intake captured: Implement archive state and functions to archive older or redundant planning items while maintaining historical records\n\n# Source Refs\n\n- Add links, file paths, issue ids, or planning refs here.\n\n# Open Questions\n\n- Which archive behaviors are essential for the first implementation slice?\n- What visibility should archived items have in normal planning workflows?\n- What verification will prove historical integrity is preserved?\n\n# Notes\n",
+  "effective_standard_refs": [],
+  "related": {}
+}

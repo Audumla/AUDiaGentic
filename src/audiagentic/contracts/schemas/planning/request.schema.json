@@ -5,7 +5,10 @@
     "id",
     "label",
     "state",
-    "summary"
+    "summary",
+    "source_refs",
+    "current_understanding",
+    "open_questions"
   ],
   "properties": {
     "id": {

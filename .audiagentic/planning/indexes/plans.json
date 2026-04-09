@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-08T03:06:15.709211+00:00",
+  "generated_at": "2026-04-09T13:26:50.353288+00:00",
   "items": [
     {
       "id": "plan-0004",
@@ -19,6 +19,30 @@
       "label": "Phase 0 Build Book",
       "state": "draft",
       "path": "docs\\planning\\plans\\plan-0006-phase-0-build-book.md"
+    },
+    {
+      "id": "plan-0007",
+      "label": "Implement installable profiles and documentation surfaces",
+      "state": "done",
+      "path": "docs\\planning\\plans\\plan-0007-implement-installable-profiles-and-documentation-surfaces.md"
+    },
+    {
+      "id": "plan-0008",
+      "label": "MCP efficiency improvements and usage enforcement",
+      "state": "done",
+      "path": "docs\\planning\\plans\\plan-0008-mcp-efficiency-improvements-and-usage-enforcement.md"
+    },
+    {
+      "id": "plan-0009",
+      "label": "Implement archive functionality",
+      "state": "ready",
+      "path": "docs\\planning\\plans\\plan-0009-implement-archive-functionality.md"
+    },
+    {
+      "id": "plan-0010",
+      "label": "Implement planning module improvements",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-0010-implement-planning-module-improvements.md"
     }
   ]
 }
