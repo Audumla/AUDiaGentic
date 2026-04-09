@@ -1,0 +1,140 @@
+from __future__ import annotations
+
+import shutil
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[3]
+for _p in (str(ROOT), str(ROOT / "src")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+import tools.planning.tm_helper as tm
+
+PLANNING_CONFIG_SRC = ROOT / ".audiagentic" / "planning" / "config"
+
+
+def _seed_helper_project(root: Path) -> None:
+    config_dir = root / ".audiagentic" / "planning" / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    for rel in ("ids", "indexes", "events", "claims", "meta"):
+        (root / ".audiagentic" / "planning" / rel).mkdir(parents=True, exist_ok=True)
+
+    for f in PLANNING_CONFIG_SRC.glob("*.yaml"):
+        shutil.copy(f, config_dir / f.name)
+
+    profile_pack_src = PLANNING_CONFIG_SRC / "profile-packs"
+    if profile_pack_src.exists():
+        shutil.copytree(profile_pack_src, config_dir / "profile-packs")
+
+    for d in ("requests", "specifications", "plans", "tasks/core", "work-packages/core", "standards"):
+        (root / "docs" / "planning" / d).mkdir(parents=True, exist_ok=True)
+
+
+@pytest.fixture()
+def helper_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    from audiagentic.planning.app.api import PlanningAPI
+
+    _seed_helper_project(tmp_path)
+    monkeypatch.setattr(tm, "_ROOT", tmp_path)
+    monkeypatch.setattr(tm, "_api", PlanningAPI(tmp_path))
+    return tmp_path
+
+
+def test_tm_helper_lists_documentation_surfaces() -> None:
+    surfaces = tm.list_doc_surfaces()
+    assert surfaces
+    assert any(surface["id"] == "readme" for surface in surfaces)
+    assert any("seed_on_install" in surface for surface in surfaces)
+
+
+def test_tm_helper_lists_request_profiles() -> None:
+    profiles = tm.list_request_profiles()
+    assert {profile["id"] for profile in profiles} >= {"feature", "issue"}
+
+
+def test_tm_helper_get_request_profile() -> None:
+    profile = tm.get_request_profile("feature")
+    assert profile is not None
+    assert profile["label"] == "Feature request"
+
+
+def test_tm_helper_doc_sync_queries() -> None:
+    requirements = tm.get_doc_sync_requirements("task", "standard")
+    assert requirements["required_updates"] == ["changelog"]
+    assert "task" in requirements["all_required_updates"]
+    assert tm.pending_doc_updates("wp", "standard") == ["changelog", "readme"]
+
+
+def test_tm_helper_lists_support_docs_and_references() -> None:
+    support_docs = tm.list_support_docs()
+    reference_docs = tm.list_reference_docs()
+    assert any(doc["id"] == "support-0001" for doc in support_docs)
+    assert any(doc["label"] == "planning-request-profiles" for doc in reference_docs)
+
+
+def test_tm_helper_get_subsection_supports_dot_and_slash_paths(helper_project: Path) -> None:
+    tm.new_spec("Section parsing spec", "Supports helper task creation")
+    content = """# Description
+
+Top level body.
+
+## Notes
+
+Nested notes.
+
+#### Deep Detail
+
+Deep content.
+"""
+    item = tm.create_with_content(
+        "task",
+        label="Nested subsection test",
+        summary="Exercise subsection parsing",
+        content=content,
+        spec="spec-0001",
+    )
+
+    slash_result = tm.get_subsection(item["id"], "description/notes")
+    dot_result = tm.get_subsection(item["id"], "description.notes")
+    deep_result = tm.get_subsection(item["id"], "description.notes.deep detail")
+
+    assert slash_result["found"] is True
+    assert slash_result["content"] == "Nested notes.\n\n#### Deep Detail\n\nDeep content."
+    assert dot_result["found"] is True
+    assert dot_result["content"] == slash_result["content"]
+    assert deep_result["found"] is True
+    assert deep_result["content"] == "Deep content."
+
+
+def test_tm_helper_new_item_reference_validation_rejects_missing_refs(helper_project: Path) -> None:
+    with pytest.raises(ValueError, match="spec 'spec-9999' does not exist"):
+        tm.new_plan("Missing spec plan", "Should fail", spec="spec-9999")
+
+    with pytest.raises(ValueError, match="spec 'spec-9999' does not exist"):
+        tm.new_task("Missing spec task", "Should fail", spec="spec-9999")
+
+    with pytest.raises(ValueError, match="plan 'plan-9999' does not exist"):
+        tm.new_wp("Missing plan wp", "Should fail", plan="plan-9999")
+
+
+def test_tm_helper_verify_structure_marks_optional_extensions_non_blocking(helper_project: Path) -> None:
+    result = tm.verify_structure()
+
+    assert result["healthy"] is True
+    assert result["checks"]["config_request-profiles"]["required"] is False
+    assert result["checks"]["config_documentation"]["required"] is False
+    assert "PASSED" in result["summary"]
+
+
+def test_tm_helper_verify_structure_reports_required_failures_clearly(helper_project: Path) -> None:
+    planning_config = helper_project / ".audiagentic" / "planning" / "config" / "planning.yaml"
+    planning_config.unlink()
+
+    result = tm.verify_structure()
+
+    assert result["healthy"] is False
+    assert result["checks"]["config_planning"]["ok"] is False
+    assert result["summary"].startswith("Structure check FAILED:")
