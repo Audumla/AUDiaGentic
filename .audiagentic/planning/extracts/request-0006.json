@@ -1,0 +1,13 @@
+{
+  "item": {
+    "id": "request-0006",
+    "kind": "request",
+    "label": "Sensitive data detection and review for planning items",
+    "state": "captured",
+    "summary": "Implement optional security review that detects sensitive information (passwords, internal server names, PII, credentials) in planning requests, specifications, tasks, and work-packages, with ability to override for known test credentials",
+    "path": "docs\\planning\\requests\\request-0006.md"
+  },
+  "body": "\n# Understanding\n\nInitial request intake captured: Implement optional security review that detects sensitive information in planning items, with override support for known test credentials\n\n# Source Refs\n\n- Add links, file paths, issue ids, or planning refs here.\n\n# Open Questions\n\n- Which sensitive-data classes must be detected in the first phase?\n- How should false positives and approved test credentials be handled?\n- Which planning kinds and workflows should enforce or surface the review?\n\n# Notes\n",
+  "effective_standard_refs": [],
+  "related": {}
+}

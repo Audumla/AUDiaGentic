@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-08T03:06:15.709211+00:00",
+  "generated_at": "2026-04-09T13:26:50.353288+00:00",
   "items": [
     {
       "id": "task-0032",
@@ -211,6 +211,108 @@
       "label": "Extend planning tools with full content management",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0027.md"
+    },
+    {
+      "id": "task-0181",
+      "label": "Implement update_task_status() wrapper function",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0181.md"
+    },
+    {
+      "id": "task-0183",
+      "label": "Define reference docs and project-facing documentation surfaces",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0183.md"
+    },
+    {
+      "id": "task-0184",
+      "label": "Scope manifest and migration-registry scaffolding",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0184.md"
+    },
+    {
+      "id": "task-0185",
+      "label": "Expand helper and MCP surfaces for documentation views",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0185.md"
+    },
+    {
+      "id": "task-0186",
+      "label": "Define section registry and subsection navigation limits",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0186.md"
+    },
+    {
+      "id": "task-0187",
+      "label": "Define supporting-doc metadata and registry behavior",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0187.md"
+    },
+    {
+      "id": "task-0188",
+      "label": "Define documentation-sync obligations and verification coverage",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0188.md"
+    },
+    {
+      "id": "task-0189",
+      "label": "Implement MCP helper root configurability",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0189.md"
+    },
+    {
+      "id": "task-0190",
+      "label": "Add archived state to planning state machine",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0190.md"
+    },
+    {
+      "id": "task-0191",
+      "label": "Implement tm_archive and tm_restore functions",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0191.md"
+    },
+    {
+      "id": "task-0192",
+      "label": "Update tm_list with archive filter parameter",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0192.md"
+    },
+    {
+      "id": "task-0193",
+      "label": "Update tm_validate with archive validation rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0193.md"
+    },
+    {
+      "id": "task-0194",
+      "label": "Update tm_show to include archive metadata",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0194.md"
+    },
+    {
+      "id": "task-0195",
+      "label": "Fix schema mismatch: move task_refs to meta.task_refs",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0195.md"
+    },
+    {
+      "id": "task-0196",
+      "label": "Implement automatic counter sync on delete",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0196.md"
+    },
+    {
+      "id": "task-0197",
+      "label": "Implement soft delete functionality",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0197.md"
+    },
+    {
+      "id": "task-0198",
+      "label": "Extend auto-reference updates to plans and tasks",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0198.md"
     },
     {
       "id": "task-0158",

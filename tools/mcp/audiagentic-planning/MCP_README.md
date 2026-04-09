@@ -83,6 +83,8 @@ Use the MCP tools directly. The server already publishes the tool names and argu
 ### Governance & constraints
 
 - `tm_standards(id)` — List applicable standards (coding styles, docs rules) for an item
+- `tm_list_standards()` — List all standard planning documents
+- `tm_get_standard(standard_id, with_related=False, with_resources=False)` — Get a standard with metadata and body
 - `tm_claim(kind, id, holder, ttl=None)` — Claim ownership to prevent concurrent edits
 - `tm_unclaim(id)` — Release ownership
 - `tm_claims(kind=None)` — List active claims
