@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "forge_extension": {
+      "url": "http://localhost:13990/mcp"
+    },
+    "audiagentic-planning": {
+      "command": "python",
+      "args": ["tools/mcp/audiagentic-planning/audiagentic-planning_mcp.py"]
+    }
+  }
+}

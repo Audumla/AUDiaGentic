@@ -61,6 +61,26 @@ def test_tm_helper_get_request_profile() -> None:
     assert profile["label"] == "Feature request"
 
 
+def test_tm_helper_new_request_uses_profile_defaults(helper_project: Path) -> None:
+    request = tm.new_request(
+        "Improve intake",
+        "Create richer request templates",
+        profile="feature",
+        source_refs=["user:chat"],
+    )
+    body = tm.get_content(request["id"])
+    shown = tm.show(request["id"])
+
+    assert shown["current_understanding"].startswith("Initial feature intake captured")
+    assert shown["open_questions"]
+    assert shown["meta"]["request_type"] == "feature"
+    assert shown["source_refs"] == ["user:chat"]
+    assert "# Problem" in body
+    assert "# Desired Outcome" in body
+    assert "# Source Refs" in body
+    assert "# Open Questions" in body
+
+
 def test_tm_helper_doc_sync_queries() -> None:
     requirements = tm.get_doc_sync_requirements("task", "standard")
     assert requirements["required_updates"] == ["changelog"]
@@ -138,3 +158,19 @@ def test_tm_helper_verify_structure_reports_required_failures_clearly(helper_pro
     assert result["healthy"] is False
     assert result["checks"]["config_planning"]["ok"] is False
     assert result["summary"].startswith("Structure check FAILED:")
+
+
+def test_tm_helper_lists_and_gets_standards(helper_project: Path) -> None:
+    standard = tm.new_standard("Review findings standard", "Keeps review output consistent")
+    tm.update_content(
+        standard["id"],
+        "# Standard\n\n# Requirements\n\n1. Findings first.\n",
+        mode="replace",
+    )
+
+    standards = tm.list_standards()
+    assert any(item["id"] == standard["id"] for item in standards)
+
+    standard_doc = tm.get_standard(standard["id"])
+    assert standard_doc["item"]["kind"] == "standard"
+    assert "Findings first." in standard_doc["body"]

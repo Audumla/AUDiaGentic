@@ -2,12 +2,20 @@
 
 This folder contains human- and agent-readable reference material for installed Audiagentic components.
 
-- planning-how-to.md
-- planning-doc-surfaces.md
-- planning-supporting-docs.md
-- planning-doc-sync.md
+## Folders
 
+- `planning/` — planning/work-specific reference material
+- `standards/` — standards-related maps and guidance
 
-- `planning-verification-matrix.md` — minimum smoke and contract checks for the documentation-surface overlay
-- planning-request-profiles.md
+## Planning References
 
+- `planning/planning-how-to.md`
+- `planning/planning-doc-surfaces.md`
+- `planning/planning-supporting-docs.md`
+- `planning/planning-doc-sync.md`
+- `planning/planning-request-profiles.md`
+- `planning/planning-verification-matrix.md` — minimum smoke and contract checks for the documentation-surface overlay
+
+## Standards References
+
+- `standards/planning-standards-map.md`

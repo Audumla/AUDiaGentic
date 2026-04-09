@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-08T03:06:15.709211+00:00",
+  "generated_at": "2026-04-09T13:26:50.353288+00:00",
   "items": [
     {
       "id": "spec-0002",
@@ -115,6 +115,30 @@
       "label": "Phase 12 Remaining Implementation Docs",
       "state": "draft",
       "path": "docs\\planning\\specifications\\spec-0020-phase-12-remaining-implementation-docs.md"
+    },
+    {
+      "id": "spec-0021",
+      "label": "Installable profiles and documentation surfaces",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0021-installable-profiles-and-documentation-surfaces.md"
+    },
+    {
+      "id": "spec-0022",
+      "label": "MCP efficiency improvements and usage enforcement",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0022-mcp-efficiency-improvements-and-usage-enforcement.md"
+    },
+    {
+      "id": "spec-0023",
+      "label": "Archive state and functionality specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0023-archive-state-and-functionality-specification.md"
+    },
+    {
+      "id": "spec-0024",
+      "label": "Planning module improvements implementation specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0024-planning-module-improvements-implementation-specification.md"
     }
   ]
 }

@@ -1,25 +1,33 @@
 ---
 id: wp-0007
 label: Supporting docs, subsection access, and documentation sync
-state: draft
-summary: Extend the planning delta with supporting-doc metadata, subsection-aware MCP access, and explicit documentation-sync rules while clarifying current indexing and validation limits.
+state: done
+summary: Extend the planning delta with supporting-doc metadata, subsection-aware
+  MCP access, and explicit documentation-sync rules while clarifying current indexing
+  and validation limits.
 plan_ref: plan-0007
 task_refs:
-  - ref: task-0187
-    seq: 1000
-  - ref: task-0188
-    seq: 2000
+- ref: task-0187
+  seq: 1000
+- ref: task-0188
+  seq: 2000
 standard_refs:
-  - standard-0001
+- standard-0001
+- standard-0002
 workflow: standard
 meta:
   doc_surface_refs:
-    - readme
-    - changelog
-    - planning_references
+  - readme
+  - changelog
+  - planning_references
   doc_sync_required: true
   doc_sync_status: pending
 ---
+
+
+
+
+
 
 # Objective
 

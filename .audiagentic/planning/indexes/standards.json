@@ -1,5 +1,54 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-08T03:06:15.709211+00:00",
-  "items": []
+  "generated_at": "2026-04-09T13:26:50.353288+00:00",
+  "items": [
+    {
+      "id": "standard-0001",
+      "label": "Planning documentation and maintenance standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-0001-planning-documentation-and-maintenance-standard.md"
+    },
+    {
+      "id": "standard-0002",
+      "label": "Documentation surface and content organization standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-0002-documentation-surface-and-content-organization-standard.md"
+    },
+    {
+      "id": "standard-0003",
+      "label": "Versioning and changelog standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-0003-versioning-and-changelog-standard.md"
+    },
+    {
+      "id": "standard-0004",
+      "label": "Review findings and evidence standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-0004-review-findings-and-evidence-standard.md"
+    },
+    {
+      "id": "standard-0005",
+      "label": "Verification and test evidence standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-0005-verification-and-test-evidence-standard.md"
+    },
+    {
+      "id": "standard-0006",
+      "label": "Planning record quality standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-0006-planning-record-quality-standard.md"
+    },
+    {
+      "id": "standard-0007",
+      "label": "Migration and change-control standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-0007-migration-and-change-control-standard.md"
+    },
+    {
+      "id": "standard-0008",
+      "label": "Python implementation standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-0008-python-implementation-standard.md"
+    }
+  ]
 }

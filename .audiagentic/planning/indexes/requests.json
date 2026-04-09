@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-08T03:06:15.709211+00:00",
+  "generated_at": "2026-04-09T13:26:50.353288+00:00",
   "items": [
     {
       "id": "request-0002",
@@ -13,6 +13,30 @@
       "label": "Add archive functionality to planning core",
       "state": "captured",
       "path": "docs\\planning\\requests\\request-0003.md"
+    },
+    {
+      "id": "request-0004",
+      "label": "MCP layer efficiency improvements and usage enforcement",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-0004.md"
+    },
+    {
+      "id": "request-0005",
+      "label": "Archive functionality for planning items",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-0005.md"
+    },
+    {
+      "id": "request-0006",
+      "label": "Sensitive data detection and review for planning items",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-0006.md"
+    },
+    {
+      "id": "request-0007",
+      "label": "Planning module critical fixes: schema, soft delete, and traceability",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-0007.md"
     }
   ]
 }
