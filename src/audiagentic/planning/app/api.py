@@ -81,6 +81,10 @@ class PlanningAPI:
         target: str | None = None,
         workflow: str | None = None,
         request_refs: list[str] | None = None,
+        profile: str | None = None,
+        source_refs: list[str] | None = None,
+        current_understanding: str | None = None,
+        open_questions: list[str] | None = None,
     ):
         kind = {
             "req": "request",
@@ -96,11 +100,22 @@ class PlanningAPI:
         self.hooks.run("before_create", kind, {"label": label})
         id_ = next_id(self.root, kind)
         if kind == "request":
-            path = self.req_mgr.create(id_, label, summary)
+            path = self.req_mgr.create(
+                id_,
+                label,
+                summary,
+                profile=profile,
+                source_refs=source_refs,
+                current_understanding=current_understanding,
+                open_questions=open_questions,
+            )
         elif kind == "spec":
             path = self.spec_mgr.create(
                 id_, label, summary, request_refs=request_refs or []
             )
+            # Auto-update source_refs on referenced requests
+            for req_id in request_refs or []:
+                self._add_source_ref(req_id, id_)
         elif kind == "plan":
             path = self.plan_mgr.create(
                 id_, label, summary, spec_refs=[spec] if spec else []

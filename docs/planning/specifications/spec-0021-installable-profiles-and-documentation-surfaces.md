@@ -2,31 +2,36 @@
 id: spec-0021
 label: Installable profiles and documentation surfaces
 state: draft
-summary: Define installable profile packs, configurable documentation surfaces, request profiles, references docs, and MCP access to project docs without violating the template installation contract.
+summary: Define installable profile packs, configurable documentation surfaces, request
+  profiles, references docs, and MCP access to project docs without violating the
+  template installation contract.
 request_refs:
-  - request-0004
+- request-0004
 task_refs:
-  - ref: task-0181
-    seq: 1000
-  - ref: task-0182
-    seq: 2000
-  - ref: task-0183
-    seq: 3000
-  - ref: task-0184
-    seq: 4000
-  - ref: task-0185
-    seq: 5000
-  - ref: task-0186
-    seq: 6000
-  - ref: task-0187
-    seq: 7000
-  - ref: task-0188
-    seq: 8000
+- ref: task-0181
+  seq: 1000
+- ref: task-0182
+  seq: 2000
+- ref: task-0183
+  seq: 3000
+- ref: task-0184
+  seq: 4000
+- ref: task-0185
+  seq: 5000
+- ref: task-0186
+  seq: 6000
+- ref: task-0187
+  seq: 7000
+- ref: task-0188
+  seq: 8000
 standard_refs:
-  - standard-0001
-  - standard-0002
+- standard-0001
+- standard-0002
+- standard-0003
 workflow: standard
 ---
+
+
 
 # Purpose
 

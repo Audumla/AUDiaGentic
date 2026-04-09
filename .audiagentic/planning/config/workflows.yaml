@@ -46,7 +46,7 @@ planning:
           transitions:
             draft: [ready, blocked, cancelled]
             ready: [in_progress, blocked, cancelled]
-            in_progress: [blocked, done, cancelled]
+            in_progress: [draft, blocked, done, cancelled]
             blocked: [draft, ready, in_progress, cancelled]
             done: []
             cancelled: []
