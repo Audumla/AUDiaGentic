@@ -1,0 +1,13 @@
+{
+  "item": {
+    "id": "request-0003",
+    "kind": "request",
+    "label": "Add archive functionality to planning core",
+    "state": "captured",
+    "summary": "Implement archive state workflow with tm_archive, tm_restore, and archive filtering for planning objects",
+    "path": "docs\\planning\\requests\\request-0003.md"
+  },
+  "body": "\n# Understanding\n\nInitial request intake captured: Implement archive state workflow with tm_archive, tm_restore, and archive filtering for planning objects\n\n# Source Refs\n\n- Add links, file paths, issue ids, or planning refs here.\n\n# Open Questions\n\n- Which planning kinds support archive behavior in this phase?\n- How should archived items appear in list, show, and validate flows?\n- What compatibility constraints apply to existing planning workflows?\n\n# Notes\n",
+  "effective_standard_refs": [],
+  "related": {}
+}

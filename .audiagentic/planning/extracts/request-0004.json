@@ -1,0 +1,13 @@
+{
+  "item": {
+    "id": "request-0004",
+    "kind": "request",
+    "label": "MCP layer efficiency improvements and usage enforcement",
+    "state": "captured",
+    "summary": "Add wrapper functions, templates, and guidance to make MCP layer as efficient as direct file edits while ensuring consistent usage for audit trail and validation",
+    "path": "docs\\planning\\requests\\request-0004.md"
+  },
+  "body": "\n# Understanding\n\nInitial request intake captured: Add wrapper functions, templates, and guidance to make MCP layer as efficient as direct file edits while ensuring consistent usage for audit trail and validation\n\n# Source Refs\n\n- Add links, file paths, issue ids, or planning refs here.\n\n# Open Questions\n\n- Which planning operations should prefer MCP tools over direct edits?\n- What MCP gaps still force direct file edits?\n- How should auditability and convenience be balanced?\n\n# Notes\n",
+  "effective_standard_refs": [],
+  "related": {}
+}

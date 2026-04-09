@@ -1,0 +1,13 @@
+{
+  "item": {
+    "id": "request-0002",
+    "kind": "request",
+    "label": "Comprehensive implementation docs migration",
+    "state": "captured",
+    "summary": "Migrate all docs/implementation content to planning structure with full reference resolution",
+    "path": "docs\\planning\\requests\\request-0002.md"
+  },
+  "body": "\n# Understanding\n\nInitial request intake captured: Migrate all docs/implementation content to planning structure with full reference resolution\n\n# Source Refs\n\n- Add links, file paths, issue ids, or planning refs here.\n\n# Open Questions\n\n- What remains canonical versus archived after migration?\n- Which reader-facing entrypoints still need reference updates?\n- What verification proves the migration is complete?\n\n# Notes\n",
+  "effective_standard_refs": [],
+  "related": {}
+}

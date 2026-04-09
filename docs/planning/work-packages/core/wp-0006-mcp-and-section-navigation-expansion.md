@@ -1,23 +1,30 @@
 ---
 id: wp-0006
 label: MCP and section navigation expansion
-state: draft
-summary: Expand the planning helper and MCP surface for documentation surfaces, references, and section navigation while documenting current implementation limits.
+state: done
+summary: Expand the planning helper and MCP surface for documentation surfaces, references,
+  and section navigation while documenting current implementation limits.
 plan_ref: plan-0007
 task_refs:
-  - ref: task-0185
-    seq: 1000
-  - ref: task-0186
-    seq: 2000
+- ref: task-0185
+  seq: 1000
+- ref: task-0186
+  seq: 2000
 standard_refs:
-  - standard-0001
+- standard-0001
+- standard-0002
 workflow: standard
 meta:
   doc_surface_refs:
-    - planning_references
+  - planning_references
   doc_sync_required: true
   doc_sync_status: pending
 ---
+
+
+
+
+
 
 # Objective
 

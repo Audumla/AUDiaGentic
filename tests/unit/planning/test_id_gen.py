@@ -1,4 +1,5 @@
 """Unit tests for planning thread-safe ID generation."""
+
 from __future__ import annotations
 
 import sys
@@ -23,7 +24,9 @@ def test_sequential_ids(tmp_path: Path) -> None:
 def test_counter_persisted(tmp_path: Path) -> None:
     next_id(tmp_path, "spec")
     next_id(tmp_path, "spec")
-    counter = (tmp_path / ".audiagentic" / "planning" / "ids" / "spec.counter").read_text()
+    counter = (
+        tmp_path / ".audiagentic" / "planning" / "ids" / "spec.counter"
+    ).read_text()
     assert counter.strip() == "2"
 
 
@@ -61,9 +64,10 @@ def test_thread_safety(tmp_path: Path) -> None:
 
 
 def test_sync_counter_seeds_from_docs(tmp_path: Path) -> None:
-    # Simulate pre-existing docs by seeding the counter directly to a lower value
-    # then calling sync_counter — it should advance to the max found in docs.
-    # Since we have no actual docs in tmp_path, sync_counter is a no-op.
+    # sync_counter should always create counter file (even if empty)
+    # This ensures garbage values are fixed and counters are initialized
     sync_counter(tmp_path, "task")
-    # Counter file should not be created if no docs exist
-    assert not (tmp_path / ".audiagentic" / "planning" / "ids" / "task.counter").exists()
+    counter_file = tmp_path / ".audiagentic" / "planning" / "ids" / "task.counter"
+    assert counter_file.exists()
+    # Counter should be 0 when no docs exist
+    assert int(counter_file.read_text().strip()) == 0
