@@ -1,0 +1,15 @@
+# Request profiles are lightweight classification/default layers for Requests.
+# They are distinct from workflow profiles and profile packs.
+request_profiles:
+  feature:
+    label: Feature request
+    defaults:
+      meta:
+        request_type: feature
+    suggested_sections: [Problem, Desired Outcome, Constraints]
+  issue:
+    label: Issue report
+    defaults:
+      meta:
+        request_type: issue
+    suggested_sections: [Problem, Impact, Reproduction, Constraints]
