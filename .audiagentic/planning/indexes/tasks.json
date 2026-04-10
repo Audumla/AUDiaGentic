@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T12:21:57.366400+00:00",
+  "generated_at": "2026-04-10T12:23:42.044416+00:00",
   "items": [
     {
       "id": "task-0032",
@@ -493,6 +493,12 @@
       "label": "Write tests for sensitive data detection",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0235.md"
+    },
+    {
+      "id": "task-0236",
+      "label": "Implement audience profile system in config and API",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0236.md"
     },
     {
       "id": "task-0158",
