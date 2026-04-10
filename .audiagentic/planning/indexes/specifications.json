@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T12:24:03.088001+00:00",
+  "generated_at": "2026-04-10T12:49:30.364758+00:00",
   "items": [
     {
       "id": "spec-0023",
@@ -70,9 +70,15 @@
     },
     {
       "id": "spec-0046",
-      "label": "Audience-level profile system for controlling planning depth-of-detail",
+      "label": "Guidance levels for controlling planning depth-of-detail",
       "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0046-audience-level-profile-system-for-controlling-planning-depth-of-detail.md"
+      "path": "docs\\planning\\specifications\\spec-0046-guidance-levels-for-controlling-planning-depth-of-detail.md"
+    },
+    {
+      "id": "spec-0047",
+      "label": "Unified workflow states for all planning item types",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0047-unified-workflow-states-for-all-planning-item-types.md"
     }
   ]
 }
