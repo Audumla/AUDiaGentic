@@ -1,19 +1,7 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T03:43:58.481196+00:00",
+  "generated_at": "2026-04-10T06:37:23.008587+00:00",
   "items": [
-    {
-      "id": "wp-0002",
-      "label": "Complete implementation docs migration",
-      "state": "draft",
-      "path": "docs\\planning\\work-packages\\core\\wp-0002-complete-implementation-docs-migration.md"
-    },
-    {
-      "id": "wp-0003",
-      "label": "Implement archive functionality",
-      "state": "draft",
-      "path": "docs\\planning\\work-packages\\core\\wp-0003-implement-archive-functionality.md"
-    },
     {
       "id": "wp-0004",
       "label": "Implement archive state workflow",
@@ -39,12 +27,6 @@
       "path": "docs\\planning\\work-packages\\core\\wp-0007-supporting-docs-subsection-access-and-documentation-sync.md"
     },
     {
-      "id": "wp-0008",
-      "label": "Add MCP wrapper functions for efficient task updates",
-      "state": "done",
-      "path": "docs\\planning\\work-packages\\core\\wp-0008-add-mcp-wrapper-functions-for-efficient-task-updates.md"
-    },
-    {
       "id": "wp-0009",
       "label": "Archive state workflow and core functions",
       "state": "ready",
@@ -61,12 +43,6 @@
       "label": "Fix PlanningAPI and MCP gaps",
       "state": "in_progress",
       "path": "docs\\planning\\work-packages\\core\\wp-0011-fix-planningapi-and-mcp-gaps.md"
-    },
-    {
-      "id": "wp-0013",
-      "label": "Implementation Plan",
-      "state": "draft",
-      "path": "docs\\planning\\work-packages\\core\\wp-0013-implementation-plan.md"
     }
   ]
 }

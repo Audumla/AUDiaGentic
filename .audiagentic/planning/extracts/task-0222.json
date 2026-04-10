@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-0222",
+    "label": "Add internal lookup(id) and head(id) helpers to api.py",
+    "state": "draft",
+    "summary": "Add lookup(id) that reads lookup.json and parses only the target markdown file, and head(id) that returns index-only metadata without parsing any planning doc",
+    "spec_ref": "spec-0043",
+    "request_refs": [],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs\\planning\\tasks\\core\\task-0222.md"
+  },
+  "body": "\n# Description\n\nAdd two internal helper methods to `src/audiagentic/planning/app/api.py`:\n\n**`lookup(id_: str) -> ItemView`**\n\n- Read `.audiagentic/planning/indexes/lookup.json`\n- Resolve the item's path from the index entry\n- Call `parse_markdown(path)` on that single file\n- Return an `ItemView` equivalent to what `_find()` returns today\n- Raise `KeyError` (or a clear `ValueError`) if the id is not in the index\n\n**`head(id_: str) -> dict`**\n\n- Read `.audiagentic/planning/indexes/lookup.json`\n- Return the index entry directly: `{id, kind, label, state, path, deleted}`\n- No markdown file parse \u2014 index data only\n\nBoth methods must be available internally for use by `_find()`, `show()`, `extract()`, and any other single-item read path.\n\n# Acceptance Criteria\n\n- `lookup(id)` returns a fully parsed item for a known id without calling `scan_items()`\n- `head(id)` returns the index entry dict without opening any markdown file\n- Both raise a clear error for an unknown id\n- Both are covered by unit tests using a fixture lookup.json\n\n# Notes\n\nDepends on task-0221 (lookup.json must exist before these helpers can be used). These helpers are internal \u2014 not part of the public tm_helper or MCP surface yet (that is task-0225).\n",
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ]
+}

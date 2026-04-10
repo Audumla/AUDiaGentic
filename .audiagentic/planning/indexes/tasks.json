@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T03:43:58.481196+00:00",
+  "generated_at": "2026-04-10T06:37:23.008587+00:00",
   "items": [
     {
       "id": "task-0032",
@@ -387,22 +387,64 @@
       "path": "docs\\planning\\tasks\\core\\task-0210.md"
     },
     {
-      "id": "task-0211",
-      "label": "Task 1",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0211.md"
-    },
-    {
-      "id": "task-0212",
-      "label": "Task 2",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0212.md"
-    },
-    {
       "id": "task-0215",
       "label": "Unify --profile and --stack-profile into single parameter",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0215.md"
+    },
+    {
+      "id": "task-0217",
+      "label": "Test task with defaults",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0217.md"
+    },
+    {
+      "id": "task-0218",
+      "label": "Test task",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0218.md"
+    },
+    {
+      "id": "task-0221",
+      "label": "Add lookup.json global index generation to idx_mgr",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0221.md"
+    },
+    {
+      "id": "task-0222",
+      "label": "Add internal lookup(id) and head(id) helpers to api.py",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0222.md"
+    },
+    {
+      "id": "task-0223",
+      "label": "Refactor _find(), show(), and extract() onto lookup path",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0223.md"
+    },
+    {
+      "id": "task-0224",
+      "label": "Add include_body and write_to_disk controls to extract()",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0224.md"
+    },
+    {
+      "id": "task-0225",
+      "label": "Expose head(id) and refined extract controls in MCP and tm_helper",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0225.md"
+    },
+    {
+      "id": "task-0226",
+      "label": "Add stale-index handling for lookup misses",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0226.md"
+    },
+    {
+      "id": "task-0227",
+      "label": "Add body content parameters to task creation and enforce non-empty body via validation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0227.md"
     },
     {
       "id": "task-0158",

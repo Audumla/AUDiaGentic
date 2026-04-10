@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T03:43:58.481196+00:00",
+  "generated_at": "2026-04-10T06:37:23.008587+00:00",
   "items": [
     {
       "id": "request-0002",
@@ -47,7 +47,7 @@
     {
       "id": "request-0009",
       "label": "Add audience-level profile system to control planning depth-of-detail",
-      "state": "distilled",
+      "state": "captured",
       "path": "docs\\planning\\requests\\request-0009.md"
     },
     {
@@ -57,10 +57,10 @@
       "path": "docs\\planning\\requests\\request-0010.md"
     },
     {
-      "id": "request-0022",
-      "label": "Test Source Required",
-      "state": "captured",
-      "path": "docs\\planning\\requests\\request-0022.md"
+      "id": "request-0025",
+      "label": "Optimize planning single-item lookup and extract token usage",
+      "state": "distilled",
+      "path": "docs\\planning\\requests\\request-0025.md"
     }
   ]
 }

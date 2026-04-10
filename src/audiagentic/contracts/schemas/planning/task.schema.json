@@ -5,8 +5,7 @@
     "id",
     "label",
     "state",
-    "summary",
-    "spec_ref"
+    "summary"
   ],
   "properties": {
     "id": {

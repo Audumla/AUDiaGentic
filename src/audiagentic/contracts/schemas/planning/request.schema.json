@@ -32,6 +32,12 @@
     "workflow": {
       "type": "string"
     },
+    "spec_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "standard_refs": {
       "type": "array",
       "items": {

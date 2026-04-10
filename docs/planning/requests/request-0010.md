@@ -16,11 +16,13 @@ meta:
   - request-0015
   - request-0016
   outcomes_delivered:
-  - Added `direct` and `full` stack profiles to profiles.yaml with configurable on_request_create behavior
-  - Implemented cascade creation in PlanningAPI.new() to auto-create specs when request uses stack_profile
+  - Merged request_profiles and stack_profiles into unified `profiles` structure in profiles.yaml
+  - Implemented cascade creation in PlanningAPI.new() to auto-create specs when request uses profile
   - Added apply_plan_overlay() method for applying plan/WP mapping over existing spec-linked tasks
-  - Exposed CLI support via --stack-profile flag and overlay-plan subcommand in tm.py
-  - All 162 existing planning tests pass; backward compatible (no profile = existing behavior)
+  - Unified CLI: single --profile parameter handles both request defaults and stack topology
+  - Exposed overlay-plan subcommand for applying plan/WP overlay to existing tasks
+  - Made source field required for all requests to track request origin
+  - All 164 planning tests pass; backward compatible (no profile = existing behavior)
 ---
 
 # Understanding
@@ -37,13 +39,31 @@ None at consolidation time.
 
 # Delivery
 
-Implemented in commit c8370e7:
+Implemented across commits c8370e7, a0391a0, bc90445, e9b7b20:
 
-- `stack_profiles` now driven by runtime code, not just config decoration
-- Two profiles: `direct` (spec-task only) and `full` (same base, allows overlay)
-- Auto-cascade on request creation respects profile configuration
-- Plan/WP overlay commands allow later application without re-anchoring tasks
-- Full backward compatibility: requests without profile behave exactly as before
+## c8370e7 — Stack Profiles Implementation
+
+- Separate `direct` and `full` stack profiles to control execution topology
+- Auto-cascade: specs auto-created when request uses a profile
+
+## a0391a0 — Unified Profile Refinement
+
+- Merged request_profiles + stack_profiles into single `profiles` structure
+- Single `--profile` parameter handles both request defaults and stack topology
+- `profile_for()` unified accessor in config.py
+- Profiles now contain: defaults (Understanding, meta), on_request_create, allow_plan_overlay
+
+## bc90445 — Task-0215 Documentation
+
+- Tracked the unification as a formal refinement task under spec-0024
+
+## e9b7b20 — Source Field Required
+
+- Made `source` required field on all requests (schema + validation)
+- --source now required CLI argument for request creation
+- Improves auditability and request traceability
+
+Full backward compatibility: requests without profile behave as before (no auto-cascade)
 
 # Acceptance Criteria
 

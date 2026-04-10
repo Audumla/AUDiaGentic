@@ -24,8 +24,26 @@ class Validator:
     def validate_all(self) -> list[str]:
         errors = []
         errors.extend(self.config.validate())
-        items = scan_items(self.root)
+        items = list(scan_items(self.root))
         ids = set()
+
+        # Build indexes for referential integrity checks
+        specs_by_request = {}  # request_id -> [spec_ids]
+        tasks_by_spec = {}     # spec_id -> [task_ids]
+
+        for item in items:
+            if item.kind == 'spec' and not item.data.get('deleted'):
+                for req_id in item.data.get('request_refs', []):
+                    if req_id not in specs_by_request:
+                        specs_by_request[req_id] = []
+                    specs_by_request[req_id].append(item.data['id'])
+            elif item.kind == 'task' and not item.data.get('deleted'):
+                spec_ref = item.data.get('spec_ref')
+                if spec_ref:
+                    if spec_ref not in tasks_by_spec:
+                        tasks_by_spec[spec_ref] = []
+                    tasks_by_spec[spec_ref].append(item.data['id'])
+
         for item in items:
             if item.data['id'] in ids:
                 errors.append(f'duplicate id: {item.data["id"]}')
@@ -63,6 +81,24 @@ class Validator:
             if item.kind == 'wp':
                 if item.path.parent.parent.name != 'work-packages':
                     errors.append(f"{item.path}: wp must be under docs/planning/work-packages/<domain>/")
+
+        # Referential integrity checks
+        for item in items:
+            if item.data.get('deleted'):
+                continue
+
+            # Requests in distilled/ready/done state should have specs
+            if item.kind == 'request' and item.data.get('state') in ('distilled', 'ready', 'done'):
+                req_id = item.data['id']
+                if req_id not in specs_by_request or not specs_by_request[req_id]:
+                    errors.append(f"{item.path}: request in '{item.data['state']}' state has no spec references")
+
+            # Specs in ready/done state should have tasks
+            if item.kind == 'spec' and item.data.get('state') in ('ready', 'done'):
+                spec_id = item.data['id']
+                if spec_id not in tasks_by_spec or not tasks_by_spec[spec_id]:
+                    errors.append(f"{item.path}: spec in '{item.data['state']}' state has no task references")
+
         return errors
 
     def _format_error(self, error: ValidationError) -> str:
