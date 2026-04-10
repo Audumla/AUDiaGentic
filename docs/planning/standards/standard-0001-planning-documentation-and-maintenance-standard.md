@@ -42,6 +42,7 @@ Sources:
 - Keep acceptance criteria and verification steps explicit.
 - Keep planning docs aligned with the actual repository structure and tool behavior.
 - Do not claim implementation completeness where only scaffolding or review prep exists.
+- Planning outputs (extracts, exports, reports) must be isolated from project source code and stored under a dedicated artifact root (e.g., `.audiagentic/planning/extracts/`) or external location. Never write planning artifacts into source directories.
 
 # Non-Goals
 
