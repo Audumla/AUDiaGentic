@@ -1858,3 +1858,27 @@
 {"ts": "2026-04-10T06:26:19.433258+00:00", "event": "task.after_create", "id": "task-0226", "path": "docs\\planning\\tasks\\core\\task-0226.md"}
 {"ts": "2026-04-10T06:26:48.844310+00:00", "event": "spec.after_state_change", "id": "spec-0043", "old_state": "draft", "new_state": "ready"}
 {"ts": "2026-04-10T06:36:49.777629+00:00", "event": "task.after_create", "id": "task-0227", "path": "docs\\planning\\tasks\\core\\task-0227.md"}
+{"ts": "2026-04-10T09:53:23.325066+00:00", "event": "request.after_update", "id": "request-0008"}
+{"ts": "2026-04-10T09:53:23.560441+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T09:53:23.635317+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T09:53:40.915632+00:00", "event": "request.after_update", "id": "request-0008"}
+{"ts": "2026-04-10T09:53:41.148318+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T09:53:41.223317+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T09:53:41.468491+00:00", "event": "request.after_state_change", "id": "request-0008", "old_state": "distilled", "new_state": "closed"}
+{"ts": "2026-04-10T10:01:01.052444+00:00", "event": "request.after_update", "id": "request-0002"}
+{"ts": "2026-04-10T10:01:01.284601+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T10:01:01.366221+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T10:01:01.834525+00:00", "event": "request.after_state_change", "id": "request-0002", "old_state": "captured", "new_state": "closed"}
+{"ts": "2026-04-10T10:03:23.064175+00:00", "event": "request.after_state_change", "id": "request-0003", "old_state": "captured", "new_state": "superseded"}
+{"ts": "2026-04-10T10:03:23.396875+00:00", "event": "spec.after_state_change", "id": "spec-0023", "old_state": "draft", "new_state": "ready"}
+{"ts": "2026-04-10T10:03:23.974320+00:00", "event": "request.after_state_change", "id": "request-0005", "old_state": "captured", "new_state": "distilled"}
+{"ts": "2026-04-10T10:03:27.685122+00:00", "event": "plan.after_state_change", "id": "plan-0009", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-10T10:03:28.020977+00:00", "event": "wp.after_state_change", "id": "wp-0009", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-10T10:03:28.111025+00:00", "event": "wp.review_stub", "id": "wp-0009", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-10T10:03:28.111157+00:00", "event": "wp.report_stub", "id": "wp-0009", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-10T10:08:47.503632+00:00", "event": "request.after_create", "id": "request-0026", "path": "docs\\planning\\requests\\request-0026.md"}
+{"ts": "2026-04-10T10:08:53.182359+00:00", "event": "request.after_state_change", "id": "request-0004", "old_state": "captured", "new_state": "closed"}
+{"ts": "2026-04-10T10:09:19.631863+00:00", "event": "request.after_state_change", "id": "request-0026", "old_state": "captured", "new_state": "closed"}
+{"ts": "2026-04-10T10:09:22.793097+00:00", "event": "request.after_update", "id": "request-0026"}
+{"ts": "2026-04-10T10:09:23.038293+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T10:09:23.117308+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
