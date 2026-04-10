@@ -1964,3 +1964,4 @@
 {"ts": "2026-04-10T12:21:57.185239+00:00", "event": "request.after_state_change", "id": "request-0006", "old_state": "distilled", "new_state": "closed", "reason": "Implementation complete and verified"}
 {"ts": "2026-04-10T12:22:46.240354+00:00", "event": "spec.after_create", "id": "spec-0046", "path": "docs\\planning\\specifications\\spec-0046-audience-level-profile-system-for-controlling-planning-depth-of-detail.md"}
 {"ts": "2026-04-10T12:23:41.855946+00:00", "event": "task.after_create", "id": "task-0236", "path": "docs\\planning\\tasks\\core\\task-0236.md"}
+{"ts": "2026-04-10T12:24:02.907958+00:00", "event": "request.after_state_change", "id": "request-0009", "old_state": "captured", "new_state": "distilled"}
