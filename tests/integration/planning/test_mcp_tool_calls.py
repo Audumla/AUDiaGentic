@@ -602,15 +602,38 @@ class TestMCPMutationIsolated:
         assert shown["context"] == "integration test"
 
     def test_tm_new_spec_creates_item(self, isolated_project):
+        _call_tool(
+            "tm_new_request",
+            _request_args("Spec owner", "Spec request"),
+            cwd=isolated_project,
+        )
         result = _call_tool(
             "tm_new_spec",
-            {"label": "Isolated Spec", "summary": "MCP spec test"},
+            {
+                "label": "Isolated Spec",
+                "summary": "MCP spec test",
+                "request_refs": ["request-0001"],
+            },
             cwd=isolated_project,
         )
         assert result["id"].startswith("spec-")
 
+    def test_tm_new_spec_requires_request_ref(self, isolated_project):
+        resp = _call_tool_raw(
+            "tm_new_spec",
+            {"label": "Orphan Spec", "summary": "Should fail"},
+            cwd=isolated_project,
+        )
+        has_error = "error" in resp or resp.get("result", {}).get("isError")
+        assert has_error, "Expected error when creating a spec without request_refs"
+
     def test_tm_new_plan_creates_item(self, isolated_project):
-        _call_tool("tm_new_spec", {"label": "SP", "summary": "S"}, cwd=isolated_project)
+        _call_tool("tm_new_request", _request_args("R", "S"), cwd=isolated_project)
+        _call_tool(
+            "tm_new_spec",
+            {"label": "SP", "summary": "S", "request_refs": ["request-0001"]},
+            cwd=isolated_project,
+        )
         result = _call_tool(
             "tm_new_plan",
             {"label": "Isolated Plan", "summary": "MCP plan test", "spec": "spec-0001"},
@@ -619,7 +642,12 @@ class TestMCPMutationIsolated:
         assert result["id"].startswith("plan-")
 
     def test_tm_new_task_creates_item(self, isolated_project):
-        _call_tool("tm_new_spec", {"label": "SP", "summary": "S"}, cwd=isolated_project)
+        _call_tool("tm_new_request", _request_args("R", "S"), cwd=isolated_project)
+        _call_tool(
+            "tm_new_spec",
+            {"label": "SP", "summary": "S", "request_refs": ["request-0001"]},
+            cwd=isolated_project,
+        )
         result = _call_tool(
             "tm_new_task",
             {"label": "Isolated Task", "summary": "MCP task test", "spec": "spec-0001"},
@@ -628,7 +656,12 @@ class TestMCPMutationIsolated:
         assert result["id"].startswith("task-")
 
     def test_tm_new_wp_creates_item(self, isolated_project):
-        _call_tool("tm_new_spec", {"label": "SP", "summary": "S"}, cwd=isolated_project)
+        _call_tool("tm_new_request", _request_args("R", "S"), cwd=isolated_project)
+        _call_tool(
+            "tm_new_spec",
+            {"label": "SP", "summary": "S", "request_refs": ["request-0001"]},
+            cwd=isolated_project,
+        )
         _call_tool(
             "tm_new_plan",
             {"label": "PL", "summary": "P", "spec": "spec-0001"},
@@ -650,7 +683,12 @@ class TestMCPMutationIsolated:
         assert result["id"].startswith("standard-")
 
     def test_tm_state_changes_state(self, isolated_project):
-        _call_tool("tm_new_spec", {"label": "SP", "summary": "S"}, cwd=isolated_project)
+        _call_tool("tm_new_request", _request_args("R", "S"), cwd=isolated_project)
+        _call_tool(
+            "tm_new_spec",
+            {"label": "SP", "summary": "S", "request_refs": ["request-0001"]},
+            cwd=isolated_project,
+        )
         result = _call_tool(
             "tm_state", {"id": "spec-0001", "new_state": "ready"}, cwd=isolated_project
         )
@@ -685,7 +723,12 @@ class TestMCPMutationIsolated:
         assert "Appended." in content
 
     def test_tm_batch_update_state_and_summary(self, isolated_project):
-        _call_tool("tm_new_spec", {"label": "SP", "summary": "S"}, cwd=isolated_project)
+        _call_tool("tm_new_request", _request_args("R", "S"), cwd=isolated_project)
+        _call_tool(
+            "tm_new_spec",
+            {"label": "SP", "summary": "S", "request_refs": ["request-0001"]},
+            cwd=isolated_project,
+        )
         _call_tool(
             "tm_new_task",
             {"label": "T", "summary": "Old", "spec": "spec-0001"},
@@ -711,7 +754,12 @@ class TestMCPMutationIsolated:
         (isolated_project / "docs" / "planning" / "tasks" / "contrib").mkdir(
             parents=True, exist_ok=True
         )
-        _call_tool("tm_new_spec", {"label": "SP", "summary": "S"}, cwd=isolated_project)
+        _call_tool("tm_new_request", _request_args("R", "S"), cwd=isolated_project)
+        _call_tool(
+            "tm_new_spec",
+            {"label": "SP", "summary": "S", "request_refs": ["request-0001"]},
+            cwd=isolated_project,
+        )
         _call_tool(
             "tm_new_task",
             {"label": "T", "summary": "S", "spec": "spec-0001"},
@@ -726,7 +774,11 @@ class TestMCPMutationIsolated:
         _call_tool(
             "tm_new_request", _request_args("R", "S"), cwd=isolated_project
         )
-        _call_tool("tm_new_spec", {"label": "SP", "summary": "S"}, cwd=isolated_project)
+        _call_tool(
+            "tm_new_spec",
+            {"label": "SP", "summary": "S", "request_refs": ["request-0001"]},
+            cwd=isolated_project,
+        )
         result = _call_tool(
             "tm_relink",
             {"src": "spec-0001", "field": "request_refs", "dst": "request-0001"},
@@ -735,7 +787,12 @@ class TestMCPMutationIsolated:
         assert "id" in result
 
     def test_tm_package_groups_tasks(self, isolated_project):
-        _call_tool("tm_new_spec", {"label": "SP", "summary": "S"}, cwd=isolated_project)
+        _call_tool("tm_new_request", _request_args("R", "S"), cwd=isolated_project)
+        _call_tool(
+            "tm_new_spec",
+            {"label": "SP", "summary": "S", "request_refs": ["request-0001"]},
+            cwd=isolated_project,
+        )
         _call_tool(
             "tm_new_plan",
             {"label": "PL", "summary": "P", "spec": "spec-0001"},
@@ -836,7 +893,12 @@ class TestMCPMutationIsolated:
         assert "Extra." in content
 
     def test_tm_set_section(self, isolated_project):
-        _call_tool("tm_new_spec", {"label": "SP", "summary": "S"}, cwd=isolated_project)
+        _call_tool("tm_new_request", _request_args("R", "S"), cwd=isolated_project)
+        _call_tool(
+            "tm_new_spec",
+            {"label": "SP", "summary": "S", "request_refs": ["request-0001"]},
+            cwd=isolated_project,
+        )
         _call_tool(
             "tm_update_content",
             {
@@ -862,7 +924,12 @@ class TestMCPMutationIsolated:
         assert "New purpose content." in content
 
     def test_tm_append_section(self, isolated_project):
-        _call_tool("tm_new_spec", {"label": "SP", "summary": "S"}, cwd=isolated_project)
+        _call_tool("tm_new_request", _request_args("R", "S"), cwd=isolated_project)
+        _call_tool(
+            "tm_new_spec",
+            {"label": "SP", "summary": "S", "request_refs": ["request-0001"]},
+            cwd=isolated_project,
+        )
         _call_tool(
             "tm_update_content",
             {
@@ -901,7 +968,12 @@ class TestMCPMutationIsolated:
         assert "The problem." in content
 
     def test_tm_claim_and_unclaim(self, isolated_project):
-        _call_tool("tm_new_spec", {"label": "SP", "summary": "S"}, cwd=isolated_project)
+        _call_tool("tm_new_request", _request_args("R", "S"), cwd=isolated_project)
+        _call_tool(
+            "tm_new_spec",
+            {"label": "SP", "summary": "S", "request_refs": ["request-0001"]},
+            cwd=isolated_project,
+        )
         claim_result = _call_tool(
             "tm_claim",
             {"kind": "spec", "id": "spec-0001", "holder": "agent-test", "ttl": 300},
@@ -991,7 +1063,12 @@ class TestMCPMutationIsolated:
         assert "duplicate_of" in result
 
     def test_tm_state_invalid_transition_returns_error(self, isolated_project):
-        _call_tool("tm_new_spec", {"label": "SP", "summary": "S"}, cwd=isolated_project)
+        _call_tool("tm_new_request", _request_args("R", "S"), cwd=isolated_project)
+        _call_tool(
+            "tm_new_spec",
+            {"label": "SP", "summary": "S", "request_refs": ["request-0001"]},
+            cwd=isolated_project,
+        )
         resp = _call_tool_raw(
             "tm_state", {"id": "spec-0001", "new_state": "done"}, cwd=isolated_project
         )
