@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T10:09:23.194996+00:00",
+  "generated_at": "2026-04-10T10:51:52.110075+00:00",
   "items": [
     {
       "id": "standard-0001",
@@ -49,6 +49,12 @@
       "label": "Python implementation standard",
       "state": "ready",
       "path": "docs\\planning\\standards\\standard-0008-python-implementation-standard.md"
+    },
+    {
+      "id": "standard-0009",
+      "label": "Planning layer enhancement impact standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-0009-planning-layer-enhancement-impact-standard.md"
     }
   ]
 }

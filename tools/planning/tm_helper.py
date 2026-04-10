@@ -460,12 +460,20 @@ def new_standard(label: str, summary: str, root: Path | None = None) -> dict[str
     return {"id": item.data["id"], "path": str(item.path.relative_to(project_root))}
 
 
-def state(id_: str, new_state: str, root: Path | None = None) -> dict[str, Any]:
+def state(
+    id_: str,
+    new_state: str,
+    reason: str | None = None,
+    actor: str | None = None,
+    root: Path | None = None,
+) -> dict[str, Any]:
     """Change the state of a planning item.
 
     Args:
         id_: Item ID
         new_state: New state value
+        reason: Optional archive reason for archive transitions
+        actor: Optional actor identifier for archive/restore metadata
         root: Optional project root. If None, uses current root.
 
     Returns:
@@ -473,8 +481,18 @@ def state(id_: str, new_state: str, root: Path | None = None) -> dict[str, Any]:
     """
     project_root = root or _get_root()
     api = PlanningAPI(project_root)
-    item = api.state(id_, new_state)
-    return {"id": item.data["id"], "state": item.data["state"]}
+    item = api.state(id_, new_state, reason=reason, actor=actor)
+    result = {"id": item.data["id"], "state": item.data["state"]}
+    for field in (
+        "archived_at",
+        "archived_by",
+        "archive_reason",
+        "restored_at",
+        "restored_by",
+    ):
+        if field in item.data:
+            result[field] = item.data[field]
+    return result
 
 
 def move(id_: str, domain: str, root: Path | None = None) -> dict[str, Any]:
@@ -906,6 +924,7 @@ def list_kind(
     kind: str | None = None,
     root: Path | None = None,
     include_deleted: bool = False,
+    include_archived: bool = False,
 ) -> list[dict[str, Any]]:
     """List planning items, optionally filtered by kind.
 
@@ -923,6 +942,8 @@ def list_kind(
         items = [i for i in items if i.kind == kind]
     if not include_deleted:
         items = [i for i in items if not i.data.get("deleted")]
+    if not include_archived:
+        items = [i for i in items if i.data.get("state") != "archived"]
     return [
         {
             "id": i.data["id"],
@@ -930,6 +951,7 @@ def list_kind(
             "label": i.data["label"],
             "state": i.data["state"],
             "deleted": bool(i.data.get("deleted")),
+            "archived": i.data.get("state") == "archived",
         }
         for i in items
     ]
@@ -1792,4 +1814,69 @@ def verify_structure() -> dict[str, Any]:
         "healthy": healthy,
         "checks": checks,
         "summary": summary,
+    }
+
+import re
+
+# Sensitive data detection patterns
+_SENSITIVE_PATTERNS = {
+    'aws_key': r'AKIA[0-9A-Z]{16}',
+    'api_key': r'(?:api[_-]?key|apikey)[\s]*[=:]\s*["\']?[a-zA-Z0-9_\-]{20,}["\']?',
+    'password': r'(?:password|passwd|pwd)[\s]*[=:]\s*["\']?[^"\'\s]+["\']?',
+    'bearer_token': r'Bearer\s+[a-zA-Z0-9\-._~+/]+=*',
+}
+
+
+def check_sensitive_data(id_: str, root: Path | None = None) -> dict[str, Any]:
+    """Check a planning item for sensitive data patterns in body content.
+
+    Scans the markdown body for common sensitive patterns:
+    - AWS Access Keys (AKIA format)
+    - API Keys
+    - Passwords
+    - Bearer tokens
+
+    Args:
+        id_: Planning item ID
+        root: Optional project root. If None, uses current root.
+
+    Returns:
+        dict with:
+        - id: The item being checked
+        - has_sensitive_data: True if any patterns matched
+        - warnings: List of detected pattern types
+        - patterns_checked: List of all pattern names checked
+
+    Example:
+        >>> result = check_sensitive_data('task-0123')
+        >>> if result['has_sensitive_data']:
+        ...     print(f"Found: {result['warnings']}")
+    """
+    if root:
+        set_root(root)
+
+    api = _get_api()
+
+    try:
+        item = api.lookup(id_)
+    except Exception as e:
+        return {
+            'id': id_,
+            'has_sensitive_data': False,
+            'warnings': [f'Error checking item: {str(e)}'],
+            'patterns_checked': list(_SENSITIVE_PATTERNS.keys()),
+        }
+
+    body = item.body or ''
+    warnings = []
+
+    for pattern_name, pattern in _SENSITIVE_PATTERNS.items():
+        if re.search(pattern, body, re.IGNORECASE):
+            warnings.append(f'Possible {pattern_name.replace("_", " ")} detected in body')
+
+    return {
+        'id': id_,
+        'has_sensitive_data': len(warnings) > 0,
+        'warnings': warnings,
+        'patterns_checked': list(_SENSITIVE_PATTERNS.keys()),
     }

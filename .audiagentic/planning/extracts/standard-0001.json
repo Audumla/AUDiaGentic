@@ -5,7 +5,12 @@
     "state": "ready",
     "summary": "Default standard for maintaining planning records and adjacent documentation as first-class, reviewable project assets.",
     "kind": "standard",
-    "path": "docs/planning/standards/standard-0001-planning-documentation-and-maintenance-standard.md"
+    "path": "docs/planning/standards/standard-0001-planning-documentation-and-maintenance-standard.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
   },
   "effective_standard_refs": [],
   "body": "\n# Standard\n\nDefault standard for how planning records and adjacent documentation should be written, maintained, and kept current in AUDiaGentic-based projects.\n\n# Source Basis\n\nThis standard is derived from the Write the Docs guidance on docs-as-code, documentation principles, and style guidance, adapted for the repository's planning model.\n\nSources:\n- https://www.writethedocs.org/guide/docs-as-code.html\n- https://www.writethedocs.org/guide/writing/docs-principles.html\n- https://www.writethedocs.org/style-guide.html\n\n# Requirements\n\n1. Planning records are maintained as versioned, reviewable text assets in the repository.\n2. Documentation updates should happen alongside the relevant planning or implementation change, not as an afterthought.\n3. Documentation must stay current. Incorrect documentation is treated as worse than missing documentation.\n4. Planning items must use clear, stable labels and summaries so humans and tools can identify them quickly.\n5. The scope, non-goals, and verification expectations for work should be visible in the planning record before implementation begins.\n6. Documentation should be structured for skimmability:\n- clear headings\n- concise sections\n- explicit examples where useful\n- separation between reference material and explanatory material\n7. Changes to documentation should follow the same quality expectations as code changes:\n- version control\n- review\n- traceable ownership\n- verification where practical\n\n# Default Rules\n\n- Prefer Markdown planning documents that are easy to diff and review.\n- Keep acceptance criteria and verification steps explicit.\n- Keep planning docs aligned with the actual repository structure and tool behavior.\n- Do not claim implementation completeness where only scaffolding or review prep exists.\n\n# Non-Goals\n\n- defining execution workflow policy\n- replacing project-specific architecture decisions\n- forcing one universal prose style across all documentation surfaces\n"

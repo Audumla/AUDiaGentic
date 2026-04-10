@@ -25,6 +25,7 @@ class Indexer:
                 'state': item.data['state'],
                 'path': rel_path,
                 'deleted': bool(item.data.get('deleted', False)),
+                'archived': item.data.get('state') == 'archived',
             }
         idx_root = self.root / '.audiagentic/planning/indexes'
         idx_root.mkdir(parents=True, exist_ok=True)
