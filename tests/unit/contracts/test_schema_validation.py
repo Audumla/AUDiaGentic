@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import tools.validate_schemas as validate_schemas
+import tools.validation.validate_schemas as validate_schemas
 
 
 def test_all_fixtures_validate() -> None:

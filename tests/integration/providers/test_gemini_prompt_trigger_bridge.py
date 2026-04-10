@@ -99,7 +99,7 @@ def test_gemini_prompt_trigger_bridge_script_launches_job(tmp_path: Path) -> Non
         result = subprocess.run(
             [
                 sys.executable,
-                str(ROOT / "tools" / "gemini_prompt_trigger_bridge.py"),
+                str(ROOT / "tools" / "bridges" / "gemini_prompt_trigger_bridge.py"),
                 "--project-root",
                 str(sandbox.repo),
             ],

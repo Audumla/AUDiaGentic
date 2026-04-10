@@ -28,7 +28,6 @@ def _seed_base_config(tmp_path: Path, include_optional: bool) -> Path:
 
     if include_optional:
         shutil.copy(src / "documentation.yaml", dst / "documentation.yaml")
-        shutil.copy(src / "request-profiles.yaml", dst / "request-profiles.yaml")
         shutil.copytree(src / "profile-packs", dst / "profile-packs")
 
     return tmp_path
@@ -38,7 +37,8 @@ def test_config_optional_files_may_be_absent(tmp_path: Path) -> None:
     root = _seed_base_config(tmp_path, include_optional=False)
     cfg = Config(root)
     assert cfg.documentation == {}
-    assert cfg.request_profiles == {}
+    assert "request_profiles" in cfg.request_profiles
+    assert cfg.request_profiles["request_profiles"] != {}
     assert cfg.profile_packs == {}
     assert cfg.validate() == []
 
@@ -56,4 +56,3 @@ def test_config_validates_optional_files_when_present(tmp_path: Path) -> None:
     root = _seed_base_config(tmp_path, include_optional=True)
     cfg = Config(root)
     assert cfg.validate() == []
-
