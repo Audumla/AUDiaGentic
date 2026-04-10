@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T12:23:42.044416+00:00",
+  "generated_at": "2026-04-10T12:24:03.088001+00:00",
   "items": [
     {
       "id": "request-0002",
@@ -47,7 +47,7 @@
     {
       "id": "request-0009",
       "label": "Add audience-level profile system to control planning depth-of-detail",
-      "state": "captured",
+      "state": "distilled",
       "path": "docs\\planning\\requests\\request-0009.md"
     },
     {
