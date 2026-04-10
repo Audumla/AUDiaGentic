@@ -1,9 +1,10 @@
 ---
-id: request-0020
-label: Full Stack Test
+id: request-0022
+label: Test Source Required
 state: captured
-summary: Test full stack
-current_understanding: 'Initial request intake captured: Test full stack'
+summary: Test
+source: claude
+current_understanding: 'Initial request intake captured: Test'
 open_questions:
 - What exact outcome is required?
 - What constraints or non-goals apply?
@@ -12,7 +13,7 @@ open_questions:
 
 # Understanding
 
-Initial request intake captured: Test full stack
+Initial request intake captured: Test
 
 # Open Questions
 

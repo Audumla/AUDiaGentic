@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T03:27:12.653156+00:00",
+  "generated_at": "2026-04-10T03:43:58.481196+00:00",
   "items": [
     {
       "id": "plan-0004",
@@ -47,17 +47,11 @@
     {
       "id": "plan-0011",
       "kind": "plan",
-      "state": "draft",
+      "state": "in_progress",
       "claimed": false
     },
     {
       "id": "plan-0012",
-      "kind": "plan",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "plan-0013",
       "kind": "plan",
       "state": "draft",
       "claimed": false
@@ -101,7 +95,7 @@
     {
       "id": "request-0008",
       "kind": "request",
-      "state": "closed",
+      "state": "distilled",
       "claimed": false
     },
     {
@@ -117,67 +111,7 @@
       "claimed": false
     },
     {
-      "id": "request-0011",
-      "kind": "request",
-      "state": "superseded",
-      "claimed": false
-    },
-    {
-      "id": "request-0012",
-      "kind": "request",
-      "state": "superseded",
-      "claimed": false
-    },
-    {
-      "id": "request-0013",
-      "kind": "request",
-      "state": "superseded",
-      "claimed": false
-    },
-    {
-      "id": "request-0014",
-      "kind": "request",
-      "state": "superseded",
-      "claimed": false
-    },
-    {
-      "id": "request-0015",
-      "kind": "request",
-      "state": "superseded",
-      "claimed": false
-    },
-    {
-      "id": "request-0016",
-      "kind": "request",
-      "state": "superseded",
-      "claimed": false
-    },
-    {
-      "id": "request-0017",
-      "kind": "request",
-      "state": "captured",
-      "claimed": false
-    },
-    {
-      "id": "request-0018",
-      "kind": "request",
-      "state": "captured",
-      "claimed": false
-    },
-    {
-      "id": "request-0019",
-      "kind": "request",
-      "state": "captured",
-      "claimed": false
-    },
-    {
-      "id": "request-0020",
-      "kind": "request",
-      "state": "captured",
-      "claimed": false
-    },
-    {
-      "id": "request-0021",
+      "id": "request-0022",
       "kind": "request",
       "state": "captured",
       "claimed": false
@@ -323,7 +257,7 @@
     {
       "id": "spec-0025",
       "kind": "spec",
-      "state": "draft",
+      "state": "in_progress",
       "claimed": false
     },
     {
@@ -358,30 +292,6 @@
     },
     {
       "id": "spec-0031",
-      "kind": "spec",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "spec-0032",
-      "kind": "spec",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "spec-0033",
-      "kind": "spec",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "spec-0034",
-      "kind": "spec",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "spec-0035",
       "kind": "spec",
       "state": "draft",
       "claimed": false
@@ -767,55 +677,55 @@
     {
       "id": "task-0202",
       "kind": "task",
-      "state": "draft",
+      "state": "done",
       "claimed": false
     },
     {
       "id": "task-0203",
       "kind": "task",
-      "state": "draft",
+      "state": "done",
       "claimed": false
     },
     {
       "id": "task-0204",
       "kind": "task",
-      "state": "draft",
+      "state": "done",
       "claimed": false
     },
     {
       "id": "task-0205",
       "kind": "task",
-      "state": "draft",
+      "state": "done",
       "claimed": false
     },
     {
       "id": "task-0206",
       "kind": "task",
-      "state": "draft",
+      "state": "done",
       "claimed": false
     },
     {
       "id": "task-0207",
       "kind": "task",
-      "state": "draft",
+      "state": "done",
       "claimed": false
     },
     {
       "id": "task-0208",
       "kind": "task",
-      "state": "draft",
+      "state": "done",
       "claimed": false
     },
     {
       "id": "task-0209",
       "kind": "task",
-      "state": "draft",
+      "state": "ready",
       "claimed": false
     },
     {
       "id": "task-0210",
       "kind": "task",
-      "state": "draft",
+      "state": "ready",
       "claimed": false
     },
     {
@@ -831,15 +741,9 @@
       "claimed": false
     },
     {
-      "id": "task-0213",
+      "id": "task-0215",
       "kind": "task",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-0214",
-      "kind": "task",
-      "state": "draft",
+      "state": "done",
       "claimed": false
     },
     {
@@ -1703,17 +1607,11 @@
     {
       "id": "wp-0011",
       "kind": "wp",
-      "state": "draft",
+      "state": "in_progress",
       "claimed": false
     },
     {
       "id": "wp-0013",
-      "kind": "wp",
-      "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "wp-0014",
       "kind": "wp",
       "state": "draft",
       "claimed": false

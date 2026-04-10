@@ -5,6 +5,7 @@ state: closed
 summary: Focused planning-core hardening slice for delete safety, request traceability,
   duplicate guards, validation feedback, and regression coverage in the planning
   module
+source: legacy-backfill
 current_understanding: This request captures a focused planning-module hardening slice.
   The detailed requirements, constraints, and acceptance criteria are owned by
   spec-0024; this request records the motivation, linked implementation chain, and

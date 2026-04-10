@@ -4,6 +4,7 @@ label: Add archive functionality to planning core
 state: captured
 summary: Implement archive state workflow with tm_archive, tm_restore, and archive
   filtering for planning objects
+source: legacy-backfill
 current_understanding: "This request is the original archive-workflow intake for the planning core. It established the first archive-state direction and is now best understood as the historical umbrella behind the newer implementation-focused archive request chain."
 open_questions:
   - Should this request remain the historical umbrella while request-0005 drives implementation, or should the archive intake be consolidated more explicitly?

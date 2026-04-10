@@ -88,7 +88,7 @@ class PlanningAPI:
         source: str | None = None,
         context: str | None = None,
         check_duplicates: bool = True,
-    ):
+    ) -> ItemView:
         kind = {
             "req": "request",
             "request": "request",
@@ -105,16 +105,18 @@ class PlanningAPI:
             self._check_duplicate(kind, label, summary)
         if kind in {"spec", "plan", "task"}:
             self._validate_request_refs(request_refs or [])
+        if kind == "request" and not source:
+            raise ValueError("request requires --source to track request origin")
         id_ = next_id(self.root, kind)
         if kind == "request":
             path = self.req_mgr.create(
                 id_,
                 label,
                 summary,
+                source=source,
                 profile=profile,
                 current_understanding=current_understanding,
                 open_questions=open_questions,
-                source=source,
                 context=context,
             )
             # Apply profile cascade if specified
@@ -240,6 +242,7 @@ class PlanningAPI:
         label: str,
         summary: str,
         content: str,
+        source: str | None = None,
         domain: str | None = None,
         spec: str | None = None,
         plan: str | None = None,
@@ -280,9 +283,11 @@ class PlanningAPI:
             self._check_duplicate(kind, label, summary)
         if kind in {"spec", "plan", "task"}:
             self._validate_request_refs(request_refs or [])
+        if kind == "request" and not source:
+            raise ValueError("request requires source to track request origin")
         id_ = next_id(self.root, kind)
         if kind == "request":
-            path = self.req_mgr.create(id_, label, summary)
+            path = self.req_mgr.create(id_, label, summary, source=source)
             self.update_content(id_, content)
         elif kind == "spec":
             try:

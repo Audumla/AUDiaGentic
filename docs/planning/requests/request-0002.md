@@ -4,6 +4,7 @@ label: Comprehensive implementation docs migration
 state: captured
 summary: Migrate all docs/implementation content to planning structure with full reference
   resolution
+source: legacy-backfill
 current_understanding: "This request is the umbrella intake for migrating the old implementation-document surface into the planning structure with preserved references, archived backup content, and reader-facing entrypoints that point at the canonical planning docs."
 open_questions:
   - Which remaining implementation-backup documents are still canonical versus historical only?

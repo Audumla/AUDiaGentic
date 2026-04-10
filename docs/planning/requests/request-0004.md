@@ -4,6 +4,7 @@ label: MCP layer efficiency improvements and usage enforcement
 state: captured
 summary: Add wrapper functions, templates, and guidance to make MCP layer as efficient
   as direct file edits while ensuring consistent usage for audit trail and validation
+source: legacy-backfill
 current_understanding: "This request drives the planning MCP and helper ergonomics work: improve read and update flows, reduce unnecessary direct edits, and make the planning surface efficient enough that agents can prefer it without losing auditability or validation safety."
 open_questions:
   - Which remaining planning operations still require direct file edits because the MCP or helper layer cannot mutate the needed metadata cleanly?

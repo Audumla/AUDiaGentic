@@ -66,6 +66,7 @@ def test_tm_helper_new_request_uses_profile_defaults(helper_project: Path) -> No
     request = tm.new_request(
         "Improve intake",
         "Create richer request templates",
+        source="test",
         profile="feature",
     )
     body = tm.get_content(request["id"])
@@ -107,7 +108,7 @@ def test_tm_helper_lists_support_docs_and_references() -> None:
 
 
 def test_tm_helper_get_subsection_supports_dot_and_slash_paths(helper_project: Path) -> None:
-    tm.new_spec("Section parsing spec", "Supports helper task creation")
+    spec = tm.new_spec("Section parsing spec", "Supports helper task creation")
     content = """# Description
 
 Top level body.
@@ -125,7 +126,7 @@ Deep content.
         label="Nested subsection test",
         summary="Exercise subsection parsing",
         content=content,
-        spec="spec-0001",
+        spec=spec["id"],
     )
 
     slash_result = tm.get_subsection(item["id"], "description/notes")
@@ -190,7 +191,7 @@ def test_tm_helper_lists_and_gets_standards(helper_project: Path) -> None:
 def test_tm_helper_plan_and_task_request_refs_appear_in_trace_index(
     helper_project: Path,
 ) -> None:
-    request = tm.new_request("Trace request", "Track reverse refs")
+    request = tm.new_request("Trace request", "Track reverse refs", source="test")
     spec = tm.new_spec("Trace spec", "Trace spec summary", [request["id"]])
     plan = tm.new_plan("Trace plan", "Trace plan summary", spec["id"], [request["id"]])
     task = tm.new_task(
