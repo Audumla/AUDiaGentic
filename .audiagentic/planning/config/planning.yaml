@@ -1,5 +1,7 @@
 planning:
   convention_version: 1
+  default_profile: feature
+  default_guidance: standard
   dirs:
     requests: docs/planning/requests
     specifications: docs/planning/specifications
