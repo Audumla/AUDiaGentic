@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T13:11:42.454992+00:00",
+  "generated_at": "2026-04-10T14:28:01.531820+00:00",
   "items": [
     {
       "id": "wp-0004",
@@ -49,6 +49,30 @@
       "label": "Implement guidance levels in config, API, and validation",
       "state": "draft",
       "path": "docs\\planning\\work-packages\\core\\wp-0015-implement-guidance-levels-in-config-api-and-validation.md"
+    },
+    {
+      "id": "wp-0016",
+      "label": "Define guidance level semantics in standard",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-0016-define-guidance-level-semantics-in-standard.md"
+    },
+    {
+      "id": "wp-0017",
+      "label": "Implement canonical guidance semantics",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-0017-implement-canonical-guidance-semantics.md"
+    },
+    {
+      "id": "wp-0018",
+      "label": "Implement unified workflow states and cascade archive",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-0018-implement-unified-workflow-states-and-cascade-archive.md"
+    },
+    {
+      "id": "wp-0019",
+      "label": "Implement unified workflow states",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-0019-implement-unified-workflow-states.md"
     }
   ]
 }

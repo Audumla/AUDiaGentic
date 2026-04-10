@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T13:11:42.454992+00:00",
+  "generated_at": "2026-04-10T14:28:01.531820+00:00",
   "items": [
     {
       "id": "plan-0005",
@@ -43,6 +43,18 @@
       "label": "Implement guidance levels for planning depth-of-detail",
       "state": "draft",
       "path": "docs\\planning\\plans\\plan-0014-implement-guidance-levels-for-planning-depth-of-detail.md"
+    },
+    {
+      "id": "plan-0015",
+      "label": "Implement canonical guidance semantics standard",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-0015-implement-canonical-guidance-semantics-standard.md"
+    },
+    {
+      "id": "plan-0016",
+      "label": "Implement unified workflow states",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-0016-implement-unified-workflow-states.md"
     }
   ]
 }

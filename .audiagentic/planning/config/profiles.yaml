@@ -1,4 +1,92 @@
 planning:
+  guidance_levels:
+    light:
+      description: Minimal planning for experienced implementors who need less hand-holding
+      label: Light (minimal)
+      defaults:
+        current_understanding: Initial intake captured; key details need refinement.
+        open_questions:
+          - What is the core requirement?
+          - What are the main constraints?
+          - How will success be verified?
+      spec_sections:
+        required: [Purpose, Scope, Requirements]
+        suggested: [Constraints, Acceptance Criteria]
+      task_sections:
+        required: [Description]
+        suggested: [Acceptance Criteria, Notes]
+      acceptance_criteria_depth: basic
+      semantics:
+        target_implementor: "Experienced architect or designer who prefers minimal scaffolding"
+        philosophy: "Trust the implementor to fill in gaps; provide structure but not hand-holding"
+        use_cases:
+          - "Senior devs working on familiar codebase"
+          - "Quick prototypes where speed matters more than documentation"
+          - "Internal tools with low user impact"
+          - "Experienced designers implementing their own patterns"
+        expectations:
+          - "Implementor fills in missing details during implementation"
+          - "Acceptance criteria can be minimal (1-2 bullets per requirement)"
+          - "Less upfront planning, more iteration during build"
+    standard:
+      description: Balanced depth for typical team workflows and AI agents
+      label: Standard (balanced)
+      defaults:
+        current_understanding: Initial intake captured; requirements are understood well enough to proceed.
+        open_questions:
+          - What exact outcome is required?
+          - What constraints or non-goals apply?
+          - How will success be verified?
+      spec_sections:
+        required: [Purpose, Scope, Requirements, Constraints]
+        suggested: [Acceptance Criteria]
+      task_sections:
+        required: [Description]
+        suggested: [Acceptance Criteria, Notes]
+      acceptance_criteria_depth: standard
+      semantics:
+        target_implementor: "AI agent or mid-level developer who needs clear direction"
+        philosophy: "Provide enough structure for autonomous execution without over-specifying"
+        use_cases:
+          - "Typical feature work"
+          - "AI agent implementation"
+          - "Cross-team work with unclear context"
+          - "User-facing changes"
+        expectations:
+          - "All constraints documented upfront"
+          - "Acceptance criteria are detailed and testable"
+          - "Implementor can execute without constant clarification"
+    deep:
+      description: Comprehensive planning for complex work or less experienced implementors
+      label: Deep (comprehensive)
+      defaults:
+        current_understanding: Initial intake captured; requirements are well-understood with clear implementation path.
+        open_questions:
+          - What exact outcome is required?
+          - What constraints or non-goals apply?
+          - How will success be verified?
+          - What are the implementation risks?
+      spec_sections:
+        required: [Purpose, Scope, Requirements, Constraints, Acceptance Criteria]
+        suggested: [Non-Goals, Compatibility]
+      task_sections:
+        required: [Description, Acceptance Criteria]
+        suggested: [Notes, Implementation Notes]
+      acceptance_criteria_depth: rigorous
+      semantics:
+        target_implementor: "Junior dev, complex system, or high-stakes work"
+        philosophy: "Leave nothing to chance; comprehensive documentation reduces ambiguity"
+        use_cases:
+          - "Junior developers needing clear guidance"
+          - "Complex systems with many dependencies"
+          - "Public APIs or critical infrastructure"
+          - "Work with high user impact or regulatory requirements"
+          - "Cross-functional work with unclear ownership"
+        expectations:
+          - "All edge cases documented"
+          - "Acceptance criteria cover edge cases and error conditions"
+          - "Implementation notes and risk analysis included"
+          - "Minimal ambiguity for the implementor"
   profiles:
     enhancement:
       description: Broader enhancement with request and specification, plus optional execution overlay
