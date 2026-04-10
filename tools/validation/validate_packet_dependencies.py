@@ -9,7 +9,7 @@ from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 REGISTRY_PATH = REPO_ROOT / "docs" / "implementation" / "31_Build_Status_and_Work_Registry.md"
 
 PACKET_ID_PATTERN = re.compile(r"PKT-[A-Z]{3}-\d{3}")

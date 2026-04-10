@@ -10,6 +10,7 @@ class PlanMgr(BaseMgr):
         summary: str,
         spec_refs,
         request_refs=None,
+        standard_refs=None,
         state: str = 'draft',
     ):
         path = self.path_for('plan', id_, label)
@@ -22,6 +23,8 @@ class PlanMgr(BaseMgr):
             'request_refs': request_refs or [],
             'work_package_refs': [],
         }
+        if standard_refs:
+            data['standard_refs'] = standard_refs
         body = '# Objectives\n\n\n# Delivery Approach\n\n\n# Dependencies\n\n'
         dump_markdown(path, data, body)
         return path

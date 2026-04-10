@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-0221",
+    "label": "Add lookup.json global index generation to idx_mgr",
+    "state": "draft",
+    "summary": "Extend idx_mgr.py to generate .audiagentic/planning/indexes/lookup.json keyed by id with id, kind, path, label, state, and deleted fields alongside existing per-kind indexes",
+    "spec_ref": "spec-0043",
+    "request_refs": [],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs\\planning\\tasks\\core\\task-0221.md"
+  },
+  "body": "\n# Description\n\nExtend `src/audiagentic/planning/app/idx_mgr.py` to generate a global lookup index at `.audiagentic/planning/indexes/lookup.json` as part of the existing `write_indexes()` call.\n\nThe index must be a flat JSON object keyed by planning item id. Each entry must contain:\n\n```json\n{\n  \"spec-0043\": {\n    \"id\": \"spec-0043\",\n    \"kind\": \"spec\",\n    \"label\": \"...\",\n    \"state\": \"draft\",\n    \"path\": \"docs/planning/specifications/spec-0043-...\",\n    \"deleted\": false\n  }\n}\n```\n\nAll planning kinds must be included: requests, specifications, tasks, plans, work-packages, standards. The `deleted` field should be `false` when absent from the source document. Paths should use forward slashes and be relative to the project root.\n\n# Acceptance Criteria\n\n- Running `tm.py index` produces `.audiagentic/planning/indexes/lookup.json`\n- All planning items across all kinds appear in the index\n- Each entry contains `id`, `kind`, `label`, `state`, `path`, and `deleted`\n- Deleted items are included with `deleted: true` so lookup can surface them without a scan\n- Re-running `index` overwrites the file cleanly with current state\n- Existing per-kind index files are unchanged\n\n# Notes\n\nThe lookup index is an accelerator, not the source of truth. It is always regenerated from the markdown files, never edited directly.\n",
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ]
+}

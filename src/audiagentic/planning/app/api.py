@@ -55,6 +55,25 @@ class PlanningAPI:
                 return item
         raise KeyError(id_)
 
+    def _append_unique_ref(self, src_id: str, field: str, dst_id: str) -> None:
+        item = self._find(src_id)
+        data, body = parse_markdown(item.path)
+        vals = list(data.get(field, []) or [])
+        if dst_id in vals:
+            return
+        vals.append(dst_id)
+        data[field] = vals
+        dump_markdown(item.path, data, body)
+
+    def _sync_request_spec_refs(
+        self, spec_id: str, request_refs: list[str] | None = None
+    ) -> None:
+        for req_id in request_refs or []:
+            request = self._find(req_id)
+            if request.kind != "request":
+                raise ValueError(f"request '{req_id}' does not exist")
+            self._append_unique_ref(req_id, "spec_refs", spec_id)
+
     def validate(self, raise_on_error: bool = False):
         errors = self.validator.validate_all()
         if raise_on_error and errors:
@@ -82,6 +101,7 @@ class PlanningAPI:
         target: str | None = None,
         workflow: str | None = None,
         request_refs: list[str] | None = None,
+        standard_refs: list[str] | None = None,
         profile: str | None = None,
         current_understanding: str | None = None,
         open_questions: list[str] | None = None,
@@ -100,6 +120,13 @@ class PlanningAPI:
             "wp": "wp",
             "standard": "standard",
         }.get(kind, kind)
+
+        # Apply default standards if not explicitly provided
+        if standard_refs is None and kind in {"spec", "task", "plan", "wp", "request"}:
+            standard_refs = self.config.standard_defaults_for(kind)
+        else:
+            standard_refs = standard_refs or []
+
         self.hooks.run("before_create", kind, {"label": label})
         if kind in {"request", "spec"} and check_duplicates:
             self._check_duplicate(kind, label, summary)
@@ -118,11 +145,13 @@ class PlanningAPI:
                 current_understanding=current_understanding,
                 open_questions=open_questions,
                 context=context,
+                standard_refs=standard_refs,
             )
             # Apply profile cascade if specified
             if profile:
                 prof = self.config.profile_for(profile)
-                if "specification" in prof.get("on_request_create", []):
+                cascade = prof.get("on_request_create", [])
+                if "specification" in cascade:
                     spec_id = next_id(self.root, "spec")
                     self.spec_mgr.create(
                         spec_id,
@@ -130,11 +159,24 @@ class PlanningAPI:
                         f"Specification for {summary}",
                         request_refs=[id_],
                     )
+                    self._sync_request_spec_refs(spec_id, [id_])
+                elif "task" in cascade:
+                    # For quick profile: create task directly without spec
+                    task_id = next_id(self.root, "task")
+                    self.task_mgr.create(
+                        task_id,
+                        f"{label} — Task",
+                        f"Task for {summary}",
+                        spec_ref=None,
+                        domain="core",
+                        request_refs=[id_],
+                    )
         elif kind == "spec":
             try:
                 path = self.spec_mgr.create(
-                    id_, label, summary, request_refs=request_refs or []
+                    id_, label, summary, request_refs=request_refs or [], standard_refs=standard_refs
                 )
+                self._sync_request_spec_refs(id_, request_refs)
             except Exception:
                 if "path" in locals() and Path(path).exists():
                     Path(path).unlink(missing_ok=True)
@@ -147,14 +189,13 @@ class PlanningAPI:
                     summary,
                     spec_refs=[spec] if spec else [],
                     request_refs=request_refs or [],
+                    standard_refs=standard_refs,
                 )
             except Exception:
                 if "path" in locals() and Path(path).exists():
                     Path(path).unlink(missing_ok=True)
                 raise
         elif kind == "task":
-            if not spec:
-                raise ValueError("task requires --spec")
             try:
                 path = self.task_mgr.create(
                     id_,
@@ -166,6 +207,7 @@ class PlanningAPI:
                     target=target,
                     workflow=workflow,
                     request_refs=request_refs or [],
+                    standard_refs=standard_refs,
                 )
             except Exception:
                 if "path" in locals() and Path(path).exists():
@@ -182,6 +224,7 @@ class PlanningAPI:
                 task_refs=[],
                 domain=domain or "core",
                 workflow=workflow,
+                standard_refs=standard_refs,
             )
         elif kind == "standard":
             path = self.std_mgr.create(id_, label, summary)
@@ -294,6 +337,7 @@ class PlanningAPI:
                 path = self.spec_mgr.create(
                     id_, label, summary, request_refs=request_refs or []
                 )
+                self._sync_request_spec_refs(id_, request_refs)
                 self.update_content(id_, content)
             except Exception:
                 if "path" in locals() and Path(path).exists():
@@ -314,8 +358,6 @@ class PlanningAPI:
                     Path(path).unlink(missing_ok=True)
                 raise
         elif kind == "task":
-            if not spec:
-                raise ValueError("task requires --spec")
             try:
                 path = self.task_mgr.create(
                     id_,
@@ -524,6 +566,8 @@ class PlanningAPI:
         else:
             raise ValueError(f"unsupported field {field}")
         dump_markdown(item.path, data, body)
+        if item.kind == "spec" and field == "request_refs":
+            self._sync_request_spec_refs(src_id, [dst_id])
         self.index()
         return self._find(src_id)
 

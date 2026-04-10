@@ -75,6 +75,8 @@ class RequestMgr(BaseMgr):
         current_understanding: str | None = None,
         open_questions: list[str] | None = None,
         context: str | None = None,
+        standard_refs=None,
+        spec_refs=None,
     ):
         path = self.path_for('request', id_, label)
         profile_cfg = self._load_request_profile(profile)
@@ -97,6 +99,10 @@ class RequestMgr(BaseMgr):
             data['context'] = context
         if default_meta:
             data['meta'] = default_meta
+        if standard_refs:
+            data['standard_refs'] = standard_refs
+        if spec_refs:
+            data['spec_refs'] = spec_refs
         suggested_sections = profile_cfg.get('suggested_sections', []) if isinstance(profile_cfg, dict) else []
         body = self._build_body(current_understanding, open_questions, suggested_sections)
         dump_markdown(path, data, body)
