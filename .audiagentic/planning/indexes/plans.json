@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T03:27:12.653156+00:00",
+  "generated_at": "2026-04-10T03:43:58.481196+00:00",
   "items": [
     {
       "id": "plan-0004",
@@ -47,7 +47,7 @@
     {
       "id": "plan-0011",
       "label": "Fix planning API and MCP gaps",
-      "state": "draft",
+      "state": "in_progress",
       "path": "docs\\planning\\plans\\plan-0011-fix-planning-api-and-mcp-gaps.md"
     },
     {
@@ -55,12 +55,6 @@
       "label": "Implementation Plan",
       "state": "draft",
       "path": "docs\\planning\\plans\\plan-0012-implementation-plan.md"
-    },
-    {
-      "id": "plan-0013",
-      "label": "Test Plan",
-      "state": "draft",
-      "path": "docs\\planning\\plans\\plan-0013-test-plan.md"
     }
   ]
 }

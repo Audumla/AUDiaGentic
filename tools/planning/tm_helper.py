@@ -190,10 +190,10 @@ def _docs_manager(root: Path | None = None) -> DocumentationManager:
 def new_request(
     label: str,
     summary: str,
+    source: str,
     profile: str | None = None,
     current_understanding: str | None = None,
     open_questions: list[str] | None = None,
-    source: str | None = None,
     context: str | None = None,
     root: Path | None = None,
     check_duplicates: bool = True,
@@ -716,13 +716,13 @@ def create_with_content(
         label,
         summary,
         content,
-        domain,
-        spec,
-        plan,
-        parent,
-        target,
-        workflow,
-        request_refs,
+        domain=domain,
+        spec=spec,
+        plan=plan,
+        parent=parent,
+        target=target,
+        workflow=workflow,
+        request_refs=request_refs,
     )
     return {"id": item.data["id"], "path": str(item.path.relative_to(project_root))}
 
