@@ -1,7 +1,8 @@
 {
   "version": 1,
   "counters": {
-    "request": 26,
-    "task": 227
+    "request": 27,
+    "spec": 45,
+    "task": 235
   }
 }

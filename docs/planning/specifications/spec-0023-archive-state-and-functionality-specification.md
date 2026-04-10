@@ -37,7 +37,7 @@ older or redundant items while maintaining historical records and queryability.
    - ready → archived
    - in_progress → archived
    - done → archived
-   - archived → ready (restore)
+   - archived → a valid active state for that item kind, as allowed by the configured workflow
 3. Archived items cannot be modified except through allowed state restoration and explicitly-supported archive metadata updates.
 4. Archive behavior should remain canonical in workflow/core planning logic; MCP may expose convenience affordances later, but should not define separate archive semantics.
 
@@ -73,7 +73,7 @@ def tm_state(
 ```
 
 Requirements:
-- Transition item from `archived` back to `ready`
+- Transition item from `archived` back to a valid non-archived state for that item kind
 - Record restore metadata (restored_at, restored_by or actor)
 - Log restore event
 - Return restore result
@@ -122,7 +122,7 @@ Requirements:
 1. Archived state is defined for all planning kinds
 2. State transitions are validated correctly
 3. State-driven archive transitions move items to `archived` with metadata
-4. State-driven restore transitions move items back to `ready` with metadata
+4. State-driven restore transitions move items back to a valid active state with metadata
 5. tm_list() excludes archived items by default
 6. tm_validate() skips cross-ref validation for archived items
 7. tm_show() includes archive metadata

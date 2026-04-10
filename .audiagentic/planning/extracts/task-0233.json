@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-0233",
+    "label": "Implement detect_sensitive_patterns function with regex patterns",
+    "state": "draft",
+    "summary": "Add detect_sensitive_patterns(body) with regex for AWS keys, API keys, passwords, bearer tokens; return warning messages",
+    "spec_ref": "spec-0045",
+    "request_refs": [],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0233.md"
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+}

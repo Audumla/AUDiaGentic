@@ -56,6 +56,21 @@
     "deletion_reason": {
       "type": "string"
     },
+    "archived_at": {
+      "type": ["string", "null"]
+    },
+    "archived_by": {
+      "type": ["string", "null"]
+    },
+    "archive_reason": {
+      "type": ["string", "null"]
+    },
+    "restored_at": {
+      "type": ["string", "null"]
+    },
+    "restored_by": {
+      "type": ["string", "null"]
+    },
     "current_understanding": {
       "type": "string"
     },
