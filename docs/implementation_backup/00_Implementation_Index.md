@@ -24,7 +24,6 @@ This implementation pack is the **end-to-end staged build book** for AUDiaGentic
 - `08_Phase_2_Build_Book.md`
 - `09_Phase_3_Build_Book.md`
 - `10_Phase_4_Build_Book.md`
-- `11_Phase_5_Build_Book.md`
 - `12_Phase_6_Build_Book.md`
 - `13_Packet_Execution_Rules.md`
 - `14_End_to_End_Staged_Build_Summary.md`
@@ -56,7 +55,6 @@ This implementation pack is the **end-to-end staged build book** for AUDiaGentic
 - `packets/phase-3/`
 - `packets/phase-3-1/` through `phase-3-4/`
 - `packets/phase-4/` (includes PKT-PRV-001 through PKT-PRV-055 + PKT-SRV-001)
-- `packets/phase-5/` (future)
 - `packets/phase-6/` (future)
 - `packets/phase-7/` through `phase-11/` (future extensions)
 
@@ -95,6 +93,26 @@ This implementation pack is the **end-to-end staged build book** for AUDiaGentic
 - `54_Build_Status_Registry_Extension_For_Phases_7_11.md`
 - `56_Phase_1_4_Installable_Project_Baseline_and_Managed_Asset_Synchronization.md`
 - `57_Phase_0_3_Repository_Domain_Refactor_and_Package_Realignment.md`
+
+## Superseded archive notice
+
+The older pre-ACP Discord, Continue, and local-openai execution line was removed from the active implementation pack and archived under:
+
+- `docs/archive/superseded/2026-04-pre-acp-line/`
+
+That archive includes the retired Phase 5 Discord build book, the superseded provider-specific Continue/local-openai runbooks, and the cancelled packet docs for:
+
+- `PKT-DSC-001` through `PKT-DSC-004`
+- `PKT-PRV-003`
+- `PKT-PRV-008`
+- `PKT-PRV-019`
+- `PKT-PRV-021`
+- `PKT-PRV-027`
+- `PKT-PRV-029`
+- `PKT-PRV-036`
+- `PKT-PRV-038`
+- `PKT-PRV-044`
+- `PKT-PRV-046`
 
 ## Claude-specific provider docs (Phase 4.6 extensions)
 
