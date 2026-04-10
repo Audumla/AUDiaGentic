@@ -203,6 +203,8 @@ class PlanningAPI:
             self._check_duplicate(kind, label, summary)
         if kind in {"spec", "plan", "task"}:
             self._validate_request_refs(request_refs or [])
+        if kind == "spec":
+            self._require_request_refs_for_spec(request_refs or [])
         if kind == "request" and not source:
             raise ValueError("request requires --source to track request origin")
         id_ = next_id(self.root, kind)
@@ -397,6 +399,8 @@ class PlanningAPI:
             self._check_duplicate(kind, label, summary)
         if kind in {"spec", "plan", "task"}:
             self._validate_request_refs(request_refs or [])
+        if kind == "spec":
+            self._require_request_refs_for_spec(request_refs or [])
         if kind == "request" and not source:
             raise ValueError("request requires source to track request origin")
         id_ = next_id(self.root, kind)
@@ -837,6 +841,10 @@ class PlanningAPI:
             item = self._find(req_id)
             if item.kind != "request":
                 raise ValueError(f"request '{req_id}' does not exist")
+
+    def _require_request_refs_for_spec(self, request_refs: list[str]) -> None:
+        if not request_refs:
+            raise ValueError("spec requires at least one request reference")
 
     def _check_duplicate(self, kind: str, label: str, summary: str) -> None:
         label_key = label.strip().lower()
