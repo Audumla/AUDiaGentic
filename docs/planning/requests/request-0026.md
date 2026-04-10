@@ -4,7 +4,7 @@ label: 'MCP mutation coverage gaps: operations requiring direct file edits'
 state: closed
 summary: Identify and close gaps in MCP/helper mutation coverage that currently force
   direct file edits; clarify MCP-first enforcement policy and scope boundary
-source: extracted-from-request-0004
+source: claude
 current_understanding: 'The planning MCP surface is efficient for read operations
   and basic mutations (state, label, summary, sections). Remaining gaps block full
   MCP-first workflows: certain planning metadata mutations have no clean MCP/helper
