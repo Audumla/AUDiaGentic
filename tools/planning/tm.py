@@ -62,7 +62,7 @@ def main():
     p_new.add_argument('--profile', help='Profile name for request defaults and stack topology (e.g. feature, issue, direct, full)')
     p_new.add_argument('--understanding', dest='current_understanding')
     p_new.add_argument('--question', action='append', dest='open_questions')
-    p_new.add_argument('--source')
+    p_new.add_argument('--source', required=True, help='Source of request (e.g. user, claude, jira, slack)')
     p_new.add_argument('--context')
     p_up = sp.add_parser('update')
     p_up.add_argument('id')

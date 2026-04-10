@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T03:27:12.653156+00:00",
+  "generated_at": "2026-04-10T03:43:58.481196+00:00",
   "refs": [
     {
       "src": "plan-0004",
@@ -96,11 +96,6 @@
     {
       "src": "plan-0012",
       "dst": "spec-0030",
-      "field": "spec_refs"
-    },
-    {
-      "src": "plan-0013",
-      "dst": "spec-0035",
       "field": "spec_refs"
     },
     {
@@ -357,26 +352,6 @@
     {
       "src": "spec-0031",
       "dst": "request-0010",
-      "field": "request_refs"
-    },
-    {
-      "src": "spec-0032",
-      "dst": "request-0017",
-      "field": "request_refs"
-    },
-    {
-      "src": "spec-0033",
-      "dst": "request-0018",
-      "field": "request_refs"
-    },
-    {
-      "src": "spec-0034",
-      "dst": "request-0019",
-      "field": "request_refs"
-    },
-    {
-      "src": "spec-0035",
-      "dst": "request-0020",
       "field": "request_refs"
     },
     {
@@ -750,13 +725,13 @@
       "field": "spec_ref"
     },
     {
-      "src": "task-0213",
-      "dst": "spec-0035",
-      "field": "spec_ref"
+      "src": "task-0215",
+      "dst": "request-0010",
+      "field": "request_refs"
     },
     {
-      "src": "task-0214",
-      "dst": "spec-0035",
+      "src": "task-0215",
+      "dst": "spec-0024",
       "field": "spec_ref"
     },
     {
@@ -1874,25 +1849,6 @@
     {
       "src": "wp-0013",
       "dst": "task-0212",
-      "field": "task_refs",
-      "seq": null,
-      "display": null
-    },
-    {
-      "src": "wp-0014",
-      "dst": "plan-0013",
-      "field": "plan_ref"
-    },
-    {
-      "src": "wp-0014",
-      "dst": "task-0213",
-      "field": "task_refs",
-      "seq": null,
-      "display": null
-    },
-    {
-      "src": "wp-0014",
-      "dst": "task-0214",
       "field": "task_refs",
       "seq": null,
       "display": null

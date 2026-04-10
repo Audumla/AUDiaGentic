@@ -69,11 +69,11 @@ class RequestMgr(BaseMgr):
         id_: str,
         label: str,
         summary: str,
+        source: str,
         state: str = 'captured',
         profile: str | None = None,
         current_understanding: str | None = None,
         open_questions: list[str] | None = None,
-        source: str | None = None,
         context: str | None = None,
     ):
         path = self.path_for('request', id_, label)
@@ -89,11 +89,10 @@ class RequestMgr(BaseMgr):
             'label': label,
             'state': state,
             'summary': summary,
+            'source': source,
             'current_understanding': current_understanding,
             'open_questions': open_questions,
         }
-        if source:
-            data['source'] = source
         if context:
             data['context'] = context
         if default_meta:

@@ -52,7 +52,7 @@ def test_validate_empty_project(planning_root):
 
 def test_new_request(planning_root):
     root, api = planning_root
-    item = api.new("request", label="Test request", summary="A test")
+    item = api.new("request", label="Test request", summary="A test", source="test")
     assert item.data["id"] == "request-0001"
     assert item.data["state"] == "captured"
     assert (root / "docs" / "planning" / "requests" / "request-0001.md").exists()
@@ -98,19 +98,19 @@ def test_invalid_state_transition_rejected(planning_root):
 
 def test_id_counter_persisted_across_api_instances(planning_root):
     root, api = planning_root
-    api.new("request", label="R1", summary="S")
-    api.new("request", label="R2", summary="S")
+    api.new("request", label="R1", summary="S", source="test")
+    api.new("request", label="R2", summary="S", source="test")
     # New API instance should continue from counter
     from audiagentic.planning.app.api import PlanningAPI
 
     api2 = PlanningAPI(root)
-    item = api2.new("request", label="R3", summary="S")
+    item = api2.new("request", label="R3", summary="S", source="test")
     assert item.data["id"] == "request-0003"
 
 
 def test_index_creates_files(planning_root):
     root, api = planning_root
-    api.new("request", label="R", summary="S")
+    api.new("request", label="R", summary="S", source="test")
     api.index()
     idx = root / ".audiagentic" / "planning" / "indexes"
     assert (idx / "requests.json").exists()
@@ -129,7 +129,7 @@ def test_dispatch_json_initialised_by_index(planning_root):
 
 def test_validate_catches_duplicate_ids(planning_root):
     root, api = planning_root
-    api.new("request", label="R", summary="S")
+    api.new("request", label="R", summary="S", source="test")
     # Manually write a duplicate
     dup = root / "docs" / "planning" / "requests" / "request-0001-dup.md"
     dup.write_text(
@@ -186,7 +186,7 @@ def test_package_creates_wp_with_task_refs(planning_root):
 
 def test_api_new_plan_and_task_preserve_request_trace_in_index(planning_root):
     root, api = planning_root
-    request = api.new("request", label="R", summary="Request summary")
+    request = api.new("request", label="R", summary="Request summary", source="test")
     spec = api.new(
         "spec",
         label="S",
@@ -224,9 +224,9 @@ def test_api_new_plan_and_task_preserve_request_trace_in_index(planning_root):
 
 def test_api_duplicate_detection_rejects_duplicate_requests_and_specs(planning_root):
     _, api = planning_root
-    api.new("request", label="Repeated request", summary="Same summary")
+    api.new("request", label="Repeated request", summary="Same summary", source="test")
     with pytest.raises(ValueError, match="request already exists"):
-        api.new("request", label="Repeated request", summary="Same summary")
+        api.new("request", label="Repeated request", summary="Same summary", source="test")
 
     api.new("spec", label="Repeated spec", summary="Spec summary")
     with pytest.raises(ValueError, match="spec already exists"):
