@@ -125,6 +125,7 @@ When updating shared rules:
 
 ## References
 
-- AgentRunner pattern: `H:\development\projects\AgentRunner\.agent_runner\config\`
-- Current providers: See `.audiagentic/config/rules/providers/`
-- Shared rules: `.audiagentic/config/rules/shared/`
+- AgentRunner pattern: `H:\development\projects\AgentRunner\.agent_runner\config\rules\`
+- Rule system: `.audiagentic/config/rules/shared/` and `.audiagentic/config/rules/providers/`
+- Planning standards: `docs/planning/standards/`
+- Related: `standard-0001` (Planning documentation), `CLAUDE.md` (Generated from rules)
