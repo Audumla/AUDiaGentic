@@ -1,20 +1,33 @@
 ---
 id: request-0009
 label: Add audience-level profile system to control planning depth-of-detail
-state: captured
+state: distilled
 summary: Introduce orthogonal audience profiles (junior/mid/senior) that control spec/task
   required sections, detail verbosity, and acceptance criteria depth independently
   of work-type profiles (enhancement/feature/issue/fix)
 source: legacy-backfill
-current_understanding: Audience profiles remain a future-facing planning-layer enhancement. The shipped unified profile model now covers work-type and downstream-creation behavior through enhancement, feature, issue, and fix profiles. This request stays separate because it would add an orthogonal content-depth control that changes planning defaults, validation expectations, and possibly automation behavior without changing the core request-to-specification or request-to-task topology.
+current_understanding: Audience profiles remain a future-facing planning-layer enhancement.
+  The shipped unified profile model now covers work-type and downstream-creation behavior
+  through enhancement, feature, issue, and fix profiles. This request stays separate
+  because it would add an orthogonal content-depth control that changes planning defaults,
+  validation expectations, and possibly automation behavior without changing the core
+  request-to-specification or request-to-task topology.
 open_questions:
-  - Should audience profile be a top-level frontmatter field (like workflow) or stored in meta?
-  - Should the default audience be configurable per-project in planning.yaml, or always 'standard'?
-  - Which required or suggested sections should differ between junior/mid/senior, and by how much?
-  - Should audience profiles also affect hook/automation rules or event metadata for downstream tooling?
+- Should audience profile be a top-level frontmatter field (like workflow) or stored
+  in meta?
+- Should the default audience be configurable per-project in planning.yaml, or always
+  'standard'?
+- Which required or suggested sections should differ between junior/mid/senior, and
+  by how much?
+- Should audience profiles also affect hook/automation rules or event metadata for
+  downstream tooling?
+spec_refs:
+- spec-0046
 standard_refs:
-  - standard-0009  # Planning layer enhancement impact
+- standard-0009
 meta:
+  task_refs:
+  - task-0236
   source_refs:
   - docs/planning/requests/request-0008.md
   - .audiagentic/planning/config/profiles.yaml
@@ -22,6 +35,7 @@ meta:
   - src/audiagentic/planning/app/api.py
   - tools/planning/tm_helper.py
 ---
+
 
 
 
