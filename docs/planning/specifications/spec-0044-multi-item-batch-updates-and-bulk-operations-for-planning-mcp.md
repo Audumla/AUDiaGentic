@@ -19,6 +19,7 @@ task_refs:
 standard_refs:
 - standard-0006
 - standard-0005
+- standard-0009
 ---
 
 
@@ -183,7 +184,7 @@ These are design-forward but deferred; implement multi-item batch first.
 - [ ] `tm_batch_update` supports `summary_only` flag
 - [ ] `tm_bulk_state(ids, new_state, summary_only)` implemented in MCP
 - [ ] `tm_bulk_state` returns minimal response when summary_only=True
-- [ ] All 6 tasks in archive work (task-0190-0195) can be state-transitioned with one `tm_bulk_state` call
+- [ ] Bulk state transition can move a representative task set for this work item in one `tm_bulk_state` call
 - [ ] Agent calling pattern reduced from N individual calls to 1-2 batch calls
 - [ ] Tests cover multi-item batches, state transitions, summary_only flag, backward compat
 - [ ] Existing single-item `tm_batch_update` tests still pass
