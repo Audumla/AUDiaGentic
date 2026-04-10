@@ -143,8 +143,8 @@ The registry records the active baseline phases and the later additive extension
 | Phase 4.2 | `VERIFIED` | provider status/validation CLI complete |
 | Phase 4.3 | `VERIFIED` | shared provider prompt-tag contract verified; provider-specific rollout guidance now lives in Phase 4.4 |
 | Phase 4.4 | `VERIFIED` | provider execution compliance model and isolated provider implementation docs staged |
-| Phase 4.6 | `IN_PROGRESS` | shared prompt-trigger bridge harness and primary Claude/Cline/Codex/opencode provider bridge paths are implemented; provider prompt-calling mechanics map is now explicit starting with Codex; prompt-level `provider=` directives can override a surface default provider so Codex-launched prompts can intentionally hand off to Cline or another supported provider; Codex and opencode preflight now validate required repo-local assets before launch; opencode adapter/config parity still needs cleanup before full readiness; Gemini/Copilot/local-openai/Qwen bridge paths exist but remain outside the primary provider set; Continue is deferred as a future integration; realism assessment now documents primary vs guarded providers |
-| Phase 4.7 | `DEFERRED_DRAFT` | provider availability and auto-install orchestration drafted; install/bootstrap policy and packets still need refinement |
+| Phase 4.6 | `IN_PROGRESS` | shared prompt-trigger bridge harness and primary Claude/Cline/Codex/opencode provider bridge paths are implemented; provider prompt-calling mechanics map is now explicit starting with Codex; prompt-level `provider=` directives can override a surface default provider so Codex-launched prompts can intentionally hand off to Cline or another supported provider; Codex and opencode preflight now validate required repo-local assets before launch; opencode adapter/config parity still needs cleanup before full readiness; Gemini/Copilot/Qwen remain guarded or follow-on lines; the older Continue/local-openai branch is cancelled and archived; realism assessment now documents primary vs guarded providers |
+| Phase 4.7 | `DEFERRED_DRAFT` | provider availability and auto-install orchestration drafted; Continue/local-openai-specific packets are cancelled and archived; remaining active scope is narrower than the older registry advertised |
 | Phase 4.9 | `IN_PROGRESS` | shared live stream and progress capture now uses pluggable sinks and writes `events.ndjson` through AUDiaGentic-owned runtime artifacts; part of the shared Phase 4.9–4.11 provider session I/O and completion tranche for implementation reuse only; provider-specific extractor sinks remain the next step; Codex, Cline, Claude, and opencode are the primary validation providers, while guarded-provider sink-harness uplift is now explicitly owned by PKT-PRV-072 (Gemini) and PKT-PRV-073 (Qwen) |
 | Phase 4.9.1 | `VERIFIED` | post-implementation streaming hardening slice covering configuration-driven timeout support, bounded memory capture, sink-failure observability, normalized-event validation, serialized event writing, and stream-control validation after the baseline Phase 4.9 harness is stable; defaults prefer warnings and explicit overflow markers over hard-stop enforcement; PKT-PRV-074, PKT-PRV-075, PKT-PRV-076 implemented |
 | Phase 4.10 | `IN_PROGRESS` | shared live input and interactive-session capture harness records and persists session input; part of the shared Phase 4.9–4.11 provider session I/O and completion tranche for implementation reuse only; a full live-session attachment manager is still needed for true mid-run input injection; prompt-launch now merges default stream/input controls so capture stays AUDiaGentic-owned; raw provider session keys are explicitly treated as non-log-safe follow-on material that needs a secure-session-reference seam; Cline and Codex are the first-wave validation providers |
@@ -156,8 +156,8 @@ The registry records the active baseline phases and the later additive extension
 | Phase 9 | `WAITING_ON_DEPENDENCIES` | federation and control extension is additive future work |
 | Phase 10 | `WAITING_ON_DEPENDENCIES` | federation consumption seam is additive future work |
 | Phase 11 | `DEFERRED_DRAFT` | external connector connectivity is a later optional extension |
-| Phase 5 | `READY_TO_START` | Discord overlay/eventing work remains additive and may resume per its own packet dependencies |
-| Phase 6 | `WAITING_ON_DEPENDENCIES` | cannot start until Phase 5 is complete and Phase 6 prerequisites are satisfied |
+| Phase 5 | `CANCELLED` | Discord overlay/eventing line is superseded, archived, and removed from the active program |
+| Phase 6 | `WAITING_ON_DEPENDENCIES` | phase 6 cannot rely on the retired Discord overlay line; any later external messaging/control work must align to the ACP/OpenACP direction instead |
 
 ---
 
@@ -311,12 +311,12 @@ Later phases should continue this registry pattern using the same fields and sta
 |---|---|---|---|---|---|---|---|---|
 | PKT-PRV-001 | Provider registry and descriptor validation | VERIFIED | Codex | workspace | needs PKT-FND-001 + PKT-FND-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/unit/providers/test_registry.py |
 | PKT-PRV-002 | Provider selection and health check service | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-JOB-003 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_selection.py; fixtures: provider-health.*.json |
-| PKT-PRV-003 | local-openai provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_local_openai.py |
+| PKT-PRV-003 | local-openai provider adapter | CANCELLED | Codex | workspace | superseded by scope reduction | 03, 06, packet | 2026-04-10 | superseded by ACP/OpenACP-aligned provider scope reduction; archived in pre-ACP archive pack |
 | PKT-PRV-004 | claude provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_claude.py; live wrapper smoke test verified; hook/skills assets still needed for full native-intercept rollout |
 | PKT-PRV-005 | codex provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_codex.py; live wrapper smoke test verified; prompt envelope still needs richer task payload for fully specific execution |
 | PKT-PRV-006 | gemini provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_gemini.py |
 | PKT-PRV-007 | copilot provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_copilot.py |
-| PKT-PRV-008 | continue provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_continue.py |
+| PKT-PRV-008 | continue provider adapter | CANCELLED | Codex | workspace | superseded by scope reduction | 03, 06, packet | 2026-04-10 | superseded by ACP/OpenACP-aligned provider scope reduction; archived in pre-ACP archive pack |
 | PKT-PRV-009 | cline provider adapter | VERIFIED | Codex | workspace | needs PKT-PRV-001 + PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_cline.py |
 | PKT-PRV-010 | Job/provider integration seam tests | VERIFIED | Codex | workspace | needs PKT-PRV-002 + PKT-JOB-003 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/integration/providers/test_job_provider_seam.py |
 | PKT-PRV-011 | Provider access-mode contract + health config rules | VERIFIED | Codex | workspace | needs PKT-PRV-002 VERIFIED | 03, 06, packet | 2026-03-30 | tests: tests/unit/contracts/test_schema_validation.py; tests/integration/providers/test_selection.py; tests/integration/test_example_scaffold.py; tests/e2e/lifecycle/test_fresh_install.py |
@@ -343,9 +343,9 @@ Later phases should continue this registry pattern using the same fields and sta
 | PKT-PRV-016 | claude prompt-tag surface integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-004 VERIFIED | 03, 27, 38, packet | 2026-04-04 | later wrapper and native-hook rollout now covers the practical Claude surface path; keep this open only for documentation closeout/reconciliation |
 | PKT-PRV-017 | gemini prompt-tag surface integration | READY_FOR_REVIEW | Gemini CLI | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-006 VERIFIED | 03, 27, 38, packet | 2026-03-30 | implemented prompt-tag detection and normalization; smoke tests simulated |
 | PKT-PRV-018 | copilot prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-007 VERIFIED | 03, 27, 38, packet | 2026-03-30 | copilot surface rollout |
-| PKT-PRV-019 | continue prompt-tag surface integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-008 VERIFIED | 03, 27, 38, packet | 2026-03-30 | future integration; not part of the active prompt-calling rollout |
+| PKT-PRV-019 | continue prompt-tag surface integration | CANCELLED | Codex | workspace | superseded by scope reduction | 03, 27, 38, packet | 2026-04-10 | superseded and archived with the retired Continue provider line |
 | PKT-PRV-020 | cline prompt-tag surface integration | READY_TO_START | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-009 VERIFIED | 03, 27, 38, packet | 2026-03-30 | cline wrapper/extension prompt-tag rollout |
-| PKT-PRV-021 | local-openai/qwen bridge-wrapper prompt-tag integration | VERIFIED | Codex | workspace | needs PKT-PRV-014 VERIFIED + PKT-PRV-003 VERIFIED + PKT-PRV-011 VERIFIED | 03, 27, 38, packet | 2026-03-30 | bridge-wrapper surface wiring for local-openai and qwen; bridge wrappers and smoke tests are implemented |
+| PKT-PRV-021 | local-openai/qwen bridge-wrapper prompt-tag integration | CANCELLED | Codex | workspace | superseded by scope reduction | 03, 27, 38, packet | 2026-04-10 | superseded and archived with the retired local-openai bridge-wrapper line; any future Qwen-specific replacement must be repacketized cleanly |
 
 ### Phase 4.4 — Provider Tag Execution Compliance and Isolated Provider Implementations
 
@@ -356,9 +356,9 @@ Later phases should continue this registry pattern using the same fields and sta
 | PKT-PRV-024 | Claude Code tag execution implementation | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-004 VERIFIED | 28, 39, packet | 2026-04-04 | later wrapper and native-hook work now covers the practical Claude execution path; keep this open only for documentation closeout/reconciliation |
 | PKT-PRV-025 | Gemini tag execution implementation | READY_FOR_REVIEW | Gemini CLI | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-006 VERIFIED | 28, 39, packet | 2026-03-30 | implemented native intercept guidance and GEMINI.md |
 | PKT-PRV-026 | GitHub Copilot tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-007 VERIFIED | 28, 39, packet | 2026-03-30 | isolated Copilot execution doc and smoke-test guidance |
-| PKT-PRV-027 | Continue tag execution implementation | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-008 VERIFIED | 28, 39, packet | 2026-03-30 | future integration; isolated Continue execution doc and smoke-test guidance are deferred |
+| PKT-PRV-027 | Continue tag execution implementation | CANCELLED | Codex | workspace | superseded by scope reduction | 28, 39, packet | 2026-04-10 | superseded and archived with the retired Continue execution line |
 | PKT-PRV-028 | Cline tag execution implementation | VERIFIED | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-009 VERIFIED | 28, 39, packet | 2026-03-30 | CLI-backed wrapper implemented and smoke-tested; hook-native path remains feature-gated |
-| PKT-PRV-029 | local OpenAI-compatible tag execution implementation | READY_TO_START | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-003 VERIFIED + PKT-PRV-011 VERIFIED | 28, 39, packet | 2026-03-30 | backend-only provider execution doc and smoke-test guidance |
+| PKT-PRV-029 | local OpenAI-compatible tag execution implementation | CANCELLED | Codex | workspace | superseded by scope reduction | 28, 39, packet | 2026-04-10 | superseded and archived with the retired local-openai execution line |
 | PKT-PRV-030 | Qwen Code tag execution implementation | VERIFIED | Codex | workspace | needs PKT-PRV-022 VERIFIED + PKT-PRV-003 VERIFIED + PKT-PRV-011 VERIFIED | 28, 39, packet | 2026-03-30 | CLI-backed wrapper implemented and smoke-tested; hook-native path remains feature-gated |
 
 ### Phase 4.6 — Provider Prompt-Trigger Launch Behavior
@@ -370,9 +370,9 @@ Later phases should continue this registry pattern using the same fields and sta
 | PKT-PRV-033 | Claude prompt-trigger launch integration (Option A baseline) | VERIFIED | Codex | workspace | needs PKT-PRV-031 VERIFIED + PKT-PRV-004 VERIFIED | 03, 20, 29, 40, packet | 2026-04-02 | Option A wrapper baseline complete: `.claude/skills/ag-{plan,implement,review,audit,check-in-prep}/SKILL.md` + REQUIRED_ASSETS validation + uses shared default prompts (provider-specific only when constrained, like Cline's read-only review) + tests passing; Option B native hook integration ready to start (PKT-PRV-055) |
 | PKT-PRV-034 | Gemini prompt-trigger launch integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 VERIFIED + PKT-PRV-006 VERIFIED + PKT-PRV-062 READY_FOR_REVIEW | 03, 29, 40, packet | 2026-04-05 | generated `.gemini/commands/ag-*.md` command templates + `.gemini/settings.json` documenting fallback-only path (no native hook available); shared bridge is the canonical launch mechanism; smoke tests pending |
 | PKT-PRV-035 | GitHub Copilot prompt-trigger launch integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 VERIFIED + PKT-PRV-007 VERIFIED | 03, 29, 40, packet | 2026-04-05 | all 5 `.github/prompts/*.prompt.md` files filled with substantive content; all 5 `.github/agents/*.agent.md` files present; `.github/copilot-instructions.md` expanded; smoke tests pending |
-| PKT-PRV-036 | Continue prompt-trigger launch integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-031 VERIFIED + PKT-PRV-008 VERIFIED | 03, 29, 40, packet | 2026-03-30 | future integration; Continue config surface and wrapper path for prompt-trigger launch |
+| PKT-PRV-036 | Continue prompt-trigger launch integration | CANCELLED | Codex | workspace | superseded by scope reduction | 03, 29, 40, packet | 2026-04-10 | superseded and archived with the retired Continue prompt-trigger line |
 | PKT-PRV-037 | Cline prompt-trigger launch integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 VERIFIED + PKT-PRV-009 VERIFIED + PKT-PRV-070 VERIFIED + PKT-PRV-062 READY_FOR_REVIEW | 03, 29, 40, packet | 2026-04-05 | generated `.clinerules/skills/ag-*.md` files + `.clinerules/hook-config.md` documenting fallback-only path (no native hook available); shared bridge is the canonical launch mechanism; smoke tests pending |
-| PKT-PRV-038 | local-openai/qwen prompt-trigger bridge integration | READY_FOR_REVIEW | Codex | workspace | needs PKT-PRV-031 VERIFIED + PKT-PRV-003 VERIFIED + PKT-PRV-011 VERIFIED | 03, 29, 40, packet | 2026-03-30 | bridge-owned launch path for backend-only surfaces; local-openai and Qwen bridge wrappers are implemented |
+| PKT-PRV-038 | local-openai/qwen prompt-trigger bridge integration | CANCELLED | Codex | workspace | superseded by scope reduction | 03, 29, 40, packet | 2026-04-10 | superseded and archived with the retired local-openai bridge line; any future Qwen-only bridge work must be reintroduced separately |
 | PKT-PRV-055 | Claude UserPromptSubmit and PreToolUse native hook integration (Option B) | VERIFIED | Claude | workspace | needs PKT-PRV-033 VERIFIED | 20, 33, 45, packet | 2026-04-02 | Option B native hook path complete: .claude/settings.json hook config + tools/claude_hooks.py handlers + stage restrictions + tests passing; Option A and B now form complete Claude baseline path |
 
 ### Phase 4.7 — Provider Availability and Auto-Install Orchestration
@@ -384,9 +384,9 @@ Later phases should continue this registry pattern using the same fields and sta
 | PKT-PRV-041 | Claude auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-004 VERIFIED + PKT-PRV-016 READY_FOR_REVIEW or better | 03, 30, 41, packet | 2026-04-04 | Claude install/bootstrap guidance and smoke tests |
 | PKT-PRV-042 | Gemini auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-006 VERIFIED + PKT-PRV-017 READY_FOR_REVIEW or better | 03, 30, 41, packet | 2026-04-04 | Gemini install/bootstrap guidance and smoke tests |
 | PKT-PRV-043 | GitHub Copilot auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-007 VERIFIED + PKT-PRV-018 READY_TO_START | 03, 30, 41, packet | 2026-03-30 | Copilot install/bootstrap guidance and smoke tests |
-| PKT-PRV-044 | Continue auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-008 VERIFIED + PKT-PRV-019 DEFERRED_DRAFT | 03, 30, 41, packet | 2026-03-30 | future integration; Continue install/bootstrap guidance and smoke tests are deferred |
+| PKT-PRV-044 | Continue auto-install integration | CANCELLED | Codex | workspace | superseded by scope reduction | 03, 30, 41, packet | 2026-04-10 | superseded and archived with the retired Continue availability/bootstrap line |
 | PKT-PRV-045 | Cline auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-009 VERIFIED + PKT-PRV-020 READY_TO_START | 03, 30, 41, packet | 2026-03-30 | Cline install/bootstrap guidance and smoke tests |
-| PKT-PRV-046 | local-openai availability and bridge bootstrap | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-003 VERIFIED + PKT-PRV-021 VERIFIED | 03, 30, 41, packet | 2026-03-30 | bridge-owned availability and bootstrap for backend-only surfaces |
+| PKT-PRV-046 | local-openai availability and bridge bootstrap | CANCELLED | Codex | workspace | superseded by scope reduction | 03, 30, 41, packet | 2026-04-10 | superseded and archived with the retired local-openai availability/bootstrap line |
 | PKT-PRV-047 | Qwen auto-install integration | DEFERRED_DRAFT | Codex | workspace | needs PKT-PRV-039 DEFERRED_DRAFT + PKT-PRV-030 VERIFIED + PKT-PRV-021 VERIFIED | 03, 30, 41, packet | 2026-03-30 | Qwen install/bootstrap guidance and smoke tests |
 
 ### Phase 4.9 — Provider Live Stream and Progress Capture
@@ -487,10 +487,10 @@ Later phases should continue this registry pattern using the same fields and sta
 |---|---|---|
 | Phase 4.1 | PKT-PRV-012 | VERIFIED |
 | Phase 4.2 | PKT-PRV-013 | VERIFIED |
-| Phase 4.3 | PKT-PRV-014 .. PKT-PRV-021 | VERIFIED |
-| Phase 4.4 | PKT-PRV-022 .. PKT-PRV-030 | VERIFIED |
-| Phase 4.6 | PKT-PRV-031 .. PKT-PRV-038 | IN_PROGRESS |
-| Phase 4.7 | PKT-PRV-039 .. PKT-PRV-047 | DEFERRED_DRAFT |
+| Phase 4.3 | PKT-PRV-014 .. PKT-PRV-021 | VERIFIED with archived Continue/local-openai branch removed from active scope |
+| Phase 4.4 | PKT-PRV-022 .. PKT-PRV-030 | VERIFIED with archived Continue/local-openai branch removed from active scope |
+| Phase 4.6 | PKT-PRV-031 .. PKT-PRV-038 | IN_PROGRESS with Continue/local-openai branch cancelled |
+| Phase 4.7 | PKT-PRV-039 .. PKT-PRV-047 | DEFERRED_DRAFT with Continue/local-openai branch cancelled |
 | Phase 4.9 | PKT-PRV-048 .. PKT-PRV-050, PKT-PRV-072 .. PKT-PRV-073 | VERIFIED |
 | Phase 4.10 | PKT-PRV-051 .. PKT-PRV-054 | IN_PROGRESS |
 | Phase 4.11 | PKT-PRV-056 .. PKT-PRV-058, PKT-PRV-068 .. PKT-PRV-071 | VERIFIED |
@@ -508,7 +508,7 @@ Later phases should continue this registry pattern using the same fields and sta
 | Phase 2.3 | PKT-RLS-011 | VERIFIED |
 | Phase 3.2 | PKT-JOB-008, PKT-JOB-009 | VERIFIED | `@adhoc` is a conscious launch-scope choice, not an unresolved design gap |
 | Phase 3.3 | PKT-JOB-010 | VERIFIED | prompt shorthand/default-launch enhancement complete |
-| Phase 5 | PKT-DSC-001 .. PKT-DSC-004 | READY_TO_START |
+| Phase 5 | PKT-DSC-001 .. PKT-DSC-004 | CANCELLED |
 | Phase 6 | PKT-MIG-001 .. PKT-MIG-003 | WAITING_ON_DEPENDENCIES |
 
 ---
