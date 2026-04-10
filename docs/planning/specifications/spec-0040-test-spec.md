@@ -3,7 +3,8 @@ id: spec-0040
 label: Test spec
 state: draft
 summary: For task testing
-request_refs: []
+request_refs:
+  - request-0029
 task_refs: []
 standard_refs:
 - standard-0006

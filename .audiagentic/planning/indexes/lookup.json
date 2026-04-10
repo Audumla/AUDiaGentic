@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T13:11:42.454992+00:00",
+  "generated_at": "2026-04-10T14:28:01.531820+00:00",
   "items": {
     "plan-0005": {
       "id": "plan-0005",
@@ -62,6 +62,24 @@
       "label": "Implement guidance levels for planning depth-of-detail",
       "state": "draft",
       "path": "docs/planning/plans/plan-0014-implement-guidance-levels-for-planning-depth-of-detail.md",
+      "deleted": false,
+      "archived": false
+    },
+    "plan-0015": {
+      "id": "plan-0015",
+      "kind": "plan",
+      "label": "Implement canonical guidance semantics standard",
+      "state": "draft",
+      "path": "docs/planning/plans/plan-0015-implement-canonical-guidance-semantics-standard.md",
+      "deleted": false,
+      "archived": false
+    },
+    "plan-0016": {
+      "id": "plan-0016",
+      "kind": "plan",
+      "label": "Implement unified workflow states",
+      "state": "draft",
+      "path": "docs/planning/plans/plan-0016-implement-unified-workflow-states.md",
       "deleted": false,
       "archived": false
     },
@@ -159,7 +177,7 @@
       "id": "request-0029",
       "kind": "request",
       "label": "Add guidance levels (light/standard/deep) to control planning depth-of-detail",
-      "state": "captured",
+      "state": "distilled",
       "path": "docs/planning/requests/request-0029.md",
       "deleted": false,
       "archived": false
@@ -167,9 +185,18 @@
     "request-0030": {
       "id": "request-0030",
       "kind": "request",
-      "label": "Require request linkage for every planning specification",
-      "state": "captured",
+      "label": "Require request linkage for every planning specification, with cascade archive",
+      "state": "distilled",
       "path": "docs/planning/requests/request-0030.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-0031": {
+      "id": "request-0031",
+      "kind": "request",
+      "label": "Define canonical semantics for planning guidance levels",
+      "state": "captured",
+      "path": "docs/planning/requests/request-0031.md",
       "deleted": false,
       "archived": false
     },
@@ -287,6 +314,15 @@
       "label": "Unified workflow states for all planning item types",
       "state": "draft",
       "path": "docs/planning/specifications/spec-0047-unified-workflow-states-for-all-planning-item-types.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-0048": {
+      "id": "spec-0048",
+      "kind": "spec",
+      "label": "Canonical semantics for guidance levels",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0048-canonical-semantics-for-guidance-levels.md",
       "deleted": false,
       "archived": false
     },
@@ -1122,7 +1158,7 @@
       "id": "task-0237",
       "kind": "task",
       "label": "Add guidance_levels to profiles.yaml",
-      "state": "draft",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0237.md",
       "deleted": false,
       "archived": false
@@ -1131,7 +1167,7 @@
       "id": "task-0238",
       "kind": "task",
       "label": "Update config.py to load guidance levels",
-      "state": "draft",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0238.md",
       "deleted": false,
       "archived": false
@@ -1140,7 +1176,7 @@
       "id": "task-0239",
       "kind": "task",
       "label": "Add guidance field to request schema",
-      "state": "draft",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0239.md",
       "deleted": false,
       "archived": false
@@ -1149,7 +1185,7 @@
       "id": "task-0240",
       "kind": "task",
       "label": "Update tm_helper.py new_request() with guidance parameter",
-      "state": "draft",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0240.md",
       "deleted": false,
       "archived": false
@@ -1158,7 +1194,7 @@
       "id": "task-0241",
       "kind": "task",
       "label": "Add --guidance CLI parameter to tm.py",
-      "state": "draft",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0241.md",
       "deleted": false,
       "archived": false
@@ -1167,7 +1203,7 @@
       "id": "task-0242",
       "kind": "task",
       "label": "Update validation to enforce guidance-appropriate sections",
-      "state": "draft",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0242.md",
       "deleted": false,
       "archived": false
@@ -1176,7 +1212,7 @@
       "id": "task-0243",
       "kind": "task",
       "label": "Add default_guidance to planning.yaml",
-      "state": "draft",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0243.md",
       "deleted": false,
       "archived": false
@@ -1185,8 +1221,62 @@
       "id": "task-0244",
       "kind": "task",
       "label": "Write tests for guidance levels",
-      "state": "draft",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0244.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0245": {
+      "id": "task-0245",
+      "kind": "task",
+      "label": "Draft standard-0010 with guidance level definitions",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0245.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0246": {
+      "id": "task-0246",
+      "kind": "task",
+      "label": "Update validation to enforce guidance level requirements",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0246.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0247": {
+      "id": "task-0247",
+      "kind": "task",
+      "label": "Add guidance level selection guide to documentation",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0247.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0248": {
+      "id": "task-0248",
+      "kind": "task",
+      "label": "Update workflows.yaml with unified states",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0248.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0249": {
+      "id": "task-0249",
+      "kind": "task",
+      "label": "Implement cascade archive for requests",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0249.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0250": {
+      "id": "task-0250",
+      "kind": "task",
+      "label": "Implement cascade archive for specs",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0250.md",
       "deleted": false,
       "archived": false
     },
@@ -2465,6 +2555,42 @@
       "label": "Implement guidance levels in config, API, and validation",
       "state": "draft",
       "path": "docs/planning/work-packages/core/wp-0015-implement-guidance-levels-in-config-api-and-validation.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-0016": {
+      "id": "wp-0016",
+      "kind": "wp",
+      "label": "Define guidance level semantics in standard",
+      "state": "draft",
+      "path": "docs/planning/work-packages/core/wp-0016-define-guidance-level-semantics-in-standard.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-0017": {
+      "id": "wp-0017",
+      "kind": "wp",
+      "label": "Implement canonical guidance semantics",
+      "state": "draft",
+      "path": "docs/planning/work-packages/core/wp-0017-implement-canonical-guidance-semantics.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-0018": {
+      "id": "wp-0018",
+      "kind": "wp",
+      "label": "Implement unified workflow states and cascade archive",
+      "state": "draft",
+      "path": "docs/planning/work-packages/core/wp-0018-implement-unified-workflow-states-and-cascade-archive.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-0019": {
+      "id": "wp-0019",
+      "kind": "wp",
+      "label": "Implement unified workflow states",
+      "state": "draft",
+      "path": "docs/planning/work-packages/core/wp-0019-implement-unified-workflow-states.md",
       "deleted": false,
       "archived": false
     }
