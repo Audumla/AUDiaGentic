@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T11:05:53.463433+00:00",
+  "generated_at": "2026-04-10T12:21:57.366400+00:00",
   "items": {
     "plan-0005": {
       "id": "plan-0005",
@@ -87,7 +87,7 @@
       "id": "request-0005",
       "kind": "request",
       "label": "Archive functionality for planning items",
-      "state": "distilled",
+      "state": "closed",
       "path": "docs/planning/requests/request-0005.md",
       "deleted": false,
       "archived": false
@@ -96,7 +96,7 @@
       "id": "request-0006",
       "kind": "request",
       "label": "Sensitive data detection and review for planning items",
-      "state": "distilled",
+      "state": "closed",
       "path": "docs/planning/requests/request-0006.md",
       "deleted": false,
       "archived": false
@@ -132,7 +132,7 @@
       "id": "request-0010",
       "kind": "request",
       "label": "Implement configurable stack profiles for lightweight req\u2192spec\u2192task workflows",
-      "state": "distilled",
+      "state": "closed",
       "path": "docs/planning/requests/request-0010.md",
       "deleted": false,
       "archived": false
@@ -231,7 +231,7 @@
       "id": "spec-0044",
       "kind": "spec",
       "label": "Multi-item batch updates and bulk operations for planning MCP",
-      "state": "ready",
+      "state": "cancelled",
       "path": "docs/planning/specifications/spec-0044-multi-item-batch-updates-and-bulk-operations-for-planning-mcp.md",
       "deleted": false,
       "archived": false
@@ -996,7 +996,7 @@
       "id": "task-0228",
       "kind": "task",
       "label": "Extend tm_batch_update to support multi-item operations",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-0228.md",
       "deleted": false,
       "archived": false
@@ -1005,7 +1005,7 @@
       "id": "task-0229",
       "kind": "task",
       "label": "Implement tm_bulk_state for state transitions",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-0229.md",
       "deleted": false,
       "archived": false
@@ -1014,7 +1014,7 @@
       "id": "task-0230",
       "kind": "task",
       "label": "Add summary_only flag to individual operations",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-0230.md",
       "deleted": false,
       "archived": false
@@ -1023,7 +1023,7 @@
       "id": "task-0231",
       "kind": "task",
       "label": "Expose bulk operations in MCP and tm_helper",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-0231.md",
       "deleted": false,
       "archived": false
@@ -1032,7 +1032,7 @@
       "id": "task-0232",
       "kind": "task",
       "label": "Write tests for bulk operations and backward compatibility",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-0232.md",
       "deleted": false,
       "archived": false
