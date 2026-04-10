@@ -465,6 +465,50 @@ class TestStateTransitions:
 
 
 class TestShowExtract:
+    def test_index_writes_lookup_json(self, pr):
+        root, api = pr
+        req = api.new("request", label="R", summary="S", source="test")
+        lookup = json.loads(
+            (root / ".audiagentic" / "planning" / "indexes" / "lookup.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert req.data["id"] in lookup["items"]
+        assert lookup["items"][req.data["id"]]["kind"] == "request"
+
+    def test_head_returns_index_metadata(self, pr):
+        _, api = pr
+        req = api.new("request", label="R", summary="S", source="test")
+        head = api.head(req.data["id"])
+        assert head["id"] == req.data["id"]
+        assert head["kind"] == "request"
+        assert "path" in head
+
+    def test_lookup_falls_back_when_lookup_index_missing(self, pr):
+        root, api = pr
+        req = api.new("request", label="R", summary="S", source="test")
+        (root / ".audiagentic" / "planning" / "indexes" / "lookup.json").unlink()
+        item = api.lookup(req.data["id"])
+        assert item.data["id"] == req.data["id"]
+
+    def test_head_falls_back_when_lookup_index_missing(self, pr):
+        root, api = pr
+        req = api.new("request", label="R", summary="S", source="test")
+        (root / ".audiagentic" / "planning" / "indexes" / "lookup.json").unlink()
+        head = api.head(req.data["id"])
+        assert head["id"] == req.data["id"]
+        assert head["kind"] == "request"
+
+    def test_lookup_falls_back_when_id_missing_from_lookup_index(self, pr):
+        root, api = pr
+        req = api.new("request", label="R", summary="S", source="test")
+        lookup_path = root / ".audiagentic" / "planning" / "indexes" / "lookup.json"
+        lookup = json.loads(lookup_path.read_text(encoding="utf-8"))
+        lookup["items"].pop(req.data["id"])
+        lookup_path.write_text(json.dumps(lookup, indent=2), encoding="utf-8")
+        item = api.lookup(req.data["id"])
+        assert item.data["id"] == req.data["id"]
+
     def test_show_returns_kind_and_path(self, pr):
         _, api = pr
         req = api.new("request", label="R", summary="S", source="test")
@@ -512,6 +556,14 @@ class TestShowExtract:
         # When no attachments dir exists, key should still be present or absent gracefully
         assert "body" in result
 
+    def test_extract_can_skip_body(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        api.update_content(spec.data["id"], "# Purpose\n\nSome body text.\n", mode="replace")
+        result = api.extracts.extract(spec.data["id"], include_body=False)
+        assert "body" not in result
+        assert result["item"]["id"] == spec.data["id"]
+
     def test_extract_writes_json_cache(self, pr):
         root, api = pr
         req = api.new("request", label="R", summary="S", source="test")
@@ -522,6 +574,15 @@ class TestShowExtract:
         assert cache.exists()
         cached = json.loads(cache.read_text())
         assert cached["item"]["id"] == req.data["id"]
+
+    def test_extract_can_skip_json_cache_write(self, pr):
+        root, api = pr
+        req = api.new("request", label="R", summary="S", source="test")
+        api.extracts.extract(req.data["id"], write_to_disk=False)
+        cache = (
+            root / ".audiagentic" / "planning" / "extracts" / f"{req.data['id']}.json"
+        )
+        assert not cache.exists()
 
     def test_extract_effective_standard_refs_field_present(self, pr):
         _, api = pr

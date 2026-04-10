@@ -93,6 +93,23 @@ def test_tm_helper_new_request_persists_source_and_context(helper_project: Path)
     assert shown["context"] == "unit test"
 
 
+def test_tm_helper_head_returns_lean_metadata(helper_project: Path) -> None:
+    request = tm.new_request("Lean head", "Return index-only metadata", source="test")
+    result = tm.head(request["id"])
+    assert result["id"] == request["id"]
+    assert result["kind"] == "request"
+    assert "path" in result
+
+
+def test_tm_helper_extract_can_skip_body_and_disk_write(helper_project: Path) -> None:
+    spec = tm.new_spec("Extract controls", "Support lean extract")
+    tm.update_content(spec["id"], "# Purpose\n\nSpec body.\n", mode="replace")
+    result = tm.extract(spec["id"], include_body=False, write_to_disk=False)
+    cache = helper_project / ".audiagentic" / "planning" / "extracts" / f"{spec['id']}.json"
+    assert "body" not in result
+    assert not cache.exists()
+
+
 def test_tm_helper_doc_sync_queries() -> None:
     requirements = tm.get_doc_sync_requirements("task", "standard")
     assert requirements["required_updates"] == ["changelog"]

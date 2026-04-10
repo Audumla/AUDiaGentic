@@ -1,7 +1,9 @@
 from __future__ import annotations
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 import shutil
+import warnings
 from ..fs.scan import scan_items
 from ..fs.read import parse_markdown
 from ..fs.write import dump_markdown
@@ -36,7 +38,7 @@ class PlanningAPI:
         )
         self.indexer = Indexer(self.root)
         self.validator = Validator(self.root)
-        self.extracts = Extracts(self.root)
+        self.extracts = Extracts(self.root, api_getter=lambda: self)
         self.reconciler = Reconcile(self.root)
         self.hooks = Hooks(self.root, api_getter=lambda: self)
         self.req_mgr = RequestMgr(self.root)
@@ -49,11 +51,74 @@ class PlanningAPI:
     def _scan(self):
         return scan_items(self.root)
 
-    def _find(self, id_: str):
+    def _lookup_index_path(self) -> Path:
+        return self.root / ".audiagentic/planning/indexes/lookup.json"
+
+    def _load_lookup_index(self) -> dict[str, dict]:
+        path = self._lookup_index_path()
+        if not path.exists():
+            raise FileNotFoundError(path)
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return payload.get("items", {})
+
+    def _item_to_head(self, item: ItemView) -> dict[str, object]:
+        return {
+            "id": item.data["id"],
+            "kind": item.kind,
+            "label": item.data["label"],
+            "state": item.data["state"],
+            "path": item.path.relative_to(self.root).as_posix(),
+            "deleted": bool(item.data.get("deleted", False)),
+        }
+
+    def _fallback_scan_item(self, id_: str) -> ItemView:
         for item in self._scan():
             if item.data["id"] == id_:
                 return item
-        raise KeyError(id_)
+        raise ValueError(f"{id_} not found")
+
+    def lookup(self, id_: str) -> ItemView:
+        try:
+            entry = self._load_lookup_index().get(id_)
+        except FileNotFoundError:
+            warnings.warn(
+                "lookup.json is missing; falling back to scan_items()",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return self._fallback_scan_item(id_)
+
+        if not entry:
+            return self._fallback_scan_item(id_)
+
+        path = self.root / Path(entry["path"])
+        if not path.exists():
+            return self._fallback_scan_item(id_)
+
+        data, body = parse_markdown(path)
+        return ItemView(entry["kind"], path, data, body)
+
+    def head(self, id_: str) -> dict[str, object]:
+        try:
+            entry = self._load_lookup_index().get(id_)
+        except FileNotFoundError:
+            warnings.warn(
+                "lookup.json is missing; falling back to scan_items()",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return self._item_to_head(self._fallback_scan_item(id_))
+
+        if entry:
+            return dict(entry)
+
+        return self._item_to_head(self._fallback_scan_item(id_))
+
+    def _find(self, id_: str):
+        try:
+            return self.lookup(id_)
+        except ValueError as exc:
+            raise KeyError(id_) from exc
 
     def _append_unique_ref(self, src_id: str, field: str, dst_id: str) -> None:
         item = self._find(src_id)
