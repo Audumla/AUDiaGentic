@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T13:11:42.454992+00:00",
+  "generated_at": "2026-04-10T14:28:01.531820+00:00",
   "items": [
     {
       "id": "request-0002",
@@ -65,14 +65,20 @@
     {
       "id": "request-0029",
       "label": "Add guidance levels (light/standard/deep) to control planning depth-of-detail",
-      "state": "captured",
+      "state": "distilled",
       "path": "docs\\planning\\requests\\request-0029.md"
     },
     {
       "id": "request-0030",
-      "label": "Require request linkage for every planning specification",
-      "state": "captured",
+      "label": "Require request linkage for every planning specification, with cascade archive",
+      "state": "distilled",
       "path": "docs\\planning\\requests\\request-0030.md"
+    },
+    {
+      "id": "request-0031",
+      "label": "Define canonical semantics for planning guidance levels",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-0031.md"
     }
   ]
 }

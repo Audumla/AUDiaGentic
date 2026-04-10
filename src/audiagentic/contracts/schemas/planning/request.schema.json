@@ -29,6 +29,10 @@
     "context": {
       "type": "string"
     },
+    "guidance": {
+      "type": "string",
+      "enum": ["light", "standard", "deep"]
+    },
     "workflow": {
       "type": "string"
     },

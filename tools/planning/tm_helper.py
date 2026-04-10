@@ -202,6 +202,7 @@ def new_request(
     summary: str,
     source: str,
     profile: str | None = None,
+    guidance: str | None = None,
     current_understanding: str | None = None,
     open_questions: list[str] | None = None,
     context: str | None = None,
@@ -216,6 +217,7 @@ def new_request(
         source: Identifier of the agent or user who created this request (e.g., 'claude', 'codex',
             'user@example.com'). MUST be a creator identifier, not a process description.
         profile: Optional request profile such as feature or issue.
+        guidance: Optional guidance level (light, standard, deep). Defaults to project default.
         current_understanding: Optional initial understanding text.
         open_questions: Optional initial open-question list.
         context: Optional extra context for where this request came from.
@@ -227,6 +229,35 @@ def new_request(
     """
     project_root = root or _get_root()
     api = PlanningAPI(project_root)
+
+    # Apply default profile if not specified
+    if profile is None:
+        profile = api.config.default_profile()
+
+    # Validate profile
+    profiles = api.config.profile_for(profile)
+    if not profiles:
+        raise ValueError(
+            f"Invalid profile '{profile}'. Must be one of: {list(api.config.profiles.get('planning', {}).get('profiles', {}).keys())}"
+        )
+
+    # Apply default guidance if not specified
+    if guidance is None:
+        guidance = api.config.default_guidance()
+
+    # Validate guidance level
+    levels = api.config.guidance_levels()
+    if guidance not in levels:
+        raise ValueError(
+            f"Invalid guidance level '{guidance}'. Must be one of: {list(levels.keys())}"
+        )
+
+    # Apply guidance defaults
+    guidance_config = levels[guidance]
+    if current_understanding is None:
+        current_understanding = guidance_config["defaults"]["current_understanding"]
+    if open_questions is None:
+        open_questions = guidance_config["defaults"]["open_questions"]
 
     if check_duplicates:
         existing = [i for i in api._scan() if i.kind == "request"]
@@ -248,6 +279,7 @@ def new_request(
         label=label,
         summary=summary,
         profile=profile,
+        guidance=guidance,
         current_understanding=current_understanding,
         open_questions=open_questions,
         source=source,

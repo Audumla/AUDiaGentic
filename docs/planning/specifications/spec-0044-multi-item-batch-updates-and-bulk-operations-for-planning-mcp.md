@@ -4,7 +4,8 @@ label: Multi-item batch updates and bulk operations for planning MCP
 state: cancelled
 summary: Design and implement multi-item batch operations, bulk state transitions,
   and optional result summarization to reduce token overhead for agent bulk operations
-request_refs: []
+request_refs:
+  - request-0029
 task_refs:
 - ref: task-0228
   seq: 1000
