@@ -13,21 +13,19 @@ This document defines the canonical ids, schemas, return types, and contract rul
 - event and record ids: stable prefixes plus sortable identifiers
 
 ### Canonical provider ids
-- `local-openai`
 - `claude`
 - `codex`
 - `gemini`
 - `qwen`
 - `copilot`
-- `continue`
 - `cline`
+- `opencode`
 
 ### Canonical component ids
 - `core-lifecycle`
 - `release-audit-ledger`
 - `agent-jobs`
 - `provider-layer`
-- `discord-overlay`
 - `optional-server`
 - `nodes`
 - `discovery`
@@ -123,8 +121,6 @@ components:
     enabled: true
   provider-layer:
     enabled: true
-  discord-overlay:
-    enabled: false
   optional-server:
     enabled: false
   nodes:
@@ -140,7 +136,6 @@ components:
 Dependency validation:
 - `release-audit-ledger` requires `core-lifecycle`
 - `agent-jobs` requires `core-lifecycle`, `release-audit-ledger`, and `provider-layer`
-- `discord-overlay` requires `core-lifecycle`; it may consume jobs and release services when enabled
 - `optional-server` requires `core-lifecycle`
 - `nodes` requires `core-lifecycle` and `release-audit-ledger`
 - `discovery` requires `nodes`
@@ -152,14 +147,13 @@ Dependency validation:
 ```yaml
 contract-version: v1
 providers:
-  local-openai:
+  codex:
     enabled: true
     install-mode: external-configured
-    access-mode: none
-    base-url: http://localhost:8000/v1
-    default-model: qwen-coder
+    access-mode: cli
+    default-model: gpt-5.4-mini
   claude:
-    enabled: false
+    enabled: true
     install-mode: external-configured
     access-mode: env
     auth-ref: env:ANTHROPIC_API_KEY
@@ -207,7 +201,7 @@ Rules:
 - runtime provenance may keep a non-secret session handle or redacted identifier when needed for correlation
 - a secure session-reference/store seam for sensitive session material is a deferred follow-on feature
 - Cline and Codex are the first-wave validation providers for this contract
-- Discord may later consume the same normalized stream without changing provider behavior
+- a later external messaging/control surface may consume the same normalized stream without changing provider behavior
 
 ### DRAFT — Provider live input and interactive session control
 
@@ -233,7 +227,7 @@ Rules:
 - runtime provenance may keep a non-secret session handle or redacted identifier when needed for correlation
 - a secure session-reference/store seam for sensitive session material is a deferred follow-on feature
 - Cline and Codex are the first-wave validation providers for this contract
-- Discord may later consume the same normalized input stream without changing provider behavior
+- a later external messaging/control surface may consume the same normalized input stream without changing provider behavior
 
 ### Phase 3.4 job-control note
 
@@ -307,15 +301,20 @@ Prompt-tagged launch consumes provider/model metadata only after the Phase 4.1 c
 
 ### Canonical prompt-entry end state
 
-The desired end functionality for all supported providers is that every CLI or prompt-entry surface converges on the same repo-owned bridge or launcher contract.
+The desired end functionality for the active provider scope is that every supported CLI or prompt-entry surface converges on the same repo-owned bridge or launcher contract, with ACP-first provider/session handling internally and OpenACP-preferred external messaging/control where an external seam is needed.
 
 That means:
 - canonical tags and provider shorthands always normalize into `PromptLaunchRequest`
 - provider-specific hooks, wrappers, extensions, and instruction files are implementation details only
 - provider-specific differences may change how the prompt reaches the bridge, but they must not change the workflow semantics or the launch contract
 - AUDiaGentic owns provenance, defaults, runtime capture, and persistence for launched jobs
-- the same canonical end-state applies to Codex, Claude, Gemini, Qwen, Copilot, Continue, Cline, and local-openai
+- the same canonical end-state applies to Codex, Claude, Gemini, Qwen, Copilot, Cline, and opencode
 - provider docs must describe the concrete mechanics they use to reach that end-state, but they must not define alternate meanings for the tags
+
+Scope note:
+- the older Continue and local-openai provider line is superseded and archived
+- the older Discord overlay component line is superseded and archived
+- canonical project documentation, issue-tracking, and changelog-extension work should be modeled as managed documentation or connector seams, not as a Discord-specific overlay revival
 
 ### Phase 7+ additive extension contracts
 
@@ -496,7 +495,7 @@ Future extension:
   "job-id": "job_20260329_0001",
   "packet-id": "pkt-job-implement-001",
   "project-id": "my-project",
-  "provider-id": "local-openai",
+  "provider-id": "codex",
   "workflow-profile": "lite",
   "state": "running",
   "created-at": "2026-03-29T00:00:00Z",
@@ -960,7 +959,7 @@ See `19_Glossary.md` for canonical meanings of:
     "release-audit-ledger": "installed"
   },
   "providers": {
-    "local-openai": "configured"
+    "codex": "configured"
   },
   "last-lifecycle-action": "fresh-install",
   "updated-at": "2026-03-29T00:00:00Z"
@@ -977,7 +976,7 @@ Validation rules:
 ```json
 {
   "contract-version": "v1",
-  "provider-id": "local-openai",
+  "provider-id": "codex",
   "status": "healthy",
   "latency-ms": 120,
   "error": null,
@@ -1015,7 +1014,6 @@ Rules:
   - `RLS-*` release
   - `JOB-*` jobs
   - `PRV-*` providers
-  - `DSC-*` Discord
   - `MIG-*` migration
 
 ## EventPublisher contract
