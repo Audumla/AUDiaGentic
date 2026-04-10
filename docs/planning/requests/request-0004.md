@@ -4,15 +4,6 @@ label: MCP layer efficiency improvements and usage enforcement
 state: captured
 summary: Add wrapper functions, templates, and guidance to make MCP layer as efficient
   as direct file edits while ensuring consistent usage for audit trail and validation
-source_refs:
-  - spec-0021
-  - spec-0022
-  - plan-0007
-  - plan-0008
-  - wp-0005
-  - wp-0006
-  - docs/references/planning/planning-mcp-change-first.md
-  - tools/mcp/audiagentic-planning/audiagentic-planning_mcp.py
 current_understanding: "This request drives the planning MCP and helper ergonomics work: improve read and update flows, reduce unnecessary direct edits, and make the planning surface efficient enough that agents can prefer it without losing auditability or validation safety."
 open_questions:
   - Which remaining planning operations still require direct file edits because the MCP or helper layer cannot mutate the needed metadata cleanly?
@@ -23,17 +14,6 @@ open_questions:
 # Understanding
 
 This request drives the planning MCP and helper ergonomics work: improve read and update flows, reduce unnecessary direct edits, and make the planning surface efficient enough that agents can prefer it without losing auditability or validation safety.
-
-# Source Refs
-
-- spec-0021
-- spec-0022
-- plan-0007
-- plan-0008
-- wp-0005
-- wp-0006
-- docs/references/planning/planning-mcp-change-first.md
-- tools/mcp/audiagentic-planning/audiagentic-planning_mcp.py
 
 # Open Questions
 

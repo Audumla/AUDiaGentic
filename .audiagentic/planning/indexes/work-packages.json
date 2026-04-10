@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-09T13:26:50.353288+00:00",
+  "generated_at": "2026-04-10T03:27:12.653156+00:00",
   "items": [
     {
       "id": "wp-0002",
@@ -52,9 +52,27 @@
     },
     {
       "id": "wp-0010",
-      "label": "Critical fixes: schema, delete, and counter sync",
+      "label": "Critical fixes: schema, delete, traceability, and hardening",
+      "state": "done",
+      "path": "docs\\planning\\work-packages\\core\\wp-0010-critical-fixes-schema-delete-traceability-and-hardening.md"
+    },
+    {
+      "id": "wp-0011",
+      "label": "Fix PlanningAPI and MCP gaps",
       "state": "draft",
-      "path": "docs\\planning\\work-packages\\core\\wp-0010-critical-fixes-schema-delete-and-counter-sync.md"
+      "path": "docs\\planning\\work-packages\\core\\wp-0011-fix-planningapi-and-mcp-gaps.md"
+    },
+    {
+      "id": "wp-0013",
+      "label": "Implementation Plan",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-0013-implementation-plan.md"
+    },
+    {
+      "id": "wp-0014",
+      "label": "Test Plan",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-0014-test-plan.md"
     }
   ]
 }

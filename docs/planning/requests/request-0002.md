@@ -4,13 +4,6 @@ label: Comprehensive implementation docs migration
 state: captured
 summary: Migrate all docs/implementation content to planning structure with full reference
   resolution
-source_refs:
-  - spec-0002
-  - plan-0004
-  - wp-0002
-  - spec-0020
-  - docs/implementation_backup/
-  - docs/planning/
 current_understanding: "This request is the umbrella intake for migrating the old implementation-document surface into the planning structure with preserved references, archived backup content, and reader-facing entrypoints that point at the canonical planning docs."
 open_questions:
   - Which remaining implementation-backup documents are still canonical versus historical only?
@@ -21,15 +14,6 @@ open_questions:
 # Understanding
 
 This request is the umbrella intake for migrating the old implementation-document surface into the planning structure with preserved references, archived backup content, and reader-facing entrypoints that point at the canonical planning docs.
-
-# Source Refs
-
-- spec-0002
-- plan-0004
-- wp-0002
-- spec-0020
-- docs/implementation_backup/
-- docs/planning/
 
 # Open Questions
 
