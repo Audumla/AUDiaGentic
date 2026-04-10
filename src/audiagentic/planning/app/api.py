@@ -71,6 +71,12 @@ class PlanningAPI:
             "deleted": bool(item.data.get("deleted", False)),
         }
 
+    def _assert_not_archived(self, item: ItemView, action: str) -> None:
+        if item.data.get("state") == "archived":
+            raise ValueError(
+                f"cannot {action} archived item {item.data['id']}; restore it first"
+            )
+
     def _fallback_scan_item(self, id_: str) -> ItemView:
         for item in self._scan():
             if item.data["id"] == id_:
@@ -472,6 +478,7 @@ class PlanningAPI:
         body_append: str | None = None,
     ):
         item = self._find(id_)
+        self._assert_not_archived(item, "update")
         self.hooks.run("before_update", item.kind, {"id": id_})
         data, body = parse_markdown(item.path)
         if label:
@@ -511,6 +518,7 @@ class PlanningAPI:
         import re
 
         item = self._find(id_)
+        self._assert_not_archived(item, "update content for")
         self.hooks.run("before_update", item.kind, {"id": id_})
         data, body = parse_markdown(item.path)
 
@@ -573,6 +581,7 @@ class PlanningAPI:
 
     def move(self, id_: str, domain: str):
         item = self._find(id_)
+        self._assert_not_archived(item, "move")
         if item.kind not in {"task", "wp"}:
             raise ValueError("only task/wp can move by domain")
         dest_dir = self.paths.kind_dir(item.kind, domain)
@@ -582,7 +591,13 @@ class PlanningAPI:
         self.reconcile()
         return self._find(id_)
 
-    def state(self, id_: str, new_state: str):
+    def state(
+        self,
+        id_: str,
+        new_state: str,
+        reason: str | None = None,
+        actor: str | None = None,
+    ):
         item = self._find(id_)
         data, body = parse_markdown(item.path)
         wf_name = data.get("workflow")
@@ -595,14 +610,44 @@ class PlanningAPI:
         self.hooks.run(
             "before_state_change",
             item.kind,
-            {"id": id_, "old_state": old, "new_state": new_state},
+            {
+                "id": id_,
+                "old_state": old,
+                "new_state": new_state,
+                "reason": reason,
+                "actor": actor,
+            },
         )
         data["state"] = new_state
+        timestamp = datetime.now(timezone.utc).isoformat()
+        event_payload = {"id": id_, "old_state": old, "new_state": new_state}
+        if actor is not None:
+            event_payload["actor"] = actor
+        if reason is not None:
+            event_payload["reason"] = reason
+        if new_state == "archived":
+            data["archived_at"] = timestamp
+            data["archived_by"] = actor or data.get("archived_by") or "system"
+            data["archive_reason"] = reason or ""
+            data["restored_at"] = None
+            data["restored_by"] = None
+            event_payload["archived_at"] = data["archived_at"]
+            event_payload["archived_by"] = data["archived_by"]
+            event_payload["archive_reason"] = data["archive_reason"]
+        elif old == "archived":
+            data["restored_at"] = timestamp
+            data["restored_by"] = actor or "system"
+            event_payload["restored_at"] = data["restored_at"]
+            event_payload["restored_by"] = data["restored_by"]
         dump_markdown(item.path, data, body)
+        if new_state == "archived":
+            self.events.emit(f"{item.kind}.archived", event_payload)
+        elif old == "archived":
+            self.events.emit(f"{item.kind}.restored", event_payload)
         self.hooks.run(
             "after_state_change",
             item.kind,
-            {"id": id_, "old_state": old, "new_state": new_state},
+            event_payload,
         )
         self.index()
         return self._find(id_)
@@ -616,6 +661,7 @@ class PlanningAPI:
         display: str | None = None,
     ):
         item = self._find(src_id)
+        self._assert_not_archived(item, "relink")
         data, body = parse_markdown(item.path)
         if field in {"request_refs", "spec_refs", "standard_refs"}:
             vals = list(data.get(field, []) or [])

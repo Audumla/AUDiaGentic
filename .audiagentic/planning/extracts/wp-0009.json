@@ -1,0 +1,42 @@
+{
+  "item": {
+    "id": "wp-0009",
+    "label": "Archive state workflow and core functions",
+    "state": "in_progress",
+    "summary": "Implement archive state in planning state machine and state-based archive/restore behavior",
+    "plan_ref": "plan-0009",
+    "standard_refs": [
+      "standard-0009"
+    ],
+    "task_refs": [
+      {
+        "ref": "task-0190",
+        "seq": 1000
+      },
+      {
+        "ref": "task-0191",
+        "seq": 1001
+      },
+      {
+        "ref": "task-0192",
+        "seq": 1002
+      },
+      {
+        "ref": "task-0193",
+        "seq": 1003
+      },
+      {
+        "ref": "task-0194",
+        "seq": 1004
+      }
+    ],
+    "kind": "wp",
+    "path": "docs/planning/work-packages/core/wp-0009-archive-state-workflow-and-core-functions.md"
+  },
+  "effective_standard_refs": [
+    "standard-0009",
+    "standard-0006",
+    "standard-0005"
+  ],
+  "body": "\n\n# Objective\n\nImplement archive state workflow and core functions for planning items to enable archiving\nolder or redundant items while maintaining historical records.\n\n# Scope of This Package\n\n- Add archived state to planning state machine\n- Implement state-based archive and restore behavior in the planning core\n- Update tm_list() with archive filtering\n- Update tm_validate() with archive rules\n- Update tm_show() with archive metadata\n\n# Inputs\n\n- spec-0023: Archive state and functionality specification\n- Existing planning state machine\n- Existing tm_helper functions\n\n# Instructions\n\n1. Add archived state to all planning item kinds\n2. Define valid state transitions including archive/restore\n3. Implement archive and restore behavior through the canonical state/lifecycle machinery rather than separate wrapper-defined semantics\n4. Update tm_list() to filter archived items\n5. Update tm_validate() to skip cross-ref validation for archived items\n6. Update tm_show() to include archive metadata\n7. Keep MCP/helper exposure aligned with the planning-core state model\n\n# Required Outputs\n\n- Archived state in planning state machine\n- State-based archive and restore behavior in the planning core\n- Archive filtering in tm_list()\n- Archive validation rules in tm_validate()\n- Archive metadata in tm_show()\n\n# Acceptance Checks\n\n- [ ] Archived state is defined for all planning kinds\n- [ ] State transitions are validated correctly\n- [ ] State-driven archive transitions move items to archived with metadata\n- [ ] State-driven restore transitions move items back to ready with metadata\n- [ ] tm_list() excludes archived items by default\n- [ ] tm_validate() skips cross-ref validation for archived items\n- [ ] tm_show() includes archive metadata\n\n# Non-Goals\n\n- Full audit trail system (just basic metadata)\n- Automated archiving policies\n- Bulk archive operations\n- Archive cleanup/sweeping\n"
+}

@@ -310,8 +310,13 @@ def tm_new_standard(label: str, summary: str) -> dict[str, Any]:
 @mcp.tool(
     description="Change the state of a planning item (e.g., ready → in_progress → done)"
 )
-def tm_state(id: str, new_state: str) -> dict[str, Any]:
-    return tm.state(id, new_state)
+def tm_state(
+    id: str,
+    new_state: str,
+    reason: str | None = None,
+    actor: str | None = None,
+) -> dict[str, Any]:
+    return tm.state(id, new_state, reason=reason, actor=actor)
 
 
 @mcp.tool(
@@ -441,8 +446,11 @@ def tm_package(
 def tm_list(
     kind: str | None = None,
     include_deleted: bool = False,
+    include_archived: bool = False,
 ) -> dict[str, Any]:
-    return tm.list_kind(kind, include_deleted=include_deleted)
+    return tm.list_kind(
+        kind, include_deleted=include_deleted, include_archived=include_archived
+    )
 
 
 @mcp.tool(

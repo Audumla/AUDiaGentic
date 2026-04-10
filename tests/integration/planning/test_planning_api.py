@@ -96,6 +96,52 @@ def test_invalid_state_transition_rejected(planning_root):
         api.state(spec.data["id"], "done")  # draft → done not allowed
 
 
+def test_archive_and_restore_task_state_roundtrip(planning_root):
+    _, api = planning_root
+    spec = api.new("spec", label="S", summary="S")
+    task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+
+    archived = api.state(task.data["id"], "archived", reason="obsolete", actor="tester")
+    assert archived.data["state"] == "archived"
+    assert archived.data["archived_by"] == "tester"
+    assert archived.data["archive_reason"] == "obsolete"
+    assert archived.data["archived_at"]
+
+    restored = api.state(task.data["id"], "ready", actor="tester")
+    assert restored.data["state"] == "ready"
+    assert restored.data["restored_by"] == "tester"
+    assert restored.data["restored_at"]
+
+
+def test_archive_and_restore_request_uses_request_workflow(planning_root):
+    _, api = planning_root
+    request = api.new("request", label="R", summary="S", source="test")
+    api.new("spec", label="S", summary="S", request_refs=[request.data["id"]])
+    api.state(request.data["id"], "distilled")
+
+    archived = api.state(request.data["id"], "archived", reason="historical")
+    assert archived.data["state"] == "archived"
+
+    restored = api.state(request.data["id"], "distilled")
+    assert restored.data["state"] == "distilled"
+
+
+def test_archived_item_rejects_update_operations(planning_root):
+    _, api = planning_root
+    spec = api.new("spec", label="S", summary="S")
+    task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+    api.state(task.data["id"], "archived")
+
+    with pytest.raises(ValueError, match="cannot update archived item"):
+        api.update(task.data["id"], label="Updated")
+
+    with pytest.raises(ValueError, match="cannot update content for archived item"):
+        api.update_content(task.data["id"], "x", mode="replace")
+
+    with pytest.raises(ValueError, match="cannot relink archived item"):
+        api.relink(task.data["id"], "spec_ref", spec.data["id"])
+
+
 def test_id_counter_persisted_across_api_instances(planning_root):
     root, api = planning_root
     api.new("request", label="R1", summary="S", source="test")
