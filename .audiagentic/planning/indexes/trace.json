@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T10:51:52.110075+00:00",
+  "generated_at": "2026-04-10T11:01:30.363542+00:00",
   "refs": [
     {
       "src": "plan-0005",
@@ -101,21 +101,6 @@
     },
     {
       "src": "request-0025",
-      "dst": "standard-0001",
-      "field": "standard_refs"
-    },
-    {
-      "src": "request-0026",
-      "dst": "standard-0001",
-      "field": "standard_refs"
-    },
-    {
-      "src": "request-0027",
-      "dst": "spec-0044",
-      "field": "spec_refs"
-    },
-    {
-      "src": "request-0027",
       "dst": "standard-0001",
       "field": "standard_refs"
     },
