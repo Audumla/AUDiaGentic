@@ -1,4 +1,5 @@
 from __future__ import annotations
+from datetime import datetime, timezone
 from pathlib import Path
 import shutil
 from ..fs.scan import scan_items
@@ -82,9 +83,10 @@ class PlanningAPI:
         workflow: str | None = None,
         request_refs: list[str] | None = None,
         profile: str | None = None,
-        source_refs: list[str] | None = None,
         current_understanding: str | None = None,
         open_questions: list[str] | None = None,
+        check_duplicates: bool = True,
+        stack_profile: str | None = None,
     ):
         kind = {
             "req": "request",
@@ -98,6 +100,10 @@ class PlanningAPI:
             "standard": "standard",
         }.get(kind, kind)
         self.hooks.run("before_create", kind, {"label": label})
+        if kind in {"request", "spec"} and check_duplicates:
+            self._check_duplicate(kind, label, summary)
+        if kind in {"spec", "plan", "task"}:
+            self._validate_request_refs(request_refs or [])
         id_ = next_id(self.root, kind)
         if kind == "request":
             path = self.req_mgr.create(
@@ -105,34 +111,61 @@ class PlanningAPI:
                 label,
                 summary,
                 profile=profile,
-                source_refs=source_refs,
                 current_understanding=current_understanding,
                 open_questions=open_questions,
             )
+            # Apply stack profile cascade if specified
+            if stack_profile:
+                sp = self.config.stack_profile_for(stack_profile)
+                if "specification" in sp.get("on_request_create", []):
+                    spec_id = next_id(self.root, "spec")
+                    self.spec_mgr.create(
+                        spec_id,
+                        f"{label} — Specification",
+                        f"Specification for {summary}",
+                        request_refs=[id_],
+                    )
         elif kind == "spec":
-            path = self.spec_mgr.create(
-                id_, label, summary, request_refs=request_refs or []
-            )
-            # Auto-update source_refs on referenced requests
-            for req_id in request_refs or []:
-                self._add_source_ref(req_id, id_)
+            try:
+                path = self.spec_mgr.create(
+                    id_, label, summary, request_refs=request_refs or []
+                )
+            except Exception:
+                if "path" in locals() and Path(path).exists():
+                    Path(path).unlink(missing_ok=True)
+                raise
         elif kind == "plan":
-            path = self.plan_mgr.create(
-                id_, label, summary, spec_refs=[spec] if spec else []
-            )
+            try:
+                path = self.plan_mgr.create(
+                    id_,
+                    label,
+                    summary,
+                    spec_refs=[spec] if spec else [],
+                    request_refs=request_refs or [],
+                )
+            except Exception:
+                if "path" in locals() and Path(path).exists():
+                    Path(path).unlink(missing_ok=True)
+                raise
         elif kind == "task":
             if not spec:
                 raise ValueError("task requires --spec")
-            path = self.task_mgr.create(
-                id_,
-                label,
-                summary,
-                spec_ref=spec,
-                domain=domain or "core",
-                parent_task_ref=parent,
-                target=target,
-                workflow=workflow,
-            )
+            try:
+                path = self.task_mgr.create(
+                    id_,
+                    label,
+                    summary,
+                    spec_ref=spec,
+                    domain=domain or "core",
+                    parent_task_ref=parent,
+                    target=target,
+                    workflow=workflow,
+                    request_refs=request_refs or [],
+                )
+            except Exception:
+                if "path" in locals() and Path(path).exists():
+                    Path(path).unlink(missing_ok=True)
+                raise
         elif kind == "wp":
             if not plan:
                 raise ValueError("wp requires --plan")
@@ -155,6 +188,49 @@ class PlanningAPI:
         self.index()
         return self._find(id_)
 
+    def apply_plan_overlay(
+        self,
+        label: str,
+        summary: str,
+        spec_id: str,
+        task_ids: list[str],
+        request_refs: list[str] | None = None,
+        domain: str = "core",
+    ):
+        """Create a plan + WP that wraps existing spec-linked tasks.
+
+        Args:
+            label: Plan/WP label
+            summary: Plan/WP summary
+            spec_id: Specification ID to link plan to
+            task_ids: List of task IDs to include in the WP
+            request_refs: Optional request references
+            domain: Domain for WP (default: core)
+
+        Returns:
+            Dict with 'plan' and 'wp' ItemView objects
+        """
+        plan_id = next_id(self.root, "plan")
+        self.plan_mgr.create(
+            plan_id,
+            label,
+            summary,
+            spec_refs=[spec_id],
+            request_refs=request_refs or [],
+        )
+        wp_id = next_id(self.root, "wp")
+        task_refs = [{"ref": t} for t in task_ids]
+        self.wp_mgr.create(
+            wp_id,
+            label,
+            summary,
+            plan_ref=plan_id,
+            task_refs=task_refs,
+            domain=domain,
+        )
+        self.index()
+        return {"plan": self._find(plan_id), "wp": self._find(wp_id)}
+
     def create_with_content(
         self,
         kind: str,
@@ -168,6 +244,7 @@ class PlanningAPI:
         target: str | None = None,
         workflow: str | None = None,
         request_refs: list[str] | None = None,
+        check_duplicates: bool = True,
     ):
         """Create planning object with full content.
 
@@ -196,34 +273,58 @@ class PlanningAPI:
             "standard": "standard",
         }.get(kind, kind)
         self.hooks.run("before_create", kind, {"label": label})
+        if kind in {"request", "spec"} and check_duplicates:
+            self._check_duplicate(kind, label, summary)
+        if kind in {"spec", "plan", "task"}:
+            self._validate_request_refs(request_refs or [])
         id_ = next_id(self.root, kind)
         if kind == "request":
             path = self.req_mgr.create(id_, label, summary)
             self.update_content(id_, content)
         elif kind == "spec":
-            path = self.spec_mgr.create(
-                id_, label, summary, request_refs=request_refs or []
-            )
-            self.update_content(id_, content)
+            try:
+                path = self.spec_mgr.create(
+                    id_, label, summary, request_refs=request_refs or []
+                )
+                self.update_content(id_, content)
+            except Exception:
+                if "path" in locals() and Path(path).exists():
+                    Path(path).unlink(missing_ok=True)
+                raise
         elif kind == "plan":
-            path = self.plan_mgr.create(
-                id_, label, summary, spec_refs=[spec] if spec else []
-            )
-            self.update_content(id_, content)
+            try:
+                path = self.plan_mgr.create(
+                    id_,
+                    label,
+                    summary,
+                    spec_refs=[spec] if spec else [],
+                    request_refs=request_refs or [],
+                )
+                self.update_content(id_, content)
+            except Exception:
+                if "path" in locals() and Path(path).exists():
+                    Path(path).unlink(missing_ok=True)
+                raise
         elif kind == "task":
             if not spec:
                 raise ValueError("task requires --spec")
-            path = self.task_mgr.create(
-                id_,
-                label,
-                summary,
-                spec_ref=spec,
-                domain=domain or "core",
-                parent_task_ref=parent,
-                target=target,
-                workflow=workflow,
-            )
-            self.update_content(id_, content)
+            try:
+                path = self.task_mgr.create(
+                    id_,
+                    label,
+                    summary,
+                    spec_ref=spec,
+                    domain=domain or "core",
+                    parent_task_ref=parent,
+                    target=target,
+                    workflow=workflow,
+                    request_refs=request_refs or [],
+                )
+                self.update_content(id_, content)
+            except Exception:
+                if "path" in locals() and Path(path).exists():
+                    Path(path).unlink(missing_ok=True)
+                raise
         elif kind == "wp":
             if not plan:
                 raise ValueError("wp requires --plan")
@@ -315,10 +416,27 @@ class PlanningAPI:
         elif mode == "section":
             if section is None:
                 raise ValueError("section header required for section mode")
-            # Find section header (e.g., "# Requirements" or "## Requirements")
+            # Find section header and content up to next header or end of file
+            # Pattern matches: section header, blank line, then content (non-greedy) up to next header or EOF
             section_pattern = re.compile(
-                rf"^({re.escape(section)})\n(.*)$", re.M | re.S
+                rf"^{re.escape(section)}\n\n(.*?)(?=\n#{1, 6}\s+|$)", re.M | re.S
             )
+            match = section_pattern.search(body)
+            if not match:
+                # Section not found, append it
+                body = body.rstrip() + f"\n\n{section}\n\n{content.rstrip()}\n"
+            else:
+                # Replace section content (keep header and blank line, replace content)
+                start = match.start()
+                end = match.end()
+                body = (
+                    body[:start]
+                    + section
+                    + "\n\n"
+                    + content.rstrip()
+                    + "\n"
+                    + body[end:]
+                )
             match = section_pattern.search(body)
             if not match:
                 # Section not found, append it
@@ -327,10 +445,6 @@ class PlanningAPI:
                 # Replace section content
                 start = match.start()
                 end = match.end()
-                # Find end of section (next header or end of file)
-                next_section = re.search(r"\n#{1,6}\s+", body[end:])
-                if next_section:
-                    end += next_section.start()
                 body = (
                     body[:start] + section + "\n" + content.rstrip() + "\n" + body[end:]
                 )
@@ -414,24 +528,50 @@ class PlanningAPI:
         domain: str = "core",
         workflow: str | None = None,
     ):
-        item = self.new(
-            "wp",
-            label=label,
-            summary=summary,
-            plan=plan_ref,
-            domain=domain,
-            workflow=workflow,
-        )
-        data, body = parse_markdown(item.path)
-        rels = []
-        seq = 1000
-        for tid in task_ids:
-            rels.append({"ref": tid, "seq": seq})
-            seq += 1000
-        data["task_refs"] = rels
-        dump_markdown(item.path, data, body)
-        self.index()
-        return self._find(item.data["id"])
+        # Check if WP with same label and plan_ref already exists
+        existing = None
+        for item in self._scan():
+            if (
+                item.kind == "wp"
+                and item.data.get("label") == label
+                and item.data.get("plan_ref") == plan_ref
+            ):
+                existing = item
+                break
+
+        if existing:
+            # Add tasks to existing WP
+            data, body = parse_markdown(existing.path)
+            existing_refs = {r["ref"]: r for r in data.get("task_refs", [])}
+            seq = max((r["seq"] for r in existing_refs.values()), default=999) + 1000
+            for tid in task_ids:
+                if tid not in existing_refs:
+                    existing_refs[tid] = {"ref": tid, "seq": seq}
+                    seq += 1000
+            data["task_refs"] = sorted(existing_refs.values(), key=lambda x: x["seq"])
+            dump_markdown(existing.path, data, body)
+            self.index()
+            return self._find(existing.data["id"])
+        else:
+            # Create new WP
+            item = self.new(
+                "wp",
+                label=label,
+                summary=summary,
+                plan=plan_ref,
+                domain=domain,
+                workflow=workflow,
+            )
+            data, body = parse_markdown(item.path)
+            rels = []
+            seq = 1000
+            for tid in task_ids:
+                rels.append({"ref": tid, "seq": seq})
+                seq += 1000
+            data["task_refs"] = rels
+            dump_markdown(item.path, data, body)
+            self.index()
+            return self._find(item.data["id"])
 
     def claim(self, kind: str, id_: str, holder: str, ttl: int | None = None):
         rec = self.claims_store.claim(kind, id_, holder, ttl)
@@ -458,6 +598,8 @@ class PlanningAPI:
         out = []
         for i in items:
             if i.data["id"] in claimed:
+                continue
+            if i.data.get("deleted"):
                 continue
             if domain and i.path.parent.name != domain:
                 continue
@@ -488,3 +630,59 @@ class PlanningAPI:
 
         for kind in CANONICAL_KINDS:
             sync_counter(self.root, kind)
+
+    def delete(
+        self,
+        id_: str,
+        hard: bool = False,
+        reason: str | None = None,
+    ) -> dict:
+        item = self._find(id_)
+        self.hooks.run(
+            "before_delete", item.kind, {"id": id_, "hard": hard, "reason": reason}
+        )
+        if hard:
+            item.path.unlink(missing_ok=True)
+            from .id_gen import sync_counter
+
+            sync_counter(self.root, item.kind)
+            self.reconcile()
+            result = {
+                "id": id_,
+                "hard_delete": True,
+                "counter_sync": True,
+            }
+        else:
+            data, body = parse_markdown(item.path)
+            data["deleted"] = True
+            data["deleted_at"] = datetime.now(timezone.utc).isoformat()
+            if reason:
+                data["deletion_reason"] = reason
+            dump_markdown(item.path, data, body)
+            self.index()
+            result = {
+                "id": id_,
+                "hard_delete": False,
+                "deleted_at": data["deleted_at"],
+                "counter_sync": False,
+            }
+        self.hooks.run("after_delete", item.kind, result)
+        return result
+
+    def _validate_request_refs(self, request_refs: list[str]) -> None:
+        for req_id in request_refs:
+            item = self._find(req_id)
+            if item.kind != "request":
+                raise ValueError(f"request '{req_id}' does not exist")
+
+    def _check_duplicate(self, kind: str, label: str, summary: str) -> None:
+        label_key = label.strip().lower()
+        for item in self._scan():
+            if item.kind != kind or item.data.get("deleted"):
+                continue
+            existing_label = str(item.data.get("label", "")).strip().lower()
+            if existing_label == label_key:
+                raise ValueError(
+                    f"{kind} already exists: {item.data['id']} "
+                    f"({item.data.get('label', '')})"
+                )

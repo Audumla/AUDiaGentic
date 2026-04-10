@@ -78,3 +78,12 @@ class Config:
         group = self.workflows['planning']['workflows'][kind]
         wf_name = name or group['default']
         return group['named'][wf_name]
+
+    def stack_profile_for(self, name: str) -> dict:
+        profiles = (
+            self.profiles.get("planning", {})
+            .get("stack_profiles", {})
+        )
+        if name not in profiles:
+            raise ValueError(f"stack profile '{name}' not found")
+        return profiles[name]
