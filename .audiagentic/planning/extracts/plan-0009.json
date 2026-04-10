@@ -1,0 +1,39 @@
+{
+  "item": {
+    "id": "plan-0009",
+    "label": "Implement archive functionality",
+    "state": "in_progress",
+    "summary": "Implement archive state, state-based archive/restore behavior, and filtering",
+    "spec_refs": [
+      "spec-0023"
+    ],
+    "standard_refs": [
+      "standard-0006",
+      "standard-0009"
+    ],
+    "work_package_refs": [
+      {
+        "ref": "wp-0009",
+        "seq": 1000
+      }
+    ],
+    "kind": "plan",
+    "path": "docs/planning/plans/plan-0009-implement-archive-functionality.md"
+  },
+  "effective_standard_refs": [
+    "standard-0006",
+    "standard-0009"
+  ],
+  "body": "\n\n# Objectives\n\nImplement archive functionality for planning items to enable:\n- Archiving older or redundant planning items\n- Maintaining historical records\n- Querying archived items when needed\n- Restoring archived items when needed\n\n# Delivery Approach\n\n1. Add archived state to planning state machine (task-0190)\n2. Implement state-based archive and restore behavior in the planning core (task-0191)\n3. Update tm_list() with archive filtering (task-0192)\n4. Update tm_validate() with archive rules (task-0193)\n5. Update tm_show() with archive metadata (task-0194)\n\n# Dependencies\n\n- spec-0023: Archive state and functionality specification\n- Existing planning state machine\n- Existing tm_helper functions\n- MCP/helper surface alignment with planning-core behavior\n\n# Risks\n\n1. Breaking existing workflows that rely on current state machine\n2. Performance impact of archive filtering\n3. Data loss if archive metadata is not properly persisted\n4. Behavioral drift between workflow/core semantics and MCP-facing convenience surfaces\n\n# Mitigations\n\n1. Thorough testing of state transitions\n2. Performance testing with large item sets\n3. Comprehensive archive metadata logging\n4. Keep MCP exposure aligned to core state semantics instead of introducing separate archive-only behavior in wrappers\n",
+  "related": {
+    "spec_refs": [
+      "spec-0023"
+    ],
+    "work_package_refs": [
+      {
+        "ref": "wp-0009",
+        "seq": 1000
+      }
+    ]
+  }
+}

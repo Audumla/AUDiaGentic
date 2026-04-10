@@ -6,7 +6,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-import tools.create_sandbox as create_sandbox
+import tools.misc.create_sandbox as create_sandbox
 
 
 @dataclass

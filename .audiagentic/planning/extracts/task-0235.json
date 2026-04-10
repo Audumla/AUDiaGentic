@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-0235",
+    "label": "Write tests for sensitive data detection",
+    "state": "draft",
+    "summary": "Add tests for AWS key, API key, password detection; confirm non-blocking behavior; test false positive edge cases",
+    "spec_ref": "spec-0045",
+    "request_refs": [],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0235.md"
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+}

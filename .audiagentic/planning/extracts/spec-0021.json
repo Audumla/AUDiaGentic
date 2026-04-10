@@ -1,0 +1,55 @@
+{
+  "item": {
+    "id": "spec-0021",
+    "kind": "spec",
+    "label": "Installable profiles and documentation surfaces",
+    "state": "draft",
+    "summary": "Define installable profile packs, configurable documentation surfaces, request profiles, references docs, and MCP access to project docs without violating the template installation contract.",
+    "path": "docs\\planning\\specifications\\spec-0021-installable-profiles-and-documentation-surfaces.md"
+  },
+  "body": "\n\n\n# Purpose\n\nDefine the next additive extension to the planning component so AUDiaGentic can install planning and documentation capability into other projects at different levels of depth.\n\n# Scope\n\nIn scope:\n- installable profile-pack model for planning/documentation depth\n- project documentation surface model\n- references docs as a first-class documentation-surface family\n- request profiles for feature and issue capture\n- supporting-doc metadata and structured sidecar conventions\n- central manifest and migration-registry scaffolding\n- planning MCP expansion for project docs, support docs, sections, and subsection paths\n- documentation-sync obligations for completed work\n- validation, testing, and review notes needed before implementation starts\n\nOut of scope:\n- installer frontend implementation\n- lifecycle/install scripts\n- provider execution integration\n- runtime/streaming features\n- converting this repository into a standalone app instead of a reusable template\n\n# Requirements\n\n1. The planning component must support installable profile packs with defaults for:\n   - minimal\n   - standard\n   - full_project\n   - audiagentic_full\n\n2. A profile pack must define:\n   - which planning objects are expected\n   - which project documentation surfaces exist\n   - which standards are active\n   - workflow defaults where relevant\n   - documentation-sync obligations by work kind\n\n3. The design must not duplicate or blur the existing execution-layer workflow profiles. Planning profile packs, request profiles, and execution workflow profiles must remain distinct concepts.\n\n4. Documentation surfaces must be configurable and optional. They may include:\n   - README\n   - CHANGELOG\n   - canonical docs under `docs/`\n   - reference and how-to docs under `docs/references/`\n\n5. Project docs must remain visible and human-editable, with ownership/update policy aligned to the managed-surface contract for template installation.\n\n6. The planning MCP must expose project documentation surfaces and section-level navigation/update operations without hiding the current heading-based implementation limits.\n\n7. Requests remain the canonical issue object, with request profiles used only as classification/default metadata rather than a replacement issue system.\n\n8. Supporting documents must have explicit metadata so they do not become loose notes, and the implementation plan must state whether they are sidecar docs or first-class indexed planning objects.\n\n9. The documentation model must support required and optional sections plus free-form subsections.\n\n10. Documentation-sync obligations for completed tasks/work packages must be explicit and queryable.\n\n11. The implementation must introduce central version-pinning/manifests and migration scaffolding without requiring the installer to exist yet.\n\n12. Any accepted implementation plan must include config wiring, schema validation, repo scanning/indexing impact, and automated test coverage.\n\n# Constraints\n\n- The core planning hierarchy must not change.\n- The planning component must remain separate from the execution/job layer.\n- The installer/distribution mechanism remains undecided and must not leak into the planning core.\n- Profile/config composition must scale without forcing one giant config file.\n- The template installation contract in architecture doc 50 remains authoritative for runtime ownership modes and install seeding docs.\n- New tracked planning docs must use IDs that do not collide with existing objects in the repository.\n\n# Acceptance Criteria\n\n- profile-pack config model exists and uses non-conflicting naming\n- documentation-surface config model exists\n- request-profile config model exists for feature and issue, with examples and schema scaffolding\n- references docs are modeled with ownership/update guidance\n- central manifest and migration-registry scaffolding exist\n- planning MCP examples include project-doc, support-doc, section, and subsection operations\n- support-doc metadata model exists and its indexing/validation status is explicit\n- doc-sync requirements model exists\n- required config, schema, validator, and test updates are called out in leaf tasks\n- junior-dev-level implementation docs exist for each leaf task in this delta\n",
+  "effective_standard_refs": [
+    "standard-0001",
+    "standard-0002",
+    "standard-0003"
+  ],
+  "related": {
+    "request_refs": [
+      "request-0004"
+    ],
+    "task_refs": [
+      {
+        "ref": "task-0181",
+        "seq": 1000
+      },
+      {
+        "ref": "task-0182",
+        "seq": 2000
+      },
+      {
+        "ref": "task-0183",
+        "seq": 3000
+      },
+      {
+        "ref": "task-0184",
+        "seq": 4000
+      },
+      {
+        "ref": "task-0185",
+        "seq": 5000
+      },
+      {
+        "ref": "task-0186",
+        "seq": 6000
+      },
+      {
+        "ref": "task-0187",
+        "seq": 7000
+      },
+      {
+        "ref": "task-0188",
+        "seq": 8000
+      }
+    ]
+  }
+}
