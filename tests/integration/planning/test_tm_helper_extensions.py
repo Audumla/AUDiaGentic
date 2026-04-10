@@ -102,7 +102,8 @@ def test_tm_helper_head_returns_lean_metadata(helper_project: Path) -> None:
 
 
 def test_tm_helper_extract_can_skip_body_and_disk_write(helper_project: Path) -> None:
-    spec = tm.new_spec("Extract controls", "Support lean extract")
+    request = tm.new_request("Extract request", "Support lean extract", source="test")
+    spec = tm.new_spec("Extract controls", "Support lean extract", [request["id"]])
     tm.update_content(spec["id"], "# Purpose\n\nSpec body.\n", mode="replace")
     result = tm.extract(spec["id"], include_body=False, write_to_disk=False)
     cache = helper_project / ".audiagentic" / "planning" / "extracts" / f"{spec['id']}.json"
@@ -125,7 +126,8 @@ def test_tm_helper_lists_support_docs_and_references() -> None:
 
 
 def test_tm_helper_get_subsection_supports_dot_and_slash_paths(helper_project: Path) -> None:
-    spec = tm.new_spec("Section parsing spec", "Supports helper task creation")
+    request = tm.new_request("Section parsing request", "Supports helper task creation", source="test")
+    spec = tm.new_spec("Section parsing spec", "Supports helper task creation", [request["id"]])
     content = """# Description
 
 Top level body.
@@ -159,6 +161,9 @@ Deep content.
 
 
 def test_tm_helper_new_item_reference_validation_rejects_missing_refs(helper_project: Path) -> None:
+    with pytest.raises(ValueError, match="spec requires at least one request reference"):
+        tm.new_spec("Missing request spec", "Should fail")
+
     with pytest.raises(ValueError, match="spec 'spec-9999' does not exist"):
         tm.new_plan("Missing spec plan", "Should fail", spec="spec-9999")
 
@@ -241,7 +246,8 @@ def test_tm_helper_new_spec_updates_request_spec_refs(helper_project: Path) -> N
 
 
 def test_tm_helper_delete_and_list_include_deleted(helper_project: Path) -> None:
-    spec = tm.new_spec("Delete spec", "Delete summary")
+    request = tm.new_request("Delete request", "Delete summary", source="test")
+    spec = tm.new_spec("Delete spec", "Delete summary", [request["id"]])
     task = tm.new_task("Delete task", "Delete summary", spec["id"])
 
     result = tm.delete(task["id"], reason="test cleanup")
@@ -259,7 +265,8 @@ def test_tm_helper_delete_and_list_include_deleted(helper_project: Path) -> None
 def test_tm_helper_state_supports_archive_metadata_and_list_filtering(
     helper_project: Path,
 ) -> None:
-    spec = tm.new_spec("Archive spec", "Archive summary")
+    request = tm.new_request("Archive request", "Archive summary", source="test")
+    spec = tm.new_spec("Archive spec", "Archive summary", [request["id"]])
     task = tm.new_task("Archive task", "Archive summary", spec["id"])
 
     archived = tm.state(task["id"], "archived", reason="superseded", actor="tester")
