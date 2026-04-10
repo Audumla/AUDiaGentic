@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T11:01:30.363542+00:00",
+  "generated_at": "2026-04-10T11:05:53.463433+00:00",
   "items": [
     {
       "id": "plan-0005",
@@ -23,7 +23,7 @@
     {
       "id": "plan-0009",
       "kind": "plan",
-      "state": "in_progress",
+      "state": "done",
       "claimed": false
     },
     {
@@ -101,7 +101,7 @@
     {
       "id": "spec-0023",
       "kind": "spec",
-      "state": "ready",
+      "state": "done",
       "claimed": false
     },
     {
@@ -1541,7 +1541,7 @@
     {
       "id": "wp-0009",
       "kind": "wp",
-      "state": "in_progress",
+      "state": "done",
       "claimed": false
     },
     {

@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T11:01:30.363542+00:00",
+  "generated_at": "2026-04-10T11:05:53.463433+00:00",
   "items": {
     "plan-0005": {
       "id": "plan-0005",
@@ -33,7 +33,7 @@
       "id": "plan-0009",
       "kind": "plan",
       "label": "Implement archive functionality",
-      "state": "in_progress",
+      "state": "done",
       "path": "docs/planning/plans/plan-0009-implement-archive-functionality.md",
       "deleted": false,
       "archived": false
@@ -150,7 +150,7 @@
       "id": "spec-0023",
       "kind": "spec",
       "label": "Archive state and functionality specification",
-      "state": "ready",
+      "state": "done",
       "path": "docs/planning/specifications/spec-0023-archive-state-and-functionality-specification.md",
       "deleted": false,
       "archived": false
@@ -2310,7 +2310,7 @@
       "id": "wp-0009",
       "kind": "wp",
       "label": "Archive state workflow and core functions",
-      "state": "in_progress",
+      "state": "done",
       "path": "docs/planning/work-packages/core/wp-0009-archive-state-workflow-and-core-functions.md",
       "deleted": false,
       "archived": false
