@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T10:51:52.110075+00:00",
+  "generated_at": "2026-04-10T11:01:30.363542+00:00",
   "items": [
     {
       "id": "plan-0005",
@@ -96,18 +96,6 @@
       "id": "request-0025",
       "kind": "request",
       "state": "closed",
-      "claimed": false
-    },
-    {
-      "id": "request-0026",
-      "kind": "request",
-      "state": "closed",
-      "claimed": false
-    },
-    {
-      "id": "request-0027",
-      "kind": "request",
-      "state": "distilled",
       "claimed": false
     },
     {
