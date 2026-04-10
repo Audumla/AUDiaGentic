@@ -79,7 +79,7 @@ def tool_with_empty_list_fix(description=None):
     return decorator
 
 
-@mcp.tool(description="Create a new Request planning document with duplicate detection")
+@mcp.tool(description="Create a new Request planning document with duplicate detection. Source must be a creator identifier (e.g., 'claude', 'codex', 'user@example.com'), not a process description.")
 def tm_new_request(
     label: str,
     summary: str,
