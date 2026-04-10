@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T12:24:03.088001+00:00",
+  "generated_at": "2026-04-10T12:49:30.364758+00:00",
   "items": [
     {
       "id": "wp-0004",
@@ -43,6 +43,12 @@
       "label": "Fix PlanningAPI and MCP gaps",
       "state": "in_progress",
       "path": "docs\\planning\\work-packages\\core\\wp-0011-fix-planningapi-and-mcp-gaps.md"
+    },
+    {
+      "id": "wp-0015",
+      "label": "Implement guidance levels in config, API, and validation",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-0015-implement-guidance-levels-in-config-api-and-validation.md"
     }
   ]
 }

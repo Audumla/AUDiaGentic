@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T12:24:03.088001+00:00",
+  "generated_at": "2026-04-10T12:49:30.364758+00:00",
   "items": {
     "plan-0005": {
       "id": "plan-0005",
@@ -48,6 +48,14 @@
       "label": "Fix planning API and MCP gaps",
       "state": "in_progress",
       "path": "docs/planning/plans/plan-0011-fix-planning-api-and-mcp-gaps.md",
+      "deleted": false
+    },
+    "plan-0014": {
+      "id": "plan-0014",
+      "kind": "plan",
+      "label": "Implement guidance levels for planning depth-of-detail",
+      "state": "draft",
+      "path": "docs/planning/plans/plan-0014-implement-guidance-levels-for-planning-depth-of-detail.md",
       "deleted": false
     },
     "request-0002": {
@@ -109,8 +117,8 @@
     "request-0009": {
       "id": "request-0009",
       "kind": "request",
-      "label": "Add audience-level profile system to control planning depth-of-detail",
-      "state": "distilled",
+      "label": "Add guidance levels to control planning depth-of-detail",
+      "state": "closed",
       "path": "docs/planning/requests/request-0009.md",
       "deleted": false
     },
@@ -128,6 +136,14 @@
       "label": "Optimize planning single-item lookup and extract token usage",
       "state": "closed",
       "path": "docs/planning/requests/request-0025.md",
+      "deleted": false
+    },
+    "request-0029": {
+      "id": "request-0029",
+      "kind": "request",
+      "label": "Add guidance levels (light/standard/deep) to control planning depth-of-detail",
+      "state": "captured",
+      "path": "docs/planning/requests/request-0029.md",
       "deleted": false
     },
     "spec-0023": {
@@ -221,9 +237,17 @@
     "spec-0046": {
       "id": "spec-0046",
       "kind": "spec",
-      "label": "Audience-level profile system for controlling planning depth-of-detail",
+      "label": "Guidance levels for controlling planning depth-of-detail",
       "state": "draft",
-      "path": "docs/planning/specifications/spec-0046-audience-level-profile-system-for-controlling-planning-depth-of-detail.md",
+      "path": "docs/planning/specifications/spec-0046-guidance-levels-for-controlling-planning-depth-of-detail.md",
+      "deleted": false
+    },
+    "spec-0047": {
+      "id": "spec-0047",
+      "kind": "spec",
+      "label": "Unified workflow states for all planning item types",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0047-unified-workflow-states-for-all-planning-item-types.md",
       "deleted": false
     },
     "standard-0001": {
@@ -962,11 +986,75 @@
       "path": "docs/planning/tasks/core/task-0236.md",
       "deleted": false
     },
+    "task-0237": {
+      "id": "task-0237",
+      "kind": "task",
+      "label": "Add guidance_levels to profiles.yaml",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-0237.md",
+      "deleted": false
+    },
+    "task-0238": {
+      "id": "task-0238",
+      "kind": "task",
+      "label": "Update config.py to load guidance levels",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-0238.md",
+      "deleted": false
+    },
+    "task-0239": {
+      "id": "task-0239",
+      "kind": "task",
+      "label": "Add guidance field to request schema",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-0239.md",
+      "deleted": false
+    },
+    "task-0240": {
+      "id": "task-0240",
+      "kind": "task",
+      "label": "Update tm_helper.py new_request() with guidance parameter",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-0240.md",
+      "deleted": false
+    },
+    "task-0241": {
+      "id": "task-0241",
+      "kind": "task",
+      "label": "Add --guidance CLI parameter to tm.py",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-0241.md",
+      "deleted": false
+    },
+    "task-0242": {
+      "id": "task-0242",
+      "kind": "task",
+      "label": "Update validation to enforce guidance-appropriate sections",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-0242.md",
+      "deleted": false
+    },
+    "task-0243": {
+      "id": "task-0243",
+      "kind": "task",
+      "label": "Add default_guidance to planning.yaml",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-0243.md",
+      "deleted": false
+    },
+    "task-0244": {
+      "id": "task-0244",
+      "kind": "task",
+      "label": "Write tests for guidance levels",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-0244.md",
+      "deleted": false
+    },
     "task-0158": {
       "id": "task-0158",
       "kind": "task",
       "label": "[PKT-DSC-001](task-0158): Event Subscriber",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/discord/task-0158.md",
       "deleted": false
     },
@@ -974,7 +1062,7 @@
       "id": "task-0159",
       "kind": "task",
       "label": "[PKT-DSC-002](task-0159): Release Summary Publishing",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/discord/task-0159.md",
       "deleted": false
     },
@@ -982,7 +1070,7 @@
       "id": "task-0160",
       "kind": "task",
       "label": "[PKT-DSC-003](task-0160): Approval Publishing/Response Handling",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/discord/task-0160.md",
       "deleted": false
     },
@@ -990,7 +1078,7 @@
       "id": "task-0161",
       "kind": "task",
       "label": "[PKT-DSC-004](task-0161): Lifecycle/Migration Notices",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/discord/task-0161.md",
       "deleted": false
     },
@@ -1334,7 +1422,7 @@
       "id": "task-0080",
       "kind": "task",
       "label": "[PKT-PRV-003](task-0080): Provider Selection",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-0080.md",
       "deleted": false
     },
@@ -1374,7 +1462,7 @@
       "id": "task-0085",
       "kind": "task",
       "label": "[PKT-PRV-008](task-0085): Provider Documentation",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-0085.md",
       "deleted": false
     },
@@ -1462,7 +1550,7 @@
       "id": "task-0096",
       "kind": "task",
       "label": "[PKT-PRV-019](task-0096): Provider Tracing",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-0096.md",
       "deleted": false
     },
@@ -1478,7 +1566,7 @@
       "id": "task-0098",
       "kind": "task",
       "label": "[PKT-PRV-021](task-0098): Provider Discovery",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-0098.md",
       "deleted": false
     },
@@ -1526,7 +1614,7 @@
       "id": "task-0104",
       "kind": "task",
       "label": "[PKT-PRV-027](task-0104): Provider Message Queue",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-0104.md",
       "deleted": false
     },
@@ -1542,7 +1630,7 @@
       "id": "task-0106",
       "kind": "task",
       "label": "[PKT-PRV-029](task-0106): Provider Batch Processing",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-0106.md",
       "deleted": false
     },
@@ -1598,7 +1686,7 @@
       "id": "task-0113",
       "kind": "task",
       "label": "[PKT-PRV-036](task-0113): Provider Bulkhead",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-0113.md",
       "deleted": false
     },
@@ -1614,7 +1702,7 @@
       "id": "task-0115",
       "kind": "task",
       "label": "[PKT-PRV-038](task-0115): Provider Connection Pooling",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-0115.md",
       "deleted": false
     },
@@ -1662,7 +1750,7 @@
       "id": "task-0122",
       "kind": "task",
       "label": "[PKT-PRV-044](task-0122): Provider Policy Enforcement",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-0122.md",
       "deleted": false
     },
@@ -1678,7 +1766,7 @@
       "id": "task-0124",
       "kind": "task",
       "label": "[PKT-PRV-046](task-0124): Provider Data Masking",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-0124.md",
       "deleted": false
     },
@@ -2088,6 +2176,14 @@
       "label": "Fix PlanningAPI and MCP gaps",
       "state": "in_progress",
       "path": "docs/planning/work-packages/core/wp-0011-fix-planningapi-and-mcp-gaps.md",
+      "deleted": false
+    },
+    "wp-0015": {
+      "id": "wp-0015",
+      "kind": "wp",
+      "label": "Implement guidance levels in config, API, and validation",
+      "state": "draft",
+      "path": "docs/planning/work-packages/core/wp-0015-implement-guidance-levels-in-config-api-and-validation.md",
       "deleted": false
     }
   }
