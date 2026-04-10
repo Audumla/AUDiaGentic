@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-0234",
+    "label": "Integrate sensitive data detection into tm_validate output",
+    "state": "draft",
+    "summary": "Update tm_validate() to emit sensitive data warnings in validation output as non-blocking warnings",
+    "spec_ref": "spec-0045",
+    "request_refs": [],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0234.md"
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+}

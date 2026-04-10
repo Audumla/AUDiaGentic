@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T10:09:23.194996+00:00",
+  "generated_at": "2026-04-10T10:51:52.110075+00:00",
   "items": [
     {
       "id": "spec-0023",
@@ -55,6 +55,18 @@
       "label": "Index-backed planning lookup and lean extract/read surfaces",
       "state": "ready",
       "path": "docs\\planning\\specifications\\spec-0043-index-backed-planning-lookup-and-lean-extract-read-surfaces.md"
+    },
+    {
+      "id": "spec-0044",
+      "label": "Multi-item batch updates and bulk operations for planning MCP",
+      "state": "ready",
+      "path": "docs\\planning\\specifications\\spec-0044-multi-item-batch-updates-and-bulk-operations-for-planning-mcp.md"
+    },
+    {
+      "id": "spec-0045",
+      "label": "Cursory sensitive data detection in planning validation (v1)",
+      "state": "ready",
+      "path": "docs\\planning\\specifications\\spec-0045-cursory-sensitive-data-detection-in-planning-validation-v1.md"
     }
   ]
 }
