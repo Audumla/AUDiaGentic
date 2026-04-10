@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T11:01:30.363542+00:00",
+  "generated_at": "2026-04-10T11:05:53.463433+00:00",
   "refs": [
     {
       "src": "plan-0005",
@@ -93,6 +93,11 @@
       "src": "request-0006",
       "dst": "spec-0045",
       "field": "spec_refs"
+    },
+    {
+      "src": "request-0009",
+      "dst": "standard-0009",
+      "field": "standard_refs"
     },
     {
       "src": "request-0025",
@@ -232,11 +237,6 @@
       "field": "task_refs",
       "seq": null,
       "display": null
-    },
-    {
-      "src": "spec-0044",
-      "dst": "request-0027",
-      "field": "request_refs"
     },
     {
       "src": "spec-0044",
