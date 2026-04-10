@@ -1,7 +1,7 @@
 ---
 id: request-0009
 label: Add audience-level profile system to control planning depth-of-detail
-state: distilled
+state: superseded
 summary: Introduce orthogonal audience profiles (junior/mid/senior) that control spec/task
   required sections, detail verbosity, and acceptance criteria depth independently
   of work-type profiles (enhancement/feature/issue/fix)
@@ -61,3 +61,5 @@ This is distinct from `request-0010`, which closed the unified work-type profile
 This request should only proceed with a planning-layer impact review across workflow/config, helper/API behavior, MCP exposure, validation, generated surfaces, and automation assumptions, consistent with `standard-0009`.
 
 Example: `profile: feature` + `audience: senior` would create a request→specification flow with more rigorous required sections and acceptance detail, while `profile: fix` + `audience: junior` would keep a request→task flow but allow lighter explanatory content.
+
+Superseded by request-0029 (refined with "guidance levels" terminology: light/standard/deep)

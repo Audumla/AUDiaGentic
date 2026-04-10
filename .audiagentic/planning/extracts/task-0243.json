@@ -1,0 +1,30 @@
+{
+  "item": {
+    "id": "task-0243",
+    "label": "Add default_guidance to planning.yaml",
+    "state": "draft",
+    "summary": "Add default_guidance field to .audiagentic/planning/config/planning.yaml, update Config class to load and provide default",
+    "spec_ref": "spec-0046",
+    "request_refs": [
+      "request-0029"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0243.md"
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006",
+    "standard-0009"
+  ],
+  "body": "\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n",
+  "related": {
+    "request_refs": [
+      "request-0029"
+    ],
+    "spec_ref": "spec-0046"
+  }
+}

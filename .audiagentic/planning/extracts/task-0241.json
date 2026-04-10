@@ -1,0 +1,30 @@
+{
+  "item": {
+    "id": "task-0241",
+    "label": "Add --guidance CLI parameter to tm.py",
+    "state": "draft",
+    "summary": "Add --guidance argument to tm request command, validate against available guidance levels, pass to new_request()",
+    "spec_ref": "spec-0046",
+    "request_refs": [
+      "request-0029"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0241.md"
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006",
+    "standard-0009"
+  ],
+  "body": "\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n",
+  "related": {
+    "request_refs": [
+      "request-0029"
+    ],
+    "spec_ref": "spec-0046"
+  }
+}

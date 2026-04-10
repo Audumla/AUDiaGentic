@@ -5,7 +5,7 @@ state: captured
 summary: '"Introduce orthogonal guidance levels (light/standard/deep) that control
   spec/task required sections, detail verbosity, and acceptance criteria depth independently
   of work-type profiles (enhancement/feature/issue/fix)"'
-source: refinement-of-request-0009
+source: claude
 current_understanding: Guidance levels (light/standard/deep) control spec/task required
   sections, detail verbosity, and acceptance criteria depth independently of work-type
   profiles. This is a refinement of request-0009 with clearer naming.
@@ -21,6 +21,7 @@ context: 'Refinement of request-0009: renamed ''audience profiles'' to ''guidanc
   levels'' for clarity'
 standard_refs:
 - standard-0001
+- standard-0009
 spec_refs:
   - spec-0046
 meta:
