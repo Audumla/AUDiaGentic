@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Provide the canonical machine-readable error contract used by CLI tools, lifecycle operations, release scripts, jobs, providers, and overlays.
+Provide the canonical machine-readable error contract used by CLI tools, lifecycle operations, release scripts, jobs, providers, and external surfaces.
 
 ## ErrorEnvelope
 
@@ -34,7 +34,6 @@ Provide the canonical machine-readable error contract used by CLI tools, lifecyc
 - `RLS-*` release
 - `JOB-*` jobs
 - `PRV-*` providers
-- `DSC-*` Discord
 - `MIG-*` migration
 
 ## Rules

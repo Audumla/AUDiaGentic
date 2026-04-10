@@ -12,16 +12,25 @@
 8. `08_Agent_Jobs_MVP.md`
 9. `09_Release_Audit_and_Change_Ledger.md`
 10. `10_Release_Please_Baseline_Workflow_Management.md`
-11. `11_Discord_Overlay_V1.md`
-12. `12_Workflow_Profiles_and_Extensibility.md`
-13. `13_Skills_and_Script_Contracts.md`
-14. `14_Approval_Core_and_Event_Model.md`
-15. `15_Document_and_Legacy_Migration.md`
-16. `16_Test_and_Validation_Strategy.md`
-17. `17_Feasibility_Risks_and_Open_Questions.md`
-18. `18_File_Ownership_Matrix.md`
-19. `19_Glossary.md`
-20. `20_Error_Envelope_and_Error_Codes.md`
+11. `12_Workflow_Profiles_and_Extensibility.md`
+12. `13_Skills_and_Script_Contracts.md`
+13. `14_Approval_Core_and_Event_Model.md`
+14. `15_Document_and_Legacy_Migration.md`
+15. `16_Test_and_Validation_Strategy.md`
+16. `17_Feasibility_Risks_and_Open_Questions.md`
+17. `18_File_Ownership_Matrix.md`
+18. `19_Glossary.md`
+19. `20_Error_Envelope_and_Error_Codes.md`
+
+## Superseded architecture material
+
+The pre-ACP Discord overlay line was removed from the active architecture pack and archived under:
+
+- `docs/archive/superseded/2026-04-pre-acp-line/specifications/11_Discord_Overlay_V1.md`
+
+Continue- and local-openai-specific provider docs from the older prompt-trigger/provider-wrapper line were also archived under:
+
+- `docs/archive/superseded/2026-04-pre-acp-line/specifications/providers/`
 
 ## Review-driven additions in this pack
 
@@ -58,6 +67,7 @@ The following areas were strengthened specifically to close pre-implementation g
 - 46_Centralized_Prompt_Syntax_and_Aliases.md
 - 47_Provider_Prompt_Templates_and_Defaults.md
 - 48_Installable_Project_Baseline_and_Managed_Asset_Synchronization.md
+- 55_Provider_Availability_and_Quota_Handling.md
 
 ## Structural correction docs
 
