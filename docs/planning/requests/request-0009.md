@@ -40,6 +40,7 @@ meta:
 
 
 
+
 # Understanding
 
 Introduce orthogonal audience profiles (junior/mid/senior) that control spec and task required sections, detail verbosity, and acceptance criteria depth independently of the shipped work-type profiles (`enhancement`, `feature`, `issue`, `fix`).
