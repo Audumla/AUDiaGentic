@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T12:24:03.088001+00:00",
+  "generated_at": "2026-04-10T12:49:30.364758+00:00",
   "items": [
     {
       "id": "task-0032",
@@ -501,27 +501,75 @@
       "path": "docs\\planning\\tasks\\core\\task-0236.md"
     },
     {
+      "id": "task-0237",
+      "label": "Add guidance_levels to profiles.yaml",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0237.md"
+    },
+    {
+      "id": "task-0238",
+      "label": "Update config.py to load guidance levels",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0238.md"
+    },
+    {
+      "id": "task-0239",
+      "label": "Add guidance field to request schema",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0239.md"
+    },
+    {
+      "id": "task-0240",
+      "label": "Update tm_helper.py new_request() with guidance parameter",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0240.md"
+    },
+    {
+      "id": "task-0241",
+      "label": "Add --guidance CLI parameter to tm.py",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0241.md"
+    },
+    {
+      "id": "task-0242",
+      "label": "Update validation to enforce guidance-appropriate sections",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0242.md"
+    },
+    {
+      "id": "task-0243",
+      "label": "Add default_guidance to planning.yaml",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0243.md"
+    },
+    {
+      "id": "task-0244",
+      "label": "Write tests for guidance levels",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0244.md"
+    },
+    {
       "id": "task-0158",
       "label": "[PKT-DSC-001](task-0158): Event Subscriber",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\discord\\task-0158.md"
     },
     {
       "id": "task-0159",
       "label": "[PKT-DSC-002](task-0159): Release Summary Publishing",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\discord\\task-0159.md"
     },
     {
       "id": "task-0160",
       "label": "[PKT-DSC-003](task-0160): Approval Publishing/Response Handling",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\discord\\task-0160.md"
     },
     {
       "id": "task-0161",
       "label": "[PKT-DSC-004](task-0161): Lifecycle/Migration Notices",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\discord\\task-0161.md"
     },
     {
@@ -779,7 +827,7 @@
     {
       "id": "task-0080",
       "label": "[PKT-PRV-003](task-0080): Provider Selection",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\providers\\task-0080.md"
     },
     {
@@ -809,7 +857,7 @@
     {
       "id": "task-0085",
       "label": "[PKT-PRV-008](task-0085): Provider Documentation",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\providers\\task-0085.md"
     },
     {
@@ -875,7 +923,7 @@
     {
       "id": "task-0096",
       "label": "[PKT-PRV-019](task-0096): Provider Tracing",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\providers\\task-0096.md"
     },
     {
@@ -887,7 +935,7 @@
     {
       "id": "task-0098",
       "label": "[PKT-PRV-021](task-0098): Provider Discovery",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\providers\\task-0098.md"
     },
     {
@@ -923,7 +971,7 @@
     {
       "id": "task-0104",
       "label": "[PKT-PRV-027](task-0104): Provider Message Queue",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\providers\\task-0104.md"
     },
     {
@@ -935,7 +983,7 @@
     {
       "id": "task-0106",
       "label": "[PKT-PRV-029](task-0106): Provider Batch Processing",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\providers\\task-0106.md"
     },
     {
@@ -977,7 +1025,7 @@
     {
       "id": "task-0113",
       "label": "[PKT-PRV-036](task-0113): Provider Bulkhead",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\providers\\task-0113.md"
     },
     {
@@ -989,7 +1037,7 @@
     {
       "id": "task-0115",
       "label": "[PKT-PRV-038](task-0115): Provider Connection Pooling",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\providers\\task-0115.md"
     },
     {
@@ -1025,7 +1073,7 @@
     {
       "id": "task-0122",
       "label": "[PKT-PRV-044](task-0122): Provider Policy Enforcement",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\providers\\task-0122.md"
     },
     {
@@ -1037,7 +1085,7 @@
     {
       "id": "task-0124",
       "label": "[PKT-PRV-046](task-0124): Provider Data Masking",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\providers\\task-0124.md"
     },
     {
