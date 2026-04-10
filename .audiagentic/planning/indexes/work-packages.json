@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T11:01:30.363542+00:00",
+  "generated_at": "2026-04-10T11:05:53.463433+00:00",
   "items": [
     {
       "id": "wp-0004",
@@ -29,7 +29,7 @@
     {
       "id": "wp-0009",
       "label": "Archive state workflow and core functions",
-      "state": "in_progress",
+      "state": "done",
       "path": "docs\\planning\\work-packages\\core\\wp-0009-archive-state-workflow-and-core-functions.md"
     },
     {
