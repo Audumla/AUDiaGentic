@@ -30,6 +30,11 @@ Sources:
 5. Planning work should include validation of planning integrity where relevant, such as planning schema validation, link integrity, or task/work-package consistency.
 6. Claims of completeness should not be made without matching evidence.
 7. If a command, test suite, or validation pass fails, the failure should be recorded with the important reason instead of being hidden.
+8. **Smoke Test**: After any meaningful code change, verify the project compiles/runs without errors before marking work complete. Use language-specific verification:
+   - Python: `python -m py_compile <file>` or `python -c "import <module>"`
+   - JS/TS: `npx tsc --noEmit` or `node --check <file>`
+   - Shell: `bash -n <script>`
+   - Tests: `python -m pytest tests/ -q` (or project equivalent)
 
 # Default Rules
 
