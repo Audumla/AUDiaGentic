@@ -2,12 +2,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from jsonschema import Draft202012Validator
+from jsonschema.exceptions import ValidationError
 from ..fs.scan import scan_items
 from .config import Config, _PLANNING_SCHEMA_DIR
 from .util import body_has_section
 
 REQ_SECTIONS = {
-    'request': ['Understanding', 'Source Refs', 'Open Questions', 'Notes'],
+    'request': ['Understanding', 'Open Questions', 'Notes'],
     'spec': ['Purpose', 'Scope', 'Requirements', 'Constraints', 'Acceptance Criteria'],
     'plan': ['Objectives', 'Delivery Approach', 'Dependencies'],
     'wp': ['Objective', 'Scope of This Package', 'Inputs', 'Instructions', 'Required Outputs', 'Acceptance Checks', 'Non-Goals'],
@@ -42,7 +43,7 @@ class Validator:
                 sch = json.loads((self.schemas / schema_name).read_text(encoding='utf-8'))
                 v = Draft202012Validator(sch)
                 for e in v.iter_errors(item.data):
-                    errors.append(f'{item.path}: {e.message}')
+                    errors.append(f"{item.path}: {self._format_error(e)}")
             allowed = set((sch.get('properties', {}) if sch else {}).keys()) if sch else set(item.data.keys())
             for k in item.data.keys():
                 if sch and k not in allowed:
@@ -63,3 +64,36 @@ class Validator:
                 if item.path.parent.parent.name != 'work-packages':
                     errors.append(f"{item.path}: wp must be under docs/planning/work-packages/<domain>/")
         return errors
+
+    def _format_error(self, error: ValidationError) -> str:
+        path_parts = [str(part) for part in error.path]
+        field = path_parts[0] if path_parts else None
+
+        rel_fields = {"task_refs", "work_package_refs"}
+        if (
+            error.validator == "type"
+            and field in rel_fields
+            and len(path_parts) >= 2
+            and isinstance(error.instance, str)
+        ):
+            example = (
+                f"{field} must be a list of objects with 'ref' and optional 'seq'/'display'. "
+                f"Expected example: - ref: {error.instance}\n  seq: 1000\n"
+                f"Got: {error.instance}"
+            )
+            return example
+
+        if error.validator == "required" and path_parts:
+            missing = ", ".join(repr(part) for part in error.validator_value)
+            return f"{field or 'item'} is missing required field(s): {missing}"
+
+        if error.validator == "additionalProperties":
+            field_name = field or "item"
+            return f"{field_name} has unsupported fields; move custom values into meta when appropriate"
+
+        if field in rel_fields:
+            return f"{field}: {error.message}"
+
+        if field:
+            return f"{field}: {error.message}"
+        return error.message

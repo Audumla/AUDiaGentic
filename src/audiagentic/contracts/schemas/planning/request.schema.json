@@ -6,7 +6,6 @@
     "label",
     "state",
     "summary",
-    "source_refs",
     "current_understanding",
     "open_questions"
   ],
@@ -23,6 +22,12 @@
     "summary": {
       "type": "string"
     },
+    "source": {
+      "type": "string"
+    },
+    "context": {
+      "type": "string"
+    },
     "workflow": {
       "type": "string"
     },
@@ -35,11 +40,14 @@
     "meta": {
       "type": "object"
     },
-    "source_refs": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
+    "deleted": {
+      "type": "boolean"
+    },
+    "deleted_at": {
+      "type": "string"
+    },
+    "deletion_reason": {
+      "type": "string"
     },
     "current_understanding": {
       "type": "string"

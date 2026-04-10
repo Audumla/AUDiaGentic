@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-09T13:26:50.353288+00:00",
+  "generated_at": "2026-04-10T03:27:12.653156+00:00",
   "items": [
     {
       "id": "standard-0001",
@@ -34,9 +34,9 @@
     },
     {
       "id": "standard-0006",
-      "label": "Planning record quality standard",
+      "label": "Planning structure and record quality standard",
       "state": "ready",
-      "path": "docs\\planning\\standards\\standard-0006-planning-record-quality-standard.md"
+      "path": "docs\\planning\\standards\\standard-0006-planning-structure-and-record-quality-standard.md"
     },
     {
       "id": "standard-0007",
