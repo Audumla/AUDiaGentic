@@ -40,6 +40,30 @@ planning:
       description: Request → Spec with optional Plan → WP → Task overlay.
       on_request_create: [request, specification]
       allow_plan_overlay: true
+    quick:
+      description: Quick request → task for small changes. Skips spec layer.
+      label: Quick change
+      on_request_create: [request, task]
+      allow_plan_overlay: false
+      defaults:
+        meta:
+          request_type: quick_change
+        current_understanding: Quick change capture; implementation ready.
+        open_questions: []
+      suggested_sections: [Change, Rationale, Verification]
+  standard_defaults:
+    spec:
+      - standard-0006  # Planning structure and record quality
+      - standard-0005  # Verification and test evidence
+    task:
+      - standard-0005  # Verification and test evidence (what counts as done)
+      - standard-0006  # Planning structure (acceptance criteria clarity)
+    plan:
+      - standard-0006  # Planning structure (decomposition, sequencing)
+    wp:
+      - standard-0006  # Planning structure
+    request:
+      - standard-0001  # Planning documentation and maintenance
   object_profiles:
     spec_precise:
       applies_to: spec

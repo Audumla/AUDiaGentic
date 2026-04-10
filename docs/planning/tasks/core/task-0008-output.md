@@ -3,8 +3,9 @@ id: task-0008-output
 label: Migration Reference Map
 state: done
 summary: Complete inventory and reference map for all implementation docs
-spec_ref: spec-0002
+spec_ref: spec-0036
 ---
+
 
 # Description
 

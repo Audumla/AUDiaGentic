@@ -20,7 +20,8 @@ class Config:
         self.automations = self._read_required_yaml('automations.yaml')
         self.hooks = self._read_required_yaml('hooks.yaml')
         self.documentation = self._read_optional_yaml('documentation.yaml')
-        self.request_profiles = self._read_optional_yaml('request-profiles.yaml')
+        # request_profiles is now merged into unified profiles (for backward compatibility)
+        self.request_profiles = {"request_profiles": self.profiles.get("planning", {}).get("profiles", {})}
         self.profile_packs = self._read_profile_packs()
 
     def _read_required_yaml(self, filename: str) -> dict:
@@ -101,3 +102,18 @@ class Config:
         if name not in profiles:
             raise ValueError(f"profile '{name}' not found")
         return profiles[name]
+
+    def standard_defaults_for(self, kind: str) -> list[str]:
+        """Get default standards for a planning kind.
+
+        Args:
+            kind: Planning kind ('spec', 'task', 'plan', 'wp', 'request')
+
+        Returns:
+            List of standard IDs to apply by default (e.g. ['standard-0006', 'standard-0005'])
+        """
+        defaults = (
+            self.profiles.get("planning", {})
+            .get("standard_defaults", {})
+        )
+        return defaults.get(kind, [])

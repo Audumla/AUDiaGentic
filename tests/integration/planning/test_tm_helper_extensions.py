@@ -156,7 +156,7 @@ def test_tm_helper_verify_structure_marks_optional_extensions_non_blocking(helpe
     result = tm.verify_structure()
 
     assert result["healthy"] is True
-    assert result["checks"]["config_request-profiles"]["required"] is False
+    assert result["checks"]["config_profiles"]["required"] is False
     assert result["checks"]["config_documentation"]["required"] is False
     assert "PASSED" in result["summary"]
 
@@ -212,6 +212,15 @@ def test_tm_helper_plan_and_task_request_refs_appear_in_trace_index(
     assert any(ref["src"] == spec["id"] for ref in request_edges)
     assert any(ref["src"] == plan["id"] for ref in request_edges)
     assert any(ref["src"] == task["id"] for ref in request_edges)
+
+
+def test_tm_helper_new_spec_updates_request_spec_refs(helper_project: Path) -> None:
+    request = tm.new_request("Spec backref request", "Track spec refs on request", source="test")
+    spec = tm.new_spec("Spec backref spec", "Trace back to request", [request["id"]])
+
+    shown = tm.show(request["id"])
+
+    assert spec["id"] in shown.get("spec_refs", [])
 
 
 def test_tm_helper_delete_and_list_include_deleted(helper_project: Path) -> None:
