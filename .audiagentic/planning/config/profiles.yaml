@@ -1,10 +1,13 @@
 planning:
   stack_profiles:
-    default:
-      on_request_create: [request, specification, task]
-      task_refinement:
-        allow_child_tasks: true
-        leaf_profile: impl_leaf
+    direct:
+      description: "Request → Spec → Task. No plan or WP required."
+      on_request_create: [request, specification]
+      allow_plan_overlay: false
+    full:
+      description: "Request → Spec → Plan → WP → Task. Plan/WP overlay available."
+      on_request_create: [request, specification]
+      allow_plan_overlay: true
   object_profiles:
     spec_precise:
       applies_to: spec
