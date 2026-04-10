@@ -1,7 +1,7 @@
 ---
 id: request-0006
 label: Sensitive data detection and review for planning items
-state: distilled
+state: closed
 summary: Implement optional security review that detects sensitive information (passwords,
   internal server names, PII, credentials) in planning requests, specifications, tasks,
   and work-packages, with ability to override for known test credentials
@@ -26,6 +26,7 @@ meta:
     non-blocking warnings in validation. Designed for quick implementation, extendable
     to frontmatter/attachments/allow-listing in future versions.'
 ---
+
 
 
 
