@@ -14,7 +14,7 @@ from audiagentic.contracts.errors import AudiaGenticError
 from audiagentic.runtime.lifecycle.manifest import build_manifest, write_manifest
 from audiagentic.runtime.lifecycle.uninstall import apply_uninstall
 from tests.helpers import sandbox as sandbox_helper
-from tools.seed_example_project import seed_example_project
+from tools.misc.seed_example_project import seed_example_project
 
 
 def _write_manifest(root: Path) -> None:

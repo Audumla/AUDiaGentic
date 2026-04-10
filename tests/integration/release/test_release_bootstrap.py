@@ -81,10 +81,9 @@ def test_release_bootstrap_creates_install_and_release_artifacts(tmp_path: Path)
         assert payload["installed-state"] == "audiagentic-current"
         assert payload["synced-fragments"] == 1
 
-        assert (sandbox.repo / ".audiagentic" / "project.yaml").is_file()
-        assert (sandbox.repo / ".audiagentic" / "components.yaml").is_file()
-        assert (sandbox.repo / ".audiagentic" / "installed.json").is_file()
+        assert (sandbox.repo / ".audiagentic" / "providers.yaml").is_file()
         assert (sandbox.repo / ".audiagentic" / "prompt-syntax.yaml").is_file()
+        assert (sandbox.repo / ".audiagentic" / "installed.json").is_file()
         assert (sandbox.repo / ".audiagentic" / "prompts" / "ag-review" / "default.md").is_file()
         assert (sandbox.repo / "AGENTS.md").is_file()
         assert (sandbox.repo / ".github" / "workflows" / "release-please.audiagentic.yml").is_file()

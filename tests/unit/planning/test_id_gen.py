@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import threading
 from pathlib import Path
@@ -24,10 +25,10 @@ def test_sequential_ids(tmp_path: Path) -> None:
 def test_counter_persisted(tmp_path: Path) -> None:
     next_id(tmp_path, "spec")
     next_id(tmp_path, "spec")
-    counter = (
-        tmp_path / ".audiagentic" / "planning" / "ids" / "spec.counter"
-    ).read_text()
-    assert counter.strip() == "2"
+    counters = json.loads(
+        (tmp_path / ".audiagentic" / "planning" / "ids" / "counters.json").read_text()
+    )
+    assert counters["counters"]["spec"] == 2
 
 
 def test_kinds_independent(tmp_path: Path) -> None:
@@ -64,21 +65,25 @@ def test_thread_safety(tmp_path: Path) -> None:
 
 
 def test_sync_counter_seeds_from_docs(tmp_path: Path) -> None:
-    # sync_counter should always create counter file (even if empty)
+    # sync_counter should always create the consolidated counters file (even if empty)
     # This ensures garbage values are fixed and counters are initialized
     sync_counter(tmp_path, "task")
-    counter_file = tmp_path / ".audiagentic" / "planning" / "ids" / "task.counter"
+    counter_file = tmp_path / ".audiagentic" / "planning" / "ids" / "counters.json"
     assert counter_file.exists()
     # Counter should be 0 when no docs exist
-    assert int(counter_file.read_text().strip()) == 0
+    counters = json.loads(counter_file.read_text())
+    assert counters["counters"]["task"] == 0
 
 
 def test_sync_counter_never_moves_backwards(tmp_path: Path) -> None:
     counter_dir = tmp_path / ".audiagentic" / "planning" / "ids"
     counter_dir.mkdir(parents=True)
-    counter_file = counter_dir / "task.counter"
-    counter_file.write_text("8", encoding="utf-8")
+    counter_file = counter_dir / "counters.json"
+    counter_file.write_text(
+        json.dumps({"version": 1, "counters": {"task": 8}}, indent=2), encoding="utf-8"
+    )
 
     sync_counter(tmp_path, "task")
 
-    assert int(counter_file.read_text().strip()) == 8
+    counters = json.loads(counter_file.read_text())
+    assert counters["counters"]["task"] == 8

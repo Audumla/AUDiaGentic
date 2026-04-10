@@ -252,12 +252,14 @@ class TestCreateWithContent:
         )
         assert "snake_case" in api.get_content(item.data["id"])
 
-    def test_create_with_content_task_missing_spec_raises(self, pr):
+    def test_create_with_content_task_without_spec_allowed(self, pr):
         _, api = pr
-        with pytest.raises(ValueError, match="task requires"):
-            api.create_with_content(
-                "task", label="T", summary="S", content="# Description\n\nX.\n"
-            )
+        # Tasks no longer require specs (spec_ref is optional)
+        item = api.create_with_content(
+            "task", label="T", summary="S", content="# Description\n\nX.\n"
+        )
+        assert item.data["id"].startswith("task-")
+        assert "spec_ref" not in item.data  # Not set if not provided
 
 
 # ===========================================================================
@@ -318,6 +320,14 @@ class TestRelink:
         spec = api.new("spec", label="S", summary="S")
         result = api.relink(spec.data["id"], "request_refs", req.data["id"])
         assert req.data["id"] in result.data.get("request_refs", [])
+
+    def test_relink_request_refs_updates_request_spec_refs(self, pr):
+        _, api = pr
+        req = api.new("request", label="R", summary="S", source="test")
+        spec = api.new("spec", label="S", summary="S")
+        api.relink(spec.data["id"], "request_refs", req.data["id"])
+        updated_request = api._find(req.data["id"])
+        assert spec.data["id"] in updated_request.data.get("spec_refs", [])
 
     def test_relink_sets_spec_ref(self, pr):
         _, api = pr
@@ -470,6 +480,13 @@ class TestShowExtract:
         assert shown["summary"] == "My Summary"
         assert shown["state"] == "captured"
 
+    def test_show_request_includes_spec_refs_when_present(self, pr):
+        _, api = pr
+        req = api.new("request", label="R", summary="S", source="test")
+        spec = api.new("spec", label="S", summary="S", request_refs=[req.data["id"]])
+        shown = api.extracts.show(req.data["id"])
+        assert spec.data["id"] in shown.get("spec_refs", [])
+
     def test_extract_includes_body(self, pr):
         _, api = pr
         spec = api.new("spec", label="S", summary="S")
@@ -549,20 +566,26 @@ class TestSyncIdCounters:
     def test_sync_creates_counter_files_for_all_kinds(self, pr):
         root, api = pr
         api.sync_id_counters()
-        ids_dir = root / ".audiagentic" / "planning" / "ids"
+        counters_file = root / ".audiagentic" / "planning" / "ids" / "counters.json"
+        assert counters_file.exists()
+        counters = json.loads(counters_file.read_text(encoding="utf-8"))["counters"]
         for kind in ("request", "spec", "plan", "task", "wp", "standard"):
-            assert (ids_dir / f"{kind}.counter").exists(), f"Missing counter for {kind}"
+            assert kind in counters, f"Missing counter for {kind}"
 
     def test_sync_sets_counter_from_existing_docs(self, pr):
         root, api = pr
         api.new("request", label="R1", summary="S", source="test")
         api.new("request", label="R2", summary="S", source="test")
         # Corrupt the counter
-        counter_file = root / ".audiagentic" / "planning" / "ids" / "request.counter"
-        counter_file.write_text("0", encoding="utf-8")
+        counter_file = root / ".audiagentic" / "planning" / "ids" / "counters.json"
+        counter_file.write_text(
+            json.dumps({"version": 1, "counters": {"request": 0}}, indent=2),
+            encoding="utf-8",
+        )
         # Sync should repair it
         api.sync_id_counters()
-        assert int(counter_file.read_text().strip()) >= 2
+        counters = json.loads(counter_file.read_text(encoding="utf-8"))["counters"]
+        assert counters["request"] >= 2
 
 
 # ===========================================================================

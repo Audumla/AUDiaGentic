@@ -9,8 +9,8 @@ for path in (str(ROOT), str(ROOT / "src")):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-import tools.lifecycle_stub as lifecycle_stub
-import tools.seed_example_project as seed_example_project
+import tools.misc.lifecycle_stub as lifecycle_stub
+import tools.misc.seed_example_project as seed_example_project
 from tests.helpers import sandbox as sandbox_helper
 
 

@@ -5,7 +5,7 @@ state: done
 summary: Deliver an implementation-ready plan for installable profile packs, documentation
   surfaces, references docs, manifest scaffolding, and MCP expansion.
 spec_refs:
-- spec-0021
+- spec-0037
 work_package_refs:
 - ref: wp-0005
   seq: 1000
@@ -17,6 +17,7 @@ work_package_refs:
   seq: 3000
   display: '3'
 ---
+
 
 
 

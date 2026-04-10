@@ -9,15 +9,17 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[4]
 SRC_ROOT = REPO_ROOT / "src"
 TOOLS_ROOT = REPO_ROOT / "tools"
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 if str(TOOLS_ROOT) not in sys.path:
     sys.path.insert(0, str(TOOLS_ROOT))
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-import lifecycle_stub
-import refresh_model_catalog as refresh_model_catalog_tool
+from tools.misc import lifecycle_stub
+from tools.misc import refresh_model_catalog as refresh_model_catalog_tool
 from audiagentic.runtime.release import bootstrap as release_bootstrap
-import provider_status as provider_status_tool
+from tools.misc import provider_status as provider_status_tool
 from audiagentic.execution.jobs import control as job_control_tool
 from audiagentic.execution.jobs import prompt_launch as prompt_launch_tool
 from audiagentic.execution.jobs import prompt_trigger_bridge as prompt_trigger_bridge_tool
