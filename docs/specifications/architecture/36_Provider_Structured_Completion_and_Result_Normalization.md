@@ -33,10 +33,9 @@ This spec applies to the prompt-trigger execution path for:
 - `cline`
 - `gemini`
 - `copilot`
-- `local-openai`
 - `qwen`
 
-`continue` remains a future integration and is intentionally out of scope for the first pass.
+The older Continue and local-openai line is superseded and archived; it is intentionally out of scope for the active first pass.
 
 ## Shared result contract
 
@@ -199,17 +198,6 @@ That means Phase 4.11 is the contract-hardening layer that closes the gap betwee
 - Recommended completion mode:
   - wrapper-normalized final result with repo instruction files as the prompt surface
 
-### local-openai
-
-- Best method: bridge-only with direct response normalization.
-- Reason: the backend is already an OpenAI-compatible endpoint, so AUDiaGentic should normalize directly from the response body.
-- Required support:
-  - shared bridge
-  - response-body JSON normalization
-  - no native hook dependency
-- Recommended completion mode:
-  - direct response-body normalization with no separate result file path
-
 ### Qwen
 
 - Best method: bridge-first with CLI fallback normalization.
@@ -220,11 +208,6 @@ That means Phase 4.11 is the contract-hardening layer that closes the gap betwee
   - normalized result parsing
 - Recommended completion mode:
   - bridge-first CLI or endpoint normalization until a stronger native surface is proven
-
-### Continue
-
-- Future integration only.
-- Not part of the first executable pass for this phase.
 
 ## Design goals
 

@@ -154,10 +154,8 @@ Providers report prompt-tag capability through additive descriptor fields.
 | `claude` | `wrapper-normalize` | `extension-normalize` | same prompt grammar as codex; provider-specific settings handled in provider doc |
 | `gemini` | `wrapper-normalize` | `extension-normalize` | same shared grammar; provider doc defines profile/checklist |
 | `copilot` | `bridge-wrapper` or provider-specific CLI bridge | `extension-normalize` | VS Code-first integration is expected; CLI path may be bridge-owned |
-| `continue` | `wrapper-normalize` | `extension-normalize` | same shared normalization rule |
 | `cline` | `wrapper-normalize` | `extension-normalize` | same shared normalization rule |
-| `local-openai` | `bridge-wrapper` | `bridge-wrapper` | AUDiaGentic owns the tag-aware bridge; provider itself remains OpenAI-compatible |
-| `qwen` | `bridge-wrapper` | `bridge-wrapper` | same as `local-openai`; no separate native surface contract required in MVP |
+| `qwen` | `bridge-wrapper` | `bridge-wrapper` | guarded bridge-wrapper path; no separate native surface contract required in MVP |
 
 This matrix is intentionally about **AUDiaGentic integration mode**, not about external product branding.
 
@@ -219,9 +217,8 @@ Packet order:
 3. `PKT-PRV-016` — claude prompt-tag surface integration
 4. `PKT-PRV-017` — gemini prompt-tag surface integration
 5. `PKT-PRV-018` — copilot prompt-tag surface integration
-6. `PKT-PRV-019` — continue prompt-tag surface integration
-7. `PKT-PRV-020` — cline prompt-tag surface integration
-8. `PKT-PRV-021` — local-openai/qwen bridge-wrapper prompt-tag integration
+6. `PKT-PRV-020` — cline prompt-tag surface integration
+7. any future guarded-provider bridge additions must be introduced under a fresh active packet line rather than the archived pre-ACP packet chain
 
 ## Change-control rule
 
