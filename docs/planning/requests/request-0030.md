@@ -9,8 +9,9 @@ open_questions:
   - Should validation also escalate existing orphan specs from warning-level drift to a hard error during full-repo validation?
   - Should relink or future unlink operations prevent removing the last request reference from an existing spec?
 standard_refs:
-  - standard-0001
-  - standard-0009
+- standard-0001
+- standard-0006
+- standard-0009
 spec_refs:
   - spec-0047
 ---
