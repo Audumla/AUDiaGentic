@@ -23,34 +23,34 @@ This enables the same workflow (e.g., feature→spec→task) to produce differen
 
 ## In Scope
 
-- Define audience profile structure in `profiles.yaml`
-- Add `audience` field to request frontmatter
-- Configure different required/suggested sections per audience level
-- Control acceptance criteria depth per audience level
-- Apply audience profiles during request creation and validation
+- Define guidance_levels structure in `profiles.yaml`
+- Add `guidance` field to request frontmatter
+- Configure different required/suggested sections per guidance level
+- Control acceptance criteria depth per guidance level
+- Apply guidance levels during request creation and validation
 
 ## Out of Scope (v1)
 
-- Hook/automation rules based on audience
+- Hook/automation rules based on guidance
 - Event metadata changes for downstream tooling
-- Dynamic content generation based on audience
-- Per-user or per-role audience assignment
+- Dynamic content generation based on guidance
+- Per-user or per-role guidance assignment
 
 # Requirements
 
 ## 1. Profile Structure
 
-Add `audience_profiles` section to `.audiagentic/planning/config/profiles.yaml`:
+Add `guidance_levels` section to `.audiagentic/planning/config/profiles.yaml`:
 
 ```yaml
 planning:
-  audience_profiles:
-    junior:
-      description: Basic depth for junior team members or quick intake
-      label: Junior (basic)
+  guidance_levels:
+    light:
+      description: Basic depth for quick intake or simple tasks
+      label: Light (basic)
       defaults:
         meta:
-          audience: junior
+          guidance: light
         current_understanding: Initial intake captured; key details need refinement.
         open_questions:
           - What is the core requirement?
@@ -63,12 +63,12 @@ planning:
         required: [Description]
         suggested: [Acceptance Criteria, Notes]
       acceptance_criteria_depth: basic
-    mid:
+    standard:
       description: Standard depth for typical team workflows
-      label: Mid (standard)
+      label: Standard (standard)
       defaults:
         meta:
-          audience: mid
+          guidance: standard
         current_understanding: Initial intake captured; requirements are understood well enough to proceed.
         open_questions:
           - What exact outcome is required?
@@ -81,12 +81,12 @@ planning:
         required: [Description]
         suggested: [Acceptance Criteria, Notes]
       acceptance_criteria_depth: standard
-    senior:
+    deep:
       description: Deep depth for complex work or rigorous review
-      label: Senior (deep)
+      label: Deep (deep)
       defaults:
         meta:
-          audience: senior
+          guidance: deep
         current_understanding: Initial intake captured; requirements are well-understood with clear implementation path.
         open_questions:
           - What exact outcome is required?
@@ -104,7 +104,7 @@ planning:
 
 ## 2. Frontmatter Field
 
-Add `audience` field to request frontmatter:
+Add `guidance` field to request frontmatter:
 
 ```yaml
 ---
@@ -113,50 +113,50 @@ label: Example request
 state: captured
 summary: Example
 source: manual
-audience: mid  # junior, mid, or senior
+guidance: standard  # light, standard, or deep
 ---
 ```
 
-## 3. Default Audience
+## 3. Default Guidance
 
-Configure default audience in `.audiagentic/planning/config/planning.yaml`:
+Configure default guidance in `.audiagentic/planning/config/planning.yaml`:
 
 ```yaml
 planning:
-  default_audience: mid  # or junior, senior
+  default_guidance: standard  # or light, deep
 ```
 
 ## 4. CLI Parameter
 
-Add `--audience` flag to `tm.py` request creation:
+Add `--guidance` flag to `tm.py` request creation:
 
 ```bash
-tm request --profile feature --audience senior "Add new feature"
+tm request --profile feature --guidance deep "Add new feature"
 ```
 
 ## 5. Validation Rules
 
-Update validation to enforce audience-appropriate sections:
+Update validation to enforce guidance-appropriate sections:
 
-- `junior`: Warn if spec has excessive detail
-- `mid`: Standard validation
-- `senior`: Require all required sections, check acceptance criteria depth
+- `light`: Warn if spec has excessive detail
+- `standard`: Standard validation
+- `deep`: Require all required sections, check acceptance criteria depth
 
 ## 6. Profile Combination
 
-When creating a request with both `--profile` and `--audience`:
+When creating a request with both `--profile` and `--guidance`:
 
 - `--profile` controls: `on_request_create` cascade, `allow_plan_overlay`
-- `--audience` controls: required sections, acceptance criteria depth, verbosity
+- `--guidance` controls: required sections, acceptance criteria depth, verbosity
 
-Example: `--profile feature --audience senior` creates request→spec→task with rigorous content.
+Example: `--profile feature --guidance deep` creates request→spec→task with rigorous content.
 
 # Constraints
 
-- **Backward compatible**: No `audience` field = use `mid` defaults
+- **Backward compatible**: No `guidance` field = use `standard` defaults
 - **Simple configuration**: All in `profiles.yaml`, no new config files
 - **Validation-friendly**: Enforce at validation time, not creation time
-- **Extensible**: Future versions can add more audience levels or hook rules
+- **Extensible**: Future versions can add more guidance levels or hook rules
 
 # Acceptance Criteria
 
