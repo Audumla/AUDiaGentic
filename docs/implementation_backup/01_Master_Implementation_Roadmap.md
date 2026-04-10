@@ -13,7 +13,7 @@ Build AUDiaGentic from a minimal correct baseline up to the agreed end-state cap
 - Build independent cores before overlays.
 - Prefer script-backed deterministic behavior before AI-assisted behavior.
 - Keep jobs simple before introducing richer orchestration.
-- Keep Discord out of the core.
+- Keep superseded overlay and provider-specific transport lines out of the core.
 - Keep providers out of the release/lifecycle core until their phase.
 - Make each packet small enough for one implementor or one agent.
 
@@ -343,14 +343,17 @@ Leaves behind:
 - bridge-owned provenance, defaults, capture, and persistence rules
 - provider docs that describe implementation mechanics without redefining semantics
 
-### Phase 5 — Discord overlay
-Add Discord as a true overlay using approval + events only.
+### Phase 5 — Archived pre-ACP overlay line
+The old Discord overlay program line is superseded and archived. It is no longer an active execution phase.
+
+Current direction:
+- ACP-first internal provider/session handling
+- OpenACP-preferred external messaging/control when an external seam is needed
+- canonical project documentation, issue-tracking, and changelog extensions as the preferred non-provider-specific outward-facing extension line
 
 Leaves behind:
-- event subscriber
-- release summary publishing
-- approval publishing/response handling
-- lifecycle/migration notices
+- archived Discord overlay material for historical lookup only
+- a cancellation/supersession record in the build registry
 
 ### Phase 6 — Migration hardening and cutover completion
 Harden migration and operator recovery.
@@ -437,3 +440,15 @@ The implementation reviews identified a small set of items that are important en
 - **Phase 3 jobs use a stub provider seam**; real provider integration is deferred to Phase 4 to avoid core rewrites.
 
 These additions do not change the sequence of phases. They tighten execution discipline within the existing sequence.
+
+## Scope correction after the pre-ACP archive pass
+
+The older provider/prompt/Discord line advertised broader scope than the current target program.
+
+After the archive pass:
+
+- Continue is not an active provider rollout line
+- local-openai is not an active provider rollout line
+- Discord is not an active overlay phase
+- the active provider scope is narrower and centered on the remaining canonical provider docs
+- external messaging/control should align to the ACP/OpenACP direction rather than a Discord-specific overlay revival
