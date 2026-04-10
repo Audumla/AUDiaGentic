@@ -26,5 +26,6 @@
     "path": "docs/planning/requests/request-0009.md"
   },
   "effective_standard_refs": [],
-  "body": "\n\n\n\n# Understanding\n\nInitial request intake captured: Introduce orthogonal audience profiles (junior/mid/senior) that control spec/task required sections, detail verbosity, and acceptance criteria depth independently of work-type profiles (feature/bug/spike/compliance/rfc)\n\n# Open Questions\n\n- What exact outcome is required?\n- What constraints or non-goals apply?\n- What follow-up detail is still needed before implementation?\n# Notes\n"
+  "body": "\n\n\n\n# Understanding\n\nInitial request intake captured: Introduce orthogonal audience profiles (junior/mid/senior) that control spec/task required sections, detail verbosity, and acceptance criteria depth independently of work-type profiles (feature/bug/spike/compliance/rfc)\n\n# Open Questions\n\n- What exact outcome is required?\n- What constraints or non-goals apply?\n- What follow-up detail is still needed before implementation?\n# Notes\n",
+  "related": {}
 }
