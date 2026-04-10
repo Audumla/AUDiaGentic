@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-09T13:26:50.353288+00:00",
+  "generated_at": "2026-04-10T03:27:12.653156+00:00",
   "items": [
     {
       "id": "spec-0002",
@@ -137,8 +137,74 @@
     {
       "id": "spec-0024",
       "label": "Planning module improvements implementation specification",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\specifications\\spec-0024-planning-module-improvements-implementation-specification.md"
+    },
+    {
+      "id": "spec-0025",
+      "label": "Fix planning API and MCP gaps revealed by coverage tests",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0025-fix-planning-api-and-mcp-gaps-revealed-by-coverage-tests.md"
+    },
+    {
+      "id": "spec-0026",
+      "label": "Test Direct Profile \u2014 Specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0026-test-direct-profile-specification.md"
+    },
+    {
+      "id": "spec-0027",
+      "label": "Test2 \u2014 Specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0027-test2-specification.md"
+    },
+    {
+      "id": "spec-0028",
+      "label": "Test Spec",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0028-test-spec.md"
+    },
+    {
+      "id": "spec-0029",
+      "label": "Test Cascade Request \u2014 Specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0029-test-cascade-request-specification.md"
+    },
+    {
+      "id": "spec-0030",
+      "label": "Test3 \u2014 Specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0030-test3-specification.md"
+    },
+    {
+      "id": "spec-0031",
+      "label": "Full Profile Test \u2014 Specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0031-full-profile-test-specification.md"
+    },
+    {
+      "id": "spec-0032",
+      "label": "Test Feature Profile \u2014 Specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0032-test-feature-profile-specification.md"
+    },
+    {
+      "id": "spec-0033",
+      "label": "Test Issue Profile \u2014 Specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0033-test-issue-profile-specification.md"
+    },
+    {
+      "id": "spec-0034",
+      "label": "Direct Stack Test \u2014 Specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0034-direct-stack-test-specification.md"
+    },
+    {
+      "id": "spec-0035",
+      "label": "Full Stack Test \u2014 Specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0035-full-stack-test-specification.md"
     }
   ]
 }

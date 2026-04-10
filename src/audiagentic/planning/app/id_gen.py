@@ -80,6 +80,13 @@ def sync_counter(root: Path, kind: str) -> None:
             except (IndexError, ValueError):
                 pass
 
+    current_n = 0
+    if counter_file.exists():
+        try:
+            current_n = int(counter_file.read_text(encoding="utf-8").strip())
+        except ValueError:
+            current_n = 0
+
     # Always write counter file (create if missing, fix if corrupted)
-    # Use max_n as authoritative value (from actual files)
-    counter_file.write_text(str(max_n), encoding="utf-8")
+    # Never move the counter backwards; IDs stay monotonic even after deletes.
+    counter_file.write_text(str(max(max_n, current_n)), encoding="utf-8")

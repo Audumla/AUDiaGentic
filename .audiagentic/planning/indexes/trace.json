@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-09T13:26:50.353288+00:00",
+  "generated_at": "2026-04-10T03:27:12.653156+00:00",
   "refs": [
     {
       "src": "plan-0004",
@@ -74,6 +74,33 @@
     {
       "src": "plan-0010",
       "dst": "spec-0024",
+      "field": "spec_refs"
+    },
+    {
+      "src": "plan-0010",
+      "dst": "wp-0010",
+      "field": "work_package_refs",
+      "seq": 1000,
+      "display": null
+    },
+    {
+      "src": "plan-0011",
+      "dst": "spec-0025",
+      "field": "spec_refs"
+    },
+    {
+      "src": "plan-0012",
+      "dst": "request-0010",
+      "field": "request_refs"
+    },
+    {
+      "src": "plan-0012",
+      "dst": "spec-0030",
+      "field": "spec_refs"
+    },
+    {
+      "src": "plan-0013",
+      "dst": "spec-0035",
       "field": "spec_refs"
     },
     {
@@ -295,6 +322,61 @@
     {
       "src": "spec-0024",
       "dst": "request-0007",
+      "field": "request_refs"
+    },
+    {
+      "src": "spec-0025",
+      "dst": "request-0008",
+      "field": "request_refs"
+    },
+    {
+      "src": "spec-0026",
+      "dst": "request-0010",
+      "field": "request_refs"
+    },
+    {
+      "src": "spec-0027",
+      "dst": "request-0010",
+      "field": "request_refs"
+    },
+    {
+      "src": "spec-0028",
+      "dst": "request-0010",
+      "field": "request_refs"
+    },
+    {
+      "src": "spec-0029",
+      "dst": "request-0010",
+      "field": "request_refs"
+    },
+    {
+      "src": "spec-0030",
+      "dst": "request-0010",
+      "field": "request_refs"
+    },
+    {
+      "src": "spec-0031",
+      "dst": "request-0010",
+      "field": "request_refs"
+    },
+    {
+      "src": "spec-0032",
+      "dst": "request-0017",
+      "field": "request_refs"
+    },
+    {
+      "src": "spec-0033",
+      "dst": "request-0018",
+      "field": "request_refs"
+    },
+    {
+      "src": "spec-0034",
+      "dst": "request-0019",
+      "field": "request_refs"
+    },
+    {
+      "src": "spec-0035",
+      "dst": "request-0020",
       "field": "request_refs"
     },
     {
@@ -585,6 +667,96 @@
     {
       "src": "task-0198",
       "dst": "spec-0024",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0199",
+      "dst": "spec-0024",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0200",
+      "dst": "spec-0024",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0201",
+      "dst": "spec-0024",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0202",
+      "dst": "spec-0025",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0203",
+      "dst": "spec-0025",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0204",
+      "dst": "spec-0025",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0205",
+      "dst": "spec-0025",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0206",
+      "dst": "spec-0025",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0207",
+      "dst": "spec-0025",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0208",
+      "dst": "spec-0025",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0209",
+      "dst": "spec-0025",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0210",
+      "dst": "spec-0025",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0211",
+      "dst": "request-0010",
+      "field": "request_refs"
+    },
+    {
+      "src": "task-0211",
+      "dst": "spec-0030",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0212",
+      "dst": "request-0010",
+      "field": "request_refs"
+    },
+    {
+      "src": "task-0212",
+      "dst": "spec-0030",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0213",
+      "dst": "spec-0035",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0214",
+      "dst": "spec-0035",
       "field": "spec_ref"
     },
     {
@@ -1596,6 +1768,133 @@
       "dst": "task-0198",
       "field": "task_refs",
       "seq": 1003,
+      "display": null
+    },
+    {
+      "src": "wp-0010",
+      "dst": "task-0199",
+      "field": "task_refs",
+      "seq": 1004,
+      "display": null
+    },
+    {
+      "src": "wp-0010",
+      "dst": "task-0200",
+      "field": "task_refs",
+      "seq": 1005,
+      "display": null
+    },
+    {
+      "src": "wp-0010",
+      "dst": "task-0201",
+      "field": "task_refs",
+      "seq": 1006,
+      "display": null
+    },
+    {
+      "src": "wp-0011",
+      "dst": "plan-0011",
+      "field": "plan_ref"
+    },
+    {
+      "src": "wp-0011",
+      "dst": "task-0202",
+      "field": "task_refs",
+      "seq": 1000,
+      "display": null
+    },
+    {
+      "src": "wp-0011",
+      "dst": "task-0203",
+      "field": "task_refs",
+      "seq": 2000,
+      "display": null
+    },
+    {
+      "src": "wp-0011",
+      "dst": "task-0204",
+      "field": "task_refs",
+      "seq": 3000,
+      "display": null
+    },
+    {
+      "src": "wp-0011",
+      "dst": "task-0205",
+      "field": "task_refs",
+      "seq": 4000,
+      "display": null
+    },
+    {
+      "src": "wp-0011",
+      "dst": "task-0206",
+      "field": "task_refs",
+      "seq": 5000,
+      "display": null
+    },
+    {
+      "src": "wp-0011",
+      "dst": "task-0207",
+      "field": "task_refs",
+      "seq": 6000,
+      "display": null
+    },
+    {
+      "src": "wp-0011",
+      "dst": "task-0208",
+      "field": "task_refs",
+      "seq": 7000,
+      "display": null
+    },
+    {
+      "src": "wp-0011",
+      "dst": "task-0209",
+      "field": "task_refs",
+      "seq": 8000,
+      "display": null
+    },
+    {
+      "src": "wp-0011",
+      "dst": "task-0210",
+      "field": "task_refs",
+      "seq": 9000,
+      "display": null
+    },
+    {
+      "src": "wp-0013",
+      "dst": "plan-0012",
+      "field": "plan_ref"
+    },
+    {
+      "src": "wp-0013",
+      "dst": "task-0211",
+      "field": "task_refs",
+      "seq": null,
+      "display": null
+    },
+    {
+      "src": "wp-0013",
+      "dst": "task-0212",
+      "field": "task_refs",
+      "seq": null,
+      "display": null
+    },
+    {
+      "src": "wp-0014",
+      "dst": "plan-0013",
+      "field": "plan_ref"
+    },
+    {
+      "src": "wp-0014",
+      "dst": "task-0213",
+      "field": "task_refs",
+      "seq": null,
+      "display": null
+    },
+    {
+      "src": "wp-0014",
+      "dst": "task-0214",
+      "field": "task_refs",
+      "seq": null,
       "display": null
     }
   ]

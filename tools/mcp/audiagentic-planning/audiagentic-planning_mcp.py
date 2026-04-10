@@ -64,6 +64,36 @@ for _p in (str(_ROOT), str(_ROOT / "src")):
 mcp = FastMCP("audiagentic-planning")
 
 
+def _wrap_tool_result(func):
+    """Wrap tool function to ensure lists are serialized as single content block.
+
+    FastMCP serializes Python lists as multiple content blocks (one per item).
+    This wrapper ensures all lists are returned as {"_result": list} so they
+    serialize as a single content block.
+    """
+    import functools
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        result = func(*args, **kwargs)
+        # Wrap all lists and None in a dict
+        if isinstance(result, list) or result is None:
+            return {"_result": result}
+        return result
+
+    return wrapper
+
+
+def tool_with_empty_list_fix(description=None):
+    """Tool decorator that fixes empty list serialization."""
+
+    def decorator(func):
+        wrapped = _wrap_tool_result(func)
+        return mcp.tool(description=description)(wrapped)
+
+    return decorator
+
+
 def _read_stdio_message() -> tuple[str | None, bool | None]:
     """Read either header-framed or newline-delimited JSON from stdin.
 
@@ -189,18 +219,20 @@ def tm_new_request(
     label: str,
     summary: str,
     profile: str | None = None,
-    source_refs: list[str] | None = None,
     current_understanding: str | None = None,
     open_questions: list[str] | None = None,
+    source: str | None = None,
+    context: str | None = None,
     check_duplicates: bool = True,
 ) -> dict[str, Any]:
     return tm.new_request(
         label,
         summary,
         profile=profile,
-        source_refs=source_refs,
         current_understanding=current_understanding,
         open_questions=open_questions,
+        source=source,
+        context=context,
         check_duplicates=check_duplicates,
     )
 
@@ -220,8 +252,13 @@ def tm_new_spec(
 @mcp.tool(
     description="Create a new Plan planning document, optionally linked to a Specification"
 )
-def tm_new_plan(label: str, summary: str, spec: str | None = None) -> dict[str, Any]:
-    return tm.new_plan(label, summary, spec)
+def tm_new_plan(
+    label: str,
+    summary: str,
+    spec: str | None = None,
+    request_refs: list[str] | None = None,
+) -> dict[str, Any]:
+    return tm.new_plan(label, summary, spec, request_refs)
 
 
 @mcp.tool(
@@ -235,8 +272,22 @@ def tm_new_task(
     target: str | None = None,
     parent: str | None = None,
     workflow: str | None = None,
+    request_refs: list[str] | None = None,
 ) -> dict[str, Any]:
-    return tm.new_task(label, summary, spec, domain, target, parent, workflow)
+    return tm.new_task(
+        label, summary, spec, domain, target, parent, workflow, request_refs
+    )
+
+
+@mcp.tool(
+    description="Soft delete a planning item by default, or hard delete it and sync counters"
+)
+def tm_delete(
+    id: str,
+    hard: bool = False,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    return tm.delete(id, hard=hard, reason=reason)
 
 
 @mcp.tool(description="Create a new WorkPackage planning document linked to a Plan")
@@ -381,11 +432,14 @@ def tm_package(
     return tm.package(plan, tasks, label, summary, domain)
 
 
-@mcp.tool(
+@tool_with_empty_list_fix(
     description="List planning items, optionally filtered by kind (request, spec, plan, task, wp, standard)"
 )
-def tm_list(kind: str | None = None) -> list[dict[str, Any]]:
-    return tm.list_kind(kind)
+def tm_list(
+    kind: str | None = None,
+    include_deleted: bool = False,
+) -> dict[str, Any]:
+    return tm.list_kind(kind, include_deleted=include_deleted)
 
 
 @mcp.tool(
@@ -404,21 +458,21 @@ def tm_extract(
     return tm.extract(id, with_related, with_resources)
 
 
-@mcp.tool(
+@tool_with_empty_list_fix(
     description="List Tasks in a given state (default: ready), optionally filtered by domain"
 )
 def tm_next_tasks(
     state: str = "ready", domain: str | None = None
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     return tm.next_tasks(state, domain)
 
 
-@mcp.tool(
+@tool_with_empty_list_fix(
     description="List items of a given kind in a given state, optionally filtered by domain"
 )
 def tm_next_items(
     kind: str = "task", state: str = "ready", domain: str | None = None
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     return tm.next_items(kind, state, domain)
 
 
@@ -429,15 +483,15 @@ def tm_status() -> dict[str, Any]:
     return tm.status()
 
 
-@mcp.tool(
+@tool_with_empty_list_fix(
     description="List applicable standards (e.g., coding styles, docs requirements) for a planning item"
 )
-def tm_standards(id: str) -> list[str]:
+def tm_standards(id: str) -> dict[str, Any]:
     return tm.standards(id)
 
 
-@mcp.tool(description="List all standard planning documents")
-def tm_list_standards() -> list[dict[str, Any]]:
+@tool_with_empty_list_fix(description="List all standard planning documents")
+def tm_list_standards() -> dict[str, Any]:
     return tm.list_standards()
 
 
@@ -448,41 +502,43 @@ def tm_get_standard(
     return tm.get_standard(standard_id, with_related, with_resources)
 
 
-@mcp.tool(
+@tool_with_empty_list_fix(
     description="List all documentation surfaces (generated views of planning items for different audiences)"
 )
-def tm_list_doc_surfaces() -> list[dict[str, Any]]:
+def tm_list_doc_surfaces() -> dict[str, Any]:
     return tm.list_doc_surfaces()
 
 
-@mcp.tool(description="Get a specific documentation surface by ID")
+@tool_with_empty_list_fix(description="Get a specific documentation surface by ID")
 def tm_get_doc_surface(surface_id: str) -> dict[str, Any] | None:
     return tm.get_doc_surface(surface_id)
 
 
-@mcp.tool(description="List reference documentation that applies to planning items")
-def tm_list_reference_docs() -> list[dict[str, str]]:
+@tool_with_empty_list_fix(
+    description="List reference documentation that applies to planning items"
+)
+def tm_list_reference_docs() -> dict[str, Any]:
     return tm.list_reference_docs()
 
 
-@mcp.tool(
+@tool_with_empty_list_fix(
     description="List available request profiles (templates/configs for creating Requests)"
 )
-def tm_list_request_profiles() -> list[dict[str, Any]]:
+def tm_list_request_profiles() -> dict[str, Any]:
     return tm.list_request_profiles()
 
 
-@mcp.tool(description="Get a specific request profile by ID")
+@tool_with_empty_list_fix(description="Get a specific request profile by ID")
 def tm_get_request_profile(profile_id: str) -> dict[str, Any] | None:
     return tm.get_request_profile(profile_id)
 
 
-@mcp.tool(
+@tool_with_empty_list_fix(
     description="List supporting documentation (sidecars) for a planning item or by role"
 )
 def tm_list_support_docs(
     supports_id: str | None = None, role: str | None = None
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     return tm.list_support_docs(supports_id, role)
 
 
@@ -519,10 +575,10 @@ def tm_doc_sync_requirements(
     return tm.get_doc_sync_requirements(kind, profile_pack)
 
 
-@mcp.tool(
+@tool_with_empty_list_fix(
     description="List pending documentation updates needed for a planning item kind"
 )
-def tm_pending_doc_updates(kind: str, profile_pack: str = "standard") -> list[str]:
+def tm_pending_doc_updates(kind: str, profile_pack: str = "standard") -> dict[str, Any]:
     return tm.pending_doc_updates(kind, profile_pack)
 
 
@@ -533,37 +589,41 @@ def tm_claim(kind: str, id: str, holder: str, ttl: int | None = None) -> dict[st
     return tm.claim(kind, id, holder, ttl)
 
 
-@mcp.tool(description="Release ownership of a planning item (unclaim)")
+@tool_with_empty_list_fix(description="Release ownership of a planning item (unclaim)")
 def tm_unclaim(id: str) -> bool:
     return tm.unclaim(id)
 
 
-@mcp.tool(
+@tool_with_empty_list_fix(
     description="List active claims on planning items, optionally filtered by kind"
 )
-def tm_claims(kind: str | None = None) -> list[dict[str, Any]]:
+def tm_claims(kind: str | None = None) -> dict[str, Any]:
     return tm.claims(kind)
 
 
-@mcp.tool(
+@tool_with_empty_list_fix(
     description="Validate all planning documents against schemas and rules; returns list of errors"
 )
-def tm_validate() -> list[str]:
+def tm_validate() -> dict[str, Any]:
     return tm.validate()
 
 
-@mcp.tool(description="Re-index all planning documents (scan, parse, build indices)")
+@tool_with_empty_list_fix(
+    description="Re-index all planning documents (scan, parse, build indices)"
+)
 def tm_index() -> None:
     tm.index()
 
 
-@mcp.tool(description="Reconcile planning state with filesystem (fix inconsistencies)")
+@tool_with_empty_list_fix(
+    description="Reconcile planning state with filesystem (fix inconsistencies)"
+)
 def tm_reconcile() -> dict[str, Any]:
     return tm.reconcile()
 
 
-@mcp.tool(description="Get recent planning events from the event log")
-def tm_events(tail: int = 20) -> list[dict[str, Any]]:
+@tool_with_empty_list_fix(description="Get recent planning events from the event log")
+def tm_events(tail: int = 20) -> dict[str, Any]:
     return tm.events(tail)
 
 
