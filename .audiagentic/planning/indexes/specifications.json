@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T11:05:53.463433+00:00",
+  "generated_at": "2026-04-10T12:21:57.366400+00:00",
   "items": [
     {
       "id": "spec-0023",
@@ -59,7 +59,7 @@
     {
       "id": "spec-0044",
       "label": "Multi-item batch updates and bulk operations for planning MCP",
-      "state": "ready",
+      "state": "cancelled",
       "path": "docs\\planning\\specifications\\spec-0044-multi-item-batch-updates-and-bulk-operations-for-planning-mcp.md"
     },
     {

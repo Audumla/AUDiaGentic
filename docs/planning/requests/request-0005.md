@@ -1,7 +1,7 @@
 ---
 id: request-0005
 label: Archive functionality for planning items
-state: distilled
+state: closed
 summary: Implement archive state and functions to archive older or redundant planning
   items while maintaining historical records
 source: legacy-backfill
@@ -9,8 +9,8 @@ current_understanding: This request is the current implementation-focused archiv
   intake. It takes the earlier archive concept and narrows it into a concrete delivery
   slice for archive state support, state-driven archive/restore behavior, default
   archive filtering, validation behavior, and archive metadata visibility. It supersedes
-  request-0003 as the active implementation intake while preserving that request
-  as historical provenance.
+  request-0003 as the active implementation intake while preserving that request as
+  historical provenance.
 open_questions:
 - Are there any compatibility constraints from legacy planning queries or state transitions
   that need to be called out more explicitly before implementation is closed?
@@ -23,6 +23,7 @@ meta:
   current_understanding: Archive functionality implementation ready to begin. Spec-0023
     finalized, plan-0009 and wp-0009 ready, all 5 tasks prepared for implementation.
 ---
+
 
 
 

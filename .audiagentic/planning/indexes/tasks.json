@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T11:05:53.463433+00:00",
+  "generated_at": "2026-04-10T12:21:57.366400+00:00",
   "items": [
     {
       "id": "task-0032",
@@ -449,31 +449,31 @@
     {
       "id": "task-0228",
       "label": "Extend tm_batch_update to support multi-item operations",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-0228.md"
     },
     {
       "id": "task-0229",
       "label": "Implement tm_bulk_state for state transitions",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-0229.md"
     },
     {
       "id": "task-0230",
       "label": "Add summary_only flag to individual operations",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-0230.md"
     },
     {
       "id": "task-0231",
       "label": "Expose bulk operations in MCP and tm_helper",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-0231.md"
     },
     {
       "id": "task-0232",
       "label": "Write tests for bulk operations and backward compatibility",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-0232.md"
     },
     {

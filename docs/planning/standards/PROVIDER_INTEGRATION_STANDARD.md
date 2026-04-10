@@ -1,3 +1,10 @@
+---
+id: provider-integration-standard
+label: Provider integration standard and checklist
+state: ready
+summary: Process and checklist for adding support for new providers (agents, LLMs) to AUDiaGentic, including rule files, generation logic, and testing.
+---
+
 # Adding a New Provider to AUDiaGentic
 
 When adding support for a new provider (agent, LLM, or tool), follow this checklist to ensure rules, documentation, and generation are properly configured.
