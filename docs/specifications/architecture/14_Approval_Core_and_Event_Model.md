@@ -2,7 +2,7 @@
 
 ## Approval core
 
-The approval service is transport-neutral. Discord and any future UI act as adapters.
+The approval service is transport-neutral. Any future UI or external control surface acts as an adapter.
 
 ## Approval rules
 
@@ -22,7 +22,7 @@ Approval adapters consume and emit through the core service:
 
 ## Event publisher contract
 
-Discord and any future UI/server seam consume events through a transport-neutral publisher contract:
+Any future UI or external control/server seam consumes events through a transport-neutral publisher contract:
 
 ```python
 publish(event_envelope) -> None
@@ -63,7 +63,7 @@ The core event model uses a project-local append-only log as the publication mec
 
 MVP rules:
 - no required external message broker
-- overlays such as Discord consume by tailing/filtering project-local events
+- external surfaces consume by tailing/filtering project-local events when needed
 - failure to publish an event must never mutate approval state retroactively
 - event rotation is local-log based; archival/export is a DRAFT future enhancement
 

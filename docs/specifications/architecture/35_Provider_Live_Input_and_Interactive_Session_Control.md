@@ -19,8 +19,8 @@ Implementation note:
 
 ## Relationship to existing phases
 
-This is a Phase 4.10 extension that sits after live-stream capture and before Discord or other
-overlays need to participate in live conversations.
+This is a Phase 4.10 extension that sits after live-stream capture and before any later
+external surface needs to participate in live conversations.
 
 Related earlier work:
 - Phase 3 launch and review jobs already exist
@@ -39,7 +39,7 @@ Related earlier work:
 
 ## Non-goals
 
-- No Discord implementation here.
+- No external messaging/control implementation here.
 - No new core job state machine.
 - No provider-owned persistence rules.
 - No requirement that every provider supports true bidirectional session input on day one.
@@ -152,7 +152,7 @@ Suggested canonical shape:
   "surface": "cli",
   "stage": "implement",
   "event-kind": "input-submitted",
-  "message": "continue with the provider handoff test",
+  "message": "proceed with the provider handoff test",
   "timestamp": "2026-04-02T00:15:00Z",
   "details": {
     "source-kind": "operator-console",
@@ -238,14 +238,13 @@ For later providers, choose one of these methods explicitly:
 
 No provider should blur these levels together in the docs. Each provider must say which level it actually supports.
 
-## Discord handoff
+## External consumer handoff
 
-Discord remains an overlay. It should consume the same job input stream and final artifacts
-later, without requiring the provider runtime to know anything about Discord.
+Any later external messaging or control surface should consume the same job input stream and final artifacts without requiring the provider runtime to know anything about that consumer.
 
 That means:
-- providers do not publish to Discord directly
-- AUDiaGentic may publish session-state changes to Discord later by reading the same stream
+- providers do not publish directly to an external consumer
+- AUDiaGentic may publish session-state changes later by reading the same stream
 - the session-control contract should remain transport-neutral
 - raw session keys or other secret session material must not be copied into runtime input logs; only redacted handles or secure references may survive beyond the live provider process
 
