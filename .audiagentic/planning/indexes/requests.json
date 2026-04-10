@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T11:05:53.463433+00:00",
+  "generated_at": "2026-04-10T12:21:57.366400+00:00",
   "items": [
     {
       "id": "request-0002",
@@ -23,13 +23,13 @@
     {
       "id": "request-0005",
       "label": "Archive functionality for planning items",
-      "state": "distilled",
+      "state": "closed",
       "path": "docs\\planning\\requests\\request-0005.md"
     },
     {
       "id": "request-0006",
       "label": "Sensitive data detection and review for planning items",
-      "state": "distilled",
+      "state": "closed",
       "path": "docs\\planning\\requests\\request-0006.md"
     },
     {
@@ -53,7 +53,7 @@
     {
       "id": "request-0010",
       "label": "Implement configurable stack profiles for lightweight req\u2192spec\u2192task workflows",
-      "state": "distilled",
+      "state": "closed",
       "path": "docs\\planning\\requests\\request-0010.md"
     },
     {

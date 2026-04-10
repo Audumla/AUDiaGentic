@@ -1960,3 +1960,5 @@
 {"ts": "2026-04-10T11:05:47.959664+00:00", "event": "plan.after_state_change", "id": "plan-0009", "old_state": "in_progress", "new_state": "done", "reason": "All associated tasks complete; archive functionality fully implemented"}
 {"ts": "2026-04-10T11:05:52.952575+00:00", "event": "spec.after_state_change", "id": "spec-0023", "old_state": "ready", "new_state": "in_progress", "reason": "Archive specification implementation beginning"}
 {"ts": "2026-04-10T11:05:53.300149+00:00", "event": "spec.after_state_change", "id": "spec-0023", "old_state": "in_progress", "new_state": "done", "reason": "Archive specification complete and fully implemented"}
+{"ts": "2026-04-10T12:21:56.826871+00:00", "event": "request.after_state_change", "id": "request-0005", "old_state": "distilled", "new_state": "closed", "reason": "Implementation complete and verified"}
+{"ts": "2026-04-10T12:21:57.185239+00:00", "event": "request.after_state_change", "id": "request-0006", "old_state": "distilled", "new_state": "closed", "reason": "Implementation complete and verified"}
