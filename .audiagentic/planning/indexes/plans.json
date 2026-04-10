@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T12:24:03.088001+00:00",
+  "generated_at": "2026-04-10T12:49:30.364758+00:00",
   "items": [
     {
       "id": "plan-0005",
@@ -37,6 +37,12 @@
       "label": "Fix planning API and MCP gaps",
       "state": "in_progress",
       "path": "docs\\planning\\plans\\plan-0011-fix-planning-api-and-mcp-gaps.md"
+    },
+    {
+      "id": "plan-0014",
+      "label": "Implement guidance levels for planning depth-of-detail",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-0014-implement-guidance-levels-for-planning-depth-of-detail.md"
     }
   ]
 }

@@ -1965,3 +1965,17 @@
 {"ts": "2026-04-10T12:22:46.240354+00:00", "event": "spec.after_create", "id": "spec-0046", "path": "docs\\planning\\specifications\\spec-0046-audience-level-profile-system-for-controlling-planning-depth-of-detail.md"}
 {"ts": "2026-04-10T12:23:41.855946+00:00", "event": "task.after_create", "id": "task-0236", "path": "docs\\planning\\tasks\\core\\task-0236.md"}
 {"ts": "2026-04-10T12:24:02.907958+00:00", "event": "request.after_state_change", "id": "request-0009", "old_state": "captured", "new_state": "distilled"}
+{"ts": "2026-04-10T12:47:45.569205+00:00", "event": "request.after_create", "id": "request-0029", "path": "docs\\planning\\requests\\request-0029.md"}
+{"ts": "2026-04-10T12:47:57.831979+00:00", "event": "request.after_update", "id": "request-0009"}
+{"ts": "2026-04-10T12:47:58.141560+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T12:47:58.230559+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T12:48:45.255989+00:00", "event": "plan.after_create", "id": "plan-0014", "path": "docs\\planning\\plans\\plan-0014-implement-guidance-levels-for-planning-depth-of-detail.md"}
+{"ts": "2026-04-10T12:48:49.392026+00:00", "event": "wp.after_create", "id": "wp-0015", "path": "docs\\planning\\work-packages\\core\\wp-0015-implement-guidance-levels-in-config-api-and-validation.md"}
+{"ts": "2026-04-10T12:48:53.918089+00:00", "event": "task.after_create", "id": "task-0237", "path": "docs\\planning\\tasks\\core\\task-0237.md"}
+{"ts": "2026-04-10T12:48:58.192709+00:00", "event": "task.after_create", "id": "task-0238", "path": "docs\\planning\\tasks\\core\\task-0238.md"}
+{"ts": "2026-04-10T12:49:02.567508+00:00", "event": "task.after_create", "id": "task-0239", "path": "docs\\planning\\tasks\\core\\task-0239.md"}
+{"ts": "2026-04-10T12:49:06.966630+00:00", "event": "task.after_create", "id": "task-0240", "path": "docs\\planning\\tasks\\core\\task-0240.md"}
+{"ts": "2026-04-10T12:49:11.620663+00:00", "event": "task.after_create", "id": "task-0241", "path": "docs\\planning\\tasks\\core\\task-0241.md"}
+{"ts": "2026-04-10T12:49:16.125295+00:00", "event": "task.after_create", "id": "task-0242", "path": "docs\\planning\\tasks\\core\\task-0242.md"}
+{"ts": "2026-04-10T12:49:20.499622+00:00", "event": "task.after_create", "id": "task-0243", "path": "docs\\planning\\tasks\\core\\task-0243.md"}
+{"ts": "2026-04-10T12:49:24.806767+00:00", "event": "task.after_create", "id": "task-0244", "path": "docs\\planning\\tasks\\core\\task-0244.md"}
