@@ -5,6 +5,7 @@ state: distilled
 summary: Introduce orthogonal audience profiles (junior/mid/senior) that control spec/task
   required sections, detail verbosity, and acceptance criteria depth independently
   of work-type profiles (feature/bug/spike/compliance/rfc)
+source: legacy-backfill
 current_understanding: 'Initial request intake captured: Introduce orthogonal audience
   profiles (junior/mid/senior) that control spec/task required sections, detail verbosity,
   and acceptance criteria depth independently of work-type profiles (feature/bug/spike/compliance/rfc)'

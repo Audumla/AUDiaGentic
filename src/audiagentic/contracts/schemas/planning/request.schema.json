@@ -6,6 +6,7 @@
     "label",
     "state",
     "summary",
+    "source",
     "current_understanding",
     "open_questions"
   ],
