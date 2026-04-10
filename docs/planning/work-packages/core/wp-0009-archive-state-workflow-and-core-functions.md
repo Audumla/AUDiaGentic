@@ -2,9 +2,11 @@
 id: wp-0009
 label: Archive state workflow and core functions
 state: in_progress
-summary: Implement archive state in planning state machine and tm_archive/tm_restore
-  functions
+summary: Implement archive state in planning state machine and state-based archive/restore
+  behavior
 plan_ref: plan-0009
+standard_refs:
+- standard-0009
 task_refs:
 - ref: task-0190
   seq: 1000
@@ -27,7 +29,7 @@ older or redundant items while maintaining historical records.
 # Scope of This Package
 
 - Add archived state to planning state machine
-- Implement tm_archive() and tm_restore() helper functions
+- Implement state-based archive and restore behavior in the planning core
 - Update tm_list() with archive filtering
 - Update tm_validate() with archive rules
 - Update tm_show() with archive metadata
@@ -42,15 +44,16 @@ older or redundant items while maintaining historical records.
 
 1. Add archived state to all planning item kinds
 2. Define valid state transitions including archive/restore
-3. Implement tm_archive() and tm_restore() in tm_helper.py
+3. Implement archive and restore behavior through the canonical state/lifecycle machinery rather than separate wrapper-defined semantics
 4. Update tm_list() to filter archived items
 5. Update tm_validate() to skip cross-ref validation for archived items
 6. Update tm_show() to include archive metadata
+7. Keep MCP/helper exposure aligned with the planning-core state model
 
 # Required Outputs
 
 - Archived state in planning state machine
-- tm_archive() and tm_restore() functions
+- State-based archive and restore behavior in the planning core
 - Archive filtering in tm_list()
 - Archive validation rules in tm_validate()
 - Archive metadata in tm_show()
@@ -59,8 +62,8 @@ older or redundant items while maintaining historical records.
 
 - [ ] Archived state is defined for all planning kinds
 - [ ] State transitions are validated correctly
-- [ ] tm_archive() transitions item to archived state
-- [ ] tm_restore() transitions item back to ready state
+- [ ] State-driven archive transitions move items to archived with metadata
+- [ ] State-driven restore transitions move items back to ready with metadata
 - [ ] tm_list() excludes archived items by default
 - [ ] tm_validate() skips cross-ref validation for archived items
 - [ ] tm_show() includes archive metadata

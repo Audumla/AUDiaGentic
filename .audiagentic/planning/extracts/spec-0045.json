@@ -1,0 +1,55 @@
+{
+  "item": {
+    "id": "spec-0045",
+    "label": "Cursory sensitive data detection in planning validation (v1)",
+    "state": "ready",
+    "summary": "Add lightweight regex-based detection of common secrets (AWS keys, API keys, passwords) in planning item body content; emit as non-blocking warnings during validation",
+    "request_refs": [
+      "request-0006"
+    ],
+    "task_refs": [
+      {
+        "ref": "task-0233",
+        "seq": 1000
+      },
+      {
+        "ref": "task-0234",
+        "seq": 1001
+      },
+      {
+        "ref": "task-0235",
+        "seq": 1002
+      }
+    ],
+    "standard_refs": [
+      "standard-0006",
+      "standard-0005"
+    ],
+    "kind": "spec",
+    "path": "docs/planning/specifications/spec-0045-cursory-sensitive-data-detection-in-planning-validation-v1.md"
+  },
+  "effective_standard_refs": [
+    "standard-0006",
+    "standard-0005"
+  ],
+  "body": "\n\n\n\n\n# Purpose\n\nAdd lightweight, cursory detection of common sensitive patterns in planning item body content. Emit as non-blocking warnings during validation. This is v1: simple, fast, can be extended later.\n\n# Scope (v1: Intentionally Minimal)\n\nDetect only:\n- AWS Access Keys (AKIA pattern)\n- API Keys (generic patterns: `api_key=`, `apikey:`, `API_KEY=`)\n- Passwords (basic patterns: `password=`, `passwd=`, `pwd=`)\n- Common tokens (Bearer tokens in markdown)\n\nCheck only:\n- Markdown body content (item.body)\n\nEmit as:\n- Non-blocking warnings during `tm_validate()`\n- Included in validation output but do not fail validation\n\nDo NOT include in v1:\n- Frontmatter checking\n- Attachment/resource scanning\n- Allow-listing or overrides\n- Sophisticated entropy analysis\n- Custom detection rules\n- Configuration options\n\n# Requirements\n\n## 1. Detection Patterns\n\nSimple regex patterns for:\n```python\nPATTERNS = {\n    'aws_key': r'AKIA[0-9A-Z]{16}',\n    'api_key': r'(?:api[_-]?key|apikey)[\\s]*[=:]\\s*[\"\\']?[a-zA-Z0-9]{20,}[\"\\']?',\n    'password': r'(?:password|passwd|pwd)[\\s]*[=:]\\s*[\"\\']?[^\"\\'\\s]+[\"\\']?',\n    'bearer_token': r'Bearer\\s+[a-zA-Z0-9\\-._~+/]+=*',\n}\n```\n\n## 2. Detection Function\n\n```python\ndef detect_sensitive_patterns(body: str) -> list[str]:\n    \"\"\"Scan markdown body for common sensitive patterns.\n    \n    Returns list of warning messages, e.g.:\n    - \"Possible AWS access key detected in body\"\n    - \"Possible API key detected in body\"\n    \"\"\"\n    warnings = []\n    if not body:\n        return warnings\n    \n    for name, pattern in PATTERNS.items():\n        if re.search(pattern, body, re.IGNORECASE):\n            warnings.append(f\"Possible {name.replace('_', ' ')} detected in body content\")\n    \n    return warnings\n```\n\n## 3. Integration with Validation\n\nUpdate `tm_validate()` to:\n```python\ndef validate(items=None, ...) -> list[dict]:\n    ...\n    for item in items_to_check:\n        # Existing validation\n        item_errors = validate_item(item)\n        \n        # Add sensitive data warnings\n        item_warnings = detect_sensitive_patterns(item.body)\n        \n        # Include warnings in output, mark as non-blocking\n        validation_output['warnings'].extend(item_warnings)\n    \n    return validation_output\n```\n\nOutput shape:\n```json\n{\n  \"items_checked\": 248,\n  \"errors\": [...],\n  \"warnings\": [\n    {\n      \"id\": \"task-0123\",\n      \"type\": \"sensitive_data\",\n      \"message\": \"Possible API key detected in body content\"\n    }\n  ]\n}\n```\n\n## 4. MCP/Helper Exposure\n\nNo new MCP tools needed in v1. Warnings appear in:\n- `tm_validate()` output (already exists)\n- No separate detection API\n\n## 5. Testing\n\nBasic tests:\n- Detects AWS key pattern in body\n- Detects API key pattern\n- Detects password pattern\n- Does NOT trigger on false positives in normal text\n- Does NOT block validation (warnings only)\n- Empty/None body returns no warnings\n\n# Constraints\n\n- **Performance:** Regex patterns should be fast; no heavy computation\n- **False positives:** Accept some false positives in v1 (can be refined later)\n- **False negatives:** OK to miss some patterns (cursory by design)\n- **No persistence:** Warnings are emitted but not stored/tracked\n- **No side effects:** Detection does not modify planning items\n\n# What's Explicitly NOT in v1\n\n- \u274c Allow-listing of credentials\n- \u274c Frontmatter/metadata checking\n- \u274c Attachment scanning\n- \u274c Configuration/custom rules\n- \u274c Blocking validation\n- \u274c Audit trail\n- \u274c Entropy-based detection\n- \u274c NLP or advanced analysis\n\n# Acceptance Criteria\n\n- [x] Design complete (lightweight by intent)\n- [ ] `detect_sensitive_patterns(body: str)` function implemented\n- [ ] Integrated into `tm_validate()` output as non-blocking warnings\n- [ ] AWS key, API key, password, bearer token patterns detected\n- [ ] Tests confirm detection works and doesn't break validation\n- [ ] Warnings appear in validation output with type=\"sensitive_data\"\n- [ ] Cursory approach documented; v2 expansion noted\n\n# Notes\n\nThis is intentionally minimal: regex patterns, body-only, advisory warnings. The goal is to catch obvious accidental leaks (copy-paste mishaps) without heavyweight infrastructure. v2 can add allow-listing, frontmatter checking, and configuration. v1 just raises awareness.\n\nFuture extensions:\n- Allow-listing of known test credentials\n- Frontmatter and attachment scanning\n- Integration with external secret scanning tools\n- Configurable pattern sets\n- Blocking mode (optional)\n",
+  "related": {
+    "request_refs": [
+      "request-0006"
+    ],
+    "task_refs": [
+      {
+        "ref": "task-0233",
+        "seq": 1000
+      },
+      {
+        "ref": "task-0234",
+        "seq": 1001
+      },
+      {
+        "ref": "task-0235",
+        "seq": 1002
+      }
+    ]
+  }
+}

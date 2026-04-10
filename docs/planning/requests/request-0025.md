@@ -1,7 +1,7 @@
 ---
 id: request-0025
 label: Optimize planning single-item lookup and extract token usage
-state: distilled
+state: closed
 summary: Improve planning API and MCP efficiency by replacing repeated full-repo scans
   for single-item reads with index-backed lookup, and refine extract/show surfaces
   to reduce unnecessary body payloads and side-effect writes.
@@ -12,13 +12,13 @@ current_understanding: Every single-item read in the planning API currently trig
   scan then calls show() internally, resulting in a triple scan per extract call.
   The idx_mgr already generates per-kind index files containing id, label, state,
   and path, but these are never read for lookups. A single global lookup index keyed
-  by id would allow _find(), show(), and extract() to resolve items via one JSON
-  read and one targeted markdown parse, eliminating O(n) scans for single-item
-  operations. Additionally, extract() always includes full body content and always
-  writes an artifact to disk, which is unnecessary overhead for callers that only
-  need metadata. Adding explicit include_body and write_to_disk controls, and
-  exposing a lean head(id) surface in both the helper and MCP layers, would
-  significantly reduce token usage for AI consumers.
+  by id would allow _find(), show(), and extract() to resolve items via one JSON read
+  and one targeted markdown parse, eliminating O(n) scans for single-item operations.
+  Additionally, extract() always includes full body content and always writes an artifact
+  to disk, which is unnecessary overhead for callers that only need metadata. Adding
+  explicit include_body and write_to_disk controls, and exposing a lean head(id) surface
+  in both the helper and MCP layers, would significantly reduce token usage for AI
+  consumers.
 open_questions: []
 context: 'Derived from review of planning API and MCP read paths. Key concerns: repeated
   scan_items() usage in single-item operations, extract() always including body and
@@ -27,7 +27,15 @@ spec_refs:
 - spec-0043
 standard_refs:
 - standard-0001
+meta:
+  current_understanding: 'All optimization work complete and verified: lookup.json
+    generates correctly, lookup(id) and head(id) helpers implemented with proper fallback,
+    single-item read paths refactored to use index-backed lookup eliminating O(n)
+    scans, extract() controls (include_body, write_to_disk) fully exposed in API/MCP/helper,
+    all 15 test cases passing.'
 ---
+
+
 
 # Understanding
 
