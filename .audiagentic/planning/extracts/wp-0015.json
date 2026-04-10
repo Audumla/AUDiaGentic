@@ -1,0 +1,91 @@
+{
+  "item": {
+    "id": "wp-0015",
+    "label": "Implement guidance levels in config, API, and validation",
+    "state": "draft",
+    "summary": "Add guidance_levels to profiles.yaml, implement guidance field in requests, update validation and CLI",
+    "plan_ref": "plan-0014",
+    "task_refs": [
+      {
+        "ref": "task-0237",
+        "seq": 1999
+      },
+      {
+        "ref": "task-0238",
+        "seq": 2999
+      },
+      {
+        "ref": "task-0239",
+        "seq": 3999
+      },
+      {
+        "ref": "task-0240",
+        "seq": 4999
+      },
+      {
+        "ref": "task-0241",
+        "seq": 5999
+      },
+      {
+        "ref": "task-0242",
+        "seq": 6999
+      },
+      {
+        "ref": "task-0243",
+        "seq": 7999
+      },
+      {
+        "ref": "task-0244",
+        "seq": 8999
+      }
+    ],
+    "standard_refs": [
+      "standard-0006"
+    ],
+    "kind": "wp",
+    "path": "docs/planning/work-packages/core/wp-0015-implement-guidance-levels-in-config-api-and-validation.md"
+  },
+  "effective_standard_refs": [
+    "standard-0006",
+    "standard-0005",
+    "standard-0009"
+  ],
+  "body": "\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n",
+  "related": {
+    "task_refs": [
+      {
+        "ref": "task-0237",
+        "seq": 1999
+      },
+      {
+        "ref": "task-0238",
+        "seq": 2999
+      },
+      {
+        "ref": "task-0239",
+        "seq": 3999
+      },
+      {
+        "ref": "task-0240",
+        "seq": 4999
+      },
+      {
+        "ref": "task-0241",
+        "seq": 5999
+      },
+      {
+        "ref": "task-0242",
+        "seq": 6999
+      },
+      {
+        "ref": "task-0243",
+        "seq": 7999
+      },
+      {
+        "ref": "task-0244",
+        "seq": 8999
+      }
+    ],
+    "plan_ref": "plan-0014"
+  }
+}
