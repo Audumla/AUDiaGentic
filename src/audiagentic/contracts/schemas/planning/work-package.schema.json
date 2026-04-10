@@ -34,6 +34,15 @@
     "meta": {
       "type": "object"
     },
+    "deleted": {
+      "type": "boolean"
+    },
+    "deleted_at": {
+      "type": "string"
+    },
+    "deletion_reason": {
+      "type": "string"
+    },
     "plan_ref": {
       "type": "string"
     },

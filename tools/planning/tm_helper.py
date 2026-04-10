@@ -60,6 +60,8 @@ from audiagentic.planning.app.docs_mgr import DocumentationManager
 from audiagentic.planning.app.refs_mgr import ReferencesManager
 from audiagentic.planning.app.support_mgr import SupportingDocsManager
 from audiagentic.planning.app.section_registry import split_section_path
+from audiagentic.planning.fs.read import parse_markdown
+from audiagentic.planning.fs.write import dump_markdown
 
 # Module-level root - can be overridden for isolated operations
 _current_root: Path | None = None
@@ -189,9 +191,10 @@ def new_request(
     label: str,
     summary: str,
     profile: str | None = None,
-    source_refs: list[str] | None = None,
     current_understanding: str | None = None,
     open_questions: list[str] | None = None,
+    source: str | None = None,
+    context: str | None = None,
     root: Path | None = None,
     check_duplicates: bool = True,
 ) -> dict[str, Any]:
@@ -201,9 +204,10 @@ def new_request(
         label: Request label
         summary: Request summary
         profile: Optional request profile such as feature or issue.
-        source_refs: Optional initial source refs.
         current_understanding: Optional initial understanding text.
         open_questions: Optional initial open-question list.
+        source: Optional provenance source for how this request was created.
+        context: Optional extra context for where this request came from.
         root: Optional project root. If None, uses current root.
         check_duplicates: If True, check for existing requests with same label/summary
 
@@ -216,12 +220,10 @@ def new_request(
     if check_duplicates:
         existing = [i for i in api._scan() if i.kind == "request"]
         label_lower = label.lower().strip()
-        summary_lower = summary.lower().strip()
 
         for item in existing:
             existing_label = item.data.get("label", "").lower().strip()
-            existing_summary = item.data.get("summary", "").lower().strip()
-            if existing_label == label_lower or existing_summary == summary_lower:
+            if existing_label == label_lower:
                 return {
                     "id": item.data["id"],
                     "path": str(item.path.relative_to(project_root)),
@@ -235,9 +237,11 @@ def new_request(
         label=label,
         summary=summary,
         profile=profile,
-        source_refs=source_refs,
         current_understanding=current_understanding,
         open_questions=open_questions,
+        source=source,
+        context=context,
+        check_duplicates=check_duplicates,
     )
     return {
         "id": item.data["id"],
@@ -271,12 +275,10 @@ def new_spec(
     if check_duplicates:
         existing = [i for i in api._scan() if i.kind == "spec"]
         label_lower = label.lower().strip()
-        summary_lower = summary.lower().strip()
 
         for item in existing:
             existing_label = item.data.get("label", "").lower().strip()
-            existing_summary = item.data.get("summary", "").lower().strip()
-            if existing_label == label_lower or existing_summary == summary_lower:
+            if existing_label == label_lower:
                 return {
                     "id": item.data["id"],
                     "path": str(item.path.relative_to(project_root)),
@@ -285,7 +287,13 @@ def new_spec(
                     "message": f"Specification already exists: {item.data['id']}",
                 }
 
-    item = api.new("spec", label=label, summary=summary, request_refs=request_refs)
+    item = api.new(
+        "spec",
+        label=label,
+        summary=summary,
+        request_refs=request_refs,
+        check_duplicates=check_duplicates,
+    )
     return {
         "id": item.data["id"],
         "path": str(item.path.relative_to(project_root)),
@@ -313,7 +321,11 @@ def _validate_reference(ref_id: str, ref_type: str, root: Path | None = None) ->
 
 
 def new_plan(
-    label: str, summary: str, spec: str | None = None, root: Path | None = None
+    label: str,
+    summary: str,
+    spec: str | None = None,
+    request_refs: list[str] | None = None,
+    root: Path | None = None,
 ) -> dict[str, Any]:
     """Create a new Plan planning document.
 
@@ -321,6 +333,7 @@ def new_plan(
         label: Plan label
         summary: Plan summary
         spec: Optional spec ID to link
+        request_refs: Optional request IDs to link for traceability.
         root: Optional project root. If None, uses current root.
 
     Returns:
@@ -329,8 +342,16 @@ def new_plan(
     project_root = root or _get_root()
     if spec:
         _validate_reference(spec, "spec", project_root)
+    for req_id in request_refs or []:
+        _validate_reference(req_id, "request", project_root)
     api = PlanningAPI(project_root)
-    item = api.new("plan", label=label, summary=summary, spec=spec)
+    item = api.new(
+        "plan",
+        label=label,
+        summary=summary,
+        spec=spec,
+        request_refs=request_refs,
+    )
     return {"id": item.data["id"], "path": str(item.path.relative_to(project_root))}
 
 
@@ -342,6 +363,7 @@ def new_task(
     target: str | None = None,
     parent: str | None = None,
     workflow: str | None = None,
+    request_refs: list[str] | None = None,
     root: Path | None = None,
 ) -> dict[str, Any]:
     """Create a new Task planning document.
@@ -354,6 +376,7 @@ def new_task(
         target: Optional target ID
         parent: Optional parent ID
         workflow: Optional workflow ID
+        request_refs: Optional request IDs to link for traceability.
         root: Optional project root. If None, uses current root.
 
     Returns:
@@ -363,6 +386,8 @@ def new_task(
     _validate_reference(spec, "spec", project_root)
     if parent:
         _validate_reference(parent, "parent", project_root)
+    for req_id in request_refs or []:
+        _validate_reference(req_id, "request", project_root)
     api = PlanningAPI(project_root)
     item = api.new(
         "task",
@@ -373,6 +398,7 @@ def new_task(
         target=target,
         parent=parent,
         workflow=workflow,
+        request_refs=request_refs,
     )
     return {"id": item.data["id"], "path": str(item.path.relative_to(project_root))}
 
@@ -561,8 +587,14 @@ def _execute_batch_operations(
                 elif op_type == "meta":
                     field = op["field"]
                     value = op["value"]
-                    # Update meta field via update_content or direct file manipulation
-                    # For now, use update with append to body or handle specially
+                    # Update meta field in frontmatter
+                    item = api._find(id_)
+                    data, body = parse_markdown(item.path)
+                    if "meta" not in data:
+                        data["meta"] = {}
+                    data["meta"][field] = value
+                    dump_markdown(item.path, data, body)
+                    api.index()
                     results.append(
                         {
                             "index": i,
@@ -763,6 +795,21 @@ def validate(root: Path | None = None) -> list[str]:
     return api.validate()
 
 
+def delete(
+    id_: str,
+    hard: bool = False,
+    reason: str | None = None,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    """Delete a planning item.
+
+    Soft delete is the default; hard delete removes the file and syncs counters.
+    """
+    project_root = root or _get_root()
+    api = PlanningAPI(project_root)
+    return api.delete(id_, hard=hard, reason=reason)
+
+
 def index(root: Path | None = None) -> None:
     """Re-index all planning documents.
 
@@ -826,7 +873,9 @@ def extract(
 
 
 def list_kind(
-    kind: str | None = None, root: Path | None = None
+    kind: str | None = None,
+    root: Path | None = None,
+    include_deleted: bool = False,
 ) -> list[dict[str, Any]]:
     """List planning items, optionally filtered by kind.
 
@@ -842,12 +891,15 @@ def list_kind(
     items = api._scan()
     if kind:
         items = [i for i in items if i.kind == kind]
+    if not include_deleted:
+        items = [i for i in items if not i.data.get("deleted")]
     return [
         {
             "id": i.data["id"],
             "kind": i.kind,
             "label": i.data["label"],
             "state": i.data["state"],
+            "deleted": bool(i.data.get("deleted")),
         }
         for i in items
     ]
@@ -965,7 +1017,7 @@ def list_standards(root: Path | None = None) -> list[dict[str, Any]]:
     Returns:
         List of standards
     """
-    return list_kind("standard", root)
+    return list_kind("standard", root=root)
 
 
 def get_standard(
@@ -1022,7 +1074,7 @@ def status(root: Path | None = None) -> dict[str, Any]:
         root: Optional project root. If None, uses current root.
 
     Returns:
-        Status summary dict
+        Status summary dict with counts per kind per state
     """
     project_root = root or _get_root()
     api = PlanningAPI(project_root)
@@ -1032,6 +1084,9 @@ def status(root: Path | None = None) -> dict[str, Any]:
         out.setdefault(i.kind, {})
         out[i.kind].setdefault(i.data["state"], 0)
         out[i.kind][i.data["state"]] += 1
+    # Also add total count per kind
+    for kind in out:
+        out[kind]["_total"] = sum(out[kind].values())
     return out
 
 

@@ -5,11 +5,6 @@ state: captured
 summary: Implement optional security review that detects sensitive information (passwords,
   internal server names, PII, credentials) in planning requests, specifications, tasks,
   and work-packages, with ability to override for known test credentials
-source_refs:
-  - spec-0008
-  - docs/specifications/architecture/03_Common_Contracts.md
-  - docs/implementation_backup/22_Secret_Management.md
-  - .audiagentic/planning/config/hooks.yaml
 current_understanding: "This request captures an exploratory but valuable planning-safety feature: detecting likely secrets and sensitive data in planning content before that material becomes part of tracked project records. It is related to secret-management policy, but it does not yet have a dedicated implementation spec or plan."
 open_questions:
   - "Which content surfaces should be checked first: frontmatter, markdown body, attachments, or generated runtime artifacts?"
@@ -20,13 +15,6 @@ open_questions:
 # Understanding
 
 This request captures an exploratory but valuable planning-safety feature: detecting likely secrets and sensitive data in planning content before that material becomes part of tracked project records. It is related to secret-management policy, but it does not yet have a dedicated implementation spec or plan.
-
-# Source Refs
-
-- spec-0008
-- docs/specifications/architecture/03_Common_Contracts.md
-- docs/implementation_backup/22_Secret_Management.md
-- .audiagentic/planning/config/hooks.yaml
 
 # Open Questions
 

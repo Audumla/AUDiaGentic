@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-09T13:26:50.353288+00:00",
+  "generated_at": "2026-04-10T03:27:12.653156+00:00",
   "items": [
     {
       "id": "request-0002",
@@ -34,9 +34,93 @@
     },
     {
       "id": "request-0007",
-      "label": "Planning module critical fixes: schema, soft delete, and traceability",
-      "state": "captured",
+      "label": "Planning module hardening: delete safety, traceability, validation, and duplicate guards",
+      "state": "closed",
       "path": "docs\\planning\\requests\\request-0007.md"
+    },
+    {
+      "id": "request-0008",
+      "label": "Fix planning API and MCP gaps revealed by coverage tests",
+      "state": "closed",
+      "path": "docs\\planning\\requests\\request-0008.md"
+    },
+    {
+      "id": "request-0009",
+      "label": "Add audience-level profile system to control planning depth-of-detail",
+      "state": "distilled",
+      "path": "docs\\planning\\requests\\request-0009.md"
+    },
+    {
+      "id": "request-0010",
+      "label": "Implement configurable stack profiles for lightweight req\u2192spec\u2192task workflows",
+      "state": "distilled",
+      "path": "docs\\planning\\requests\\request-0010.md"
+    },
+    {
+      "id": "request-0011",
+      "label": "Test Direct Profile",
+      "state": "superseded",
+      "path": "docs\\planning\\requests\\request-0011.md"
+    },
+    {
+      "id": "request-0012",
+      "label": "Test2",
+      "state": "superseded",
+      "path": "docs\\planning\\requests\\request-0012.md"
+    },
+    {
+      "id": "request-0013",
+      "label": "Test Cascade Request",
+      "state": "superseded",
+      "path": "docs\\planning\\requests\\request-0013.md"
+    },
+    {
+      "id": "request-0014",
+      "label": "Test3",
+      "state": "superseded",
+      "path": "docs\\planning\\requests\\request-0014.md"
+    },
+    {
+      "id": "request-0015",
+      "label": "Traditional Request",
+      "state": "superseded",
+      "path": "docs\\planning\\requests\\request-0015.md"
+    },
+    {
+      "id": "request-0016",
+      "label": "Full Profile Test",
+      "state": "superseded",
+      "path": "docs\\planning\\requests\\request-0016.md"
+    },
+    {
+      "id": "request-0017",
+      "label": "Test Feature Profile",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-0017.md"
+    },
+    {
+      "id": "request-0018",
+      "label": "Test Issue Profile",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-0018.md"
+    },
+    {
+      "id": "request-0019",
+      "label": "Direct Stack Test",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-0019.md"
+    },
+    {
+      "id": "request-0020",
+      "label": "Full Stack Test",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-0020.md"
+    },
+    {
+      "id": "request-0021",
+      "label": "No Profile",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-0021.md"
     }
   ]
 }

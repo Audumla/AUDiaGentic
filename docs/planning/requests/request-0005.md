@@ -4,12 +4,6 @@ label: Archive functionality for planning items
 state: captured
 summary: Implement archive state and functions to archive older or redundant planning
   items while maintaining historical records
-source_refs:
-  - request-0003
-  - spec-0023
-  - plan-0009
-  - wp-0009
-  - docs/planning/specifications/spec-0003-archive-state-workflow-specification.md
 current_understanding: "This request is the current implementation-focused archive intake. It takes the earlier archive concept and narrows it into a concrete delivery slice for archive state support, archive helper functions, filtering, and metadata visibility."
 open_questions:
   - Which archive behaviors are mandatory for the first pass versus safe to defer?
@@ -20,14 +14,6 @@ open_questions:
 # Understanding
 
 This request is the current implementation-focused archive intake. It takes the earlier archive concept and narrows it into a concrete delivery slice for archive state support, archive helper functions, filtering, and metadata visibility.
-
-# Source Refs
-
-- request-0003
-- spec-0023
-- plan-0009
-- wp-0009
-- docs/planning/specifications/spec-0003-archive-state-workflow-specification.md
 
 # Open Questions
 

@@ -5,7 +5,16 @@ state: distilled
 summary: Enable optional plans/work packages via stack_profiles, allowing request→specification→task execution without mandatory plan/WP layers
 current_understanding: 'Planning module now supports two configurable stack profiles: direct (req→spec→task only) and full (same base with optional plan/WP overlay). This makes the base planning workflow lightweight while keeping planning structure available when needed.'
 open_questions: []
+source: consolidation
+context: Consolidated canonical request for stack-profile and overlay work after reviewing exploratory request records.
 meta:
+  consolidated_requests:
+  - request-0011
+  - request-0012
+  - request-0013
+  - request-0014
+  - request-0015
+  - request-0016
   outcomes_delivered:
   - Added `direct` and `full` stack profiles to profiles.yaml with configurable on_request_create behavior
   - Implemented cascade creation in PlanningAPI.new() to auto-create specs when request uses stack_profile
@@ -19,6 +28,12 @@ meta:
 The planning module required a lightweight execution path that doesn't mandate plans and work packages. This request drove the implementation of configurable stack profiles that make the base graph (request → specification → task) a first-class workflow, with planning (plan/WP) as an optional overlay applied later when needed.
 
 The implementation preserves the existing strict schema (work packages still require plans) while making the planning lifecycle genuinely optional at the request level.
+
+Exploratory test requests created during implementation review were consolidated here so the stack-profile feature has a single canonical request record. `request-0009` remains a separate request because it tracks audience-level profile depth/detail rather than stack-topology behavior.
+
+# Open Questions
+
+None at consolidation time.
 
 # Delivery
 
@@ -42,3 +57,9 @@ Implemented in commit c8370e7:
 # Notes
 
 Planning layer is now optimized for lightweight execution. Agents can work with spec+task flows without planning overhead, and planning structure can be applied declaratively when needed.
+
+Consolidation notes:
+
+- Rolled in exploratory stack-profile requests `request-0011` through `request-0016`
+- Re-pointed linked implementation artifacts to `request-0010` for traceability
+- Preserved `request-0009` as a separate future-facing request about audience-level profiles

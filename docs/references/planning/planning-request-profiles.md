@@ -51,7 +51,6 @@ When a request is created without a profile, the planning layer now seeds a gene
 - `current_understanding`
 - `open_questions`
 - `# Understanding`
-- `# Source Refs`
 - `# Open Questions`
 - `# Notes`
 

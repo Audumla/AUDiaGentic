@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -66,7 +67,6 @@ def test_tm_helper_new_request_uses_profile_defaults(helper_project: Path) -> No
         "Improve intake",
         "Create richer request templates",
         profile="feature",
-        source_refs=["user:chat"],
     )
     body = tm.get_content(request["id"])
     shown = tm.show(request["id"])
@@ -74,11 +74,22 @@ def test_tm_helper_new_request_uses_profile_defaults(helper_project: Path) -> No
     assert shown["current_understanding"].startswith("Initial feature intake captured")
     assert shown["open_questions"]
     assert shown["meta"]["request_type"] == "feature"
-    assert shown["source_refs"] == ["user:chat"]
     assert "# Problem" in body
     assert "# Desired Outcome" in body
-    assert "# Source Refs" in body
     assert "# Open Questions" in body
+
+
+def test_tm_helper_new_request_persists_source_and_context(helper_project: Path) -> None:
+    request = tm.new_request(
+        "Trace helper request",
+        "Capture provenance",
+        source="helper",
+        context="unit test",
+    )
+    shown = tm.show(request["id"])
+
+    assert shown["source"] == "helper"
+    assert shown["context"] == "unit test"
 
 
 def test_tm_helper_doc_sync_queries() -> None:
@@ -174,3 +185,45 @@ def test_tm_helper_lists_and_gets_standards(helper_project: Path) -> None:
     standard_doc = tm.get_standard(standard["id"])
     assert standard_doc["item"]["kind"] == "standard"
     assert "Findings first." in standard_doc["body"]
+
+
+def test_tm_helper_plan_and_task_request_refs_appear_in_trace_index(
+    helper_project: Path,
+) -> None:
+    request = tm.new_request("Trace request", "Track reverse refs")
+    spec = tm.new_spec("Trace spec", "Trace spec summary", [request["id"]])
+    plan = tm.new_plan("Trace plan", "Trace plan summary", spec["id"], [request["id"]])
+    task = tm.new_task(
+        "Trace task",
+        "Trace task summary",
+        spec["id"],
+        request_refs=[request["id"]],
+    )
+
+    trace = json.loads(
+        (helper_project / ".audiagentic" / "planning" / "indexes" / "trace.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    request_edges = [
+        ref for ref in trace["refs"] if ref["field"] == "request_refs" and ref["dst"] == request["id"]
+    ]
+    assert any(ref["src"] == spec["id"] for ref in request_edges)
+    assert any(ref["src"] == plan["id"] for ref in request_edges)
+    assert any(ref["src"] == task["id"] for ref in request_edges)
+
+
+def test_tm_helper_delete_and_list_include_deleted(helper_project: Path) -> None:
+    spec = tm.new_spec("Delete spec", "Delete summary")
+    task = tm.new_task("Delete task", "Delete summary", spec["id"])
+
+    result = tm.delete(task["id"], reason="test cleanup")
+    assert result["hard_delete"] is False
+
+    active_ids = {item["id"] for item in tm.list_kind("task")}
+    all_ids = {item["id"] for item in tm.list_kind("task", include_deleted=True)}
+    shown = tm.show(task["id"])
+
+    assert task["id"] not in active_ids
+    assert task["id"] in all_ids
+    assert shown["deleted"] is True

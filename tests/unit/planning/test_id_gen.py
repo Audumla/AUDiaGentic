@@ -71,3 +71,14 @@ def test_sync_counter_seeds_from_docs(tmp_path: Path) -> None:
     assert counter_file.exists()
     # Counter should be 0 when no docs exist
     assert int(counter_file.read_text().strip()) == 0
+
+
+def test_sync_counter_never_moves_backwards(tmp_path: Path) -> None:
+    counter_dir = tmp_path / ".audiagentic" / "planning" / "ids"
+    counter_dir.mkdir(parents=True)
+    counter_file = counter_dir / "task.counter"
+    counter_file.write_text("8", encoding="utf-8")
+
+    sync_counter(tmp_path, "task")
+
+    assert int(counter_file.read_text().strip()) == 8

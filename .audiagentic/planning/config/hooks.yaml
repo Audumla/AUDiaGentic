@@ -59,6 +59,8 @@ planning:
       wp:
         - action: emit_event
         - action: index
+        - action: review_stub
+        - action: report_stub
     after_reconcile:
       planning:
         - action: emit_event

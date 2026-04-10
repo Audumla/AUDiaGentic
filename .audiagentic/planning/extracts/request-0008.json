@@ -1,0 +1,20 @@
+{
+  "item": {
+    "id": "request-0008",
+    "label": "Fix planning API and MCP gaps revealed by coverage tests",
+    "state": "distilled",
+    "summary": "Fix 23 failing tests across PlanningAPI and MCP: section-mode regex, wp move, request workflow, claims TTL, hook payloads, batch meta op, status shape, empty-list serialization, and root isolation",
+    "current_understanding": "Initial request intake captured: Implement fixes for 23 failing tests in test_planning_api_coverage.py and test_mcp_tool_calls.py: (1) section-mode content replacement regex, (2) wp move to contrib domain, (3) request state workflow (captured\u2192draft), (4) claims TTL expiry enforcement, (5) hook event payload structure for review_stub/report_stub/note_stub, (6) batch operation meta op and tm_helper set_root interaction, (7) tm_status return shape, (8) MCP empty-list/None serialization via FastMCP (0 content blocks), (9) MCP subprocess root isolation via AUDIAGENTIC_ROOT env var or --root flag to enable mutation test isolation",
+    "open_questions": [
+      "Should FastMCP empty-list fix be a wrapper in each MCP tool function, or patched at the FastMCP response-serialization layer?",
+      "Should claims TTL expiry purge expired records on read (lazy) or on a scheduled basis?",
+      "Should AUDIAGENTIC_ROOT env var be the only isolation mechanism, or also support a --root CLI flag passed to the MCP server?",
+      "Is captured -> draft a valid request workflow transition or should requests skip captured on creation?"
+    ],
+    "kind": "request",
+    "path": "docs\\planning\\requests\\request-0008.md"
+  },
+  "body": "\n\n\n\n# Understanding\n\n23 tests fail in two new coverage suites (`test_planning_api_coverage.py` and `test_mcp_tool_calls.py`) plus 32 mutation tests are marked xfail due to MCP subprocess isolation not being implemented. The failures map to 9 distinct root causes across three layers: PlanningAPI bugs, MCP serialization issues, and a missing MCP root isolation mechanism.\n\n**PlanningAPI bugs (12 failures):**\n1. `update_content()` section-mode regex fails to bound section end correctly \u2014 corrupts sibling sections\n2. `move()` fails for work-packages \u2014 path resolution inconsistency for wp domain\n3. Request workflow missing `captured -> draft` transition in workflows.yaml\n4. Claims TTL expiry not enforced \u2014 expired claims still block `next_items()` and appear in `claims()`\n5. Hook event payloads for `review_stub`, `report_stub`, `note_stub` have wrong structure\n6. Batch `meta` op in `_execute_batch_operations()` silently discarded \u2014 no frontmatter write\n7. `tm.status()` return shape uses different keys than `{request, spec, plan, task, wp}`\n\n**MCP serialization (11 failures):**\n8. FastMCP emits 0 content blocks for empty list `[]` and `None` \u2014 clients cannot distinguish from void/error. Affects: `tm_validate`, `tm_claims`, `tm_next_tasks`, `tm_next_items`, `tm_pending_doc_updates`, `tm_standards`, `tm_get_doc_surface`, `tm_get_request_profile`\n\n**MCP root isolation (32 xfail):**\n9. MCP server `_bootstrap_repo_root()` always resolves via module file path markers, ignoring cwd when `tools/planning/tm_helper` is importable from the real repo. Needs `AUDIAGENTIC_ROOT` env var support.\n\n# Open Questions\n\n- Should FastMCP empty-list fix be a wrapper in each MCP tool function, or patched at the FastMCP response-serialization layer?\n- Should claims TTL expiry purge expired records on read (lazy) or on a scheduled basis?\n- Should `AUDIAGENTIC_ROOT` env var be the only isolation mechanism, or also support a `--root` CLI flag passed to the MCP server?\n- Is `captured -> draft` a valid request workflow transition or should requests skip `captured` on creation?\n\n# Notes\n\nFailures were discovered by writing full surface-level tests before implementation \u2014 tests serve as the specification for this work. All 23 failures are genuine gaps, not test harness issues. The 32 xfail tests will become regular passing tests once root isolation is implemented.\n",
+  "effective_standard_refs": [],
+  "related": {}
+}

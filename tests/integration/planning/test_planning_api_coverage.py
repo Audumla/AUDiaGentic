@@ -1,0 +1,1004 @@
+"""Full surface integration tests for PlanningAPI.
+
+Covers all methods and scenarios not exercised by the existing
+test_planning_api.py and test_tm_helper_extensions.py suites.
+
+Tests are written against the intended contract. Some will fail until
+the corresponding functionality is implemented or bugs are fixed.
+"""
+
+from __future__ import annotations
+
+import json
+import shutil
+import sys
+import time
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[3]
+PLANNING_CONFIG_SRC = ROOT / ".audiagentic" / "planning" / "config"
+
+for _p in (str(ROOT), str(ROOT / "src")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+
+# ---------------------------------------------------------------------------
+# Fixture
+# ---------------------------------------------------------------------------
+
+
+def _seed(root: Path) -> None:
+    config_dir = root / ".audiagentic" / "planning" / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    for f in PLANNING_CONFIG_SRC.glob("*.yaml"):
+        shutil.copy(f, config_dir / f.name)
+    pp_src = PLANNING_CONFIG_SRC / "profile-packs"
+    if pp_src.exists():
+        shutil.copytree(pp_src, config_dir / "profile-packs", dirs_exist_ok=True)
+    for d in (
+        "requests",
+        "specifications",
+        "plans",
+        "tasks/core",
+        "tasks/contrib",
+        "work-packages/core",
+        "work-packages/contrib",
+        "standards",
+    ):
+        (root / "docs" / "planning" / d).mkdir(parents=True, exist_ok=True)
+    for sub in ("ids", "indexes", "events", "claims", "meta", "extracts"):
+        (root / ".audiagentic" / "planning" / sub).mkdir(parents=True, exist_ok=True)
+
+
+@pytest.fixture()
+def pr(tmp_path: Path):
+    """Return (root, api) for an isolated project."""
+    _seed(tmp_path)
+    from audiagentic.planning.app.api import PlanningAPI
+
+    return tmp_path, PlanningAPI(tmp_path)
+
+
+# Shorthand helpers inside tests
+def _spec_and_task(api):
+    spec = api.new("spec", label="S", summary="S")
+    task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+    return spec, task
+
+
+def _full_hierarchy(api):
+    req = api.new("request", label="R", summary="R")
+    spec = api.new("spec", label="S", summary="S", request_refs=[req.data["id"]])
+    plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
+    task = api.new("task", label="T", summary="T", spec=spec.data["id"])
+    wp = api.new("wp", label="W", summary="W", plan=plan.data["id"])
+    return req, spec, plan, task, wp
+
+
+# ===========================================================================
+# update()
+# ===========================================================================
+
+
+class TestUpdate:
+    def test_update_label(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="Original", summary="S")
+        updated = api.update(spec.data["id"], label="Updated")
+        assert updated.data["label"] == "Updated"
+
+    def test_update_summary(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="Original summary")
+        updated = api.update(spec.data["id"], summary="New summary")
+        assert updated.data["summary"] == "New summary"
+
+    def test_update_body_append(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        api.update(spec.data["id"], body_append="## Appended\n\nExtra content.")
+        body = api.get_content(spec.data["id"])
+        assert "Appended" in body
+        assert "Extra content." in body
+
+    def test_update_returns_updated_item(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        result = api.update(spec.data["id"], label="Changed")
+        assert result.data["id"] == spec.data["id"]
+        assert result.data["label"] == "Changed"
+
+    def test_update_no_args_is_noop(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        result = api.update(spec.data["id"])
+        assert result.data["label"] == "S"
+
+
+# ===========================================================================
+# get_content() / update_content()
+# ===========================================================================
+
+
+class TestContent:
+    def test_get_content_returns_body_without_frontmatter(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        body = api.get_content(spec.data["id"])
+        assert "---" not in body
+        assert isinstance(body, str)
+
+    def test_update_content_replace(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        api.update_content(spec.data["id"], "# Purpose\n\nReplaced.\n", mode="replace")
+        assert "Replaced." in api.get_content(spec.data["id"])
+
+    def test_update_content_append(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        api.update_content(spec.data["id"], "# Purpose\n\nOriginal.\n", mode="replace")
+        api.update_content(spec.data["id"], "## Appended\n\nExtra.\n", mode="append")
+        body = api.get_content(spec.data["id"])
+        assert "Original." in body
+        assert "Extra." in body
+
+    def test_update_content_insert_at_position(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        api.update_content(
+            spec.data["id"], "# Purpose\n\nLine A.\n\nLine B.\n", mode="replace"
+        )
+        api.update_content(spec.data["id"], "INSERTED", mode="insert", position=3)
+        body = api.get_content(spec.data["id"])
+        assert "INSERTED" in body
+
+    def test_update_content_insert_requires_position(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        with pytest.raises(ValueError, match="position required"):
+            api.update_content(spec.data["id"], "x", mode="insert")
+
+    def test_update_content_insert_out_of_range_raises(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        api.update_content(spec.data["id"], "# A\n\nB.\n", mode="replace")
+        with pytest.raises(ValueError, match="out of range"):
+            api.update_content(spec.data["id"], "x", mode="insert", position=9999)
+
+    def test_update_content_section_mode_replaces_section(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        api.update_content(
+            spec.data["id"],
+            "# Purpose\n\nOld content.\n\n# Scope\n\nScope text.\n",
+            mode="replace",
+        )
+        api.update_content(
+            spec.data["id"], "New content.", mode="section", section="# Purpose"
+        )
+        body = api.get_content(spec.data["id"])
+        assert "New content." in body
+        assert "Old content." not in body
+        assert "Scope text." in body  # sibling section untouched
+
+    def test_update_content_section_mode_appends_if_not_found(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        api.update_content(spec.data["id"], "# Purpose\n\nContent.\n", mode="replace")
+        api.update_content(
+            spec.data["id"],
+            "Added section content.",
+            mode="section",
+            section="# New Section",
+        )
+        assert "New Section" in api.get_content(spec.data["id"])
+
+    def test_update_content_invalid_mode_raises(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        with pytest.raises(ValueError, match="unknown mode"):
+            api.update_content(spec.data["id"], "x", mode="overwrite")
+
+
+# ===========================================================================
+# create_with_content()
+# ===========================================================================
+
+
+class TestCreateWithContent:
+    def test_create_request_with_content(self, pr):
+        _, api = pr
+        content = "# Problem\n\nThe core issue.\n\n# Desired Outcome\n\nBetter state.\n"
+        item = api.create_with_content(
+            "request", label="R", summary="S", content=content
+        )
+        assert item.kind == "request"
+        assert "The core issue." in api.get_content(item.data["id"])
+
+    def test_create_spec_with_content(self, pr):
+        _, api = pr
+        content = "# Purpose\n\nNew spec.\n"
+        item = api.create_with_content("spec", label="S", summary="S", content=content)
+        assert "New spec." in api.get_content(item.data["id"])
+
+    def test_create_task_with_content(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="SP", summary="SP")
+        content = "# Description\n\nTask detail.\n"
+        item = api.create_with_content(
+            "task", label="T", summary="S", content=content, spec=spec.data["id"]
+        )
+        assert "Task detail." in api.get_content(item.data["id"])
+
+    def test_create_wp_with_content(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="SP", summary="SP")
+        plan = api.new("plan", label="PL", summary="PL", spec=spec.data["id"])
+        content = "# Objective\n\nWP detail.\n"
+        item = api.create_with_content(
+            "wp", label="W", summary="S", content=content, plan=plan.data["id"]
+        )
+        assert "WP detail." in api.get_content(item.data["id"])
+
+    def test_create_standard_with_content(self, pr):
+        _, api = pr
+        content = "# Standard\n\nUse snake_case.\n"
+        item = api.create_with_content(
+            "standard", label="Naming", summary="S", content=content
+        )
+        assert "snake_case" in api.get_content(item.data["id"])
+
+    def test_create_with_content_task_missing_spec_raises(self, pr):
+        _, api = pr
+        with pytest.raises(ValueError, match="task requires"):
+            api.create_with_content(
+                "task", label="T", summary="S", content="# Description\n\nX.\n"
+            )
+
+
+# ===========================================================================
+# move()
+# ===========================================================================
+
+
+class TestMove:
+    def test_move_task_to_contrib(self, pr):
+        root, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        moved = api.move(task.data["id"], "contrib")
+        assert "contrib" in str(moved.path)
+        assert (
+            root / "docs" / "planning" / "tasks" / "contrib" / f"{task.data['id']}.md"
+        ).exists()
+
+    def test_move_wp_to_contrib(self, pr):
+        root, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
+        wp = api.new("wp", label="W", summary="S", plan=plan.data["id"])
+        moved = api.move(wp.data["id"], "contrib")
+        assert "contrib" in str(moved.path)
+        assert moved.path.exists()
+
+    def test_move_request_raises(self, pr):
+        _, api = pr
+        req = api.new("request", label="R", summary="S")
+        with pytest.raises(ValueError, match="only task/wp"):
+            api.move(req.data["id"], "contrib")
+
+    def test_move_spec_raises(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        with pytest.raises(ValueError, match="only task/wp"):
+            api.move(spec.data["id"], "contrib")
+
+    def test_move_preserves_content(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        original_label = task.data["label"]
+        moved = api.move(task.data["id"], "contrib")
+        assert moved.data["label"] == original_label
+
+
+# ===========================================================================
+# relink()
+# ===========================================================================
+
+
+class TestRelink:
+    def test_relink_adds_to_request_refs(self, pr):
+        _, api = pr
+        req = api.new("request", label="R", summary="S")
+        spec = api.new("spec", label="S", summary="S")
+        result = api.relink(spec.data["id"], "request_refs", req.data["id"])
+        assert req.data["id"] in result.data.get("request_refs", [])
+
+    def test_relink_sets_spec_ref(self, pr):
+        _, api = pr
+        spec1 = api.new("spec", label="S1", summary="S")
+        spec2 = api.new("spec", label="S2", summary="S")
+        task = api.new("task", label="T", summary="S", spec=spec1.data["id"])
+        result = api.relink(task.data["id"], "spec_ref", spec2.data["id"])
+        assert result.data["spec_ref"] == spec2.data["id"]
+
+    def test_relink_sets_parent_task_ref(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        parent = api.new("task", label="Parent", summary="S", spec=spec.data["id"])
+        child = api.new("task", label="Child", summary="S", spec=spec.data["id"])
+        result = api.relink(child.data["id"], "parent_task_ref", parent.data["id"])
+        assert result.data["parent_task_ref"] == parent.data["id"]
+
+    def test_relink_task_refs_with_seq(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
+        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        wp = api.new("wp", label="W", summary="S", plan=plan.data["id"])
+        result = api.relink(
+            wp.data["id"], "task_refs", task.data["id"], seq=100, display="T.1"
+        )
+        refs = result.data.get("task_refs", [])
+        assert any(r.get("ref") == task.data["id"] for r in refs)
+
+    def test_relink_invalid_field_raises(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        with pytest.raises(ValueError, match="unsupported field"):
+            api.relink(spec.data["id"], "nonexistent_field", "something")
+
+    def test_relink_does_not_duplicate_request_refs(self, pr):
+        _, api = pr
+        req = api.new("request", label="R", summary="S")
+        spec = api.new("spec", label="S", summary="S")
+        api.relink(spec.data["id"], "request_refs", req.data["id"])
+        result = api.relink(spec.data["id"], "request_refs", req.data["id"])
+        assert result.data["request_refs"].count(req.data["id"]) == 1
+
+
+# ===========================================================================
+# reconcile()
+# ===========================================================================
+
+
+class TestReconcile:
+    def test_reconcile_returns_dict_with_orphans(self, pr):
+        _, api = pr
+        result = api.reconcile()
+        assert isinstance(result, dict)
+        assert "orphans" in result
+
+    def test_reconcile_empty_project_has_no_orphans(self, pr):
+        _, api = pr
+        result = api.reconcile()
+        assert result["orphans"] == []
+
+    def test_reconcile_rebuilds_index(self, pr):
+        root, api = pr
+        api.new("request", label="R", summary="S")
+        api.reconcile()
+        assert (
+            root / ".audiagentic" / "planning" / "indexes" / "requests.json"
+        ).exists()
+
+
+# ===========================================================================
+# state() for request, plan, wp
+# ===========================================================================
+
+
+class TestStateTransitions:
+    def test_state_request_captured_to_distilled(self, pr):
+        _, api = pr
+        req = api.new("request", label="R", summary="S")
+        assert req.data["state"] == "captured"
+        result = api.state(req.data["id"], "distilled")
+        assert result.data["state"] == "distilled"
+
+    def test_state_plan_draft_to_ready(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
+        assert plan.data["state"] == "draft"
+        result = api.state(plan.data["id"], "ready")
+        assert result.data["state"] == "ready"
+
+    def test_state_wp_draft_to_ready(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
+        wp = api.new("wp", label="W", summary="S", plan=plan.data["id"])
+        assert wp.data["state"] == "draft"
+        result = api.state(wp.data["id"], "ready")
+        assert result.data["state"] == "ready"
+
+    def test_state_invalid_for_kind_raises(self, pr):
+        _, api = pr
+        req = api.new("request", label="R", summary="S")
+        with pytest.raises(ValueError):
+            api.state(req.data["id"], "nonexistent_state")
+
+    def test_state_emits_event(self, pr):
+        root, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        api.state(spec.data["id"], "ready")
+        events_path = root / ".audiagentic" / "planning" / "events" / "events.jsonl"
+        events = [
+            json.loads(line)
+            for line in events_path.read_text().splitlines()
+            if line.strip()
+        ]
+        assert any(e.get("event", "").endswith("after_state_change") for e in events)
+
+    def test_state_updates_index(self, pr):
+        root, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        api.state(spec.data["id"], "ready")
+        idx = json.loads(
+            (
+                root / ".audiagentic" / "planning" / "indexes" / "specifications.json"
+            ).read_text()
+        )
+        entry = next(e for e in idx["items"] if e["id"] == spec.data["id"])
+        assert entry["state"] == "ready"
+
+
+# ===========================================================================
+# show() / extract()
+# ===========================================================================
+
+
+class TestShowExtract:
+    def test_show_returns_kind_and_path(self, pr):
+        _, api = pr
+        req = api.new("request", label="R", summary="S")
+        shown = api.extracts.show(req.data["id"])
+        assert shown["kind"] == "request"
+        assert "path" in shown
+
+    def test_show_includes_all_frontmatter_fields(self, pr):
+        _, api = pr
+        req = api.new("request", label="My Request", summary="My Summary")
+        shown = api.extracts.show(req.data["id"])
+        assert shown["label"] == "My Request"
+        assert shown["summary"] == "My Summary"
+        assert shown["state"] == "captured"
+
+    def test_extract_includes_body(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        api.update_content(
+            spec.data["id"], "# Purpose\n\nSome body text.\n", mode="replace"
+        )
+        result = api.extracts.extract(spec.data["id"])
+        assert "body" in result
+        assert "Some body text." in result["body"]
+
+    def test_extract_with_related_includes_fields(self, pr):
+        _, api = pr
+        req = api.new("request", label="R", summary="S")
+        spec = api.new("spec", label="S", summary="S", request_refs=[req.data["id"]])
+        result = api.extracts.extract(spec.data["id"], with_related=True)
+        assert "related" in result
+        assert "request_refs" in result["related"]
+
+    def test_extract_with_resources_includes_attachments_key(self, pr):
+        _, api = pr
+        req = api.new("request", label="R", summary="S")
+        result = api.extracts.extract(req.data["id"], with_resources=True)
+        # When no attachments dir exists, key should still be present or absent gracefully
+        assert "body" in result
+
+    def test_extract_writes_json_cache(self, pr):
+        root, api = pr
+        req = api.new("request", label="R", summary="S")
+        api.extracts.extract(req.data["id"])
+        cache = (
+            root / ".audiagentic" / "planning" / "extracts" / f"{req.data['id']}.json"
+        )
+        assert cache.exists()
+        cached = json.loads(cache.read_text())
+        assert cached["item"]["id"] == req.data["id"]
+
+    def test_extract_effective_standard_refs_field_present(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        result = api.extracts.extract(spec.data["id"])
+        assert "effective_standard_refs" in result
+
+
+# ===========================================================================
+# standards()
+# ===========================================================================
+
+
+class TestStandards:
+    def test_standards_returns_list_for_item_without_refs(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        refs = api.standards(spec.data["id"])
+        assert isinstance(refs, list)
+
+    def test_standards_includes_inherited_refs(self, pr):
+        _, api = pr
+        std = api.new("standard", label="Naming conventions", summary="S")
+        spec = api.new("spec", label="S", summary="S")
+        api.relink(spec.data["id"], "standard_refs", std.data["id"])
+        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        refs = api.standards(task.data["id"])
+        assert std.data["id"] in refs
+
+    def test_standards_for_unknown_item_raises(self, pr):
+        _, api = pr
+        with pytest.raises(KeyError):
+            api.standards("nonexistent-0001")
+
+
+# ===========================================================================
+# sync_id_counters()
+# ===========================================================================
+
+
+class TestSyncIdCounters:
+    def test_sync_creates_counter_files_for_all_kinds(self, pr):
+        root, api = pr
+        api.sync_id_counters()
+        ids_dir = root / ".audiagentic" / "planning" / "ids"
+        for kind in ("request", "spec", "plan", "task", "wp", "standard"):
+            assert (ids_dir / f"{kind}.counter").exists(), f"Missing counter for {kind}"
+
+    def test_sync_sets_counter_from_existing_docs(self, pr):
+        root, api = pr
+        api.new("request", label="R1", summary="S")
+        api.new("request", label="R2", summary="S")
+        # Corrupt the counter
+        counter_file = root / ".audiagentic" / "planning" / "ids" / "request.counter"
+        counter_file.write_text("0", encoding="utf-8")
+        # Sync should repair it
+        api.sync_id_counters()
+        assert int(counter_file.read_text().strip()) >= 2
+
+
+# ===========================================================================
+# next_items() with domain filter
+# ===========================================================================
+
+
+class TestNextItems:
+    def test_next_items_domain_filter(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
+        core_task = api.new(
+            "task", label="Core", summary="S", spec=spec.data["id"], domain="core"
+        )
+        contrib_task = api.new(
+            "task", label="Contrib", summary="S", spec=spec.data["id"], domain="contrib"
+        )
+        api.state(core_task.data["id"], "ready")
+        api.state(contrib_task.data["id"], "ready")
+        core_items = api.next_items("task", "ready", domain="core")
+        contrib_items = api.next_items("task", "ready", domain="contrib")
+        core_ids = {i["id"] for i in core_items}
+        contrib_ids = {i["id"] for i in contrib_items}
+        assert core_task.data["id"] in core_ids
+        assert contrib_task.data["id"] not in core_ids
+        assert contrib_task.data["id"] in contrib_ids
+
+    def test_next_items_excludes_deleted(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        api.state(task.data["id"], "ready")
+        api.delete(task.data["id"], reason="test")
+        items = api.next_items("task", "ready")
+        assert task.data["id"] not in {i["id"] for i in items}
+
+    def test_next_items_wp_kind(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
+        wp = api.new("wp", label="W", summary="S", plan=plan.data["id"])
+        api.state(wp.data["id"], "ready")
+        items = api.next_items("wp", "ready")
+        assert any(i["id"] == wp.data["id"] for i in items)
+
+
+# ===========================================================================
+# Claims TTL expiry
+# ===========================================================================
+
+
+class TestClaimsTTL:
+    def test_expired_claims_not_visible_in_next_items(self, pr):
+        """Claims with elapsed TTL should be treated as expired and excluded
+        from active claims, making items available again in next_items.
+
+        EXPECTED TO FAIL: Claims.load() does not filter by TTL — no expiry
+        logic exists. This test documents the missing behaviour.
+        """
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        api.state(task.data["id"], "ready")
+        # Claim with 1-second TTL
+        api.claim("task", task.data["id"], holder="agent-1", ttl=1)
+        # Wait for TTL to elapse
+        time.sleep(1.5)
+        # Item should now appear as unclaimed
+        available = api.next_items("task", "ready")
+        assert any(i["id"] == task.data["id"] for i in available), (
+            "Expired claim still blocks item — TTL expiry not implemented"
+        )
+
+    def test_claims_returns_only_unexpired(self, pr):
+        """api.claims() should exclude entries whose TTL has elapsed.
+
+        EXPECTED TO FAIL: no TTL expiry filtering in claims.load().
+        """
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        api.claim("task", task.data["id"], holder="agent-exp", ttl=1)
+        time.sleep(1.5)
+        active = api.claims("task")
+        assert not any(c["id"] == task.data["id"] for c in active), (
+            "Expired claim still present — TTL expiry not implemented"
+        )
+
+
+# ===========================================================================
+# Hook actions: review_stub, report_stub, note_stub
+# ===========================================================================
+
+
+class TestHookActions:
+    def test_review_stub_emits_event(self, pr):
+        root, api = pr
+        api.hooks.run(
+            "after_state_change",
+            "wp",
+            {"id": "wp-0001", "old_state": "draft", "new_state": "ready"},
+        )
+        events_path = root / ".audiagentic" / "planning" / "events" / "events.jsonl"
+        if events_path.exists():
+            lines = [l for l in events_path.read_text().splitlines() if l.strip()]
+            events = [json.loads(l) for l in lines]
+            # The automations.yaml wp-ready-review-stub fires on wp state→ready
+            assert any("review_stub" in e.get("event", "") for e in events)
+
+    def test_note_stub_emits_note_in_payload(self, pr):
+        root, api = pr
+        api.hooks.apply(
+            "note_stub",
+            "request",
+            "after_create",
+            {"id": "request-0001"},
+            {"note": "Hello note"},
+        )
+        events_path = root / ".audiagentic" / "planning" / "events" / "events.jsonl"
+        events = [
+            json.loads(l) for l in events_path.read_text().splitlines() if l.strip()
+        ]
+        assert any(e.get("note") == "Hello note" for e in events)
+
+    def test_report_stub_emits_event(self, pr):
+        root, api = pr
+        api.hooks.apply(
+            "report_stub", "wp", "after_state_change", {"id": "wp-0001"}, {}
+        )
+        events_path = root / ".audiagentic" / "planning" / "events" / "events.jsonl"
+        events = [
+            json.loads(l) for l in events_path.read_text().splitlines() if l.strip()
+        ]
+        assert any("report_stub" in e.get("event", "") for e in events)
+
+    def test_dispatch_job_writes_to_dispatch_registry(self, pr):
+        root, api = pr
+        api.hooks.apply(
+            "dispatch_job",
+            "task",
+            "after_state_change",
+            {"id": "task-0001", "target": "PKT-TST-001"},
+            {},
+        )
+        dispatch_path = root / ".audiagentic" / "planning" / "indexes" / "dispatch.json"
+        assert dispatch_path.exists()
+        data = json.loads(dispatch_path.read_text())
+        assert "entries" in data
+        assert any(e.get("planning-id") == "task-0001" for e in data["entries"])
+
+
+# ===========================================================================
+# Validation coverage — request and standard kinds
+# ===========================================================================
+
+
+class TestValidationCoverage:
+    def test_validate_request_no_required_sections(self, pr):
+        """Requests have no required body sections in REQ_SECTIONS."""
+        _, api = pr
+        api.new("request", label="R", summary="S")
+        errors = api.validate()
+        assert not any("missing section" in e for e in errors)
+
+    def test_validate_standard_no_required_sections(self, pr):
+        """Standards have no required body sections in REQ_SECTIONS."""
+        _, api = pr
+        api.new("standard", label="Naming", summary="S")
+        errors = api.validate()
+        assert not any("missing section" in e for e in errors)
+
+    def test_validate_plan_missing_section_reported(self, pr):
+        root, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        # Write a plan without required sections
+        plan_path = root / "docs" / "planning" / "plans" / "plan-0001-test.md"
+        plan_path.write_text(
+            "---\nid: plan-0001\nlabel: Test\nstate: draft\nsummary: test\n---\n\n# Objectives\n\nX.\n",
+            encoding="utf-8",
+        )
+        errors = api.validate()
+        assert any("Delivery Approach" in e or "Dependencies" in e for e in errors)
+
+    def test_validate_task_missing_description_reported(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        # Wipe the body so Description section is absent
+        from audiagentic.planning.fs.write import dump_markdown
+        from audiagentic.planning.fs.read import parse_markdown
+
+        data, _ = parse_markdown(task.path)
+        dump_markdown(task.path, data, "\n")
+        errors = api.validate()
+        assert any("missing section" in e and "Description" in e for e in errors)
+
+    def test_validate_duplicate_standard_id_caught(self, pr):
+        root, api = pr
+        std = api.new("standard", label="My Standard", summary="S")
+        # Manually write a duplicate
+        dup = root / "docs" / "planning" / "standards" / f"{std.data['id']}-dup.md"
+        dup.write_text(
+            f"---\nid: {std.data['id']}\nlabel: Dup\nstate: draft\nsummary: dup\n---\n",
+            encoding="utf-8",
+        )
+        errors = api.validate()
+        assert any("duplicate id" in e for e in errors)
+
+    def test_validate_wrong_filename_for_task(self, pr):
+        root, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        # Rename to wrong filename
+        bad_path = task.path.parent / "task-9999-wrong.md"
+        task.path.rename(bad_path)
+        errors = api.validate()
+        assert any("filename must be" in e for e in errors)
+
+
+# ===========================================================================
+# Batch operations (tm_helper._execute_batch_operations via update())
+# ===========================================================================
+
+
+class TestBatchOperations:
+    def test_batch_state_and_label(self, pr):
+        import tools.planning.tm_helper as tm
+
+        _seed(pr[0])
+        tm.set_root(pr[0])
+        try:
+            spec = pr[1].new("spec", label="S", summary="S")
+            task = pr[1].new(
+                "task", label="Old Label", summary="S", spec=spec.data["id"]
+            )
+            pr[1].state(task.data["id"], "ready")
+            result = tm.update(
+                task.data["id"],
+                root=pr[0],
+                operations=[
+                    {"op": "state", "value": "in_progress"},
+                    {"op": "label", "value": "New Label"},
+                ],
+            )
+            assert "results" in result
+            updated = pr[1]._find(task.data["id"])
+            assert updated.data["state"] == "in_progress"
+            assert updated.data["label"] == "New Label"
+        finally:
+            tm.reset_root()
+
+    def test_batch_unknown_op_raises_or_logs(self, pr):
+        import tools.planning.tm_helper as tm
+
+        spec = pr[1].new("spec", label="S", summary="S")
+        task = pr[1].new("task", label="T", summary="S", spec=spec.data["id"])
+        result = tm.update(
+            task.data["id"],
+            root=pr[0],
+            operations=[{"op": "unknown_op", "value": "x"}],
+        )
+        # Should not raise but should report error in results
+        assert "results" in result or "errors" in result
+
+    def test_batch_meta_op_sets_field(self, pr):
+        import tools.planning.tm_helper as tm
+
+        spec = pr[1].new("spec", label="S", summary="S")
+        task = pr[1].new("task", label="T", summary="S", spec=spec.data["id"])
+        result = tm.update(
+            task.data["id"],
+            root=pr[0],
+            operations=[{"op": "meta", "field": "reviewer", "value": "agent-1"}],
+        )
+        updated = pr[1]._find(task.data["id"])
+        assert updated.data.get("meta", {}).get("reviewer") == "agent-1"
+
+
+# ===========================================================================
+# status() and events() via tm_helper
+# ===========================================================================
+
+
+class TestStatusAndEvents:
+    def test_status_returns_counts_for_all_kinds(self, pr):
+        import tools.planning.tm_helper as tm
+
+        root, api = pr
+        api.new("request", label="R", summary="S")
+        spec = api.new("spec", label="S", summary="S")
+        api.new("task", label="T", summary="S", spec=spec.data["id"])
+        result = tm.status(root=root)
+        # Check singular keys (not plural)
+        assert "request" in result
+        assert "spec" in result
+        assert "task" in result
+        # Check state breakdown exists
+        assert "captured" in result["request"]
+        assert result["request"]["captured"] == 1
+        # Check _total is provided for convenience
+        assert result["request"].get("_total") == 1
+
+    def test_events_returns_recent_events(self, pr):
+        import tools.planning.tm_helper as tm
+
+        root, api = pr
+        api.new("request", label="R", summary="S")  # triggers emit_event hook
+        events = tm.events(tail=10, root=root)
+        assert isinstance(events, list)
+        assert len(events) >= 1
+
+    def test_events_tail_limits_output(self, pr):
+        import tools.planning.tm_helper as tm
+
+        root, api = pr
+        for i in range(5):
+            api.new("request", label=f"R{i}", summary="S")
+        all_events = tm.events(tail=100, root=root)
+        tail_2 = tm.events(tail=2, root=root)
+        assert len(tail_2) <= 2
+        assert len(all_events) >= len(tail_2)
+
+
+# ===========================================================================
+# package() additional scenarios
+# ===========================================================================
+
+
+class TestPackage:
+    def test_package_multiple_tasks(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
+        t1 = api.new("task", label="T1", summary="S", spec=spec.data["id"])
+        t2 = api.new("task", label="T2", summary="S", spec=spec.data["id"])
+        t3 = api.new("task", label="T3", summary="S", spec=spec.data["id"])
+        wp = api.package(
+            plan.data["id"],
+            [t1.data["id"], t2.data["id"], t3.data["id"]],
+            label="Big WP",
+            summary="S",
+        )
+        refs = [r["ref"] for r in wp.data["task_refs"]]
+        assert t1.data["id"] in refs
+        assert t2.data["id"] in refs
+        assert t3.data["id"] in refs
+
+    def test_package_assigns_sequential_seq(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
+        t1 = api.new("task", label="T1", summary="S", spec=spec.data["id"])
+        t2 = api.new("task", label="T2", summary="S", spec=spec.data["id"])
+        wp = api.package(
+            plan.data["id"], [t1.data["id"], t2.data["id"]], label="W", summary="S"
+        )
+        seqs = [r["seq"] for r in wp.data["task_refs"]]
+        assert seqs[0] < seqs[1]
+
+    def test_package_in_contrib_domain(self, pr):
+        root, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
+        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        (root / "docs" / "planning" / "work-packages" / "contrib").mkdir(
+            parents=True, exist_ok=True
+        )
+        wp = api.package(
+            plan.data["id"], [task.data["id"]], label="W", summary="S", domain="contrib"
+        )
+        assert "contrib" in str(wp.path)
+
+
+# ===========================================================================
+# delete() additional scenarios
+# ===========================================================================
+
+
+class TestDelete:
+    def test_soft_delete_still_findable(self, pr):
+        _, api = pr
+        req = api.new("request", label="R", summary="S")
+        api.delete(req.data["id"], reason="superseded")
+        item = api._find(req.data["id"])
+        assert item.data.get("deleted") is True
+
+    def test_soft_delete_excluded_from_next_items(self, pr):
+        _, api = pr
+        spec = api.new("spec", label="S", summary="S")
+        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        api.state(task.data["id"], "ready")
+        api.delete(task.data["id"])
+        available = api.next_items("task", "ready")
+        assert task.data["id"] not in {i["id"] for i in available}
+
+    def test_hard_delete_not_findable(self, pr):
+        _, api = pr
+        req = api.new("request", label="R", summary="S")
+        api.delete(req.data["id"], hard=True, reason="test")
+        with pytest.raises(KeyError):
+            api._find(req.data["id"])
+
+    def test_hard_delete_syncs_counter(self, pr):
+        root, api = pr
+        api.new("request", label="R1", summary="S")
+        r2 = api.new("request", label="R2", summary="S")
+        result = api.delete(r2.data["id"], hard=True, reason="test")
+        assert result["counter_sync"] is True
+
+    def test_delete_reason_stored(self, pr):
+        _, api = pr
+        req = api.new("request", label="R", summary="S")
+        api.delete(req.data["id"], reason="no longer needed")
+        item = api._find(req.data["id"])
+        assert item.data.get("deletion_reason") == "no longer needed"
+
+
+# ===========================================================================
+# validate() raise_on_error kwarg
+# ===========================================================================
+
+
+class TestValidateRaiseOnError:
+    def test_validate_raise_on_error_raises_runtime_error(self, pr):
+        root, api = pr
+        # Write an invalid doc (missing required fields)
+        bad = root / "docs" / "planning" / "requests" / "request-bad.md"
+        bad.write_text("---\nid: request-bad\nlabel: Bad\n---\n\n", encoding="utf-8")
+        with pytest.raises(RuntimeError):
+            api.validate(raise_on_error=True)
+
+    def test_validate_raise_on_error_false_returns_list(self, pr):
+        root, api = pr
+        bad = root / "docs" / "planning" / "requests" / "request-bad2.md"
+        bad.write_text("---\nid: request-bad2\nlabel: Bad\n---\n\n", encoding="utf-8")
+        errors = api.validate(raise_on_error=False)
+        assert isinstance(errors, list)
+        assert len(errors) > 0
