@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "owner_id",
+    "path",
+    "type"
+  ],
+  "properties": {
+    "owner_id": {
+      "type": "string"
+    },
+    "path": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-0224",
+    "label": "Add include_body and write_to_disk controls to extract()",
+    "state": "draft",
+    "summary": "Add explicit include_body and write_to_disk parameters to extract() so callers can obtain metadata without body content and without writing to .audiagentic/planning/extracts/{id}.json",
+    "spec_ref": "spec-0043",
+    "request_refs": [],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs\\planning\\tasks\\core\\task-0224.md"
+  },
+  "body": "\n# Description\n\nAdd two explicit controls to `ext_mgr.ExtractsMgr.extract()`:\n\n**`include_body: bool = True`** \u2014 when `False`, return only frontmatter metadata without reading or returning the markdown body. Default `True` preserves current behaviour.\n\n**`write_to_disk: bool = True`** \u2014 when `False`, return the extract result without writing to `.audiagentic/planning/extracts/{id}.json`. Default `True` preserves current behaviour.\n\nUpdate the method signature:\n\n```python\ndef extract(self, id_: str, with_related: bool = False, with_resources: bool = False,\n            include_body: bool = True, write_to_disk: bool = True) -> dict:\n```\n\n# Acceptance Criteria\n\n- `extract(id, include_body=False)` returns frontmatter metadata only, no body content\n- `extract(id, write_to_disk=False)` returns the result without writing to the extracts directory\n- Default behaviour (both `True`) is identical to current behaviour\n- All existing callers continue to work without changes\n- Tests cover `include_body=False` and `write_to_disk=False` paths\n\n# Notes\n\nDepends on task-0223 (extract already uses lookup path). The `with_related` and `with_resources` parameters already default to `False` and are not changed by this task.\n",
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ]
+}

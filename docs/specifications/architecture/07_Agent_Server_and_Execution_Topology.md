@@ -1,30 +1,43 @@
 # Agent Server and Execution Topology
 
-## Scope in this baseline
+## Current topology direction
 
-An always-on server is **not required for MVP**.
+An always-on server is still optional, but the architecture is no longer framed as a purely later or thin afterthought. The active direction is:
 
-The baseline architecture uses in-process services first. A future optional server seam may be added only if the contracts below remain stable.
+- in-process core services remain the baseline execution path
+- provider and session handling should be ACP-first at the internal seam
+- OpenACP is the preferred external messaging/control direction when an external control surface is introduced
+- external messaging/control is distinct from the internal release, lifecycle, and planning cores
 
-## MVP execution topology
+## Baseline execution topology
 
 ```mermaid
 flowchart TD
-    A[CLI or local orchestrator] --> B[core-lifecycle]
+    A[CLI or local bridge surface] --> B[core-lifecycle]
     A --> C[release-audit-ledger]
     A --> D[agent-jobs]
-    D --> E[provider-layer]
+    D --> E[provider-layer / ACP-first session seam]
+    E --> F[optional external control or messaging seam]
 ```
 
-## Optional server seam
+## Internal versus external responsibilities
 
-Later phases may expose the same services through a thin boundary. To support that later without base rewrites:
+- `core-lifecycle`, `release-audit-ledger`, and `agent-jobs` remain internal project-owned cores
+- provider normalization, session provenance, and runtime artifact ownership remain internal responsibilities
+- any external messaging or control surface must consume canonical contracts rather than redefine them
+- the retired Discord-specific overlay is not part of the active topology
+
+## Optional external seam
+
+Later phases may expose the same services through a more explicit boundary. To support that without base rewrites:
+
 - services must accept explicit context objects
 - services must not depend on global mutable state
 - services must return typed result objects defined in common contracts
+- external control or messaging surfaces should attach to the canonical bridge/session seam rather than invent a provider-specific overlay path
 
-## Not in scope for MVP
+## Not in scope for this baseline
 
-- remote control plane
-- distributed session ownership
-- server-only execution path
+- Discord as an active first-class overlay path
+- provider-specific external control contracts that bypass canonical bridge behavior
+- distributed session ownership without the canonical ACP/OpenACP seam being defined first

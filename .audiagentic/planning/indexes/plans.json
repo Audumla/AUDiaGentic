@@ -1,0 +1,42 @@
+{
+  "convention_version": 1,
+  "generated_at": "2026-04-10T12:24:03.088001+00:00",
+  "items": [
+    {
+      "id": "plan-0005",
+      "label": "Implement archive functionality in planning core",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-0005-implement-archive-functionality-in-planning-core.md"
+    },
+    {
+      "id": "plan-0006",
+      "label": "Phase 0 Build Book",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-0006-phase-0-build-book.md"
+    },
+    {
+      "id": "plan-0007",
+      "label": "Implement installable profiles and documentation surfaces",
+      "state": "done",
+      "path": "docs\\planning\\plans\\plan-0007-implement-installable-profiles-and-documentation-surfaces.md"
+    },
+    {
+      "id": "plan-0009",
+      "label": "Implement archive functionality",
+      "state": "done",
+      "path": "docs\\planning\\plans\\plan-0009-implement-archive-functionality.md"
+    },
+    {
+      "id": "plan-0010",
+      "label": "Implement planning module improvements",
+      "state": "done",
+      "path": "docs\\planning\\plans\\plan-0010-implement-planning-module-improvements.md"
+    },
+    {
+      "id": "plan-0011",
+      "label": "Fix planning API and MCP gaps",
+      "state": "in_progress",
+      "path": "docs\\planning\\plans\\plan-0011-fix-planning-api-and-mcp-gaps.md"
+    }
+  ]
+}

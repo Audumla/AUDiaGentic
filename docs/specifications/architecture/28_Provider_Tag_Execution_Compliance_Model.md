@@ -77,13 +77,12 @@ but not deterministic first-line tag interception.
 Examples in current provider set:
 - Codex
 - GitHub Copilot
-- Continue
 
 ### Level C — Backend only
 
 The provider is only a model transport / endpoint.  
 Examples:
-- local OpenAI-compatible endpoints behind Continue/Cline or another client
+- backend-only endpoints behind another active client or bridge surface
 
 ## Non-negotiable constraints
 
