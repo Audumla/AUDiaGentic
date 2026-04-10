@@ -70,7 +70,7 @@ def _spec_and_task(api):
 
 
 def _full_hierarchy(api):
-    req = api.new("request", label="R", summary="R")
+    req = api.new("request", label="R", summary="R", source="test")
     spec = api.new("spec", label="S", summary="S", request_refs=[req.data["id"]])
     plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
     task = api.new("task", label="T", summary="T", spec=spec.data["id"])
@@ -214,7 +214,7 @@ class TestCreateWithContent:
         _, api = pr
         content = "# Problem\n\nThe core issue.\n\n# Desired Outcome\n\nBetter state.\n"
         item = api.create_with_content(
-            "request", label="R", summary="S", content=content
+            "request", label="R", summary="S", content=content, source="test"
         )
         assert item.kind == "request"
         assert "The core issue." in api.get_content(item.data["id"])
@@ -287,7 +287,7 @@ class TestMove:
 
     def test_move_request_raises(self, pr):
         _, api = pr
-        req = api.new("request", label="R", summary="S")
+        req = api.new("request", label="R", summary="S", source="test")
         with pytest.raises(ValueError, match="only task/wp"):
             api.move(req.data["id"], "contrib")
 
@@ -314,7 +314,7 @@ class TestMove:
 class TestRelink:
     def test_relink_adds_to_request_refs(self, pr):
         _, api = pr
-        req = api.new("request", label="R", summary="S")
+        req = api.new("request", label="R", summary="S", source="test")
         spec = api.new("spec", label="S", summary="S")
         result = api.relink(spec.data["id"], "request_refs", req.data["id"])
         assert req.data["id"] in result.data.get("request_refs", [])
@@ -355,7 +355,7 @@ class TestRelink:
 
     def test_relink_does_not_duplicate_request_refs(self, pr):
         _, api = pr
-        req = api.new("request", label="R", summary="S")
+        req = api.new("request", label="R", summary="S", source="test")
         spec = api.new("spec", label="S", summary="S")
         api.relink(spec.data["id"], "request_refs", req.data["id"])
         result = api.relink(spec.data["id"], "request_refs", req.data["id"])
@@ -381,7 +381,7 @@ class TestReconcile:
 
     def test_reconcile_rebuilds_index(self, pr):
         root, api = pr
-        api.new("request", label="R", summary="S")
+        api.new("request", label="R", summary="S", source="test")
         api.reconcile()
         assert (
             root / ".audiagentic" / "planning" / "indexes" / "requests.json"
@@ -396,7 +396,7 @@ class TestReconcile:
 class TestStateTransitions:
     def test_state_request_captured_to_distilled(self, pr):
         _, api = pr
-        req = api.new("request", label="R", summary="S")
+        req = api.new("request", label="R", summary="S", source="test")
         assert req.data["state"] == "captured"
         result = api.state(req.data["id"], "distilled")
         assert result.data["state"] == "distilled"
@@ -420,7 +420,7 @@ class TestStateTransitions:
 
     def test_state_invalid_for_kind_raises(self, pr):
         _, api = pr
-        req = api.new("request", label="R", summary="S")
+        req = api.new("request", label="R", summary="S", source="test")
         with pytest.raises(ValueError):
             api.state(req.data["id"], "nonexistent_state")
 
@@ -457,14 +457,14 @@ class TestStateTransitions:
 class TestShowExtract:
     def test_show_returns_kind_and_path(self, pr):
         _, api = pr
-        req = api.new("request", label="R", summary="S")
+        req = api.new("request", label="R", summary="S", source="test")
         shown = api.extracts.show(req.data["id"])
         assert shown["kind"] == "request"
         assert "path" in shown
 
     def test_show_includes_all_frontmatter_fields(self, pr):
         _, api = pr
-        req = api.new("request", label="My Request", summary="My Summary")
+        req = api.new("request", label="My Request", summary="My Summary", source="test")
         shown = api.extracts.show(req.data["id"])
         assert shown["label"] == "My Request"
         assert shown["summary"] == "My Summary"
@@ -482,7 +482,7 @@ class TestShowExtract:
 
     def test_extract_with_related_includes_fields(self, pr):
         _, api = pr
-        req = api.new("request", label="R", summary="S")
+        req = api.new("request", label="R", summary="S", source="test")
         spec = api.new("spec", label="S", summary="S", request_refs=[req.data["id"]])
         result = api.extracts.extract(spec.data["id"], with_related=True)
         assert "related" in result
@@ -490,14 +490,14 @@ class TestShowExtract:
 
     def test_extract_with_resources_includes_attachments_key(self, pr):
         _, api = pr
-        req = api.new("request", label="R", summary="S")
+        req = api.new("request", label="R", summary="S", source="test")
         result = api.extracts.extract(req.data["id"], with_resources=True)
         # When no attachments dir exists, key should still be present or absent gracefully
         assert "body" in result
 
     def test_extract_writes_json_cache(self, pr):
         root, api = pr
-        req = api.new("request", label="R", summary="S")
+        req = api.new("request", label="R", summary="S", source="test")
         api.extracts.extract(req.data["id"])
         cache = (
             root / ".audiagentic" / "planning" / "extracts" / f"{req.data['id']}.json"
@@ -555,8 +555,8 @@ class TestSyncIdCounters:
 
     def test_sync_sets_counter_from_existing_docs(self, pr):
         root, api = pr
-        api.new("request", label="R1", summary="S")
-        api.new("request", label="R2", summary="S")
+        api.new("request", label="R1", summary="S", source="test")
+        api.new("request", label="R2", summary="S", source="test")
         # Corrupt the counter
         counter_file = root / ".audiagentic" / "planning" / "ids" / "request.counter"
         counter_file.write_text("0", encoding="utf-8")
@@ -724,7 +724,7 @@ class TestValidationCoverage:
     def test_validate_request_no_required_sections(self, pr):
         """Requests have no required body sections in REQ_SECTIONS."""
         _, api = pr
-        api.new("request", label="R", summary="S")
+        api.new("request", label="R", summary="S", source="test")
         errors = api.validate()
         assert not any("missing section" in e for e in errors)
 
@@ -852,7 +852,7 @@ class TestStatusAndEvents:
         import tools.planning.tm_helper as tm
 
         root, api = pr
-        api.new("request", label="R", summary="S")
+        api.new("request", label="R", summary="S", source="test")
         spec = api.new("spec", label="S", summary="S")
         api.new("task", label="T", summary="S", spec=spec.data["id"])
         result = tm.status(root=root)
@@ -870,7 +870,7 @@ class TestStatusAndEvents:
         import tools.planning.tm_helper as tm
 
         root, api = pr
-        api.new("request", label="R", summary="S")  # triggers emit_event hook
+        api.new("request", label="R", summary="S", source="test")  # triggers emit_event hook
         events = tm.events(tail=10, root=root)
         assert isinstance(events, list)
         assert len(events) >= 1
@@ -880,7 +880,7 @@ class TestStatusAndEvents:
 
         root, api = pr
         for i in range(5):
-            api.new("request", label=f"R{i}", summary="S")
+            api.new("request", label=f"R{i}", summary="S", source="test")
         all_events = tm.events(tail=100, root=root)
         tail_2 = tm.events(tail=2, root=root)
         assert len(tail_2) <= 2
@@ -945,7 +945,7 @@ class TestPackage:
 class TestDelete:
     def test_soft_delete_still_findable(self, pr):
         _, api = pr
-        req = api.new("request", label="R", summary="S")
+        req = api.new("request", label="R", summary="S", source="test")
         api.delete(req.data["id"], reason="superseded")
         item = api._find(req.data["id"])
         assert item.data.get("deleted") is True
@@ -961,21 +961,21 @@ class TestDelete:
 
     def test_hard_delete_not_findable(self, pr):
         _, api = pr
-        req = api.new("request", label="R", summary="S")
+        req = api.new("request", label="R", summary="S", source="test")
         api.delete(req.data["id"], hard=True, reason="test")
         with pytest.raises(KeyError):
             api._find(req.data["id"])
 
     def test_hard_delete_syncs_counter(self, pr):
         root, api = pr
-        api.new("request", label="R1", summary="S")
-        r2 = api.new("request", label="R2", summary="S")
+        api.new("request", label="R1", summary="S", source="test")
+        r2 = api.new("request", label="R2", summary="S", source="test")
         result = api.delete(r2.data["id"], hard=True, reason="test")
         assert result["counter_sync"] is True
 
     def test_delete_reason_stored(self, pr):
         _, api = pr
-        req = api.new("request", label="R", summary="S")
+        req = api.new("request", label="R", summary="S", source="test")
         api.delete(req.data["id"], reason="no longer needed")
         item = api._find(req.data["id"])
         assert item.data.get("deletion_reason") == "no longer needed"
