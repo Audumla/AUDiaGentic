@@ -40,7 +40,7 @@ def test_fallback_to_wrapper_when_hook_unavailable():
     # which allows normal Claude planning to proceed
     # The actual fallback mechanism is tested through the hook logic
     # For now, just verify the module is correctly structured
-    from tools.claude_hooks import UserPromptSubmit_handler, PreToolUse_handler
+    from tools.misc.claude_hooks import UserPromptSubmit_handler, PreToolUse_handler
 
     assert callable(UserPromptSubmit_handler)
     assert callable(PreToolUse_handler)

@@ -87,13 +87,12 @@ Required launch metadata remains:
 | Claude | hook or instruction-file normalization | `CLAUDE.md`, `.claude/rules`, `.claude/skills` | shared repo bridge |
 | Gemini | instruction-file or command-template normalization | `GEMINI.md`, command templates | shared repo bridge |
 | GitHub Copilot | instruction-file / custom agent normalization | `.github/copilot-instructions.md`, custom agents | shared repo bridge |
-| Continue | config-driven invocation normalization | `config.yaml`, rules, invokable prompts | shared repo bridge |
 | Cline | hook / rules / workflow normalization | `.clinerules`, hooks, workflows | shared repo bridge |
-| local-openai / qwen | bridge-wrapper only | repo bridge, provider config, model catalog | same repo bridge |
+| qwen | bridge-wrapper only | repo bridge, provider config, model catalog | same repo bridge |
 
 Realistic rollout note:
 - Claude and Cline are the strongest first-wave candidates for hook-backed rollout.
-- Codex, Copilot, Continue, and local-openai should be treated as wrapper/bridge-first.
+- Codex and Copilot should be treated as wrapper/bridge-first.
 - Gemini and Qwen should remain guarded until their fallback paths and hook behavior are validated locally.
 
 ## Acceptance expectations

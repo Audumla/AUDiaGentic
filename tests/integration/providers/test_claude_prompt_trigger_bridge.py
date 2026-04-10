@@ -86,7 +86,7 @@ def test_claude_prompt_trigger_bridge_script_launches_job(tmp_path: Path) -> Non
         result = subprocess.run(
             [
                 sys.executable,
-                str(ROOT / "tools" / "claude_prompt_trigger_bridge.py"),
+                str(ROOT / "tools" / "bridges" / "claude_prompt_trigger_bridge.py"),
                 "--project-root",
                 str(sandbox.repo),
             ],
@@ -121,7 +121,7 @@ def test_claude_prompt_trigger_bridge_missing_assets_returns_validation_error(tm
         result = subprocess.run(
             [
                 sys.executable,
-                str(ROOT / "tools" / "claude_prompt_trigger_bridge.py"),
+                str(ROOT / "tools" / "bridges" / "claude_prompt_trigger_bridge.py"),
                 "--project-root",
                 str(sandbox.repo),
             ],

@@ -1,0 +1,28 @@
+{
+  "item": {
+    "id": "wp-0007",
+    "kind": "wp",
+    "label": "Supporting docs, subsection access, and documentation sync",
+    "state": "draft",
+    "summary": "Extend the planning delta with supporting-doc metadata, subsection-aware MCP access, and explicit documentation-sync rules while clarifying current indexing and validation limits.",
+    "path": "docs\\planning\\work-packages\\core\\wp-0007-supporting-docs-subsection-access-and-documentation-sync.md"
+  },
+  "body": "\n# Objective\n\nAdd explicit supporting-doc sidecar conventions and documentation-sync support without changing the core planning hierarchy.\n\n# Scope of This Package\n\n- supporting-doc metadata and registry\n- supporting-doc indexing/validation decision\n- documentation sync requirement queries\n- verification coverage expectations\n\n# Inputs\n\n- spec-0021\n- plan-0007\n- current MCP server and helper\n- current repo scan and validator behavior\n\n# Instructions\n\nKeep the MCP/API compact and high-value. Prefer additive helpers and schemas over large structural changes, and do not claim first-class support-doc behavior unless the pack also scopes the repo/index/validator work required.\n\n# Required Outputs\n\n- support-doc schema and sample docs\n- review notes locking support docs as sidecar docs for this phase\n- references docs updates\n- test and validation checklist\n\n# Acceptance Checks\n\n- support docs are modeled as structured sidecar docs and are discoverable\n- support-doc indexing status is explicit\n- doc-sync requirements are queryable\n- feature list and review notes reflect the additions\n\n# Non-Goals\n\n- no separate support-doc MCP\n- no full implementation of project-doc workflow state\n",
+  "effective_standard_refs": [
+    "standard-0001",
+    "standard-0002"
+  ],
+  "related": {
+    "task_refs": [
+      {
+        "ref": "task-0187",
+        "seq": 1000
+      },
+      {
+        "ref": "task-0188",
+        "seq": 2000
+      }
+    ],
+    "plan_ref": "plan-0007"
+  }
+}

@@ -9,7 +9,6 @@
 - `provider-layer`
 
 ### Optional subsystems
-- `discord-overlay`
 - `optional-server`
 
 ### Optional extension subsystems
@@ -93,9 +92,6 @@ flowchart LR
     R --> J
     J --> P[provider-layer]
     R --> P
-    J --> D[discord-overlay]
-    R --> D
-    L --> D
     J --> S[optional-server]
     R --> S
     L --> S
@@ -111,10 +107,8 @@ flowchart LR
 
 ## Forbidden dependencies
 
-- `release-audit-ledger` must not depend on `discord-overlay`
-- `agent-jobs` must not depend on `discord-overlay`
 - `release-audit-ledger` must not require local AI
-- `agent-jobs` must not require Discord for correctness
+- `agent-jobs` must not require any external messaging/control surface for correctness
 - `optional-server` must not become required for in-process execution
 - `nodes`, `discovery`, `federation`, and `connectors` must remain optional extension layers and must not become required for single-node correctness, release correctness, or prompt-launch correctness
 - `discovery` must not become a prerequisite for node-local operation

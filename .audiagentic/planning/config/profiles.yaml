@@ -1,0 +1,83 @@
+planning:
+  profiles:
+    enhancement:
+      description: Broader enhancement with request and specification, plus optional execution overlay
+      label: Enhancement request
+      # Stack topology
+      on_request_create: [request, specification]
+      allow_plan_overlay: true
+      # Request defaults
+      defaults:
+        meta:
+          request_type: enhancement
+        current_understanding: Initial enhancement intake captured; desired outcome, shared-surface impact, and implementation boundaries need refinement.
+        open_questions:
+          - What exact outcome is required?
+          - What compatibility, workflow, or shared-surface impacts need to be considered?
+          - How will success be verified?
+      suggested_sections: [Problem, Desired Outcome, Constraints, Compatibility]
+    feature:
+      description: Bounded feature work with request, specification, and direct execution tasking
+      label: Feature request
+      on_request_create: [request, specification]
+      allow_plan_overlay: false
+      defaults:
+        meta:
+          request_type: feature
+        current_understanding: Initial feature intake captured; the desired capability is understood well enough to refine directly into implementation work.
+        open_questions:
+          - What exact outcome is required?
+          - What constraints or non-goals apply?
+          - How will success be verified?
+      suggested_sections: [Problem, Desired Outcome, Constraints]
+    issue:
+      description: Issue report with direct request-to-task execution and stronger diagnosis framing
+      label: Issue report
+      on_request_create: [request, task]
+      allow_plan_overlay: false
+      defaults:
+        meta:
+          request_type: issue
+        current_understanding: Initial issue intake captured; impact and reproduction detail are the priority before implementation is considered complete.
+        open_questions:
+          - What is the observed impact or failure mode?
+          - How can this be reproduced or verified?
+          - What constraints or non-goals apply?
+      suggested_sections: [Problem, Impact, Reproduction, Constraints]
+    fix:
+      description: Implementation-ready corrective change with direct request-to-task execution
+      label: Fix request
+      on_request_create: [request, task]
+      allow_plan_overlay: false
+      defaults:
+        meta:
+          request_type: fix
+        current_understanding: Initial fix intake captured; expected correction and verification path are understood well enough to implement directly.
+        open_questions:
+          - What is the expected correction?
+          - What should be verified after the fix?
+      suggested_sections: [Problem, Correction, Verification]
+  standard_defaults:
+    spec:
+      - standard-0006  # Planning structure and record quality
+      - standard-0005  # Verification and test evidence
+    task:
+      - standard-0005  # Verification and test evidence (what counts as done)
+      - standard-0006  # Planning structure (acceptance criteria clarity)
+    plan:
+      - standard-0006  # Planning structure (decomposition, sequencing)
+    wp:
+      - standard-0006  # Planning structure
+    request:
+      - standard-0001  # Planning documentation and maintenance
+  object_profiles:
+    spec_precise:
+      applies_to: spec
+      required_sections: [Purpose, Scope, Requirements, Constraints, Acceptance Criteria]
+    task_brief:
+      applies_to: task
+      required_sections: [Description]
+      suggested_sections: [Acceptance Criteria, Notes, Implementation Notes]
+    wp_standard:
+      applies_to: wp
+      required_sections: [Objective, Scope of This Package, Inputs, Instructions, Required Outputs, Acceptance Checks, Non-Goals]

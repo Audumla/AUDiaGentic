@@ -62,7 +62,7 @@ def test_copilot_prompt_trigger_bridge_script_launches_job(tmp_path: Path) -> No
         result = subprocess.run(
             [
                 sys.executable,
-                str(ROOT / "tools" / "copilot_prompt_trigger_bridge.py"),
+                str(ROOT / "tools" / "bridges" / "copilot_prompt_trigger_bridge.py"),
                 "--project-root",
                 str(sandbox.repo),
             ],

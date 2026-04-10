@@ -1,0 +1,6 @@
+profile_pack:
+  id: minimal
+  documentation:
+    required_updates:
+      task: [changelog]
+      wp: [changelog]

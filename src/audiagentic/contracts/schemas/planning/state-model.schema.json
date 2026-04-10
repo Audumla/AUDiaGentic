@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "planning": {
+      "type": "object",
+      "properties": {
+        "workflows": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "default",
+              "named"
+            ],
+            "properties": {
+              "default": {
+                "type": "string"
+              },
+              "named": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "required": [
+                    "initial",
+                    "values",
+                    "transitions"
+                  ],
+                  "properties": {
+                    "initial": {
+                      "type": "string"
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "transitions": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "planning"
+  ]
+}
