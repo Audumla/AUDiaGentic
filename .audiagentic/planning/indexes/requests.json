@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T12:24:03.088001+00:00",
+  "generated_at": "2026-04-10T12:49:30.364758+00:00",
   "items": [
     {
       "id": "request-0002",
@@ -46,8 +46,8 @@
     },
     {
       "id": "request-0009",
-      "label": "Add audience-level profile system to control planning depth-of-detail",
-      "state": "distilled",
+      "label": "Add guidance levels to control planning depth-of-detail",
+      "state": "closed",
       "path": "docs\\planning\\requests\\request-0009.md"
     },
     {
@@ -61,6 +61,12 @@
       "label": "Optimize planning single-item lookup and extract token usage",
       "state": "closed",
       "path": "docs\\planning\\requests\\request-0025.md"
+    },
+    {
+      "id": "request-0029",
+      "label": "Add guidance levels (light/standard/deep) to control planning depth-of-detail",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-0029.md"
     }
   ]
 }
