@@ -2,8 +2,13 @@
 id: request-0010
 label: Implement configurable stack profiles for lightweight req→spec→task workflows
 state: distilled
-summary: Enable optional plans/work packages via stack_profiles, allowing request→specification→task execution without mandatory plan/WP layers
-current_understanding: 'Planning module now supports two configurable stack profiles: direct (req→spec→task only) and full (same base with optional plan/WP overlay). This makes the base planning workflow lightweight while keeping planning structure available when needed.'
+summary: Implement a unified profile system that controls request defaults and downstream
+  creation topology, enabling lightweight request→specification or request→task flows
+  with optional planning overlay where appropriate
+current_understanding: 'Planning module now uses a unified profile model covering enhancement,
+  feature, issue, and fix request types. Profiles combine request defaults with downstream
+  creation topology, making lightweight execution first-class while still allowing
+  planning overlay where appropriate.'
 open_questions: []
 source: consolidation
 context: Consolidated canonical request for stack-profile and overlay work after reviewing exploratory request records.
@@ -27,7 +32,7 @@ meta:
 
 # Understanding
 
-The planning module required a lightweight execution path that doesn't mandate plans and work packages. This request drove the implementation of configurable stack profiles that make the base graph (request → specification → task) a first-class workflow, with planning (plan/WP) as an optional overlay applied later when needed.
+The planning module required a lightweight execution path that doesn't mandate plans and work packages. This request drove the implementation of a unified profile system that combines request defaults with downstream creation topology, so lightweight execution can be the default while fuller planning structure remains available where needed.
 
 The implementation preserves the existing strict schema (work packages still require plans) while making the planning lifecycle genuinely optional at the request level.
 
@@ -43,7 +48,7 @@ Implemented across commits c8370e7, a0391a0, bc90445, e9b7b20:
 
 ## c8370e7 — Stack Profiles Implementation
 
-- Separate `direct` and `full` stack profiles to control execution topology
+- Separate stack-profile behavior to control execution topology
 - Auto-cascade: specs auto-created when request uses a profile
 
 ## a0391a0 — Unified Profile Refinement
@@ -63,20 +68,27 @@ Implemented across commits c8370e7, a0391a0, bc90445, e9b7b20:
 - --source now required CLI argument for request creation
 - Improves auditability and request traceability
 
-Full backward compatibility: requests without profile behave as before (no auto-cascade)
+Current profile model:
+
+- `enhancement`: request → specification with optional planning overlay
+- `feature`: request → specification without plan overlay by default
+- `issue`: request → task with diagnosis-oriented intake defaults
+- `fix`: request → task with implementation-oriented intake defaults
+
+Backward compatibility note: requests without profile continue to avoid automatic downstream creation.
 
 # Acceptance Criteria
 
-- [x] Requests with `--stack-profile direct` auto-create spec without plan/WP
-- [x] Requests without stack_profile behave as before (no change)
+- [x] Profile-driven downstream creation supports lightweight execution without mandatory plan/WP layers
+- [x] Requests without profile behave as before (no automatic downstream creation)
 - [x] Tasks only require spec_ref, not plan_ref (already true, codified)
 - [x] Plan/WP overlay wraps existing tasks without disruption
-- [x] All 162 planning tests pass
+- [x] Planning tests passed during delivery
 - [x] No schema changes to work-package (plan_ref stays required)
 
 # Notes
 
-Planning layer is now optimized for lightweight execution. Agents can work with spec+task flows without planning overhead, and planning structure can be applied declaratively when needed.
+Planning layer is now optimized for lightweight execution. Agents can work with request+spec or request+task flows without mandatory planning overhead, and planning structure can be applied declaratively when needed.
 
 Consolidation notes:
 

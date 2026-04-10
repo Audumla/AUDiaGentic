@@ -59,6 +59,17 @@ All of these are equivalent:
 @r-cline
 ```
 
+## Planning item creation policy
+
+**Planning items (requests, specs, plans, tasks) can only be created with explicit user approval.**
+
+- Do not autonomously create planning items during analysis, review, or exploration work
+- If analysis suggests a new request or spec is needed, report findings and ask for approval
+- Use the canonical tags (`@ag-plan`) to signal planning work that requires user direction
+- Only create planning items in response to explicit user instruction or approved workflow prompts
+
+This prevents unintended expansion of the planning record and maintains user control over scope.
+
 ## Review doctrine
 
 - review prompts should stay read-focused unless the normalized request explicitly allows more
