@@ -6,7 +6,7 @@ Status: implementation-ready spec — sink architecture locked
 
 Define the live-output contract for provider-backed prompt launches so AUDiaGentic can
 capture progress, mirror console output, persist runtime artifacts, and later feed the same
-stream to overlays such as Discord without moving persistence responsibility into the provider.
+stream to external consumers without moving persistence responsibility into the provider.
 
 This extension is intentionally about **capture and presentation**, not provider business
 logic. The provider emits progress; AUDiaGentic owns persistence, rendering, and later
@@ -19,8 +19,8 @@ Implementation note:
 
 ## Relationship to existing phases
 
-This is a Phase 4.9 extension that sits after prompt-trigger launch behavior and before the
-Discord overlay consumes the same stream family.
+This is a Phase 4.9 extension that sits after prompt-trigger launch behavior and before any
+later external consumer attaches to the same stream family.
 
 Related earlier work:
 - Phase 3 launch and review jobs already exist
@@ -34,13 +34,13 @@ Related earlier work:
 
 1. Capture live provider progress without requiring the provider to write files.
 2. Mirror the same live stream to console and runtime artifacts.
-3. Preserve enough structure that a later overlay can subscribe to the same data.
+3. Preserve enough structure that a later external consumer can subscribe to the same data.
 4. Keep provider-specific stream behavior isolated behind the provider adapter or bridge.
 5. Make the first implementation pass work for Cline and Codex before broadening to other providers.
 
 ## Non-goals
 
-- No Discord implementation here.
+- No external messaging/control implementation here.
 - No new core job state machine.
 - No provider-owned persistence rules.
 - No requirement that every provider emits the same shape on day one.
@@ -213,7 +213,7 @@ Normalization rules:
 3. AUDiaGentic mirrors the live output to the console if streaming is enabled.
 4. AUDiaGentic appends normalized progress records to the job event stream when the writer is enabled.
 5. AUDiaGentic writes the final structured report when the provider finishes.
-6. Any later consumer, including Discord, can tail the job event stream or raw logs instead of parsing provider-specific CLI output.
+6. Any later consumer can tail the job event stream or raw logs instead of parsing provider-specific CLI output.
 
 ## Implementation sequence
 
@@ -271,14 +271,13 @@ For later providers, choose one of these methods explicitly:
 
 No provider should invent a fourth persistence path outside the shared runtime artifact family.
 
-## Discord handoff
+## External consumer handoff
 
-Discord remains an overlay. It should consume the same job event stream and final artifacts
-later, without requiring the provider runtime to know anything about Discord.
+Any later external messaging or control surface should consume the same job event stream and final artifacts without requiring the provider runtime to know anything about that consumer.
 
 That means:
-- providers do not publish to Discord directly
-- AUDiaGentic may publish progress to Discord later by reading the same stream
+- providers do not publish directly to an external consumer
+- AUDiaGentic may publish progress later by reading the same stream
 - the stream contract should remain transport-neutral
 - raw session keys or other secret session material must not be copied into runtime stream logs; only redacted handles or secure references may survive beyond the live provider process
 
