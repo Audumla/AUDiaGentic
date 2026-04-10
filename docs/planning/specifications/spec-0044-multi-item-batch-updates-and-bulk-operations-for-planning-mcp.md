@@ -1,7 +1,7 @@
 ---
 id: spec-0044
 label: Multi-item batch updates and bulk operations for planning MCP
-state: ready
+state: cancelled
 summary: Design and implement multi-item batch operations, bulk state transitions,
   and optional result summarization to reduce token overhead for agent bulk operations
 request_refs: []
@@ -209,3 +209,5 @@ These are design-forward but deferred; implement multi-item batch first.
 Multi-item batch is the highest-priority extension. Bulk state transitions are a common pattern that deserves its own optimized tool. Result summarization applies broadly and should become the default for operations where agents don't need full item data.
 
 Compound operations (create_and_link) are valuable but can be deferred — start with multi-item batch + bulk state + summarization.
+
+This specification is currently cancelled because the originating request record is no longer present and the linked task slice was never fleshed into implementation-ready work. If this capability is revived, it should be reintroduced under a new active request with explicit request linkage and refreshed task content.
