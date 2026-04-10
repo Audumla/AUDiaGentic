@@ -12,10 +12,20 @@ class Indexer:
     def write_indexes(self):
         items = scan_items(self.root)
         by_kind = {}
+        lookup = {}
         for item in items:
+            rel_path = item.path.relative_to(self.root).as_posix()
             by_kind.setdefault(item.kind, []).append({
                 'id': item.data['id'], 'label': item.data['label'], 'state': item.data['state'], 'path': str(item.path.relative_to(self.root))
             })
+            lookup[item.data['id']] = {
+                'id': item.data['id'],
+                'kind': item.kind,
+                'label': item.data['label'],
+                'state': item.data['state'],
+                'path': rel_path,
+                'deleted': bool(item.data.get('deleted', False)),
+            }
         idx_root = self.root / '.audiagentic/planning/indexes'
         idx_root.mkdir(parents=True, exist_ok=True)
         meta = {'convention_version': 1, 'generated_at': now_iso()}
@@ -23,6 +33,10 @@ class Indexer:
         for kind, name in names.items():
             payload = {**meta, 'items': by_kind.get(kind, [])}
             (idx_root / f'{name}.json').write_text(json.dumps(payload, indent=2), encoding='utf-8')
+        (idx_root / 'lookup.json').write_text(
+            json.dumps({**meta, 'items': lookup}, indent=2),
+            encoding='utf-8',
+        )
         trace = {**meta, 'refs': []}
         for item in items:
             for field in ['request_refs', 'spec_refs', 'standard_refs']:

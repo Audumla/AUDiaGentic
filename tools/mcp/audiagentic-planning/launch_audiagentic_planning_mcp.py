@@ -16,6 +16,8 @@ from pathlib import Path
 def main() -> None:
     here = Path(__file__).resolve()
     project_root = here.parents[3]
+    target_root = Path(os.environ.get("AUDIAGENTIC_ROOT", project_root)).resolve()
+    os.environ["AUDIAGENTIC_ROOT"] = str(target_root)
     os.chdir(project_root)
 
     for candidate in (project_root, project_root / "src"):
