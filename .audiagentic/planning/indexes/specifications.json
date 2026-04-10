@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T13:11:42.454992+00:00",
+  "generated_at": "2026-04-10T14:28:01.531820+00:00",
   "items": [
     {
       "id": "spec-0023",
@@ -79,6 +79,12 @@
       "label": "Unified workflow states for all planning item types",
       "state": "draft",
       "path": "docs\\planning\\specifications\\spec-0047-unified-workflow-states-for-all-planning-item-types.md"
+    },
+    {
+      "id": "spec-0048",
+      "label": "Canonical semantics for guidance levels",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0048-canonical-semantics-for-guidance-levels.md"
     }
   ]
 }
