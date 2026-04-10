@@ -1,0 +1,22 @@
+{
+  "item": {
+    "id": "spec-0038",
+    "label": "Stack profiles and unified configuration \u2014 Implementation specification",
+    "state": "done",
+    "summary": "Specification for configurable stack profiles (direct/full) enabling lightweight req-spec-task workflows with optional plan/WP overlay, plus source field tracking and unified profile parameter.",
+    "request_refs": [
+      "request-0010"
+    ],
+    "task_refs": [],
+    "kind": "spec",
+    "path": "docs/planning/specifications/spec-0038-stack-profiles-and-unified-configuration-implementation-specification.md"
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n# Purpose\n\n\n# Scope\n\n\n# Requirements\n\n\n# Constraints\n\n\n# Acceptance Criteria\n",
+  "related": {
+    "request_refs": [
+      "request-0010"
+    ],
+    "task_refs": []
+  }
+}
