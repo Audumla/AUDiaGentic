@@ -1,7 +1,7 @@
 ---
 id: request-0010
 label: Implement configurable stack profiles for lightweight req→spec→task workflows
-state: distilled
+state: closed
 summary: Implement a unified profile system that controls request defaults and downstream
   creation topology, enabling lightweight request→specification or request→task flows
   with optional planning overlay where appropriate
@@ -40,7 +40,7 @@ Exploratory test requests created during implementation review were consolidated
 
 # Open Questions
 
-None at consolidation time.
+None at closure time.
 
 # Delivery
 
@@ -95,3 +95,4 @@ Consolidation notes:
 - Rolled in exploratory stack-profile requests `request-0011` through `request-0016`
 - Re-pointed linked implementation artifacts to `request-0010` for traceability
 - Preserved `request-0009` as a separate future-facing request about audience-level profiles
+- Closed after aligning the request record with the current unified profile model in `profiles.yaml`
