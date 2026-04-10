@@ -28,6 +28,7 @@ Sources:
 6. Helper layers and wrappers must stay aligned with the underlying API signatures they expose.
 7. Changes must not silently broaden scope into unrelated runtime, lifecycle, or provider behavior.
 8. Tests and verification should be proportional to risk, with direct coverage for regressions being fixed.
+9. Production code must not reference or depend on development infrastructure, planning system internals, or machine-local paths. Keep project source separate from tooling/orchestration state.
 
 # Default Rules
 
