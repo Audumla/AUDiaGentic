@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "task-0192",
+    "label": "Update tm_list with archive filter parameter",
+    "state": "draft",
+    "summary": "Add include_archived parameter to tm_list() to filter archived items",
+    "spec_ref": "spec-0023",
+    "meta": {
+      "task_refs": [
+        {
+          "ref": "wp-0009",
+          "seq": 1002
+        }
+      ]
+    },
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0192.md"
+  },
+  "effective_standard_refs": [
+    "standard-0006",
+    "standard-0005",
+    "standard-0009"
+  ],
+  "body": "\n\n# Description\n\nAdd include_archived parameter to tm_list() to filter archived items.\n\n## Requirements\n\n```python\ndef tm_list(\n    kind: str | None = None,\n    include_archived: bool = False,\n    root: Path | None = None,\n) -> list[dict[str, Any]]:\n    \"\"\"List planning items with archive filtering.\n    \n    Args:\n        kind: Optional kind filter\n        include_archived: Include archived items (default: False)\n        root: Optional project root\n    \n    Returns:\n        List of item summaries\n    \"\"\"\n```\n\n## Implementation\n\n- Update `tools/planning/tm_helper.py` list surface\n- Update `src/audiagentic/planning/app/api.py` list/scan surface as needed\n- Filter by state when include_archived=False\n- Default behavior: exclude archived items\n- Keep query behavior aligned with the canonical state model\n\n## Acceptance Criteria\n\n1. tm_list() excludes archived items by default\n2. tm_list(include_archived=True) includes archived items\n3. Archive state is included in item metadata\n4. Performance is not significantly impacted\n"
+}

@@ -86,6 +86,8 @@ class Validator:
         for item in items:
             if item.data.get('deleted'):
                 continue
+            if item.data.get('state') == 'archived':
+                continue
 
             # Requests in distilled/ready/done state should have specs
             if item.kind == 'request' and item.data.get('state') in ('distilled', 'ready', 'done'):

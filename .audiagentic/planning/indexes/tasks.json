@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T10:09:23.194996+00:00",
+  "generated_at": "2026-04-10T10:51:52.110075+00:00",
   "items": [
     {
       "id": "task-0032",
@@ -263,31 +263,31 @@
     {
       "id": "task-0190",
       "label": "Add archived state to planning state machine",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0190.md"
     },
     {
       "id": "task-0191",
-      "label": "Implement tm_archive and tm_restore functions",
-      "state": "draft",
+      "label": "Implement state-based archive and restore behavior",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0191.md"
     },
     {
       "id": "task-0192",
       "label": "Update tm_list with archive filter parameter",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0192.md"
     },
     {
       "id": "task-0193",
       "label": "Update tm_validate with archive validation rules",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0193.md"
     },
     {
       "id": "task-0194",
       "label": "Update tm_show to include archive metadata",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0194.md"
     },
     {
@@ -407,37 +407,37 @@
     {
       "id": "task-0221",
       "label": "Add lookup.json global index generation to idx_mgr",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0221.md"
     },
     {
       "id": "task-0222",
       "label": "Add internal lookup(id) and head(id) helpers to api.py",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0222.md"
     },
     {
       "id": "task-0223",
       "label": "Refactor _find(), show(), and extract() onto lookup path",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0223.md"
     },
     {
       "id": "task-0224",
       "label": "Add include_body and write_to_disk controls to extract()",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0224.md"
     },
     {
       "id": "task-0225",
       "label": "Expose head(id) and refined extract controls in MCP and tm_helper",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0225.md"
     },
     {
       "id": "task-0226",
       "label": "Add stale-index handling for lookup misses",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0226.md"
     },
     {
@@ -445,6 +445,54 @@
       "label": "Add body content parameters to task creation and enforce non-empty body via validation",
       "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0227.md"
+    },
+    {
+      "id": "task-0228",
+      "label": "Extend tm_batch_update to support multi-item operations",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0228.md"
+    },
+    {
+      "id": "task-0229",
+      "label": "Implement tm_bulk_state for state transitions",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0229.md"
+    },
+    {
+      "id": "task-0230",
+      "label": "Add summary_only flag to individual operations",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0230.md"
+    },
+    {
+      "id": "task-0231",
+      "label": "Expose bulk operations in MCP and tm_helper",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0231.md"
+    },
+    {
+      "id": "task-0232",
+      "label": "Write tests for bulk operations and backward compatibility",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0232.md"
+    },
+    {
+      "id": "task-0233",
+      "label": "Implement detect_sensitive_patterns function with regex patterns",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0233.md"
+    },
+    {
+      "id": "task-0234",
+      "label": "Integrate sensitive data detection into tm_validate output",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0234.md"
+    },
+    {
+      "id": "task-0235",
+      "label": "Write tests for sensitive data detection",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0235.md"
     },
     {
       "id": "task-0158",
