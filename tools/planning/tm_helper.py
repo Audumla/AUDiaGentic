@@ -213,10 +213,11 @@ def new_request(
     Args:
         label: Request label
         summary: Request summary
+        source: Identifier of the agent or user who created this request (e.g., 'claude', 'codex',
+            'user@example.com'). MUST be a creator identifier, not a process description.
         profile: Optional request profile such as feature or issue.
         current_understanding: Optional initial understanding text.
         open_questions: Optional initial open-question list.
-        source: Optional provenance source for how this request was created.
         context: Optional extra context for where this request came from.
         root: Optional project root. If None, uses current root.
         check_duplicates: If True, check for existing requests with same label/summary
