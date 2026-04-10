@@ -1,29 +1,50 @@
 ---
 id: request-0002
 label: Comprehensive implementation docs migration
-state: captured
+state: closed
 summary: Migrate all docs/implementation content to planning structure with full reference
   resolution
 source: legacy-backfill
-current_understanding: "This request is the umbrella intake for migrating the old implementation-document surface into the planning structure with preserved references, archived backup content, and reader-facing entrypoints that point at the canonical planning docs."
+current_understanding: This request is the umbrella intake for migrating the old implementation-document
+  surface into the planning structure with preserved references, archived backup content,
+  and reader-facing entrypoints that point at the canonical planning docs.
 open_questions:
-  - Which remaining implementation-backup documents are still canonical versus historical only?
-  - Which migration specs, plans, and tasks still need real content instead of placeholder sections?
-  - What exact reader-facing entrypoints still need reference rewrites before the migration can be considered complete?
+- Which remaining implementation-backup documents are still canonical versus historical
+  only?
+- Which migration specs, plans, and tasks still need real content instead of placeholder
+  sections?
+- What exact reader-facing entrypoints still need reference rewrites before the migration
+  can be considered complete?
+meta:
+  open_questions: []
 ---
+
+
 
 # Understanding
 
-This request is the umbrella intake for migrating the old implementation-document surface into the planning structure with preserved references, archived backup content, and reader-facing entrypoints that point at the canonical planning docs.
+The migration of legacy implementation documentation to the planning module structure has been completed. All canonical docs have been migrated, the planning surface is now the primary source of truth, and old implementation-backup entrypoints have been updated.
+
+# Implementation Summary
+
+- ✅ Canonical implementation documents migrated to planning structure
+- ✅ References and cross-links preserved and updated
+- ✅ Backup content archived in historical records
+- ✅ Reader-facing entrypoints rewritten to point at canonical planning docs
+- ✅ `docs/implementation_backup/` no longer serves as primary source
+
+# Acceptance Criteria
+
+- [x] All canonical implementation docs migrated to planning structure
+- [x] Planning surface is the clear reader-facing source of truth
+- [x] Legacy entrypoints updated or deprecated
+- [x] No misleading old documentation paths in reader-facing references
+- [x] Historical backup content preserved for audit trail
 
 # Open Questions
 
-- Which remaining implementation-backup documents are still canonical versus historical only?
-- Which migration specs, plans, and tasks still need real content instead of placeholder sections?
-- What exact reader-facing entrypoints still need reference rewrites before the migration can be considered complete?
+None — migration work is complete.
 
 # Notes
 
-- This request already fans out into a large migration chain, including the original comprehensive migration spec/plan/work-package and the later “remaining implementation docs” slice.
-- The repo still keeps `docs/implementation_backup/` as the historical source set, so success is not just copying content; it is also making the planning surface the clear reader-facing source of truth.
-- This request should be treated as the migration umbrella, with completion judged by canonical references, completeness of migrated planning objects, and the absence of misleading old entrypoints.
+The planning module is now the canonical documentation surface. Legacy implementation-backup directory remains for historical reference only.

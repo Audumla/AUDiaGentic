@@ -1,16 +1,28 @@
 ---
 id: request-0004
 label: MCP layer efficiency improvements and usage enforcement
-state: captured
+state: closed
 summary: Add wrapper functions, templates, and guidance to make MCP layer as efficient
   as direct file edits while ensuring consistent usage for audit trail and validation
 source: legacy-backfill
-current_understanding: "This request drives the planning MCP and helper ergonomics work: improve read and update flows, reduce unnecessary direct edits, and make the planning surface efficient enough that agents can prefer it without losing auditability or validation safety."
+current_understanding: 'This request drives the planning MCP and helper ergonomics
+  work: improve read and update flows, reduce unnecessary direct edits, and make the
+  planning surface efficient enough that agents can prefer it without losing auditability
+  or validation safety.'
 open_questions:
-  - Which remaining planning operations still require direct file edits because the MCP or helper layer cannot mutate the needed metadata cleanly?
-  - How strongly should agent guidance enforce MCP-first behavior versus allowing pragmatic direct edits for unsupported cases?
-  - Where should the line stay between a thin planning MCP and a more opinionated workflow surface?
+- Which remaining planning operations still require direct file edits because the
+  MCP or helper layer cannot mutate the needed metadata cleanly?
+- How strongly should agent guidance enforce MCP-first behavior versus allowing pragmatic
+  direct edits for unsupported cases?
+- Where should the line stay between a thin planning MCP and a more opinionated workflow
+  surface?
+meta:
+  current_understanding: Main MCP efficiency work complete via plan-0007 and plan-0010.
+    Remaining gaps (mutation coverage, enforcement policy, scope boundary) extracted
+    to request-0026 for separate treatment.
 ---
+
+
 
 # Understanding
 
