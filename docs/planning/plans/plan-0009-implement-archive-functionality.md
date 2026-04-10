@@ -1,7 +1,7 @@
 ---
 id: plan-0009
 label: Implement archive functionality
-state: in_progress
+state: done
 summary: Implement archive state, state-based archive/restore behavior, and filtering
 spec_refs:
 - spec-0023
@@ -12,6 +12,7 @@ work_package_refs:
 - ref: wp-0009
   seq: 1000
 ---
+
 
 
 # Objectives

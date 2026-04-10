@@ -1954,3 +1954,9 @@
 {"ts": "2026-04-10T10:51:51.936387+00:00", "event": "task.after_state_change", "id": "task-0235", "old_state": "in_progress", "new_state": "done", "reason": "Implementation complete with tests passing"}
 {"ts": "2026-04-10T11:01:30.190724+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
 {"ts": "2026-04-10T11:01:30.277586+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T11:05:47.609181+00:00", "event": "wp.after_state_change", "id": "wp-0009", "old_state": "in_progress", "new_state": "done", "reason": "All associated tasks complete; archive functionality fully implemented"}
+{"ts": "2026-04-10T11:05:47.704340+00:00", "event": "wp.review_stub", "id": "wp-0009", "old_state": "in_progress", "new_state": "done", "reason": "All associated tasks complete; archive functionality fully implemented"}
+{"ts": "2026-04-10T11:05:47.704466+00:00", "event": "wp.report_stub", "id": "wp-0009", "old_state": "in_progress", "new_state": "done", "reason": "All associated tasks complete; archive functionality fully implemented"}
+{"ts": "2026-04-10T11:05:47.959664+00:00", "event": "plan.after_state_change", "id": "plan-0009", "old_state": "in_progress", "new_state": "done", "reason": "All associated tasks complete; archive functionality fully implemented"}
+{"ts": "2026-04-10T11:05:52.952575+00:00", "event": "spec.after_state_change", "id": "spec-0023", "old_state": "ready", "new_state": "in_progress", "reason": "Archive specification implementation beginning"}
+{"ts": "2026-04-10T11:05:53.300149+00:00", "event": "spec.after_state_change", "id": "spec-0023", "old_state": "in_progress", "new_state": "done", "reason": "Archive specification complete and fully implemented"}

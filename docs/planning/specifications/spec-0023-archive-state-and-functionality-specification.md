@@ -1,7 +1,7 @@
 ---
 id: spec-0023
 label: Archive state and functionality specification
-state: ready
+state: done
 summary: Define archive state workflow, state-based archive behavior, and filtering
   behavior
 request_refs:
@@ -12,6 +12,8 @@ standard_refs:
 - standard-0009
 task_refs: []
 ---
+
+
 
 
 # Purpose

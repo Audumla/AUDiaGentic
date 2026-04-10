@@ -1,7 +1,7 @@
 ---
 id: wp-0009
 label: Archive state workflow and core functions
-state: in_progress
+state: done
 summary: Implement archive state in planning state machine and state-based archive/restore
   behavior
 plan_ref: plan-0009
@@ -19,6 +19,7 @@ task_refs:
 - ref: task-0194
   seq: 1004
 ---
+
 
 
 # Objective
