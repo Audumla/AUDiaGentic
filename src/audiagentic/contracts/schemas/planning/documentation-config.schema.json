@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "planning": {
+      "type": "object",
+      "properties": {
+        "documentation": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "root": {
+              "type": "string"
+            },
+            "surfaces": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "path",
+                  "kind",
+                  "mode",
+                  "profile",
+                  "update_policy"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "mode": {
+                    "enum": [
+                      "manual",
+                      "hybrid",
+                      "managed"
+                    ]
+                  },
+                  "profile": {
+                    "type": "string"
+                  },
+                  "update_policy": {
+                    "type": "string"
+                  },
+                  "entry": {
+                    "type": "boolean"
+                  },
+                  "seed_on_install": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

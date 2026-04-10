@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import tools.validate_ids as validate_ids
+import tools.validation.validate_ids as validate_ids
 
 
 def _write_yaml(path: Path, content: str) -> None:

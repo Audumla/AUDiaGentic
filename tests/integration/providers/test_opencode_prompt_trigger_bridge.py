@@ -79,7 +79,7 @@ def test_opencode_prompt_trigger_bridge_requires_assets(tmp_path: Path) -> None:
         result = subprocess.run(
             [
                 sys.executable,
-                str(ROOT / "tools" / "opencode_prompt_trigger_bridge.py"),
+                str(ROOT / "tools" / "bridges" / "opencode_prompt_trigger_bridge.py"),
                 "--project-root",
                 str(sandbox.repo),
             ],
@@ -106,7 +106,7 @@ def test_opencode_prompt_trigger_bridge_launches_job(tmp_path: Path) -> None:
         result = subprocess.run(
             [
                 sys.executable,
-                str(ROOT / "tools" / "opencode_prompt_trigger_bridge.py"),
+                str(ROOT / "tools" / "bridges" / "opencode_prompt_trigger_bridge.py"),
                 "--project-root",
                 str(sandbox.repo),
             ],
