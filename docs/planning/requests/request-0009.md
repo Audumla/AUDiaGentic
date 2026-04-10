@@ -34,6 +34,7 @@ meta:
   - .audiagentic/planning/config/planning.yaml
   - src/audiagentic/planning/app/api.py
   - tools/planning/tm_helper.py
+  superseded_by: request-0029
 ---
 
 
