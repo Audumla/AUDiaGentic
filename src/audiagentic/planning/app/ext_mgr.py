@@ -56,6 +56,14 @@ class Extracts:
         out = dict(item.data)
         out['kind'] = item.kind
         out['path'] = item.path.relative_to(self.root).as_posix()
+        for field in (
+            "archived_at",
+            "archived_by",
+            "archive_reason",
+            "restored_at",
+            "restored_by",
+        ):
+            out.setdefault(field, None)
         return out
 
     def extract(
