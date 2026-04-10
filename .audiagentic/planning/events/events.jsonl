@@ -1952,3 +1952,5 @@
 {"ts": "2026-04-10T10:51:51.234247+00:00", "event": "task.after_state_change", "id": "task-0234", "old_state": "in_progress", "new_state": "done", "reason": "Implementation complete with tests passing"}
 {"ts": "2026-04-10T10:51:51.579227+00:00", "event": "task.after_state_change", "id": "task-0235", "old_state": "ready", "new_state": "in_progress", "reason": "Starting implementation"}
 {"ts": "2026-04-10T10:51:51.936387+00:00", "event": "task.after_state_change", "id": "task-0235", "old_state": "in_progress", "new_state": "done", "reason": "Implementation complete with tests passing"}
+{"ts": "2026-04-10T11:01:30.190724+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T11:01:30.277586+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
