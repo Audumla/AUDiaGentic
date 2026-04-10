@@ -60,9 +60,9 @@ def main():
     p_new.add_argument('--workflow')
     p_new.add_argument('--request-ref', action='append', dest='request_refs')
     p_new.add_argument('--profile')
-    p_new.add_argument('--source-ref', action='append', dest='source_refs')
     p_new.add_argument('--understanding', dest='current_understanding')
     p_new.add_argument('--question', action='append', dest='open_questions')
+    p_new.add_argument('--stack-profile', dest='stack_profile', help='Stack profile name (e.g. direct, full)')
     p_up = sp.add_parser('update')
     p_up.add_argument('id')
     p_up.add_argument('--label')
@@ -74,6 +74,10 @@ def main():
     p_state = sp.add_parser('state')
     p_state.add_argument('id')
     p_state.add_argument('state')
+    p_del = sp.add_parser('delete')
+    p_del.add_argument('id')
+    p_del.add_argument('--hard', action='store_true')
+    p_del.add_argument('--reason')
     p_rel = sp.add_parser('relink')
     p_rel.add_argument('src')
     p_rel.add_argument('field')
@@ -87,9 +91,17 @@ def main():
     p_pkg.add_argument('--summary', required=True)
     p_pkg.add_argument('--domain', default='core')
     p_pkg.add_argument('--workflow')
+    p_overlay = sp.add_parser('overlay-plan')
+    p_overlay.add_argument('--spec', required=True, help='Specification ID')
+    p_overlay.add_argument('--task', action='append', required=True, dest='tasks', help='Task ID(s) to include')
+    p_overlay.add_argument('--label', required=True, help='Plan/WP label')
+    p_overlay.add_argument('--summary', default='', help='Plan/WP summary')
+    p_overlay.add_argument('--request-ref', action='append', dest='request_refs', help='Request reference(s)')
+    p_overlay.add_argument('--domain', default='core', help='Domain for WP')
     sp.add_parser('validate')
     p_ls = sp.add_parser('list')
     p_ls.add_argument('kind', nargs='?')
+    p_ls.add_argument('--include-deleted', action='store_true')
     p_show = sp.add_parser('show')
     p_show.add_argument('id')
     sp.add_parser('status')
@@ -138,9 +150,9 @@ def main():
             workflow=args.workflow,
             request_refs=args.request_refs,
             profile=args.profile,
-            source_refs=args.source_refs,
             current_understanding=args.current_understanding,
             open_questions=args.open_questions,
+            stack_profile=args.stack_profile,
         )
         print_json({'id': item.data['id'], 'path': str(item.path.relative_to(root))})
     elif args.cmd == 'update':
@@ -152,12 +164,24 @@ def main():
     elif args.cmd == 'state':
         item = api.state(args.id, args.state)
         print_json({'id': item.data['id'], 'state': item.data['state']})
+    elif args.cmd == 'delete':
+        print_json(api.delete(args.id, hard=args.hard, reason=args.reason))
     elif args.cmd == 'relink':
         item = api.relink(args.src, args.field, args.dst, args.seq, args.display)
         print_json({'id': item.data['id'], 'field': args.field})
     elif args.cmd == 'package':
         item = api.package(args.plan, args.tasks, args.label, args.summary, args.domain, args.workflow)
         print_json({'id': item.data['id'], 'path': str(item.path.relative_to(root))})
+    elif args.cmd == 'overlay-plan':
+        result = api.apply_plan_overlay(
+            args.label,
+            args.summary,
+            args.spec,
+            args.tasks,
+            args.request_refs,
+            args.domain
+        )
+        print_json({'plan': {'id': result['plan'].data['id'], 'path': str(result['plan'].path.relative_to(root))}, 'wp': {'id': result['wp'].data['id'], 'path': str(result['wp'].path.relative_to(root))}})
     elif args.cmd == 'validate':
         errs = api.validate()
         print_json({'ok': not errs, 'errors': errs})
@@ -166,6 +190,8 @@ def main():
         items = api._scan()
         if args.kind:
             items = [i for i in items if i.kind == args.kind]
+        if not args.include_deleted:
+            items = [i for i in items if not i.data.get('deleted')]
         print_json([{'id': i.data['id'], 'kind': i.kind, 'label': i.data['label'], 'state': i.data['state']} for i in items])
     elif args.cmd == 'show':
         print_json(api.extracts.show(args.id))
