@@ -79,11 +79,25 @@ class Config:
         wf_name = name or group['default']
         return group['named'][wf_name]
 
-    def stack_profile_for(self, name: str) -> dict:
+    def profile_for(self, name: str) -> dict:
+        """Load a unified profile by name.
+
+        Profiles combine request defaults (Understanding, Open Questions, suggested sections)
+        and stack topology (on_request_create, allow_plan_overlay).
+
+        Args:
+            name: Profile name (e.g. 'feature', 'issue', 'direct', 'full')
+
+        Returns:
+            Profile dict with both request defaults and stack topology
+
+        Raises:
+            ValueError: If profile not found
+        """
         profiles = (
             self.profiles.get("planning", {})
-            .get("stack_profiles", {})
+            .get("profiles", {})
         )
         if name not in profiles:
-            raise ValueError(f"stack profile '{name}' not found")
+            raise ValueError(f"profile '{name}' not found")
         return profiles[name]

@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-09T13:26:50.353288+00:00",
+  "generated_at": "2026-04-10T03:27:12.653156+00:00",
   "items": [
     {
       "id": "task-0032",
@@ -292,27 +292,123 @@
     },
     {
       "id": "task-0195",
-      "label": "Fix schema mismatch: move task_refs to meta.task_refs",
-      "state": "draft",
+      "label": "Verify and preserve schema-compliant task reference placement",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0195.md"
     },
     {
       "id": "task-0196",
       "label": "Implement automatic counter sync on delete",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0196.md"
     },
     {
       "id": "task-0197",
       "label": "Implement soft delete functionality",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0197.md"
     },
     {
       "id": "task-0198",
       "label": "Extend auto-reference updates to plans and tasks",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0198.md"
+    },
+    {
+      "id": "task-0199",
+      "label": "Add duplicate detection for requests and specs",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0199.md"
+    },
+    {
+      "id": "task-0200",
+      "label": "Improve schema validation error messages",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0200.md"
+    },
+    {
+      "id": "task-0201",
+      "label": "Add integration tests for critical fixes",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0201.md"
+    },
+    {
+      "id": "task-0202",
+      "label": "Fix update_content() section-mode regex",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0202.md"
+    },
+    {
+      "id": "task-0203",
+      "label": "Fix move() for work-packages",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0203.md"
+    },
+    {
+      "id": "task-0204",
+      "label": "Implement claims TTL lazy purge",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0204.md"
+    },
+    {
+      "id": "task-0205",
+      "label": "Fix hook event payloads",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0205.md"
+    },
+    {
+      "id": "task-0206",
+      "label": "Fix batch meta op",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0206.md"
+    },
+    {
+      "id": "task-0207",
+      "label": "Fix tm.status() return shape",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0207.md"
+    },
+    {
+      "id": "task-0208",
+      "label": "Fix FastMCP empty-list serialization",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0208.md"
+    },
+    {
+      "id": "task-0209",
+      "label": "Add AUDIAGENTIC_ROOT env var support",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0209.md"
+    },
+    {
+      "id": "task-0210",
+      "label": "Add --root CLI flag support",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0210.md"
+    },
+    {
+      "id": "task-0211",
+      "label": "Task 1",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0211.md"
+    },
+    {
+      "id": "task-0212",
+      "label": "Task 2",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0212.md"
+    },
+    {
+      "id": "task-0213",
+      "label": "Task 1",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0213.md"
+    },
+    {
+      "id": "task-0214",
+      "label": "Task 2",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0214.md"
     },
     {
       "id": "task-0158",
