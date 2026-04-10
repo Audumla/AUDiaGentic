@@ -1,22 +1,23 @@
 ---
 id: spec-0046
-label: Audience-level profile system for controlling planning depth-of-detail
+label: Guidance levels for controlling planning depth-of-detail
 state: draft
-summary: Specification for orthogonal audience profiles (junior/mid/senior) that control
+summary: Specification for orthogonal guidance levels (light/standard/deep) that control
   spec/task required sections, detail verbosity, and acceptance criteria depth independently
   of work-type profiles
 request_refs:
-  - request-0009
+  - request-0029
 task_refs: []
 standard_refs:
-  - standard-0009
+- standard-0009
 ---
+
 
 # Purpose
 
-Introduce an orthogonal audience profile system that controls the depth, detail, and rigor of planning content independently of work-type profiles (feature/issue/fix/enhancement).
+Introduce an orthogonal guidance system that controls the depth, detail, and rigor of planning content independently of work-type profiles (feature/issue/fix/enhancement).
 
-This enables the same workflow (e.g., feature→spec→task) to produce different levels of detail based on team maturity, reviewer expectations, or project needs.
+This enables the same workflow (e.g., feature→spec→task) to produce different levels of detail based on implementor skill level or project needs.
 
 # Scope
 
@@ -159,17 +160,17 @@ Example: `--profile feature --audience senior` creates request→spec→task wit
 
 # Acceptance Criteria
 
-- [ ] `audience_profiles` section added to `profiles.yaml`
-- [ ] `audience` field added to request frontmatter schema
-- [ ] Default audience configurable in `planning.yaml`
-- [ ] `--audience` CLI parameter implemented
-- [ ] Validation enforces audience-appropriate sections
+- [ ] `guidance_levels` section added to `profiles.yaml`
+- [ ] `guidance` field added to request frontmatter schema
+- [ ] Default guidance configurable in `planning.yaml`
+- [ ] `--guidance` CLI parameter implemented
+- [ ] Validation enforces guidance-appropriate sections
 - [ ] Profile combination documented
 - [ ] All planning tests pass
-- [ ] Backward compatible (no audience = mid defaults)
+- [ ] Backward compatible (no guidance = standard defaults)
 
 # Notes
 
-This is orthogonal to stack-profiles (request-0010). Stack profiles control execution topology (what objects get created). Audience profiles control content depth (how detailed the output should be).
+This is orthogonal to stack-profiles (request-0010). Stack profiles control execution topology (what objects get created). Guidance controls content depth (how detailed the output should be).
 
-They can be combined: `--profile feature --audience senior` creates a feature workflow with deep, rigorous content.
+They can be combined: `--profile feature --guidance deep` creates a feature workflow with deep, rigorous content.

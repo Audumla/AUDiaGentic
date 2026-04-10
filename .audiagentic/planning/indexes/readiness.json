@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T12:24:03.088001+00:00",
+  "generated_at": "2026-04-10T12:49:30.364758+00:00",
   "items": [
     {
       "id": "plan-0005",
@@ -36,6 +36,12 @@
       "id": "plan-0011",
       "kind": "plan",
       "state": "in_progress",
+      "claimed": false
+    },
+    {
+      "id": "plan-0014",
+      "kind": "plan",
+      "state": "draft",
       "claimed": false
     },
     {
@@ -83,7 +89,7 @@
     {
       "id": "request-0009",
       "kind": "request",
-      "state": "distilled",
+      "state": "closed",
       "claimed": false
     },
     {
@@ -96,6 +102,12 @@
       "id": "request-0025",
       "kind": "request",
       "state": "closed",
+      "claimed": false
+    },
+    {
+      "id": "request-0029",
+      "kind": "request",
+      "state": "captured",
       "claimed": false
     },
     {
@@ -166,6 +178,12 @@
     },
     {
       "id": "spec-0046",
+      "kind": "spec",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "spec-0047",
       "kind": "spec",
       "state": "draft",
       "claimed": false
@@ -723,27 +741,75 @@
       "claimed": false
     },
     {
-      "id": "task-0158",
+      "id": "task-0237",
       "kind": "task",
       "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0238",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0239",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0240",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0241",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0242",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0243",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0244",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0158",
+      "kind": "task",
+      "state": "cancelled",
       "claimed": false
     },
     {
       "id": "task-0159",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
       "id": "task-0160",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
       "id": "task-0161",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
@@ -1001,7 +1067,7 @@
     {
       "id": "task-0080",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
@@ -1031,7 +1097,7 @@
     {
       "id": "task-0085",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
@@ -1097,7 +1163,7 @@
     {
       "id": "task-0096",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
@@ -1109,7 +1175,7 @@
     {
       "id": "task-0098",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
@@ -1145,7 +1211,7 @@
     {
       "id": "task-0104",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
@@ -1157,7 +1223,7 @@
     {
       "id": "task-0106",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
@@ -1199,7 +1265,7 @@
     {
       "id": "task-0113",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
@@ -1211,7 +1277,7 @@
     {
       "id": "task-0115",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
@@ -1247,7 +1313,7 @@
     {
       "id": "task-0122",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
@@ -1259,7 +1325,7 @@
     {
       "id": "task-0124",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
@@ -1566,6 +1632,12 @@
       "id": "wp-0011",
       "kind": "wp",
       "state": "in_progress",
+      "claimed": false
+    },
+    {
+      "id": "wp-0015",
+      "kind": "wp",
+      "state": "draft",
       "claimed": false
     }
   ]
