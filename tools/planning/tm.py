@@ -70,7 +70,13 @@ def main():
     p_new.add_argument("--request-ref", action="append", dest="request_refs")
     p_new.add_argument(
         "--profile",
-        help="Profile name for request defaults and stack topology (e.g. feature, issue, direct, full)",
+        default=None,
+        help="Profile name for request defaults and stack topology (e.g. feature, issue, direct, full). Defaults to project default.",
+    )
+    p_new.add_argument(
+        "--guidance",
+        choices=["light", "standard", "deep"],
+        help="Guidance level for content depth (light, standard, deep). Defaults to project default.",
     )
     p_new.add_argument("--understanding", dest="current_understanding")
     p_new.add_argument("--question", action="append", dest="open_questions")
@@ -183,6 +189,7 @@ def main():
             workflow=args.workflow,
             request_refs=args.request_refs,
             profile=args.profile,
+            guidance=args.guidance,
             current_understanding=args.current_understanding,
             open_questions=args.open_questions,
             source=args.source,

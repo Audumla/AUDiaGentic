@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T13:11:42.454992+00:00",
+  "generated_at": "2026-04-10T14:28:01.531820+00:00",
   "items": [
     {
       "id": "task-0032",
@@ -503,50 +503,86 @@
     {
       "id": "task-0237",
       "label": "Add guidance_levels to profiles.yaml",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0237.md"
     },
     {
       "id": "task-0238",
       "label": "Update config.py to load guidance levels",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0238.md"
     },
     {
       "id": "task-0239",
       "label": "Add guidance field to request schema",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0239.md"
     },
     {
       "id": "task-0240",
       "label": "Update tm_helper.py new_request() with guidance parameter",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0240.md"
     },
     {
       "id": "task-0241",
       "label": "Add --guidance CLI parameter to tm.py",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0241.md"
     },
     {
       "id": "task-0242",
       "label": "Update validation to enforce guidance-appropriate sections",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0242.md"
     },
     {
       "id": "task-0243",
       "label": "Add default_guidance to planning.yaml",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0243.md"
     },
     {
       "id": "task-0244",
       "label": "Write tests for guidance levels",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0244.md"
+    },
+    {
+      "id": "task-0245",
+      "label": "Draft standard-0010 with guidance level definitions",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0245.md"
+    },
+    {
+      "id": "task-0246",
+      "label": "Update validation to enforce guidance level requirements",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0246.md"
+    },
+    {
+      "id": "task-0247",
+      "label": "Add guidance level selection guide to documentation",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0247.md"
+    },
+    {
+      "id": "task-0248",
+      "label": "Update workflows.yaml with unified states",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0248.md"
+    },
+    {
+      "id": "task-0249",
+      "label": "Implement cascade archive for requests",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0249.md"
+    },
+    {
+      "id": "task-0250",
+      "label": "Implement cascade archive for specs",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0250.md"
     },
     {
       "id": "task-0158",
