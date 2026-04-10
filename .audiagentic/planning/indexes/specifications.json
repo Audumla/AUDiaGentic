@@ -1,11 +1,11 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T11:01:30.363542+00:00",
+  "generated_at": "2026-04-10T11:05:53.463433+00:00",
   "items": [
     {
       "id": "spec-0023",
       "label": "Archive state and functionality specification",
-      "state": "ready",
+      "state": "done",
       "path": "docs\\planning\\specifications\\spec-0023-archive-state-and-functionality-specification.md"
     },
     {
