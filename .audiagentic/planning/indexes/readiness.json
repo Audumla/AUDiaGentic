@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T12:21:57.366400+00:00",
+  "generated_at": "2026-04-10T12:23:42.044416+00:00",
   "items": [
     {
       "id": "plan-0005",
@@ -162,6 +162,12 @@
       "id": "spec-0045",
       "kind": "spec",
       "state": "ready",
+      "claimed": false
+    },
+    {
+      "id": "spec-0046",
+      "kind": "spec",
+      "state": "draft",
       "claimed": false
     },
     {
@@ -708,6 +714,12 @@
       "id": "task-0235",
       "kind": "task",
       "state": "done",
+      "claimed": false
+    },
+    {
+      "id": "task-0236",
+      "kind": "task",
+      "state": "draft",
       "claimed": false
     },
     {
