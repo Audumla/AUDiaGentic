@@ -10,7 +10,7 @@ AUDiaGentic is a clean replacement project for the legacy platform. It is design
 2. **Contract first** — shared contracts must be explicit before parallel implementation begins.
 3. **Project local state** — each enabled project owns its own runtime state under `.audiagentic/`.
 4. **Release before jobs** — release, audit, and ledger come before agent jobs.
-5. **Optional overlays** — Discord and later server/seam features must remain optional.
+5. **Optional external seams** — external control or messaging surfaces must remain optional and must not redefine the core contracts.
 6. **Low rewrite growth path** — new layers should add on top of stable contracts rather than force base rewrites.
 
 ## Tracked vs runtime material
@@ -35,7 +35,7 @@ flowchart TD
     B --> C[Phase 2 Release / audit / ledger / Release Please]
     C --> D[Phase 3 Agent jobs and simple workflows]
     D --> E[Phase 4 Providers and optional server seam]
-    E --> F[Phase 5 Discord overlay]
+    E --> F[Later external control or messaging seam]
     F --> G[Phase 6 Migration hardening and cutover completion]
 ```
 
@@ -44,5 +44,5 @@ flowchart TD
 - no complex graph workflow engine
 - no mandatory server runtime
 - no mandatory AI for release correctness
-- no MCP-based Discord design in v1
+- no Discord-specific overlay path in the active baseline
 - no migration of legacy runtime state

@@ -22,7 +22,6 @@ src/
       state/
     channels/
       cli/
-      discord/
       server/
     streaming/
     observability/
@@ -71,7 +70,7 @@ Interpretation rules for this tranche:
 
 - `execution/` is the home of job orchestration and provider execution behavior.
 - `runtime/` is the home of lifecycle, release, and durable runtime/project state concerns.
-- `channels/` is the home of human-facing entry or interaction surfaces such as CLI, Discord, and optional server adapters.
+- `channels/` is the home of human-facing entry or interaction surfaces such as CLI and optional server adapters.
 - `streaming/` is reserved for live input/output flow and stream-bridging behavior.
 - `observability/` is reserved for telemetry, diagnostics, reporting, and later monitoring surfaces.
 - `nodes/`, `discovery/`, `federation/`, and `connectors/` remain reserved extension roots during this tranche and are **not** folded into the baseline repository-domain tree.
@@ -100,6 +99,7 @@ Future packets and docs should reference the canonical domain paths directly.
 - Packets must not create alternative parallel module trees outside the frozen target shape.
 - When a packet needs a new module outside this tree, it must update this file before code is written.
 - `nodes/`, `discovery/`, `federation/`, and `connectors/` remain optional extension roots and must not become baseline prerequisites during this tranche.
+- this archive/supersession pass does not approve any new documentation, issue-tracking, changelog, ACP, or OpenACP package roots by itself; if new code directories are required for that direction, this file must be updated first
 
 ## Future extension note
 

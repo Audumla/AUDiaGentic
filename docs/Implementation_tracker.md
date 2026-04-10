@@ -276,12 +276,12 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-30 | Phase 3 | PKT-JOB-006 | VERIFIED | Release bridge integration; tests: tests/integration/jobs/test_release_bridge.py |
 | 2026-03-30 | Phase 4 | PKT-PRV-001 | VERIFIED | Provider registry + descriptor validation; tests: tests/unit/providers/test_registry.py |
 | 2026-03-30 | Phase 4 | PKT-PRV-002 | VERIFIED | Provider selection + health checks; tests: tests/integration/providers/test_selection.py |
-| 2026-03-30 | Phase 4 | PKT-PRV-003 | VERIFIED | local-openai adapter; tests: tests/integration/providers/test_local_openai.py |
+| 2026-03-30 | Phase 4 | PKT-PRV-003 | CANCELLED | superseded pre-ACP local-openai line archived; retained only in archive register |
 | 2026-03-30 | Phase 4 | PKT-PRV-004 | VERIFIED | claude adapter; tests: tests/integration/providers/test_claude.py; live wrapper smoke test verified; hook/skills assets still needed for full native-intercept rollout |
 | 2026-03-30 | Phase 4 | PKT-PRV-005 | VERIFIED | codex adapter; tests: tests/integration/providers/test_codex.py; live wrapper smoke test verified; task payload enrichment still a follow-up |
 | 2026-03-30 | Phase 4 | PKT-PRV-006 | VERIFIED | gemini adapter; tests: tests/integration/providers/test_gemini.py |
 | 2026-03-30 | Phase 4 | PKT-PRV-007 | VERIFIED | copilot adapter; tests: tests/integration/providers/test_copilot.py |
-| 2026-03-30 | Phase 4 | PKT-PRV-008 | VERIFIED | continue adapter; tests: tests/integration/providers/test_continue.py |
+| 2026-03-30 | Phase 4 | PKT-PRV-008 | CANCELLED | superseded pre-ACP Continue line archived; retained only in archive register |
 | 2026-03-30 | Phase 4 | PKT-PRV-009 | VERIFIED | cline adapter; tests: tests/integration/providers/test_cline.py |
 | 2026-03-30 | Phase 4 | PKT-PRV-010 | VERIFIED | provider/job seam tests; tests: tests/integration/providers/test_job_provider_seam.py |
 | 2026-03-30 | Phase 4 | PKT-SRV-001 | VERIFIED | optional server seam; tests: tests/unit/server/test_service_boundary.py |
@@ -296,7 +296,7 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-03-30 | Phase 4.6 | PKT-PRV-034 | READY_FOR_REVIEW | Gemini prompt-trigger bridge surface implemented with repo-local `GEMINI.md` guidance |
 | 2026-03-30 | Phase 4.6 | PKT-PRV-035 | READY_FOR_REVIEW | GitHub Copilot prompt-trigger bridge surface implemented with repo-local `.github/copilot-instructions.md`, prompt files, and agent files |
 | 2026-03-30 | Phase 4.6 | PKT-PRV-037 | READY_FOR_REVIEW | Cline prompt-trigger bridge surface implemented with repo-local `.clinerules` guidance |
-| 2026-03-30 | Phase 4.6 | PKT-PRV-038 | READY_FOR_REVIEW | local-openai/qwen prompt-trigger bridge surface implemented with repo-local bridge wrappers |
+| 2026-03-30 | Phase 4.6 | PKT-PRV-038 | CANCELLED | superseded pre-ACP local-openai bridge line archived; Qwen remains tracked separately in active docs |
 | 2026-03-30 | Phase 4.7 | PKT-PRV-039 | DEFERRED_DRAFT | provider availability and auto-install orchestration; shared install policy and provider-specific bootstrap packets drafted |
 | 2026-03-31 | Phase 4.9 | PKT-PRV-048 | READY_FOR_REVIEW | shared live-stream capture contract and sink harness are implemented; console mirroring and runtime persistence remain AUDiaGentic-owned |
 | 2026-03-31 | Phase 4.9 | PKT-PRV-049 | READY_TO_START | Codex live-stream capture packet is now an active first-wave validation follow-on behind PKT-PRV-048 |
@@ -308,7 +308,7 @@ If one of these is missing, the correct action is to clarify the state first —
 | 2026-04-02 | Phase 4.11 | PKT-PRV-056 | READY_TO_START | shared structured-completion contract and normalization harness are packetized and ready to begin |
 | 2026-04-02 | Phase 4.11 | PKT-PRV-057 | WAITING_ON_DEPENDENCIES | Codex structured-completion integration is defined behind the shared normalization harness |
 | 2026-04-02 | Phase 4.11 | PKT-PRV-058 | WAITING_ON_DEPENDENCIES | Cline structured-completion integration is defined behind the shared normalization harness |
-| 2026-03-30 | Phase 5 | PKT-DSC-001 .. PKT-DSC-004 | READY_TO_START | Discord overlay packet headers normalized; phase 5 is ready to implement after Phase 4.4 verification |
+| 2026-03-30 | Phase 5 | PKT-DSC-001 .. PKT-DSC-004 | CANCELLED | superseded pre-ACP Discord overlay line archived and removed from active program |
 | 2026-03-30 | Phase 0.1 | PKT-FND-008 | VERIFIED | contract/schema updates for access-mode, model catalog, model-id/model-alias |
 | 2026-03-30 | Phase 1.1 | PKT-LFC-008 | VERIFIED | lifecycle updates to preserve new tracked config fields |
 | 2026-03-30 | Phase 2.1 | PKT-RLS-009 | VERIFIED | release updates to summarize or omit provider/model metadata explicitly |
