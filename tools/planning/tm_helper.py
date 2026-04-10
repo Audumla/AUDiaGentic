@@ -7,6 +7,7 @@ planning kinds in this phase.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,15 @@ def _find_project_root() -> Path:
     Raises:
         RuntimeError: If project root cannot be determined
     """
+    override = os.environ.get("AUDIAGENTIC_ROOT")
+    if override:
+        override_path = Path(override).resolve()
+        if (override_path / ".audiagentic" / "planning").exists():
+            return override_path
+        raise RuntimeError(
+            f"AUDIAGENTIC_ROOT={override_path} does not contain .audiagentic/planning/"
+        )
+
     # Strategy 1: Search from cwd upward
     for p in [Path.cwd(), *Path.cwd().parents]:
         if (p / ".audiagentic" / "planning").exists():
@@ -681,6 +691,7 @@ def create_with_content(
     label: str,
     summary: str,
     content: str,
+    source: str | None = None,
     domain: str = "core",
     spec: str | None = None,
     plan: str | None = None,
@@ -697,6 +708,7 @@ def create_with_content(
         label: Item label
         summary: Item summary
         content: Initial markdown content
+        source: Optional provenance/source for request creation
         domain: Item domain (default: core)
         spec: Optional spec ID
         plan: Optional plan ID
@@ -716,6 +728,7 @@ def create_with_content(
         label,
         summary,
         content,
+        source=source,
         domain=domain,
         spec=spec,
         plan=plan,
@@ -850,10 +863,19 @@ def show(id_: str, root: Path | None = None) -> dict[str, Any]:
     return api.extracts.show(id_)
 
 
+def head(id_: str, root: Path | None = None) -> dict[str, Any]:
+    """Return lean index-only metadata for a planning item."""
+    project_root = root or _get_root()
+    api = PlanningAPI(project_root)
+    return api.head(id_)
+
+
 def extract(
     id_: str,
     with_related: bool = False,
     with_resources: bool = False,
+    include_body: bool = True,
+    write_to_disk: bool = True,
     root: Path | None = None,
 ) -> dict[str, Any]:
     """Extract a planning item with optional related items.
@@ -862,6 +884,8 @@ def extract(
         id_: Item ID
         with_related: Include related items
         with_resources: Include resource references
+        include_body: Include markdown body content
+        write_to_disk: Persist extract JSON to disk
         root: Optional project root. If None, uses current root.
 
     Returns:
@@ -869,7 +893,13 @@ def extract(
     """
     project_root = root or _get_root()
     api = PlanningAPI(project_root)
-    return api.extracts.extract(id_, with_related, with_resources)
+    return api.extracts.extract(
+        id_,
+        with_related,
+        with_resources,
+        include_body,
+        write_to_disk,
+    )
 
 
 def list_kind(
@@ -1040,7 +1070,12 @@ def get_standard(
     Raises:
         ValueError: If the requested item exists but is not a standard
     """
-    data = extract(standard_id, with_related, with_resources, root)
+    data = extract(
+        standard_id,
+        with_related=with_related,
+        with_resources=with_resources,
+        root=root,
+    )
     item = data.get("item", {})
     if item.get("kind") != "standard":
         raise ValueError(f"{standard_id} is not a standard")

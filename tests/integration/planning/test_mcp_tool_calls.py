@@ -58,6 +58,10 @@ def _exchange(
 ) -> tuple[list[dict], str]:
     """Send messages to MCP server stdio, return (responses, stderr)."""
     payload = "\n".join(json.dumps(m) for m in messages) + "\n"
+    env = None
+    if cwd is not None:
+        env = dict(**__import__("os").environ)
+        env["AUDIAGENTIC_ROOT"] = str(cwd)
     proc = subprocess.run(
         [sys.executable, str(SERVER)],
         input=payload,
@@ -66,6 +70,7 @@ def _exchange(
         errors="replace",
         capture_output=True,
         cwd=str(cwd or ROOT),
+        env=env,
         timeout=timeout,
         check=False,
     )
@@ -139,6 +144,12 @@ def _call_tool_raw(
     return next((r for r in responses if r.get("id") == 2), {})
 
 
+def _request_args(label: str, summary: str, **extra: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {"label": label, "summary": summary, "source": "test"}
+    payload.update(extra)
+    return payload
+
+
 # ---------------------------------------------------------------------------
 # Isolation fixture for mutation tests
 # ---------------------------------------------------------------------------
@@ -189,7 +200,7 @@ def isolated_project(tmp_path: Path) -> Path:
 
 
 class TestMCPProtocol:
-    def test_all_45_tools_exposed(self):
+    def test_all_46_tools_exposed(self):
         """Every @mcp.tool in audiagentic-planning_mcp.py must be listed."""
         responses, _ = _exchange(
             _INIT_MSG,
@@ -225,6 +236,7 @@ class TestMCPProtocol:
             "tm_get_subsection",
             # query
             "tm_list",
+            "tm_head",
             "tm_show",
             "tm_extract",
             "tm_next_tasks",
@@ -469,6 +481,17 @@ class TestReadOnlyTools:
         has_error = "error" in resp or resp.get("result", {}).get("isError")
         assert has_error
 
+    def test_tm_head_existing_request(self):
+        items = _call_tool("tm_list", {"kind": "request"})
+        if not items:
+            pytest.skip("No requests in real repo to show")
+        first_id = items[0]["id"]
+        result = _call_tool("tm_head", {"id": first_id})
+        assert result["id"] == first_id
+        assert "kind" in result
+        assert "path" in result
+        assert "body" not in result
+
     def test_tm_get_content_existing_item(self):
         items = _call_tool("tm_list", {"kind": "request"})
         if not items:
@@ -494,6 +517,18 @@ class TestReadOnlyTools:
         first_id = items[0]["id"]
         result = _call_tool("tm_extract", {"id": first_id, "with_related": True})
         assert "related" in result
+
+    def test_tm_extract_can_skip_body(self):
+        items = _call_tool("tm_list", {"kind": "spec"})
+        if not items:
+            pytest.skip("No specs in repo")
+        first_id = items[0]["id"]
+        result = _call_tool(
+            "tm_extract",
+            {"id": first_id, "include_body": False, "write_to_disk": False},
+        )
+        assert "item" in result
+        assert "body" not in result
 
     def test_tm_standards_existing_item(self):
         items = _call_tool("tm_list", {"kind": "task"})
@@ -537,32 +572,15 @@ class TestReadOnlyTools:
 
 # ---------------------------------------------------------------------------
 # 3. Mutation tools — require isolated project (cwd=tmp_path)
-#    These are marked xfail because MCP root isolation via cwd is not yet
-#    formally supported (server always resolves to real repo via module path).
-#    Implement per-request: "MCP subprocess root isolation via AUDIAGENTIC_ROOT
-#    env var or --root CLI flag".
 # ---------------------------------------------------------------------------
 
-MCP_ISOLATION_NOT_IMPLEMENTED = pytest.mark.xfail(
-    reason=(
-        "MCP subprocess always resolves to real repo root via module file path. "
-        "Isolation requires AUDIAGENTIC_ROOT env var or --root flag — not yet implemented."
-    ),
-    strict=False,
-)
-
-
-@MCP_ISOLATION_NOT_IMPLEMENTED
 class TestMCPMutationIsolated:
     """Mutation tests that require a fully isolated MCP project."""
 
     def test_tm_new_request_creates_item(self, isolated_project):
         result = _call_tool(
             "tm_new_request",
-            {
-                "label": "MCP Isolated Request",
-                "summary": "Created by isolated MCP test",
-            },
+            _request_args("MCP Isolated Request", "Created by isolated MCP test"),
             cwd=isolated_project,
         )
         assert "id" in result
@@ -641,7 +659,7 @@ class TestMCPMutationIsolated:
     def test_tm_update_label(self, isolated_project):
         _call_tool(
             "tm_new_request",
-            {"label": "Original", "summary": "S"},
+            _request_args("Original", "S"),
             cwd=isolated_project,
         )
         result = _call_tool(
@@ -653,7 +671,7 @@ class TestMCPMutationIsolated:
 
     def test_tm_update_append(self, isolated_project):
         _call_tool(
-            "tm_new_request", {"label": "R", "summary": "S"}, cwd=isolated_project
+            "tm_new_request", _request_args("R", "S"), cwd=isolated_project
         )
         result = _call_tool(
             "tm_update",
@@ -706,7 +724,7 @@ class TestMCPMutationIsolated:
 
     def test_tm_relink_request_refs(self, isolated_project):
         _call_tool(
-            "tm_new_request", {"label": "R", "summary": "S"}, cwd=isolated_project
+            "tm_new_request", _request_args("R", "S"), cwd=isolated_project
         )
         _call_tool("tm_new_spec", {"label": "SP", "summary": "S"}, cwd=isolated_project)
         result = _call_tool(
@@ -748,7 +766,7 @@ class TestMCPMutationIsolated:
     def test_tm_delete_soft(self, isolated_project):
         _call_tool(
             "tm_new_request",
-            {"label": "ToDelete", "summary": "S"},
+            _request_args("ToDelete", "S"),
             cwd=isolated_project,
         )
         result = _call_tool(
@@ -761,7 +779,7 @@ class TestMCPMutationIsolated:
     def test_tm_delete_hard(self, isolated_project):
         _call_tool(
             "tm_new_request",
-            {"label": "ToHardDelete", "summary": "S"},
+            _request_args("ToHardDelete", "S"),
             cwd=isolated_project,
         )
         result = _call_tool(
@@ -773,7 +791,7 @@ class TestMCPMutationIsolated:
 
     def test_tm_update_content_replace(self, isolated_project):
         _call_tool(
-            "tm_new_request", {"label": "R", "summary": "S"}, cwd=isolated_project
+            "tm_new_request", _request_args("R", "S"), cwd=isolated_project
         )
         result = _call_tool(
             "tm_update_content",
@@ -792,7 +810,7 @@ class TestMCPMutationIsolated:
 
     def test_tm_update_content_append(self, isolated_project):
         _call_tool(
-            "tm_new_request", {"label": "R", "summary": "S"}, cwd=isolated_project
+            "tm_new_request", _request_args("R", "S"), cwd=isolated_project
         )
         _call_tool(
             "tm_update_content",
@@ -872,6 +890,7 @@ class TestMCPMutationIsolated:
                 "label": "Rich Request",
                 "summary": "Has content",
                 "content": "# Problem\n\nThe problem.\n\n# Desired Outcome\n\nBetter state.\n",
+                "source": "test",
             },
             cwd=isolated_project,
         )
@@ -900,14 +919,14 @@ class TestMCPMutationIsolated:
 
     def test_tm_validate_after_create(self, isolated_project):
         _call_tool(
-            "tm_new_request", {"label": "R", "summary": "S"}, cwd=isolated_project
+            "tm_new_request", _request_args("R", "S"), cwd=isolated_project
         )
         errors = _call_tool("tm_validate", cwd=isolated_project)
         assert isinstance(errors, list)
 
     def test_tm_index_runs_without_error(self, isolated_project):
         _call_tool(
-            "tm_new_request", {"label": "R", "summary": "S"}, cwd=isolated_project
+            "tm_new_request", _request_args("R", "S"), cwd=isolated_project
         )
         # tm_index returns None
         resp = _call_tool_raw("tm_index", {}, cwd=isolated_project)
@@ -920,7 +939,7 @@ class TestMCPMutationIsolated:
 
     def test_tm_events_after_create(self, isolated_project):
         _call_tool(
-            "tm_new_request", {"label": "R", "summary": "S"}, cwd=isolated_project
+            "tm_new_request", _request_args("R", "S"), cwd=isolated_project
         )
         events = _call_tool("tm_events", {"tail": 5}, cwd=isolated_project)
         assert isinstance(events, list)
@@ -933,17 +952,17 @@ class TestMCPMutationIsolated:
 
     def test_tm_list_after_mutations(self, isolated_project):
         _call_tool(
-            "tm_new_request", {"label": "R1", "summary": "S"}, cwd=isolated_project
+            "tm_new_request", _request_args("R1", "S"), cwd=isolated_project
         )
         _call_tool(
-            "tm_new_request", {"label": "R2", "summary": "S"}, cwd=isolated_project
+            "tm_new_request", _request_args("R2", "S"), cwd=isolated_project
         )
         result = _call_tool("tm_list", {"kind": "request"}, cwd=isolated_project)
         assert len(result) >= 2
 
     def test_tm_show_after_create(self, isolated_project):
         _call_tool(
-            "tm_new_request", {"label": "ShowMe", "summary": "S"}, cwd=isolated_project
+            "tm_new_request", _request_args("ShowMe", "S"), cwd=isolated_project
         )
         result = _call_tool("tm_show", {"id": "request-0001"}, cwd=isolated_project)
         assert result["id"] == "request-0001"
@@ -951,21 +970,21 @@ class TestMCPMutationIsolated:
 
     def test_tm_status_after_create(self, isolated_project):
         _call_tool(
-            "tm_new_request", {"label": "R", "summary": "S"}, cwd=isolated_project
+            "tm_new_request", _request_args("R", "S"), cwd=isolated_project
         )
         result = _call_tool("tm_status", cwd=isolated_project)
-        assert result.get("request", 0) >= 1
+        assert result.get("request", {}).get("captured", 0) >= 1
 
     def test_tm_new_request_duplicate_detection(self, isolated_project):
         """Duplicate requests should return existing item with created=False."""
         _call_tool(
             "tm_new_request",
-            {"label": "Dup Label", "summary": "S"},
+            _request_args("Dup Label", "S"),
             cwd=isolated_project,
         )
         result = _call_tool(
             "tm_new_request",
-            {"label": "Dup Label", "summary": "S"},
+            _request_args("Dup Label", "S"),
             cwd=isolated_project,
         )
         assert result.get("created") is False
