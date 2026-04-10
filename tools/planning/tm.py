@@ -59,10 +59,11 @@ def main():
     p_new.add_argument('--target')
     p_new.add_argument('--workflow')
     p_new.add_argument('--request-ref', action='append', dest='request_refs')
-    p_new.add_argument('--profile')
+    p_new.add_argument('--profile', help='Profile name for request defaults and stack topology (e.g. feature, issue, direct, full)')
     p_new.add_argument('--understanding', dest='current_understanding')
     p_new.add_argument('--question', action='append', dest='open_questions')
-    p_new.add_argument('--stack-profile', dest='stack_profile', help='Stack profile name (e.g. direct, full)')
+    p_new.add_argument('--source')
+    p_new.add_argument('--context')
     p_up = sp.add_parser('update')
     p_up.add_argument('id')
     p_up.add_argument('--label')
@@ -152,7 +153,8 @@ def main():
             profile=args.profile,
             current_understanding=args.current_understanding,
             open_questions=args.open_questions,
-            stack_profile=args.stack_profile,
+            source=args.source,
+            context=args.context,
         )
         print_json({'id': item.data['id'], 'path': str(item.path.relative_to(root))})
     elif args.cmd == 'update':

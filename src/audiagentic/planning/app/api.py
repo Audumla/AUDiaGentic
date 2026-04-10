@@ -85,8 +85,9 @@ class PlanningAPI:
         profile: str | None = None,
         current_understanding: str | None = None,
         open_questions: list[str] | None = None,
+        source: str | None = None,
+        context: str | None = None,
         check_duplicates: bool = True,
-        stack_profile: str | None = None,
     ):
         kind = {
             "req": "request",
@@ -113,11 +114,13 @@ class PlanningAPI:
                 profile=profile,
                 current_understanding=current_understanding,
                 open_questions=open_questions,
+                source=source,
+                context=context,
             )
-            # Apply stack profile cascade if specified
-            if stack_profile:
-                sp = self.config.stack_profile_for(stack_profile)
-                if "specification" in sp.get("on_request_create", []):
+            # Apply profile cascade if specified
+            if profile:
+                prof = self.config.profile_for(profile)
+                if "specification" in prof.get("on_request_create", []):
                     spec_id = next_id(self.root, "spec")
                     self.spec_mgr.create(
                         spec_id,
