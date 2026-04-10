@@ -9,6 +9,7 @@ first-class planning kinds in the core scan/index/validator model.
 
 from __future__ import annotations
 
+import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -21,10 +22,7 @@ def _bootstrap_repo_root() -> Path:
     The helper owns canonical project-root detection. This bootstrap only needs
     to locate the repository so `tools.planning.tm_helper` can be imported.
     """
-    markers = (
-        (".audiagentic", "planning"),
-        ("tools", "planning", "tm_helper.py"),
-    )
+    markers = (("tools", "planning", "tm_helper.py"),)
     search_roots = [
         Path.cwd(),
         *Path.cwd().parents,
@@ -57,6 +55,9 @@ except ImportError:
 import tools.planning.tm_helper as tm
 
 _ROOT = tm._find_project_root()
+if os.environ.get("AUDIAGENTIC_ROOT"):
+    tm.set_root(Path(os.environ["AUDIAGENTIC_ROOT"]).resolve())
+    _ROOT = tm._get_root()
 for _p in (str(_ROOT), str(_ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
@@ -393,6 +394,7 @@ def tm_create_with_content(
     label: str,
     summary: str,
     content: str,
+    source: str | None = None,
     domain: str = "core",
     spec: str | None = None,
     plan: str | None = None,
@@ -406,6 +408,7 @@ def tm_create_with_content(
         label,
         summary,
         content,
+        source,
         domain,
         spec,
         plan,
@@ -443,19 +446,30 @@ def tm_list(
 
 
 @mcp.tool(
-    description="Get a full view of a planning item with all metadata and relationships"
+    description="Get frontmatter metadata for a single planning item via one file parse. No body content."
 )
 def tm_show(id: str) -> dict[str, Any]:
     return tm.show(id)
 
 
 @mcp.tool(
-    description="Extract a planning item with optional related items and resource references"
+    description="Return a planning extract. Can include related refs, resources, and optionally body content."
 )
 def tm_extract(
-    id: str, with_related: bool = False, with_resources: bool = False
+    id: str,
+    with_related: bool = False,
+    with_resources: bool = False,
+    include_body: bool = True,
+    write_to_disk: bool = True,
 ) -> dict[str, Any]:
-    return tm.extract(id, with_related, with_resources)
+    return tm.extract(id, with_related, with_resources, include_body, write_to_disk)
+
+
+@mcp.tool(
+    description="Return lean index-only metadata for a planning item. No markdown parse. Lowest token cost."
+)
+def tm_head(id: str) -> dict[str, Any]:
+    return tm.head(id)
 
 
 @tool_with_empty_list_fix(

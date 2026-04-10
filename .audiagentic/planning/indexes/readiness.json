@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T06:37:23.008587+00:00",
+  "generated_at": "2026-04-10T10:09:23.194996+00:00",
   "items": [
     {
       "id": "plan-0005",
@@ -23,7 +23,7 @@
     {
       "id": "plan-0009",
       "kind": "plan",
-      "state": "ready",
+      "state": "in_progress",
       "claimed": false
     },
     {
@@ -41,25 +41,25 @@
     {
       "id": "request-0002",
       "kind": "request",
-      "state": "captured",
+      "state": "closed",
       "claimed": false
     },
     {
       "id": "request-0003",
       "kind": "request",
-      "state": "captured",
+      "state": "superseded",
       "claimed": false
     },
     {
       "id": "request-0004",
       "kind": "request",
-      "state": "captured",
+      "state": "closed",
       "claimed": false
     },
     {
       "id": "request-0005",
       "kind": "request",
-      "state": "captured",
+      "state": "distilled",
       "claimed": false
     },
     {
@@ -77,7 +77,7 @@
     {
       "id": "request-0008",
       "kind": "request",
-      "state": "distilled",
+      "state": "closed",
       "claimed": false
     },
     {
@@ -99,9 +99,15 @@
       "claimed": false
     },
     {
+      "id": "request-0026",
+      "kind": "request",
+      "state": "closed",
+      "claimed": false
+    },
+    {
       "id": "spec-0023",
       "kind": "spec",
-      "state": "draft",
+      "state": "ready",
       "claimed": false
     },
     {
@@ -1475,7 +1481,7 @@
     {
       "id": "wp-0009",
       "kind": "wp",
-      "state": "ready",
+      "state": "in_progress",
       "claimed": false
     },
     {

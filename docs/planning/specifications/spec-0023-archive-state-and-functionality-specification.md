@@ -1,13 +1,18 @@
 ---
 id: spec-0023
 label: Archive state and functionality specification
-state: draft
-summary: Define archive state workflow, tm_archive/tm_restore functions, and filtering
+state: ready
+summary: Define archive state workflow, state-based archive behavior, and filtering
   behavior
 request_refs:
 - request-0005
+standard_refs:
+- standard-0006
+- standard-0005
+- standard-0009
 task_refs: []
 ---
+
 
 # Purpose
 
@@ -17,7 +22,7 @@ older or redundant items while maintaining historical records and queryability.
 # Scope
 
 - Archive state for all planning item kinds (request, spec, plan, task, wp, standard)
-- tm_archive() and tm_restore() helper functions
+- State-based archive and restore behavior in the planning core
 - Archive filtering in tm_list()
 - Archive validation rules in tm_validate()
 - Archive metadata in tm_show()
@@ -33,38 +38,43 @@ older or redundant items while maintaining historical records and queryability.
    - in_progress → archived
    - done → archived
    - archived → ready (restore)
-3. Archived items cannot be modified (state transitions rejected except restore)
+3. Archived items cannot be modified except through allowed state restoration and explicitly-supported archive metadata updates.
+4. Archive behavior should remain canonical in workflow/core planning logic; MCP may expose convenience affordances later, but should not define separate archive semantics.
 
-## tm_archive()
+## State-Based Archive Transition
 
 ```python
-def tm_archive(
+def tm_state(
     id_: str,
+    new_state: str,
     reason: str | None = None,
+    actor: str | None = None,
     root: Path | None = None,
 ) -> dict[str, Any]:
-    """Archive a planning item."""
+    """Change planning item state, including archive/restore transitions."""
 ```
 
 Requirements:
-- Transition item to archived state
-- Record archive metadata (archived_at, archived_by, reason)
+- Transition item to `archived` when the requested state is archive
+- Record archive metadata (archived_at, archived_by or actor, reason)
 - Log archive event
 - Return archive result
 
-## tm_restore()
+## State-Based Restore Transition
 
 ```python
-def tm_restore(
+def tm_state(
     id_: str,
+    new_state: str,
+    actor: str | None = None,
     root: Path | None = None,
 ) -> dict[str, Any]:
-    """Restore an archived planning item."""
+    """Change planning item state, including archive/restore transitions."""
 ```
 
 Requirements:
-- Transition item back to ready state
-- Record restore metadata (restored_at, restored_by)
+- Transition item from `archived` back to `ready`
+- Record restore metadata (restored_at, restored_by or actor)
 - Log restore event
 - Return restore result
 
@@ -105,13 +115,14 @@ Requirements:
 3. Archived items remain queryable
 4. No automatic archive policies (manual archive only)
 5. No bulk archive operations in this phase
+6. Future workflow triggers may act on archived state later, but this phase only requires the core state semantics and directly related read/validation behavior
 
 # Acceptance Criteria
 
 1. Archived state is defined for all planning kinds
 2. State transitions are validated correctly
-3. tm_archive() transitions item to archived state with metadata
-4. tm_restore() transitions item back to ready state with metadata
+3. State-driven archive transitions move items to `archived` with metadata
+4. State-driven restore transitions move items back to `ready` with metadata
 5. tm_list() excludes archived items by default
 6. tm_validate() skips cross-ref validation for archived items
 7. tm_show() includes archive metadata

@@ -1,16 +1,27 @@
 ---
 id: request-0003
 label: Add archive functionality to planning core
-state: captured
+state: superseded
 summary: Implement archive state workflow with tm_archive, tm_restore, and archive
   filtering for planning objects
 source: legacy-backfill
-current_understanding: "This request is the original archive-workflow intake for the planning core. It established the first archive-state direction and is now best understood as the historical umbrella behind the newer implementation-focused archive request chain."
+current_understanding: This request is the original archive-workflow intake for the
+  planning core. It established the first archive-state direction and is now best
+  understood as the historical umbrella behind the newer implementation-focused archive
+  request chain.
 open_questions:
-  - Should this request remain the historical umbrella while request-0005 drives implementation, or should the archive intake be consolidated more explicitly?
-  - Which archive behaviors belong to the older workflow-oriented chain versus the newer implementation-focused chain?
-  - What compatibility rules must be preserved so archive support does not break existing planning queries and state handling?
+- Should this request remain the historical umbrella while request-0005 drives implementation,
+  or should the archive intake be consolidated more explicitly?
+- Which archive behaviors belong to the older workflow-oriented chain versus the newer
+  implementation-focused chain?
+- What compatibility rules must be preserved so archive support does not break existing
+  planning queries and state handling?
+meta:
+  current_understanding: Superseded by request-0005. Original archive workflow intake;
+    implementation continues under request-0005 with spec-0023, plan-0009, and wp-0009.
 ---
+
+
 
 # Understanding
 
