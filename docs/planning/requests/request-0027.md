@@ -4,7 +4,7 @@ label: Enhance planning MCP with bulk update operations and result summarization
 state: distilled
 summary: Extend MCP batch operations to support multi-item updates, bulk state transitions,
   and result summarization to reduce agent token usage and round-trip calls
-source: planning-team
+source: claude
 current_understanding: Planning MCP currently optimizes for single-item reads (head,
   show, extract controls) but not for bulk operations. Agents frequently perform bulk
   state transitions, relinking, or updates. A multi-item batch operation and optional
@@ -32,17 +32,15 @@ meta:
     compound operations pattern. Ready for implementation.'
 ---
 
-
-
-
 # Understanding
 
 Planning MCP currently optimizes for single-item reads (head, show, extract controls) but not for bulk operations. Agents frequently perform bulk state transitions, relinking, or updates. A multi-item batch operation and optional result summarization (counts only, not full payloads) would reduce token overhead for common agent workflows.
 
-# Open Questions
+## Open Questions
 
 - Should tm_batch_update accept both single-item (current) and multi-item formats for backward compatibility?
 - For result summarization, what minimal response shape best serves agents (counts vs ID list)?
 - Should compound operations like create_and_link be included or deferred?
 - What should be the maximum batch size per call to prevent abuse?
-# Notes
+
+## Notes
