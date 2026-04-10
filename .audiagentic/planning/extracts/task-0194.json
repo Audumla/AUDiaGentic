@@ -1,0 +1,25 @@
+{
+  "item": {
+    "id": "task-0194",
+    "label": "Update tm_show to include archive metadata",
+    "state": "draft",
+    "summary": "Add archive metadata (archived_at, archived_by, reason) to tm_show() output",
+    "spec_ref": "spec-0023",
+    "meta": {
+      "task_refs": [
+        {
+          "ref": "wp-0009",
+          "seq": 1004
+        }
+      ]
+    },
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0194.md"
+  },
+  "effective_standard_refs": [
+    "standard-0006",
+    "standard-0005",
+    "standard-0009"
+  ],
+  "body": "\n\n# Description\n\nAdd archive metadata (archived_at, archived_by, reason) to tm_show() output.\n\n## Requirements\n\nArchive metadata should be included in item metadata:\n\n```python\n{\n    \"id\": \"task-0001\",\n    \"kind\": \"task\",\n    \"label\": \"Example task\",\n    \"state\": \"archived\",\n    \"archived_at\": \"2026-04-09T12:00:00Z\",\n    \"archived_by\": \"user@example.com\",\n    \"archive_reason\": \"Feature deprecated\",\n    \"restored_at\": None,\n    \"restored_by\": None,\n}\n```\n\n## Implementation\n\n- Update `src/audiagentic/planning/app/api.py` extracts.show()\n- Add archive metadata to item data\n- Store metadata in YAML frontmatter\n- Include in tm_show() output\n- Keep metadata shape aligned with the state-driven archive/restore model\n\n## Acceptance Criteria\n\n1. Archived items show archive metadata in tm_show()\n2. Metadata includes timestamp, user, and reason\n3. Restored items show restore metadata\n4. Non-archived items show None for archive fields\n"
+}

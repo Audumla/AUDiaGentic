@@ -254,3 +254,22 @@ def test_tm_helper_delete_and_list_include_deleted(helper_project: Path) -> None
     assert task["id"] not in active_ids
     assert task["id"] in all_ids
     assert shown["deleted"] is True
+
+
+def test_tm_helper_state_supports_archive_metadata_and_list_filtering(
+    helper_project: Path,
+) -> None:
+    spec = tm.new_spec("Archive spec", "Archive summary")
+    task = tm.new_task("Archive task", "Archive summary", spec["id"])
+
+    archived = tm.state(task["id"], "archived", reason="superseded", actor="tester")
+    shown = tm.show(task["id"])
+    active_ids = {item["id"] for item in tm.list_kind("task")}
+    all_ids = {item["id"] for item in tm.list_kind("task", include_archived=True)}
+
+    assert archived["state"] == "archived"
+    assert archived["archived_by"] == "tester"
+    assert archived["archive_reason"] == "superseded"
+    assert shown["archived_at"] is not None
+    assert task["id"] not in active_ids
+    assert task["id"] in all_ids

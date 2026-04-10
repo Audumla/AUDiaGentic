@@ -5,73 +5,89 @@ planning:
       named:
         standard:
           initial: captured
-          values: [captured, distilled, closed, superseded]
+          values: [captured, distilled, closed, superseded, archived]
           transitions:
-            captured: [distilled, closed, superseded]
-            distilled: [closed, superseded]
+            captured: [distilled, closed, superseded, archived]
+            distilled: [closed, superseded, archived]
             closed: []
-            superseded: []
+            superseded: [archived]
+            archived: [distilled, superseded]
     spec:
       default: standard
       named:
         standard:
           initial: draft
-          values: [draft, ready, in_progress, blocked, done, cancelled]
+          values: [draft, ready, in_progress, blocked, done, cancelled, archived]
           transitions:
-            draft: [ready, blocked, cancelled]
-            ready: [in_progress, blocked, cancelled]
-            in_progress: [blocked, done, cancelled]
-            blocked: [draft, ready, in_progress, cancelled]
-            done: []
-            cancelled: []
+            draft: [ready, blocked, cancelled, archived]
+            ready: [in_progress, blocked, cancelled, archived]
+            in_progress: [blocked, done, cancelled, archived]
+            blocked: [draft, ready, in_progress, cancelled, archived]
+            done: [archived]
+            cancelled: [archived]
+            archived: [ready]
     plan:
       default: standard
       named:
         standard:
           initial: draft
-          values: [draft, ready, in_progress, blocked, done, cancelled]
+          values: [draft, ready, in_progress, blocked, done, cancelled, archived]
           transitions:
-            draft: [ready, blocked, cancelled]
-            ready: [in_progress, blocked, cancelled]
-            in_progress: [blocked, done, cancelled]
-            blocked: [draft, ready, in_progress, cancelled]
-            done: []
-            cancelled: []
+            draft: [ready, blocked, cancelled, archived]
+            ready: [in_progress, blocked, cancelled, archived]
+            in_progress: [blocked, done, cancelled, archived]
+            blocked: [draft, ready, in_progress, cancelled, archived]
+            done: [archived]
+            cancelled: [archived]
+            archived: [ready]
     task:
       default: standard
       named:
         standard:
           initial: draft
-          values: [draft, ready, in_progress, blocked, done, cancelled]
+          values: [draft, ready, in_progress, blocked, done, cancelled, archived]
           transitions:
-            draft: [ready, blocked, cancelled]
-            ready: [in_progress, blocked, cancelled]
-            in_progress: [draft, blocked, done, cancelled]
-            blocked: [draft, ready, in_progress, cancelled]
-            done: []
-            cancelled: []
+            draft: [ready, blocked, cancelled, archived]
+            ready: [in_progress, blocked, cancelled, archived]
+            in_progress: [draft, blocked, done, cancelled, archived]
+            blocked: [draft, ready, in_progress, cancelled, archived]
+            done: [archived]
+            cancelled: [archived]
+            archived: [ready]
         review_heavy:
           initial: draft
-          values: [draft, review, ready, in_progress, blocked, done, cancelled]
+          values: [draft, review, ready, in_progress, blocked, done, cancelled, archived]
           transitions:
-            draft: [review, blocked, cancelled]
-            review: [draft, ready, blocked, cancelled]
-            ready: [in_progress, blocked, cancelled]
-            in_progress: [blocked, done, cancelled]
-            blocked: [draft, review, ready, in_progress, cancelled]
-            done: []
-            cancelled: []
+            draft: [review, blocked, cancelled, archived]
+            review: [draft, ready, blocked, cancelled, archived]
+            ready: [in_progress, blocked, cancelled, archived]
+            in_progress: [blocked, done, cancelled, archived]
+            blocked: [draft, review, ready, in_progress, cancelled, archived]
+            done: [archived]
+            cancelled: [archived]
+            archived: [ready]
     wp:
       default: standard
       named:
         standard:
           initial: draft
-          values: [draft, ready, in_progress, blocked, review, done, cancelled]
+          values: [draft, ready, in_progress, blocked, review, done, cancelled, archived]
           transitions:
-            draft: [ready, blocked, cancelled]
-            ready: [in_progress, blocked, cancelled]
-            in_progress: [review, blocked, done, cancelled]
-            review: [in_progress, done, blocked, cancelled]
-            blocked: [draft, ready, in_progress, cancelled]
-            done: []
-            cancelled: []
+            draft: [ready, blocked, cancelled, archived]
+            ready: [in_progress, blocked, cancelled, archived]
+            in_progress: [review, blocked, done, cancelled, archived]
+            review: [in_progress, done, blocked, cancelled, archived]
+            blocked: [draft, ready, in_progress, cancelled, archived]
+            done: [archived]
+            cancelled: [archived]
+            archived: [ready]
+    standard:
+      default: standard
+      named:
+        standard:
+          initial: ready
+          values: [ready, done, archived]
+          transitions:
+            ready: [done, archived]
+            done: [archived]
+            archived: [ready]
