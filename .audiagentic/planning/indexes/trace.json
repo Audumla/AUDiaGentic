@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T12:49:30.364758+00:00",
+  "generated_at": "2026-04-10T13:11:42.454992+00:00",
   "refs": [
     {
       "src": "plan-0005",
@@ -116,11 +116,6 @@
     },
     {
       "src": "request-0009",
-      "dst": "spec-0047",
-      "field": "spec_refs"
-    },
-    {
-      "src": "request-0009",
       "dst": "standard-0009",
       "field": "standard_refs"
     },
@@ -142,6 +137,26 @@
     {
       "src": "request-0029",
       "dst": "standard-0001",
+      "field": "standard_refs"
+    },
+    {
+      "src": "request-0029",
+      "dst": "standard-0009",
+      "field": "standard_refs"
+    },
+    {
+      "src": "request-0030",
+      "dst": "spec-0047",
+      "field": "spec_refs"
+    },
+    {
+      "src": "request-0030",
+      "dst": "standard-0001",
+      "field": "standard_refs"
+    },
+    {
+      "src": "request-0030",
+      "dst": "standard-0009",
       "field": "standard_refs"
     },
     {
@@ -371,7 +386,7 @@
     },
     {
       "src": "spec-0047",
-      "dst": "request-0028",
+      "dst": "request-0030",
       "field": "request_refs"
     },
     {

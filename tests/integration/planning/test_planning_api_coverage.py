@@ -64,9 +64,18 @@ def pr(tmp_path: Path):
 
 # Shorthand helpers inside tests
 def _spec_and_task(api):
-    spec = api.new("spec", label="S", summary="S")
+    spec = _new_spec(api)
     task = api.new("task", label="T", summary="S", spec=spec.data["id"])
     return spec, task
+
+
+def _new_request(api, label: str = "R", summary: str = "S"):
+    return api.new("request", label=label, summary=summary, source="test")
+
+
+def _new_spec(api, label: str = "S", summary: str = "S"):
+    request = _new_request(api, label=f"{label} request", summary=summary)
+    return api.new("spec", label=label, summary=summary, request_refs=[request.data["id"]])
 
 
 def _full_hierarchy(api):
@@ -86,19 +95,19 @@ def _full_hierarchy(api):
 class TestUpdate:
     def test_update_label(self, pr):
         _, api = pr
-        spec = api.new("spec", label="Original", summary="S")
+        spec = _new_spec(api, label="Original")
         updated = api.update(spec.data["id"], label="Updated")
         assert updated.data["label"] == "Updated"
 
     def test_update_summary(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="Original summary")
+        spec = _new_spec(api, summary="Original summary")
         updated = api.update(spec.data["id"], summary="New summary")
         assert updated.data["summary"] == "New summary"
 
     def test_update_body_append(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         api.update(spec.data["id"], body_append="## Appended\n\nExtra content.")
         body = api.get_content(spec.data["id"])
         assert "Appended" in body
@@ -106,14 +115,14 @@ class TestUpdate:
 
     def test_update_returns_updated_item(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         result = api.update(spec.data["id"], label="Changed")
         assert result.data["id"] == spec.data["id"]
         assert result.data["label"] == "Changed"
 
     def test_update_no_args_is_noop(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         result = api.update(spec.data["id"])
         assert result.data["label"] == "S"
 
@@ -126,20 +135,20 @@ class TestUpdate:
 class TestContent:
     def test_get_content_returns_body_without_frontmatter(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         body = api.get_content(spec.data["id"])
         assert "---" not in body
         assert isinstance(body, str)
 
     def test_update_content_replace(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         api.update_content(spec.data["id"], "# Purpose\n\nReplaced.\n", mode="replace")
         assert "Replaced." in api.get_content(spec.data["id"])
 
     def test_update_content_append(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         api.update_content(spec.data["id"], "# Purpose\n\nOriginal.\n", mode="replace")
         api.update_content(spec.data["id"], "## Appended\n\nExtra.\n", mode="append")
         body = api.get_content(spec.data["id"])
@@ -148,7 +157,7 @@ class TestContent:
 
     def test_update_content_insert_at_position(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         api.update_content(
             spec.data["id"], "# Purpose\n\nLine A.\n\nLine B.\n", mode="replace"
         )
@@ -158,20 +167,20 @@ class TestContent:
 
     def test_update_content_insert_requires_position(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         with pytest.raises(ValueError, match="position required"):
             api.update_content(spec.data["id"], "x", mode="insert")
 
     def test_update_content_insert_out_of_range_raises(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         api.update_content(spec.data["id"], "# A\n\nB.\n", mode="replace")
         with pytest.raises(ValueError, match="out of range"):
             api.update_content(spec.data["id"], "x", mode="insert", position=9999)
 
     def test_update_content_section_mode_replaces_section(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         api.update_content(
             spec.data["id"],
             "# Purpose\n\nOld content.\n\n# Scope\n\nScope text.\n",
@@ -187,7 +196,7 @@ class TestContent:
 
     def test_update_content_section_mode_appends_if_not_found(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         api.update_content(spec.data["id"], "# Purpose\n\nContent.\n", mode="replace")
         api.update_content(
             spec.data["id"],
@@ -199,7 +208,7 @@ class TestContent:
 
     def test_update_content_invalid_mode_raises(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         with pytest.raises(ValueError, match="unknown mode"):
             api.update_content(spec.data["id"], "x", mode="overwrite")
 
@@ -222,12 +231,19 @@ class TestCreateWithContent:
     def test_create_spec_with_content(self, pr):
         _, api = pr
         content = "# Purpose\n\nNew spec.\n"
-        item = api.create_with_content("spec", label="S", summary="S", content=content)
+        req = _new_request(api, label="Create-with-content request")
+        item = api.create_with_content(
+            "spec",
+            label="S",
+            summary="S",
+            content=content,
+            request_refs=[req.data["id"]],
+        )
         assert "New spec." in api.get_content(item.data["id"])
 
     def test_create_task_with_content(self, pr):
         _, api = pr
-        spec = api.new("spec", label="SP", summary="SP")
+        spec = _new_spec(api, label="SP", summary="SP")
         content = "# Description\n\nTask detail.\n"
         item = api.create_with_content(
             "task", label="T", summary="S", content=content, spec=spec.data["id"]
@@ -236,7 +252,7 @@ class TestCreateWithContent:
 
     def test_create_wp_with_content(self, pr):
         _, api = pr
-        spec = api.new("spec", label="SP", summary="SP")
+        spec = _new_spec(api, label="SP", summary="SP")
         plan = api.new("plan", label="PL", summary="PL", spec=spec.data["id"])
         content = "# Objective\n\nWP detail.\n"
         item = api.create_with_content(
@@ -270,7 +286,7 @@ class TestCreateWithContent:
 class TestMove:
     def test_move_task_to_contrib(self, pr):
         root, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         task = api.new("task", label="T", summary="S", spec=spec.data["id"])
         moved = api.move(task.data["id"], "contrib")
         assert "contrib" in str(moved.path)
@@ -280,7 +296,7 @@ class TestMove:
 
     def test_move_wp_to_contrib(self, pr):
         root, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
         wp = api.new("wp", label="W", summary="S", plan=plan.data["id"])
         moved = api.move(wp.data["id"], "contrib")
@@ -295,13 +311,13 @@ class TestMove:
 
     def test_move_spec_raises(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         with pytest.raises(ValueError, match="only task/wp"):
             api.move(spec.data["id"], "contrib")
 
     def test_move_preserves_content(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         task = api.new("task", label="T", summary="S", spec=spec.data["id"])
         original_label = task.data["label"]
         moved = api.move(task.data["id"], "contrib")
@@ -317,29 +333,29 @@ class TestRelink:
     def test_relink_adds_to_request_refs(self, pr):
         _, api = pr
         req = api.new("request", label="R", summary="S", source="test")
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         result = api.relink(spec.data["id"], "request_refs", req.data["id"])
         assert req.data["id"] in result.data.get("request_refs", [])
 
     def test_relink_request_refs_updates_request_spec_refs(self, pr):
         _, api = pr
         req = api.new("request", label="R", summary="S", source="test")
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         api.relink(spec.data["id"], "request_refs", req.data["id"])
         updated_request = api._find(req.data["id"])
         assert spec.data["id"] in updated_request.data.get("spec_refs", [])
 
     def test_relink_sets_spec_ref(self, pr):
         _, api = pr
-        spec1 = api.new("spec", label="S1", summary="S")
-        spec2 = api.new("spec", label="S2", summary="S")
+        spec1 = _new_spec(api, label="S1")
+        spec2 = _new_spec(api, label="S2")
         task = api.new("task", label="T", summary="S", spec=spec1.data["id"])
         result = api.relink(task.data["id"], "spec_ref", spec2.data["id"])
         assert result.data["spec_ref"] == spec2.data["id"]
 
     def test_relink_sets_parent_task_ref(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         parent = api.new("task", label="Parent", summary="S", spec=spec.data["id"])
         child = api.new("task", label="Child", summary="S", spec=spec.data["id"])
         result = api.relink(child.data["id"], "parent_task_ref", parent.data["id"])
@@ -347,7 +363,7 @@ class TestRelink:
 
     def test_relink_task_refs_with_seq(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
         task = api.new("task", label="T", summary="S", spec=spec.data["id"])
         wp = api.new("wp", label="W", summary="S", plan=plan.data["id"])
@@ -359,14 +375,14 @@ class TestRelink:
 
     def test_relink_invalid_field_raises(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         with pytest.raises(ValueError, match="unsupported field"):
             api.relink(spec.data["id"], "nonexistent_field", "something")
 
     def test_relink_does_not_duplicate_request_refs(self, pr):
         _, api = pr
         req = api.new("request", label="R", summary="S", source="test")
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         api.relink(spec.data["id"], "request_refs", req.data["id"])
         result = api.relink(spec.data["id"], "request_refs", req.data["id"])
         assert result.data["request_refs"].count(req.data["id"]) == 1
@@ -413,7 +429,7 @@ class TestStateTransitions:
 
     def test_state_plan_draft_to_ready(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
         assert plan.data["state"] == "draft"
         result = api.state(plan.data["id"], "ready")
@@ -421,7 +437,7 @@ class TestStateTransitions:
 
     def test_state_wp_draft_to_ready(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
         wp = api.new("wp", label="W", summary="S", plan=plan.data["id"])
         assert wp.data["state"] == "draft"
@@ -436,7 +452,7 @@ class TestStateTransitions:
 
     def test_state_emits_event(self, pr):
         root, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         api.state(spec.data["id"], "ready")
         events_path = root / ".audiagentic" / "planning" / "events" / "events.jsonl"
         events = [
@@ -448,7 +464,7 @@ class TestStateTransitions:
 
     def test_state_updates_index(self, pr):
         root, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         api.state(spec.data["id"], "ready")
         idx = json.loads(
             (
@@ -533,7 +549,7 @@ class TestShowExtract:
 
     def test_extract_includes_body(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         api.update_content(
             spec.data["id"], "# Purpose\n\nSome body text.\n", mode="replace"
         )
@@ -558,7 +574,7 @@ class TestShowExtract:
 
     def test_extract_can_skip_body(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         api.update_content(spec.data["id"], "# Purpose\n\nSome body text.\n", mode="replace")
         result = api.extracts.extract(spec.data["id"], include_body=False)
         assert "body" not in result
@@ -586,7 +602,7 @@ class TestShowExtract:
 
     def test_extract_effective_standard_refs_field_present(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         result = api.extracts.extract(spec.data["id"])
         assert "effective_standard_refs" in result
 
@@ -599,14 +615,14 @@ class TestShowExtract:
 class TestStandards:
     def test_standards_returns_list_for_item_without_refs(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         refs = api.standards(spec.data["id"])
         assert isinstance(refs, list)
 
     def test_standards_includes_inherited_refs(self, pr):
         _, api = pr
         std = api.new("standard", label="Naming conventions", summary="S")
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         api.relink(spec.data["id"], "standard_refs", std.data["id"])
         task = api.new("task", label="T", summary="S", spec=spec.data["id"])
         refs = api.standards(task.data["id"])
@@ -657,7 +673,7 @@ class TestSyncIdCounters:
 class TestNextItems:
     def test_next_items_domain_filter(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
         core_task = api.new(
             "task", label="Core", summary="S", spec=spec.data["id"], domain="core"
@@ -677,7 +693,7 @@ class TestNextItems:
 
     def test_next_items_excludes_deleted(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         task = api.new("task", label="T", summary="S", spec=spec.data["id"])
         api.state(task.data["id"], "ready")
         api.delete(task.data["id"], reason="test")
@@ -686,7 +702,7 @@ class TestNextItems:
 
     def test_next_items_wp_kind(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
         wp = api.new("wp", label="W", summary="S", plan=plan.data["id"])
         api.state(wp.data["id"], "ready")
@@ -708,7 +724,7 @@ class TestClaimsTTL:
         logic exists. This test documents the missing behaviour.
         """
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         task = api.new("task", label="T", summary="S", spec=spec.data["id"])
         api.state(task.data["id"], "ready")
         # Claim with 1-second TTL
@@ -727,7 +743,7 @@ class TestClaimsTTL:
         EXPECTED TO FAIL: no TTL expiry filtering in claims.load().
         """
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         task = api.new("task", label="T", summary="S", spec=spec.data["id"])
         api.claim("task", task.data["id"], holder="agent-exp", ttl=1)
         time.sleep(1.5)
@@ -821,7 +837,7 @@ class TestValidationCoverage:
 
     def test_validate_plan_missing_section_reported(self, pr):
         root, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         # Write a plan without required sections
         plan_path = root / "docs" / "planning" / "plans" / "plan-0001-test.md"
         plan_path.write_text(
@@ -833,7 +849,7 @@ class TestValidationCoverage:
 
     def test_validate_task_missing_description_reported(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         task = api.new("task", label="T", summary="S", spec=spec.data["id"])
         # Wipe the body so Description section is absent
         from audiagentic.planning.fs.write import dump_markdown
@@ -858,7 +874,7 @@ class TestValidationCoverage:
 
     def test_validate_wrong_filename_for_task(self, pr):
         root, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         task = api.new("task", label="T", summary="S", spec=spec.data["id"])
         # Rename to wrong filename
         bad_path = task.path.parent / "task-9999-wrong.md"
@@ -879,7 +895,7 @@ class TestBatchOperations:
         _seed(pr[0])
         tm.set_root(pr[0])
         try:
-            spec = pr[1].new("spec", label="S", summary="S")
+            spec = _new_spec(pr[1])
             task = pr[1].new(
                 "task", label="Old Label", summary="S", spec=spec.data["id"]
             )
@@ -902,7 +918,7 @@ class TestBatchOperations:
     def test_batch_unknown_op_raises_or_logs(self, pr):
         import tools.planning.tm_helper as tm
 
-        spec = pr[1].new("spec", label="S", summary="S")
+        spec = _new_spec(pr[1])
         task = pr[1].new("task", label="T", summary="S", spec=spec.data["id"])
         result = tm.update(
             task.data["id"],
@@ -915,7 +931,7 @@ class TestBatchOperations:
     def test_batch_meta_op_sets_field(self, pr):
         import tools.planning.tm_helper as tm
 
-        spec = pr[1].new("spec", label="S", summary="S")
+        spec = _new_spec(pr[1])
         task = pr[1].new("task", label="T", summary="S", spec=spec.data["id"])
         result = tm.update(
             task.data["id"],
@@ -937,7 +953,7 @@ class TestStatusAndEvents:
 
         root, api = pr
         api.new("request", label="R", summary="S", source="test")
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         api.new("task", label="T", summary="S", spec=spec.data["id"])
         result = tm.status(root=root)
         # Check singular keys (not plural)
@@ -946,9 +962,9 @@ class TestStatusAndEvents:
         assert "task" in result
         # Check state breakdown exists
         assert "captured" in result["request"]
-        assert result["request"]["captured"] == 1
+        assert result["request"]["captured"] == 2
         # Check _total is provided for convenience
-        assert result["request"].get("_total") == 1
+        assert result["request"].get("_total") == 2
 
     def test_events_returns_recent_events(self, pr):
         import tools.planning.tm_helper as tm
@@ -979,7 +995,7 @@ class TestStatusAndEvents:
 class TestPackage:
     def test_package_multiple_tasks(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
         t1 = api.new("task", label="T1", summary="S", spec=spec.data["id"])
         t2 = api.new("task", label="T2", summary="S", spec=spec.data["id"])
@@ -997,7 +1013,7 @@ class TestPackage:
 
     def test_package_assigns_sequential_seq(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
         t1 = api.new("task", label="T1", summary="S", spec=spec.data["id"])
         t2 = api.new("task", label="T2", summary="S", spec=spec.data["id"])
@@ -1009,7 +1025,7 @@ class TestPackage:
 
     def test_package_in_contrib_domain(self, pr):
         root, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
         task = api.new("task", label="T", summary="S", spec=spec.data["id"])
         (root / "docs" / "planning" / "work-packages" / "contrib").mkdir(
@@ -1036,7 +1052,7 @@ class TestDelete:
 
     def test_soft_delete_excluded_from_next_items(self, pr):
         _, api = pr
-        spec = api.new("spec", label="S", summary="S")
+        spec = _new_spec(api)
         task = api.new("task", label="T", summary="S", spec=spec.data["id"])
         api.state(task.data["id"], "ready")
         api.delete(task.data["id"])

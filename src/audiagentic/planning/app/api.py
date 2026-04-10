@@ -220,6 +220,10 @@ class PlanningAPI:
                 context=context,
                 standard_refs=standard_refs,
             )
+            # Auto-supersede if source indicates refinement
+            if source and source.startswith("refinement-of-"):
+                superseded_id = source.replace("refinement-of-", "")
+                self._auto_supersede(superseded_id, id_)
             # Apply profile cascade if specified
             if profile:
                 prof = self.config.profile_for(profile)
@@ -247,7 +251,11 @@ class PlanningAPI:
         elif kind == "spec":
             try:
                 path = self.spec_mgr.create(
-                    id_, label, summary, request_refs=request_refs or [], standard_refs=standard_refs
+                    id_,
+                    label,
+                    summary,
+                    request_refs=request_refs or [],
+                    standard_refs=standard_refs,
                 )
                 self._sync_request_spec_refs(id_, request_refs)
             except Exception:
@@ -845,6 +853,48 @@ class PlanningAPI:
     def _require_request_refs_for_spec(self, request_refs: list[str]) -> None:
         if not request_refs:
             raise ValueError("spec requires at least one request reference")
+
+    def _auto_supersede(self, superseded_id: str, new_id: str) -> None:
+        """Auto-supersede an existing request when creating a refinement.
+
+        Args:
+            superseded_id: ID of the request to supersede
+            new_id: ID of the new request that supersedes it
+        """
+        try:
+            superseded = self._find(superseded_id)
+        except KeyError:
+            # Old request doesn't exist, just create new one
+            return
+
+        data, body = parse_markdown(superseded.path)
+
+        # Add bidirectional fields
+        if "meta" not in data:
+            data["meta"] = {}
+        data["meta"]["superseded_by"] = new_id
+        data["state"] = "superseded"
+
+        # Add note to body
+        note = f"\n\n**Superseded by** `{new_id}` on {datetime.now(timezone.utc).isoformat()}"
+        if "# Notes" in body:
+            body = body.rstrip() + note + "\n"
+        else:
+            body = body.rstrip() + "\n\n# Notes\n\n" + note + "\n"
+
+        dump_markdown(superseded.path, data, body)
+
+        # Add supersedes field to new request
+        new_item = self._find(new_id)
+        new_data, new_body = parse_markdown(new_item.path)
+        if "meta" not in new_data:
+            new_data["meta"] = {}
+        new_data["meta"]["supersedes"] = superseded_id
+
+        dump_markdown(new_item.path, new_data, new_body)
+
+        # Re-index both
+        self.index()
 
     def _check_duplicate(self, kind: str, label: str, summary: str) -> None:
         label_key = label.strip().lower()
