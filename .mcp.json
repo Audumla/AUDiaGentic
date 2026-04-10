@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "audiagentic-planning": {
+      "type": "stdio",
+      "command": "C:\\example-home\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe",
+      "args": [
+        "-u",
+        "C:\\example-dev-root\\audiagentic\\tools\\mcp\\audiagentic-planning\\audiagentic_planning_mcp_claude.py"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONUTF8": "1",
+        "AUDIAGENTIC_ROOT": "C:\\example-dev-root\\audiagentic",
+        "FASTMCP_SHOW_SERVER_BANNER": "0"
+      }
+    }
+  }
+}

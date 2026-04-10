@@ -1,0 +1,78 @@
+{
+  "convention_version": 1,
+  "generated_at": "2026-04-10T12:24:03.088001+00:00",
+  "items": [
+    {
+      "id": "spec-0023",
+      "label": "Archive state and functionality specification",
+      "state": "done",
+      "path": "docs\\planning\\specifications\\spec-0023-archive-state-and-functionality-specification.md"
+    },
+    {
+      "id": "spec-0024",
+      "label": "Planning module improvements implementation specification",
+      "state": "done",
+      "path": "docs\\planning\\specifications\\spec-0024-planning-module-improvements-implementation-specification.md"
+    },
+    {
+      "id": "spec-0025",
+      "label": "Fix planning API and MCP gaps revealed by coverage tests",
+      "state": "in_progress",
+      "path": "docs\\planning\\specifications\\spec-0025-fix-planning-api-and-mcp-gaps-revealed-by-coverage-tests.md"
+    },
+    {
+      "id": "spec-0036",
+      "label": "Comprehensive implementation migration \u2014 Master specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0036-comprehensive-implementation-migration-master-specification.md"
+    },
+    {
+      "id": "spec-0037",
+      "label": "MCP layer efficiency and planning surface ergonomics \u2014 Master specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0037-mcp-layer-efficiency-and-planning-surface-ergonomics-master-specification.md"
+    },
+    {
+      "id": "spec-0038",
+      "label": "Stack profiles and unified configuration \u2014 Implementation specification",
+      "state": "done",
+      "path": "docs\\planning\\specifications\\spec-0038-stack-profiles-and-unified-configuration-implementation-specification.md"
+    },
+    {
+      "id": "spec-0039",
+      "label": "Test spec with defaults",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0039-test-spec-with-defaults.md"
+    },
+    {
+      "id": "spec-0040",
+      "label": "Test spec",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0040-test-spec.md"
+    },
+    {
+      "id": "spec-0043",
+      "label": "Index-backed planning lookup and lean extract/read surfaces",
+      "state": "ready",
+      "path": "docs\\planning\\specifications\\spec-0043-index-backed-planning-lookup-and-lean-extract-read-surfaces.md"
+    },
+    {
+      "id": "spec-0044",
+      "label": "Multi-item batch updates and bulk operations for planning MCP",
+      "state": "cancelled",
+      "path": "docs\\planning\\specifications\\spec-0044-multi-item-batch-updates-and-bulk-operations-for-planning-mcp.md"
+    },
+    {
+      "id": "spec-0045",
+      "label": "Cursory sensitive data detection in planning validation (v1)",
+      "state": "ready",
+      "path": "docs\\planning\\specifications\\spec-0045-cursory-sensitive-data-detection-in-planning-validation-v1.md"
+    },
+    {
+      "id": "spec-0046",
+      "label": "Audience-level profile system for controlling planning depth-of-detail",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0046-audience-level-profile-system-for-controlling-planning-depth-of-detail.md"
+    }
+  ]
+}

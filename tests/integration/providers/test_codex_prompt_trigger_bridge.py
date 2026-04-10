@@ -196,7 +196,7 @@ def test_codex_prompt_trigger_bridge_requires_codex_assets(tmp_path: Path) -> No
         result = subprocess.run(
             [
                 sys.executable,
-                str(ROOT / "tools" / "codex_prompt_trigger_bridge.py"),
+                str(ROOT / "tools" / "bridges" / "codex_prompt_trigger_bridge.py"),
                 "--project-root",
                 str(sandbox.repo),
             ],
@@ -223,7 +223,7 @@ def test_codex_prompt_trigger_bridge_script_launches_job(tmp_path: Path) -> None
         result = subprocess.run(
             [
                 sys.executable,
-                str(ROOT / "tools" / "codex_prompt_trigger_bridge.py"),
+                str(ROOT / "tools" / "bridges" / "codex_prompt_trigger_bridge.py"),
                 "--project-root",
                 str(sandbox.repo),
             ],
@@ -257,7 +257,7 @@ def test_codex_prompt_trigger_bridge_can_route_review_to_cline(tmp_path: Path) -
         result = subprocess.run(
             [
                 sys.executable,
-                str(ROOT / "tools" / "codex_prompt_trigger_bridge.py"),
+                str(ROOT / "tools" / "bridges" / "codex_prompt_trigger_bridge.py"),
                 "--project-root",
                 str(sandbox.repo),
             ],
@@ -295,7 +295,7 @@ def test_codex_prompt_trigger_bridge_accepts_short_r_cline_form(tmp_path: Path) 
         result = subprocess.run(
             [
                 sys.executable,
-                str(ROOT / "tools" / "codex_prompt_trigger_bridge.py"),
+                str(ROOT / "tools" / "bridges" / "codex_prompt_trigger_bridge.py"),
                 "--project-root",
                 str(sandbox.repo),
             ],
