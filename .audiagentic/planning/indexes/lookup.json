@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T10:51:52.110075+00:00",
+  "generated_at": "2026-04-10T11:01:30.363542+00:00",
   "items": {
     "plan-0005": {
       "id": "plan-0005",
@@ -143,24 +143,6 @@
       "label": "Optimize planning single-item lookup and extract token usage",
       "state": "closed",
       "path": "docs/planning/requests/request-0025.md",
-      "deleted": false,
-      "archived": false
-    },
-    "request-0026": {
-      "id": "request-0026",
-      "kind": "request",
-      "label": "MCP mutation coverage gaps: operations requiring direct file edits",
-      "state": "closed",
-      "path": "docs/planning/requests/request-0026.md",
-      "deleted": false,
-      "archived": false
-    },
-    "request-0027": {
-      "id": "request-0027",
-      "kind": "request",
-      "label": "Enhance planning MCP with bulk update operations and result summarization",
-      "state": "distilled",
-      "path": "docs/planning/requests/request-0027.md",
       "deleted": false,
       "archived": false
     },
