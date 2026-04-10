@@ -18,8 +18,8 @@ open_questions:
   surface?
 meta:
   current_understanding: Main MCP efficiency work complete via plan-0007 and plan-0010.
-    Remaining gaps (mutation coverage, enforcement policy, scope boundary) extracted
-    to request-0026 for separate treatment.
+    Analysis of remaining gaps (mutation coverage, enforcement policy, scope boundary)
+    showed no actual blockers — all planning metadata has MCP/helper paths.
 ---
 
 
