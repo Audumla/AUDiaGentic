@@ -273,7 +273,7 @@ def new_spec(
     Args:
         label: Spec label
         summary: Spec summary
-        request_refs: Optional list of request IDs to reference
+        request_refs: Required list of request IDs to reference
         root: Optional project root. If None, uses current root.
         check_duplicates: If True, check for existing specs with same label/summary
 

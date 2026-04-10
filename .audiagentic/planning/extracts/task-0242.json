@@ -1,0 +1,30 @@
+{
+  "item": {
+    "id": "task-0242",
+    "label": "Update validation to enforce guidance-appropriate sections",
+    "state": "draft",
+    "summary": "Update val_mgr.py to check guidance field and enforce required/suggested sections per guidance level, warn about excessive/minimal detail",
+    "spec_ref": "spec-0046",
+    "request_refs": [
+      "request-0029"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0242.md"
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006",
+    "standard-0009"
+  ],
+  "body": "\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n",
+  "related": {
+    "request_refs": [
+      "request-0029"
+    ],
+    "spec_ref": "spec-0046"
+  }
+}
