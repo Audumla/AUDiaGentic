@@ -7,8 +7,10 @@ summary: 'Implementation specification for 9 fixes: section-mode regex, wp move,
   isolation'
 request_refs:
 - request-0008
-task_refs: []
+task_refs:
+- ref: task-0227
 ---
+
 
 # Purpose
 

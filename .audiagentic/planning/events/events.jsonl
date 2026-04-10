@@ -1747,3 +1747,114 @@
 {"ts": "2026-04-10T03:42:22.941915+00:00", "event": "planning.after_reconcile", "orphans": []}
 {"ts": "2026-04-10T03:42:29.642839+00:00", "event": "planning.after_reconcile", "orphans": []}
 {"ts": "2026-04-10T03:42:29.738252+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:51:21.192332+00:00", "event": "request.after_create", "id": "request-0023", "path": "docs\\planning\\requests\\request-0023.md"}
+{"ts": "2026-04-10T03:54:48.709850+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:54:48.795291+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:54:49.193759+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:54:49.275018+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:56:26.134957+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:56:26.214605+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:56:26.639469+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:56:26.725227+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:56:27.114436+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:56:27.200649+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:56:27.587926+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:56:27.665570+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:56:28.041712+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:56:28.116207+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:56:28.509688+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:56:28.592355+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:56:36.835321+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:56:36.910952+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:56:37.283340+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:56:37.378144+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:58:58.800929+00:00", "event": "spec.after_create", "id": "spec-0036", "path": "docs\\planning\\specifications\\spec-0036-comprehensive-implementation-migration-master-specification.md"}
+{"ts": "2026-04-10T03:58:59.171393+00:00", "event": "spec.after_create", "id": "spec-0037", "path": "docs\\planning\\specifications\\spec-0037-mcp-layer-efficiency-and-planning-surface-ergonomics-master-specification.md"}
+{"ts": "2026-04-10T03:59:03.909957+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:03.992499+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:04.367827+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:04.448598+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:04.819714+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:04.896633+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:05.263979+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:05.347274+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:05.746745+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:05.823720+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:06.201798+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:06.279313+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:06.642859+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:06.721059+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:07.089966+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:07.168544+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:07.544461+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:07.634464+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:08.003302+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:08.080363+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:08.438231+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:08.510615+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:08.874411+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:08.945380+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:09.315741+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:09.400074+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:09.778736+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:09.858799+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:10.217159+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:10.292647+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:10.655506+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:10.727905+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:11.089252+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:11.175922+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:11.525280+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:11.596730+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:11.954770+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:12.028071+00:00", "event": "planning.after_reconcile", "orphans": []}
+{"ts": "2026-04-10T03:59:12.398053+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T03:59:12.475789+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T03:59:12.829564+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T03:59:12.899531+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:03:11.015767+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:03:11.085013+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:03:11.418870+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:03:11.488567+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:04:59.239503+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:04:59.309540+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:04:59.654216+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:04:59.724547+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:05:00.063412+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:05:00.134260+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:05:00.462222+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:05:00.531169+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:05:00.868899+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:05:00.934619+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:08:33.353880+00:00", "event": "spec.after_create", "id": "spec-0038", "path": "docs\\planning\\specifications\\spec-0038-stack-profiles-and-unified-configuration-implementation-specification.md"}
+{"ts": "2026-04-10T04:11:21.730855+00:00", "event": "request.after_create", "id": "request-0024", "path": "docs\\planning\\requests\\request-0024.md"}
+{"ts": "2026-04-10T04:13:58.912032+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:13:58.982571+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:13:59.315260+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:13:59.388106+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:39:26.579730+00:00", "event": "spec.after_create", "id": "spec-0039", "path": "docs\\planning\\specifications\\spec-0039-test-spec-with-defaults.md"}
+{"ts": "2026-04-10T04:39:26.781785+00:00", "event": "task.after_create", "id": "task-0217", "path": "docs\\planning\\tasks\\core\\task-0217.md"}
+{"ts": "2026-04-10T04:39:33.999485+00:00", "event": "spec.after_create", "id": "spec-0040", "path": "docs\\planning\\specifications\\spec-0040-test-spec.md"}
+{"ts": "2026-04-10T04:39:34.226684+00:00", "event": "task.after_create", "id": "task-0218", "path": "docs\\planning\\tasks\\core\\task-0218.md"}
+{"ts": "2026-04-10T04:39:49.532360+00:00", "event": "spec.after_create", "id": "spec-0041", "path": "docs\\planning\\specifications\\spec-0041-test-spec-e44f4908.md"}
+{"ts": "2026-04-10T04:39:49.729867+00:00", "event": "task.after_create", "id": "task-0219", "path": "docs\\planning\\tasks\\core\\task-0219.md"}
+{"ts": "2026-04-10T04:39:49.990331+00:00", "event": "spec.after_create", "id": "spec-0042", "path": "docs\\planning\\specifications\\spec-0042-test-no-stds-e44f4908.md"}
+{"ts": "2026-04-10T04:39:50.192126+00:00", "event": "task.after_create", "id": "task-0220", "path": "docs\\planning\\tasks\\core\\task-0220.md"}
+{"ts": "2026-04-10T04:39:50.642019+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:39:50.711640+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:39:51.030032+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:39:51.097317+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:39:51.417375+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:39:51.484574+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:39:51.802045+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T04:39:51.869568+00:00", "event": "planning.after_reconcile", "orphans": ["spec-0021"]}
+{"ts": "2026-04-10T05:42:38.166062+00:00", "event": "request.after_create", "id": "request-0025", "path": "docs\\planning\\requests\\request-0025.md"}
+{"ts": "2026-04-10T05:42:47.913572+00:00", "event": "spec.after_create", "id": "spec-0043", "path": "docs\\planning\\specifications\\spec-0043-index-backed-planning-lookup-and-lean-extract-read-surfaces.md"}
+{"ts": "2026-04-10T06:25:37.273804+00:00", "event": "task.after_create", "id": "task-0221", "path": "docs\\planning\\tasks\\core\\task-0221.md"}
+{"ts": "2026-04-10T06:25:41.628014+00:00", "event": "task.after_create", "id": "task-0222", "path": "docs\\planning\\tasks\\core\\task-0222.md"}
+{"ts": "2026-04-10T06:26:02.895875+00:00", "event": "task.after_create", "id": "task-0223", "path": "docs\\planning\\tasks\\core\\task-0223.md"}
+{"ts": "2026-04-10T06:26:09.221238+00:00", "event": "task.after_create", "id": "task-0224", "path": "docs\\planning\\tasks\\core\\task-0224.md"}
+{"ts": "2026-04-10T06:26:14.558525+00:00", "event": "task.after_create", "id": "task-0225", "path": "docs\\planning\\tasks\\core\\task-0225.md"}
+{"ts": "2026-04-10T06:26:19.433258+00:00", "event": "task.after_create", "id": "task-0226", "path": "docs\\planning\\tasks\\core\\task-0226.md"}
+{"ts": "2026-04-10T06:26:48.844310+00:00", "event": "spec.after_state_change", "id": "spec-0043", "old_state": "draft", "new_state": "ready"}
+{"ts": "2026-04-10T06:36:49.777629+00:00", "event": "task.after_create", "id": "task-0227", "path": "docs\\planning\\tasks\\core\\task-0227.md"}

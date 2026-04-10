@@ -3,7 +3,7 @@ from .base_mgr import BaseMgr
 from ..fs.write import dump_markdown
 
 class SpecMgr(BaseMgr):
-    def create(self, id_: str, label: str, summary: str, request_refs=None, state: str = 'draft'):
+    def create(self, id_: str, label: str, summary: str, request_refs=None, standard_refs=None, state: str = 'draft'):
         path = self.path_for('spec', id_, label)
         data = {
             'id': id_,
@@ -13,6 +13,8 @@ class SpecMgr(BaseMgr):
             'request_refs': request_refs or [],
             'task_refs': [],
         }
+        if standard_refs:
+            data['standard_refs'] = standard_refs
         body = '# Purpose\n\n\n# Scope\n\n\n# Requirements\n\n\n# Constraints\n\n\n# Acceptance Criteria\n\n'
         dump_markdown(path, data, body)
         return path

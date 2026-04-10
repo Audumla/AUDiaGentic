@@ -1141,8 +1141,8 @@ def list_request_profiles(root: Path | None = None) -> list[dict[str, Any]]:
         List of profile configs (feature, issue, etc.)
     """
     project_root = root or _get_root()
-    cfg = _load_yaml(project_root, ".audiagentic/planning/config/request-profiles.yaml")
-    profiles = cfg.get("request_profiles", {})
+    cfg = _load_yaml(project_root, ".audiagentic/planning/config/profiles.yaml")
+    profiles = cfg.get("planning", {}).get("profiles", {})
     out = []
     for name, data in profiles.items():
         row = {"id": name}
@@ -1165,8 +1165,8 @@ def get_request_profile(
         Profile data dict with id and config fields, or None if not found
     """
     project_root = root or _get_root()
-    cfg = _load_yaml(project_root, ".audiagentic/planning/config/request-profiles.yaml")
-    data = cfg.get("request_profiles", {}).get(profile_id)
+    cfg = _load_yaml(project_root, ".audiagentic/planning/config/profiles.yaml")
+    data = cfg.get("planning", {}).get("profiles", {}).get(profile_id)
     if data is None:
         return None
     row = {"id": profile_id}
@@ -1500,7 +1500,7 @@ def verify_structure(root: Path | None = None) -> dict[str, Any]:
         }
 
     optional_configs = [
-        ".audiagentic/planning/config/request-profiles.yaml",
+        ".audiagentic/planning/config/profiles.yaml",
         ".audiagentic/planning/config/documentation.yaml",
     ]
     for cfg_rel in optional_configs:
@@ -1687,7 +1687,7 @@ def verify_structure() -> dict[str, Any]:
 
     # Check optional extension configs (Phase 2 doc surfaces)
     optional_configs = [
-        ".audiagentic/planning/config/request-profiles.yaml",
+        ".audiagentic/planning/config/profiles.yaml",
         ".audiagentic/planning/config/documentation.yaml",
     ]
     for cfg_rel in optional_configs:

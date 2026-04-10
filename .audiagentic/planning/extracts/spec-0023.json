@@ -1,0 +1,22 @@
+{
+  "item": {
+    "id": "spec-0023",
+    "label": "Archive state and functionality specification",
+    "state": "draft",
+    "summary": "Define archive state workflow, tm_archive/tm_restore functions, and filtering behavior",
+    "request_refs": [
+      "request-0005"
+    ],
+    "task_refs": [],
+    "kind": "spec",
+    "path": "docs\\planning\\specifications\\spec-0023-archive-state-and-functionality-specification.md"
+  },
+  "body": "\n# Purpose\n\nDefine archive state workflow and functionality for planning items to enable archiving\nolder or redundant items while maintaining historical records and queryability.\n\n# Scope\n\n- Archive state for all planning item kinds (request, spec, plan, task, wp, standard)\n- tm_archive() and tm_restore() helper functions\n- Archive filtering in tm_list()\n- Archive validation rules in tm_validate()\n- Archive metadata in tm_show()\n\n# Requirements\n\n## State Machine\n\n1. Add \"archived\" state to all planning item kinds\n2. Define valid transitions:\n   - draft \u2192 archived\n   - ready \u2192 archived\n   - in_progress \u2192 archived\n   - done \u2192 archived\n   - archived \u2192 ready (restore)\n3. Archived items cannot be modified (state transitions rejected except restore)\n\n## tm_archive()\n\n```python\ndef tm_archive(\n    id_: str,\n    reason: str | None = None,\n    root: Path | None = None,\n) -> dict[str, Any]:\n    \"\"\"Archive a planning item.\"\"\"\n```\n\nRequirements:\n- Transition item to archived state\n- Record archive metadata (archived_at, archived_by, reason)\n- Log archive event\n- Return archive result\n\n## tm_restore()\n\n```python\ndef tm_restore(\n    id_: str,\n    root: Path | None = None,\n) -> dict[str, Any]:\n    \"\"\"Restore an archived planning item.\"\"\"\n```\n\nRequirements:\n- Transition item back to ready state\n- Record restore metadata (restored_at, restored_by)\n- Log restore event\n- Return restore result\n\n## tm_list()\n\n```python\ndef tm_list(\n    kind: str | None = None,\n    include_archived: bool = False,\n    root: Path | None = None,\n) -> list[dict[str, Any]]:\n    \"\"\"List planning items with archive filtering.\"\"\"\n```\n\nRequirements:\n- Exclude archived items by default (include_archived=False)\n- Include archived items when requested (include_archived=True)\n- Archive state included in item metadata\n\n## tm_validate()\n\nRequirements:\n- Archived items skip cross-reference validation\n- Archived items still validate required fields\n- Report archived items separately in validation output\n\n## tm_show()\n\nRequirements:\n- Include archive metadata for archived items\n- Include restore metadata for restored items\n- Show None for archive fields on non-archived items\n\n# Constraints\n\n1. Archive metadata stored in YAML frontmatter\n2. Archive events logged to events.jsonl\n3. Archived items remain queryable\n4. No automatic archive policies (manual archive only)\n5. No bulk archive operations in this phase\n\n# Acceptance Criteria\n\n1. Archived state is defined for all planning kinds\n2. State transitions are validated correctly\n3. tm_archive() transitions item to archived state with metadata\n4. tm_restore() transitions item back to ready state with metadata\n5. tm_list() excludes archived items by default\n6. tm_validate() skips cross-ref validation for archived items\n7. tm_show() includes archive metadata\n8. Archive events are logged\n",
+  "effective_standard_refs": [],
+  "related": {
+    "request_refs": [
+      "request-0005"
+    ],
+    "task_refs": []
+  }
+}

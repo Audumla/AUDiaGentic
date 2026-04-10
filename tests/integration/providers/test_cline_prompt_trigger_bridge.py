@@ -62,7 +62,7 @@ def test_cline_prompt_trigger_bridge_script_launches_job(tmp_path: Path) -> None
         result = subprocess.run(
             [
                 sys.executable,
-                str(ROOT / "tools" / "cline_prompt_trigger_bridge.py"),
+                str(ROOT / "tools" / "bridges" / "cline_prompt_trigger_bridge.py"),
                 "--project-root",
                 str(sandbox.repo),
             ],

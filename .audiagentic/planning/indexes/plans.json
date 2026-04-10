@@ -1,13 +1,7 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T03:43:58.481196+00:00",
+  "generated_at": "2026-04-10T06:37:23.008587+00:00",
   "items": [
-    {
-      "id": "plan-0004",
-      "label": "Comprehensive implementation docs migration plan",
-      "state": "draft",
-      "path": "docs\\planning\\plans\\plan-0004-comprehensive-implementation-docs-migration-plan.md"
-    },
     {
       "id": "plan-0005",
       "label": "Implement archive functionality in planning core",
@@ -27,12 +21,6 @@
       "path": "docs\\planning\\plans\\plan-0007-implement-installable-profiles-and-documentation-surfaces.md"
     },
     {
-      "id": "plan-0008",
-      "label": "MCP efficiency improvements and usage enforcement",
-      "state": "done",
-      "path": "docs\\planning\\plans\\plan-0008-mcp-efficiency-improvements-and-usage-enforcement.md"
-    },
-    {
       "id": "plan-0009",
       "label": "Implement archive functionality",
       "state": "ready",
@@ -49,12 +37,6 @@
       "label": "Fix planning API and MCP gaps",
       "state": "in_progress",
       "path": "docs\\planning\\plans\\plan-0011-fix-planning-api-and-mcp-gaps.md"
-    },
-    {
-      "id": "plan-0012",
-      "label": "Implementation Plan",
-      "state": "draft",
-      "path": "docs\\planning\\plans\\plan-0012-implementation-plan.md"
     }
   ]
 }

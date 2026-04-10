@@ -13,7 +13,7 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.contracts.schema_registry import read_schema
-import tools.seed_example_project as seed_example_project
+import tools.misc.seed_example_project as seed_example_project
 
 
 def _load_yaml(path: Path) -> dict:
@@ -34,8 +34,8 @@ def test_scaffold_seed_creates_layout(tmp_path: Path) -> None:
     assert (target / "docs" / "releases").is_dir()
     assert (target / "docs" / "decisions").is_dir()
     assert (target / ".audiagentic" / "runtime").is_dir()
-    assert (target / ".audiagentic" / "project.yaml").is_file()
-    assert (target / ".audiagentic" / "components.yaml").is_file()
+    assert (target / ".audiagentic" / "providers.yaml").is_file()
+    assert (target / ".audiagentic" / "prompt-syntax.yaml").is_file()
     assert (target / ".audiagentic" / "providers.yaml").is_file()
     assert (target / ".audiagentic" / "prompt-syntax.yaml").is_file()
     assert (target / ".audiagentic" / "prompts" / "ag-review" / "default.md").is_file()
@@ -46,8 +46,6 @@ def test_scaffold_seed_creates_layout(tmp_path: Path) -> None:
 def test_scaffold_configs_validate(tmp_path: Path) -> None:
     target = tmp_path / "project"
     seed_example_project.seed_example_project(target)
-    _validate("project-config", _load_yaml(target / ".audiagentic" / "project.yaml"))
-    _validate("component-config", _load_yaml(target / ".audiagentic" / "components.yaml"))
     _validate("provider-config", _load_yaml(target / ".audiagentic" / "providers.yaml"))
     _validate("prompt-syntax", _load_yaml(target / ".audiagentic" / "prompt-syntax.yaml"))
 
@@ -67,7 +65,7 @@ def test_seed_refuses_non_empty_target(tmp_path: Path) -> None:
 def test_seed_is_idempotent_with_overwrite(tmp_path: Path) -> None:
     target = tmp_path / "project"
     seed_example_project.seed_example_project(target)
-    first = (target / ".audiagentic" / "project.yaml").read_text(encoding="utf-8")
+    first = (target / ".audiagentic" / "providers.yaml").read_text(encoding="utf-8")
     seed_example_project.seed_example_project(target, overwrite=True)
-    second = (target / ".audiagentic" / "project.yaml").read_text(encoding="utf-8")
+    second = (target / ".audiagentic" / "providers.yaml").read_text(encoding="utf-8")
     assert first == second

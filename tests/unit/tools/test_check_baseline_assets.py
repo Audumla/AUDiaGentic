@@ -12,7 +12,7 @@ def test_check_baseline_assets_managed_headers() -> None:
     completed = subprocess.run(
         [
             sys.executable,
-            "tools/check_baseline_assets.py",
+            "tools/checks/check_baseline_assets.py",
             "--check-gitignore",
             "--check-managed-headers",
         ],

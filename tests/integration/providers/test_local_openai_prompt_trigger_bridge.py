@@ -62,7 +62,7 @@ def test_local_openai_prompt_trigger_bridge_script_launches_job(tmp_path: Path) 
         result = subprocess.run(
             [
                 sys.executable,
-                str(ROOT / "tools" / "local_openai_prompt_trigger_bridge.py"),
+                str(ROOT / "tools" / "bridges" / "local_openai_prompt_trigger_bridge.py"),
                 "--project-root",
                 str(sandbox.repo),
             ],

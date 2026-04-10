@@ -2,12 +2,14 @@
 id: plan-0005
 label: Implement archive functionality in planning core
 state: draft
-summary: Add archive state to state machine, implement tm_archive/tm_restore, update tm_list/tm_validate/tm_show
+summary: Add archive state to state machine, implement tm_archive/tm_restore, update
+  tm_list/tm_validate/tm_show
 spec_refs:
-- spec-0003
+- spec-0036
 work_package_refs:
 - ref: wp-0004
 ---
+
 
 # Objectives
 

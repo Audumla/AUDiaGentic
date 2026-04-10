@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 MANAGED_MARKDOWN_HEADER = "<!-- MANAGED_BY_AUDIAGENTIC: do not edit directly. -->"
 REQUIRED_PATHS = [
     ".audiagentic/project.yaml",
@@ -47,9 +47,9 @@ REQUIRED_PATHS = [
     ".opencode/skills/ag-review/SKILL.md",
     ".opencode/skills/ag-audit/SKILL.md",
     ".opencode/skills/ag-check-in-prep/SKILL.md",
-    "tools/regenerate_tag_surfaces.py",
+    "tools/misc/regenerate_tag_surfaces.py",
     ".github/workflows/release-please.audiagentic.yml",
-    "tools/seed_example_project.py",
+    "tools/misc/seed_example_project.py",
     "src/audiagentic/runtime/lifecycle/baseline_sync.py",
     "src/audiagentic/runtime/release/bootstrap.py",
     ".audiagentic/planning/config/planning.yaml",

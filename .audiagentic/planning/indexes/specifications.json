@@ -1,133 +1,7 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T03:43:58.481196+00:00",
+  "generated_at": "2026-04-10T06:37:23.008587+00:00",
   "items": [
-    {
-      "id": "spec-0002",
-      "label": "Comprehensive migration specification with reference resolution",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0002-comprehensive-migration-specification-with-reference-resolution.md"
-    },
-    {
-      "id": "spec-0003",
-      "label": "Archive state workflow specification",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0003-archive-state-workflow-specification.md"
-    },
-    {
-      "id": "spec-0004",
-      "label": "Phase 0 Contracts and Scaffolding",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0004-phase-0-contracts-and-scaffolding.md"
-    },
-    {
-      "id": "spec-0005",
-      "label": "Executable Packets Foundation and Contracts",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0005-executable-packets-foundation-and-contracts.md"
-    },
-    {
-      "id": "spec-0006",
-      "label": "CI/CD and Testing Infrastructure",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0006-ci-cd-and-testing-infrastructure.md"
-    },
-    {
-      "id": "spec-0007",
-      "label": "Destructive Test Sandbox",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0007-destructive-test-sandbox.md"
-    },
-    {
-      "id": "spec-0008",
-      "label": "Secret Management",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0008-secret-management.md"
-    },
-    {
-      "id": "spec-0009",
-      "label": "Phase 1 Lifecycle and Project Enablement",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0009-phase-1-lifecycle-and-project-enablement.md"
-    },
-    {
-      "id": "spec-0010",
-      "label": "Phase 2 Release Audit Ledger and Release Please",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0010-phase-2-release-audit-ledger-and-release-please.md"
-    },
-    {
-      "id": "spec-0011",
-      "label": "Phase 3 Jobs and Simple Workflows",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0011-phase-3-jobs-and-simple-workflows.md"
-    },
-    {
-      "id": "spec-0012",
-      "label": "Phase 4 Providers and Optional Server Foundation",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0012-phase-4-providers-and-optional-server-foundation.md"
-    },
-    {
-      "id": "spec-0013",
-      "label": "Phase 5 Discord Overlay",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0013-phase-5-discord-overlay.md"
-    },
-    {
-      "id": "spec-0014",
-      "label": "Phase 6 Migration Hardening and Cutover Completion",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0014-phase-6-migration-hardening-and-cutover-completion.md"
-    },
-    {
-      "id": "spec-0015",
-      "label": "Phase 7 Node Execution and Federation Extension",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0015-phase-7-node-execution-and-federation-extension.md"
-    },
-    {
-      "id": "spec-0016",
-      "label": "Phase 8 Discovery and Registry Extension",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0016-phase-8-discovery-and-registry-extension.md"
-    },
-    {
-      "id": "spec-0017",
-      "label": "Phase 9 Distributed Eventing and Control Extension",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0017-phase-9-distributed-eventing-and-control-extension.md"
-    },
-    {
-      "id": "spec-0018",
-      "label": "Phase 10 Coordinator Consumption Seam",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0018-phase-10-coordinator-consumption-seam.md"
-    },
-    {
-      "id": "spec-0019",
-      "label": "Phase 11 Pluggable External Tool Connectivity",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0019-phase-11-pluggable-external-tool-connectivity.md"
-    },
-    {
-      "id": "spec-0020",
-      "label": "Phase 12 Remaining Implementation Docs",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0020-phase-12-remaining-implementation-docs.md"
-    },
-    {
-      "id": "spec-0021",
-      "label": "Installable profiles and documentation surfaces",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0021-installable-profiles-and-documentation-surfaces.md"
-    },
-    {
-      "id": "spec-0022",
-      "label": "MCP efficiency improvements and usage enforcement",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0022-mcp-efficiency-improvements-and-usage-enforcement.md"
-    },
     {
       "id": "spec-0023",
       "label": "Archive state and functionality specification",
@@ -147,40 +21,40 @@
       "path": "docs\\planning\\specifications\\spec-0025-fix-planning-api-and-mcp-gaps-revealed-by-coverage-tests.md"
     },
     {
-      "id": "spec-0026",
-      "label": "Test Direct Profile \u2014 Specification",
+      "id": "spec-0036",
+      "label": "Comprehensive implementation migration \u2014 Master specification",
       "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0026-test-direct-profile-specification.md"
+      "path": "docs\\planning\\specifications\\spec-0036-comprehensive-implementation-migration-master-specification.md"
     },
     {
-      "id": "spec-0027",
-      "label": "Test2 \u2014 Specification",
+      "id": "spec-0037",
+      "label": "MCP layer efficiency and planning surface ergonomics \u2014 Master specification",
       "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0027-test2-specification.md"
+      "path": "docs\\planning\\specifications\\spec-0037-mcp-layer-efficiency-and-planning-surface-ergonomics-master-specification.md"
     },
     {
-      "id": "spec-0028",
-      "label": "Test Spec",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0028-test-spec.md"
+      "id": "spec-0038",
+      "label": "Stack profiles and unified configuration \u2014 Implementation specification",
+      "state": "done",
+      "path": "docs\\planning\\specifications\\spec-0038-stack-profiles-and-unified-configuration-implementation-specification.md"
     },
     {
-      "id": "spec-0029",
-      "label": "Test Cascade Request \u2014 Specification",
+      "id": "spec-0039",
+      "label": "Test spec with defaults",
       "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0029-test-cascade-request-specification.md"
+      "path": "docs\\planning\\specifications\\spec-0039-test-spec-with-defaults.md"
     },
     {
-      "id": "spec-0030",
-      "label": "Test3 \u2014 Specification",
+      "id": "spec-0040",
+      "label": "Test spec",
       "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0030-test3-specification.md"
+      "path": "docs\\planning\\specifications\\spec-0040-test-spec.md"
     },
     {
-      "id": "spec-0031",
-      "label": "Full Profile Test \u2014 Specification",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0031-full-profile-test-specification.md"
+      "id": "spec-0043",
+      "label": "Index-backed planning lookup and lean extract/read surfaces",
+      "state": "ready",
+      "path": "docs\\planning\\specifications\\spec-0043-index-backed-planning-lookup-and-lean-extract-read-surfaces.md"
     }
   ]
 }

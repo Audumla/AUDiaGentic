@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tools.claude_hooks import (
+from tools.misc.claude_hooks import (
     detect_and_launch_prompt_tag,
     enforce_stage_restrictions,
     _parse_first_line_params,
