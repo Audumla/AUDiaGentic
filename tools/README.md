@@ -39,7 +39,7 @@ Read-only structural integrity and analysis scripts. Safe to run at any time —
 
 - `check_baseline_assets.py` — Verify that required baseline assets exist in `.audiagentic/`
 - `check_cross_domain_imports.py` — Detect imports that cross domain boundaries per v3 dependency rules; reports violations
-- `find_legacy_paths.py` — Search for import paths that refer to pre-v3 module locations (e.g., `audiagentic.contracts`, `audiagentic.streaming`)
+- `find_legacy_paths.py` — Search for import paths that refer to pre-v3 module locations (moved roots such as the old contracts, config, streaming, and execution/providers paths)
 
 ### `mcp/`
 
