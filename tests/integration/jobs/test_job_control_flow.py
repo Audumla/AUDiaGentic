@@ -12,7 +12,7 @@ for path in (str(ROOT), str(SRC)):
 from audiagentic.execution.jobs import control as job_control
 from audiagentic.execution.jobs.packet_runner import run_packet
 from audiagentic.execution.jobs.records import build_job_record
-from audiagentic.execution.jobs.store import read_job_record, write_job_record
+from audiagentic.runtime.state.jobs_store import read_job_record, write_job_record
 from tests.helpers import sandbox as sandbox_helper
 
 
