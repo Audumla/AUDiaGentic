@@ -7,9 +7,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-SRC = ROOT / "src"
-for path in (str(ROOT), str(SRC)):
+# Bootstrap: make tools.lib importable, then use robust multi-fallback root discovery.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from tools.lib.repo_paths import REPO_ROOT, SRC_ROOT
+
+for path in (str(REPO_ROOT), str(SRC_ROOT)):
     if path not in sys.path:
         sys.path.insert(0, path)
 

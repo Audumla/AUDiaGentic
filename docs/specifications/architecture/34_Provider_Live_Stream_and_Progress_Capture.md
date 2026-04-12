@@ -57,7 +57,7 @@ class StreamSink(Protocol):
     def close(self) -> None: ...
 ```
 
-Built-in sinks (in `src/audiagentic/streaming/sinks.py`):
+Built-in sinks (in `src/audiagentic/interoperability/protocols/streaming/sinks.py`):
 
 | Sink                        | Responsibility                                    |
 | --------------------------- | ------------------------------------------------- |

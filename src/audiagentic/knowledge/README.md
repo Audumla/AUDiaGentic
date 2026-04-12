@@ -12,7 +12,11 @@ Provides pluggable knowledge management for projects:
 
 ## Status
 
-**Scaffolding only** — full implementation deferred to post-refactor work.
+**Scaffold only. No executable code exists in this directory.**
+
+This domain is reserved to prevent other modules from absorbing knowledge-management ownership by default. The `__init__.py` contains only a module docstring. All real implementation is deferred to a post-refactor work item.
+
+When implementation begins, the entry point will be `knowledge/__init__.py` re-exported as the public API with submodules under the structure listed below.
 
 ## Future structure (planned)
 

@@ -7,8 +7,17 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from jsonschema import Draft202012Validator
+
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.execution.jobs.records import validate_job_record
+from audiagentic.foundation.contracts.schema_registry import read_schema
+
+
+def validate_job_record(payload: dict[str, Any]) -> list[str]:
+    schema = read_schema("job-record")
+    validator = Draft202012Validator(schema)
+    errors = [error.message for error in validator.iter_errors(payload)]
+    return sorted(errors)
 
 
 def _jobs_root(project_root: Path) -> Path:

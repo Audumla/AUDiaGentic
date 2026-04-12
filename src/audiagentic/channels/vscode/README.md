@@ -12,7 +12,9 @@ Provides AUDiaGentic functionality as a VS Code extension/integration:
 
 ## Status
 
-**Scaffolding in progress** — detailed implementation deferred.
+**Scaffold only. No executable code exists in this directory.**
+
+This directory is reserved to establish VS Code as an explicit channel boundary. The `__init__.py` contains only a module docstring. No extension code, command handlers, or UI integration exists yet. Implementation is deferred until the CLI channel is stable and the interoperability seams it depends on are finalized.
 
 ## Must not own
 

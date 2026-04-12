@@ -137,9 +137,8 @@ The 4 test failures are **not blockers** — they involve test fixture path assu
 **Status**: Complete  
 **Changes**:
 - `channels/vscode/` scaffolded with README and __init__.py
-- `tests/unit/server/` → `tests/deferred/server/` (preserves test if server is introduced later)
 - `channels/discord/` removed (was empty)
-- `channels/server/` retained with `DEFERRED.md` marker
+- `channels/server/` removed entirely — no implementation, no design, no tests worth preserving (post-refactor review decision)
 
 ---
 
@@ -230,14 +229,11 @@ src/audiagentic/
 └── channels/
     ├── cli/                   ← unchanged
     ├── vscode/                ← NEW: scaffolding
-    └── server/                ← deferred (DEFERRED.md marker added)
-
 tools/                          ← import paths updated (6 files)
 tests/
 ├── unit/                       ← imports updated
 ├── integration/                ← imports updated
-├── e2e/                        ← all passing
-└── deferred/                   ← new (server tests moved here)
+└── e2e/                        ← all passing
 ```
 
 ---
@@ -336,8 +332,9 @@ tests/
 5. **Introduce VS Code channel** — populate `channels/vscode/` with editor integration
 
 ### Low Priority (Future enhancement)
-6. **Finalize server channel** — decide on contract and implement or remove DEFERRED marker
-7. **Add more boundary docs** — execution/jobs and other subdomain READMEs
+
+6. **Add server channel** — introduce `channels/server/` only when there is a concrete implementation plan
+7. **Add more boundary docs** — further subdomain READMEs as submodules mature
 
 ---
 
