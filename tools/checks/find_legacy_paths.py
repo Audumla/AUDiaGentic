@@ -95,15 +95,32 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+_SKIP_SEGMENTS = {
+    # Historical archives and migration docs — old paths are expected here by definition.
+    "implementation_backup",
+    "archive",
+    "refactor",   # migration reports (v3-migration-report.md etc.)
+    "releases",   # frozen release ledger snapshots
+    "planning",   # planning task/spec docs reference historical state
+    # Runtime data and bytecode.
+    "__pycache__",
+}
+
+
+def _is_excluded(path: Path) -> bool:
+    normalized = str(path).replace("\\", "/")
+    if ".audiagentic/runtime/" in normalized:
+        return True
+    return any(seg in path.parts for seg in _SKIP_SEGMENTS)
+
+
 def iter_files(root: Path) -> list[Path]:
     if root.is_file():
         return [root]
     return [
         path
         for path in root.rglob("*")
-        if path.is_file()
-        and ".audiagentic/runtime/" not in str(path).replace("\\", "/")
-        and "__pycache__" not in str(path)
+        if path.is_file() and not _is_excluded(path)
     ]
 
 
