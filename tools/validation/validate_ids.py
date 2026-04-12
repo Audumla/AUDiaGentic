@@ -14,13 +14,13 @@ SRC_ROOT = REPO_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from audiagentic.contracts.canonical_ids import (
+from audiagentic.foundation.contracts.canonical_ids import (
     CANONICAL_COMPONENT_IDS,
     CANONICAL_PROVIDER_IDS,
     validate_ids,
     validate_schema_files,
 )
-from audiagentic.contracts.schema_registry import SCHEMA_DIR
+from audiagentic.foundation.contracts.schema_registry import SCHEMA_DIR
 
 
 def _extract_ids(payload: Any) -> tuple[list[str], list[str]]:

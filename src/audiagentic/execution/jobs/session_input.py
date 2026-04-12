@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def _now_timestamp() -> str:

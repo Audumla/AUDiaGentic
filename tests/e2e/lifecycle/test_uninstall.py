@@ -10,7 +10,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.lifecycle.manifest import build_manifest, write_manifest
 from audiagentic.runtime.lifecycle.uninstall import apply_uninstall
 from tests.helpers import sandbox as sandbox_helper
