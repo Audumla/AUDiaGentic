@@ -10,7 +10,7 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.runtime.release.history_import import import_legacy_history
+from audiagentic.release.history_import import import_legacy_history
 from tests.helpers import sandbox as sandbox_helper
 
 FIXTURES = ROOT / "docs" / "examples" / "fixtures"
