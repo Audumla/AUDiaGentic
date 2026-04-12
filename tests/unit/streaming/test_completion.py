@@ -14,7 +14,7 @@ for path in (str(ROOT), str(SRC)):
 
 import pytest
 
-from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.streaming.completion import (
     CompletionStatus,
     Decision,

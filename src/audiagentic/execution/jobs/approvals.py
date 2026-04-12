@@ -10,8 +10,8 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.contracts.schema_registry import read_schema
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.schema_registry import read_schema
 from audiagentic.execution.jobs import store
 from audiagentic.execution.jobs.reviews import read_review_bundle
 from audiagentic.execution.jobs.state_machine import transition_and_persist

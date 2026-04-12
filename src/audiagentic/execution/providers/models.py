@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
-from audiagentic.config.provider_catalog import catalog_is_stale, catalog_model_ids
+from audiagentic.foundation.config.provider_catalog import catalog_is_stale, catalog_model_ids
 
 
 def resolve_model_selection(
