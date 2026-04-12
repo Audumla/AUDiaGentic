@@ -11,8 +11,8 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.execution.providers.health import health_check
-from audiagentic.execution.providers.selection import select_provider
+from audiagentic.interoperability.providers.health import health_check
+from audiagentic.interoperability.providers.selection import select_provider
 
 
 def _descriptor(provider_id: str, supports_jobs: bool = True) -> dict:

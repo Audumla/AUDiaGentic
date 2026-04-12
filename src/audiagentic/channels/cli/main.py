@@ -18,14 +18,14 @@ if str(SRC_ROOT) not in sys.path:
 
 from tools.misc import lifecycle_stub
 from tools.misc import refresh_model_catalog as refresh_model_catalog_tool
-from audiagentic.runtime.release import bootstrap as release_bootstrap
+from audiagentic.release import bootstrap as release_bootstrap
 from tools.misc import provider_status as provider_status_tool
 from audiagentic.execution.jobs import control as job_control_tool
 from audiagentic.execution.jobs import prompt_launch as prompt_launch_tool
 from audiagentic.execution.jobs import prompt_trigger_bridge as prompt_trigger_bridge_tool
-from audiagentic.execution.jobs import session_input as session_input_tool
+from audiagentic.runtime.state import session_input_store as session_input_tool
 from audiagentic.execution.jobs.prompt_parser import parse_prompt_launch_request
-from audiagentic.execution.jobs import store as job_store
+from audiagentic.runtime.state import jobs_store as job_store
 
 
 def _load_json_argument(raw_value: str | None) -> dict[str, object] | None:

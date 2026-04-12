@@ -9,7 +9,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.runtime.release.release_please import (
+from audiagentic.release.release_please import (
     BASELINE_WORKFLOW,
     CANDIDATE_NAME,
     LEGACY_NAME,

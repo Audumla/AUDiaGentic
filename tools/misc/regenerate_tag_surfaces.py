@@ -14,8 +14,8 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.execution.jobs.prompt_syntax import load_prompt_syntax
-from audiagentic.execution.providers.surfaces.base import SkillDefinition
-from audiagentic.execution.providers.surfaces.registry import load_renderer_registry
+from audiagentic.interoperability.providers.surfaces.base import SkillDefinition
+from audiagentic.interoperability.providers.surfaces.registry import load_renderer_registry
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
