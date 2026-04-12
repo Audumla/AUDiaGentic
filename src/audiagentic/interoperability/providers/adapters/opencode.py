@@ -1,4 +1,4 @@
-"""Copilot provider adapter."""
+"""opencode provider adapter."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.streaming.completion import (
+from audiagentic.interoperability.protocols.streaming.completion import (
     NormalizationMethod,
     ResultSource,
     build_synthetic_fallback,
@@ -17,48 +17,72 @@ from audiagentic.streaming.completion import (
     persist_completion,
     try_extract_json_from_stdout,
 )
-from audiagentic.streaming.provider_streaming import (
+from audiagentic.interoperability.protocols.streaming.provider_streaming import (
     build_provider_stream_sinks,
     run_streaming_command,
 )
-from audiagentic.streaming.sinks import NormalizedEventSink, StreamSink
+from audiagentic.interoperability.protocols.streaming.sinks import NormalizedEventSink, StreamSink
 
 
-class CopilotEventExtractor:
-    """Extract Copilot events from stream output.
+class OpencodeEventExtractor:
+    """Extract opencode events from stream output.
 
-    This sink parses Copilot plain-text output and translates it into canonical
+    This sink parses opencode NDJSON events and translates them into canonical
     provider-stream-event records before forwarding to NormalizedEventSink.
     """
+
+    # opencode event type to canonical event kind mapping
+    EVENT_KIND_MAP = {
+        "session.started": "task-start",
+        "assistant.message": "task-progress",
+        "tool.call": "tool-call",
+        "tool.result": "tool-result",
+        "error": "error",
+        "session.complete": "completion",
+    }
 
     def __init__(
         self,
         event_sink: NormalizedEventSink,
         job_id: str | None = None,
-        provider_id: str = "copilot",
+        provider_id: str = "opencode",
     ) -> None:
         self.event_sink = event_sink
         self.job_id = job_id
         self.provider_id = provider_id
 
     def write(self, line: str) -> None:
-        """Process a line and extract Copilot events."""
+        """Process a line and extract opencode NDJSON events."""
         text = line.rstrip("\r\n")
         if not text:
             return
 
-        # Try to parse as JSON for future structured event support
+        # Try to parse as NDJSON
         try:
             message = json.loads(text)
-            if isinstance(message, dict):
-                # For future JSON-format support, map event types here
-                # For now, all JSON events and text are task-progress
-                self._emit_event("task-progress", text, message)
-            else:
-                self._emit_event("task-progress", text)
         except json.JSONDecodeError:
-            # Plain text line
+            # Pass through non-JSON lines as task-progress
             self._emit_event("task-progress", text)
+            return
+
+        if not isinstance(message, dict):
+            self._emit_event("task-progress", text)
+            return
+
+        # Extract event type and map to canonical kind
+        event_type = message.get("type")
+        event_kind = self.EVENT_KIND_MAP.get(event_type, "task-progress")
+
+        # Extract message content
+        message_text = (
+            message.get("text")
+            or message.get("message")
+            or message.get("content")
+            or message.get("output")
+            or str(message)
+        )
+
+        self._emit_event(event_kind, message_text, message)
 
     def _emit_event(
         self,
@@ -67,7 +91,7 @@ class CopilotEventExtractor:
         raw_payload: dict[str, Any] | None = None,
     ) -> None:
         """Emit a canonical event through the underlying sink."""
-        details: dict[str, Any] = {"extractor": "copilot-plaintext"}
+        details: dict[str, Any] = {"extractor": "opencode-ndjson"}
         if raw_payload:
             details["raw"] = raw_payload
 
@@ -94,15 +118,15 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def build_copilot_stream_sinks(
+def build_opencode_stream_sinks(
     *,
     packet_ctx: dict[str, Any],
     stream_controls: dict[str, Any] | None = None,
 ) -> tuple[list[StreamSink], list[StreamSink]]:
-    """Build Copilot-specific stream sinks with event extraction.
+    """Build opencode-specific stream sinks with NDJSON event extraction.
 
-    This adds CopilotEventExtractor on top of the standard sinks to parse
-    Copilot output into canonical events.
+    This adds OpencodeEventExtractor on top of the standard sinks to parse
+    opencode NDJSON events into canonical events.
     """
     # Build base sinks
     stdout_sinks, stderr_sinks = build_provider_stream_sinks(
@@ -110,15 +134,15 @@ def build_copilot_stream_sinks(
         stream_controls=stream_controls,
     )
 
-    # Find the NormalizedEventSink for stdout and wrap it with CopilotEventExtractor
+    # Find the NormalizedEventSink for stdout and wrap it with OpencodeEventExtractor
     job_id = packet_ctx.get("job-id")
     for i, sink in enumerate(stdout_sinks):
         if isinstance(sink, NormalizedEventSink):
-            # Replace with CopilotEventExtractor that wraps the original sink
-            stdout_sinks[i] = CopilotEventExtractor(
+            # Replace with OpencodeEventExtractor that wraps the original sink
+            stdout_sinks[i] = OpencodeEventExtractor(
                 event_sink=sink,
                 job_id=job_id,
-                provider_id="copilot",
+                provider_id="opencode",
             )
             break
 
@@ -128,10 +152,10 @@ def build_copilot_stream_sinks(
 def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> str:
     prompt_body = packet_ctx.get("prompt-body")
     prompt = (
-        "AUDiaGentic Copilot provider execution request. "
+        "AUDiaGentic opencode provider execution request. "
         f"job={packet_ctx.get('job-id')} "
         f"packet={packet_ctx.get('packet-id')} "
-        f"provider={packet_ctx.get('provider-id', 'copilot')} "
+        f"provider={packet_ctx.get('provider-id', 'opencode')} "
         f"model={provider_cfg.get('default-model')} "
         f"workflow={packet_ctx.get('workflow-profile')}. "
         "Return a concise execution summary or the blocking reason if execution is impossible."
@@ -141,79 +165,135 @@ def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> s
     return prompt.strip()
 
 
-def _copilot_executable() -> str:
-    executable = shutil.which("gh")
+def _opencode_executable() -> str:
+    executable = shutil.which("opencode")
     if executable is None:
         raise AudiaGenticError(
-            code="PRV-EXTERNAL-013",
+            code="PRV-EXTERNAL-011",
             kind="external",
-            message="gh command is not available on PATH",
-            details={"provider-id": "copilot"},
+            message="opencode command is not available on PATH",
+            details={"provider-id": "opencode"},
         )
     return executable
 
 
-def _parse_copilot_completion(
+def _parse_opencode_completion(
     stdout: str, stderr: str, returncode: int
 ) -> tuple[dict[str, Any] | None, ResultSource]:
-    """Parse Copilot completion from stdout.
+    """Parse opencode completion from NDJSON stdout.
+
+    opencode outputs NDJSON with events like:
+    {"type":"text","part":{"text":"..."}}
+    {"type":"step_finish","sessionID":"..."}
 
     Returns:
         tuple[dict[str, Any] | None, ResultSource]: (parsed_data, source)
     """
-    # Try to parse full stdout as JSON
-    try:
-        data = json.loads(stdout)
-        if isinstance(data, dict):
-            return data, ResultSource.STDOUT_JSON
-    except (json.JSONDecodeError, ValueError):
-        pass
+    completion_data: dict[str, Any] = {}
+    session_id: str | None = None
+    text_parts: list[str] = []
+
+    for line in stdout.splitlines():
+        payload = line.strip()
+        if not payload:
+            continue
+        try:
+            message = json.loads(payload)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(message, dict):
+            continue
+
+        # Extract session ID
+        session_value = (
+            message.get("sessionID")
+            or message.get("sessionId")
+            or message.get("session")
+        )
+        if session_id is None and session_value is not None:
+            session_id = str(session_value)
+
+        # Extract text from part object (opencode format)
+        part = message.get("part", {})
+        if isinstance(part, dict):
+            part_text = part.get("text", "")
+            if isinstance(part_text, str) and part_text.strip():
+                text_parts.append(part_text.strip())
+
+        # Also check top-level fields for compatibility
+        candidate = (
+            message.get("text")
+            or message.get("message")
+            or message.get("content")
+            or message.get("output")
+        )
+        if isinstance(candidate, str) and candidate.strip():
+            text_parts.append(candidate.strip())
+
+    # Combine text parts
+    if text_parts:
+        completion_data["kind"] = "adhoc"
+        completion_data["completion_text"] = " ".join(text_parts)
+        completion_data["session_id"] = session_id
+        return completion_data, ResultSource.STDOUT_JSON
 
     extracted = try_extract_json_from_stdout(stdout)
     if extracted:
+        if "kind" not in extracted:
+            extracted["kind"] = "adhoc"
         return extracted, ResultSource.STDOUT_JSON_BLOCK
 
     return None, ResultSource.STDOUT_TEXT
 
 
 def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, Any]:
-    executable = _copilot_executable()
+    executable = _opencode_executable()
     prompt = _build_prompt(packet_ctx, provider_cfg)
     default_model = provider_cfg.get("default-model")
     working_root = packet_ctx.get("working-root")
     cwd = Path(working_root) if working_root else None
 
-    command = [
-        executable,
-        "copilot",
-        "suggest",
-        "-t",
-        "shell",
-        prompt,
-    ]
+    execution_policy = provider_cfg.get("execution-policy", {})
+    output_format = execution_policy.get("output-format", "json")
+
+    command = [executable, "run", "--format", str(output_format)]
+    if default_model:
+        command.extend(["--model", str(default_model)])
+    command.append(prompt)
 
     stream_controls = packet_ctx.get("stream-controls", {})
-    stdout_sinks, stderr_sinks = build_copilot_stream_sinks(
+    stdout_sinks, stderr_sinks = build_opencode_stream_sinks(
         packet_ctx=packet_ctx,
         stream_controls=stream_controls,
     )
-
     completed = run_streaming_command(
         command,
         cwd=cwd,
         stdout_sinks=stdout_sinks,
         stderr_sinks=stderr_sinks,
     )
+
     stdout_text = completed.stdout.strip()
     stderr_text = completed.stderr.strip()
 
+    # Parse structured completion
+    parsed_data, result_source = _parse_opencode_completion(
+        stdout_text, stderr_text, completed.returncode
+    )
+
+    output_text = stdout_text
+    session_id = None
+    if parsed_data:
+        output_text = parsed_data.get("completion_text", output_text)
+        session_id = parsed_data.get("session_id")
+
     if completed.returncode != 0:
         raise AudiaGenticError(
-            code="PRV-EXTERNAL-014",
+            code="PRV-EXTERNAL-012",
             kind="external",
-            message="copilot execution failed",
+            message="opencode execution failed",
             details={
-                "provider-id": "copilot",
+                "provider-id": "opencode",
                 "returncode": completed.returncode,
                 "stdout": stdout_text,
                 "stderr": stderr_text,
@@ -221,15 +301,10 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
             },
         )
 
-    # Parse structured completion
-    parsed_data, result_source = _parse_copilot_completion(
-        stdout_text, stderr_text, completed.returncode
-    )
-
     # Build canonical completion
     if parsed_data and result_source != ResultSource.STDOUT_TEXT:
         completion = normalize_provider_result(
-            provider_id="copilot",
+            provider_id="opencode",
             job_id=packet_ctx.get("job-id"),
             prompt_id=packet_ctx.get("prompt-id"),
             surface=packet_ctx.get("surface"),
@@ -243,7 +318,7 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
         )
     else:
         completion = build_synthetic_fallback(
-            provider_id="copilot",
+            provider_id="opencode",
             job_id=packet_ctx.get("job-id"),
             stdout=stdout_text,
             stderr=stderr_text,
@@ -259,11 +334,12 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
             pass
 
     return {
-        "provider-id": packet_ctx.get("provider-id", "copilot"),
+        "provider-id": packet_ctx.get("provider-id", "opencode"),
         "status": "ok",
         "execution-mode": provider_cfg.get("access-mode", "cli"),
         "model": default_model,
-        "output": stdout_text,
+        "session-id": session_id,
+        "output": output_text or stdout_text,
         "stdout": stdout_text,
         "stderr": stderr_text,
         "returncode": completed.returncode,

@@ -13,7 +13,7 @@ for path in (str(ROOT), str(SRC)):
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.execution.jobs.release_bridge import build_change_event_from_job, emit_job_change
 from audiagentic.execution.jobs.records import build_job_record
-from audiagentic.execution.jobs.store import write_job_record
+from audiagentic.runtime.state.jobs_store import write_job_record
 from tests.helpers import sandbox as sandbox_helper
 
 

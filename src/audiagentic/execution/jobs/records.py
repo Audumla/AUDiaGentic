@@ -10,6 +10,7 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.runtime.state import jobs_store
 from audiagentic.foundation.contracts.schema_registry import read_schema
 
 REPO_ROOT = Path(__file__).resolve().parents[4]

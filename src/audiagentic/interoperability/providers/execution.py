@@ -10,15 +10,15 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 ProviderRunner = Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]
 
 _ADAPTER_MODULES: dict[str, str] = {
-    "codex": "audiagentic.execution.providers.adapters.codex",
-    "claude": "audiagentic.execution.providers.adapters.claude",
-    "gemini": "audiagentic.execution.providers.adapters.gemini",
-    "copilot": "audiagentic.execution.providers.adapters.copilot",
-    "continue": "audiagentic.execution.providers.adapters.continue_",
-    "cline": "audiagentic.execution.providers.adapters.cline",
-    "local-openai": "audiagentic.execution.providers.adapters.local_openai",
-    "qwen": "audiagentic.execution.providers.adapters.qwen",
-    "opencode": "audiagentic.execution.providers.adapters.opencode",
+    "codex": "audiagentic.interoperability.providers.adapters.codex",
+    "claude": "audiagentic.interoperability.providers.adapters.claude",
+    "gemini": "audiagentic.interoperability.providers.adapters.gemini",
+    "copilot": "audiagentic.interoperability.providers.adapters.copilot",
+    "continue": "audiagentic.interoperability.providers.adapters.continue_",
+    "cline": "audiagentic.interoperability.providers.adapters.cline",
+    "local-openai": "audiagentic.interoperability.providers.adapters.local_openai",
+    "qwen": "audiagentic.interoperability.providers.adapters.qwen",
+    "opencode": "audiagentic.interoperability.providers.adapters.opencode",
 }
 
 

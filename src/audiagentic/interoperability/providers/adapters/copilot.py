@@ -1,4 +1,4 @@
-"""Qwen provider adapter."""
+"""Copilot provider adapter."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.streaming.completion import (
+from audiagentic.interoperability.protocols.streaming.completion import (
     NormalizationMethod,
     ResultSource,
     build_synthetic_fallback,
@@ -17,17 +17,17 @@ from audiagentic.streaming.completion import (
     persist_completion,
     try_extract_json_from_stdout,
 )
-from audiagentic.streaming.provider_streaming import (
+from audiagentic.interoperability.protocols.streaming.provider_streaming import (
     build_provider_stream_sinks,
     run_streaming_command,
 )
-from audiagentic.streaming.sinks import NormalizedEventSink, StreamSink
+from audiagentic.interoperability.protocols.streaming.sinks import NormalizedEventSink, StreamSink
 
 
-class QwenEventExtractor:
-    """Extract Qwen events from stream output.
+class CopilotEventExtractor:
+    """Extract Copilot events from stream output.
 
-    This sink parses Qwen plain-text output and translates it into canonical
+    This sink parses Copilot plain-text output and translates it into canonical
     provider-stream-event records before forwarding to NormalizedEventSink.
     """
 
@@ -35,19 +35,19 @@ class QwenEventExtractor:
         self,
         event_sink: NormalizedEventSink,
         job_id: str | None = None,
-        provider_id: str = "qwen",
+        provider_id: str = "copilot",
     ) -> None:
         self.event_sink = event_sink
         self.job_id = job_id
         self.provider_id = provider_id
 
     def write(self, line: str) -> None:
-        """Process a line and extract Qwen events."""
+        """Process a line and extract Copilot events."""
         text = line.rstrip("\r\n")
         if not text:
             return
 
-        # Try to parse as JSON for structured events
+        # Try to parse as JSON for future structured event support
         try:
             message = json.loads(text)
             if isinstance(message, dict):
@@ -67,7 +67,7 @@ class QwenEventExtractor:
         raw_payload: dict[str, Any] | None = None,
     ) -> None:
         """Emit a canonical event through the underlying sink."""
-        details: dict[str, Any] = {"extractor": "qwen-plaintext"}
+        details: dict[str, Any] = {"extractor": "copilot-plaintext"}
         if raw_payload:
             details["raw"] = raw_payload
 
@@ -94,15 +94,15 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def build_qwen_stream_sinks(
+def build_copilot_stream_sinks(
     *,
     packet_ctx: dict[str, Any],
     stream_controls: dict[str, Any] | None = None,
 ) -> tuple[list[StreamSink], list[StreamSink]]:
-    """Build Qwen-specific stream sinks with event extraction.
+    """Build Copilot-specific stream sinks with event extraction.
 
-    This adds QwenEventExtractor on top of the standard sinks to parse
-    Qwen output into canonical events.
+    This adds CopilotEventExtractor on top of the standard sinks to parse
+    Copilot output into canonical events.
     """
     # Build base sinks
     stdout_sinks, stderr_sinks = build_provider_stream_sinks(
@@ -110,15 +110,15 @@ def build_qwen_stream_sinks(
         stream_controls=stream_controls,
     )
 
-    # Find the NormalizedEventSink for stdout and wrap it with QwenEventExtractor
+    # Find the NormalizedEventSink for stdout and wrap it with CopilotEventExtractor
     job_id = packet_ctx.get("job-id")
     for i, sink in enumerate(stdout_sinks):
         if isinstance(sink, NormalizedEventSink):
-            # Replace with QwenEventExtractor that wraps the original sink
-            stdout_sinks[i] = QwenEventExtractor(
+            # Replace with CopilotEventExtractor that wraps the original sink
+            stdout_sinks[i] = CopilotEventExtractor(
                 event_sink=sink,
                 job_id=job_id,
-                provider_id="qwen",
+                provider_id="copilot",
             )
             break
 
@@ -128,10 +128,10 @@ def build_qwen_stream_sinks(
 def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> str:
     prompt_body = packet_ctx.get("prompt-body")
     prompt = (
-        "AUDiaGentic Qwen provider execution request. "
+        "AUDiaGentic Copilot provider execution request. "
         f"job={packet_ctx.get('job-id')} "
         f"packet={packet_ctx.get('packet-id')} "
-        f"provider={packet_ctx.get('provider-id', 'qwen')} "
+        f"provider={packet_ctx.get('provider-id', 'copilot')} "
         f"model={provider_cfg.get('default-model')} "
         f"workflow={packet_ctx.get('workflow-profile')}. "
         "Return a concise execution summary or the blocking reason if execution is impossible."
@@ -141,22 +141,22 @@ def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> s
     return prompt.strip()
 
 
-def _qwen_executable() -> str:
-    executable = shutil.which("qwen")
+def _copilot_executable() -> str:
+    executable = shutil.which("gh")
     if executable is None:
         raise AudiaGenticError(
-            code="PRV-EXTERNAL-007",
+            code="PRV-EXTERNAL-013",
             kind="external",
-            message="qwen command is not available on PATH",
-            details={"provider-id": "qwen"},
+            message="gh command is not available on PATH",
+            details={"provider-id": "copilot"},
         )
     return executable
 
 
-def _parse_qwen_completion(
+def _parse_copilot_completion(
     stdout: str, stderr: str, returncode: int
 ) -> tuple[dict[str, Any] | None, ResultSource]:
-    """Parse Qwen completion from stdout.
+    """Parse Copilot completion from stdout.
 
     Returns:
         tuple[dict[str, Any] | None, ResultSource]: (parsed_data, source)
@@ -177,28 +177,23 @@ def _parse_qwen_completion(
 
 
 def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, Any]:
-    executable = _qwen_executable()
+    executable = _copilot_executable()
     prompt = _build_prompt(packet_ctx, provider_cfg)
     default_model = provider_cfg.get("default-model")
     working_root = packet_ctx.get("working-root")
     cwd = Path(working_root) if working_root else None
 
-    execution_policy = provider_cfg.get("execution-policy", {})
-    approval_mode = execution_policy.get("permission-mode", "auto")
-
-    # Qwen CLI uses positional arguments for prompt
-    command = [executable]
-    if approval_mode == "yolo":
-        command.append("--yolo")
-    elif approval_mode == "auto-edit":
-        command.extend(["--approval-mode", "auto-edit"])
-    if default_model:
-        command.extend(["-m", str(default_model)])
-    # Add prompt as positional argument
-    command.append(prompt)
+    command = [
+        executable,
+        "copilot",
+        "suggest",
+        "-t",
+        "shell",
+        prompt,
+    ]
 
     stream_controls = packet_ctx.get("stream-controls", {})
-    stdout_sinks, stderr_sinks = build_qwen_stream_sinks(
+    stdout_sinks, stderr_sinks = build_copilot_stream_sinks(
         packet_ctx=packet_ctx,
         stream_controls=stream_controls,
     )
@@ -214,11 +209,11 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
 
     if completed.returncode != 0:
         raise AudiaGenticError(
-            code="PRV-EXTERNAL-008",
+            code="PRV-EXTERNAL-014",
             kind="external",
-            message="qwen execution failed",
+            message="copilot execution failed",
             details={
-                "provider-id": "qwen",
+                "provider-id": "copilot",
                 "returncode": completed.returncode,
                 "stdout": stdout_text,
                 "stderr": stderr_text,
@@ -227,14 +222,14 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
         )
 
     # Parse structured completion
-    parsed_data, result_source = _parse_qwen_completion(
+    parsed_data, result_source = _parse_copilot_completion(
         stdout_text, stderr_text, completed.returncode
     )
 
     # Build canonical completion
     if parsed_data and result_source != ResultSource.STDOUT_TEXT:
         completion = normalize_provider_result(
-            provider_id="qwen",
+            provider_id="copilot",
             job_id=packet_ctx.get("job-id"),
             prompt_id=packet_ctx.get("prompt-id"),
             surface=packet_ctx.get("surface"),
@@ -248,7 +243,7 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
         )
     else:
         completion = build_synthetic_fallback(
-            provider_id="qwen",
+            provider_id="copilot",
             job_id=packet_ctx.get("job-id"),
             stdout=stdout_text,
             stderr=stderr_text,
@@ -264,7 +259,7 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
             pass
 
     return {
-        "provider-id": packet_ctx.get("provider-id", "qwen"),
+        "provider-id": packet_ctx.get("provider-id", "copilot"),
         "status": "ok",
         "execution-mode": provider_cfg.get("access-mode", "cli"),
         "model": default_model,

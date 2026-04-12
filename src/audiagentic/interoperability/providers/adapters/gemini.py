@@ -11,7 +11,7 @@ from typing import Any
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.execution.jobs.prompt_launch import launch_prompt_request
 from audiagentic.execution.jobs.prompt_parser import parse_prompt_launch_request
-from audiagentic.streaming.completion import (
+from audiagentic.interoperability.protocols.streaming.completion import (
     NormalizationMethod,
     ResultSource,
     build_synthetic_fallback,
@@ -19,11 +19,11 @@ from audiagentic.streaming.completion import (
     persist_completion,
     try_extract_json_from_stdout,
 )
-from audiagentic.streaming.provider_streaming import (
+from audiagentic.interoperability.protocols.streaming.provider_streaming import (
     build_provider_stream_sinks,
     run_streaming_command,
 )
-from audiagentic.streaming.sinks import NormalizedEventSink, StreamSink
+from audiagentic.interoperability.protocols.streaming.sinks import NormalizedEventSink, StreamSink
 
 
 class GeminiEventExtractor:

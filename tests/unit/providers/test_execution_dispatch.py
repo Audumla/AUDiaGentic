@@ -9,8 +9,8 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.execution.providers.adapters import codex as codex_adapter
-from audiagentic.execution.providers.execution import execute_provider
+from audiagentic.interoperability.providers.adapters import codex as codex_adapter
+from audiagentic.interoperability.providers.execution import execute_provider
 
 
 def test_execute_provider_normalizes_adapter_result(monkeypatch) -> None:

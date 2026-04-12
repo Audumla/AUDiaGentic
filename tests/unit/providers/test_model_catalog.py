@@ -11,7 +11,7 @@ for path in (str(ROOT), str(SRC)):
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.config.provider_catalog import build_model_catalog, validate_model_catalog
-from audiagentic.execution.providers.models import resolve_model_selection
+from audiagentic.interoperability.providers.models import resolve_model_selection
 
 
 def test_build_model_catalog_validates_shape() -> None:

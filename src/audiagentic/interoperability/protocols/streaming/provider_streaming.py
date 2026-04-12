@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TextIO
 
-from audiagentic.streaming.sinks import (
+from audiagentic.interoperability.protocols.streaming.sinks import (
     ConsoleSink,
     InMemorySink,
     NormalizedEventSink,
