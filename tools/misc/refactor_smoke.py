@@ -1,3 +1,7 @@
+"""Lightweight smoke checks for the v3 structural refactor.
+
+Verifies that the key modules can be imported and that required paths exist.
+"""
 from __future__ import annotations
 
 import argparse
@@ -5,9 +9,12 @@ import importlib
 import sys
 from pathlib import Path
 
+# Use the shared repo-root helper so this tool works regardless of cwd.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from tools.lib.repo_paths import REPO_ROOT, SRC_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-SRC_ROOT = REPO_ROOT / "src"
+sys.path.insert(0, str(SRC_ROOT))
+
 SMOKE_IMPORTS = [
     "audiagentic.channels.cli.main",
     "audiagentic.foundation.contracts.canonical_ids",
@@ -36,8 +43,6 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    sys.path.insert(0, str(SRC_ROOT))
-    sys.path.insert(0, str(REPO_ROOT))
     failures: list[str] = []
 
     for module_name in SMOKE_IMPORTS:

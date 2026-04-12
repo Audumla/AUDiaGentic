@@ -4,8 +4,10 @@ import argparse
 import sys
 from pathlib import Path
 
+# Use the shared repo-root helper so this tool works regardless of cwd.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from tools.lib.repo_paths import REPO_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
 MANAGED_MARKDOWN_HEADER = "<!-- MANAGED_BY_AUDIAGENTIC: do not edit directly. -->"
 REQUIRED_PATHS = [
     ".audiagentic/project.yaml",

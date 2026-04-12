@@ -1,2 +1,1 @@
-"""Phase 0.3 target scaffold for audiagentic.runtime.release."""
-
+"""Release governance, audit trail, and change ledger for AUDiaGentic."""

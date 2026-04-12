@@ -1,1 +1,1 @@
-"""Phase 0.3 execution provider adapters package."""
+"""Provider adapter implementations for all supported AI providers."""
