@@ -32,44 +32,44 @@ DEFAULT_SCAN_ROOTS = [
 # Pre-v3 import paths that should no longer appear in source.
 PATTERNS: dict[str, re.Pattern[str]] = {
     # Top-level roots removed/moved
-    "audiagentic.contracts (→ foundation.contracts)": re.compile(
+    "audiagentic.contracts (-> foundation.contracts)": re.compile(
         r"\baudiagentic\.contracts\b"
     ),
-    "audiagentic.config (→ foundation.config)": re.compile(
+    "audiagentic.config (-> foundation.config)": re.compile(
         r"\baudiagentic\.config\b"
     ),
-    "audiagentic.streaming (→ interoperability.protocols.streaming)": re.compile(
+    "audiagentic.streaming (-> interoperability.protocols.streaming)": re.compile(
         r"\baudiagentic\.streaming\b"
     ),
-    "audiagentic.execution.providers (→ interoperability.providers)": re.compile(
+    "audiagentic.execution.providers (-> interoperability.providers)": re.compile(
         r"\baudiagentic\.execution\.providers\b"
     ),
-    "audiagentic.scoping (→ planning)": re.compile(
+    "audiagentic.scoping (-> planning)": re.compile(
         r"\baudiagentic\.scoping\b"
     ),
-    "audiagentic.runtime.release (→ release)": re.compile(
+    "audiagentic.runtime.release (-> release)": re.compile(
         r"\baudiagentic\.runtime\.release\b"
     ),
-    "audiagentic.execution.jobs.store (→ runtime.state.jobs_store)": re.compile(
+    "audiagentic.execution.jobs.store (-> runtime.state.jobs_store)": re.compile(
         r"\baudiagentic\.execution\.jobs\.store\b"
     ),
-    "audiagentic.execution.jobs.session_input (→ runtime.state.session_input_store)": re.compile(
+    "audiagentic.execution.jobs.session_input (-> runtime.state.session_input_store)": re.compile(
         r"\baudiagentic\.execution\.jobs\.session_input\b"
     ),
     # Old domain names in plain-text docs/scripts
-    "src/audiagentic/contracts/ (→ foundation/contracts/)": re.compile(
+    "src/audiagentic/contracts/ (-> foundation/contracts/)": re.compile(
         r"src[\\/]+audiagentic[\\/]+contracts[\\/]"
     ),
-    "src/audiagentic/config/ (→ foundation/config/)": re.compile(
+    "src/audiagentic/config/ (-> foundation/config/)": re.compile(
         r"src[\\/]+audiagentic[\\/]+config[\\/]"
     ),
-    "src/audiagentic/streaming/ (→ interoperability/protocols/streaming/)": re.compile(
+    "src/audiagentic/streaming/ (-> interoperability/protocols/streaming/)": re.compile(
         r"src[\\/]+audiagentic[\\/]+streaming[\\/]"
     ),
-    "src/audiagentic/execution/providers/ (→ interoperability/providers/)": re.compile(
+    "src/audiagentic/execution/providers/ (-> interoperability/providers/)": re.compile(
         r"src[\\/]+audiagentic[\\/]+execution[\\/]+providers[\\/]"
     ),
-    "src/audiagentic/runtime/release/ (→ release/)": re.compile(
+    "src/audiagentic/runtime/release/ (-> release/)": re.compile(
         r"src[\\/]+audiagentic[\\/]+runtime[\\/]+release[\\/]"
     ),
     # Removed placeholder roots
