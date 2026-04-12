@@ -51,7 +51,7 @@ REQUIRED_PATHS = [
     ".github/workflows/release-please.audiagentic.yml",
     "tools/misc/seed_example_project.py",
     "src/audiagentic/runtime/lifecycle/baseline_sync.py",
-    "src/audiagentic/runtime/release/bootstrap.py",
+    "src/audiagentic/release/bootstrap.py",
     ".audiagentic/planning/config/planning.yaml",
     ".audiagentic/planning/config/profiles.yaml",
     ".audiagentic/planning/config/workflows.yaml",
