@@ -15,7 +15,7 @@ from audiagentic.release.current_summary import regenerate_current_release
 from audiagentic.release.release_please import ensure_release_please_baseline
 from audiagentic.release.sync import sync_current_release_ledger
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _provider_summary(project_root: Path) -> dict[str, str]:
