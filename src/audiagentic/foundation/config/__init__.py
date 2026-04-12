@@ -1,2 +1,1 @@
-"""Phase 0.3 target scaffold for audiagentic.config."""
-
+"""Provider and project configuration loading and validation."""

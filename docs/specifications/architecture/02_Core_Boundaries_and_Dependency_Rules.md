@@ -1,6 +1,10 @@
 # Core Boundaries and Dependency Rules
 
-## Mandatory dependency rules
+> **v3 structural refactor complete.** Domain names updated from pre-refactor vocabulary
+> (`contracts`, `config`, `scoping`, `streaming`, `observability`, `core`) to the current
+> v3 canonical domains. See `docs/refactor/v3-migration-report.md` for migration history.
+
+## Active subsystem taxonomy
 
 ### Core subsystems
 - `core-lifecycle`
@@ -9,81 +13,62 @@
 - `provider-layer`
 
 ### Optional subsystems
-- `optional-server`
+- `optional-server` (deferred — no active implementation)
 
-### Optional extension subsystems
+### Optional extension subsystems (reserved, not yet active)
+- `knowledge`
 - `nodes`
 - `discovery`
 - `federation`
 - `connectors`
 
-Historical docs may still mention the older `eventing` / `coordinator` / `connectivity`
-split. The canonical extension taxonomy is now `nodes`, `discovery`, `federation`, and
-`connectors`; later docs should use those names even when describing the same future seams.
+## Repository-domain dependency rules (v3)
 
-## Repository-domain dependency rules for the Phase 0.3 refactor
-
-The subsystem rules above remain the high-level architecture boundary. During the repository
-domain refactor, the following repository-domain dependency rules are also canonical for code
-placement and import repair inside `src/audiagentic/`.
+The following rules are canonical for code placement and import repair inside `src/audiagentic/`.
 
 ### Repository domains
 
-- `contracts`
-- `core`
-- `config`
-- `scoping`
+Active:
+- `foundation` (contains `contracts/` and `config/`)
+- `planning`
 - `execution`
-- `runtime`
+- `interoperability` (contains `providers/` and `protocols/`)
+- `runtime` (contains `lifecycle/` and `state/`)
+- `release`
 - `channels`
-- `streaming`
-- `observability`
-- reserved extension roots:
-  - `nodes`
-  - `discovery`
-  - `federation`
-  - `connectors`
+
+Deferred scaffolding:
+- `knowledge` (scaffold only — no active implementation)
 
 ### Allowed repository-domain dependencies
 
 | Domain | May depend on |
 |---|---|
-| `contracts` | no repository-domain dependencies required |
-| `core` | `contracts` |
-| `config` | `contracts`, `core` |
-| `scoping` | `contracts`, `core`, `config` |
-| `execution` | `contracts`, `core`, `config`, selected `runtime` ports/records, selected `streaming` ports/adapters |
-| `runtime` | `contracts`, `core`, `config` |
-| `channels` | `contracts`, `core`, `config`, selected runtime-facing records, selected execution entrypoints/facades |
-| `streaming` | `execution`, `runtime`, `channels`, `contracts`, `core` |
-| `observability` | `runtime`, `contracts`, `core`, `config` |
-| `nodes` | optional extension root; may depend on baseline contracts/core/config as later frozen |
-| `discovery` | optional extension root; may depend on `nodes` contracts and baseline contracts/core/config as later frozen |
-| `federation` | optional extension root; may depend on `nodes`, `discovery`, and baseline contracts/core/config as later frozen |
-| `connectors` | optional extension root; may depend on `federation` and baseline contracts/core/config as later frozen |
+| `foundation` | no repository-domain dependencies |
+| `planning` | `foundation` |
+| `execution` | `foundation`, `runtime`, `interoperability` |
+| `interoperability` | `foundation`, `execution` (one-way; see gemini seam note) |
+| `runtime` | `foundation` |
+| `release` | `foundation`, `runtime` |
+| `channels` | `foundation`, `runtime`, `execution`, `release` |
+| `knowledge` | `foundation` |
 
 ### Forbidden repository-domain dependencies
 
-- `scoping` must not depend on `channels`
-- `scoping` must not depend on `observability`
+- `foundation` must not depend on any other domain
+- `runtime` must not depend on `channels`, `execution`, `release`, or `interoperability`
 - `execution` must not depend on channel formatting or rendering internals
-- `runtime` must not depend on `channels`
-- `channels` must not depend on execution orchestration internals beyond explicitly approved entrypoint/facade seams
-- `observability` must not own or control live interaction/session steering
-- `streaming` must not become the owner of durable observability storage policy
-- reserved extension roots must not become required for baseline single-node correctness during the Phase 0.3 tranche
+- `channels` must not depend on execution orchestration internals beyond approved entrypoints
+- `release` must not depend on `channels` or `execution`
+- `knowledge` must not depend on `execution`, `channels`, or `release` during scaffold phase
 
-### Implication for the refactor checkpoint
+### Known approved cross-layer seam
 
-- `03_Target_Codebase_Tree.md` and `05_Module_Ownership_and_Parallelization_Map.md` should be
-  read together with this section when deciding destination modules during `PKT-FND-012`.
-- When a moved module appears to need a forbidden dependency direction, stop the move and resolve
-  the boundary in `PKT-FND-011` or a follow-on checkpoint packet rather than letting the code move
-  redefine the dependency model implicitly.
-- Reserved extension roots remain reserved roots during this tranche; they are not absorbed into the
-  baseline repository-domain tree.
+`interoperability/providers/adapters/gemini.py` imports from `execution.jobs.prompt_launch` and
+`execution.jobs.prompt_parser`. This is a documented one-way dependency (interoperability → execution)
+that is approved and must not be expanded without review.
 
-## Allowed dependencies
+## Allowed subsystem dependencies (conceptual)
 
 ```mermaid
 flowchart LR
@@ -92,30 +77,18 @@ flowchart LR
     R --> J
     J --> P[provider-layer]
     R --> P
-    J --> S[optional-server]
-    R --> S
-    L --> S
-    L --> N[nodes]
-    R --> N
-    J --> N
-    N --> G[discovery]
-    N --> F[federation]
-    N --> C[connectors]
-    G --> F
-    F --> C
-  ```
+```
 
-## Forbidden dependencies
+## Forbidden subsystem dependencies
 
 - `release-audit-ledger` must not require local AI
 - `agent-jobs` must not require any external messaging/control surface for correctness
 - `optional-server` must not become required for in-process execution
-- `nodes`, `discovery`, `federation`, and `connectors` must remain optional extension layers and must not become required for single-node correctness, release correctness, or prompt-launch correctness
-- `discovery` must not become a prerequisite for node-local operation
-- `federation` must not become a prerequisite for node-local operation
-- `connectors` must not become a prerequisite for node-local operation
+- Reserved extension roots must remain optional and must not become required for
+  single-node correctness, release correctness, or prompt-launch correctness
 
 ## Implication for implementation
 
 Every cross-module interaction must go through a documented contract, schema, or script boundary.
-The later node/discovery/federation/connector layers are additive optional extension subsystems, not replacements for the baseline `core-lifecycle`, `release-audit-ledger`, `agent-jobs`, or `provider-layer` contracts.
+The later extension layers are additive optional subsystems, not replacements for the baseline
+`core-lifecycle`, `release-audit-ledger`, `agent-jobs`, or `provider-layer` contracts.
