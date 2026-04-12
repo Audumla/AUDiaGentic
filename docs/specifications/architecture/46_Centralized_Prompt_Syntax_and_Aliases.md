@@ -152,7 +152,7 @@ All providers automatically recognize new aliases through the shared parser and 
 
 ## Validation
 
-**Contract:** `.audiagentic/prompt-syntax.yaml` conforms to `src/audiagentic/contracts/schemas/prompt-syntax.schema.json`
+**Contract:** `.audiagentic/prompt-syntax.yaml` conforms to `src/audiagentic/foundation/contracts/schemas/prompt-syntax.schema.json`
 
 **Validation happens at:**
 - Bridge startup (when loading syntax)
@@ -165,7 +165,7 @@ All providers automatically recognize new aliases through the shared parser and 
 
 - `src/audiagentic/execution/jobs/prompt_parser.py` — Tag resolution logic
 - `src/audiagentic/execution/jobs/prompt_syntax.py` — Config loading
-- `src/audiagentic/contracts/schemas/prompt-syntax.schema.json` — Schema definition
+- `src/audiagentic/foundation/contracts/schemas/prompt-syntax.schema.json` — Schema definition
 - `tools/regenerate_tag_surfaces.py` — Derived instruction surface regeneration
 - `tools/claude_hooks.py` — Hook-based tag detection
 - `tools/claude_prompt_trigger_bridge.py` — Claude bridge

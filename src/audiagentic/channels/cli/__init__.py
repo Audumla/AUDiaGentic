@@ -1,2 +1,1 @@
-"""Phase 0.3 target scaffold for audiagentic.channels.cli."""
-
+"""Command-line interface channel for AUDiaGentic."""
