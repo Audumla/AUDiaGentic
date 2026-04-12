@@ -5,7 +5,7 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any, Callable
 
-from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 ProviderRunner = Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]
 

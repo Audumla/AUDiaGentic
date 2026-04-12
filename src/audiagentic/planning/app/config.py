@@ -7,7 +7,7 @@ from jsonschema import Draft202012Validator
 # Schemas are bundled with the audiagentic package, not in the project root.
 # From app/config.py: parents[2] = src/audiagentic/
 _PLANNING_SCHEMA_DIR = (
-    Path(__file__).resolve().parents[2] / "contracts" / "schemas" / "planning"
+    Path(__file__).resolve().parents[2] / "foundation" / "contracts" / "schemas" / "planning"
 )
 
 
