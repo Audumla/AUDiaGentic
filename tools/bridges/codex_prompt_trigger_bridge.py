@@ -6,8 +6,10 @@ import json
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-SRC_ROOT = REPO_ROOT / "src"
+# Bootstrap: make tools.lib importable, then use robust multi-fallback root discovery.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from tools.lib.repo_paths import REPO_ROOT, SRC_ROOT
+
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 if str(SRC_ROOT) not in sys.path:

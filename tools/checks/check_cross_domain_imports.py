@@ -41,7 +41,7 @@ FROZEN_DOMAINS = {
 ALLOWED: dict[str, set[str]] = {
     "foundation": set(),
     "planning": {"foundation"},
-    "execution": {"foundation", "runtime", "interoperability"},
+    "execution": {"foundation", "runtime", "interoperability", "release"},
     "interoperability": {"foundation", "execution"},
     "runtime": {"foundation"},
     "release": {"foundation", "runtime"},
