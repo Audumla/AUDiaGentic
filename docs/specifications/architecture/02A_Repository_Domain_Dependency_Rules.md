@@ -1,36 +1,61 @@
-# Repository-Domain Dependency Rules for Phase 0.3
+# Repository-Domain Dependency Rules (v3)
+
+> **Updated for v3 structural refactor.** This document replaces the pre-refactor
+> `Phase 0.3` addendum. Domain names now reflect the live `src/audiagentic/` tree.
 
 ## Purpose
 
-This addendum defines the **canonical package-level repository-domain dependency rules** for the Phase 0.3 repository refactor.
+Defines the canonical package-level repository-domain dependency rules for the v3 structure.
+This is the single source of truth for which domain may import from which.
 
-It exists so `PKT-FND-011` and `PKT-FND-012` have one stable source for package-move guardrails even while `02_Core_Boundaries_and_Dependency_Rules.md` still carries the older subsystem-oriented model.
+## Active domains
+
+Under `src/audiagentic/`:
+
+- `foundation` — shared contracts and configuration (base layer)
+- `planning` — planning workflows and task management
+- `execution` — job orchestration
+- `interoperability` — external provider integrations and protocols
+- `runtime` — lifecycle management and durable state persistence
+- `release` — release governance and audit
+- `channels` — operator-facing surfaces
+- `knowledge` — optional capability domain (scaffold only)
 
 ## Allowed repository-domain dependencies
 
-- `contracts` may be imported by every domain
-- `core` may be imported by every domain
-- `config` may be imported by `execution`, `runtime`, `channels`, `streaming`, and `observability`
-- `scoping` may depend on `contracts`, `core`, and `config`
-- `execution` may depend on `contracts`, `core`, `config`, and selected `runtime` ports
-- `runtime` may depend on `contracts`, `core`, and `config`
-- `channels` may depend on `contracts`, `core`, `config`, and selected presentation-facing runtime records
-- `streaming` may depend on `execution`, `runtime`, `channels`, `contracts`, and `core`
-- `observability` may depend on `runtime`, `contracts`, `core`, and `config`
+- `foundation` has no repository-domain dependencies (it is the base layer)
+- `planning` may depend on `foundation`
+- `execution` may depend on `foundation`, `runtime`, `interoperability`
+- `interoperability` may depend on `foundation`, `execution` (see seam note below)
+- `runtime` may depend on `foundation`
+- `release` may depend on `foundation`, `runtime`
+- `channels` may depend on `foundation`, `runtime`, `execution`, `release`
+- `knowledge` may depend on `foundation`
 
 ## Forbidden repository-domain dependencies
 
-- `scoping -> channels`
-- `scoping -> observability`
-- `execution ->` channel formatting or rendering internals
-- `observability ->` live interaction control
-- `channels ->` execution internals
-- `runtime -> channels`
+- `foundation → any domain`
+- `runtime → channels`, `runtime → execution`, `runtime → release`
+- `execution → channel formatting or rendering internals`
+- `channels → execution internals beyond approved entrypoints`
+- `release → channels`, `release → execution`
 
-## Extension-root note
+## Approved cross-layer seam
 
-`nodes`, `discovery`, `federation`, and `connectors` remain reserved extension roots under `src/audiagentic/` during this tranche. They are not folded into the baseline repository-domain taxonomy for Phase 0.3 code motion, even if they later align conceptually with `runtime`, `channels`, `streaming`, or `observability`.
+`interoperability/providers/adapters/gemini.py` → `execution.jobs.prompt_launch` and
+`execution.jobs.prompt_parser`.
 
-## Enforcement note
+This is a one-way, documented dependency. The direction (interoperability → execution) is
+approved because the gemini adapter needs to launch sub-jobs. It must not be expanded without
+a boundary review.
 
-During Phase 0.3, `tools/check_cross_domain_imports.py` should enforce these rules for any moved or newly introduced package edges.
+## Enforcement
+
+Run after any code motion:
+
+```bash
+python tools/checks/check_cross_domain_imports.py
+```
+
+This tool enforces the allowed/forbidden rules above by scanning all Python source under
+`src/audiagentic/` and reporting violations.
