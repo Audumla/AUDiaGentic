@@ -11,7 +11,7 @@ SRC_ROOT = REPO_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from audiagentic.contracts.errors import AudiaGenticError, to_error_envelope
+from audiagentic.foundation.contracts.errors import AudiaGenticError, to_error_envelope
 from audiagentic.execution.providers.status import build_provider_status
 
 

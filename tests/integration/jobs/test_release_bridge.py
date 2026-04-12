@@ -10,7 +10,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.execution.jobs.release_bridge import build_change_event_from_job, emit_job_change
 from audiagentic.execution.jobs.records import build_job_record
 from audiagentic.execution.jobs.store import write_job_record

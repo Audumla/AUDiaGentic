@@ -8,8 +8,8 @@ from typing import Any
 import yaml
 from jsonschema import Draft202012Validator
 
-from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.contracts.schema_registry import read_schema
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.schema_registry import read_schema
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
