@@ -1,14 +1,25 @@
 """Check imports under repository domains against frozen dependency rules.
 
 Domain model reflects the v3 structural refactor:
-  foundation       — shared contracts and config (base layer, no domain deps)
-  planning         — planning workflows
-  execution        — job orchestration
-  interoperability — external integrations (providers, protocols)
-  runtime          — lifecycle and state persistence
-  release          — governance and audit
-  channels         — operator surfaces (cli, vscode)
-  knowledge        — optional capability domain (scaffold)
+
+  IMPLEMENTED:
+    foundation       — shared contracts and config (base layer, no domain deps)
+    planning         — planning workflows
+    execution        — job orchestration and bridges
+    interoperability — external integrations (providers, protocols/streaming)
+    runtime          — lifecycle and state persistence
+    release          — governance, audit, and release finalization
+    channels/cli     — CLI operator surface
+
+  SCAFFOLD ONLY (reserved, no executable code):
+    knowledge                          — optional capability domain
+    channels/vscode                    — VS Code editor integration
+    interoperability/mcp               — MCP protocol scaffolding
+    interoperability/protocols/acp     — ACP inter-agent protocol scaffolding
+
+  DEPENDENCY NOTES:
+    execution -> release   intentional (release_bridge.py is a one-way seam)
+    interoperability -> execution  intentional (gemini adapter calls prompt_launch)
 """
 from __future__ import annotations
 

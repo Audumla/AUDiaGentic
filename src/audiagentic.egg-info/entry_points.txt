@@ -1,0 +1,2 @@
+[console_scripts]
+audiagentic = audiagentic.channels.cli.main:main

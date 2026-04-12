@@ -72,8 +72,8 @@ src/audiagentic/
 4. **Baseline preservation**: `.audiagentic/` tracked baseline and `.audiagentic/runtime/`
    exclusion model preserved unchanged.
 
-5. **Schemas location**: `src/audiagentic/foundation/contracts/schemas/` (moved from
-   `src/audiagentic/contracts/schemas/`); `docs/examples/` unchanged.
+5. **Schemas location**: `src/audiagentic/foundation/contracts/schemas/` (previously under
+   the old `contracts/schemas/` root before it was moved under `foundation/`); `docs/examples/` unchanged.
 
 6. **Test layout**: centralized `tests/` retained; domain structure mirrored inside it.
 

@@ -8,46 +8,65 @@
 Defines the canonical package-level repository-domain dependency rules for the v3 structure.
 This is the single source of truth for which domain may import from which.
 
-## Active domains
+## Domain inventory
+
+### Implemented domains
 
 Under `src/audiagentic/`:
 
-- `foundation` — shared contracts and configuration (base layer)
-- `planning` — planning workflows and task management
-- `execution` — job orchestration
-- `interoperability` — external provider integrations and protocols
-- `runtime` — lifecycle management and durable state persistence
-- `release` — release governance and audit
-- `channels` — operator-facing surfaces
-- `knowledge` — optional capability domain (scaffold only)
+| Domain | Description |
+| -------- | ----------- |
+| `foundation` | Shared contracts, config, and schema registry (base layer) |
+| `planning` | Planning workflows, item types, state machine, and file system layer |
+| `execution` | Job orchestration, prompt bridges, state machine, and reviews |
+| `interoperability` | Provider adapters, streaming protocol, and protocol scaffolding |
+| `runtime` | Lifecycle management and durable state persistence |
+| `release` | Release governance, audit, and finalization |
+| `channels/cli` | CLI operator surface |
+
+### Scaffold-only domains (reserved, no executable code)
+
+| Domain | Status |
+| -------- | ------ |
+| `knowledge` | Optional capability domain — reserved to prevent other modules absorbing this ownership |
+| `channels/vscode` | VS Code editor integration — deferred until CLI is stable |
+| `interoperability/mcp` | MCP protocol server — scaffolding only |
+| `interoperability/protocols/acp` | ACP inter-agent protocol — scaffolding only |
 
 ## Allowed repository-domain dependencies
 
-- `foundation` has no repository-domain dependencies (it is the base layer)
-- `planning` may depend on `foundation`
-- `execution` may depend on `foundation`, `runtime`, `interoperability`
-- `interoperability` may depend on `foundation`, `execution` (see seam note below)
-- `runtime` may depend on `foundation`
-- `release` may depend on `foundation`, `runtime`
-- `channels` may depend on `foundation`, `runtime`, `execution`, `release`
-- `knowledge` may depend on `foundation`
+This table is the canonical source of truth. It is enforced by `tools/checks/check_cross_domain_imports.py`.
 
-## Forbidden repository-domain dependencies
+| Domain | May import from |
+| -------- | --------------- |
+| `foundation` | *(none — base layer)* |
+| `planning` | `foundation` |
+| `execution` | `foundation`, `runtime`, `interoperability`, `release` (see seam note) |
+| `interoperability` | `foundation`, `execution` (see seam note) |
+| `runtime` | `foundation` |
+| `release` | `foundation`, `runtime` |
+| `channels` | `foundation`, `runtime`, `execution`, `release` |
+| `knowledge` | `foundation` |
+
+## Forbidden dependencies
 
 - `foundation → any domain`
-- `runtime → channels`, `runtime → execution`, `runtime → release`
-- `execution → channel formatting or rendering internals`
-- `channels → execution internals beyond approved entrypoints`
+- `runtime → execution`, `runtime → release`, `runtime → channels`
 - `release → channels`, `release → execution`
+- `channels → execution internals beyond approved entrypoints`
 
-## Approved cross-layer seam
+## Approved cross-layer seams
 
-`interoperability/providers/adapters/gemini.py` → `execution.jobs.prompt_launch` and
-`execution.jobs.prompt_parser`.
+Two one-way cross-layer seams are intentionally allowed and must not be expanded without a boundary review.
 
-This is a one-way, documented dependency. The direction (interoperability → execution) is
-approved because the gemini adapter needs to launch sub-jobs. It must not be expanded without
-a boundary review.
+**Seam 1: interoperability → execution**
+`interoperability/providers/adapters/gemini.py` imports from `execution.jobs.prompt_launch`
+and `execution.jobs.prompt_parser`. The gemini adapter needs to launch sub-jobs. Approved.
+
+**Seam 2: execution → release**
+`execution/jobs/release_bridge.py` imports from `release.*`. The release bridge is an
+orchestration connector — execution triggers the release domain on job completion. Approved.
+No other execution code may import from release without a boundary review.
 
 ## Enforcement
 
