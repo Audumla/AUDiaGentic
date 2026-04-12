@@ -10,14 +10,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC_ROOT = REPO_ROOT / "src"
 SMOKE_IMPORTS = [
     "audiagentic.channels.cli.main",
-    "audiagentic.contracts.canonical_ids",
+    "audiagentic.foundation.contracts.canonical_ids",
     "audiagentic.runtime.lifecycle.fresh_install",
-    "audiagentic.runtime.release.bootstrap",
+    "audiagentic.release.bootstrap",
     "audiagentic.execution.jobs.prompt_launch",
-    "audiagentic.config.provider_registry",
+    "audiagentic.foundation.config.provider_registry",
 ]
 REQUIRED_PATHS = [
-    "src/audiagentic/contracts/schemas",
+    "src/audiagentic/foundation/contracts/schemas",
     "docs/examples",
     ".audiagentic/project.yaml",
     ".audiagentic/providers.yaml",
