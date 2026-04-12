@@ -1,3 +1,15 @@
+"""Check imports under repository domains against frozen dependency rules.
+
+Domain model reflects the v3 structural refactor:
+  foundation       — shared contracts and config (base layer, no domain deps)
+  planning         — planning workflows
+  execution        — job orchestration
+  interoperability — external integrations (providers, protocols)
+  runtime          — lifecycle and state persistence
+  release          — governance and audit
+  channels         — operator surfaces (cli, vscode)
+  knowledge        — optional capability domain (scaffold)
+"""
 from __future__ import annotations
 
 import argparse
@@ -6,31 +18,35 @@ import importlib.util
 import sys
 from pathlib import Path
 
+# Use the shared repo-root helper so this tool works regardless of cwd.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from tools.lib.repo_paths import REPO_ROOT, SRC_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-SRC_ROOT = REPO_ROOT / "src"
 DOMAIN_ROOT = SRC_ROOT / "audiagentic"
+
+# Canonical domains after v3 refactor.
 FROZEN_DOMAINS = {
-    "contracts",
-    "core",
-    "config",
-    "scoping",
+    "foundation",
+    "planning",
     "execution",
+    "interoperability",
     "runtime",
+    "release",
     "channels",
-    "streaming",
-    "observability",
+    "knowledge",
 }
+
+# Allowed import directions. A domain may only import from listed domains.
+# Omitted domains default to no allowed cross-domain imports.
 ALLOWED: dict[str, set[str]] = {
-    "contracts": set(),
-    "core": {"contracts"},
-    "config": {"contracts", "core"},
-    "scoping": {"contracts", "core", "config"},
-    "execution": {"contracts", "core", "config", "runtime", "streaming"},
-    "runtime": {"contracts", "core", "config"},
-    "channels": {"contracts", "core", "config", "runtime", "execution"},
-    "streaming": {"execution", "runtime", "channels", "contracts", "core"},
-    "observability": {"runtime", "contracts", "core", "config"},
+    "foundation": set(),
+    "planning": {"foundation"},
+    "execution": {"foundation", "runtime", "interoperability"},
+    "interoperability": {"foundation", "execution"},
+    "runtime": {"foundation"},
+    "release": {"foundation", "runtime"},
+    "channels": {"foundation", "runtime", "execution", "release"},
+    "knowledge": {"foundation"},
 }
 
 
@@ -54,8 +70,11 @@ def package_name_for(path: Path) -> str:
 def resolve_module_name(path: Path, module: str | None, level: int) -> str | None:
     if level == 0:
         return module
-    package = package_name_for(path.parent / "__init__.py" if path.name == "__init__.py" else path)
-    package = package_name_for(path) if path.name == "__init__.py" else package_name_for(path.parent / "__init__.py")
+    package = (
+        package_name_for(path)
+        if path.name == "__init__.py"
+        else package_name_for(path.parent / "__init__.py")
+    )
     try:
         target = "." * level + (module or "")
         return importlib.util.resolve_name(target, package)
@@ -64,7 +83,10 @@ def resolve_module_name(path: Path, module: str | None, level: int) -> str | Non
 
 
 def domain_for_file(path: Path) -> str | None:
-    rel = path.relative_to(DOMAIN_ROOT)
+    try:
+        rel = path.relative_to(DOMAIN_ROOT)
+    except ValueError:
+        return None
     if not rel.parts:
         return None
     domain = rel.parts[0]
@@ -87,30 +109,39 @@ def collect_violations(root: Path) -> list[str]:
         domain = domain_for_file(path)
         if domain is None:
             continue
-        text = path.read_text(encoding="utf-8")
-        tree = ast.parse(text, filename=str(path))
+        try:
+            text = path.read_text(encoding="utf-8")
+            tree = ast.parse(text, filename=str(path))
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        allowed = ALLOWED.get(domain, set())
         for node in ast.walk(tree):
-            module_name: str | None = None
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     target = imported_domain(alias.name)
-                    if target and target != domain and target not in ALLOWED[domain]:
+                    if target and target != domain and target not in allowed:
                         violations.append(
-                            f"{path.relative_to(REPO_ROOT)} imports forbidden domain {target} via {alias.name}"
+                            f"{path.relative_to(REPO_ROOT)} imports forbidden domain "
+                            f"'{target}' via '{alias.name}'"
                         )
             elif isinstance(node, ast.ImportFrom):
                 module_name = resolve_module_name(path, node.module, node.level)
                 target = imported_domain(module_name) if module_name else None
-                if target and target != domain and target not in ALLOWED[domain]:
+                if target and target != domain and target not in allowed:
                     violations.append(
-                        f"{path.relative_to(REPO_ROOT)} imports forbidden domain {target} via {module_name}"
+                        f"{path.relative_to(REPO_ROOT)} imports forbidden domain "
+                        f"'{target}' via '{module_name}'"
                     )
     return violations
 
 
 def main() -> int:
     args = parse_args()
-    root = (REPO_ROOT / args.root).resolve() if not Path(args.root).is_absolute() else Path(args.root)
+    root = (
+        (REPO_ROOT / args.root).resolve()
+        if not Path(args.root).is_absolute()
+        else Path(args.root)
+    )
     if not root.exists():
         print(f"scan root does not exist: {root}", file=sys.stderr)
         return 1
