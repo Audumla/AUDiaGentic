@@ -13,7 +13,7 @@ from typing import Any, Protocol, TextIO
 
 from jsonschema import Draft202012Validator
 
-from audiagentic.contracts.schema_registry import read_schema
+from audiagentic.foundation.contracts.schema_registry import read_schema
 
 
 # Per-path locks for coordinated writes to the same file

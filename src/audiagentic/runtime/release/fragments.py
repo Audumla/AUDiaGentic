@@ -9,8 +9,8 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.contracts.schema_registry import read_schema
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.schema_registry import read_schema
 
 
 def _validate_change_event(payload: dict[str, Any]) -> None:
