@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def _parse_legacy_changelog(path: Path) -> list[str]:

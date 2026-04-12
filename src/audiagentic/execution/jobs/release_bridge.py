@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.release.audit import generate_audit_and_checkin
 from audiagentic.runtime.release.current_summary import regenerate_current_release
 from audiagentic.runtime.release.fragments import record_change_event

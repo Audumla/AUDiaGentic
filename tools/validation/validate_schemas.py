@@ -14,7 +14,7 @@ SRC_ROOT = REPO_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from audiagentic.contracts.schema_registry import SCHEMA_DIR, schema_filename
+from audiagentic.foundation.contracts.schema_registry import SCHEMA_DIR, schema_filename
 
 FIXTURES_DIR = REPO_ROOT / "docs" / "examples" / "fixtures"
 
