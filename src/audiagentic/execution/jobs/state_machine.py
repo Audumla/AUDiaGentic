@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.execution.jobs import store
+from audiagentic.runtime.state import jobs_store as store
 
 LEGAL_TRANSITIONS = {
     "created": {"ready"},

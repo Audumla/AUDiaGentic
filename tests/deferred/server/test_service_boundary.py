@@ -12,7 +12,7 @@ for path in (str(ROOT), str(SRC)):
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.channels.server.service_boundary import CoreServiceBoundary
-from audiagentic.execution.jobs.store import job_record_path
+from audiagentic.runtime.state.jobs_store import job_record_path
 from tests.helpers import sandbox as sandbox_helper
 
 

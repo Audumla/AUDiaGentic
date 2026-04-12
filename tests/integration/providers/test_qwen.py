@@ -10,7 +10,7 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.execution.providers.adapters import qwen
+from audiagentic.interoperability.providers.adapters import qwen
 
 
 def test_qwen_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:

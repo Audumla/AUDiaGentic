@@ -11,9 +11,9 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.streaming import provider_streaming as streaming
-from audiagentic.streaming.sinks import ConsoleSink
-from audiagentic.streaming.sinks import InMemorySink
+from audiagentic.interoperability.protocols.streaming import provider_streaming as streaming
+from audiagentic.interoperability.protocols.streaming.sinks import ConsoleSink
+from audiagentic.interoperability.protocols.streaming.sinks import InMemorySink
 
 
 def test_run_streaming_command_captures_stdout_and_stderr(monkeypatch, tmp_path: Path) -> None:

@@ -4,8 +4,8 @@ from __future__ import annotations
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.execution.providers.models import resolve_model_selection
-from audiagentic.execution.providers.health import health_check
+from audiagentic.interoperability.providers.models import resolve_model_selection
+from audiagentic.interoperability.providers.health import health_check
 
 
 def select_provider(

@@ -10,8 +10,8 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.execution.providers.adapters import copilot
-from audiagentic.streaming import provider_streaming as streaming
+from audiagentic.interoperability.providers.adapters import copilot
+from audiagentic.interoperability.protocols.streaming import provider_streaming as streaming
 
 
 def test_copilot_adapter_contract(monkeypatch, tmp_path: Path) -> None:

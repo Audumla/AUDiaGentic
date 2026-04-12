@@ -1,18 +1,15 @@
-"""Codex provider adapter."""
+"""Claude provider adapter."""
 
 from __future__ import annotations
 
 import json
-import os
-import re
 import shutil
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.streaming.completion import (
+from audiagentic.interoperability.protocols.streaming.completion import (
     NormalizationMethod,
     ResultSource,
     build_synthetic_fallback,
@@ -20,63 +17,89 @@ from audiagentic.streaming.completion import (
     persist_completion,
     try_extract_json_from_stdout,
 )
-from audiagentic.streaming.provider_streaming import (
+from audiagentic.interoperability.protocols.streaming.provider_streaming import (
     build_provider_stream_sinks,
     run_streaming_command,
 )
-from audiagentic.streaming.sinks import NormalizedEventSink, StreamSink
+from audiagentic.interoperability.protocols.streaming.sinks import NormalizedEventSink, StreamSink
 
 
-class CodexEventExtractor:
-    """Extract Codex milestone events from stream output.
+class ClaudeEventExtractor:
+    """Extract Claude events from stream output.
 
-    This sink parses Codex wrapper milestone lines and translates them into
-    canonical provider-stream-event records before forwarding to NormalizedEventSink.
+    This sink parses Claude JSON stream events (when --output-format stream-json is used)
+    and translates them into canonical provider-stream-event records before forwarding
+    to NormalizedEventSink.
     """
 
-    # Patterns for Codex milestone lines
-    MILESTONE_PATTERNS = {
-        "task-start": re.compile(
-            r"^\[MILESTONE\]\s*task-start:\s*(.+)$", re.IGNORECASE
-        ),
-        "task-progress": re.compile(
-            r"^\[MILESTONE\]\s*task-progress:\s*(.+)$", re.IGNORECASE
-        ),
-        "task-complete": re.compile(
-            r"^\[MILESTONE\]\s*task-complete:\s*(.+)$", re.IGNORECASE
-        ),
-        "error": re.compile(r"^\[ERROR\]\s*(.+)$", re.IGNORECASE),
+    # Claude event type to canonical event kind mapping
+    EVENT_KIND_MAP = {
+        "message_start": "task-start",
+        "content_block_start": "task-progress",
+        "content_block_delta": "task-progress",
+        "content_block_stop": "task-progress",
+        "message_delta": "task-progress",
+        "message_stop": "completion",
+        "error": "error",
     }
 
     def __init__(
         self,
         event_sink: NormalizedEventSink,
         job_id: str | None = None,
-        provider_id: str = "codex",
+        provider_id: str = "claude",
     ) -> None:
         self.event_sink = event_sink
         self.job_id = job_id
         self.provider_id = provider_id
 
     def write(self, line: str) -> None:
-        """Process a line and extract Codex events."""
+        """Process a line and extract Claude events."""
         text = line.rstrip("\r\n")
         if not text:
             return
 
-        # Check for milestone patterns
-        for event_kind, pattern in self.MILESTONE_PATTERNS.items():
-            match = pattern.match(text)
-            if match:
-                message = match.group(1).strip()
-                self._emit_event(event_kind, message)
-                return
+        # Try to parse as JSON stream-json format
+        try:
+            message = json.loads(text)
+        except json.JSONDecodeError:
+            # Plain text line (when using --output-format text)
+            self._emit_event("task-progress", text)
+            return
 
-        # Pass through non-milestone lines as task-progress
-        self._emit_event("task-progress", text)
+        if not isinstance(message, dict):
+            self._emit_event("task-progress", text)
+            return
 
-    def _emit_event(self, event_kind: str, message: str) -> None:
+        # Extract event type
+        event_type = message.get("type")
+        event_kind = self.EVENT_KIND_MAP.get(event_type, "task-progress")
+
+        # Extract message content based on event type
+        message_text = text
+        if event_type == "content_block_delta":
+            delta = message.get("delta", {})
+            if delta.get("type") == "text_delta":
+                message_text = delta.get("text", "")
+        elif event_type == "message_delta":
+            delta = message.get("delta", {})
+            message_text = delta.get("stop_reason", "message_delta")
+        elif event_type == "message_start":
+            message_text = "message_start"
+
+        self._emit_event(event_kind, message_text, message)
+
+    def _emit_event(
+        self,
+        event_kind: str,
+        message: str,
+        raw_payload: dict[str, Any] | None = None,
+    ) -> None:
         """Emit a canonical event through the underlying sink."""
+        details: dict[str, Any] = {"extractor": "claude-stream-json"}
+        if raw_payload:
+            details["raw"] = raw_payload
+
         self.event_sink.write_event(
             {
                 "contract-version": "v1",
@@ -85,7 +108,7 @@ class CodexEventExtractor:
                 "event-kind": event_kind,
                 "message": message,
                 "timestamp": _utc_now(),
-                "details": {"extractor": "codex-milestone"},
+                "details": details,
             }
         )
 
@@ -100,15 +123,15 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def build_codex_stream_sinks(
+def build_claude_stream_sinks(
     *,
     packet_ctx: dict[str, Any],
     stream_controls: dict[str, Any] | None = None,
 ) -> tuple[list[StreamSink], list[StreamSink]]:
-    """Build Codex-specific stream sinks with event extraction.
+    """Build Claude-specific stream sinks with JSON event extraction.
 
-    This adds CodexEventExtractor on top of the standard sinks to parse
-    Codex milestone lines into canonical events.
+    This adds ClaudeEventExtractor on top of the standard sinks to parse
+    Claude JSON stream events into canonical events.
     """
     # Build base sinks
     stdout_sinks, stderr_sinks = build_provider_stream_sinks(
@@ -116,15 +139,15 @@ def build_codex_stream_sinks(
         stream_controls=stream_controls,
     )
 
-    # Find the NormalizedEventSink for stdout and wrap it with CodexEventExtractor
+    # Find the NormalizedEventSink for stdout and wrap it with ClaudeEventExtractor
     job_id = packet_ctx.get("job-id")
     for i, sink in enumerate(stdout_sinks):
         if isinstance(sink, NormalizedEventSink):
-            # Replace with CodexEventExtractor that wraps the original sink
-            stdout_sinks[i] = CodexEventExtractor(
+            # Replace with ClaudeEventExtractor that wraps the original sink
+            stdout_sinks[i] = ClaudeEventExtractor(
                 event_sink=sink,
                 job_id=job_id,
-                provider_id="codex",
+                provider_id="claude",
             )
             break
 
@@ -146,18 +169,17 @@ def _find_packet_doc(working_root: str | None, packet_id: str | None) -> Path | 
 
 def _packet_doc_excerpt(path: Path, *, max_lines: int = 80) -> str:
     lines = path.read_text(encoding="utf-8").splitlines()
-    excerpt = lines[:max_lines]
-    return "\n".join(excerpt).strip()
+    return "\n".join(lines[:max_lines]).strip()
 
 
 def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> str:
-    prompt_body = packet_ctx.get("prompt-body")
     packet_doc = _find_packet_doc(
         packet_ctx.get("working-root"), packet_ctx.get("packet-id")
     )
+    prompt_body = packet_ctx.get("prompt-body")
     envelope = {
         "job-id": packet_ctx.get("job-id"),
-        "provider-id": packet_ctx.get("provider-id", "codex"),
+        "provider-id": packet_ctx.get("provider-id", "claude"),
         "packet-id": packet_ctx.get("packet-id"),
         "project-id": packet_ctx.get("project-id"),
         "workflow-profile": packet_ctx.get("workflow-profile"),
@@ -170,7 +192,7 @@ def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> s
     if packet_doc is not None:
         envelope["packet-doc-path"] = str(packet_doc)
     lines = [
-        "AUDiaGentic Codex provider execution request.",
+        "AUDiaGentic Claude provider execution request.",
         "Use the packet document excerpt as the task definition.",
         "Do not ask for follow-up details unless the packet context is unusable.",
         "Carry out the requested work or, if execution is impossible, report the blocking reason and the next concrete step.",
@@ -183,26 +205,15 @@ def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> s
     return "\n".join(lines).strip()
 
 
-def _parse_codex_completion(
-    last_message: str, stdout: str, stderr: str, returncode: int
+def _parse_claude_completion(
+    stdout: str, stderr: str, returncode: int
 ) -> tuple[dict[str, Any] | None, ResultSource]:
-    """Parse Codex completion from last message or stdout.
+    """Parse Claude completion from stdout.
 
     Returns:
         tuple[dict[str, Any] | None, ResultSource]: (parsed_data, source)
     """
-    # Try to parse last_message as JSON
-    if last_message:
-        try:
-            data = json.loads(last_message)
-            if isinstance(data, dict):
-                if "kind" not in data:
-                    data = {"kind": "adhoc", **data}
-                return data, ResultSource.RESULT_FILE
-        except json.JSONDecodeError:
-            pass
-
-    # Try to parse stdout as JSON
+    # Try to parse stdout as JSON directly
     if stdout:
         try:
             data = json.loads(stdout)
@@ -213,7 +224,7 @@ def _parse_codex_completion(
         except json.JSONDecodeError:
             pass
 
-    # Try to extract JSON block from stdout
+    # Try to extract JSON block from markdown stdout
     extracted = try_extract_json_from_stdout(stdout)
     if extracted:
         if "kind" not in extracted:
@@ -223,100 +234,79 @@ def _parse_codex_completion(
     return None, ResultSource.STDOUT_TEXT
 
 
-def _codex_executable() -> str:
-    executable = shutil.which("codex")
+def _claude_executable() -> str:
+    executable = shutil.which("claude")
     if executable is None:
         raise AudiaGenticError(
-            code="PRV-EXTERNAL-001",
+            code="PRV-EXTERNAL-003",
             kind="external",
-            message="codex command is not available on PATH",
-            details={"provider-id": "codex"},
+            message="claude command is not available on PATH",
+            details={"provider-id": "claude"},
         )
     return executable
 
 
 def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, Any]:
-    executable = _codex_executable()
+    executable = _claude_executable()
     prompt = _build_prompt(packet_ctx, provider_cfg)
     default_model = provider_cfg.get("default-model")
     working_root = packet_ctx.get("working-root")
     cwd = Path(working_root) if working_root else None
 
     execution_policy = provider_cfg.get("execution-policy", {})
-    ephemeral = bool(execution_policy.get("ephemeral", True))
-    full_auto = bool(execution_policy.get("full-auto", True))
+    output_format = execution_policy.get("output-format", "text")
+    permission_mode = execution_policy.get("permission-mode", "auto")
 
-    fd, last_message_path = tempfile.mkstemp(
-        prefix="codex-last-message-", suffix=".txt"
-    )
-    os.close(fd)
-    output_path = Path(last_message_path)
     command = [
         executable,
-        "exec",
-        "--skip-git-repo-check",
-        "--output-last-message",
-        str(output_path),
+        "--print",
+        "--output-format",
+        str(output_format),
+        "--permission-mode",
+        str(permission_mode),
     ]
-    if ephemeral:
-        command.insert(2, "--ephemeral")
-    if full_auto:
-        command.insert(3, "--full-auto")
     if default_model:
         command.extend(["--model", str(default_model)])
-    command.append(prompt)
 
     stream_controls = packet_ctx.get("stream-controls", {})
-    stdout_sinks, stderr_sinks = build_codex_stream_sinks(
+    stdout_sinks, stderr_sinks = build_claude_stream_sinks(
         packet_ctx=packet_ctx,
         stream_controls=stream_controls,
     )
-
-    try:
-        completed = run_streaming_command(
-            command,
-            cwd=cwd,
-            stdout_sinks=stdout_sinks,
-            stderr_sinks=stderr_sinks,
-        )
-        last_message = (
-            output_path.read_text(encoding="utf-8").strip()
-            if output_path.exists()
-            else ""
-        )
-    finally:
-        try:
-            output_path.unlink(missing_ok=True)
-        except OSError:
-            pass
+    completed = run_streaming_command(
+        command,
+        cwd=cwd,
+        input_text=prompt,
+        stdout_sinks=stdout_sinks,
+        stderr_sinks=stderr_sinks,
+    )
+    stdout_text = completed.stdout.strip()
+    stderr_text = (completed.stderr or "").strip()
+    output_text = stdout_text
 
     if completed.returncode != 0:
         raise AudiaGenticError(
-            code="PRV-EXTERNAL-002",
+            code="PRV-EXTERNAL-004",
             kind="external",
-            message="codex execution failed",
+            message="claude execution failed",
             details={
-                "provider-id": "codex",
+                "provider-id": "claude",
                 "returncode": completed.returncode,
-                "stdout": (completed.stdout or "").strip(),
-                "stderr": (completed.stderr or "").strip(),
+                "stdout": stdout_text,
+                "stderr": stderr_text,
                 "command": command,
             },
         )
 
-    stdout_text = (completed.stdout or "").strip()
-    stderr_text = (completed.stderr or "").strip()
-    output_text = last_message or stdout_text
-
     # Parse structured completion
-    parsed_data, result_source = _parse_codex_completion(
-        last_message, stdout_text, stderr_text, completed.returncode
+    parsed_data, result_source = _parse_claude_completion(
+        stdout_text, stderr_text, completed.returncode
     )
 
     # Build canonical completion
     if parsed_data and result_source != ResultSource.STDOUT_TEXT:
         completion = normalize_provider_result(
-            provider_id="codex",
+            provider_id="claude",
             job_id=packet_ctx.get("job-id"),
             prompt_id=packet_ctx.get("prompt-id"),
             surface=packet_ctx.get("surface"),
@@ -330,7 +320,7 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
         )
     else:
         completion = build_synthetic_fallback(
-            provider_id="codex",
+            provider_id="claude",
             job_id=packet_ctx.get("job-id"),
             stdout=stdout_text,
             stderr=stderr_text,
@@ -346,7 +336,7 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
             pass
 
     return {
-        "provider-id": packet_ctx.get("provider-id", "codex"),
+        "provider-id": packet_ctx.get("provider-id", "claude"),
         "status": "ok",
         "execution-mode": provider_cfg.get("access-mode", "cli"),
         "model": default_model,

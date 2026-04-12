@@ -14,8 +14,8 @@ from audiagentic.foundation.config.provider_catalog import (
     runtime_catalog_path,
 )
 from audiagentic.foundation.config.provider_config import load_provider_config
-from audiagentic.execution.providers.health import health_check
-from audiagentic.execution.providers.models import resolve_model_selection
+from audiagentic.interoperability.providers.health import health_check
+from audiagentic.interoperability.providers.models import resolve_model_selection
 
 CLI_PROBES: dict[str, list[str]] = {
     "codex": ["codex", "--version"],

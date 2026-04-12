@@ -1,4 +1,4 @@
-"""Cline provider adapter."""
+"""Qwen provider adapter."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.streaming.completion import (
+from audiagentic.interoperability.protocols.streaming.completion import (
     NormalizationMethod,
     ResultSource,
     build_synthetic_fallback,
@@ -17,67 +17,48 @@ from audiagentic.streaming.completion import (
     persist_completion,
     try_extract_json_from_stdout,
 )
-from audiagentic.streaming.provider_streaming import (
+from audiagentic.interoperability.protocols.streaming.provider_streaming import (
     build_provider_stream_sinks,
     run_streaming_command,
 )
-from audiagentic.streaming.sinks import NormalizedEventSink, StreamSink
+from audiagentic.interoperability.protocols.streaming.sinks import NormalizedEventSink, StreamSink
 
 
-class ClineEventExtractor:
-    """Extract Cline NDJSON events from stream output.
+class QwenEventExtractor:
+    """Extract Qwen events from stream output.
 
-    This sink parses Cline native NDJSON task-progress events and translates them into
-    canonical provider-stream-event records before forwarding to NormalizedEventSink.
+    This sink parses Qwen plain-text output and translates it into canonical
+    provider-stream-event records before forwarding to NormalizedEventSink.
     """
-
-    # Cline event type to canonical event kind mapping
-    EVENT_KIND_MAP = {
-        "task_started": "task-start",
-        "task_progress": "task-progress",
-        "task_complete": "task-complete",
-        "completion_result": "completion",
-        "tool_call": "tool-call",
-        "tool_result": "tool-result",
-        "error": "error",
-    }
 
     def __init__(
         self,
         event_sink: NormalizedEventSink,
         job_id: str | None = None,
-        provider_id: str = "cline",
+        provider_id: str = "qwen",
     ) -> None:
         self.event_sink = event_sink
         self.job_id = job_id
         self.provider_id = provider_id
 
     def write(self, line: str) -> None:
-        """Process a line and extract Cline NDJSON events."""
+        """Process a line and extract Qwen events."""
         text = line.rstrip("\r\n")
         if not text:
             return
 
-        # Try to parse as NDJSON
+        # Try to parse as JSON for structured events
         try:
             message = json.loads(text)
+            if isinstance(message, dict):
+                # For future JSON-format support, map event types here
+                # For now, all JSON events and text are task-progress
+                self._emit_event("task-progress", text, message)
+            else:
+                self._emit_event("task-progress", text)
         except json.JSONDecodeError:
-            # Pass through non-JSON lines as task-progress
+            # Plain text line
             self._emit_event("task-progress", text)
-            return
-
-        if not isinstance(message, dict):
-            self._emit_event("task-progress", text)
-            return
-
-        # Extract event type and map to canonical kind
-        event_type = message.get("type") or message.get("say")
-        event_kind = self.EVENT_KIND_MAP.get(event_type, "task-progress")
-
-        # Extract message content
-        message_text = message.get("text") or message.get("message") or str(message)
-
-        self._emit_event(event_kind, message_text, message)
 
     def _emit_event(
         self,
@@ -86,7 +67,7 @@ class ClineEventExtractor:
         raw_payload: dict[str, Any] | None = None,
     ) -> None:
         """Emit a canonical event through the underlying sink."""
-        details: dict[str, Any] = {"extractor": "cline-ndjson"}
+        details: dict[str, Any] = {"extractor": "qwen-plaintext"}
         if raw_payload:
             details["raw"] = raw_payload
 
@@ -113,15 +94,15 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def build_cline_stream_sinks(
+def build_qwen_stream_sinks(
     *,
     packet_ctx: dict[str, Any],
     stream_controls: dict[str, Any] | None = None,
 ) -> tuple[list[StreamSink], list[StreamSink]]:
-    """Build Cline-specific stream sinks with NDJSON event extraction.
+    """Build Qwen-specific stream sinks with event extraction.
 
-    This adds ClineEventExtractor on top of the standard sinks to parse
-    Cline NDJSON events into canonical events.
+    This adds QwenEventExtractor on top of the standard sinks to parse
+    Qwen output into canonical events.
     """
     # Build base sinks
     stdout_sinks, stderr_sinks = build_provider_stream_sinks(
@@ -129,15 +110,15 @@ def build_cline_stream_sinks(
         stream_controls=stream_controls,
     )
 
-    # Find the NormalizedEventSink for stdout and wrap it with ClineEventExtractor
+    # Find the NormalizedEventSink for stdout and wrap it with QwenEventExtractor
     job_id = packet_ctx.get("job-id")
     for i, sink in enumerate(stdout_sinks):
         if isinstance(sink, NormalizedEventSink):
-            # Replace with ClineEventExtractor that wraps the original sink
-            stdout_sinks[i] = ClineEventExtractor(
+            # Replace with QwenEventExtractor that wraps the original sink
+            stdout_sinks[i] = QwenEventExtractor(
                 event_sink=sink,
                 job_id=job_id,
-                provider_id="cline",
+                provider_id="qwen",
             )
             break
 
@@ -147,10 +128,10 @@ def build_cline_stream_sinks(
 def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> str:
     prompt_body = packet_ctx.get("prompt-body")
     prompt = (
-        "AUDiaGentic Cline provider execution request. "
+        "AUDiaGentic Qwen provider execution request. "
         f"job={packet_ctx.get('job-id')} "
         f"packet={packet_ctx.get('packet-id')} "
-        f"provider={packet_ctx.get('provider-id', 'cline')} "
+        f"provider={packet_ctx.get('provider-id', 'qwen')} "
         f"model={provider_cfg.get('default-model')} "
         f"workflow={packet_ctx.get('workflow-profile')}. "
         "Return a concise execution summary or the blocking reason if execution is impossible."
@@ -160,99 +141,64 @@ def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> s
     return prompt.strip()
 
 
-def _cline_executable() -> str:
-    executable = shutil.which("cline")
+def _qwen_executable() -> str:
+    executable = shutil.which("qwen")
     if executable is None:
         raise AudiaGenticError(
-            code="PRV-EXTERNAL-009",
+            code="PRV-EXTERNAL-007",
             kind="external",
-            message="cline command is not available on PATH",
-            details={"provider-id": "cline"},
+            message="qwen command is not available on PATH",
+            details={"provider-id": "qwen"},
         )
     return executable
 
 
-def _parse_cline_completion(
+def _parse_qwen_completion(
     stdout: str, stderr: str, returncode: int
 ) -> tuple[dict[str, Any] | None, ResultSource]:
-    """Parse Cline completion from NDJSON stdout.
+    """Parse Qwen completion from stdout.
 
     Returns:
         tuple[dict[str, Any] | None, ResultSource]: (parsed_data, source)
     """
-    completion_data: dict[str, Any] = {}
-    task_id: str | None = None
-    has_structured_data = False
-
-    for line in stdout.splitlines():
-        payload = line.strip()
-        if not payload:
-            continue
-        try:
-            message = json.loads(payload)
-        except json.JSONDecodeError:
-            continue
-
-        if not isinstance(message, dict):
-            continue
-
-        # Extract task_id
-        if task_id is None and message.get("type") == "task_started":
-            task_id = (
-                str(message.get("taskId"))
-                if message.get("taskId") is not None
-                else None
-            )
-
-        # Extract completion_result
-        if (
-            message.get("type") == "completion_result"
-            or message.get("say") == "completion_result"
-        ):
-            completion_data["kind"] = "adhoc"
-            completion_data["completion_text"] = str(message.get("text") or "").strip()
-            completion_data["task_id"] = task_id
-            has_structured_data = True
-
-    if has_structured_data:
-        return completion_data, ResultSource.STDOUT_JSON
+    # Try to parse full stdout as JSON
+    try:
+        data = json.loads(stdout)
+        if isinstance(data, dict):
+            return data, ResultSource.STDOUT_JSON
+    except (json.JSONDecodeError, ValueError):
+        pass
 
     extracted = try_extract_json_from_stdout(stdout)
     if extracted:
-        if "kind" not in extracted:
-            extracted["kind"] = "adhoc"
         return extracted, ResultSource.STDOUT_JSON_BLOCK
 
     return None, ResultSource.STDOUT_TEXT
 
 
 def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, Any]:
-    executable = _cline_executable()
+    executable = _qwen_executable()
     prompt = _build_prompt(packet_ctx, provider_cfg)
     default_model = provider_cfg.get("default-model")
-    timeout_seconds = provider_cfg.get("timeout-seconds", 60)
     working_root = packet_ctx.get("working-root")
     cwd = Path(working_root) if working_root else None
 
     execution_policy = provider_cfg.get("execution-policy", {})
-    output_format = execution_policy.get("output-format", "json")
-    auto_approve = bool(execution_policy.get("auto-approve", True))
+    approval_mode = execution_policy.get("permission-mode", "auto")
 
+    # Qwen CLI uses positional arguments for prompt
     command = [executable]
-    if output_format == "json":
-        command.append("--json")
-    if auto_approve:
-        command.append("--auto-approve-all")
-    if timeout_seconds:
-        command.extend(["--timeout", str(timeout_seconds)])
-    if cwd is not None:
-        command.extend(["--cwd", str(cwd)])
+    if approval_mode == "yolo":
+        command.append("--yolo")
+    elif approval_mode == "auto-edit":
+        command.extend(["--approval-mode", "auto-edit"])
     if default_model:
-        command.extend(["--model", str(default_model)])
+        command.extend(["-m", str(default_model)])
+    # Add prompt as positional argument
     command.append(prompt)
 
     stream_controls = packet_ctx.get("stream-controls", {})
-    stdout_sinks, stderr_sinks = build_cline_stream_sinks(
+    stdout_sinks, stderr_sinks = build_qwen_stream_sinks(
         packet_ctx=packet_ctx,
         stream_controls=stream_controls,
     )
@@ -266,24 +212,13 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
     stdout_text = completed.stdout.strip()
     stderr_text = completed.stderr.strip()
 
-    # Parse structured completion
-    parsed_data, result_source = _parse_cline_completion(
-        stdout_text, stderr_text, completed.returncode
-    )
-
-    output_text = stdout_text
-    task_id = None
-    if parsed_data:
-        output_text = parsed_data.get("completion_text", output_text)
-        task_id = parsed_data.get("task_id")
-
     if completed.returncode != 0:
         raise AudiaGenticError(
-            code="PRV-EXTERNAL-010",
+            code="PRV-EXTERNAL-008",
             kind="external",
-            message="cline execution failed",
+            message="qwen execution failed",
             details={
-                "provider-id": "cline",
+                "provider-id": "qwen",
                 "returncode": completed.returncode,
                 "stdout": stdout_text,
                 "stderr": stderr_text,
@@ -291,10 +226,15 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
             },
         )
 
+    # Parse structured completion
+    parsed_data, result_source = _parse_qwen_completion(
+        stdout_text, stderr_text, completed.returncode
+    )
+
     # Build canonical completion
     if parsed_data and result_source != ResultSource.STDOUT_TEXT:
         completion = normalize_provider_result(
-            provider_id="cline",
+            provider_id="qwen",
             job_id=packet_ctx.get("job-id"),
             prompt_id=packet_ctx.get("prompt-id"),
             surface=packet_ctx.get("surface"),
@@ -308,7 +248,7 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
         )
     else:
         completion = build_synthetic_fallback(
-            provider_id="cline",
+            provider_id="qwen",
             job_id=packet_ctx.get("job-id"),
             stdout=stdout_text,
             stderr=stderr_text,
@@ -324,12 +264,11 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
             pass
 
     return {
-        "provider-id": packet_ctx.get("provider-id", "cline"),
+        "provider-id": packet_ctx.get("provider-id", "qwen"),
         "status": "ok",
         "execution-mode": provider_cfg.get("access-mode", "cli"),
         "model": default_model,
-        "task-id": task_id,
-        "output": output_text or stdout_text,
+        "output": stdout_text,
         "stdout": stdout_text,
         "stderr": stderr_text,
         "returncode": completed.returncode,
