@@ -5,11 +5,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.runtime.release.audit import generate_audit_and_checkin
-from audiagentic.runtime.release.current_summary import regenerate_current_release
-from audiagentic.runtime.release.fragments import record_change_event
-from audiagentic.runtime.release.sync import sync_current_release_ledger
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.release.audit import generate_audit_and_checkin
+from audiagentic.release.current_summary import regenerate_current_release
+from audiagentic.release.fragments import record_change_event
+from audiagentic.release.sync import sync_current_release_ledger
 
 
 def _now_timestamp() -> str:

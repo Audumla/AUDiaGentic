@@ -1,16 +1,13 @@
 """Job record contract helpers."""
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from jsonschema import Draft202012Validator
-
-from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.contracts.schema_registry import read_schema
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.runtime.state.jobs_store import validate_job_record
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
@@ -40,13 +37,6 @@ class JobRecord:
 
 def _now_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def validate_job_record(payload: dict[str, Any]) -> list[str]:
-    schema = read_schema("job-record")
-    validator = Draft202012Validator(schema)
-    errors = [error.message for error in validator.iter_errors(payload)]
-    return sorted(errors)
 
 
 def build_job_record(

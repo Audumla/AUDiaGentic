@@ -7,15 +7,17 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-SRC = ROOT / "src"
-for path in (str(ROOT), str(SRC)):
+# Bootstrap: make tools.lib importable, then use robust multi-fallback root discovery.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from tools.lib.repo_paths import REPO_ROOT, SRC_ROOT
+
+for path in (str(REPO_ROOT), str(SRC_ROOT)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
 from audiagentic.execution.jobs.prompt_syntax import load_prompt_syntax
-from audiagentic.execution.providers.surfaces.base import SkillDefinition
-from audiagentic.execution.providers.surfaces.registry import load_renderer_registry
+from audiagentic.interoperability.providers.surfaces.base import SkillDefinition
+from audiagentic.interoperability.providers.surfaces.registry import load_renderer_registry
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:

@@ -12,7 +12,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.contracts.schema_registry import read_schema
+from audiagentic.foundation.contracts.schema_registry import read_schema
 import tools.misc.seed_example_project as seed_example_project
 
 

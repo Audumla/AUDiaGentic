@@ -121,19 +121,22 @@ class RequestMgr(BaseMgr):
             else []
         )
 
-        # Merge profile and guidance defaults (guidance takes precedence for these fields)
+        # Merge profile and guidance defaults.
+        # Profile-specific defaults take precedence over guidance defaults: a workflow
+        # profile (e.g. "feature") provides more precise context than a cross-cutting
+        # guidance level (e.g. "standard"). Explicit args always win.
         current_understanding = (
             current_understanding
-            or guidance_understanding
             or default_understanding
+            or guidance_understanding
             or self._default_understanding(summary, profile)
         )
         open_questions = (
             open_questions
             if open_questions is not None
             else (
-                guidance_open_questions
-                or default_open_questions
+                default_open_questions
+                or guidance_open_questions
                 or self._default_open_questions(profile)
             )
         )

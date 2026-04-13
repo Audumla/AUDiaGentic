@@ -8,11 +8,11 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.contracts.schema_registry import read_schema
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.schema_registry import read_schema
 from audiagentic.execution.jobs.prompt_syntax import load_canonical_tags, load_no_body_required_tags, load_review_tag, load_prompt_syntax
 from audiagentic.execution.jobs.prompt_templates import load_prompt_template
-from audiagentic.config.provider_config import load_provider_config
+from audiagentic.foundation.config.provider_config import load_provider_config
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 

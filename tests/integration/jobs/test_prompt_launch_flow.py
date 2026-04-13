@@ -13,7 +13,7 @@ for path in (str(ROOT), str(SRC)):
 from audiagentic.execution.jobs.prompt_launch import launch_prompt_request
 from audiagentic.execution.jobs import prompt_launch
 from audiagentic.execution.jobs.prompt_parser import parse_prompt_launch_request
-from audiagentic.execution.jobs.store import job_record_path
+from audiagentic.runtime.state.jobs_store import job_record_path
 from tests.helpers import sandbox as sandbox_helper
 
 

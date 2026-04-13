@@ -1,2 +1,1 @@
-"""Phase 0.3 target scaffold for audiagentic.execution.jobs."""
-
+"""Job orchestration logic: state machines, control, prompt launch, and packet execution."""

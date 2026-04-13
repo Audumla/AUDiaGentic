@@ -10,8 +10,8 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.runtime.release.finalize import finalize_release
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.release.finalize import finalize_release
 from tests.helpers import sandbox as sandbox_helper
 
 FIXTURES = ROOT / "docs" / "examples" / "fixtures"
