@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": ["*"]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python tools/misc/claude_hooks.py"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python tools/misc/claude_hooks.py"
+          }
+        ]
+      }
+    ]
+  }
+}

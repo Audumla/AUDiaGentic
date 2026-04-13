@@ -9,7 +9,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.execution.providers.status import build_provider_status
+from audiagentic.interoperability.providers.status import build_provider_status
 
 
 def test_provider_status_reports_cli_and_catalog(tmp_path: Path) -> None:

@@ -9,8 +9,8 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.execution.providers.adapters import opencode
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.interoperability.providers.adapters import opencode
 
 
 def test_opencode_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:

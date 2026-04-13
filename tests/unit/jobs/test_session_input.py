@@ -9,7 +9,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.execution.jobs.session_input import build_session_input_record
+from audiagentic.runtime.state.session_input_store import build_session_input_record
 
 
 def test_build_session_input_record_includes_core_fields() -> None:
