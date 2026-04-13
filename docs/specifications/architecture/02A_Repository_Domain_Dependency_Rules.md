@@ -1,36 +1,80 @@
-# Repository-Domain Dependency Rules for Phase 0.3
+# Repository-Domain Dependency Rules (v3)
+
+> **Updated for v3 structural refactor.** This document replaces the pre-refactor
+> `Phase 0.3` addendum. Domain names now reflect the live `src/audiagentic/` tree.
 
 ## Purpose
 
-This addendum defines the **canonical package-level repository-domain dependency rules** for the Phase 0.3 repository refactor.
+Defines the canonical package-level repository-domain dependency rules for the v3 structure.
+This is the single source of truth for which domain may import from which.
 
-It exists so `PKT-FND-011` and `PKT-FND-012` have one stable source for package-move guardrails even while `02_Core_Boundaries_and_Dependency_Rules.md` still carries the older subsystem-oriented model.
+## Domain inventory
+
+### Implemented domains
+
+Under `src/audiagentic/`:
+
+| Domain | Description |
+| -------- | ----------- |
+| `foundation` | Shared contracts, config, and schema registry (base layer) |
+| `planning` | Planning workflows, item types, state machine, and file system layer |
+| `execution` | Job orchestration, prompt bridges, state machine, and reviews |
+| `interoperability` | Provider adapters, streaming protocol, and protocol scaffolding |
+| `runtime` | Lifecycle management and durable state persistence |
+| `release` | Release governance, audit, and finalization |
+| `channels/cli` | CLI operator surface |
+
+### Scaffold-only domains (reserved, no executable code)
+
+| Domain | Status |
+| -------- | ------ |
+| `knowledge` | Optional capability domain — reserved to prevent other modules absorbing this ownership |
+| `channels/vscode` | VS Code editor integration — deferred until CLI is stable |
+| `interoperability/mcp` | MCP protocol server — scaffolding only |
+| `interoperability/protocols/acp` | ACP inter-agent protocol — scaffolding only |
 
 ## Allowed repository-domain dependencies
 
-- `contracts` may be imported by every domain
-- `core` may be imported by every domain
-- `config` may be imported by `execution`, `runtime`, `channels`, `streaming`, and `observability`
-- `scoping` may depend on `contracts`, `core`, and `config`
-- `execution` may depend on `contracts`, `core`, `config`, and selected `runtime` ports
-- `runtime` may depend on `contracts`, `core`, and `config`
-- `channels` may depend on `contracts`, `core`, `config`, and selected presentation-facing runtime records
-- `streaming` may depend on `execution`, `runtime`, `channels`, `contracts`, and `core`
-- `observability` may depend on `runtime`, `contracts`, `core`, and `config`
+This table is the canonical source of truth. It is enforced by `tools/checks/check_cross_domain_imports.py`.
 
-## Forbidden repository-domain dependencies
+| Domain | May import from |
+| -------- | --------------- |
+| `foundation` | *(none — base layer)* |
+| `planning` | `foundation` |
+| `execution` | `foundation`, `runtime`, `interoperability`, `release` (see seam note) |
+| `interoperability` | `foundation`, `execution` (see seam note) |
+| `runtime` | `foundation` |
+| `release` | `foundation`, `runtime` |
+| `channels` | `foundation`, `runtime`, `execution`, `release` |
+| `knowledge` | `foundation` |
 
-- `scoping -> channels`
-- `scoping -> observability`
-- `execution ->` channel formatting or rendering internals
-- `observability ->` live interaction control
-- `channels ->` execution internals
-- `runtime -> channels`
+## Forbidden dependencies
 
-## Extension-root note
+- `foundation → any domain`
+- `runtime → execution`, `runtime → release`, `runtime → channels`
+- `release → channels`, `release → execution`
+- `channels → execution internals beyond approved entrypoints`
 
-`nodes`, `discovery`, `federation`, and `connectors` remain reserved extension roots under `src/audiagentic/` during this tranche. They are not folded into the baseline repository-domain taxonomy for Phase 0.3 code motion, even if they later align conceptually with `runtime`, `channels`, `streaming`, or `observability`.
+## Approved cross-layer seams
 
-## Enforcement note
+Two one-way cross-layer seams are intentionally allowed and must not be expanded without a boundary review.
 
-During Phase 0.3, `tools/check_cross_domain_imports.py` should enforce these rules for any moved or newly introduced package edges.
+**Seam 1: interoperability → execution**
+`interoperability/providers/adapters/gemini.py` imports from `execution.jobs.prompt_launch`
+and `execution.jobs.prompt_parser`. The gemini adapter needs to launch sub-jobs. Approved.
+
+**Seam 2: execution → release**
+`execution/jobs/release_bridge.py` imports from `release.*`. The release bridge is an
+orchestration connector — execution triggers the release domain on job completion. Approved.
+No other execution code may import from release without a boundary review.
+
+## Enforcement
+
+Run after any code motion:
+
+```bash
+python tools/checks/check_cross_domain_imports.py
+```
+
+This tool enforces the allowed/forbidden rules above by scanning all Python source under
+`src/audiagentic/` and reporting violations.

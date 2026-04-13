@@ -11,8 +11,8 @@ from typing import Any
 
 import yaml
 
-from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.execution.jobs import store
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.runtime.state import jobs_store as store
 from audiagentic.execution.jobs.records import build_job_record
 from audiagentic.execution.jobs.reviews import (
     build_review_bundle,
@@ -22,9 +22,9 @@ from audiagentic.execution.jobs.reviews import (
     reviewer_key_from_source,
     subject_from_target,
 )
-from audiagentic.config.provider_config import load_provider_config
-from audiagentic.execution.providers.execution import execute_provider
-from audiagentic.execution.providers.models import resolve_model_selection
+from audiagentic.foundation.config.provider_config import load_provider_config
+from audiagentic.interoperability.providers.execution import execute_provider
+from audiagentic.interoperability.providers.models import resolve_model_selection
 from audiagentic.execution.jobs.prompt_syntax import load_prompt_syntax, load_review_tag
 from audiagentic.execution.jobs.prompt_templates import load_prompt_context, load_prompt_template, render_prompt_template
 from audiagentic.execution.jobs.state_machine import TERMINAL_STATES

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from audiagentic.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 @dataclass(frozen=True)

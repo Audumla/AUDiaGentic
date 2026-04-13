@@ -15,7 +15,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.streaming.sinks import (
+from audiagentic.interoperability.protocols.streaming.sinks import (
     ConsoleSink,
     InMemorySink,
     NormalizedEventSink,
@@ -220,7 +220,7 @@ class TestSafeSinkCall:
 
     def test_successful_call(self) -> None:
         """Successful calls should complete without issues."""
-        from audiagentic.streaming.provider_streaming import _safe_sink_call
+        from audiagentic.interoperability.protocols.streaming.provider_streaming import _safe_sink_call
 
         sink = InMemorySink()
         _safe_sink_call(sink, "write", "test")
@@ -228,7 +228,7 @@ class TestSafeSinkCall:
 
     def test_failed_call_does_not_propagate(self) -> None:
         """Failed calls should not propagate exceptions."""
-        from audiagentic.streaming.provider_streaming import _safe_sink_call
+        from audiagentic.interoperability.protocols.streaming.provider_streaming import _safe_sink_call
 
         class FailingSink:
             def write(self, _):
@@ -245,7 +245,7 @@ class TestSafeSinkCall:
 
     def test_failed_call_logs_debug(self, caplog) -> None:
         """Failed calls should log at debug level."""
-        from audiagentic.streaming.provider_streaming import _safe_sink_call
+        from audiagentic.interoperability.protocols.streaming.provider_streaming import _safe_sink_call
 
         class FailingSink:
             def write(self, _):
@@ -269,7 +269,7 @@ class TestBuildProviderStreamSinks:
 
     def test_no_runtime_root_without_job_id(self, tmp_path: Path) -> None:
         """No runtime sinks should be created without job-id."""
-        from audiagentic.streaming.provider_streaming import (
+        from audiagentic.interoperability.protocols.streaming.provider_streaming import (
             build_provider_stream_sinks,
         )
 
@@ -290,7 +290,7 @@ class TestBuildProviderStreamSinks:
 
     def test_no_runtime_root_without_working_root(self, tmp_path: Path) -> None:
         """No runtime sinks should be created without working-root."""
-        from audiagentic.streaming.provider_streaming import (
+        from audiagentic.interoperability.protocols.streaming.provider_streaming import (
             build_provider_stream_sinks,
         )
 
@@ -308,7 +308,7 @@ class TestBuildProviderStreamSinks:
 
     def test_runtime_sinks_created_with_both(self, tmp_path: Path) -> None:
         """Runtime sinks should be created when both are provided."""
-        from audiagentic.streaming.provider_streaming import (
+        from audiagentic.interoperability.protocols.streaming.provider_streaming import (
             build_provider_stream_sinks,
         )
 
@@ -331,7 +331,7 @@ class TestBuildProviderStreamSinks:
 
     def test_normalized_event_sink_has_job_id(self, tmp_path: Path) -> None:
         """NormalizedEventSink should always have a job_id."""
-        from audiagentic.streaming.provider_streaming import (
+        from audiagentic.interoperability.protocols.streaming.provider_streaming import (
             build_provider_stream_sinks,
         )
 
@@ -353,7 +353,7 @@ class TestStreamControlsValidation:
 
     def test_empty_stream_controls(self, tmp_path: Path) -> None:
         """Empty stream controls should work."""
-        from audiagentic.streaming.provider_streaming import (
+        from audiagentic.interoperability.protocols.streaming.provider_streaming import (
             build_provider_stream_sinks,
         )
 
@@ -369,7 +369,7 @@ class TestStreamControlsValidation:
 
     def test_none_stream_controls(self, tmp_path: Path) -> None:
         """None stream controls should work."""
-        from audiagentic.streaming.provider_streaming import (
+        from audiagentic.interoperability.protocols.streaming.provider_streaming import (
             build_provider_stream_sinks,
         )
 
@@ -385,7 +385,7 @@ class TestStreamControlsValidation:
 
     def test_tee_console_enabled(self, tmp_path: Path) -> None:
         """tee-console should add ConsoleSink (already enabled by default)."""
-        from audiagentic.streaming.provider_streaming import (
+        from audiagentic.interoperability.protocols.streaming.provider_streaming import (
             build_provider_stream_sinks,
         )
 
@@ -402,7 +402,7 @@ class TestStreamControlsValidation:
 
     def test_tee_console_disabled(self, tmp_path: Path) -> None:
         """tee-console=False should not add ConsoleSink."""
-        from audiagentic.streaming.provider_streaming import (
+        from audiagentic.interoperability.protocols.streaming.provider_streaming import (
             build_provider_stream_sinks,
         )
 
@@ -419,7 +419,7 @@ class TestStreamControlsValidation:
 
     def test_enabled_implies_tee_console(self, tmp_path: Path) -> None:
         """enabled=True should imply tee-console (already enabled by default)."""
-        from audiagentic.streaming.provider_streaming import (
+        from audiagentic.interoperability.protocols.streaming.provider_streaming import (
             build_provider_stream_sinks,
         )
 
