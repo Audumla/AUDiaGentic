@@ -1,2 +1,1 @@
-"""Phase 0.3 target scaffold for audiagentic.runtime.state."""
-
+"""Durable state persistence: job records, session input, and review bundles."""

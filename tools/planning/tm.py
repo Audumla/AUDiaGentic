@@ -13,6 +13,10 @@ import os
 import sys
 from pathlib import Path
 
+# Bootstrap: make tools.lib importable, then use robust multi-fallback root discovery.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from tools.lib.repo_paths import REPO_ROOT, SRC_ROOT
+
 
 def _find_project_root() -> Path:
     """Walk up from cwd to find the nearest directory containing .audiagentic/planning/."""
