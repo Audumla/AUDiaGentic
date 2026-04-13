@@ -252,13 +252,6 @@ def new_request(
             f"Invalid guidance level '{guidance}'. Must be one of: {list(levels.keys())}"
         )
 
-    # Apply guidance defaults
-    guidance_config = levels[guidance]
-    if current_understanding is None:
-        current_understanding = guidance_config["defaults"]["current_understanding"]
-    if open_questions is None:
-        open_questions = guidance_config["defaults"]["open_questions"]
-
     if check_duplicates:
         existing = [i for i in api._scan() if i.kind == "request"]
         label_lower = label.lower().strip()
