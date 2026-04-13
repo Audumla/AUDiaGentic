@@ -11,6 +11,8 @@ from typing import Any
 
 # Canonical tags recognized by the shared bridge
 CANONICAL_TAGS = {'plan', 'implement', 'review', 'audit', 'check-in-prep'}
+HOOK_USER_PROMPT_SUBMIT = 'user-prompt-submit'
+HOOK_PRE_TOOL_USE = 'pre-tool-use'
 
 
 def detect_and_launch_prompt_tag(
@@ -81,7 +83,7 @@ def _invoke_shared_bridge(
         # Build bridge invocation
         bridge_cmd = [
             sys.executable,
-            str(Path(__file__).parent / 'claude_prompt_trigger_bridge.py'),
+            str(Path(__file__).resolve().parents[1] / 'bridges' / 'claude_prompt_trigger_bridge.py'),
             '--project-root', str(workspace_root),
             '--surface', surface,
             '--provider-id', provider_id,
@@ -265,6 +267,33 @@ def _load_hook_payload() -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _resolve_hook_name(explicit_hook: str | None, payload: dict[str, Any]) -> str:
+    """Resolve the hook name from argv or the Claude payload."""
+    if explicit_hook:
+        return explicit_hook
+
+    payload_hook = (
+        payload.get('hook')
+        or payload.get('hook_name')
+        or payload.get('hookName')
+    )
+    if isinstance(payload_hook, str):
+        lowered = payload_hook.strip().lower()
+        if lowered in {'userpromptsubmit', 'user-prompt-submit'}:
+            return HOOK_USER_PROMPT_SUBMIT
+        if lowered in {'pretooluse', 'pre-tool-use'}:
+            return HOOK_PRE_TOOL_USE
+
+    if any(payload.get(key) for key in ('prompt', 'rawPrompt', 'raw_prompt')):
+        return HOOK_USER_PROMPT_SUBMIT
+
+    if any(payload.get(key) for key in ('tool_name', 'toolName', 'tool', 'action_tag', 'actionTag', 'stage')):
+        return HOOK_PRE_TOOL_USE
+
+    # Default to prompt-submit so a missing argv hook does not fail the hook chain.
+    return HOOK_USER_PROMPT_SUBMIT
+
+
 def _session_metadata_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "workspace_root": payload.get("workspaceRoot")
@@ -311,11 +340,42 @@ def _handle_pre_tool_use_cli() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Claude hook command adapter.")
-    parser.add_argument("hook", choices=["user-prompt-submit", "pre-tool-use"])
+    parser.add_argument("hook", nargs="?", choices=[HOOK_USER_PROMPT_SUBMIT, HOOK_PRE_TOOL_USE])
     args = parser.parse_args(argv)
-    if args.hook == "user-prompt-submit":
-        return _handle_user_prompt_submit_cli()
-    return _handle_pre_tool_use_cli()
+
+    payload = _load_hook_payload()
+    hook_name = _resolve_hook_name(args.hook, payload)
+
+    if hook_name == HOOK_USER_PROMPT_SUBMIT:
+        result = UserPromptSubmit_handler(
+            (
+                payload.get("prompt")
+                or payload.get("rawPrompt")
+                or payload.get("raw_prompt")
+                or ""
+            ),
+            _session_metadata_from_payload(payload),
+        )
+        if result:
+            print(json.dumps(result))
+        return 0
+    result = PreToolUse_handler(
+        str(
+            payload.get("action_tag")
+            or payload.get("actionTag")
+            or payload.get("stage")
+            or ""
+        ),
+        [str(payload.get("tool_name") or payload.get("toolName") or payload.get("tool") or "")] if (
+            payload.get("tool_name")
+            or payload.get("toolName")
+            or payload.get("tool")
+        ) else [],
+        _session_metadata_from_payload(payload),
+    )
+    if result:
+        print(json.dumps(result))
+    return 0
 
 
 if __name__ == "__main__":
