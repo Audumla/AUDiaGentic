@@ -10,6 +10,7 @@ from tools.misc.claude_hooks import (
     detect_and_launch_prompt_tag,
     enforce_stage_restrictions,
     _parse_first_line_params,
+    _resolve_hook_name,
 )
 
 
@@ -98,6 +99,19 @@ class TestEnforceStageRestrictions:
         allowed = result['allowed_tools']
         # All requested tools should be allowed in implement mode
         assert set(allowed) == set(tools_requested)
+
+
+class TestHookResolution:
+    """Test hook name resolution when Claude omits the argv hook argument."""
+
+    def test_resolves_user_prompt_submit_from_prompt_payload(self):
+        assert _resolve_hook_name(None, {"prompt": "@plan\nContinue"}) == "user-prompt-submit"
+
+    def test_resolves_pre_tool_use_from_tool_payload(self):
+        assert _resolve_hook_name(None, {"tool_name": "Read"}) == "pre-tool-use"
+
+    def test_prefers_explicit_hook_argument(self):
+        assert _resolve_hook_name("pre-tool-use", {"prompt": "@plan"}) == "pre-tool-use"
 
 
 if __name__ == '__main__':
