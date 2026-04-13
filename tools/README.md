@@ -6,56 +6,76 @@ Organized utility scripts and tools for AUDiaGentic.
 
 ```
 tools/
+├── lib/              # Shared helpers imported by other tool scripts
 ├── bridges/          # Prompt trigger bridges for various providers
-├── checks/           # Validation and analysis tools
+├── checks/           # Structural integrity and cross-domain analysis
 ├── mcp/              # MCP (Model Context Protocol) servers
 │   └── audiagentic-planning/  # AUDiaGentic planning MCP server
-├── misc/             # Miscellaneous utilities
-├── planning/         # Planning component tools (tm CLI, helpers)
-└── validation/       # Schema and data validation tools
+├── misc/             # Miscellaneous development utilities
+├── planning/         # Planning component CLI (tm) and helpers
+└── validation/       # Schema and data validation scripts
 ```
 
 ## Subdirectories
 
+### `lib/`
+
+Shared Python helpers imported by other tool scripts. Not standalone tools.
+
+- `repo_paths.py` — Multi-fallback repository root discovery. Provides `REPO_ROOT`, `SRC_ROOT`, `TOOLS_ROOT`, `DOCS_ROOT`. All tool scripts should bootstrap with this rather than using `parents[N]` depth counting. Fallback chain: `AUDIAGENTIC_REPO_ROOT` env var → `.git` directory walk → `pyproject.toml` walk → structural sentinel (`src/audiagentic` + `tools`).
+
 ### `bridges/`
-Prompt trigger bridge implementations for different AI providers:
-- `prompt_trigger_bridge.py` - Base bridge implementation
-- `*_prompt_trigger_bridge.py` - Provider-specific bridges (claude, codex, gemini, etc.)
+
+Prompt trigger bridge scripts — one per supported AI provider. Each bridge receives a raw prompt from stdin (or file), normalizes it, and forwards it to the appropriate provider using the shared launch grammar.
+
+- `prompt_trigger_bridge.py` — Base bridge (dispatches to provider-specific bridges)
+- `claude_prompt_trigger_bridge.py`, `codex_prompt_trigger_bridge.py`, etc. — Provider-specific wrappers
+
+All bridges import from `execution.jobs.prompt_trigger_bridge` (not moved in v3).
 
 ### `checks/`
-Analysis and validation utilities:
-- `check_baseline_assets.py` - Verify baseline assets
-- `check_cross_domain_imports.py` - Detect cross-domain import issues
-- `find_legacy_paths.py` - Find legacy file paths
+
+Read-only structural integrity and analysis scripts. Safe to run at any time — no writes.
+
+- `check_baseline_assets.py` — Verify that required baseline assets exist in `.audiagentic/`
+- `check_cross_domain_imports.py` — Detect imports that cross domain boundaries per v3 dependency rules; reports violations
+- `find_legacy_paths.py` — Search for import paths that refer to pre-v3 module locations (moved roots such as the old contracts, config, streaming, and execution/providers paths)
 
 ### `mcp/`
-MCP servers for AI agent integration:
-- `audiagentic-planning/` - AUDiaGentic planning MCP server
-  - `audiagentic-planning_mcp.py` - Main MCP server
-  - `MCP_README.md` - MCP setup documentation
+
+MCP (Model Context Protocol) server implementations for AI agent integration.
+
+- `audiagentic-planning/audiagentic-planning_mcp.py` — MCP server exposing planning operations (`tm_*` tools) to Claude and other MCP-capable agents
+- `audiagentic-planning/MCP_README.md` — Provider configuration and setup instructions
 
 ### `misc/`
-Miscellaneous utilities:
-- `claude_hooks.py` - Claude-specific hooks
-- `create_sandbox.py` - Sandbox environment creation
-- `inventory_imports.py` - Import inventory analysis
-- `lifecycle_stub.py` - Lifecycle management stub
-- `provider_status.py` - Provider status reporting
-- `refactor_smoke.py` - Refactoring smoke tests
-- `refresh_model_catalog.py` - Model catalog refresh
-- `regenerate_tag_surfaces.py` - Tag surface regeneration
-- `seed_example_project.py` - Example project seeding
+
+Development utilities that do not fit a narrower bucket.
+
+- `claude_hooks.py` — Executed by Claude Code hooks (`UserPromptSubmit`, `PreToolUse`); routes canonical tags through the bridge
+- `create_sandbox.py` — Spin up an isolated sandbox project for manual testing
+- `inventory_imports.py` — Audit all imports across `src/` and report domain breakdown
+- `lifecycle_stub.py` — Stub lifecycle operations for development without a live project
+- `provider_status.py` — Report live provider connectivity and model availability
+- `refactor_smoke.py` — Quick smoke test of all v3 import paths; run after structural changes
+- `refresh_model_catalog.py` — Pull latest model metadata from provider APIs and update `foundation/config/`
+- `regenerate_tag_surfaces.py` — Rebuild the provider tag surface files under `interoperability/providers/surfaces/`
+- `seed_example_project.py` — Initialize an example `.audiagentic/` project structure
 
 ### `planning/`
-Planning component tools:
-- `tm.py` - Task manager CLI
-- `tm_helper.py` - Python helper for programmatic access
+
+Command-line interface for the planning subsystem. Used by humans and CI.
+
+- `tm.py` — Full-featured task manager CLI; wraps `planning.app.api.PlanningAPI`
+- `tm_helper.py` — Thin Python API wrapper for programmatic use from other scripts or notebooks
 
 ### `validation/`
-Schema and data validation:
-- `validate_ids.py` - ID validation
-- `validate_packet_dependencies.py` - Packet dependency validation
-- `validate_schemas.py` - JSON schema validation
+
+Data and schema validation scripts. Run in CI or before merging.
+
+- `validate_ids.py` — Check all planning item IDs for format correctness and uniqueness
+- `validate_packet_dependencies.py` — Verify that declared inter-item dependencies resolve to real items
+- `validate_schemas.py` — Load and validate all JSON schemas in `foundation/contracts/schemas/`
 
 ## Usage
 

@@ -29,7 +29,7 @@ class TestCheckSensitiveDataPatternDetection:
 
     def test_api_key_pattern_detected(self):
         """API key pattern should be detected."""
-        body = 'apikey: sk_live_abcdefghij1234567890abcdefghij'
+        body = 'apikey: ' + 'sk_live_' + 'abcdefghij1234567890abcdefghij'
 
         import re
         pattern = r'(?:api[_-]?key|apikey)[\s]*[=:]\s*["\']?[a-zA-Z0-9_\-]{20,}["\']?'

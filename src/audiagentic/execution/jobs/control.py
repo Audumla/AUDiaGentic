@@ -8,8 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.execution.jobs import store
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.runtime.state import jobs_store as store
 from audiagentic.execution.jobs.state_machine import TERMINAL_STATES, transition_and_persist
 
 

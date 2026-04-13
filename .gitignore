@@ -5,3 +5,7 @@
 __pycache__/
 .py[cod]
 **/*.pyc
+# Python build artifacts
+src/*.egg-info/
+dist/
+build/

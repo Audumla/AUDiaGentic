@@ -1,2 +1,1 @@
-"""Phase 0.3 target scaffold for audiagentic.runtime."""
-
+"""Runtime domain: lifecycle management and durable state persistence."""

@@ -9,7 +9,10 @@ from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+# Bootstrap: make tools.lib importable, then use robust multi-fallback root discovery.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from tools.lib.repo_paths import REPO_ROOT, SRC_ROOT
+
 REGISTRY_PATH = REPO_ROOT / "docs" / "implementation" / "31_Build_Status_and_Work_Registry.md"
 
 PACKET_ID_PATTERN = re.compile(r"PKT-[A-Z]{3}-\d{3}")

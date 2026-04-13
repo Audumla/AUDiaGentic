@@ -24,13 +24,9 @@ def test_hook_chain_settings_json_exists():
     assert 'PreToolUse' in settings['hooks']
 
 
-@pytest.mark.skipif(
-    not (ROOT / 'tools' / 'claude_hooks.py').exists(),
-    reason="Hook handlers not implemented"
-)
 def test_hook_handlers_module_exists():
-    """Verify hook handlers module exists."""
-    handlers_path = ROOT / 'tools' / 'claude_hooks.py'
+    """Verify hook handlers module exists at its v3 location."""
+    handlers_path = ROOT / 'tools' / 'misc' / 'claude_hooks.py'
     assert handlers_path.exists()
 
 

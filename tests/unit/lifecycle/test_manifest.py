@@ -12,8 +12,8 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.contracts.errors import AudiaGenticError
-from audiagentic.contracts.schema_registry import read_schema
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.schema_registry import read_schema
 from audiagentic.runtime.lifecycle.checkpoints import write_checkpoint
 from audiagentic.runtime.lifecycle.manifest import (
     build_manifest,
