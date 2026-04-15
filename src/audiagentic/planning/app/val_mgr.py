@@ -1,25 +1,67 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
-from jsonschema.exceptions import ValidationError
-
 from ..fs.scan import scan_items
-from .config import _PLANNING_SCHEMA_DIR, Config
+from .config import Config
 from .util import body_has_section
 
 
 class Validator:
     def __init__(self, root: Path):
         self.root = root
-        self.schemas = _PLANNING_SCHEMA_DIR
         self.config = Config(root)
 
     def _get_required_sections(self, kind: str) -> list[str]:
         """Get required sections for a kind from config."""
         return self.config.required_sections(kind) or []
+
+    def _validate_item_against_config(self, item) -> list[str]:
+        """Validate an item against config-driven field rules.
+
+        Args:
+            item: Item to validate
+
+        Returns:
+            List of validation errors
+        """
+        errors = []
+        kind = item.kind
+
+        # Get config-driven field definitions
+        required_fields = self.config.required_fields(kind) or []
+        optional_fields = self.config.optional_fields(kind) or []
+        allowed_fields = set(required_fields + optional_fields)
+
+        # Check required fields
+        for field in required_fields:
+            if field not in item.data:
+                errors.append(f"{item.path}: missing required field '{field}'")
+
+        # Check for unknown fields
+        for field in item.data.keys():
+            if field not in allowed_fields:
+                errors.append(
+                    f"{item.path}: unknown field '{field}', move to meta or add to config"
+                )
+
+        # Validate relationship field formats
+        rel_fields = {"task_refs", "work_package_refs", "request_refs"}
+        for field in rel_fields:
+            if field in item.data:
+                value = item.data[field]
+                if isinstance(value, list):
+                    for i, entry in enumerate(value):
+                        if isinstance(entry, str):
+                            errors.append(
+                                f"{item.path}: {field} must be a list of objects with 'ref' and optional 'seq'/'display'. "
+                                f"Expected example: - ref: {entry}\n  seq: 1000\n"
+                                f"Got: {entry}"
+                            )
+                        elif isinstance(entry, dict) and "ref" not in entry:
+                            errors.append(f"{item.path}: {field}[{i}] missing required 'ref' field")
+
+        return errors
 
     def validate_all(self) -> list[str]:
         errors = []
@@ -48,28 +90,11 @@ class Validator:
             if item.data["id"] in ids:
                 errors.append(f"duplicate id: {item.data['id']}")
             ids.add(item.data["id"])
-            schema_name = {
-                "request": "request.schema.json",
-                "spec": "specification.schema.json",
-                "plan": "plan.schema.json",
-                "task": "task.schema.json",
-                "wp": "work-package.schema.json",
-                "standard": None,
-            }[item.kind]
-            sch = None
-            if schema_name:
-                sch = json.loads((self.schemas / schema_name).read_text(encoding="utf-8"))
-                v = Draft202012Validator(sch)
-                for e in v.iter_errors(item.data):
-                    errors.append(f"{item.path}: {self._format_error(e)}")
-            allowed = (
-                set((sch.get("properties", {}) if sch else {}).keys())
-                if sch
-                else set(item.data.keys())
-            )
-            for k in item.data.keys():
-                if sch and k not in allowed:
-                    errors.append(f"{item.path}: forbidden top-level field '{k}', use meta")
+
+            # Validate against config-driven field rules
+            errors.extend(self._validate_item_against_config(item))
+
+            # Validate filename conventions
             if item.kind in {"request", "task"}:
                 if item.path.name != f"{item.data['id']}.md":
                     errors.append(f"{item.path}: filename must be {item.data['id']}.md")
@@ -159,36 +184,3 @@ class Validator:
                     )
 
         return errors
-
-    def _format_error(self, error: ValidationError) -> str:
-        path_parts = [str(part) for part in error.path]
-        field = path_parts[0] if path_parts else None
-
-        rel_fields = {"task_refs", "work_package_refs"}
-        if (
-            error.validator == "type"
-            and field in rel_fields
-            and len(path_parts) >= 2
-            and isinstance(error.instance, str)
-        ):
-            example = (
-                f"{field} must be a list of objects with 'ref' and optional 'seq'/'display'. "
-                f"Expected example: - ref: {error.instance}\n  seq: 1000\n"
-                f"Got: {error.instance}"
-            )
-            return example
-
-        if error.validator == "required" and path_parts:
-            missing = ", ".join(repr(part) for part in error.validator_value)
-            return f"{field or 'item'} is missing required field(s): {missing}"
-
-        if error.validator == "additionalProperties":
-            field_name = field or "item"
-            return f"{field_name} has unsupported fields; move custom values into meta when appropriate"
-
-        if field in rel_fields:
-            return f"{field}: {error.message}"
-
-        if field:
-            return f"{field}: {error.message}"
-        return error.message
