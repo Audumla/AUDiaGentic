@@ -6,6 +6,7 @@ from pathlib import Path
 import yaml
 
 from .api_types import ItemView
+from .standards import effective_standard_refs
 
 
 class Extracts:
@@ -26,33 +27,68 @@ class Extracts:
         return cache[id_]
 
     def _effective_standard_refs(self, item: ItemView) -> list[str]:
-        refs = list(item.data.get("standard_refs", []) or [])
+        api = self._api()
         cache = {item.data["id"]: item}
 
-        if item.kind == "task":
-            spec = self._resolve_related_item(item.data.get("spec_ref"), cache)
-            if spec:
-                refs.extend(spec.data.get("standard_refs", []) or [])
-            parent = self._resolve_related_item(item.data.get("parent_task_ref"), cache)
-            if parent:
-                refs.extend(parent.data.get("standard_refs", []) or [])
-        elif item.kind == "wp":
-            plan = self._resolve_related_item(item.data.get("plan_ref"), cache)
-            if plan:
-                refs.extend(plan.data.get("standard_refs", []) or [])
-            for rel in item.data.get("task_refs", []) or []:
-                task = self._resolve_related_item(rel.get("ref"), cache)
-                if task:
-                    refs.extend(task.data.get("standard_refs", []) or [])
-                    spec = self._resolve_related_item(task.data.get("spec_ref"), cache)
-                    if spec:
-                        refs.extend(spec.data.get("standard_refs", []) or [])
+        def resolve_refs(item_view: ItemView) -> list[str]:
+            refs = list(item_view.data.get("standard_refs", []) or [])
 
-        out = []
-        for ref in refs:
-            if ref not in out:
-                out.append(ref)
-        return out
+            if item_view.kind == "task":
+                spec_id = item_view.data.get("spec_ref")
+                if spec_id and spec_id not in cache:
+                    cache[spec_id] = api.lookup(spec_id)
+                spec = cache.get(spec_id)
+                if spec:
+                    refs.extend(spec.data.get("standard_refs", []) or [])
+
+                parent_id = item_view.data.get("parent_task_ref")
+                if parent_id and parent_id not in cache:
+                    cache[parent_id] = api.lookup(parent_id)
+                parent = cache.get(parent_id)
+                if parent:
+                    refs.extend(parent.data.get("standard_refs", []) or [])
+
+            elif item_view.kind == "wp":
+                plan_id = item_view.data.get("plan_ref")
+                if plan_id and plan_id not in cache:
+                    cache[plan_id] = api.lookup(plan_id)
+                plan = cache.get(plan_id)
+                if plan:
+                    refs.extend(plan.data.get("standard_refs", []) or [])
+
+                for rel in item_view.data.get("task_refs", []) or []:
+                    task_id = rel.get("ref")
+                    if task_id and task_id not in cache:
+                        cache[task_id] = api.lookup(task_id)
+                    task = cache.get(task_id)
+                    if task:
+                        refs.extend(task.data.get("standard_refs", []) or [])
+
+                        spec_id = task.data.get("spec_ref")
+                        if spec_id and spec_id not in cache:
+                            cache[spec_id] = api.lookup(spec_id)
+                        spec = cache.get(spec_id)
+                        if spec:
+                            refs.extend(spec.data.get("standard_refs", []) or [])
+
+            return refs
+
+        all_refs = []
+        visited = set()
+        stack = [item]
+
+        while stack:
+            current = stack.pop()
+            if current.data.get("id") in visited:
+                continue
+            visited.add(current.data.get("id"))
+
+            refs = resolve_refs(current)
+            for ref in refs:
+                if ref not in all_refs:
+                    all_refs.append(ref)
+
+        return all_refs
 
     def show(self, id_: str) -> dict:
         item = self._api().lookup(id_)

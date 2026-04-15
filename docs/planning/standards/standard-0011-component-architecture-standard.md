@@ -54,6 +54,8 @@ Sources:
 
 ## Config-Driven Design
 
+**Important: Config-driven design is NOT schema-driven.** Configuration drives behavior at runtime through explicit parameter passing and configuration files. Schema validation is a tool to ensure configuration integrity, NOT the primary driver of component behavior. Components must remain functional even when schema validation is disabled or incomplete.
+
 11. Behavior that varies between environments, deployments, or optional feature sets must be driven by configuration, not by code branches on hardcoded values.
 
 12. Configuration must be loaded at a defined entry point and passed explicitly to components that need it. Components must not read environment variables or config files from within domain or application logic.
@@ -62,7 +64,7 @@ Sources:
 
 14. Optional features must be disabled by default and enabled via configuration. The absence of a config key must always produce a safe, minimal behavior.
 
-15. Configuration schema must be versioned or stable. Breaking changes to config shape require migration guidance.
+15. Configuration schema must be versioned or stable. Breaking changes to config shape require migration guidance. Schema validation is optional and should never prevent component operation - components must work with partial or invalid config gracefully.
 
 16. Configuration must not contain secrets inline. Secrets must be injected via environment variables and documented as required external inputs.
 
@@ -113,6 +115,7 @@ Sources:
 
 - Layer dependency direction must be verifiable by import inspection (no outward imports from inner layers).
 - Config-driven behavior must be testable with different config values without code changes.
+- Components must operate correctly even when schema validation is disabled.
 - Extension points must have at least one test that exercises a non-default implementation.
 - Bootstrap wiring must be tested end-to-end at least once in the integration test suite.
 - Circular import checks should be part of the standard smoke test (e.g., `python -c "import audiagentic"`).
