@@ -12,6 +12,8 @@ planning:
       has_domain: false
       required_refs: []
       standard_refs_inheritance: []
+      required_fields: [id, label, state, summary]
+      optional_fields: [profile, source, context, current_understanding, open_questions, guidance, request_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
       
     spec:
       dir: specifications
@@ -20,6 +22,8 @@ planning:
       has_domain: false
       required_refs: []
       standard_refs_inheritance: []
+      required_fields: [id, label, state, summary, request_refs]
+      optional_fields: [workflow, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
       
     plan:
       dir: plans
@@ -28,6 +32,8 @@ planning:
       has_domain: false
       required_refs: []
       standard_refs_inheritance: []
+      required_fields: [id, label, state, summary]
+      optional_fields: [workflow, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
       
     task:
       dir: tasks
@@ -40,6 +46,8 @@ planning:
           type: direct
         - field: parent_task_ref
           type: direct
+      required_fields: [id, label, state, summary]
+      optional_fields: [workflow, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by, spec_ref, parent_task_ref, target, packet_ref, request_refs]
       
     wp:
       dir: work-packages
@@ -58,6 +66,8 @@ planning:
               type: direct
               sub_inheritance:
                 - field: standard_refs
+      required_fields: [id, label, state, summary, plan_ref]
+      optional_fields: [workflow, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by, task_refs]
       
     standard:
       dir: standards
@@ -66,6 +76,8 @@ planning:
       has_domain: false
       required_refs: []
       standard_refs_inheritance: []
+      required_fields: [id, label, state, summary]
+      optional_fields: [meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
       
   dirs:
     base: docs/planning
