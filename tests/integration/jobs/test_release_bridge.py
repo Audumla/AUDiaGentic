@@ -10,11 +10,12 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.execution.jobs.release_bridge import build_change_event_from_job, emit_job_change
-from audiagentic.execution.jobs.records import build_job_record
-from audiagentic.runtime.state.jobs_store import write_job_record
 from tests.helpers import sandbox as sandbox_helper
+
+from audiagentic.execution.jobs.records import build_job_record
+from audiagentic.execution.jobs.release_bridge import build_change_event_from_job, emit_job_change
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.runtime.state.jobs_store import write_job_record
 
 
 def test_release_bridge_emits_change_and_updates_docs(tmp_path: Path) -> None:

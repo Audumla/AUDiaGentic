@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
+import sys
 from pathlib import Path
 
-import sys
 ROOT = Path(__file__).resolve().parents[3]
 for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:

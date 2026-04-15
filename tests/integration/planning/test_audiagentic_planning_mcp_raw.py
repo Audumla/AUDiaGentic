@@ -80,9 +80,9 @@ def test_raw_stdio_harness_initializes_and_lists_tools_and_resources() -> None:
 
     tools = next(response for response in tool_responses if response["id"] == 2)
     tool_names = {tool["name"] for tool in tools["result"]["tools"]}
-    assert "tm_new_request" in tool_names
+    assert "tm_create" in tool_names
     assert "tm_list" in tool_names
-    assert "tm_verify_structure" in tool_names
+    assert "tm_admin" in tool_names
 
     resources = next(response for response in resource_responses if response["id"] == 3)
     assert resources["result"]["resources"] == []

@@ -1,0 +1,11 @@
+id: glossary-artifact
+title: Artifact
+type: glossary_term
+status: active
+summary: 'A planning system document: request, spec, plan, task, or work package.'
+owners:
+- core-team
+tags: []
+related: []
+updated_at: '2026-04-14'
+source_refs: []

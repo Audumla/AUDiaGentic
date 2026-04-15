@@ -22,6 +22,7 @@ from audiagentic.runtime.lifecycle.manifest import (
     write_manifest,
 )
 
+
 def test_manifest_roundtrip(tmp_path: Path) -> None:
     payload = build_manifest(
         installation_kind="fresh",

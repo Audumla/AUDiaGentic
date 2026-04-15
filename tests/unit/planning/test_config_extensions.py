@@ -22,7 +22,6 @@ def _seed_base_config(tmp_path: Path, include_optional: bool) -> Path:
         "profiles.yaml",
         "workflows.yaml",
         "automations.yaml",
-        "hooks.yaml",
     ):
         shutil.copy(src / name, dst / name)
 

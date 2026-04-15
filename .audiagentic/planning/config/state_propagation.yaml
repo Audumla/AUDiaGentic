@@ -1,0 +1,247 @@
+# State propagation configuration
+# Location: .audiagentic/planning/config/state_propagation.yaml
+#
+# This configures automatic state propagation across planning hierarchies.
+# Rules can be overridden per-item in the item frontmatter with:
+#   propagation:
+#     enabled: false  # Disable propagation for this item
+#     rules:
+#       done: custom_rule_name  # Override default rule for 'done' state
+
+# Global propagation settings
+global:
+  enabled: true  # Enable propagation by default (can be overridden per-item)
+  max_depth: 10  # Maximum propagation chain depth (cycle detection)
+  default_mode: async  # async or sync delivery mode
+
+# Per-kind configuration: defines parent relationships and state transition rules
+kinds:
+  # Task propagation rules
+  task:
+    enabled: true
+    parent_kind: wp  # Tasks belong to WPs
+    parent_field: task_refs  # WP field that references tasks (e.g., task_refs contains task IDs)
+    state_rules:
+      # When task enters this state, apply this rule
+      in_progress:
+        rule: trigger_parent_if_ready
+        new_state: in_progress
+      done:
+        rule: check_all_children_done
+        new_state: done
+      blocked:
+        rule: trigger_parent_unless_terminal
+        new_state: blocked
+      archived:
+        rule: none
+        new_state: null
+
+  # WP propagation rules
+  wp:
+    enabled: true
+    parent_kind: plan  # WPs belong to Plans
+    parent_field: plan_ref  # WP field that references parent plan
+    # Note: WPs don't have a direct child field - tasks are referenced via task_refs
+    # For check_all_children_done, we need to find tasks that reference this WP
+    state_rules:
+      in_progress:
+        rule: trigger_parent_if_ready
+        new_state: in_progress
+      done:
+        rule: check_all_children_done
+        new_state: done
+      blocked:
+        rule: trigger_parent_unless_terminal
+        new_state: blocked
+      archived:
+        rule: none
+        new_state: null
+
+  # Plan propagation rules
+  plan:
+    enabled: true
+    parent_kind: spec  # Plans belong to Specs
+    parent_field: spec_refs  # Plan field that references specs
+    state_rules:
+      in_progress:
+        rule: trigger_parent_if_ready
+        new_state: in_progress
+      done:
+        rule: check_all_children_done
+        new_state: done
+      blocked:
+        rule: trigger_parent_unless_terminal
+        new_state: blocked
+      archived:
+        rule: none
+        new_state: null
+
+  # Spec propagation rules
+  spec:
+    enabled: true
+    parent_kind: request  # Specs belong to Requests
+    parent_field: request_refs  # Spec field that references requests
+    state_rules:
+      in_progress:
+        rule: trigger_parent_if_ready
+        new_state: in_progress
+      done:
+        rule: check_all_children_done
+        new_state: done
+        # Additional action: check if request should auto-complete
+        check_request_completion: true
+      blocked:
+        rule: trigger_parent_unless_terminal
+        new_state: blocked
+      archived:
+        rule: none
+        new_state: null
+
+  # Request propagation rules (special: requests are top-level)
+  request:
+    enabled: false  # Disabled by default - requests are top-level
+    parent_kind: null  # No parent
+    state_rules:
+      done:
+        rule: none
+        new_state: null
+
+# Rule definitions: logic for each rule type
+# These are registered in propagation_rules.py and referenced by name here
+rules:
+  # No propagation
+  none:
+    enabled: true
+    description: "No state propagation"
+    logic: "audiagentic.planning.app.propagation_rules.rule_none"
+
+  # Trigger parent to enter new_state if parent is in 'ready' state
+  trigger_parent_if_ready:
+    enabled: true
+    description: "Set parent to new_state if parent is ready"
+    logic: "audiagentic.planning.app.propagation_rules.rule_trigger_parent_if_ready"
+
+  # Check if all sibling children are in new_state, then set parent to new_state
+  check_all_children_done:
+    enabled: true
+    description: "Set parent to new_state if all sibling children are in new_state"
+    logic: "audiagentic.planning.app.propagation_rules.rule_check_all_children_done"
+
+  # Trigger parent to new_state unless parent is in terminal state (done/archived)
+  trigger_parent_unless_terminal:
+    enabled: true
+    description: "Set parent to new_state unless parent is done/archived"
+    logic: "audiagentic.planning.app.propagation_rules.rule_trigger_parent_unless_terminal"
+
+# Action definitions: additional logic to run after propagation
+actions:
+  # Check if request should auto-complete when spec is done
+  check_request_completion:
+    enabled: true
+    description: "Auto-complete request when all specs are done"
+    logic: "audiagentic.planning.app.propagation_rules.action_check_request_completion"
+
+# Terminal states (states that block further propagation)
+terminal_states:
+  - done
+  - archived
+
+# Conflict resolution (state priority when multiple rules apply)
+# Higher number = higher priority
+state_priority:
+  archived: 100  # Terminal state, highest priority
+  done: 90       # Terminal state
+  blocked: 50    # Blocking state
+  in_progress: 20
+  ready: 10      # Default state
+
+# Workflow-specific configurations
+# Each workflow can override global/kind settings for specific use cases
+workflows:
+  # Default workflow (used when no workflow specified)
+  default:
+    description: "Default propagation rules for standard workflows"
+    # Inherits from global config, no overrides needed
+
+  # Fast-track workflow: aggressive propagation
+  fast-track:
+    description: "Aggressive state propagation for fast-track items"
+    global:
+      enabled: true
+      default_mode: sync  # Synchronous for fast feedback
+    kinds:
+      task:
+        state_rules:
+          in_progress:
+            rule: trigger_parent_unless_terminal  # More aggressive
+            new_state: in_progress
+      wp:
+        state_rules:
+          done:
+            rule: trigger_parent_if_ready  # Don't wait for all children
+            new_state: done
+
+  # Conservative workflow: minimal propagation
+  conservative:
+    description: "Minimal propagation, manual control preferred"
+    global:
+      enabled: false  # Disabled by default, opt-in per-item
+    kinds:
+      task:
+        enabled: false
+      wp:
+        enabled: false
+      plan:
+        enabled: false
+      spec:
+        enabled: false
+
+  # Documentation workflow: no auto-propagation
+  documentation:
+    description: "Documentation items don't propagate state"
+    global:
+      enabled: false
+    kinds:
+      task:
+        enabled: false
+      wp:
+        enabled: false
+      plan:
+        enabled: false
+      spec:
+        enabled: false
+      request:
+        enabled: false
+
+# Validation rules (checked when config is loaded)
+validation:
+  required_fields:
+    - global.enabled
+    - kinds.task.parent_kind
+    - kinds.wp.parent_kind
+    - kinds.plan.parent_kind
+    - kinds.spec.parent_kind
+  required_rules:
+    - none
+    - trigger_parent_if_ready
+    - check_all_children_done
+    - trigger_parent_unless_terminal
+  valid_states:
+    - ready
+    - in_progress
+    - done
+    - blocked
+    - archived
+  valid_rules:
+    - none
+    - trigger_parent_if_ready
+    - check_all_children_done
+    - trigger_parent_unless_terminal
+
+# Healing configuration: error detection and auto-fix
+healing:
+  enabled: true  # Enable validation and healing
+  auto_fix: false  # If true, automatically apply safe fixes
+  log_only: true  # If true, only log issues without applying fixes
+  on_state_change: false  # If true, validate hierarchy on every state change
+  max_fixes_per_run: 10  # Maximum number of fixes to apply in one run

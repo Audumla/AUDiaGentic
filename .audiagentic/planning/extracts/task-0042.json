@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-0042",
+    "label": "[PKT-FND-011](task-0042): Documentation",
+    "state": "draft",
+    "summary": "Create documentation for Phase 0",
+    "spec_ref": "spec-0004",
+    "kind": "task",
+    "path": "docs/planning/tasks/contracts-scaffolding/task-0042.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n# Description\n\nCreate documentation for Phase 0.\n\n# [PKT-FND-011](task-0032): Documentation\n\n## Purpose\n\nCreate documentation for Phase 0.\n\n## Scope\n\n- User documentation\n- Developer documentation\n- API documentation\n\n## Implementation\n\n1. Write user docs\n2. Write developer docs\n3. Document API\n\n## Acceptance Criteria\n\n1. Documentation complete\n2. Examples included\n3. All features documented\n"
+}

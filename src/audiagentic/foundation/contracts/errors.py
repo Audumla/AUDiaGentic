@@ -1,8 +1,9 @@
 """Error envelope contract and helpers."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 ERROR_KINDS = (
     "validation",

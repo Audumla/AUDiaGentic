@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-0120",
+    "label": "[PKT-PRV-042](task-0120): Provider Audit Logging",
+    "state": "draft",
+    "summary": "Implement provider audit logging",
+    "spec_ref": "spec-0012",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-0120.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0006",
+    "standard-0005"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-042](task-0109): Provider Audit Logging\n\n## Purpose\n\nImplement provider audit logging.\n\n## Scope\n\n- Audit format\n- Logging\n- Retention\n\n## Implementation\n\n1. Define format\n2. Implement logging\n3. Set retention\n\n## Acceptance Criteria\n\n1. Format defined\n2. Logging works\n3. Retention set\n"
+}

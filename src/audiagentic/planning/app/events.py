@@ -1,7 +1,10 @@
 from __future__ import annotations
+
 import json
 from pathlib import Path
+
 from .util import now_iso
+
 
 class EventLog:
     def __init__(self, path: Path):

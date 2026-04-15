@@ -1,0 +1,26 @@
+---
+id: spec-017
+label: Planning Module Critical Fixes — Specification
+state: draft
+summary: 'Specification for Fix critical bugs in planning module: create_with_content()
+  drops standard_refs, update_content() has dead code, val_mgr.py has duplicated validation
+  logic'
+request_refs:
+- request-016
+task_refs: []
+---
+
+
+# Purpose
+
+
+# Scope
+
+
+# Requirements
+
+
+# Constraints
+
+
+# Acceptance Criteria

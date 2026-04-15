@@ -120,7 +120,7 @@ class ProviderCompletion:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ProviderCompletion":
+    def from_dict(cls, data: dict[str, Any]) -> ProviderCompletion:
         """Create from dictionary.
         
         Raises AudiaGenticError if the data fails schema validation.

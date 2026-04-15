@@ -1,0 +1,26 @@
+{
+  "item": {
+    "id": "task-0333",
+    "label": "Migrate hardcoded values to config",
+    "state": "draft",
+    "summary": "Migrate SECTION_KEYS and body templates to profiles.yaml",
+    "spec_ref": "spec-0029",
+    "request_refs": [],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0333.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+}

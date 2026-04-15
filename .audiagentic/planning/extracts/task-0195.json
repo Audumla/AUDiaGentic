@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-0195",
+    "label": "Fix tm.status() return shape",
+    "state": "done",
+    "summary": "Align tm.status() return keys with {request, spec, plan, task, wp} naming",
+    "spec_ref": "spec-003",
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0195.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n# Description\n\nNormalize `tm.status()` so callers receive stable kind counts with the expected `{request, spec, plan, task, wp}` keys.\n\n# Acceptance Criteria\n\n1. Status payload contains the expected kind keys\n2. Key names are stable across helper and MCP usage\n3. Regression coverage proves the expected shape\n\n# Notes\n\n- Verified by status assertions in the MCP and planning coverage tests\n"
+}

@@ -1,0 +1,29 @@
+host_profiles:
+  none:
+    description: No host integration artifacts beyond the core config and vault.
+    config_overrides: {}
+    integration_hints: []
+  mcp-stdio:
+    description: Standard host-agnostic MCP stdio integration.
+    config_overrides:
+      runtime:
+        expose_mcp_stdio: true
+    integration_hints:
+      - Launch the runtime-provided MCP server from the AUDiaGentic CLI/runtime.
+      - Suitable for editors, shells, and generic agent clients.
+  headless:
+    description: Headless automation profile with no editor assumptions.
+    config_overrides:
+      runtime:
+        expose_mcp_stdio: false
+    integration_hints:
+      - Prefer CLI and JSON outputs in automation.
+      - MCP remains optional.
+  vscode-helper:
+    description: Optional VS Code oriented helper profile layered on the same core capability.
+    config_overrides:
+      runtime:
+        expose_mcp_stdio: true
+    integration_hints:
+      - Use the same core config and vault.
+      - Host/editor setup should remain optional and non-authoritative.

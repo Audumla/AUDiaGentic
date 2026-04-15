@@ -1,0 +1,11 @@
+id: glossary-canonical-prompt
+title: Canonical Prompt
+type: glossary_term
+status: active
+summary: Standardized prompt tags that trigger specific workflow jobs.
+owners:
+- core-team
+tags: []
+related: []
+updated_at: '2026-04-14'
+source_refs: []

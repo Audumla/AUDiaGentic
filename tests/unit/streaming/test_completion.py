@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
-import json
 
 ROOT = Path(__file__).resolve().parents[3]
 SRC = ROOT / "src"
@@ -23,12 +23,12 @@ from audiagentic.interoperability.protocols.streaming.completion import (
     Recommendation,
     ResultSource,
     build_synthetic_fallback,
-    normalize_provider_result,
-    validate_provider_completion,
-    try_extract_json_from_stdout,
     completion_artifact_dir,
     completion_path,
+    normalize_provider_result,
     persist_completion,
+    try_extract_json_from_stdout,
+    validate_provider_completion,
 )
 
 

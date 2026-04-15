@@ -10,10 +10,11 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.channels.server.service_boundary import CoreServiceBoundary
-from audiagentic.runtime.state.jobs_store import job_record_path
 from tests.helpers import sandbox as sandbox_helper
+
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.runtime.state.jobs_store import job_record_path
 
 
 def test_service_boundary_runs_job_in_process(tmp_path: Path) -> None:

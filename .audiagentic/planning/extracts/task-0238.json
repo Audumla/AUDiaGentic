@@ -1,30 +1,29 @@
 {
   "item": {
     "id": "task-0238",
-    "label": "Update config.py to load guidance levels",
+    "label": "Enhance lexical search",
     "state": "draft",
-    "summary": "Add guidance_levels accessor to Config class, update profile_for() to merge work-type profile with guidance level",
-    "spec_ref": "spec-0046",
+    "summary": "Add stemming, fuzzy matching, stopword filtering to search.py",
+    "spec_ref": "spec-016",
+    "parent_task_ref": "wp-013",
     "request_refs": [
-      "request-0029"
+      "request-015"
     ],
     "standard_refs": [
       "standard-0005",
       "standard-0006"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0238.md"
+    "path": "docs/planning/tasks/core/task-0238.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
   },
   "effective_standard_refs": [
     "standard-0005",
-    "standard-0006",
-    "standard-0009"
+    "standard-0006"
   ],
-  "body": "\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n",
-  "related": {
-    "request_refs": [
-      "request-0029"
-    ],
-    "spec_ref": "spec-0046"
-  }
+  "body": "\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
 }

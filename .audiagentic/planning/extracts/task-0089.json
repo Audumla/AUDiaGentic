@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-0089",
+    "label": "[PKT-PRV-012](task-0089): Provider Version Management",
+    "state": "draft",
+    "summary": "Manage provider versions",
+    "spec_ref": "spec-0012",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-0089.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0006",
+    "standard-0005"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-012](task-0079): Provider Version Management\n\n## Purpose\n\nManage provider versions.\n\n## Scope\n\n- Version format\n- Upgrade logic\n- Rollback\n\n## Implementation\n\n1. Define format\n2. Implement upgrade\n3. Add rollback\n\n## Acceptance Criteria\n\n1. Format defined\n2. Upgrade works\n3. Rollback works\n"
+}
