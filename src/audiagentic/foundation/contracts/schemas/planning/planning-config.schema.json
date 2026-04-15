@@ -6,11 +6,19 @@
       "type": "object",
       "required": [
         "convention_version",
-        "dirs"
+        "dirs",
+        "kinds"
       ],
       "properties": {
         "convention_version": {
           "type": "integer"
+        },
+        "default_profile": {
+          "type": "string"
+        },
+        "default_guidance": {
+          "type": "string",
+          "enum": ["light", "standard", "deep"]
         },
         "dirs": {
           "type": "object"
@@ -25,6 +33,77 @@
           "type": "array",
           "items": {
             "type": "string"
+          }
+        },
+        "kinds": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["dir", "id_prefix", "counter_file", "has_domain", "required_refs"],
+            "properties": {
+              "dir": {
+                "type": "string"
+              },
+              "id_prefix": {
+                "type": "string"
+              },
+              "counter_file": {
+                "type": "string"
+              },
+              "has_domain": {
+                "type": "boolean"
+              },
+              "required_refs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "standard_refs_inheritance": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "field": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": ["direct", "recursive"]
+                    },
+                    "sub_inheritance": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": ["direct", "recursive"]
+                          },
+                          "sub_inheritance": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "field": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["field"]
+                            }
+                          }
+                        },
+                        "required": ["field"]
+                      }
+                    }
+                  },
+                  "required": ["field", "type"]
+                }
+              }
+            }
           }
         }
       }
