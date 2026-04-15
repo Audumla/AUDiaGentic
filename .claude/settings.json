@@ -23,6 +23,17 @@
             "command": "python tools/misc/claude_hooks.py"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "if": "Bash(git commit *)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ruff check --fix src tests 2>/dev/null || true",
+            "statusMessage": "Formatting Python files with ruff..."
+          }
+        ]
       }
     ]
   }

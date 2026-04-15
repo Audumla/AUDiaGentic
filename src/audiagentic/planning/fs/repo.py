@@ -1,8 +1,11 @@
 from __future__ import annotations
+
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
-from .read import parse_markdown
+
 from ..domain.models import Item
+from .read import parse_markdown
+
 
 class Repo:
     def __init__(self, root: Path):

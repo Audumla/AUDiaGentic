@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T14:28:01.531820+00:00",
+  "generated_at": "2026-04-15T11:09:44.688136+00:00",
   "items": [
     {
       "id": "standard-0001",
@@ -55,6 +55,42 @@
       "label": "Planning layer enhancement impact standard",
       "state": "ready",
       "path": "docs\\planning\\standards\\standard-0009-planning-layer-enhancement-impact-standard.md"
+    },
+    {
+      "id": "standard-0010-python",
+      "label": "Python MCP server development standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-0010-python-python-mcp-server-development-standard.md"
+    },
+    {
+      "id": "standard-0011",
+      "label": "Component architecture standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-0011-component-architecture-standard.md"
+    },
+    {
+      "id": "standard-0012",
+      "label": "Knowledge maintenance standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-0012-knowledge-maintenance-standard.md"
+    },
+    {
+      "id": "standard-0013",
+      "label": "Event subscription configuration standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-0013-event-subscription-configuration-standard.md"
+    },
+    {
+      "id": "standard-0014",
+      "label": "Project directory layout standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-0014-project-directory-layout-standard.md"
+    },
+    {
+      "id": "standard-0014",
+      "label": "Test Standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-0014-test-standard.md"
     }
   ]
 }

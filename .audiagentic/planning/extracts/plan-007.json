@@ -1,0 +1,29 @@
+{
+  "item": {
+    "id": "plan-007",
+    "label": "Implement guidance levels for planning depth-of-detail",
+    "state": "draft",
+    "summary": "Plan for implementing guidance levels (light/standard/deep) to control spec/task depth independently of work-type profiles",
+    "spec_refs": [
+      "spec-010"
+    ],
+    "request_refs": [
+      "request-011"
+    ],
+    "work_package_refs": [],
+    "standard_refs": [
+      "standard-0006"
+    ],
+    "kind": "plan",
+    "path": "docs/planning/plans/plan-007-implement-guidance-levels-for-planning-depth-of-detail.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0006"
+  ],
+  "body": "\n\n\n\n# Objectives\n\n1. Add guidance_levels configuration to profiles.yaml\n2. Expose guidance field in request schema and frontmatter\n3. Implement guidance parameter in tm_helper.py and tm.py CLI\n4. Update validation to enforce guidance-appropriate sections\n5. Configure default_guidance in planning.yaml\n6. Write comprehensive tests for guidance levels\n\n# Delivery Approach\n\n1. **Configuration layer** (task-0216, task-0222): Add guidance_levels to profiles.yaml and default_guidance to planning.yaml\n2. **Schema layer** (task-0218): Update request.schema.json with guidance field\n3. **API layer** (task-0217, task-0219): Update Config class and tm_helper.py new_request()\n4. **CLI layer** (task-0220): Add --guidance parameter to tm.py\n5. **Validation layer** (task-0221): Update val_mgr.py to enforce guidance rules\n6. **Tests** (task-0223): Write tests for all layers\n\n# Dependencies\n\n- spec-010: Guidance levels specification\n- standard-0005: Config file conventions\n- standard-0006: Planning item structure\n- standard-0009: Validation rules\n"
+}

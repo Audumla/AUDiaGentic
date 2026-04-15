@@ -1,25 +1,18 @@
 {
   "item": {
     "id": "task-0192",
-    "label": "Update tm_list with archive filter parameter",
-    "state": "draft",
-    "summary": "Add include_archived parameter to tm_list() to filter archived items",
-    "spec_ref": "spec-0023",
-    "meta": {
-      "task_refs": [
-        {
-          "ref": "wp-0009",
-          "seq": 1002
-        }
-      ]
-    },
+    "label": "Implement claims TTL lazy purge",
+    "state": "done",
+    "summary": "Add lazy purge of expired claims on read in Claims._load() or next_items()/claims()",
+    "spec_ref": "spec-003",
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0192.md"
+    "path": "docs/planning/tasks/core/task-0192.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
   },
-  "effective_standard_refs": [
-    "standard-0006",
-    "standard-0005",
-    "standard-0009"
-  ],
-  "body": "\n\n# Description\n\nAdd include_archived parameter to tm_list() to filter archived items.\n\n## Requirements\n\n```python\ndef tm_list(\n    kind: str | None = None,\n    include_archived: bool = False,\n    root: Path | None = None,\n) -> list[dict[str, Any]]:\n    \"\"\"List planning items with archive filtering.\n    \n    Args:\n        kind: Optional kind filter\n        include_archived: Include archived items (default: False)\n        root: Optional project root\n    \n    Returns:\n        List of item summaries\n    \"\"\"\n```\n\n## Implementation\n\n- Update `tools/planning/tm_helper.py` list surface\n- Update `src/audiagentic/planning/app/api.py` list/scan surface as needed\n- Filter by state when include_archived=False\n- Default behavior: exclude archived items\n- Keep query behavior aligned with the canonical state model\n\n## Acceptance Criteria\n\n1. tm_list() excludes archived items by default\n2. tm_list(include_archived=True) includes archived items\n3. Archive state is included in item metadata\n4. Performance is not significantly impacted\n"
+  "effective_standard_refs": [],
+  "body": "\n\n# Description\n\nLazily purge expired claims on read so stale claims do not appear in planning queries or block work selection.\n\n# Acceptance Criteria\n\n1. Expired claims are filtered out during claim loads/reads\n2. `claims()` and `next_items()` ignore stale claims\n3. Coverage proves expired claims no longer block workflows\n\n# Notes\n\n- Implemented in `src/audiagentic/planning/app/claims.py`\n- Verified by the passing planning coverage suite\n"
 }

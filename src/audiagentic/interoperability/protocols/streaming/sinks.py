@@ -15,7 +15,6 @@ from jsonschema import Draft202012Validator
 
 from audiagentic.foundation.contracts.schema_registry import read_schema
 
-
 # Per-path locks for coordinated writes to the same file
 _event_write_locks: dict[Path, threading.Lock] = {}
 _event_write_locks_lock = threading.Lock()  # Lock for accessing the locks dict

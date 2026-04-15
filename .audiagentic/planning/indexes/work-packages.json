@@ -1,78 +1,156 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T14:28:01.531820+00:00",
+  "generated_at": "2026-04-15T11:09:44.688136+00:00",
   "items": [
     {
-      "id": "wp-0004",
+      "id": "wp-001",
       "label": "Implement archive state workflow",
       "state": "draft",
-      "path": "docs\\planning\\work-packages\\core\\wp-0004-implement-archive-state-workflow.md"
-    },
-    {
-      "id": "wp-0005",
-      "label": "Profile packs and documentation config scaffolding",
-      "state": "done",
-      "path": "docs\\planning\\work-packages\\core\\wp-0005-profile-packs-and-documentation-config-scaffolding.md"
-    },
-    {
-      "id": "wp-0006",
-      "label": "MCP and section navigation expansion",
-      "state": "done",
-      "path": "docs\\planning\\work-packages\\core\\wp-0006-mcp-and-section-navigation-expansion.md"
-    },
-    {
-      "id": "wp-0007",
-      "label": "Supporting docs, subsection access, and documentation sync",
-      "state": "done",
-      "path": "docs\\planning\\work-packages\\core\\wp-0007-supporting-docs-subsection-access-and-documentation-sync.md"
-    },
-    {
-      "id": "wp-0009",
-      "label": "Archive state workflow and core functions",
-      "state": "done",
-      "path": "docs\\planning\\work-packages\\core\\wp-0009-archive-state-workflow-and-core-functions.md"
-    },
-    {
-      "id": "wp-0010",
-      "label": "Critical fixes: schema, delete, traceability, and hardening",
-      "state": "done",
-      "path": "docs\\planning\\work-packages\\core\\wp-0010-critical-fixes-schema-delete-traceability-and-hardening.md"
-    },
-    {
-      "id": "wp-0011",
-      "label": "Fix PlanningAPI and MCP gaps",
-      "state": "in_progress",
-      "path": "docs\\planning\\work-packages\\core\\wp-0011-fix-planningapi-and-mcp-gaps.md"
-    },
-    {
-      "id": "wp-0015",
-      "label": "Implement guidance levels in config, API, and validation",
-      "state": "draft",
-      "path": "docs\\planning\\work-packages\\core\\wp-0015-implement-guidance-levels-in-config-api-and-validation.md"
+      "path": "docs\\planning\\work-packages\\core\\wp-001-implement-archive-state-workflow.md"
     },
     {
       "id": "wp-0016",
-      "label": "Define guidance level semantics in standard",
-      "state": "draft",
-      "path": "docs\\planning\\work-packages\\core\\wp-0016-define-guidance-level-semantics-in-standard.md"
+      "label": "Phase 1: Config Schema",
+      "state": "ready",
+      "path": "docs\\planning\\work-packages\\core\\wp-0016-phase-1-config-schema.md"
     },
     {
       "id": "wp-0017",
-      "label": "Implement canonical guidance semantics",
-      "state": "draft",
-      "path": "docs\\planning\\work-packages\\core\\wp-0017-implement-canonical-guidance-semantics.md"
+      "label": "Phase 2: Core Infrastructure",
+      "state": "ready",
+      "path": "docs\\planning\\work-packages\\core\\wp-0017-phase-2-core-infrastructure.md"
     },
     {
       "id": "wp-0018",
-      "label": "Implement unified workflow states and cascade archive",
-      "state": "draft",
-      "path": "docs\\planning\\work-packages\\core\\wp-0018-implement-unified-workflow-states-and-cascade-archive.md"
+      "label": "Phase 3: Manager Refactoring",
+      "state": "done",
+      "path": "docs\\planning\\work-packages\\core\\wp-0018-phase-3-manager-refactoring.md"
     },
     {
       "id": "wp-0019",
+      "label": "Phase 4: Config Migration",
+      "state": "done",
+      "path": "docs\\planning\\work-packages\\core\\wp-0019-phase-4-config-migration.md"
+    },
+    {
+      "id": "wp-002",
+      "label": "Profile packs and documentation config scaffolding",
+      "state": "done",
+      "path": "docs\\planning\\work-packages\\core\\wp-002-profile-packs-and-documentation-config-scaffolding.md"
+    },
+    {
+      "id": "wp-0020",
+      "label": "Knowledge Component Integration Work Package",
+      "state": "done",
+      "path": "docs\\planning\\work-packages\\core\\wp-0020-knowledge-component-integration-work-package.md"
+    },
+    {
+      "id": "wp-0020",
+      "label": "Phase 5: Testing",
+      "state": "done",
+      "path": "docs\\planning\\work-packages\\core\\wp-0020-phase-5-testing.md"
+    },
+    {
+      "id": "wp-0021",
+      "label": "Test WP for bug fix",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-0021-test-wp-for-bug-fix.md"
+    },
+    {
+      "id": "wp-0024",
+      "label": "Test WP",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-0024-test-wp.md"
+    },
+    {
+      "id": "wp-0025",
+      "label": "Test WP",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-0025-test-wp.md"
+    },
+    {
+      "id": "wp-0027",
+      "label": "standard-0007 implementation tasks",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-0027-standard-0007-implementation-tasks.md"
+    },
+    {
+      "id": "wp-003",
+      "label": "MCP and section navigation expansion",
+      "state": "done",
+      "path": "docs\\planning\\work-packages\\core\\wp-003-mcp-and-section-navigation-expansion.md"
+    },
+    {
+      "id": "wp-004",
+      "label": "Supporting docs, subsection access, and documentation sync",
+      "state": "done",
+      "path": "docs\\planning\\work-packages\\core\\wp-004-supporting-docs-subsection-access-and-documentation-sync.md"
+    },
+    {
+      "id": "wp-005",
+      "label": "Archive state workflow and core functions",
+      "state": "done",
+      "path": "docs\\planning\\work-packages\\core\\wp-005-archive-state-workflow-and-core-functions.md"
+    },
+    {
+      "id": "wp-006",
+      "label": "Critical fixes: schema, delete, traceability, and hardening",
+      "state": "done",
+      "path": "docs\\planning\\work-packages\\core\\wp-006-critical-fixes-schema-delete-traceability-and-hardening.md"
+    },
+    {
+      "id": "wp-007",
+      "label": "Fix PlanningAPI and MCP gaps",
+      "state": "in_progress",
+      "path": "docs\\planning\\work-packages\\core\\wp-007-fix-planningapi-and-mcp-gaps.md"
+    },
+    {
+      "id": "wp-008",
+      "label": "Implement guidance levels in config, API, and validation",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-008-implement-guidance-levels-in-config-api-and-validation.md"
+    },
+    {
+      "id": "wp-009",
+      "label": "Define guidance level semantics in standard",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-009-define-guidance-level-semantics-in-standard.md"
+    },
+    {
+      "id": "wp-010",
+      "label": "Implement canonical guidance semantics",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-010-implement-canonical-guidance-semantics.md"
+    },
+    {
+      "id": "wp-011",
+      "label": "Implement unified workflow states and cascade archive",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-011-implement-unified-workflow-states-and-cascade-archive.md"
+    },
+    {
+      "id": "wp-012",
       "label": "Implement unified workflow states",
       "state": "draft",
-      "path": "docs\\planning\\work-packages\\core\\wp-0019-implement-unified-workflow-states.md"
+      "path": "docs\\planning\\work-packages\\core\\wp-012-implement-unified-workflow-states.md"
+    },
+    {
+      "id": "wp-013",
+      "label": "Knowledge Component Improvements Work Package",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-013-knowledge-component-improvements-work-package.md"
+    },
+    {
+      "id": "wp-014",
+      "label": "Planning Module Critical Fixes Work Package",
+      "state": "done",
+      "path": "docs\\planning\\work-packages\\core\\wp-014-planning-module-critical-fixes-work-package.md"
+    },
+    {
+      "id": "wp-015",
+      "label": "Interoperability layer and state propagation implementation",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\core\\wp-015-interoperability-layer-and-state-propagation-implementation.md"
     }
   ]
 }

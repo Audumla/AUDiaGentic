@@ -9,6 +9,8 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
+from tests.helpers import sandbox as sandbox_helper
+
 from audiagentic.release.release_please import (
     BASELINE_WORKFLOW,
     CANDIDATE_NAME,
@@ -17,7 +19,6 @@ from audiagentic.release.release_please import (
     MANAGED_NAME,
     ensure_release_please_baseline,
 )
-from tests.helpers import sandbox as sandbox_helper
 
 
 def test_release_please_absent_installs_baseline(tmp_path: Path) -> None:

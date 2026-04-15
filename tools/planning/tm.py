@@ -57,9 +57,7 @@ def main():
     api = PlanningAPI(root)
 
     p = argparse.ArgumentParser(prog="tm")
-    p.add_argument(
-        "--root", default=None, help="Project root (default: auto-detect from cwd)"
-    )
+    p.add_argument("--root", default=None, help="Project root (default: auto-detect from cwd)")
     sp = p.add_subparsers(dest="cmd", required=True)
     p_new = sp.add_parser("new")
     p_new.add_argument("kind")
@@ -156,6 +154,10 @@ def main():
     p_owner.add_argument("path_fragment")
     sp.add_parser("index")
     sp.add_parser("reconcile")
+    sp.add_parser("rebaseline")
+    p_dump = sp.add_parser("dump")
+    p_dump.add_argument("--output", help="Output directory (default: stdout as JSON)")
+    p_dump.add_argument("--format", choices=["json", "yaml"], default="json", help="Output format")
     p_claim = sp.add_parser("claim")
     p_claim.add_argument("kind")
     p_claim.add_argument("id")
@@ -201,9 +203,7 @@ def main():
         )
         print_json({"id": item.data["id"], "path": str(item.path.relative_to(root))})
     elif args.cmd == "update":
-        item = api.update(
-            args.id, label=args.label, summary=args.summary, body_append=args.append
-        )
+        item = api.update(args.id, label=args.label, summary=args.summary, body_append=args.append)
         print_json({"id": item.data["id"], "path": str(item.path.relative_to(root))})
     elif args.cmd == "move":
         item = api.move(args.id, args.domain)
@@ -284,13 +284,9 @@ def main():
             api.index()
         print(pth.read_text(encoding="utf-8"))
     elif args.cmd == "extract":
-        print_json(
-            api.extracts.extract(args.id, args.with_related, args.with_resources)
-        )
+        print_json(api.extracts.extract(args.id, args.with_related, args.with_resources))
     elif args.cmd == "files":
-        print_json(
-            api.extracts.extract(args.id, with_resources=True).get("attachments", [])
-        )
+        print_json(api.extracts.extract(args.id, with_resources=True).get("attachments", []))
     elif args.cmd == "owner":
         print_json(api.extracts.owner(args.path_fragment))
     elif args.cmd == "index":
@@ -298,6 +294,10 @@ def main():
         print_json({"ok": True})
     elif args.cmd == "reconcile":
         print_json(api.reconcile())
+    elif args.cmd == "rebaseline":
+        print_json(api.rebaseline())
+    elif args.cmd == "dump":
+        print_json(api.dump_all(args.output, args.format))
     elif args.cmd == "claim":
         print_json(api.claim(args.kind, args.id, args.holder, args.ttl))
     elif args.cmd == "unclaim":

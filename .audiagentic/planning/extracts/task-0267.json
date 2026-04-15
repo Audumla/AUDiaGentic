@@ -1,0 +1,27 @@
+{
+  "item": {
+    "id": "task-0267",
+    "label": "Add module docstring to execution/jobs/__init__.py",
+    "state": "draft",
+    "summary": "Add comprehensive docstring to execution jobs module",
+    "request_refs": [
+      "request-019"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0267.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n\n\nFix empty module docstring in execution/jobs/__init__.py to comply with standard-0008 (Python Implementation) - comprehensive documentation requirement.\n\n## Current State\nThe `execution/jobs/__init__.py` file has no module-level docstring, which violates standard-0008 requirement for comprehensive documentation.\n\n## Required Work\n\n1. **Add comprehensive module docstring** that includes:\n   - Module purpose: \"Core execution job management and orchestration\"\n   - Key exports: Job class, state machine, records, stages\n   - Usage examples showing basic job creation and execution\n   - Integration points with planning domain and runtime\n\n2. **Follow existing documentation patterns** used in:\n   - `state_machine.py`: \"Job state machine with legal transitions and atomic updates\"\n   - `records.py`: \"Job records with validation and atomic updates\"\n   - `stages.py`: \"Stage execution with atomic file writes\"\n\n3. **Structure the docstring** as:\n```\n\"\"\"\nCore execution job management module.\n\nThis module provides:\n- Job lifecycle management with state transitions\n- Atomic record updates with validation\n- Stage-based execution patterns\n\nSee also:\n- state_machine: Legal transitions and state validation\n- records: Job record building and persistence\n- stages: Stage execution with atomic writes\n\"\"\"\n```\n\n## Standards Compliance\nThis fix ensures compliance with:\n- **standard-0008**: Comprehensive module-level documentation\n- **standard-0001**: Planning documentation maintenance\n\n## Testing\nVerify module docstring is accessible via `help(execution.jobs)` and contains all required sections.\n"
+}

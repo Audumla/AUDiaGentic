@@ -1,11 +1,11 @@
 # audiagentic-planning MCP
 
-Minimal planning MCP server for AUDiaGentic.
+Planning MCP server for AUDiaGentic. Single entry point for all MCP clients — 13 tools.
 
 ## Install
 
 ```bash
-pip install mcp
+pip install mcp pydantic
 ```
 
 ## Server
@@ -14,9 +14,11 @@ pip install mcp
 python tools/mcp/audiagentic-planning/audiagentic-planning_mcp.py
 ```
 
-## Generic MCP config
+## Environment Variables
 
-For clients that use an MCP server map:
+- `AUDIAGENTIC_ROOT`: (optional) Explicit project root path. If set, must contain `.audiagentic/` directory.
+
+## Generic MCP config
 
 ```json
 {
@@ -29,76 +31,176 @@ For clients that use an MCP server map:
 }
 ```
 
-## Tool surface
+With explicit root:
 
-Use the MCP tools directly. The server already publishes the tool names and argument schema. Each tool has a description explaining its purpose.
+```json
+{
+  "mcpServers": {
+    "audiagentic-planning": {
+      "command": "python",
+      "args": ["tools/mcp/audiagentic-planning/audiagentic-planning_mcp.py"],
+      "env": {
+        "AUDIAGENTIC_ROOT": "/path/to/project"
+      }
+    }
+  }
+}
+```
 
-### Creating planning documents
+## Agent guidance
 
-- `tm_new_request(label, summary)` — Create a new Request
-- `tm_new_spec(label, summary, request_refs=None)` — Create a Specification linked to Requests
-- `tm_new_plan(label, summary, spec=None)` — Create a Plan linked to a Specification
-- `tm_new_task(label, summary, spec, domain="core", target=None, parent=None, workflow=None)` — Create a Task with spec and optional target packet
-- `tm_new_wp(label, summary, plan, domain="core", workflow=None)` — Create a WorkPackage in a Plan
-- `tm_new_standard(label, summary)` — Create a Standard (coding style, docs requirement, etc.)
-- `tm_create_with_content(kind, label, summary, content, ...)` — Create any item with initial markdown content
+### Edit first
 
-### Querying & viewing
+**Use `tm_edit` for all mutations.** It accepts a list of operations executed atomically — state, label, summary, section writes, content, and metadata in one call. Prefer one `tm_edit` over multiple separate calls.
 
-- `tm_list(kind=None)` — List items by kind (request, spec, plan, task, wp, standard)
-- `tm_show(id)` — Full view of a single item with all metadata
-- `tm_extract(id, with_related=False, with_resources=False)` — Extract item with optional related items and resources
-- `tm_status()` — Summary counts by kind and state
-- `tm_next_tasks(state="ready", domain=None)` — List Tasks in a state
-- `tm_next_items(kind="task", state="ready", domain=None)` — List items by kind and state
+```json
+{
+  "id": "task-0123",
+  "operations": [
+    {"op": "state", "value": "done"},
+    {"op": "section", "name": "Notes", "content": "Implementation complete.", "mode": "set"}
+  ]
+}
+```
 
-### Mutating planning items
+**Supported operations:**
+- `state`: `{"op": "state", "value": "done"}`
+- `label`: `{"op": "label", "value": "New label"}`
+- `summary`: `{"op": "summary", "value": "New summary"}`
+- `section`: `{"op": "section", "name": "Notes", "content": "...", "mode": "set"|"append"}`
+- `content`: `{"op": "content", "value": "...", "mode": "replace"|"append"}`
+- `meta`: `{"op": "meta", "field": "tags", "value": "..."}`
 
-- `tm_update(id, label=None, summary=None, append=None)` — Update label, summary, or body text
-- `tm_state(id, new_state)` — Change state (ready → in_progress → done, etc.)
-- `tm_move(id, domain)` — Move item to a different domain (core → contrib)
-- `tm_relink(src, field, dst, seq=None, display=None)` — Update links (spec, parent, related items)
-- `tm_package(plan, tasks, label, summary, domain="core")` — Group Tasks into a WorkPackage
+Operations are validated by Pydantic schema — invalid operations return structured errors with suggestions.
 
-### Content editing (markdown sections)
+### Read cost ladder
 
-- `tm_get_content(id)` — Get full markdown content of a document
-- `tm_update_content(id, content, mode="replace", section=None, position=None)` — Replace, append, or insert content
-- `tm_get_section(id, section)` — Get a named section (heading) by name
-- `tm_set_section(id, section, content)` — Replace a named section
-- `tm_append_section(id, section, content)` — Append to a named section
-- `tm_get_subsection(id, section_path)` — Get nested sections using dot notation (e.g., "section.subsection" or "section/subsection")
+```text
+tm_get depth=head < depth=meta < depth=full < depth=body
+```
 
-### Documentation surfaces & profiles
+- `head` — index-only, no file parse. Use for existence/state checks.
+- `meta` — frontmatter only. Use when metadata fields are needed.
+- `full` — metadata + body (default). Use for full context.
+- `body` — raw markdown only. Use only when the body text is needed.
 
-- `tm_list_doc_surfaces()` — List documentation surfaces (generated views for different audiences)
-- `tm_get_doc_surface(surface_id)` — Get a specific documentation surface
-- `tm_list_reference_docs()` — List reference documentation
-- `tm_list_request_profiles()` — List request templates/profiles
-- `tm_get_request_profile(profile_id)` — Get a specific request profile
-- `tm_list_support_docs(supports_id=None, role=None)` — List supporting (sidecar) documentation
-- `tm_doc_sync_requirements(kind, profile_pack="standard")` — Get doc sync requirements for an item kind
-- `tm_pending_doc_updates(kind, profile_pack="standard")` — List pending doc updates
+### Work queue
 
-### Governance & constraints
+`tm_list mode=next` returns unclaimed items in a given state — the agent work queue.
 
-- `tm_standards(id)` — List applicable standards (coding styles, docs rules) for an item
-- `tm_list_standards()` — List all standard planning documents
-- `tm_get_standard(standard_id, with_related=False, with_resources=False)` — Get a standard with metadata and body
-- `tm_claim(kind, id, holder, ttl=None)` — Claim ownership to prevent concurrent edits
-- `tm_unclaim(id)` — Release ownership
-- `tm_claims(kind=None)` — List active claims
+### Multi-Agent Coordination
 
-### System operations
+**Multiple agents can work on the same repository using claims.** The planning system provides `tm_claim` for coordinating access to items:
 
-- `tm_validate()` — Validate all items against schemas; returns list of errors
-- `tm_index()` — Re-index all documents (scan, parse, rebuild indices)
-- `tm_reconcile()` — Fix filesystem/state inconsistencies
-- `tm_events(tail=20)` — Get recent planning events from the log
-- `tm_verify_structure()` — Health check: verify directories, configs, and API accessibility
+1. **Claim items before work**: `tm_claim op=claim kind=task id=task-0123 holder=agent-name`
+2. **Check available work**: `tm_list mode=next` returns unclaimed ready items
+3. **View active claims**: `tm_claim op=list` shows all claimed items
+4. **Release when done**: `tm_claim op=unclaim id=task-0123`
+5. **Set TTL for auto-release**: `tm_claim op=claim ... ttl=3600` (seconds)
+
+**Example workflow:**
+```json
+// Agent claims a task
+{op: "claim", kind: "task", id: "task-0123", holder: "agent-1", ttl: 7200}
+
+// Agent does work
+{op: "state", value: "in_progress"}
+{op: "section", name: "Progress", content: "...", mode: "append"}
+
+// Agent completes and releases
+{op: "state", value: "done"}
+{op: "unclaim", id: "task-0123"}
+```
+
+**Notes:**
+- Claims prevent other agents from picking up the same item via `tm_list mode=next`
+- Claims expire after TTL (if set) to prevent stale locks
+- Manual state changes work regardless of claims (claims are advisory for work queue)
+
+### Error handling
+
+All errors include a `suggestion` field to help agents recover:
+
+```json
+{
+  "error": {
+    "message": "Invalid operation 'update_state'",
+    "suggestion": "Supported operations: state, label, summary, section, content, meta"
+  }
+}
+```
+
+Common error patterns:
+- Invalid operation → check suggestion for valid ops
+- Item not found → use `tm_list` to find valid IDs
+- Unknown kind/depth/mode → check suggestion for valid values
+
+## Tools
+
+### `tm_edit(id, operations)` — mutate
+
+Execute one or more operations on a planning item atomically. Operations validated by Pydantic schema.
+
+**Returns:** `{"id": "...", "operations_executed": N, "result": {...}}`
+
+### `tm_create(kind, label, summary, ...)` — create
+
+Create a planning item. `kind`: `request|spec|plan|task|wp|standard`.
+Provide `content` for initial markdown body.
+Kind requirements: spec needs `request_refs`; task needs `spec`; wp needs `plan`.
+Request extras: `profile`, `source`, `context`, `current_understanding`, `open_questions`.
+
+### `tm_get(id, depth, with_related)` — read
+
+Read a planning item. `depth`: `head|meta|full|body` (default: `full`).
+
+### `tm_list(kind, state, domain, mode, ...)` — query
+
+Query items. `mode`: `list` (default) | `count` (kind×state summary) | `next` (unclaimed ready items).
+`kind`, `state`, `domain` are optional filters.
+
+### `tm_section(id, op, section, content)` — section read/write
+
+Read or write a named section. `op`: `get|set|append|get_sub`.
+`set` and `append` require `content`. `get_sub` accepts dot-notation paths (`Requirements.Functional`).
+
+### `tm_move(id, domain)` — move
+
+Move a task or wp to a different domain (e.g. `core → provider`).
+
+### `tm_delete(id, hard, reason)` — delete
+
+Delete an item. `hard=False` (default) soft-deletes; `hard=True` removes the file.
+
+### `tm_relink(src, field, dst, seq, display)` — update references
+
+Update a reference/link field (e.g. `spec`, `parent`, `request_refs`).
+
+### `tm_package(plan, tasks, label, summary, domain)` — group tasks
+
+Group Tasks into a new WorkPackage within a Plan.
+
+### `tm_standards(id, with_related)` — standards lookup
+
+- Omit `id` → list all standards.
+- `id=standard-XXXX` → get that standard with body.
+- `id=task-XXXX` (any non-standard item) → list applicable standards for that item.
+
+### `tm_claim(op, id, kind, holder, ttl)` — ownership claims
+
+`op`: `claim` (requires `kind`, `id`, `holder`; optional `ttl` seconds) | `unclaim` (requires `id`) | `list` (optional `kind` filter).
+
+### `tm_docs(op, id, kind, profile_pack, role)` — documentation resources
+
+`op`: `surfaces` | `surface` (id=surface_id) | `refs` | `profiles` | `profile` (id=profile_id) | `support` (optional id, role) | `sync_req` (requires kind) | `pending` (requires kind).
+
+### `tm_admin(op, id, tail)` — admin and maintenance
+
+`op`: `validate` | `index` | `reconcile` | `events` (optional `tail`, default 20) | `verify` | `check_sensitive` (requires `id`).
 
 ## Guidance
 
 - **Do use these tools for:** Planning-domain CRUD, state changes, validation, queries, doc editing, and governance
-- **Don't use this server for:** Provider execution, prompt launching, runtime job control, general code edits, or agent job submission (that's AUDiaGentic's job dispatcher)
-  
+- **Don't use this server for:** Provider execution, prompt launching, runtime job control, general code edits, or agent job submission
+- **Multi-agent:** Use claims for coordination; tm_list mode=next automatically skips claimed items
+- **Errors:** All errors include suggestions for agent recovery

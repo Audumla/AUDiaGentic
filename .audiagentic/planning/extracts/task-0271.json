@@ -1,0 +1,27 @@
+{
+  "item": {
+    "id": "task-0271",
+    "label": "Add type hints and docstring to get_task_by_id",
+    "state": "draft",
+    "summary": "Document get_task_by_id function with type hints",
+    "request_refs": [
+      "request-019"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0271.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n\n\nMissing type hints and docstring in api.py:get_task_by_id function at line 645 to comply with standard-0008 (Python Implementation). Add explicit type annotations for task_id parameter and comprehensive docstring documenting parameter validation behavior, return values, and error handling. Follow patterns from other API functions that have complete type hints and documentation. Include examples of valid and invalid input scenarios.\n"
+}

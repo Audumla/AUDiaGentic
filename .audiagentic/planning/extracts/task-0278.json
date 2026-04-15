@@ -1,0 +1,27 @@
+{
+  "item": {
+    "id": "task-0278",
+    "label": "Fix tight coupling in session_input_tool",
+    "state": "draft",
+    "summary": "Implement dependency injection for session_input_tool",
+    "request_refs": [
+      "request-019"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0278.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n\n\n\"\"\"Tight coupling to job_store in session_input_tool.build_and_persist_session_input at lines 196-200. The function directly accesses global job_store, violating standard-0011 (Component Architecture). Refactor to: 1) Accept job_store as parameter via dependency injection, 2) Create SessionInputTool class with __init__ that takes job_store, 3) Remove all direct global variable access from method bodies, 4) Update all callers to pass job_store instance. Follow pattern from job_control_tool refactor. Ensure no remaining direct references to global job_store in the tool code. Create Application context or dependency injection container. Document new instantiation pattern. Test with mocked job_store. Update all callers. Verify backward compatibility or migration path. Ensure consistent dependency injection across all CLI tools.\"\"\"\n"
+}
