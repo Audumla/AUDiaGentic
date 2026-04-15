@@ -303,3 +303,18 @@ class Config:
         """
         kind_cfg = self.kind_config(kind)
         return kind_cfg.get("required_refs", [])
+
+    def standard_refs_inheritance(self, kind: str) -> list[dict]:
+        """Get standard_refs inheritance rules for a kind.
+
+        Args:
+            kind: Planning kind name
+
+        Returns:
+            List of inheritance rules, each with:
+            - field: The reference field to follow (e.g., 'spec_ref', 'task_refs')
+            - type: 'direct' (follow field once) or 'recursive' (follow with sub_inheritance)
+            - sub_inheritance: (for recursive) list of fields to inherit from the referenced item
+        """
+        kind_cfg = self.kind_config(kind)
+        return kind_cfg.get("standard_refs_inheritance", [])

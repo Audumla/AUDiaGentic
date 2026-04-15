@@ -1523,7 +1523,7 @@ class PlanningAPI:
         from .standards import effective_standard_refs
 
         items = {i.data["id"]: ItemView(i.kind, i.path, i.data, i.body) for i in self._scan()}
-        return effective_standard_refs(items[id_], items)
+        return effective_standard_refs(items[id_], items, self.config)
 
     def dump_all(self, output_dir: str | None = None, format_: str = "json") -> dict:
         """Dump all planning docs to stdout or file.
