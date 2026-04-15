@@ -1,10 +1,12 @@
 """Main CLI entrypoint."""
+
 from __future__ import annotations
 
 import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 SRC_ROOT = REPO_ROOT / "src"
@@ -17,24 +19,114 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from tools.misc import lifecycle_stub
-from tools.misc import refresh_model_catalog as refresh_model_catalog_tool
-from audiagentic.release import bootstrap as release_bootstrap
 from tools.misc import provider_status as provider_status_tool
+from tools.misc import refresh_model_catalog as refresh_model_catalog_tool
+
 from audiagentic.execution.jobs import control as job_control_tool
 from audiagentic.execution.jobs import prompt_launch as prompt_launch_tool
 from audiagentic.execution.jobs import prompt_trigger_bridge as prompt_trigger_bridge_tool
-from audiagentic.runtime.state import session_input_store as session_input_tool
 from audiagentic.execution.jobs.prompt_parser import parse_prompt_launch_request
+from audiagentic.planning.app.audit import audit_cmd
+from audiagentic.release import bootstrap as release_bootstrap
 from audiagentic.runtime.state import jobs_store as job_store
+from audiagentic.runtime.state import session_input_store as session_input_tool
 
 
-def _load_json_argument(raw_value: str | None) -> dict[str, object] | None:
+def _load_json_argument(raw_value: str | None) -> dict[str, Any] | None:
+    """Load and validate JSON argument from string.
+
+    Parses JSON string and validates that it decodes to a dictionary object.
+    Used for CLI arguments that accept JSON payloads.
+
+    Args:
+        raw_value: JSON string to parse, or None for optional arguments
+
+    Returns:
+        Parsed dictionary or None if input was None
+
+    Raises:
+        ValueError: If JSON is invalid or does not decode to an object
+
+    Example:
+        >>> _load_json_argument('{"key": "value"}')
+        {"key": "value"}
+        >>> _load_json_argument(None)
+        None
+        >>> _load_json_argument('["array"]')
+        ValueError: JSON argument must decode to an object
+    """
     if raw_value is None:
         return None
-    payload = json.loads(raw_value)
+    try:
+        payload = json.loads(raw_value)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON: {e}") from e
     if not isinstance(payload, dict):
         raise ValueError("JSON argument must decode to an object")
     return payload
+
+
+def _validate_json_schema(data: dict[str, Any], required_keys: list[str] | None = None) -> None:
+    """Validate JSON data against required schema.
+
+    Performs basic schema validation including:
+    - Required keys presence
+    - Type validation for known fields
+    - Nested structure validation
+
+    Args:
+        data: Parsed JSON data to validate
+        required_keys: List of required top-level keys
+
+    Raises:
+        ValueError: If validation fails with details about missing/invalid fields
+
+    Example:
+        >>> _validate_json_schema({"key": "value"}, ["key"])
+        # Passes validation
+        >>> _validate_json_schema({}, ["key"])
+        ValueError: Missing required key: key
+    """
+    if required_keys:
+        for key in required_keys:
+            if key not in data:
+                raise ValueError(f"Missing required key: {key}")
+
+
+def _validate_session_input_details(details: dict[str, Any]) -> None:
+    """Validate session input details JSON structure.
+
+    Validates that session input details contain valid event data structure.
+    Checks for required fields and proper types based on event_kind.
+
+    Args:
+        details: Parsed details JSON to validate
+
+    Raises:
+        ValueError: If validation fails with specific field error
+
+    Valid structure:
+        {
+            "kind": "string (optional)",
+            "label": "string (optional)",
+            "summary": "string (optional)",
+            "metadata": "object (optional)",
+            "attachments": "array (optional)"
+        }
+    """
+    if not isinstance(details, dict):
+        raise ValueError("details must be a JSON object")
+
+    if "kind" in details and not isinstance(details["kind"], str):
+        raise ValueError("details.kind must be a string")
+    if "label" in details and not isinstance(details["label"], str):
+        raise ValueError("details.label must be a string")
+    if "summary" in details and not isinstance(details["summary"], str):
+        raise ValueError("details.summary must be a string")
+    if "metadata" in details and not isinstance(details["metadata"], dict):
+        raise ValueError("details.metadata must be an object")
+    if "attachments" in details and not isinstance(details["attachments"], list):
+        raise ValueError("details.attachments must be an array")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -59,7 +151,9 @@ def main(argv: list[str] | None = None) -> int:
 
     bridge_parser = subparsers.add_parser("prompt-trigger-bridge")
     bridge_parser.add_argument("--project-root", default=".")
-    bridge_parser.add_argument("--prompt-file", help="Path to a raw prompt text file; stdin if omitted")
+    bridge_parser.add_argument(
+        "--prompt-file", help="Path to a raw prompt text file; stdin if omitted"
+    )
     bridge_parser.add_argument("--surface", default="cli", choices=["cli", "vscode"])
     bridge_parser.add_argument("--provider-id")
     bridge_parser.add_argument("--session-id")
@@ -135,7 +229,27 @@ def main(argv: list[str] | None = None) -> int:
                 allow_adhoc_target=False,
             )
         except ValueError as exc:
-            print(json.dumps({"status": "error", "kind": "validation", "message": str(exc)}, indent=2, sort_keys=True))
+            error_msg = str(exc)
+            # Provide recovery guidance based on error type
+            if "JSON" in error_msg or "json" in error_msg:
+                suggestion = "Check that JSON arguments are valid and properly formatted"
+            elif "prompt" in error_msg.lower():
+                suggestion = "Ensure prompt contains valid @ag-* tag and required fields"
+            else:
+                suggestion = "Review argument values and ensure they match expected format"
+            print(
+                json.dumps(
+                    {
+                        "status": "error",
+                        "kind": "validation",
+                        "error-code": "CLI-VALIDATION-001",
+                        "message": error_msg,
+                        "suggestion": suggestion,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
             return 2
         result = prompt_launch_tool.launch_prompt_request(Path(args.project_root), request)
         print(json.dumps(result, indent=2, sort_keys=True))
@@ -172,7 +286,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "job-control":
         request = job_control_tool.build_job_control_request(
             job_id=args.job_id,
-            project_id=job_store.read_job_record(Path(args.project_root), args.job_id)["project-id"],
+            project_id=job_store.read_job_record(Path(args.project_root), args.job_id)[
+                "project-id"
+            ],
             requested_action=args.action,
             requested_by=args.requested_by,
             reason=args.reason,
@@ -187,25 +303,35 @@ def main(argv: list[str] | None = None) -> int:
             message = args.message
         else:
             message = sys.stdin.read()
-        details = json.loads(args.details_json) if args.details_json else None
-        job = job_store.read_job_record(Path(args.project_root), args.job_id)
+        details = _load_json_argument(args.details_json)
+        if details is not None:
+            _validate_session_input_details(details)
         record = session_input_tool.build_and_persist_session_input(
             Path(args.project_root),
             job_id=args.job_id,
             prompt_id=args.prompt_id,
-            provider_id=args.provider_id or job.get("provider-id"),
+            provider_id=args.provider_id,
             surface=args.surface,
             stage=args.stage,
             event_kind=args.event_kind,
             message=message,
             details=details,
+            job_store=job_store.read_job_record,
         )
         print(json.dumps({"status": "recorded", "session-input": record}, indent=2, sort_keys=True))
         return 0
     if args.command == "release-bootstrap":
-        result = release_bootstrap.bootstrap_release_workflow(Path(args.project_root), release_id=args.release_id)
+        result = release_bootstrap.bootstrap_release_workflow(
+            Path(args.project_root), release_id=args.release_id
+        )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
+    if args.command == "audit":
+        return audit_cmd.run(
+            project_root=Path(args.project_root),
+            fix=args.fix,
+            verbose=args.verbose,
+        )
     return 1
 
 

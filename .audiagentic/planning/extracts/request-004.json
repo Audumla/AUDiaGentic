@@ -1,0 +1,33 @@
+{
+  "item": {
+    "id": "request-004",
+    "label": "Archive functionality for planning items",
+    "state": "closed",
+    "summary": "Implement archive state and functions to archive older or redundant planning items while maintaining historical records",
+    "source": "legacy-backfill",
+    "current_understanding": "This request is the current implementation-focused archive intake. It takes the earlier archive concept and narrows it into a concrete delivery slice for archive state support, state-driven archive/restore behavior, default archive filtering, validation behavior, and archive metadata visibility. It supersedes request-0003 as the active implementation intake while preserving that request as historical provenance.",
+    "open_questions": [
+      "Are there any compatibility constraints from legacy planning queries or state transitions that need to be called out more explicitly before implementation is closed?",
+      "What test evidence is sufficient to demonstrate archive metadata persistence and non-breaking behavior across list, show, validate, archive, and restore flows?"
+    ],
+    "standard_refs": [
+      "standard-0001",
+      "standard-0009"
+    ],
+    "meta": {
+      "current_understanding": "Archive functionality implementation ready to begin. Spec-0023 finalized, plan-0009 and wp-0009 ready, all 5 tasks prepared for implementation."
+    },
+    "kind": "request",
+    "path": "docs/planning/requests/request-004.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0001",
+    "standard-0009"
+  ],
+  "body": "\n\n\n\n\n\n\n\n\n# Understanding\n\nThis request is the current implementation-focused archive intake. It takes the earlier archive concept from `request-002` and narrows it into a concrete delivery slice for archive state support, state-driven archive/restore behavior, default archive filtering, validation behavior, and archive metadata visibility.\n\n# Open Questions\n\n- Are there any compatibility constraints from legacy planning queries or state transitions that need to be called out more explicitly before implementation is closed?\n- What test evidence is sufficient to demonstrate archive metadata persistence and non-breaking behavior across list, show, validate, archive, and restore flows?\n\n# Notes\n\n- `spec-001`, `plan-004`, and `wp-005` are the current implementation chain for this request.\n- `request-002` remains the historical umbrella and provenance record for the earlier archive-workflow framing, but `request-004` is the active implementation intake.\n- The first-pass behavior is already defined by the linked implementation chain: add the `archived` state, keep archive and restore semantics state-based in the planning core, exclude archived items from `tm_list()` by default unless explicitly requested, relax cross-reference validation for archived items, and expose archive metadata in `tm_show()`.\n- This request is a better build entrypoint than `request-002` because it is narrower and already aligned to the current task sequence (`task-0178` to `task-0182`).\n- The key execution risk is changing the state/query model without making archive behavior obvious and reversible.\n"
+}

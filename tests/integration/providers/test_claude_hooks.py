@@ -1,16 +1,12 @@
 """Tests for Claude Code hook implementations."""
 
-import json
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
-
 from tools.misc.claude_hooks import (
-    detect_and_launch_prompt_tag,
-    enforce_stage_restrictions,
     _parse_first_line_params,
     _resolve_hook_name,
+    detect_and_launch_prompt_tag,
+    enforce_stage_restrictions,
 )
 
 

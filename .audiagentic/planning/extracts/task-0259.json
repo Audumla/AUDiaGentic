@@ -1,0 +1,29 @@
+{
+  "item": {
+    "id": "task-0259",
+    "label": "Add CLI commands and diagnostics for event layer",
+    "state": "draft",
+    "summary": "Implement CLI commands for event layer diagnostics \u2014 blocked: deferred until core is stable and operational need confirmed in practice",
+    "spec_ref": "spec-019",
+    "request_refs": [
+      "request-017"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0259.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006",
+    "standard-0011"
+  ],
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement CLI commands for event layer diagnostics and management. This task adds CLI surface for event inspection, replay, and cleanup.\n\n**Commands:**\n```bash\naudiagentic events list [--from TIMESTAMP] [--to TIMESTAMP] [--type PATTERN]\n  # List persisted events\n  \naudiagentic events replay [--from TIMESTAMP] [--to TIMESTAMP] [--type PATTERN]\n  # Replay events\n  \naudiagentic events debug EVENT_ID\n  # Show event details\n  \naudiagentic events cleanup [--older-than DAYS]\n  # Remove old event files\n```\n\n**Note:** Deferred until core is stable and operational need confirmed.\n\n# Acceptance Criteria\n\n- `events list` shows persisted events with filtering\n- `events replay` triggers replay with filtering\n- `events debug` shows full event envelope for given ID\n- `events cleanup` removes old event files safely\n- CLI commands integrated into existing audiagentic CLI\n- Unit tests cover: command parsing, filtering, cleanup safety\n- Smoke test proves CLI commands execute without errors\n\n# Notes\n\nDeferred until core is stable and operational need confirmed. Depends on: task-0249 (persistence), task-0250 (replay).\n"
+}

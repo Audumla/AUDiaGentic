@@ -7,13 +7,13 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.config.provider_catalog import (
     catalog_is_stale,
     read_model_catalog,
     runtime_catalog_path,
 )
 from audiagentic.foundation.config.provider_config import load_provider_config
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.interoperability.providers.health import health_check
 from audiagentic.interoperability.providers.models import resolve_model_selection
 

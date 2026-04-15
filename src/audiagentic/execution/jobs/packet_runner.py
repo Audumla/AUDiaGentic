@@ -2,18 +2,19 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from audiagentic.foundation.contracts.canonical_ids import CANONICAL_PROVIDER_IDS, validate_ids
-from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.execution.jobs import control as job_control
-from audiagentic.runtime.state import jobs_store as store
 from audiagentic.execution.jobs.profiles import load_profile
 from audiagentic.execution.jobs.records import build_job_record
-from audiagentic.execution.jobs.state_machine import transition_and_persist
 from audiagentic.execution.jobs.stages import execute_stage
+from audiagentic.execution.jobs.state_machine import transition_and_persist
+from audiagentic.foundation.contracts.canonical_ids import CANONICAL_PROVIDER_IDS, validate_ids
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.runtime.state import jobs_store as store
 
 StageExecutor = Callable[
     [dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any] | None],

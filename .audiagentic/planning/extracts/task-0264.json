@@ -1,0 +1,29 @@
+{
+  "item": {
+    "id": "task-0264",
+    "label": "Implement async event queue for background processing",
+    "state": "done",
+    "summary": "Create background worker queue for ASYNC mode event processing",
+    "spec_ref": "spec-019",
+    "request_refs": [
+      "request-017"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0264.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006",
+    "standard-0011"
+  ],
+  "body": "\n\n\n\n\n\n\n# Description\n\nImplement background worker queue for ASYNC mode event processing. This task owns queuing async events, background processing thread, and ensuring events are not lost during normal operation.\n\n**API:**\n```python\n# EventBus automatically uses AsyncQueue for ASYNC mode\nbus.publish(\"planning.task.done\", {...}, mode=ASYNC)  # returns immediately\n\n# AsyncQueue processes events in background\nasync_queue.start()  # start background worker\nasync_queue.stop()   # graceful shutdown\n```\n\n**Key behaviors:**\n- ASYNC events queued immediately, `publish()` returns in <5ms\n- Background worker processes queue continuously (threading-based, not asyncio)\n- **V1 crash recovery:** Events in queue lost on crash if `persist_on_checkpoint: false`\n- **V2 durability:** Optional disk persistence on checkpoint (configurable)\n- Queue drains on shutdown (configurable timeout, default: 30s)\n- Thread-safe using `queue.Queue`\n- Max queue size with backpressure\n\n# Acceptance Criteria\n\n- ASYNC `publish()` returns in <5ms (queue only, no processing)\n- Background worker processes queued events in order (threading-based)\n- Queue doesn't lose events during normal operation\n- **V1 crash recovery:** Events in queue lost on crash if `persist_on_checkpoint: false` (documented)\n- **V2 durability:** Optional disk persistence on checkpoint (configurable)\n- Graceful shutdown drains queue (configurable timeout, default: 30s)\n- Unit tests cover: queueing, background processing, shutdown behavior\n- Smoke test proves ASYNC events are processed correctly\n\n# Notes\n\nDepends on: task-0248 (EventBus). This task is async queue only, not the EventBus itself.\n"
+}

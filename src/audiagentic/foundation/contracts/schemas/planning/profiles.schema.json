@@ -5,16 +5,128 @@
     "planning": {
       "type": "object",
       "properties": {
-        "stack_profiles": {
-          "type": "object"
+        "guidance_levels": {
+          "type": "object",
+          "properties": {
+            "light": { "$ref": "#/$defs/guidance_level" },
+            "standard": { "$ref": "#/$defs/guidance_level" },
+            "deep": { "$ref": "#/$defs/guidance_level" }
+          }
+        },
+        "profiles": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "description": { "type": "string" },
+              "label": { "type": "string" },
+              "on_request_create": { "type": "array", "items": { "type": "string" } },
+              "allow_plan_overlay": { "type": "boolean" },
+              "defaults": { "type": "object" },
+              "suggested_sections": { "type": "array", "items": { "type": "string" } }
+            }
+          }
         },
         "object_profiles": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "applies_to": { "type": "string" },
+              "required_sections": { "type": "array", "items": { "type": "string" } },
+              "suggested_sections": { "type": "array", "items": { "type": "string" } }
+            },
+            "required": ["applies_to"]
+          }
+        },
+        "standard_defaults": {
+          "type": "object",
+          "additionalProperties": { "type": "array", "items": { "type": "string" } }
+        },
+        "document_templates": {
+          "$ref": "#/$defs/document_templates"
+        },
+        "relationship_config": {
+          "$ref": "#/$defs/relationship_config"
         }
       }
     }
   },
-  "required": [
-    "planning"
-  ]
+  "required": ["planning"],
+  "$defs": {
+    "guidance_level": {
+      "type": "object",
+      "properties": {
+        "description": { "type": "string" },
+        "label": { "type": "string" },
+        "defaults": { "type": "object" },
+        "spec_sections": {
+          "type": "object",
+          "properties": {
+            "required": { "type": "array", "items": { "type": "string" } },
+            "suggested": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "task_sections": {
+          "type": "object",
+          "properties": {
+            "required": { "type": "array", "items": { "type": "string" } },
+            "suggested": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "acceptance_criteria_depth": { "type": "string" },
+        "semantics": { "type": "object" }
+      },
+      "required": ["description", "label"]
+    },
+    "document_templates": {
+      "type": "object",
+      "properties": {
+        "spec": { "$ref": "#/$defs/template_config" },
+        "task": { "$ref": "#/$defs/template_config" },
+        "plan": { "$ref": "#/$defs/template_config" },
+        "wp": { "$ref": "#/$defs/template_config" },
+        "standard": { "$ref": "#/$defs/template_config" },
+        "request": { "$ref": "#/$defs/template_config" }
+      }
+    },
+    "template_config": {
+      "type": "object",
+      "properties": {
+        "default": { "type": "string" },
+        "by_guidance": {
+          "type": "object",
+          "properties": {
+            "light": { "type": "string" },
+            "standard": { "type": "string" },
+            "deep": { "type": "string" }
+          }
+        }
+      },
+      "required": ["default"]
+    },
+    "relationship_config": {
+      "type": "object",
+      "properties": {
+        "request": { "$ref": "#/$defs/relationship_rules" },
+        "spec": { "$ref": "#/$defs/relationship_rules" },
+        "task": { "$ref": "#/$defs/relationship_rules" },
+        "plan": { "$ref": "#/$defs/relationship_rules" },
+        "wp": { "$ref": "#/$defs/relationship_rules" },
+        "standard": { "$ref": "#/$defs/relationship_rules" }
+      }
+    },
+    "relationship_rules": {
+      "type": "object",
+      "properties": {
+        "can_reference": { "type": "array", "items": { "type": "string" } },
+        "required_for_children": { "type": "array", "items": { "type": "string" } },
+        "referenced_by": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "required": ["can_reference"]
+    }
+  }
 }

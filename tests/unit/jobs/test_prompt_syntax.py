@@ -9,10 +9,12 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.execution.jobs.prompt_syntax import load_canonical_tags
-from audiagentic.execution.jobs.prompt_syntax import load_no_body_required_tags
-from audiagentic.execution.jobs.prompt_syntax import load_prompt_syntax
-from audiagentic.execution.jobs.prompt_syntax import load_review_tag
+from audiagentic.execution.jobs.prompt_syntax import (
+    load_canonical_tags,
+    load_no_body_required_tags,
+    load_prompt_syntax,
+    load_review_tag,
+)
 
 
 def test_load_canonical_tags_uses_custom_syntax_values() -> None:

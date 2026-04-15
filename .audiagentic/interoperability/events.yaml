@@ -1,0 +1,525 @@
+# Event Registry
+
+Registry of all event types used by the AUDiaGentic interoperability layer.
+
+## Planning Events
+
+### planning.item.state.will-change
+
+State change event fired before state transition.
+
+**Version:** 1  
+**Namespace:** planning  
+**Triggered by:** manual, automatic
+
+**Subject:**
+```yaml
+kind: task|wp|plan|spec|request|standard
+id: string
+```
+
+**Payload:**
+```yaml
+id: string
+old_state: string
+new_state: string
+reason: string
+actor: string
+```
+
+**Metadata:**
+```yaml
+triggered_by: manual|automatic
+correlation_id: string
+propagation_depth: integer
+timestamp: ISO8601
+```
+
+### planning.item.state.changed
+
+State change event for planning items.
+
+**Version:** 1  
+**Namespace:** planning  
+**Triggered by:** manual, automatic
+
+**Subject:**
+```yaml
+kind: task|wp|plan|spec|request|standard
+id: string
+```
+
+**Payload:**
+```yaml
+id: string
+old_state: string
+new_state: string
+reason: string
+actor: string
+```
+
+**Metadata:**
+```yaml
+triggered_by: manual|automatic
+correlation_id: string
+propagation_depth: integer
+timestamp: ISO8601
+```
+
+**Example:**
+```json
+{
+  "name": "planning.item.state.changed",
+  "payload": {
+    "old_state": "ready",
+    "new_state": "done"
+  },
+  "metadata": {
+    "subject": {
+      "kind": "task",
+      "id": "task-001"
+    },
+    "triggered_by": "manual",
+    "correlation_id": "corr-123",
+    "propagation_depth": 0,
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### planning.item.created
+
+Item creation event.
+
+**Version:** 1  
+**Namespace:** planning  
+**Triggered by:** manual
+
+**Subject:**
+```yaml
+kind: task|wp|plan|spec|request|standard|wp
+id: string
+```
+
+**Payload:**
+```yaml
+id: string
+path: string
+```
+
+**Metadata:**
+```yaml
+triggered_by: manual
+timestamp: ISO8601
+```
+
+**Example:**
+```json
+{
+  "name": "planning.item.created",
+  "payload": {
+    "id": "task-001",
+    "path": "docs/planning/tasks/core/task-001.md"
+  },
+  "metadata": {
+    "subject": {
+      "kind": "task",
+      "id": "task-001"
+    },
+    "triggered_by": "manual",
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### planning.item.updated
+
+Item update event.
+
+**Version:** 1  
+**Namespace:** planning  
+**Triggered by:** manual
+
+**Subject:**
+```yaml
+kind: task|wp|plan|spec|request|standard|wp
+id: string
+```
+
+**Payload:**
+```yaml
+id: string
+```
+
+**Metadata:**
+```yaml
+triggered_by: manual
+timestamp: ISO8601
+```
+
+**Example:**
+```json
+{
+  "name": "planning.item.updated",
+  "payload": {
+    "id": "task-001"
+  },
+  "metadata": {
+    "subject": {
+      "kind": "task",
+      "id": "task-001"
+    },
+    "triggered_by": "manual",
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### planning.item.deleted
+
+Item deletion event.
+
+**Version:** 1  
+**Namespace:** planning  
+**Triggered by:** manual
+
+**Subject:**
+```yaml
+kind: task|wp|plan|spec|request|standard|wp
+id: string
+```
+
+**Payload:**
+```yaml
+id: string
+hard_delete: boolean
+deleted_at: ISO8601
+deletion_reason: string
+```
+
+**Metadata:**
+```yaml
+triggered_by: manual
+timestamp: ISO8601
+```
+
+**Example:**
+```json
+{
+  "name": "planning.item.deleted",
+  "payload": {
+    "id": "task-001",
+    "hard_delete": false,
+    "deleted_at": "2024-01-15T10:30:00Z",
+    "deletion_reason": "Superseded by task-002"
+  },
+  "metadata": {
+    "subject": {
+      "kind": "task",
+      "id": "task-001"
+    },
+    "triggered_by": "manual",
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### planning.reconciled
+
+Reconciliation event.
+
+**Version:** 1  
+**Namespace:** planning  
+**Triggered by:** automatic
+
+**Subject:**
+```yaml
+kind: planning
+id: planning
+```
+
+**Payload:**
+```yaml
+orphans: array of orphan items
+```
+
+**Metadata:**
+```yaml
+triggered_by: automatic
+timestamp: ISO8601
+```
+
+**Example:**
+```json
+{
+  "name": "planning.reconciled",
+  "payload": {
+    "orphans": [
+      {"id": "task-003", "reason": "orphaned from wp-001"}
+    ]
+  },
+  "metadata": {
+    "subject": {
+      "kind": "planning",
+      "id": "planning"
+    },
+    "triggered_by": "automatic",
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+## Knowledge Events
+
+### knowledge.entry.created
+
+Knowledge entry creation event.
+
+**Version:** 1  
+**Namespace:** knowledge  
+**Triggered by:** manual
+
+**Subject:**
+```yaml
+kind: page|note|concept
+id: string
+```
+
+**Payload:**
+```yaml
+id: string
+path: string
+```
+
+**Metadata:**
+```yaml
+triggered_by: manual
+timestamp: ISO8601
+```
+
+**Example:**
+```json
+{
+  "name": "knowledge.entry.created",
+  "payload": {
+    "id": "page-001",
+    "path": "docs/knowledge/pages/page-001.md"
+  },
+  "metadata": {
+    "subject": {
+      "kind": "page",
+      "id": "page-001"
+    },
+    "triggered_by": "manual",
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### knowledge.drift.detected
+
+Knowledge drift detection event.
+
+**Version:** 1  
+**Namespace:** knowledge  
+**Triggered by:** automatic
+
+**Subject:**
+```yaml
+kind: page|note|concept
+id: string
+```
+
+**Payload:**
+```yaml
+id: string
+drift_type: stale|outdated|conflicting
+details: string
+```
+
+**Metadata:**
+```yaml
+triggered_by: automatic
+timestamp: ISO8601
+```
+
+**Example:**
+```json
+{
+  "name": "knowledge.drift.detected",
+  "payload": {
+    "id": "page-001",
+    "drift_type": "stale",
+    "details": "Task task-001 marked done, page not updated"
+  },
+  "metadata": {
+    "subject": {
+      "kind": "page",
+      "id": "page-001"
+    },
+    "triggered_by": "automatic",
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+## Interoperability Events
+
+### interop.bus.started
+
+Event bus started event.
+
+**Version:** 1  
+**Namespace:** interop  
+**Triggered by:** automatic
+
+**Subject:**
+```yaml
+kind: bus
+id: eventbus
+```
+
+**Payload:**
+```yaml
+mode: sync|async
+subscriber_count: integer
+```
+
+**Metadata:**
+```yaml
+triggered_by: automatic
+timestamp: ISO8601
+```
+
+**Example:**
+```json
+{
+  "name": "interop.bus.started",
+  "payload": {
+    "mode": "async",
+    "subscriber_count": 5
+  },
+  "metadata": {
+    "subject": {
+      "kind": "bus",
+      "id": "eventbus"
+    },
+    "triggered_by": "automatic",
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### interop.subscriber.failed
+
+Subscriber failure event.
+
+**Version:** 1  
+**Namespace:** interop  
+**Triggered by:** automatic
+
+**Subject:**
+```yaml
+kind: subscriber
+id: string
+```
+
+**Payload:**
+```yaml
+subscriber_id: string
+event_name: string
+error: string
+```
+
+**Metadata:**
+```yaml
+triggered_by: automatic
+timestamp: ISO8601
+```
+
+**Example:**
+```json
+{
+  "name": "interop.subscriber.failed",
+  "payload": {
+    "subscriber_id": "knowledge-subscriber",
+    "event_name": "planning.item.state.changed",
+    "error": "Connection timeout"
+  },
+  "metadata": {
+    "subject": {
+      "kind": "subscriber",
+      "id": "knowledge-subscriber"
+    },
+    "triggered_by": "automatic",
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### interop.store.write_failed
+
+Event store write failure event.
+
+**Version:** 1  
+**Namespace:** interop  
+**Triggered by:** automatic
+
+**Subject:**
+```yaml
+kind: store
+id: eventstore
+```
+
+**Payload:**
+```yaml
+event_name: string
+error: string
+retry_count: integer
+```
+
+**Metadata:**
+```yaml
+triggered_by: automatic
+timestamp: ISO8601
+```
+
+**Example:**
+```json
+{
+  "name": "interop.store.write_failed",
+  "payload": {
+    "event_name": "planning.item.state.changed",
+    "error": "Disk full",
+    "retry_count": 3
+  },
+  "metadata": {
+    "subject": {
+      "kind": "store",
+      "id": "eventstore"
+    },
+    "triggered_by": "automatic",
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+## Event Lifecycle
+
+1. **Publish**: Component publishes event to EventBus
+2. **Dispatch**: EventBus dispatches to matching subscribers
+3. **Persist**: Events written to FileEventStore (if enabled)
+4. **Replay**: Events replayed on startup (if enabled)
+5. **Ack**: Subscriber acknowledges processing
+
+## Event Ordering
+
+- Events are ordered by timestamp within a correlation_id
+- ASYNC mode: events may be processed out of order
+- SYNC mode: events processed in publish order
+
+## Error Handling
+
+- Subscriber failures logged
+- Store write failures trigger retry with exponential backoff
+- Bus failures logged but don't block publish

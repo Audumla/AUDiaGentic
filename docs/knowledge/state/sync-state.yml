@@ -1,0 +1,30 @@
+pages:
+  system-planning:
+    title: Planning System
+    sources: []
+  system-knowledge:
+    title: Knowledge System
+    sources: []
+  guide-using-planning:
+    title: Using the Planning System
+    sources: []
+  tool-cli:
+    title: AUDiaGentic CLI
+    sources: []
+  tool-mcp:
+    title: MCP Server
+    sources: []
+  pattern-event-bridge:
+    title: Event Bridge Pattern
+    sources: []
+  pattern-page-lifecycle:
+    title: Page Lifecycle Pattern
+    sources: []
+manual_stale_pages:
+- guide-using-planning
+- pattern-event-bridge
+- pattern-page-lifecycle
+- system-knowledge
+- system-planning
+- tool-cli
+- tool-mcp

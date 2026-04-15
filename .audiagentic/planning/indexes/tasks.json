@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T14:28:01.531820+00:00",
+  "generated_at": "2026-04-15T11:09:44.688136+00:00",
   "items": [
     {
       "id": "task-0032",
@@ -81,508 +81,1102 @@
       "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-0044.md"
     },
     {
-      "id": "task-0173",
+      "id": "task-0318",
       "label": "[PKT-CRD-001](task-0173): Coordinator Consumption Seam",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\coordinator\\task-0173.md"
+      "path": "docs\\planning\\tasks\\coordinator\\task-0318.md"
     },
     {
-      "id": "task-0008-output",
+      "id": "task-0001",
       "label": "Migration Reference Map",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-0008-output.md"
+      "path": "docs\\planning\\tasks\\core\\task-0001.md"
+    },
+    {
+      "id": "task-0002",
+      "label": "Inventory all implementation docs and build reference map",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0002.md"
+    },
+    {
+      "id": "task-0003",
+      "label": "Migrate Phase 0 docs (contracts and scaffolding)",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0003.md"
     },
     {
       "id": "task-0008",
-      "label": "Inventory all implementation docs and build reference map",
-      "state": "done",
+      "label": "Migrate Phase 5-6 docs (Discord overlay and migration hardening)",
+      "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0008.md"
     },
     {
       "id": "task-0009",
-      "label": "Migrate Phase 0 docs (contracts and scaffolding)",
+      "label": "Migrate Phase 7-11 docs (federation and external connectivity)",
       "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0009.md"
     },
     {
       "id": "task-0010",
-      "label": "Migrate Phase 1 docs (lifecycle and project enablement)",
+      "label": "Resolve all cross-references between planning objects",
       "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0010.md"
     },
     {
       "id": "task-0011",
-      "label": "Migrate Phase 2 docs (release, audit, ledger)",
+      "label": "Validate migration and clean up old files",
       "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0011.md"
     },
     {
       "id": "task-0012",
-      "label": "Migrate Phase 3 docs (jobs and workflows)",
+      "label": "Implement archive state in planning core",
       "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0012.md"
     },
     {
       "id": "task-0013",
-      "label": "Migrate Phase 4 docs (providers and server seam)",
+      "label": "Update tm_list with archive filter",
       "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0013.md"
     },
     {
       "id": "task-0014",
-      "label": "Migrate Phase 5-6 docs (Discord overlay and migration hardening)",
+      "label": "Update tm_validate with archive rules",
       "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0014.md"
     },
     {
       "id": "task-0015",
-      "label": "Migrate Phase 7-11 docs (federation and external connectivity)",
+      "label": "Update tm_show to include archive metadata",
       "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0015.md"
     },
     {
       "id": "task-0016",
-      "label": "Resolve all cross-references between planning objects",
+      "label": "Add archived state to planning state machine",
       "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0016.md"
     },
     {
       "id": "task-0017",
-      "label": "Validate migration and clean up old files",
+      "label": "Implement tm_archive and tm_restore functions",
       "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0017.md"
     },
     {
       "id": "task-0018",
-      "label": "Implement archive state in planning core",
+      "label": "Update tm_list with archive filter parameter",
       "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0018.md"
     },
     {
       "id": "task-0019",
-      "label": "Update tm_list with archive filter",
+      "label": "Update tm_validate with archive validation rules",
       "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0019.md"
     },
     {
       "id": "task-0020",
-      "label": "Update tm_validate with archive rules",
+      "label": "Update tm_show to include archive metadata",
       "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0020.md"
     },
     {
       "id": "task-0021",
-      "label": "Update tm_show to include archive metadata",
-      "state": "draft",
+      "label": "Extend planning tools with full content management",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0021.md"
     },
     {
-      "id": "task-0022",
-      "label": "Add archived state to planning state machine",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0022.md"
-    },
-    {
-      "id": "task-0023",
-      "label": "Implement tm_archive and tm_restore functions",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0023.md"
-    },
-    {
-      "id": "task-0024",
-      "label": "Update tm_list with archive filter parameter",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0024.md"
-    },
-    {
-      "id": "task-0025",
-      "label": "Update tm_validate with archive validation rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0025.md"
-    },
-    {
-      "id": "task-0026",
-      "label": "Update tm_show to include archive metadata",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0026.md"
-    },
-    {
-      "id": "task-0027",
-      "label": "Extend planning tools with full content management",
+      "id": "task-0170",
+      "label": "Implement update_task_status() wrapper function",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-0027.md"
+      "path": "docs\\planning\\tasks\\core\\task-0170.md"
+    },
+    {
+      "id": "task-0171",
+      "label": "Define reference docs and project-facing documentation surfaces",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0171.md"
+    },
+    {
+      "id": "task-0172",
+      "label": "Scope manifest and migration-registry scaffolding",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0172.md"
+    },
+    {
+      "id": "task-0173",
+      "label": "Expand helper and MCP surfaces for documentation views",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0173.md"
+    },
+    {
+      "id": "task-0174",
+      "label": "Define section registry and subsection navigation limits",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0174.md"
+    },
+    {
+      "id": "task-0175",
+      "label": "Define supporting-doc metadata and registry behavior",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0175.md"
+    },
+    {
+      "id": "task-0176",
+      "label": "Define documentation-sync obligations and verification coverage",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0176.md"
+    },
+    {
+      "id": "task-0177",
+      "label": "Implement MCP helper root configurability",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0177.md"
+    },
+    {
+      "id": "task-0178",
+      "label": "Add archived state to planning state machine",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0178.md"
+    },
+    {
+      "id": "task-0179",
+      "label": "Implement state-based archive and restore behavior",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0179.md"
+    },
+    {
+      "id": "task-0180",
+      "label": "Update tm_list with archive filter parameter",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0180.md"
     },
     {
       "id": "task-0181",
-      "label": "Implement update_task_status() wrapper function",
+      "label": "Update tm_validate with archive validation rules",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0181.md"
     },
     {
+      "id": "task-0182",
+      "label": "Update tm_show to include archive metadata",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0182.md"
+    },
+    {
       "id": "task-0183",
-      "label": "Define reference docs and project-facing documentation surfaces",
+      "label": "Verify and preserve schema-compliant task reference placement",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0183.md"
     },
     {
       "id": "task-0184",
-      "label": "Scope manifest and migration-registry scaffolding",
+      "label": "Implement automatic counter sync on delete",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0184.md"
     },
     {
       "id": "task-0185",
-      "label": "Expand helper and MCP surfaces for documentation views",
+      "label": "Implement soft delete functionality",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0185.md"
     },
     {
       "id": "task-0186",
-      "label": "Define section registry and subsection navigation limits",
+      "label": "Extend auto-reference updates to plans and tasks",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0186.md"
     },
     {
       "id": "task-0187",
-      "label": "Define supporting-doc metadata and registry behavior",
+      "label": "Add duplicate detection for requests and specs",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0187.md"
     },
     {
       "id": "task-0188",
-      "label": "Define documentation-sync obligations and verification coverage",
+      "label": "Improve schema validation error messages",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0188.md"
     },
     {
       "id": "task-0189",
-      "label": "Implement MCP helper root configurability",
+      "label": "Add integration tests for critical fixes",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0189.md"
     },
     {
       "id": "task-0190",
-      "label": "Add archived state to planning state machine",
+      "label": "Fix update_content() section-mode regex",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0190.md"
     },
     {
       "id": "task-0191",
-      "label": "Implement state-based archive and restore behavior",
+      "label": "Fix move() for work-packages",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0191.md"
     },
     {
       "id": "task-0192",
-      "label": "Update tm_list with archive filter parameter",
+      "label": "Implement claims TTL lazy purge",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0192.md"
     },
     {
       "id": "task-0193",
-      "label": "Update tm_validate with archive validation rules",
+      "label": "Fix hook event payloads",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0193.md"
     },
     {
       "id": "task-0194",
-      "label": "Update tm_show to include archive metadata",
+      "label": "Fix batch meta op",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0194.md"
     },
     {
       "id": "task-0195",
-      "label": "Verify and preserve schema-compliant task reference placement",
+      "label": "Fix tm.status() return shape",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0195.md"
     },
     {
       "id": "task-0196",
-      "label": "Implement automatic counter sync on delete",
+      "label": "Fix FastMCP empty-list serialization",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0196.md"
     },
     {
       "id": "task-0197",
-      "label": "Implement soft delete functionality",
+      "label": "Add AUDIAGENTIC_ROOT env var support",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0197.md"
     },
     {
       "id": "task-0198",
-      "label": "Extend auto-reference updates to plans and tasks",
+      "label": "Add --root CLI flag support",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0198.md"
     },
     {
       "id": "task-0199",
-      "label": "Add duplicate detection for requests and specs",
+      "label": "Unify --profile and --stack-profile into single parameter",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0199.md"
     },
     {
       "id": "task-0200",
-      "label": "Improve schema validation error messages",
+      "label": "Add lookup.json global index generation to idx_mgr",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0200.md"
     },
     {
       "id": "task-0201",
-      "label": "Add integration tests for critical fixes",
+      "label": "Add internal lookup(id) and head(id) helpers to api.py",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0201.md"
     },
     {
       "id": "task-0202",
-      "label": "Fix update_content() section-mode regex",
+      "label": "Refactor _find(), show(), and extract() onto lookup path",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0202.md"
     },
     {
       "id": "task-0203",
-      "label": "Fix move() for work-packages",
+      "label": "Add include_body and write_to_disk controls to extract()",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0203.md"
     },
     {
       "id": "task-0204",
-      "label": "Implement claims TTL lazy purge",
+      "label": "Expose head(id) and refined extract controls in MCP and tm_helper",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0204.md"
     },
     {
       "id": "task-0205",
-      "label": "Fix hook event payloads",
+      "label": "Add stale-index handling for lookup misses",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0205.md"
     },
     {
       "id": "task-0206",
-      "label": "Fix batch meta op",
-      "state": "done",
+      "label": "Add body content parameters to task creation and enforce non-empty body via validation",
+      "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0206.md"
     },
     {
       "id": "task-0207",
-      "label": "Fix tm.status() return shape",
-      "state": "done",
+      "label": "Extend tm_batch_update to support multi-item operations",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-0207.md"
     },
     {
       "id": "task-0208",
-      "label": "Fix FastMCP empty-list serialization",
-      "state": "done",
+      "label": "Implement tm_bulk_state for state transitions",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-0208.md"
     },
     {
       "id": "task-0209",
-      "label": "Add AUDIAGENTIC_ROOT env var support",
-      "state": "ready",
+      "label": "Add summary_only flag to individual operations",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-0209.md"
     },
     {
       "id": "task-0210",
-      "label": "Add --root CLI flag support",
-      "state": "ready",
+      "label": "Expose bulk operations in MCP and tm_helper",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-0210.md"
     },
     {
-      "id": "task-0215",
-      "label": "Unify --profile and --stack-profile into single parameter",
+      "id": "task-0211",
+      "label": "Write tests for bulk operations and backward compatibility",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0211.md"
+    },
+    {
+      "id": "task-0212",
+      "label": "Implement detect_sensitive_patterns function with regex patterns",
       "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0212.md"
+    },
+    {
+      "id": "task-0213",
+      "label": "Integrate sensitive data detection into tm_validate output",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0213.md"
+    },
+    {
+      "id": "task-0214",
+      "label": "Write tests for sensitive data detection",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0214.md"
+    },
+    {
+      "id": "task-0215",
+      "label": "Implement audience profile system in config and API",
+      "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0215.md"
     },
     {
+      "id": "task-0216",
+      "label": "Add guidance_levels to profiles.yaml",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0216.md"
+    },
+    {
       "id": "task-0217",
-      "label": "Test task with defaults",
-      "state": "draft",
+      "label": "Update config.py to load guidance levels",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0217.md"
     },
     {
       "id": "task-0218",
-      "label": "Test task",
-      "state": "draft",
+      "label": "Add guidance field to request schema",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0218.md"
     },
     {
+      "id": "task-0219",
+      "label": "Update tm_helper.py new_request() with guidance parameter",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0219.md"
+    },
+    {
+      "id": "task-0220",
+      "label": "Add --guidance CLI parameter to tm.py",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0220.md"
+    },
+    {
       "id": "task-0221",
-      "label": "Add lookup.json global index generation to idx_mgr",
+      "label": "Update validation to enforce guidance-appropriate sections",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0221.md"
     },
     {
       "id": "task-0222",
-      "label": "Add internal lookup(id) and head(id) helpers to api.py",
+      "label": "Add default_guidance to planning.yaml",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0222.md"
     },
     {
       "id": "task-0223",
-      "label": "Refactor _find(), show(), and extract() onto lookup path",
+      "label": "Write tests for guidance levels",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0223.md"
     },
     {
       "id": "task-0224",
-      "label": "Add include_body and write_to_disk controls to extract()",
+      "label": "Draft standard-0010 with guidance level definitions",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0224.md"
     },
     {
       "id": "task-0225",
-      "label": "Expose head(id) and refined extract controls in MCP and tm_helper",
+      "label": "Update validation to enforce guidance level requirements",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0225.md"
     },
     {
       "id": "task-0226",
-      "label": "Add stale-index handling for lookup misses",
+      "label": "Add guidance level selection guide to documentation",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0226.md"
     },
     {
       "id": "task-0227",
-      "label": "Add body content parameters to task creation and enforce non-empty body via validation",
-      "state": "draft",
+      "label": "Update workflows.yaml with unified states",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0227.md"
     },
     {
       "id": "task-0228",
-      "label": "Extend tm_batch_update to support multi-item operations",
-      "state": "cancelled",
+      "label": "Implement cascade archive for requests",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0228.md"
     },
     {
       "id": "task-0229",
-      "label": "Implement tm_bulk_state for state transitions",
-      "state": "cancelled",
+      "label": "Implement cascade archive for specs",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0229.md"
     },
     {
       "id": "task-0230",
-      "label": "Add summary_only flag to individual operations",
-      "state": "cancelled",
+      "label": "Review knowledge component codebase",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0230.md"
     },
     {
       "id": "task-0231",
-      "label": "Expose bulk operations in MCP and tm_helper",
-      "state": "cancelled",
+      "label": "Integrate knowledge component source code",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0231.md"
     },
     {
       "id": "task-0232",
-      "label": "Write tests for bulk operations and backward compatibility",
-      "state": "cancelled",
+      "label": "Bootstrap knowledge component configuration",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0232.md"
     },
     {
       "id": "task-0233",
-      "label": "Implement detect_sensitive_patterns function with regex patterns",
+      "label": "Configure event adapter for planning bridge",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0233.md"
     },
     {
       "id": "task-0234",
-      "label": "Integrate sensitive data detection into tm_validate output",
+      "label": "Test knowledge component integration",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0234.md"
     },
     {
       "id": "task-0235",
-      "label": "Write tests for sensitive data detection",
-      "state": "done",
+      "label": "Validate documentation",
+      "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0235.md"
     },
     {
       "id": "task-0236",
-      "label": "Implement audience profile system in config and API",
+      "label": "Add unit tests for knowledge component",
       "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0236.md"
     },
     {
       "id": "task-0237",
-      "label": "Add guidance_levels to profiles.yaml",
-      "state": "done",
+      "label": "Refactor events.py into separate modules",
+      "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0237.md"
     },
     {
       "id": "task-0238",
-      "label": "Update config.py to load guidance levels",
-      "state": "done",
+      "label": "Enhance lexical search",
+      "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0238.md"
     },
     {
       "id": "task-0239",
-      "label": "Add guidance field to request schema",
-      "state": "done",
+      "label": "Add lifecycle management for jobs and proposals",
+      "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0239.md"
     },
     {
       "id": "task-0240",
-      "label": "Update tm_helper.py new_request() with guidance parameter",
-      "state": "done",
+      "label": "Consolidate MCP tools",
+      "state": "draft",
       "path": "docs\\planning\\tasks\\core\\task-0240.md"
     },
     {
       "id": "task-0241",
-      "label": "Add --guidance CLI parameter to tm.py",
+      "label": "Fix create_with_content() standard_refs bug",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0241.md"
     },
     {
       "id": "task-0242",
-      "label": "Update validation to enforce guidance-appropriate sections",
+      "label": "Remove dead code in update_content() section mode",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0242.md"
     },
     {
       "id": "task-0243",
-      "label": "Add default_guidance to planning.yaml",
+      "label": "Add atomic write guarantee to dump_markdown()",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0243.md"
     },
     {
       "id": "task-0244",
-      "label": "Write tests for guidance levels",
+      "label": "Fix val_mgr.py duplicated validation",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0244.md"
     },
     {
       "id": "task-0245",
-      "label": "Draft standard-0010 with guidance level definitions",
-      "state": "done",
+      "label": "Add cycle detection to standards cascade",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-0245.md"
     },
     {
       "id": "task-0246",
-      "label": "Update validation to enforce guidance level requirements",
+      "label": "Improve validation error messages",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0246.md"
     },
     {
       "id": "task-0247",
-      "label": "Add guidance level selection guide to documentation",
+      "label": "Consolidate new() and create_with_content() logic",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0247.md"
     },
     {
       "id": "task-0248",
-      "label": "Update workflows.yaml with unified states",
+      "label": "Implement InProcessEventBus satisfying EventBusProtocol",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0248.md"
     },
     {
       "id": "task-0249",
-      "label": "Implement cascade archive for requests",
+      "label": "Implement FileEventStore for optional persistence",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0249.md"
     },
     {
       "id": "task-0250",
-      "label": "Implement cascade archive for specs",
+      "label": "Implement replay functionality with is_replay flag",
       "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0250.md"
+    },
+    {
+      "id": "task-0251",
+      "label": "Implement state propagation engine for planning hierarchies",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0251.md"
+    },
+    {
+      "id": "task-0252",
+      "label": "Create state propagation config system",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0252.md"
+    },
+    {
+      "id": "task-0253",
+      "label": "Integrate interoperability layer with planning component",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0253.md"
+    },
+    {
+      "id": "task-0254",
+      "label": "Integrate interoperability layer with knowledge component",
+      "state": "ready",
+      "path": "docs\\planning\\tasks\\core\\task-0254.md"
+    },
+    {
+      "id": "task-0255",
+      "label": "Bridge planning hooks onto canonical events without removing legacy hooks",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0255.md"
+    },
+    {
+      "id": "task-0256",
+      "label": "Add integration tests for event layer and state propagation",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0256.md"
+    },
+    {
+      "id": "task-0257",
+      "label": "Create interoperability package structure with transport protocol abstraction",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0257.md"
+    },
+    {
+      "id": "task-0258",
+      "label": "Create event schema registry and documentation",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0258.md"
+    },
+    {
+      "id": "task-0259",
+      "label": "Add CLI commands and diagnostics for event layer",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0259.md"
+    },
+    {
+      "id": "task-0260",
+      "label": "Validate event layer performance targets",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0260.md"
+    },
+    {
+      "id": "task-0261",
+      "label": "Implement knowledge event handler for planning state changes",
+      "state": "blocked",
+      "path": "docs\\planning\\tasks\\core\\task-0261.md"
+    },
+    {
+      "id": "task-0262",
+      "label": "Inventory planning hooks and create migration plan",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0262.md"
+    },
+    {
+      "id": "task-0263",
+      "label": "Remove legacy hook system after migration complete",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0263.md"
+    },
+    {
+      "id": "task-0264",
+      "label": "Implement async event queue for background processing",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0264.md"
+    },
+    {
+      "id": "task-0265",
+      "label": "Implement planning audit and repair CLI command",
+      "state": "ready",
+      "path": "docs\\planning\\tasks\\core\\task-0265.md"
+    },
+    {
+      "id": "task-0266",
+      "label": "Improve MCP layer robustness and type safety",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0266.md"
+    },
+    {
+      "id": "task-0267",
+      "label": "Add module docstring to execution/jobs/__init__.py",
+      "state": "completed",
+      "path": "docs\\planning\\tasks\\core\\task-0267.md"
+    },
+    {
+      "id": "task-0268",
+      "label": "Fix empty planning/app/__init__.py",
+      "state": "completed",
+      "path": "docs\\planning\\tasks\\core\\task-0268.md"
+    },
+    {
+      "id": "task-0269",
+      "label": "Fix incomplete runtime/__init__.py docstring",
+      "state": "completed",
+      "path": "docs\\planning\\tasks\\core\\task-0269.md"
+    },
+    {
+      "id": "task-0270",
+      "label": "Add class and method docstrings to base_mgr.py",
+      "state": "completed",
+      "path": "docs\\planning\\tasks\\core\\task-0270.md"
+    },
+    {
+      "id": "task-0271",
+      "label": "Review get_task_by_id function reference",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0271.md"
+    },
+    {
+      "id": "task-0272",
+      "label": "Fix error handling in validation.py:42",
+      "state": "completed",
+      "path": "docs\\planning\\tasks\\core\\task-0272.md"
+    },
+    {
+      "id": "task-0273",
+      "label": "Add JSON schema validation to _load_json_argument",
+      "state": "completed",
+      "path": "docs\\planning\\tasks\\core\\task-0273.md"
+    },
+    {
+      "id": "task-0274",
+      "label": "Add validation for session_input --details-json",
+      "state": "completed",
+      "path": "docs\\planning\\tasks\\core\\task-0274.md"
+    },
+    {
+      "id": "task-0275",
+      "label": "Fix generic error handling in CLI",
+      "state": "completed",
+      "path": "docs\\planning\\tasks\\core\\task-0275.md"
+    },
+    {
+      "id": "task-0276",
+      "label": "standard-0012-knowledge-maintenance-impl",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0276.md"
+    },
+    {
+      "id": "task-0277",
+      "label": "Fix global state access in job_control_tool",
+      "state": "completed",
+      "path": "docs\\planning\\tasks\\core\\task-0277.md"
+    },
+    {
+      "id": "task-0278",
+      "label": "Fix tight coupling in session_input_tool",
+      "state": "completed",
+      "path": "docs\\planning\\tasks\\core\\task-0278.md"
+    },
+    {
+      "id": "task-0279",
+      "label": "Refactor event bus singleton pattern",
+      "state": "completed",
+      "path": "docs\\planning\\tasks\\core\\task-0279.md"
+    },
+    {
+      "id": "task-0280",
+      "label": "spec-0060",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0280.md"
+    },
+    {
+      "id": "task-0281",
+      "label": "spec-0065",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0281.md"
+    },
+    {
+      "id": "task-0282",
+      "label": "std-0010",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0282.md"
+    },
+    {
+      "id": "task-0283",
+      "label": "std-0011",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0283.md"
+    },
+    {
+      "id": "task-0284",
+      "label": "plan-0017",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0284.md"
+    },
+    {
+      "id": "task-0285",
+      "label": "plan-0018",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0285.md"
+    },
+    {
+      "id": "task-0286",
+      "label": "plan-0019",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0286.md"
+    },
+    {
+      "id": "task-0287",
+      "label": "plan-0020",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0287.md"
+    },
+    {
+      "id": "task-0288",
+      "label": "plan-0021",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0288.md"
+    },
+    {
+      "id": "task-0289",
+      "label": "plan-0022",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0289.md"
+    },
+    {
+      "id": "task-0290",
+      "label": "wp-0020",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0290.md"
+    },
+    {
+      "id": "task-0291",
+      "label": "wp-0021",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0291.md"
+    },
+    {
+      "id": "task-0292",
+      "label": "wp-0022",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0292.md"
+    },
+    {
+      "id": "task-0293",
+      "label": "wp-0023",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0293.md"
+    },
+    {
+      "id": "task-0294",
+      "label": "wp-0024",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0294.md"
+    },
+    {
+      "id": "task-0295",
+      "label": "wp-0025",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0295.md"
+    },
+    {
+      "id": "task-0296",
+      "label": "req-0032",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0296.md"
+    },
+    {
+      "id": "task-0297",
+      "label": "req-0033",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0297.md"
+    },
+    {
+      "id": "task-0298",
+      "label": "req-0034",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0298.md"
+    },
+    {
+      "id": "task-0299",
+      "label": "req-0035",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0299.md"
+    },
+    {
+      "id": "task-0300",
+      "label": "req-0036",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0300.md"
+    },
+    {
+      "id": "task-0301",
+      "label": "req-0037",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0301.md"
+    },
+    {
+      "id": "task-0302",
+      "label": "req-0038",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0302.md"
+    },
+    {
+      "id": "task-0303",
+      "label": "req-0039",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0303.md"
+    },
+    {
+      "id": "task-0304",
+      "label": "req-0040",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0304.md"
+    },
+    {
+      "id": "task-0305",
+      "label": "req-0041",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0305.md"
+    },
+    {
+      "id": "task-0306",
+      "label": "req-0042",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0306.md"
+    },
+    {
+      "id": "task-0307",
+      "label": "req-0043",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0307.md"
+    },
+    {
+      "id": "task-0308",
+      "label": "interop",
+      "state": "closed",
+      "path": "docs\\planning\\tasks\\core\\task-0308.md"
+    },
+    {
+      "id": "task-0309",
+      "label": "knowledge",
+      "state": "closed",
+      "path": "docs\\planning\\tasks\\core\\task-0309.md"
+    },
+    {
+      "id": "task-0310",
+      "label": "docs",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0310.md"
+    },
+    {
+      "id": "task-0311",
+      "label": "docs2",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0311.md"
+    },
+    {
+      "id": "task-0312",
+      "label": "extracts",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0312.md"
+    },
+    {
+      "id": "task-0313",
+      "label": "standard-0007-migration-change-control-impl",
+      "state": "ready",
+      "path": "docs\\planning\\tasks\\core\\task-0313.md"
+    },
+    {
+      "id": "task-0314",
+      "label": "standard-0008-python-impl-impl",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0314.md"
+    },
+    {
+      "id": "task-0315",
+      "label": "standard-0009-planning-enhancement-impl",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0315.md"
+    },
+    {
+      "id": "task-0316",
+      "label": "standard-0010-mcp-server-impl",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0316.md"
+    },
+    {
+      "id": "task-0317",
+      "label": "standard-0011-component-arch-impl",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0317.md"
+    },
+    {
+      "id": "task-0329",
+      "label": "Extend config schema for document structure",
+      "state": "ready",
+      "path": "docs\\planning\\tasks\\core\\task-0329.md"
+    },
+    {
+      "id": "task-0330",
+      "label": "Create TemplateEngine class",
+      "state": "ready",
+      "path": "docs\\planning\\tasks\\core\\task-0330.md"
+    },
+    {
+      "id": "task-0331",
+      "label": "Create RelationshipConfig class",
+      "state": "ready",
+      "path": "docs\\planning\\tasks\\core\\task-0331.md"
+    },
+    {
+      "id": "task-0332",
+      "label": "Refactor managers to use config",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0332.md"
+    },
+    {
+      "id": "task-0333",
+      "label": "Migrate hardcoded values to config",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0333.md"
+    },
+    {
+      "id": "task-0334",
+      "label": "Add tests for config-driven structure",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0334.md"
+    },
+    {
+      "id": "task-0335",
+      "label": "Updated Test Task",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-0335.md"
+    },
+    {
+      "id": "task-3245",
+      "label": "Implement source/target documentation (standard-0007 req 1-3)",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-3245.md"
+    },
+    {
+      "id": "task-3251",
+      "label": "Refactor section_registry to use config",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-3251.md"
+    },
+    {
+      "id": "task-3252",
+      "label": "Clean up req_mgr hardcoded defaults",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-3252.md"
+    },
+    {
+      "id": "task-3253",
+      "label": "Integrate relationship validation into managers",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-3253.md"
+    },
+    {
+      "id": "task-3258",
+      "label": "Test Task",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-3258.md"
+    },
+    {
+      "id": "task-3259",
+      "label": "API Compatibility Test",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-3259.md"
+    },
+    {
+      "id": "task-3261",
+      "label": "Atomicity Test",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-3261.md"
+    },
+    {
+      "id": "task-3262",
+      "label": "Atomicity Test",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-3262.md"
+    },
+    {
+      "id": "task-3263",
+      "label": "Atomicity Task",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-3263.md"
+    },
+    {
+      "id": "task-3264",
+      "label": "Generic Task",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-3264.md"
     },
     {
       "id": "task-0158",
@@ -621,64 +1215,64 @@
       "path": "docs\\planning\\tasks\\discovery\\task-0169.md"
     },
     {
-      "id": "task-0170",
+      "id": "task-0319",
       "label": "[PKT-DIS-003](task-0170): Optional Provider Seams",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\discovery\\task-0170.md"
+      "path": "docs\\planning\\tasks\\discovery\\task-0319.md"
     },
     {
-      "id": "task-0171",
+      "id": "task-0320",
       "label": "[PKT-EVT-001](task-0171): Node Event Families",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\eventing\\task-0171.md"
+      "path": "docs\\planning\\tasks\\eventing\\task-0320.md"
     },
     {
-      "id": "task-0172",
+      "id": "task-0321",
       "label": "[PKT-EVT-002](task-0172): Control Request Contracts",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\eventing\\task-0172.md"
+      "path": "docs\\planning\\tasks\\eventing\\task-0321.md"
     },
     {
-      "id": "task-0174",
+      "id": "task-0322",
       "label": "[PKT-EXT-001](task-0174): External Connector Contract and Mock",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\external-tools\\task-0174.md"
+      "path": "docs\\planning\\tasks\\external-tools\\task-0322.md"
     },
     {
-      "id": "task-0175",
+      "id": "task-0323",
       "label": "Phase 1-11 Build Books",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\implementation-docs\\task-0175.md"
+      "path": "docs\\planning\\tasks\\implementation-docs\\task-0323.md"
     },
     {
-      "id": "task-0176",
+      "id": "task-0324",
       "label": "Provider Plans and Runbooks",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\implementation-docs\\task-0176.md"
+      "path": "docs\\planning\\tasks\\implementation-docs\\task-0324.md"
     },
     {
-      "id": "task-0177",
+      "id": "task-0325",
       "label": "Refactor Docs",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\implementation-docs\\task-0177.md"
+      "path": "docs\\planning\\tasks\\implementation-docs\\task-0325.md"
     },
     {
-      "id": "task-0178",
+      "id": "task-0326",
       "label": "Testing and Status Reports",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\implementation-docs\\task-0178.md"
+      "path": "docs\\planning\\tasks\\implementation-docs\\task-0326.md"
     },
     {
-      "id": "task-0179",
+      "id": "task-0327",
       "label": "Reference Resolution",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\implementation-docs\\task-0179.md"
+      "path": "docs\\planning\\tasks\\implementation-docs\\task-0327.md"
     },
     {
-      "id": "task-0180",
+      "id": "task-0328",
       "label": "Final Validation and Cleanup",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\implementation-docs\\task-0180.md"
+      "path": "docs\\planning\\tasks\\implementation-docs\\task-0328.md"
     },
     {
       "id": "task-0067",

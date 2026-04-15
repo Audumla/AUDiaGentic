@@ -1,0 +1,17 @@
+{
+  "item": {
+    "id": "standard-0005",
+    "label": "Verification and test evidence standard",
+    "state": "ready",
+    "summary": "Default standard for how implementation and planning work should record verification scope, evidence, and gaps.",
+    "kind": "standard",
+    "path": "docs/planning/standards/standard-0005-verification-and-test-evidence-standard.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n# Standard\n\nDefault standard for how implementation and planning work should record verification scope, evidence, and known gaps.\n\n# Source Basis\n\nThis standard is derived from repository validation practice and general software verification principles, adapted for planning-led work in AUDiaGentic-based projects.\n\nSources:\n\n- Repository planning validation and test practices\n- [Google Testing Blog \u2014 Test Sizes](https://testing.googleblog.com/2010/12/test-sizes.html)\n- [pytest documentation](https://docs.pytest.org/en/stable/)\n- Project verification matrix references\n\n# Requirements\n\n1. Every meaningful change must identify how it was verified.\n2. Verification records must separate:\n\n   - automated tests that were run\n   - manual checks that were performed\n   - checks that were expected but not run\n\n3. When verification is partial, the record must state what remains unverified and why.\n4. Verification must be proportional to risk. High-risk changes need stronger evidence than low-risk documentation updates.\n5. Planning work must include validation of planning integrity where relevant: schema validation, link integrity, and task/work-package consistency.\n6. Claims of completeness must not be made without matching evidence.\n7. If a command, test suite, or validation pass fails, the failure must be recorded with the reason rather than hidden or skipped.\n8. Smoke test: after any meaningful code change, verify the project compiles or imports cleanly before marking work complete:\n\n   - Python: `python -m py_compile <file>` or `python -c \"import <module>\"`\n   - JS/TS: `npx tsc --noEmit` or `node --check <file>`\n   - Shell: `bash -n <script>`\n   - Tests: `python -m pytest tests/ -q` or project equivalent\n\n9. Architectural verification must confirm compliance with standard-0011 where applicable:\n\n   - no outward imports from inner layers\n   - config-driven behavior testable with different config values\n   - extension points exercised by at least one non-default implementation test\n   - bootstrap wiring covered by at least one integration test\n\n10. MCP server changes must verify tool registration and schema generation using the mcp CLI or test harness, per standard-0008.\n\n# Default Rules\n\n- Prefer concrete command or tool evidence where possible.\n- Keep verification records short but specific.\n- Distinguish between smoke coverage and comprehensive coverage.\n- Treat missing tests and missing validation as explicit gaps, not as implied acceptance.\n- Do not mark a task done if smoke tests have not been run.\n\n# Minimum Verification Shape\n\n- what changed\n- what was verified\n- what commands or checks were run\n- what was not verified\n- current residual risk\n\n# Non-Goals\n\n- Forcing all work to have the same test depth.\n- Replacing release-specific signoff processes.\n- Treating manual checks as invalid when automation is not yet practical.\n"
+}

@@ -1,0 +1,29 @@
+{
+  "item": {
+    "id": "task-0261",
+    "label": "Implement knowledge event handler for planning state changes",
+    "state": "blocked",
+    "summary": "Implement knowledge event handler for planning state changes \u2014 blocked on task-0282 (knowledge integration)",
+    "spec_ref": "spec-019",
+    "request_refs": [
+      "request-017"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0261.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006",
+    "standard-0011"
+  ],
+  "body": "\n\n\n\n\n\n\n# Description\n\nImplement knowledge event handler for planning state changes. This task owns filtering events by `subject.kind` and `payload.new_state`, then triggering appropriate knowledge sync actions.\n\n**Handler logic:**\n```python\ndef knowledge_event_handler(event_type, payload, metadata):\n    if metadata.get(\"is_replay\"):\n        return  # Skip replayed events\n    \n    kind = payload.get(\"subject\", {}).get(\"kind\")\n    new_state = payload.get(\"new_state\")\n    \n    if kind == \"task\" and new_state in (\"done\", \"verified\"):\n        mark_related_pages_stale(kind, payload.get(\"subject\", {}).get(\"id\"))\n    elif kind == \"wp\" and new_state == \"done\":\n        generate_sync_proposal_for_plan(kind, payload)\n    # ... etc\n```\n\n**Actions:**\n- `task` done/verified \u2192 mark related work-package/implementation pages stale\n- `wp` done \u2192 generate sync proposal for plan/current-state pages\n- `plan` done \u2192 review spec/overview pages\n- `blocked` \u2192 mark operational pages stale (don't rewrite)\n- Skip `is_replay: true` events\n- Optional opt-in via config: `config.replay.dispatch_on_replay: true`\n\n# Acceptance Criteria\n\n- Handler filters by `subject.kind` (task, wp, plan, spec)\n- Handler filters by `payload.new_state` (done, verified, in_progress, blocked)\n- **Opt-in replay:** Handler skips replayed events unless `config.replay.dispatch_on_replay: true`\n- Appropriate knowledge actions triggered per event type/state\n- Unit tests cover: filtering, replay skip, action triggering, opt-in behavior\n- Integration test covers: planning state change \u2192 knowledge action\n- Smoke test proves handler executes without errors\n\n# Notes\n\nDepends on: task-0254 (knowledge subscription). Uses existing knowledge sync/stale marking APIs.\n"
+}

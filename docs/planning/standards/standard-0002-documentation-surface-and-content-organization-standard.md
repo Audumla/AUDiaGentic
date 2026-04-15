@@ -12,25 +12,30 @@ Default standard for planning-related documentation surfaces and content organiz
 
 # Source Basis
 
-This standard is derived from Ditaxis and adapted for AUDiaGentic planning and template-installation needs.
+This standard is derived from Diataxis and adapted for AUDiaGentic planning and template-installation needs.
 
 Sources:
-- https://diataxis.fr/
-- architecture docs governing template ownership and managed surfaces in this repository
+
+- [Diataxis — A systematic approach to technical documentation](https://diataxis.fr/)
+- Architecture docs governing template ownership and managed surfaces in this repository
 
 # Requirements
 
 1. Documentation surfaces must be explicit and human-readable. A project should not hide core documentation behind opaque generated output.
 2. Documentation families must stay distinct:
-- tutorials/how-to style guidance belongs in project-facing help docs
-- reference material belongs under `docs/references/`
-- specifications and architecture material remain in their canonical specification locations
-- planning objects remain under `docs/planning/`
+
+   - tutorials and how-to guidance belong in project-facing help docs
+   - reference material belongs under `docs/references/`
+   - specifications and architecture material remain in their canonical specification locations
+   - planning objects remain under `docs/planning/`
+
 3. Each managed documentation surface must declare its ownership mode using the repository vocabulary:
-- `manual`
-- `hybrid`
-- `managed`
-- optional `seed_on_install`
+
+   - `manual`
+   - `hybrid`
+   - `managed`
+   - optional `seed_on_install`
+
 4. `README.md` and `CHANGELOG.md` must be treated as high-sensitivity surfaces because installed projects may already own them.
 5. New documentation surfaces must be additive and template-safe. They must not assume this repository is a standalone application.
 6. Reference documentation must have a clear entrypoint and must remain separate from release ledgers, specifications, and planning records.
@@ -46,6 +51,6 @@ Sources:
 
 # Non-Goals
 
-- defining installer behavior
-- redefining execution workflow profiles
-- widening planning object kinds beyond the current model
+- Defining installer behavior.
+- Redefining execution workflow profiles.
+- Widening planning object kinds beyond the current model.

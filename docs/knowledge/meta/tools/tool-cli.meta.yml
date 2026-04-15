@@ -1,0 +1,11 @@
+id: tool-cli
+title: AUDiaGentic CLI
+type: tool
+status: active
+summary: Reference for AUDiaGentic command-line interface commands.
+owners:
+- core-team
+tags: []
+related: []
+updated_at: '2026-04-15T05:28:26.326714+00:00'
+source_refs: []

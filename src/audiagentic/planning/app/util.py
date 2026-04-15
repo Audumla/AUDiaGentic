@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import re
 from datetime import datetime, timezone
+
 
 def slugify(s: str) -> str:
     s = s.lower().strip()

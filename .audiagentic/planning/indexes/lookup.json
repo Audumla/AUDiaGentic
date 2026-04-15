@@ -1,256 +1,427 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T14:28:01.531820+00:00",
+  "generated_at": "2026-04-15T11:09:44.688136+00:00",
   "items": {
-    "plan-0005": {
-      "id": "plan-0005",
+    "plan-001": {
+      "id": "plan-001",
       "kind": "plan",
       "label": "Implement archive functionality in planning core",
       "state": "draft",
-      "path": "docs/planning/plans/plan-0005-implement-archive-functionality-in-planning-core.md",
-      "deleted": false,
-      "archived": false
-    },
-    "plan-0006": {
-      "id": "plan-0006",
-      "kind": "plan",
-      "label": "Phase 0 Build Book",
-      "state": "draft",
-      "path": "docs/planning/plans/plan-0006-phase-0-build-book.md",
-      "deleted": false,
-      "archived": false
-    },
-    "plan-0007": {
-      "id": "plan-0007",
-      "kind": "plan",
-      "label": "Implement installable profiles and documentation surfaces",
-      "state": "done",
-      "path": "docs/planning/plans/plan-0007-implement-installable-profiles-and-documentation-surfaces.md",
-      "deleted": false,
-      "archived": false
-    },
-    "plan-0009": {
-      "id": "plan-0009",
-      "kind": "plan",
-      "label": "Implement archive functionality",
-      "state": "done",
-      "path": "docs/planning/plans/plan-0009-implement-archive-functionality.md",
-      "deleted": false,
-      "archived": false
-    },
-    "plan-0010": {
-      "id": "plan-0010",
-      "kind": "plan",
-      "label": "Implement planning module improvements",
-      "state": "done",
-      "path": "docs/planning/plans/plan-0010-implement-planning-module-improvements.md",
-      "deleted": false,
-      "archived": false
-    },
-    "plan-0011": {
-      "id": "plan-0011",
-      "kind": "plan",
-      "label": "Fix planning API and MCP gaps",
-      "state": "in_progress",
-      "path": "docs/planning/plans/plan-0011-fix-planning-api-and-mcp-gaps.md",
+      "path": "docs/planning/plans/plan-001-implement-archive-functionality-in-planning-core.md",
       "deleted": false,
       "archived": false
     },
     "plan-0014": {
       "id": "plan-0014",
       "kind": "plan",
-      "label": "Implement guidance levels for planning depth-of-detail",
-      "state": "draft",
-      "path": "docs/planning/plans/plan-0014-implement-guidance-levels-for-planning-depth-of-detail.md",
+      "label": "Implement config-driven planning structure",
+      "state": "done",
+      "path": "docs/planning/plans/plan-0014-implement-config-driven-planning-structure.md",
       "deleted": false,
       "archived": false
     },
-    "plan-0015": {
-      "id": "plan-0015",
+    "plan-002": {
+      "id": "plan-002",
+      "kind": "plan",
+      "label": "Phase 0 Build Book",
+      "state": "draft",
+      "path": "docs/planning/plans/plan-002-phase-0-build-book.md",
+      "deleted": false,
+      "archived": false
+    },
+    "plan-0021": {
+      "id": "plan-0021",
+      "kind": "plan",
+      "label": "Test Plan",
+      "state": "draft",
+      "path": "docs/planning/plans/plan-0021-test-plan.md",
+      "deleted": true,
+      "archived": false
+    },
+    "plan-0022": {
+      "id": "plan-0022",
+      "kind": "plan",
+      "label": "Test Plan",
+      "state": "draft",
+      "path": "docs/planning/plans/plan-0022-test-plan.md",
+      "deleted": true,
+      "archived": false
+    },
+    "plan-003": {
+      "id": "plan-003",
+      "kind": "plan",
+      "label": "Implement installable profiles and documentation surfaces",
+      "state": "done",
+      "path": "docs/planning/plans/plan-003-implement-installable-profiles-and-documentation-surfaces.md",
+      "deleted": false,
+      "archived": false
+    },
+    "plan-004": {
+      "id": "plan-004",
+      "kind": "plan",
+      "label": "Implement archive functionality",
+      "state": "done",
+      "path": "docs/planning/plans/plan-004-implement-archive-functionality.md",
+      "deleted": false,
+      "archived": false
+    },
+    "plan-005": {
+      "id": "plan-005",
+      "kind": "plan",
+      "label": "Implement planning module improvements",
+      "state": "done",
+      "path": "docs/planning/plans/plan-005-implement-planning-module-improvements.md",
+      "deleted": false,
+      "archived": false
+    },
+    "plan-006": {
+      "id": "plan-006",
+      "kind": "plan",
+      "label": "Fix planning API and MCP gaps",
+      "state": "in_progress",
+      "path": "docs/planning/plans/plan-006-fix-planning-api-and-mcp-gaps.md",
+      "deleted": false,
+      "archived": false
+    },
+    "plan-007": {
+      "id": "plan-007",
+      "kind": "plan",
+      "label": "Implement guidance levels for planning depth-of-detail",
+      "state": "draft",
+      "path": "docs/planning/plans/plan-007-implement-guidance-levels-for-planning-depth-of-detail.md",
+      "deleted": false,
+      "archived": false
+    },
+    "plan-008": {
+      "id": "plan-008",
       "kind": "plan",
       "label": "Implement canonical guidance semantics standard",
       "state": "draft",
-      "path": "docs/planning/plans/plan-0015-implement-canonical-guidance-semantics-standard.md",
+      "path": "docs/planning/plans/plan-008-implement-canonical-guidance-semantics-standard.md",
       "deleted": false,
       "archived": false
     },
-    "plan-0016": {
-      "id": "plan-0016",
+    "plan-009": {
+      "id": "plan-009",
       "kind": "plan",
       "label": "Implement unified workflow states",
       "state": "draft",
-      "path": "docs/planning/plans/plan-0016-implement-unified-workflow-states.md",
+      "path": "docs/planning/plans/plan-009-implement-unified-workflow-states.md",
       "deleted": false,
       "archived": false
     },
-    "request-0002": {
-      "id": "request-0002",
+    "plan-010": {
+      "id": "plan-010",
+      "kind": "plan",
+      "label": "Knowledge Component Integration Plan",
+      "state": "done",
+      "path": "docs/planning/plans/plan-010-knowledge-component-integration-plan.md",
+      "deleted": false,
+      "archived": false
+    },
+    "plan-011": {
+      "id": "plan-011",
+      "kind": "plan",
+      "label": "Knowledge Component Improvements Plan",
+      "state": "draft",
+      "path": "docs/planning/plans/plan-011-knowledge-component-improvements-plan.md",
+      "deleted": false,
+      "archived": false
+    },
+    "plan-012": {
+      "id": "plan-012",
+      "kind": "plan",
+      "label": "Planning Module Critical Fixes Plan",
+      "state": "draft",
+      "path": "docs/planning/plans/plan-012-planning-module-critical-fixes-plan.md",
+      "deleted": false,
+      "archived": false
+    },
+    "plan-013": {
+      "id": "plan-013",
+      "kind": "plan",
+      "label": "Interoperability layer and state propagation implementation plan",
+      "state": "ready",
+      "path": "docs/planning/plans/plan-013-interoperability-layer-and-state-propagation-implementation-plan.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-001": {
+      "id": "request-001",
       "kind": "request",
       "label": "Comprehensive implementation docs migration",
       "state": "closed",
-      "path": "docs/planning/requests/request-0002.md",
+      "path": "docs/planning/requests/request-001.md",
       "deleted": false,
       "archived": false
     },
-    "request-0003": {
-      "id": "request-0003",
+    "request-002": {
+      "id": "request-002",
       "kind": "request",
       "label": "Add archive functionality to planning core",
       "state": "superseded",
-      "path": "docs/planning/requests/request-0003.md",
+      "path": "docs/planning/requests/request-002.md",
       "deleted": false,
       "archived": false
     },
-    "request-0004": {
-      "id": "request-0004",
+    "request-0021": {
+      "id": "request-0021",
+      "kind": "request",
+      "label": "Config-driven planning document structure",
+      "state": "captured",
+      "path": "docs/planning/requests/request-0021.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-0023": {
+      "id": "request-0023",
+      "kind": "request",
+      "label": "MCP Test Request",
+      "state": "captured",
+      "path": "docs/planning/requests/request-0023.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-0024": {
+      "id": "request-0024",
+      "kind": "request",
+      "label": "Get Test Request",
+      "state": "captured",
+      "path": "docs/planning/requests/request-0024.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-0027": {
+      "id": "request-0027",
+      "kind": "request",
+      "label": "Generic Req",
+      "state": "captured",
+      "path": "docs/planning/requests/request-0027.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-003": {
+      "id": "request-003",
       "kind": "request",
       "label": "MCP layer efficiency improvements and usage enforcement",
       "state": "closed",
-      "path": "docs/planning/requests/request-0004.md",
+      "path": "docs/planning/requests/request-003.md",
       "deleted": false,
       "archived": false
     },
-    "request-0005": {
-      "id": "request-0005",
+    "request-004": {
+      "id": "request-004",
       "kind": "request",
       "label": "Archive functionality for planning items",
       "state": "closed",
-      "path": "docs/planning/requests/request-0005.md",
+      "path": "docs/planning/requests/request-004.md",
       "deleted": false,
       "archived": false
     },
-    "request-0006": {
-      "id": "request-0006",
+    "request-005": {
+      "id": "request-005",
       "kind": "request",
       "label": "Sensitive data detection and review for planning items",
       "state": "closed",
-      "path": "docs/planning/requests/request-0006.md",
+      "path": "docs/planning/requests/request-005.md",
       "deleted": false,
       "archived": false
     },
-    "request-0007": {
-      "id": "request-0007",
+    "request-006": {
+      "id": "request-006",
       "kind": "request",
       "label": "Planning module hardening: delete safety, traceability, validation, and duplicate guards",
       "state": "closed",
-      "path": "docs/planning/requests/request-0007.md",
+      "path": "docs/planning/requests/request-006.md",
       "deleted": false,
       "archived": false
     },
-    "request-0008": {
-      "id": "request-0008",
+    "request-007": {
+      "id": "request-007",
       "kind": "request",
       "label": "Fix planning API and MCP gaps revealed by coverage tests",
       "state": "closed",
-      "path": "docs/planning/requests/request-0008.md",
+      "path": "docs/planning/requests/request-007.md",
       "deleted": false,
       "archived": false
     },
-    "request-0009": {
-      "id": "request-0009",
+    "request-008": {
+      "id": "request-008",
       "kind": "request",
       "label": "Add audience-level profile system to control planning depth-of-detail",
       "state": "superseded",
-      "path": "docs/planning/requests/request-0009.md",
+      "path": "docs/planning/requests/request-008.md",
       "deleted": false,
       "archived": false
     },
-    "request-0010": {
-      "id": "request-0010",
+    "request-009": {
+      "id": "request-009",
       "kind": "request",
       "label": "Implement configurable stack profiles for lightweight req\u2192spec\u2192task workflows",
       "state": "closed",
-      "path": "docs/planning/requests/request-0010.md",
+      "path": "docs/planning/requests/request-009.md",
       "deleted": false,
       "archived": false
     },
-    "request-0025": {
-      "id": "request-0025",
+    "request-010": {
+      "id": "request-010",
       "kind": "request",
       "label": "Optimize planning single-item lookup and extract token usage",
       "state": "closed",
-      "path": "docs/planning/requests/request-0025.md",
+      "path": "docs/planning/requests/request-010.md",
       "deleted": false,
       "archived": false
     },
-    "request-0029": {
-      "id": "request-0029",
+    "request-011": {
+      "id": "request-011",
       "kind": "request",
       "label": "Add guidance levels (light/standard/deep) to control planning depth-of-detail",
-      "state": "distilled",
-      "path": "docs/planning/requests/request-0029.md",
+      "state": "closed",
+      "path": "docs/planning/requests/request-011.md",
       "deleted": false,
       "archived": false
     },
-    "request-0030": {
-      "id": "request-0030",
+    "request-012": {
+      "id": "request-012",
       "kind": "request",
       "label": "Require request linkage for every planning specification, with cascade archive",
-      "state": "distilled",
-      "path": "docs/planning/requests/request-0030.md",
+      "state": "closed",
+      "path": "docs/planning/requests/request-012.md",
       "deleted": false,
       "archived": false
     },
-    "request-0031": {
-      "id": "request-0031",
+    "request-013": {
+      "id": "request-013",
       "kind": "request",
       "label": "Define canonical semantics for planning guidance levels",
       "state": "captured",
-      "path": "docs/planning/requests/request-0031.md",
+      "path": "docs/planning/requests/request-013.md",
       "deleted": false,
       "archived": false
     },
-    "spec-0023": {
-      "id": "spec-0023",
+    "request-014": {
+      "id": "request-014",
+      "kind": "request",
+      "label": "Integrate Knowledge Component v7.4",
+      "state": "captured",
+      "path": "docs/planning/requests/request-014.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-015": {
+      "id": "request-015",
+      "kind": "request",
+      "label": "Knowledge Component Improvements",
+      "state": "captured",
+      "path": "docs/planning/requests/request-015.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-016": {
+      "id": "request-016",
+      "kind": "request",
+      "label": "Planning Module Critical Fixes",
+      "state": "captured",
+      "path": "docs/planning/requests/request-016.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-017": {
+      "id": "request-017",
+      "kind": "request",
+      "label": "Interoperability layer for cross-component communication",
+      "state": "closed",
+      "path": "docs/planning/requests/request-017.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-018": {
+      "id": "request-018",
+      "kind": "request",
+      "label": "Automatic state propagation for planning hierarchies",
+      "state": "distilled",
+      "path": "docs/planning/requests/request-018.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-019": {
+      "id": "request-019",
+      "kind": "request",
+      "label": "Code Standards Compliance Review",
+      "state": "closed",
+      "path": "docs/planning/requests/request-019.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-020": {
+      "id": "request-020",
+      "kind": "request",
+      "label": "Auto-state propagation with event subscription",
+      "state": "captured",
+      "path": "docs/planning/requests/request-020.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-001": {
+      "id": "spec-001",
       "kind": "spec",
       "label": "Archive state and functionality specification",
       "state": "done",
-      "path": "docs/planning/specifications/spec-0023-archive-state-and-functionality-specification.md",
+      "path": "docs/planning/specifications/spec-001-archive-state-and-functionality-specification.md",
       "deleted": false,
       "archived": false
     },
-    "spec-0024": {
-      "id": "spec-0024",
+    "spec-002": {
+      "id": "spec-002",
       "kind": "spec",
       "label": "Planning module improvements implementation specification",
       "state": "done",
-      "path": "docs/planning/specifications/spec-0024-planning-module-improvements-implementation-specification.md",
+      "path": "docs/planning/specifications/spec-002-planning-module-improvements-implementation-specification.md",
       "deleted": false,
       "archived": false
     },
-    "spec-0025": {
-      "id": "spec-0025",
+    "spec-0028": {
+      "id": "spec-0028",
+      "kind": "spec",
+      "label": "Test request \u2014 Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0028-test-request-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-0029": {
+      "id": "spec-0029",
+      "kind": "spec",
+      "label": "Config-driven planning document structure",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0029-config-driven-planning-document-structure.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-003": {
+      "id": "spec-003",
       "kind": "spec",
       "label": "Fix planning API and MCP gaps revealed by coverage tests",
       "state": "in_progress",
-      "path": "docs/planning/specifications/spec-0025-fix-planning-api-and-mcp-gaps-revealed-by-coverage-tests.md",
+      "path": "docs/planning/specifications/spec-003-fix-planning-api-and-mcp-gaps-revealed-by-coverage-tests.md",
       "deleted": false,
       "archived": false
     },
-    "spec-0036": {
-      "id": "spec-0036",
+    "spec-0030": {
+      "id": "spec-0030",
       "kind": "spec",
-      "label": "Comprehensive implementation migration \u2014 Master specification",
+      "label": "MCP Test Request \u2014 Specification",
       "state": "draft",
-      "path": "docs/planning/specifications/spec-0036-comprehensive-implementation-migration-master-specification.md",
+      "path": "docs/planning/specifications/spec-0030-mcp-test-request-specification.md",
       "deleted": false,
       "archived": false
     },
-    "spec-0037": {
-      "id": "spec-0037",
+    "spec-0031": {
+      "id": "spec-0031",
       "kind": "spec",
-      "label": "MCP layer efficiency and planning surface ergonomics \u2014 Master specification",
+      "label": "MCP Test Spec",
       "state": "draft",
-      "path": "docs/planning/specifications/spec-0037-mcp-layer-efficiency-and-planning-surface-ergonomics-master-specification.md",
-      "deleted": false,
-      "archived": false
-    },
-    "spec-0038": {
-      "id": "spec-0038",
-      "kind": "spec",
-      "label": "Stack profiles and unified configuration \u2014 Implementation specification",
-      "state": "done",
-      "path": "docs/planning/specifications/spec-0038-stack-profiles-and-unified-configuration-implementation-specification.md",
+      "path": "docs/planning/specifications/spec-0031-mcp-test-spec.md",
       "deleted": false,
       "archived": false
     },
@@ -260,69 +431,330 @@
       "label": "Test spec with defaults",
       "state": "draft",
       "path": "docs/planning/specifications/spec-0039-test-spec-with-defaults.md",
-      "deleted": false,
+      "deleted": true,
       "archived": false
     },
-    "spec-0040": {
-      "id": "spec-0040",
+    "spec-004": {
+      "id": "spec-004",
       "kind": "spec",
-      "label": "Test spec",
+      "label": "Comprehensive implementation migration \u2014 Master specification",
       "state": "draft",
-      "path": "docs/planning/specifications/spec-0040-test-spec.md",
+      "path": "docs/planning/specifications/spec-004-comprehensive-implementation-migration-master-specification.md",
       "deleted": false,
       "archived": false
     },
-    "spec-0043": {
-      "id": "spec-0043",
+    "spec-005": {
+      "id": "spec-005",
+      "kind": "spec",
+      "label": "MCP layer efficiency and planning surface ergonomics \u2014 Master specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-005-mcp-layer-efficiency-and-planning-surface-ergonomics-master-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-0057": {
+      "id": "spec-0057",
+      "kind": "spec",
+      "label": "Test Request \u2014 Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0057-test-request-specification.md",
+      "deleted": true,
+      "archived": false
+    },
+    "spec-0058": {
+      "id": "spec-0058",
+      "kind": "spec",
+      "label": "Get Test Request \u2014 Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0058-get-test-request-specification.md",
+      "deleted": true,
+      "archived": false
+    },
+    "spec-0059": {
+      "id": "spec-0059",
+      "kind": "spec",
+      "label": "Claim Test Request \u2014 Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0059-claim-test-request-specification.md",
+      "deleted": true,
+      "archived": false
+    },
+    "spec-006": {
+      "id": "spec-006",
+      "kind": "spec",
+      "label": "Stack profiles and unified configuration \u2014 Implementation specification",
+      "state": "done",
+      "path": "docs/planning/specifications/spec-006-stack-profiles-and-unified-configuration-implementation-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-0061": {
+      "id": "spec-0061",
+      "kind": "spec",
+      "label": "Test Request \u2014 Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0061-test-request-specification.md",
+      "deleted": true,
+      "archived": false
+    },
+    "spec-007": {
+      "id": "spec-007",
       "kind": "spec",
       "label": "Index-backed planning lookup and lean extract/read surfaces",
       "state": "ready",
-      "path": "docs/planning/specifications/spec-0043-index-backed-planning-lookup-and-lean-extract-read-surfaces.md",
+      "path": "docs/planning/specifications/spec-007-index-backed-planning-lookup-and-lean-extract-read-surfaces.md",
       "deleted": false,
       "archived": false
     },
-    "spec-0044": {
-      "id": "spec-0044",
+    "spec-0070": {
+      "id": "spec-0070",
+      "kind": "spec",
+      "label": "standard-0007 implementation spec",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0070-standard-0007-implementation-spec.md",
+      "deleted": true,
+      "archived": false
+    },
+    "spec-0071": {
+      "id": "spec-0071",
+      "kind": "spec",
+      "label": "Get Test Request \u2014 Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0071-get-test-request-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-0072": {
+      "id": "spec-0072",
+      "kind": "spec",
+      "label": "Get Test Spec",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0072-get-test-spec.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-0073": {
+      "id": "spec-0073",
+      "kind": "spec",
+      "label": "Get Test Request 2 \u2014 Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0073-get-test-request-2-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-0075": {
+      "id": "spec-0075",
+      "kind": "spec",
+      "label": "Test Request \u2014 Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0075-test-request-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-0077": {
+      "id": "spec-0077",
+      "kind": "spec",
+      "label": "Test Spec",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0077-test-spec.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-0078": {
+      "id": "spec-0078",
+      "kind": "spec",
+      "label": "Generic Req \u2014 Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0078-generic-req-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-0079": {
+      "id": "spec-0079",
+      "kind": "spec",
+      "label": "Generic Spec",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0079-generic-spec.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-008": {
+      "id": "spec-008",
       "kind": "spec",
       "label": "Multi-item batch updates and bulk operations for planning MCP",
       "state": "cancelled",
-      "path": "docs/planning/specifications/spec-0044-multi-item-batch-updates-and-bulk-operations-for-planning-mcp.md",
+      "path": "docs/planning/specifications/spec-008-multi-item-batch-updates-and-bulk-operations-for-planning-mcp.md",
       "deleted": false,
       "archived": false
     },
-    "spec-0045": {
-      "id": "spec-0045",
+    "spec-009": {
+      "id": "spec-009",
       "kind": "spec",
       "label": "Cursory sensitive data detection in planning validation (v1)",
       "state": "ready",
-      "path": "docs/planning/specifications/spec-0045-cursory-sensitive-data-detection-in-planning-validation-v1.md",
+      "path": "docs/planning/specifications/spec-009-cursory-sensitive-data-detection-in-planning-validation-v1.md",
       "deleted": false,
       "archived": false
     },
-    "spec-0046": {
-      "id": "spec-0046",
+    "spec-010": {
+      "id": "spec-010",
       "kind": "spec",
       "label": "Guidance levels for controlling planning depth-of-detail",
       "state": "draft",
-      "path": "docs/planning/specifications/spec-0046-guidance-levels-for-controlling-planning-depth-of-detail.md",
+      "path": "docs/planning/specifications/spec-010-guidance-levels-for-controlling-planning-depth-of-detail.md",
       "deleted": false,
       "archived": false
     },
-    "spec-0047": {
-      "id": "spec-0047",
+    "spec-011": {
+      "id": "spec-011",
       "kind": "spec",
       "label": "Unified workflow states for all planning item types",
       "state": "draft",
-      "path": "docs/planning/specifications/spec-0047-unified-workflow-states-for-all-planning-item-types.md",
+      "path": "docs/planning/specifications/spec-011-unified-workflow-states-for-all-planning-item-types.md",
       "deleted": false,
       "archived": false
     },
-    "spec-0048": {
-      "id": "spec-0048",
+    "spec-012": {
+      "id": "spec-012",
       "kind": "spec",
       "label": "Canonical semantics for guidance levels",
       "state": "draft",
-      "path": "docs/planning/specifications/spec-0048-canonical-semantics-for-guidance-levels.md",
+      "path": "docs/planning/specifications/spec-012-canonical-semantics-for-guidance-levels.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-013": {
+      "id": "spec-013",
+      "kind": "spec",
+      "label": "Integrate Knowledge Component v7.4 \u2014 Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-013-integrate-knowledge-component-v7-4-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-014": {
+      "id": "spec-014",
+      "kind": "spec",
+      "label": "Knowledge Component Integration Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-014-knowledge-component-integration-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-015": {
+      "id": "spec-015",
+      "kind": "spec",
+      "label": "Knowledge Component Improvements \u2014 Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-015-knowledge-component-improvements-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-016": {
+      "id": "spec-016",
+      "kind": "spec",
+      "label": "Knowledge Component Improvements Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-016-knowledge-component-improvements-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-017": {
+      "id": "spec-017",
+      "kind": "spec",
+      "label": "Planning Module Critical Fixes \u2014 Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-017-planning-module-critical-fixes-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-018": {
+      "id": "spec-018",
+      "kind": "spec",
+      "label": "Planning Module Critical Fixes Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-018-planning-module-critical-fixes-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-019": {
+      "id": "spec-019",
+      "kind": "spec",
+      "label": "Interoperability event layer specification",
+      "state": "ready",
+      "path": "docs/planning/specifications/spec-019-interoperability-event-layer-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-020": {
+      "id": "spec-020",
+      "kind": "spec",
+      "label": "Planning state propagation over events specification",
+      "state": "ready",
+      "path": "docs/planning/specifications/spec-020-planning-state-propagation-over-events-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-021": {
+      "id": "spec-021",
+      "kind": "spec",
+      "label": "Code Standards Compliance Review \u2014 Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-021-code-standards-compliance-review-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-022": {
+      "id": "spec-022",
+      "kind": "spec",
+      "label": "Auto-state propagation with event subscription implementation specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-022-auto-state-propagation-with-event-subscription-implementation-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-023": {
+      "id": "spec-023",
+      "kind": "spec",
+      "label": "Configurable event-driven knowledge updates implementation specification",
+      "state": "implemented",
+      "path": "docs/planning/specifications/spec-023-configurable-event-driven-knowledge-updates-implementation-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-024": {
+      "id": "spec-024",
+      "kind": "spec",
+      "label": "Test deterministic events \u2014 Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-024-test-deterministic-events-specification.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-025": {
+      "id": "spec-025",
+      "kind": "spec",
+      "label": "api-requirements",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-025-api-requirements.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-026": {
+      "id": "spec-026",
+      "kind": "spec",
+      "label": "validation-requirements",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-026-validation-requirements.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-027": {
+      "id": "spec-027",
+      "kind": "spec",
+      "label": "Test hooks fix \u2014 Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-027-test-hooks-fix-specification.md",
       "deleted": false,
       "archived": false
     },
@@ -404,6 +836,51 @@
       "label": "Planning layer enhancement impact standard",
       "state": "ready",
       "path": "docs/planning/standards/standard-0009-planning-layer-enhancement-impact-standard.md",
+      "deleted": false,
+      "archived": false
+    },
+    "standard-0010-python": {
+      "id": "standard-0010-python",
+      "kind": "standard",
+      "label": "Python MCP server development standard",
+      "state": "ready",
+      "path": "docs/planning/standards/standard-0010-python-python-mcp-server-development-standard.md",
+      "deleted": false,
+      "archived": false
+    },
+    "standard-0011": {
+      "id": "standard-0011",
+      "kind": "standard",
+      "label": "Component architecture standard",
+      "state": "ready",
+      "path": "docs/planning/standards/standard-0011-component-architecture-standard.md",
+      "deleted": false,
+      "archived": false
+    },
+    "standard-0012": {
+      "id": "standard-0012",
+      "kind": "standard",
+      "label": "Knowledge maintenance standard",
+      "state": "ready",
+      "path": "docs/planning/standards/standard-0012-knowledge-maintenance-standard.md",
+      "deleted": false,
+      "archived": false
+    },
+    "standard-0013": {
+      "id": "standard-0013",
+      "kind": "standard",
+      "label": "Event subscription configuration standard",
+      "state": "ready",
+      "path": "docs/planning/standards/standard-0013-event-subscription-configuration-standard.md",
+      "deleted": false,
+      "archived": false
+    },
+    "standard-0014": {
+      "id": "standard-0014",
+      "kind": "standard",
+      "label": "Test Standard",
+      "state": "ready",
+      "path": "docs/planning/standards/standard-0014-test-standard.md",
       "deleted": false,
       "archived": false
     },
@@ -524,29 +1001,47 @@
       "deleted": false,
       "archived": false
     },
-    "task-0173": {
-      "id": "task-0173",
+    "task-0318": {
+      "id": "task-0318",
       "kind": "task",
       "label": "[PKT-CRD-001](task-0173): Coordinator Consumption Seam",
       "state": "draft",
-      "path": "docs/planning/tasks/coordinator/task-0173.md",
+      "path": "docs/planning/tasks/coordinator/task-0318.md",
       "deleted": false,
       "archived": false
     },
-    "task-0008-output": {
-      "id": "task-0008-output",
+    "task-0001": {
+      "id": "task-0001",
       "kind": "task",
       "label": "Migration Reference Map",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-0008-output.md",
+      "path": "docs/planning/tasks/core/task-0001.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0002": {
+      "id": "task-0002",
+      "kind": "task",
+      "label": "Inventory all implementation docs and build reference map",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0002.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0003": {
+      "id": "task-0003",
+      "kind": "task",
+      "label": "Migrate Phase 0 docs (contracts and scaffolding)",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-0003.md",
       "deleted": false,
       "archived": false
     },
     "task-0008": {
       "id": "task-0008",
       "kind": "task",
-      "label": "Inventory all implementation docs and build reference map",
-      "state": "done",
+      "label": "Migrate Phase 5-6 docs (Discord overlay and migration hardening)",
+      "state": "draft",
       "path": "docs/planning/tasks/core/task-0008.md",
       "deleted": false,
       "archived": false
@@ -554,7 +1049,7 @@
     "task-0009": {
       "id": "task-0009",
       "kind": "task",
-      "label": "Migrate Phase 0 docs (contracts and scaffolding)",
+      "label": "Migrate Phase 7-11 docs (federation and external connectivity)",
       "state": "draft",
       "path": "docs/planning/tasks/core/task-0009.md",
       "deleted": false,
@@ -563,7 +1058,7 @@
     "task-0010": {
       "id": "task-0010",
       "kind": "task",
-      "label": "Migrate Phase 1 docs (lifecycle and project enablement)",
+      "label": "Resolve all cross-references between planning objects",
       "state": "draft",
       "path": "docs/planning/tasks/core/task-0010.md",
       "deleted": false,
@@ -572,7 +1067,7 @@
     "task-0011": {
       "id": "task-0011",
       "kind": "task",
-      "label": "Migrate Phase 2 docs (release, audit, ledger)",
+      "label": "Validate migration and clean up old files",
       "state": "draft",
       "path": "docs/planning/tasks/core/task-0011.md",
       "deleted": false,
@@ -581,7 +1076,7 @@
     "task-0012": {
       "id": "task-0012",
       "kind": "task",
-      "label": "Migrate Phase 3 docs (jobs and workflows)",
+      "label": "Implement archive state in planning core",
       "state": "draft",
       "path": "docs/planning/tasks/core/task-0012.md",
       "deleted": false,
@@ -590,7 +1085,7 @@
     "task-0013": {
       "id": "task-0013",
       "kind": "task",
-      "label": "Migrate Phase 4 docs (providers and server seam)",
+      "label": "Update tm_list with archive filter",
       "state": "draft",
       "path": "docs/planning/tasks/core/task-0013.md",
       "deleted": false,
@@ -599,7 +1094,7 @@
     "task-0014": {
       "id": "task-0014",
       "kind": "task",
-      "label": "Migrate Phase 5-6 docs (Discord overlay and migration hardening)",
+      "label": "Update tm_validate with archive rules",
       "state": "draft",
       "path": "docs/planning/tasks/core/task-0014.md",
       "deleted": false,
@@ -608,7 +1103,7 @@
     "task-0015": {
       "id": "task-0015",
       "kind": "task",
-      "label": "Migrate Phase 7-11 docs (federation and external connectivity)",
+      "label": "Update tm_show to include archive metadata",
       "state": "draft",
       "path": "docs/planning/tasks/core/task-0015.md",
       "deleted": false,
@@ -617,7 +1112,7 @@
     "task-0016": {
       "id": "task-0016",
       "kind": "task",
-      "label": "Resolve all cross-references between planning objects",
+      "label": "Add archived state to planning state machine",
       "state": "draft",
       "path": "docs/planning/tasks/core/task-0016.md",
       "deleted": false,
@@ -626,7 +1121,7 @@
     "task-0017": {
       "id": "task-0017",
       "kind": "task",
-      "label": "Validate migration and clean up old files",
+      "label": "Implement tm_archive and tm_restore functions",
       "state": "draft",
       "path": "docs/planning/tasks/core/task-0017.md",
       "deleted": false,
@@ -635,7 +1130,7 @@
     "task-0018": {
       "id": "task-0018",
       "kind": "task",
-      "label": "Implement archive state in planning core",
+      "label": "Update tm_list with archive filter parameter",
       "state": "draft",
       "path": "docs/planning/tasks/core/task-0018.md",
       "deleted": false,
@@ -644,7 +1139,7 @@
     "task-0019": {
       "id": "task-0019",
       "kind": "task",
-      "label": "Update tm_list with archive filter",
+      "label": "Update tm_validate with archive validation rules",
       "state": "draft",
       "path": "docs/planning/tasks/core/task-0019.md",
       "deleted": false,
@@ -653,7 +1148,7 @@
     "task-0020": {
       "id": "task-0020",
       "kind": "task",
-      "label": "Update tm_validate with archive rules",
+      "label": "Update tm_show to include archive metadata",
       "state": "draft",
       "path": "docs/planning/tasks/core/task-0020.md",
       "deleted": false,
@@ -662,79 +1157,133 @@
     "task-0021": {
       "id": "task-0021",
       "kind": "task",
-      "label": "Update tm_show to include archive metadata",
-      "state": "draft",
+      "label": "Extend planning tools with full content management",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0021.md",
       "deleted": false,
       "archived": false
     },
-    "task-0022": {
-      "id": "task-0022",
+    "task-0170": {
+      "id": "task-0170",
+      "kind": "task",
+      "label": "Implement update_task_status() wrapper function",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0170.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0171": {
+      "id": "task-0171",
+      "kind": "task",
+      "label": "Define reference docs and project-facing documentation surfaces",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0171.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0172": {
+      "id": "task-0172",
+      "kind": "task",
+      "label": "Scope manifest and migration-registry scaffolding",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0172.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0173": {
+      "id": "task-0173",
+      "kind": "task",
+      "label": "Expand helper and MCP surfaces for documentation views",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0173.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0174": {
+      "id": "task-0174",
+      "kind": "task",
+      "label": "Define section registry and subsection navigation limits",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0174.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0175": {
+      "id": "task-0175",
+      "kind": "task",
+      "label": "Define supporting-doc metadata and registry behavior",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0175.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0176": {
+      "id": "task-0176",
+      "kind": "task",
+      "label": "Define documentation-sync obligations and verification coverage",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0176.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0177": {
+      "id": "task-0177",
+      "kind": "task",
+      "label": "Implement MCP helper root configurability",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0177.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0178": {
+      "id": "task-0178",
       "kind": "task",
       "label": "Add archived state to planning state machine",
-      "state": "draft",
-      "path": "docs/planning/tasks/core/task-0022.md",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0178.md",
       "deleted": false,
       "archived": false
     },
-    "task-0023": {
-      "id": "task-0023",
+    "task-0179": {
+      "id": "task-0179",
       "kind": "task",
-      "label": "Implement tm_archive and tm_restore functions",
-      "state": "draft",
-      "path": "docs/planning/tasks/core/task-0023.md",
+      "label": "Implement state-based archive and restore behavior",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0179.md",
       "deleted": false,
       "archived": false
     },
-    "task-0024": {
-      "id": "task-0024",
+    "task-0180": {
+      "id": "task-0180",
       "kind": "task",
       "label": "Update tm_list with archive filter parameter",
-      "state": "draft",
-      "path": "docs/planning/tasks/core/task-0024.md",
-      "deleted": false,
-      "archived": false
-    },
-    "task-0025": {
-      "id": "task-0025",
-      "kind": "task",
-      "label": "Update tm_validate with archive validation rules",
-      "state": "draft",
-      "path": "docs/planning/tasks/core/task-0025.md",
-      "deleted": false,
-      "archived": false
-    },
-    "task-0026": {
-      "id": "task-0026",
-      "kind": "task",
-      "label": "Update tm_show to include archive metadata",
-      "state": "draft",
-      "path": "docs/planning/tasks/core/task-0026.md",
-      "deleted": false,
-      "archived": false
-    },
-    "task-0027": {
-      "id": "task-0027",
-      "kind": "task",
-      "label": "Extend planning tools with full content management",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-0027.md",
+      "path": "docs/planning/tasks/core/task-0180.md",
       "deleted": false,
       "archived": false
     },
     "task-0181": {
       "id": "task-0181",
       "kind": "task",
-      "label": "Implement update_task_status() wrapper function",
+      "label": "Update tm_validate with archive validation rules",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0181.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0182": {
+      "id": "task-0182",
+      "kind": "task",
+      "label": "Update tm_show to include archive metadata",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0182.md",
       "deleted": false,
       "archived": false
     },
     "task-0183": {
       "id": "task-0183",
       "kind": "task",
-      "label": "Define reference docs and project-facing documentation surfaces",
+      "label": "Verify and preserve schema-compliant task reference placement",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0183.md",
       "deleted": false,
@@ -743,7 +1292,7 @@
     "task-0184": {
       "id": "task-0184",
       "kind": "task",
-      "label": "Scope manifest and migration-registry scaffolding",
+      "label": "Implement automatic counter sync on delete",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0184.md",
       "deleted": false,
@@ -752,7 +1301,7 @@
     "task-0185": {
       "id": "task-0185",
       "kind": "task",
-      "label": "Expand helper and MCP surfaces for documentation views",
+      "label": "Implement soft delete functionality",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0185.md",
       "deleted": false,
@@ -761,7 +1310,7 @@
     "task-0186": {
       "id": "task-0186",
       "kind": "task",
-      "label": "Define section registry and subsection navigation limits",
+      "label": "Extend auto-reference updates to plans and tasks",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0186.md",
       "deleted": false,
@@ -770,7 +1319,7 @@
     "task-0187": {
       "id": "task-0187",
       "kind": "task",
-      "label": "Define supporting-doc metadata and registry behavior",
+      "label": "Add duplicate detection for requests and specs",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0187.md",
       "deleted": false,
@@ -779,7 +1328,7 @@
     "task-0188": {
       "id": "task-0188",
       "kind": "task",
-      "label": "Define documentation-sync obligations and verification coverage",
+      "label": "Improve schema validation error messages",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0188.md",
       "deleted": false,
@@ -788,7 +1337,7 @@
     "task-0189": {
       "id": "task-0189",
       "kind": "task",
-      "label": "Implement MCP helper root configurability",
+      "label": "Add integration tests for critical fixes",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0189.md",
       "deleted": false,
@@ -797,7 +1346,7 @@
     "task-0190": {
       "id": "task-0190",
       "kind": "task",
-      "label": "Add archived state to planning state machine",
+      "label": "Fix update_content() section-mode regex",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0190.md",
       "deleted": false,
@@ -806,7 +1355,7 @@
     "task-0191": {
       "id": "task-0191",
       "kind": "task",
-      "label": "Implement state-based archive and restore behavior",
+      "label": "Fix move() for work-packages",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0191.md",
       "deleted": false,
@@ -815,7 +1364,7 @@
     "task-0192": {
       "id": "task-0192",
       "kind": "task",
-      "label": "Update tm_list with archive filter parameter",
+      "label": "Implement claims TTL lazy purge",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0192.md",
       "deleted": false,
@@ -824,7 +1373,7 @@
     "task-0193": {
       "id": "task-0193",
       "kind": "task",
-      "label": "Update tm_validate with archive validation rules",
+      "label": "Fix hook event payloads",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0193.md",
       "deleted": false,
@@ -833,7 +1382,7 @@
     "task-0194": {
       "id": "task-0194",
       "kind": "task",
-      "label": "Update tm_show to include archive metadata",
+      "label": "Fix batch meta op",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0194.md",
       "deleted": false,
@@ -842,7 +1391,7 @@
     "task-0195": {
       "id": "task-0195",
       "kind": "task",
-      "label": "Verify and preserve schema-compliant task reference placement",
+      "label": "Fix tm.status() return shape",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0195.md",
       "deleted": false,
@@ -851,7 +1400,7 @@
     "task-0196": {
       "id": "task-0196",
       "kind": "task",
-      "label": "Implement automatic counter sync on delete",
+      "label": "Fix FastMCP empty-list serialization",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0196.md",
       "deleted": false,
@@ -860,7 +1409,7 @@
     "task-0197": {
       "id": "task-0197",
       "kind": "task",
-      "label": "Implement soft delete functionality",
+      "label": "Add AUDIAGENTIC_ROOT env var support",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0197.md",
       "deleted": false,
@@ -869,7 +1418,7 @@
     "task-0198": {
       "id": "task-0198",
       "kind": "task",
-      "label": "Extend auto-reference updates to plans and tasks",
+      "label": "Add --root CLI flag support",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0198.md",
       "deleted": false,
@@ -878,7 +1427,7 @@
     "task-0199": {
       "id": "task-0199",
       "kind": "task",
-      "label": "Add duplicate detection for requests and specs",
+      "label": "Unify --profile and --stack-profile into single parameter",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0199.md",
       "deleted": false,
@@ -887,7 +1436,7 @@
     "task-0200": {
       "id": "task-0200",
       "kind": "task",
-      "label": "Improve schema validation error messages",
+      "label": "Add lookup.json global index generation to idx_mgr",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0200.md",
       "deleted": false,
@@ -896,7 +1445,7 @@
     "task-0201": {
       "id": "task-0201",
       "kind": "task",
-      "label": "Add integration tests for critical fixes",
+      "label": "Add internal lookup(id) and head(id) helpers to api.py",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0201.md",
       "deleted": false,
@@ -905,7 +1454,7 @@
     "task-0202": {
       "id": "task-0202",
       "kind": "task",
-      "label": "Fix update_content() section-mode regex",
+      "label": "Refactor _find(), show(), and extract() onto lookup path",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0202.md",
       "deleted": false,
@@ -914,7 +1463,7 @@
     "task-0203": {
       "id": "task-0203",
       "kind": "task",
-      "label": "Fix move() for work-packages",
+      "label": "Add include_body and write_to_disk controls to extract()",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0203.md",
       "deleted": false,
@@ -923,7 +1472,7 @@
     "task-0204": {
       "id": "task-0204",
       "kind": "task",
-      "label": "Implement claims TTL lazy purge",
+      "label": "Expose head(id) and refined extract controls in MCP and tm_helper",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0204.md",
       "deleted": false,
@@ -932,7 +1481,7 @@
     "task-0205": {
       "id": "task-0205",
       "kind": "task",
-      "label": "Fix hook event payloads",
+      "label": "Add stale-index handling for lookup misses",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0205.md",
       "deleted": false,
@@ -941,8 +1490,8 @@
     "task-0206": {
       "id": "task-0206",
       "kind": "task",
-      "label": "Fix batch meta op",
-      "state": "done",
+      "label": "Add body content parameters to task creation and enforce non-empty body via validation",
+      "state": "draft",
       "path": "docs/planning/tasks/core/task-0206.md",
       "deleted": false,
       "archived": false
@@ -950,8 +1499,8 @@
     "task-0207": {
       "id": "task-0207",
       "kind": "task",
-      "label": "Fix tm.status() return shape",
-      "state": "done",
+      "label": "Extend tm_batch_update to support multi-item operations",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-0207.md",
       "deleted": false,
       "archived": false
@@ -959,8 +1508,8 @@
     "task-0208": {
       "id": "task-0208",
       "kind": "task",
-      "label": "Fix FastMCP empty-list serialization",
-      "state": "done",
+      "label": "Implement tm_bulk_state for state transitions",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-0208.md",
       "deleted": false,
       "archived": false
@@ -968,8 +1517,8 @@
     "task-0209": {
       "id": "task-0209",
       "kind": "task",
-      "label": "Add AUDIAGENTIC_ROOT env var support",
-      "state": "ready",
+      "label": "Add summary_only flag to individual operations",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-0209.md",
       "deleted": false,
       "archived": false
@@ -977,26 +1526,71 @@
     "task-0210": {
       "id": "task-0210",
       "kind": "task",
-      "label": "Add --root CLI flag support",
-      "state": "ready",
+      "label": "Expose bulk operations in MCP and tm_helper",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-0210.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0211": {
+      "id": "task-0211",
+      "kind": "task",
+      "label": "Write tests for bulk operations and backward compatibility",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0211.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0212": {
+      "id": "task-0212",
+      "kind": "task",
+      "label": "Implement detect_sensitive_patterns function with regex patterns",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0212.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0213": {
+      "id": "task-0213",
+      "kind": "task",
+      "label": "Integrate sensitive data detection into tm_validate output",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0213.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0214": {
+      "id": "task-0214",
+      "kind": "task",
+      "label": "Write tests for sensitive data detection",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0214.md",
       "deleted": false,
       "archived": false
     },
     "task-0215": {
       "id": "task-0215",
       "kind": "task",
-      "label": "Unify --profile and --stack-profile into single parameter",
-      "state": "done",
+      "label": "Implement audience profile system in config and API",
+      "state": "draft",
       "path": "docs/planning/tasks/core/task-0215.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0216": {
+      "id": "task-0216",
+      "kind": "task",
+      "label": "Add guidance_levels to profiles.yaml",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0216.md",
       "deleted": false,
       "archived": false
     },
     "task-0217": {
       "id": "task-0217",
       "kind": "task",
-      "label": "Test task with defaults",
-      "state": "draft",
+      "label": "Update config.py to load guidance levels",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0217.md",
       "deleted": false,
       "archived": false
@@ -1004,16 +1598,34 @@
     "task-0218": {
       "id": "task-0218",
       "kind": "task",
-      "label": "Test task",
-      "state": "draft",
+      "label": "Add guidance field to request schema",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0218.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0219": {
+      "id": "task-0219",
+      "kind": "task",
+      "label": "Update tm_helper.py new_request() with guidance parameter",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0219.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0220": {
+      "id": "task-0220",
+      "kind": "task",
+      "label": "Add --guidance CLI parameter to tm.py",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0220.md",
       "deleted": false,
       "archived": false
     },
     "task-0221": {
       "id": "task-0221",
       "kind": "task",
-      "label": "Add lookup.json global index generation to idx_mgr",
+      "label": "Update validation to enforce guidance-appropriate sections",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0221.md",
       "deleted": false,
@@ -1022,7 +1634,7 @@
     "task-0222": {
       "id": "task-0222",
       "kind": "task",
-      "label": "Add internal lookup(id) and head(id) helpers to api.py",
+      "label": "Add default_guidance to planning.yaml",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0222.md",
       "deleted": false,
@@ -1031,7 +1643,7 @@
     "task-0223": {
       "id": "task-0223",
       "kind": "task",
-      "label": "Refactor _find(), show(), and extract() onto lookup path",
+      "label": "Write tests for guidance levels",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0223.md",
       "deleted": false,
@@ -1040,7 +1652,7 @@
     "task-0224": {
       "id": "task-0224",
       "kind": "task",
-      "label": "Add include_body and write_to_disk controls to extract()",
+      "label": "Draft standard-0010 with guidance level definitions",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0224.md",
       "deleted": false,
@@ -1049,7 +1661,7 @@
     "task-0225": {
       "id": "task-0225",
       "kind": "task",
-      "label": "Expose head(id) and refined extract controls in MCP and tm_helper",
+      "label": "Update validation to enforce guidance level requirements",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0225.md",
       "deleted": false,
@@ -1058,7 +1670,7 @@
     "task-0226": {
       "id": "task-0226",
       "kind": "task",
-      "label": "Add stale-index handling for lookup misses",
+      "label": "Add guidance level selection guide to documentation",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0226.md",
       "deleted": false,
@@ -1067,8 +1679,8 @@
     "task-0227": {
       "id": "task-0227",
       "kind": "task",
-      "label": "Add body content parameters to task creation and enforce non-empty body via validation",
-      "state": "draft",
+      "label": "Update workflows.yaml with unified states",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0227.md",
       "deleted": false,
       "archived": false
@@ -1076,8 +1688,8 @@
     "task-0228": {
       "id": "task-0228",
       "kind": "task",
-      "label": "Extend tm_batch_update to support multi-item operations",
-      "state": "cancelled",
+      "label": "Implement cascade archive for requests",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0228.md",
       "deleted": false,
       "archived": false
@@ -1085,8 +1697,8 @@
     "task-0229": {
       "id": "task-0229",
       "kind": "task",
-      "label": "Implement tm_bulk_state for state transitions",
-      "state": "cancelled",
+      "label": "Implement cascade archive for specs",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0229.md",
       "deleted": false,
       "archived": false
@@ -1094,8 +1706,8 @@
     "task-0230": {
       "id": "task-0230",
       "kind": "task",
-      "label": "Add summary_only flag to individual operations",
-      "state": "cancelled",
+      "label": "Review knowledge component codebase",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0230.md",
       "deleted": false,
       "archived": false
@@ -1103,8 +1715,8 @@
     "task-0231": {
       "id": "task-0231",
       "kind": "task",
-      "label": "Expose bulk operations in MCP and tm_helper",
-      "state": "cancelled",
+      "label": "Integrate knowledge component source code",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0231.md",
       "deleted": false,
       "archived": false
@@ -1112,8 +1724,8 @@
     "task-0232": {
       "id": "task-0232",
       "kind": "task",
-      "label": "Write tests for bulk operations and backward compatibility",
-      "state": "cancelled",
+      "label": "Bootstrap knowledge component configuration",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0232.md",
       "deleted": false,
       "archived": false
@@ -1121,7 +1733,7 @@
     "task-0233": {
       "id": "task-0233",
       "kind": "task",
-      "label": "Implement detect_sensitive_patterns function with regex patterns",
+      "label": "Configure event adapter for planning bridge",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0233.md",
       "deleted": false,
@@ -1130,7 +1742,7 @@
     "task-0234": {
       "id": "task-0234",
       "kind": "task",
-      "label": "Integrate sensitive data detection into tm_validate output",
+      "label": "Test knowledge component integration",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0234.md",
       "deleted": false,
@@ -1139,8 +1751,8 @@
     "task-0235": {
       "id": "task-0235",
       "kind": "task",
-      "label": "Write tests for sensitive data detection",
-      "state": "done",
+      "label": "Validate documentation",
+      "state": "draft",
       "path": "docs/planning/tasks/core/task-0235.md",
       "deleted": false,
       "archived": false
@@ -1148,7 +1760,7 @@
     "task-0236": {
       "id": "task-0236",
       "kind": "task",
-      "label": "Implement audience profile system in config and API",
+      "label": "Add unit tests for knowledge component",
       "state": "draft",
       "path": "docs/planning/tasks/core/task-0236.md",
       "deleted": false,
@@ -1157,8 +1769,8 @@
     "task-0237": {
       "id": "task-0237",
       "kind": "task",
-      "label": "Add guidance_levels to profiles.yaml",
-      "state": "done",
+      "label": "Refactor events.py into separate modules",
+      "state": "draft",
       "path": "docs/planning/tasks/core/task-0237.md",
       "deleted": false,
       "archived": false
@@ -1166,8 +1778,8 @@
     "task-0238": {
       "id": "task-0238",
       "kind": "task",
-      "label": "Update config.py to load guidance levels",
-      "state": "done",
+      "label": "Enhance lexical search",
+      "state": "draft",
       "path": "docs/planning/tasks/core/task-0238.md",
       "deleted": false,
       "archived": false
@@ -1175,8 +1787,8 @@
     "task-0239": {
       "id": "task-0239",
       "kind": "task",
-      "label": "Add guidance field to request schema",
-      "state": "done",
+      "label": "Add lifecycle management for jobs and proposals",
+      "state": "draft",
       "path": "docs/planning/tasks/core/task-0239.md",
       "deleted": false,
       "archived": false
@@ -1184,8 +1796,8 @@
     "task-0240": {
       "id": "task-0240",
       "kind": "task",
-      "label": "Update tm_helper.py new_request() with guidance parameter",
-      "state": "done",
+      "label": "Consolidate MCP tools",
+      "state": "draft",
       "path": "docs/planning/tasks/core/task-0240.md",
       "deleted": false,
       "archived": false
@@ -1193,7 +1805,7 @@
     "task-0241": {
       "id": "task-0241",
       "kind": "task",
-      "label": "Add --guidance CLI parameter to tm.py",
+      "label": "Fix create_with_content() standard_refs bug",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0241.md",
       "deleted": false,
@@ -1202,7 +1814,7 @@
     "task-0242": {
       "id": "task-0242",
       "kind": "task",
-      "label": "Update validation to enforce guidance-appropriate sections",
+      "label": "Remove dead code in update_content() section mode",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0242.md",
       "deleted": false,
@@ -1211,7 +1823,7 @@
     "task-0243": {
       "id": "task-0243",
       "kind": "task",
-      "label": "Add default_guidance to planning.yaml",
+      "label": "Add atomic write guarantee to dump_markdown()",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0243.md",
       "deleted": false,
@@ -1220,7 +1832,7 @@
     "task-0244": {
       "id": "task-0244",
       "kind": "task",
-      "label": "Write tests for guidance levels",
+      "label": "Fix val_mgr.py duplicated validation",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0244.md",
       "deleted": false,
@@ -1229,8 +1841,8 @@
     "task-0245": {
       "id": "task-0245",
       "kind": "task",
-      "label": "Draft standard-0010 with guidance level definitions",
-      "state": "done",
+      "label": "Add cycle detection to standards cascade",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-0245.md",
       "deleted": false,
       "archived": false
@@ -1238,7 +1850,7 @@
     "task-0246": {
       "id": "task-0246",
       "kind": "task",
-      "label": "Update validation to enforce guidance level requirements",
+      "label": "Improve validation error messages",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0246.md",
       "deleted": false,
@@ -1247,7 +1859,7 @@
     "task-0247": {
       "id": "task-0247",
       "kind": "task",
-      "label": "Add guidance level selection guide to documentation",
+      "label": "Consolidate new() and create_with_content() logic",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0247.md",
       "deleted": false,
@@ -1256,7 +1868,7 @@
     "task-0248": {
       "id": "task-0248",
       "kind": "task",
-      "label": "Update workflows.yaml with unified states",
+      "label": "Implement InProcessEventBus satisfying EventBusProtocol",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0248.md",
       "deleted": false,
@@ -1265,7 +1877,7 @@
     "task-0249": {
       "id": "task-0249",
       "kind": "task",
-      "label": "Implement cascade archive for requests",
+      "label": "Implement FileEventStore for optional persistence",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0249.md",
       "deleted": false,
@@ -1274,9 +1886,765 @@
     "task-0250": {
       "id": "task-0250",
       "kind": "task",
-      "label": "Implement cascade archive for specs",
+      "label": "Implement replay functionality with is_replay flag",
       "state": "done",
       "path": "docs/planning/tasks/core/task-0250.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0251": {
+      "id": "task-0251",
+      "kind": "task",
+      "label": "Implement state propagation engine for planning hierarchies",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0251.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0252": {
+      "id": "task-0252",
+      "kind": "task",
+      "label": "Create state propagation config system",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0252.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0253": {
+      "id": "task-0253",
+      "kind": "task",
+      "label": "Integrate interoperability layer with planning component",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0253.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0254": {
+      "id": "task-0254",
+      "kind": "task",
+      "label": "Integrate interoperability layer with knowledge component",
+      "state": "ready",
+      "path": "docs/planning/tasks/core/task-0254.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0255": {
+      "id": "task-0255",
+      "kind": "task",
+      "label": "Bridge planning hooks onto canonical events without removing legacy hooks",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0255.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0256": {
+      "id": "task-0256",
+      "kind": "task",
+      "label": "Add integration tests for event layer and state propagation",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0256.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0257": {
+      "id": "task-0257",
+      "kind": "task",
+      "label": "Create interoperability package structure with transport protocol abstraction",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0257.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0258": {
+      "id": "task-0258",
+      "kind": "task",
+      "label": "Create event schema registry and documentation",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0258.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0259": {
+      "id": "task-0259",
+      "kind": "task",
+      "label": "Add CLI commands and diagnostics for event layer",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-0259.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0260": {
+      "id": "task-0260",
+      "kind": "task",
+      "label": "Validate event layer performance targets",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-0260.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0261": {
+      "id": "task-0261",
+      "kind": "task",
+      "label": "Implement knowledge event handler for planning state changes",
+      "state": "blocked",
+      "path": "docs/planning/tasks/core/task-0261.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0262": {
+      "id": "task-0262",
+      "kind": "task",
+      "label": "Inventory planning hooks and create migration plan",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0262.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0263": {
+      "id": "task-0263",
+      "kind": "task",
+      "label": "Remove legacy hook system after migration complete",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0263.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0264": {
+      "id": "task-0264",
+      "kind": "task",
+      "label": "Implement async event queue for background processing",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0264.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0265": {
+      "id": "task-0265",
+      "kind": "task",
+      "label": "Implement planning audit and repair CLI command",
+      "state": "ready",
+      "path": "docs/planning/tasks/core/task-0265.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0266": {
+      "id": "task-0266",
+      "kind": "task",
+      "label": "Improve MCP layer robustness and type safety",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0266.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0267": {
+      "id": "task-0267",
+      "kind": "task",
+      "label": "Add module docstring to execution/jobs/__init__.py",
+      "state": "completed",
+      "path": "docs/planning/tasks/core/task-0267.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0268": {
+      "id": "task-0268",
+      "kind": "task",
+      "label": "Fix empty planning/app/__init__.py",
+      "state": "completed",
+      "path": "docs/planning/tasks/core/task-0268.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0269": {
+      "id": "task-0269",
+      "kind": "task",
+      "label": "Fix incomplete runtime/__init__.py docstring",
+      "state": "completed",
+      "path": "docs/planning/tasks/core/task-0269.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0270": {
+      "id": "task-0270",
+      "kind": "task",
+      "label": "Add class and method docstrings to base_mgr.py",
+      "state": "completed",
+      "path": "docs/planning/tasks/core/task-0270.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0271": {
+      "id": "task-0271",
+      "kind": "task",
+      "label": "Review get_task_by_id function reference",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0271.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0272": {
+      "id": "task-0272",
+      "kind": "task",
+      "label": "Fix error handling in validation.py:42",
+      "state": "completed",
+      "path": "docs/planning/tasks/core/task-0272.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0273": {
+      "id": "task-0273",
+      "kind": "task",
+      "label": "Add JSON schema validation to _load_json_argument",
+      "state": "completed",
+      "path": "docs/planning/tasks/core/task-0273.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0274": {
+      "id": "task-0274",
+      "kind": "task",
+      "label": "Add validation for session_input --details-json",
+      "state": "completed",
+      "path": "docs/planning/tasks/core/task-0274.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0275": {
+      "id": "task-0275",
+      "kind": "task",
+      "label": "Fix generic error handling in CLI",
+      "state": "completed",
+      "path": "docs/planning/tasks/core/task-0275.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0276": {
+      "id": "task-0276",
+      "kind": "task",
+      "label": "standard-0012-knowledge-maintenance-impl",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0276.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0277": {
+      "id": "task-0277",
+      "kind": "task",
+      "label": "Fix global state access in job_control_tool",
+      "state": "completed",
+      "path": "docs/planning/tasks/core/task-0277.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0278": {
+      "id": "task-0278",
+      "kind": "task",
+      "label": "Fix tight coupling in session_input_tool",
+      "state": "completed",
+      "path": "docs/planning/tasks/core/task-0278.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0279": {
+      "id": "task-0279",
+      "kind": "task",
+      "label": "Refactor event bus singleton pattern",
+      "state": "completed",
+      "path": "docs/planning/tasks/core/task-0279.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0280": {
+      "id": "task-0280",
+      "kind": "task",
+      "label": "spec-0060",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0280.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0281": {
+      "id": "task-0281",
+      "kind": "task",
+      "label": "spec-0065",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0281.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0282": {
+      "id": "task-0282",
+      "kind": "task",
+      "label": "std-0010",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0282.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0283": {
+      "id": "task-0283",
+      "kind": "task",
+      "label": "std-0011",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0283.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0284": {
+      "id": "task-0284",
+      "kind": "task",
+      "label": "plan-0017",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0284.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0285": {
+      "id": "task-0285",
+      "kind": "task",
+      "label": "plan-0018",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0285.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0286": {
+      "id": "task-0286",
+      "kind": "task",
+      "label": "plan-0019",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0286.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0287": {
+      "id": "task-0287",
+      "kind": "task",
+      "label": "plan-0020",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0287.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0288": {
+      "id": "task-0288",
+      "kind": "task",
+      "label": "plan-0021",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0288.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0289": {
+      "id": "task-0289",
+      "kind": "task",
+      "label": "plan-0022",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0289.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0290": {
+      "id": "task-0290",
+      "kind": "task",
+      "label": "wp-0020",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0290.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0291": {
+      "id": "task-0291",
+      "kind": "task",
+      "label": "wp-0021",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0291.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0292": {
+      "id": "task-0292",
+      "kind": "task",
+      "label": "wp-0022",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0292.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0293": {
+      "id": "task-0293",
+      "kind": "task",
+      "label": "wp-0023",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0293.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0294": {
+      "id": "task-0294",
+      "kind": "task",
+      "label": "wp-0024",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0294.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0295": {
+      "id": "task-0295",
+      "kind": "task",
+      "label": "wp-0025",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0295.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0296": {
+      "id": "task-0296",
+      "kind": "task",
+      "label": "req-0032",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0296.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0297": {
+      "id": "task-0297",
+      "kind": "task",
+      "label": "req-0033",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0297.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0298": {
+      "id": "task-0298",
+      "kind": "task",
+      "label": "req-0034",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0298.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0299": {
+      "id": "task-0299",
+      "kind": "task",
+      "label": "req-0035",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0299.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0300": {
+      "id": "task-0300",
+      "kind": "task",
+      "label": "req-0036",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0300.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0301": {
+      "id": "task-0301",
+      "kind": "task",
+      "label": "req-0037",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0301.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0302": {
+      "id": "task-0302",
+      "kind": "task",
+      "label": "req-0038",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0302.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0303": {
+      "id": "task-0303",
+      "kind": "task",
+      "label": "req-0039",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0303.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0304": {
+      "id": "task-0304",
+      "kind": "task",
+      "label": "req-0040",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0304.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0305": {
+      "id": "task-0305",
+      "kind": "task",
+      "label": "req-0041",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0305.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0306": {
+      "id": "task-0306",
+      "kind": "task",
+      "label": "req-0042",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0306.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0307": {
+      "id": "task-0307",
+      "kind": "task",
+      "label": "req-0043",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0307.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0308": {
+      "id": "task-0308",
+      "kind": "task",
+      "label": "interop",
+      "state": "closed",
+      "path": "docs/planning/tasks/core/task-0308.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0309": {
+      "id": "task-0309",
+      "kind": "task",
+      "label": "knowledge",
+      "state": "closed",
+      "path": "docs/planning/tasks/core/task-0309.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0310": {
+      "id": "task-0310",
+      "kind": "task",
+      "label": "docs",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0310.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0311": {
+      "id": "task-0311",
+      "kind": "task",
+      "label": "docs2",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0311.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0312": {
+      "id": "task-0312",
+      "kind": "task",
+      "label": "extracts",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0312.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0313": {
+      "id": "task-0313",
+      "kind": "task",
+      "label": "standard-0007-migration-change-control-impl",
+      "state": "ready",
+      "path": "docs/planning/tasks/core/task-0313.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0314": {
+      "id": "task-0314",
+      "kind": "task",
+      "label": "standard-0008-python-impl-impl",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0314.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0315": {
+      "id": "task-0315",
+      "kind": "task",
+      "label": "standard-0009-planning-enhancement-impl",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0315.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0316": {
+      "id": "task-0316",
+      "kind": "task",
+      "label": "standard-0010-mcp-server-impl",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0316.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0317": {
+      "id": "task-0317",
+      "kind": "task",
+      "label": "standard-0011-component-arch-impl",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0317.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0329": {
+      "id": "task-0329",
+      "kind": "task",
+      "label": "Extend config schema for document structure",
+      "state": "ready",
+      "path": "docs/planning/tasks/core/task-0329.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0330": {
+      "id": "task-0330",
+      "kind": "task",
+      "label": "Create TemplateEngine class",
+      "state": "ready",
+      "path": "docs/planning/tasks/core/task-0330.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0331": {
+      "id": "task-0331",
+      "kind": "task",
+      "label": "Create RelationshipConfig class",
+      "state": "ready",
+      "path": "docs/planning/tasks/core/task-0331.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0332": {
+      "id": "task-0332",
+      "kind": "task",
+      "label": "Refactor managers to use config",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0332.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0333": {
+      "id": "task-0333",
+      "kind": "task",
+      "label": "Migrate hardcoded values to config",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0333.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0334": {
+      "id": "task-0334",
+      "kind": "task",
+      "label": "Add tests for config-driven structure",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0334.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0335": {
+      "id": "task-0335",
+      "kind": "task",
+      "label": "Updated Test Task",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-0335.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-3245": {
+      "id": "task-3245",
+      "kind": "task",
+      "label": "Implement source/target documentation (standard-0007 req 1-3)",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-3245.md",
+      "deleted": true,
+      "archived": false
+    },
+    "task-3251": {
+      "id": "task-3251",
+      "kind": "task",
+      "label": "Refactor section_registry to use config",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-3251.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-3252": {
+      "id": "task-3252",
+      "kind": "task",
+      "label": "Clean up req_mgr hardcoded defaults",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-3252.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-3253": {
+      "id": "task-3253",
+      "kind": "task",
+      "label": "Integrate relationship validation into managers",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-3253.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-3258": {
+      "id": "task-3258",
+      "kind": "task",
+      "label": "Test Task",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-3258.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-3259": {
+      "id": "task-3259",
+      "kind": "task",
+      "label": "API Compatibility Test",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-3259.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-3261": {
+      "id": "task-3261",
+      "kind": "task",
+      "label": "Atomicity Test",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-3261.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-3262": {
+      "id": "task-3262",
+      "kind": "task",
+      "label": "Atomicity Test",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-3262.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-3263": {
+      "id": "task-3263",
+      "kind": "task",
+      "label": "Atomicity Task",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-3263.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-3264": {
+      "id": "task-3264",
+      "kind": "task",
+      "label": "Generic Task",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-3264.md",
       "deleted": false,
       "archived": false
     },
@@ -1334,93 +2702,93 @@
       "deleted": false,
       "archived": false
     },
-    "task-0170": {
-      "id": "task-0170",
+    "task-0319": {
+      "id": "task-0319",
       "kind": "task",
       "label": "[PKT-DIS-003](task-0170): Optional Provider Seams",
       "state": "draft",
-      "path": "docs/planning/tasks/discovery/task-0170.md",
+      "path": "docs/planning/tasks/discovery/task-0319.md",
       "deleted": false,
       "archived": false
     },
-    "task-0171": {
-      "id": "task-0171",
+    "task-0320": {
+      "id": "task-0320",
       "kind": "task",
       "label": "[PKT-EVT-001](task-0171): Node Event Families",
       "state": "draft",
-      "path": "docs/planning/tasks/eventing/task-0171.md",
+      "path": "docs/planning/tasks/eventing/task-0320.md",
       "deleted": false,
       "archived": false
     },
-    "task-0172": {
-      "id": "task-0172",
+    "task-0321": {
+      "id": "task-0321",
       "kind": "task",
       "label": "[PKT-EVT-002](task-0172): Control Request Contracts",
       "state": "draft",
-      "path": "docs/planning/tasks/eventing/task-0172.md",
+      "path": "docs/planning/tasks/eventing/task-0321.md",
       "deleted": false,
       "archived": false
     },
-    "task-0174": {
-      "id": "task-0174",
+    "task-0322": {
+      "id": "task-0322",
       "kind": "task",
       "label": "[PKT-EXT-001](task-0174): External Connector Contract and Mock",
       "state": "draft",
-      "path": "docs/planning/tasks/external-tools/task-0174.md",
+      "path": "docs/planning/tasks/external-tools/task-0322.md",
       "deleted": false,
       "archived": false
     },
-    "task-0175": {
-      "id": "task-0175",
+    "task-0323": {
+      "id": "task-0323",
       "kind": "task",
       "label": "Phase 1-11 Build Books",
       "state": "draft",
-      "path": "docs/planning/tasks/implementation-docs/task-0175.md",
+      "path": "docs/planning/tasks/implementation-docs/task-0323.md",
       "deleted": false,
       "archived": false
     },
-    "task-0176": {
-      "id": "task-0176",
+    "task-0324": {
+      "id": "task-0324",
       "kind": "task",
       "label": "Provider Plans and Runbooks",
       "state": "draft",
-      "path": "docs/planning/tasks/implementation-docs/task-0176.md",
+      "path": "docs/planning/tasks/implementation-docs/task-0324.md",
       "deleted": false,
       "archived": false
     },
-    "task-0177": {
-      "id": "task-0177",
+    "task-0325": {
+      "id": "task-0325",
       "kind": "task",
       "label": "Refactor Docs",
       "state": "draft",
-      "path": "docs/planning/tasks/implementation-docs/task-0177.md",
+      "path": "docs/planning/tasks/implementation-docs/task-0325.md",
       "deleted": false,
       "archived": false
     },
-    "task-0178": {
-      "id": "task-0178",
+    "task-0326": {
+      "id": "task-0326",
       "kind": "task",
       "label": "Testing and Status Reports",
       "state": "draft",
-      "path": "docs/planning/tasks/implementation-docs/task-0178.md",
+      "path": "docs/planning/tasks/implementation-docs/task-0326.md",
       "deleted": false,
       "archived": false
     },
-    "task-0179": {
-      "id": "task-0179",
+    "task-0327": {
+      "id": "task-0327",
       "kind": "task",
       "label": "Reference Resolution",
       "state": "draft",
-      "path": "docs/planning/tasks/implementation-docs/task-0179.md",
+      "path": "docs/planning/tasks/implementation-docs/task-0327.md",
       "deleted": false,
       "archived": false
     },
-    "task-0180": {
-      "id": "task-0180",
+    "task-0328": {
+      "id": "task-0328",
       "kind": "task",
       "label": "Final Validation and Cleanup",
       "state": "draft",
-      "path": "docs/planning/tasks/implementation-docs/task-0180.md",
+      "path": "docs/planning/tasks/implementation-docs/task-0328.md",
       "deleted": false,
       "archived": false
     },
@@ -2486,111 +3854,219 @@
       "deleted": false,
       "archived": false
     },
-    "wp-0004": {
-      "id": "wp-0004",
+    "wp-001": {
+      "id": "wp-001",
       "kind": "wp",
       "label": "Implement archive state workflow",
       "state": "draft",
-      "path": "docs/planning/work-packages/core/wp-0004-implement-archive-state-workflow.md",
-      "deleted": false,
-      "archived": false
-    },
-    "wp-0005": {
-      "id": "wp-0005",
-      "kind": "wp",
-      "label": "Profile packs and documentation config scaffolding",
-      "state": "done",
-      "path": "docs/planning/work-packages/core/wp-0005-profile-packs-and-documentation-config-scaffolding.md",
-      "deleted": false,
-      "archived": false
-    },
-    "wp-0006": {
-      "id": "wp-0006",
-      "kind": "wp",
-      "label": "MCP and section navigation expansion",
-      "state": "done",
-      "path": "docs/planning/work-packages/core/wp-0006-mcp-and-section-navigation-expansion.md",
-      "deleted": false,
-      "archived": false
-    },
-    "wp-0007": {
-      "id": "wp-0007",
-      "kind": "wp",
-      "label": "Supporting docs, subsection access, and documentation sync",
-      "state": "done",
-      "path": "docs/planning/work-packages/core/wp-0007-supporting-docs-subsection-access-and-documentation-sync.md",
-      "deleted": false,
-      "archived": false
-    },
-    "wp-0009": {
-      "id": "wp-0009",
-      "kind": "wp",
-      "label": "Archive state workflow and core functions",
-      "state": "done",
-      "path": "docs/planning/work-packages/core/wp-0009-archive-state-workflow-and-core-functions.md",
-      "deleted": false,
-      "archived": false
-    },
-    "wp-0010": {
-      "id": "wp-0010",
-      "kind": "wp",
-      "label": "Critical fixes: schema, delete, traceability, and hardening",
-      "state": "done",
-      "path": "docs/planning/work-packages/core/wp-0010-critical-fixes-schema-delete-traceability-and-hardening.md",
-      "deleted": false,
-      "archived": false
-    },
-    "wp-0011": {
-      "id": "wp-0011",
-      "kind": "wp",
-      "label": "Fix PlanningAPI and MCP gaps",
-      "state": "in_progress",
-      "path": "docs/planning/work-packages/core/wp-0011-fix-planningapi-and-mcp-gaps.md",
-      "deleted": false,
-      "archived": false
-    },
-    "wp-0015": {
-      "id": "wp-0015",
-      "kind": "wp",
-      "label": "Implement guidance levels in config, API, and validation",
-      "state": "draft",
-      "path": "docs/planning/work-packages/core/wp-0015-implement-guidance-levels-in-config-api-and-validation.md",
+      "path": "docs/planning/work-packages/core/wp-001-implement-archive-state-workflow.md",
       "deleted": false,
       "archived": false
     },
     "wp-0016": {
       "id": "wp-0016",
       "kind": "wp",
-      "label": "Define guidance level semantics in standard",
-      "state": "draft",
-      "path": "docs/planning/work-packages/core/wp-0016-define-guidance-level-semantics-in-standard.md",
+      "label": "Phase 1: Config Schema",
+      "state": "ready",
+      "path": "docs/planning/work-packages/core/wp-0016-phase-1-config-schema.md",
       "deleted": false,
       "archived": false
     },
     "wp-0017": {
       "id": "wp-0017",
       "kind": "wp",
-      "label": "Implement canonical guidance semantics",
-      "state": "draft",
-      "path": "docs/planning/work-packages/core/wp-0017-implement-canonical-guidance-semantics.md",
+      "label": "Phase 2: Core Infrastructure",
+      "state": "ready",
+      "path": "docs/planning/work-packages/core/wp-0017-phase-2-core-infrastructure.md",
       "deleted": false,
       "archived": false
     },
     "wp-0018": {
       "id": "wp-0018",
       "kind": "wp",
-      "label": "Implement unified workflow states and cascade archive",
-      "state": "draft",
-      "path": "docs/planning/work-packages/core/wp-0018-implement-unified-workflow-states-and-cascade-archive.md",
+      "label": "Phase 3: Manager Refactoring",
+      "state": "done",
+      "path": "docs/planning/work-packages/core/wp-0018-phase-3-manager-refactoring.md",
       "deleted": false,
       "archived": false
     },
     "wp-0019": {
       "id": "wp-0019",
       "kind": "wp",
+      "label": "Phase 4: Config Migration",
+      "state": "done",
+      "path": "docs/planning/work-packages/core/wp-0019-phase-4-config-migration.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-002": {
+      "id": "wp-002",
+      "kind": "wp",
+      "label": "Profile packs and documentation config scaffolding",
+      "state": "done",
+      "path": "docs/planning/work-packages/core/wp-002-profile-packs-and-documentation-config-scaffolding.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-0020": {
+      "id": "wp-0020",
+      "kind": "wp",
+      "label": "Phase 5: Testing",
+      "state": "done",
+      "path": "docs/planning/work-packages/core/wp-0020-phase-5-testing.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-0021": {
+      "id": "wp-0021",
+      "kind": "wp",
+      "label": "Test WP for bug fix",
+      "state": "draft",
+      "path": "docs/planning/work-packages/core/wp-0021-test-wp-for-bug-fix.md",
+      "deleted": true,
+      "archived": false
+    },
+    "wp-0024": {
+      "id": "wp-0024",
+      "kind": "wp",
+      "label": "Test WP",
+      "state": "draft",
+      "path": "docs/planning/work-packages/core/wp-0024-test-wp.md",
+      "deleted": true,
+      "archived": false
+    },
+    "wp-0025": {
+      "id": "wp-0025",
+      "kind": "wp",
+      "label": "Test WP",
+      "state": "draft",
+      "path": "docs/planning/work-packages/core/wp-0025-test-wp.md",
+      "deleted": true,
+      "archived": false
+    },
+    "wp-0027": {
+      "id": "wp-0027",
+      "kind": "wp",
+      "label": "standard-0007 implementation tasks",
+      "state": "draft",
+      "path": "docs/planning/work-packages/core/wp-0027-standard-0007-implementation-tasks.md",
+      "deleted": true,
+      "archived": false
+    },
+    "wp-003": {
+      "id": "wp-003",
+      "kind": "wp",
+      "label": "MCP and section navigation expansion",
+      "state": "done",
+      "path": "docs/planning/work-packages/core/wp-003-mcp-and-section-navigation-expansion.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-004": {
+      "id": "wp-004",
+      "kind": "wp",
+      "label": "Supporting docs, subsection access, and documentation sync",
+      "state": "done",
+      "path": "docs/planning/work-packages/core/wp-004-supporting-docs-subsection-access-and-documentation-sync.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-005": {
+      "id": "wp-005",
+      "kind": "wp",
+      "label": "Archive state workflow and core functions",
+      "state": "done",
+      "path": "docs/planning/work-packages/core/wp-005-archive-state-workflow-and-core-functions.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-006": {
+      "id": "wp-006",
+      "kind": "wp",
+      "label": "Critical fixes: schema, delete, traceability, and hardening",
+      "state": "done",
+      "path": "docs/planning/work-packages/core/wp-006-critical-fixes-schema-delete-traceability-and-hardening.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-007": {
+      "id": "wp-007",
+      "kind": "wp",
+      "label": "Fix PlanningAPI and MCP gaps",
+      "state": "in_progress",
+      "path": "docs/planning/work-packages/core/wp-007-fix-planningapi-and-mcp-gaps.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-008": {
+      "id": "wp-008",
+      "kind": "wp",
+      "label": "Implement guidance levels in config, API, and validation",
+      "state": "draft",
+      "path": "docs/planning/work-packages/core/wp-008-implement-guidance-levels-in-config-api-and-validation.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-009": {
+      "id": "wp-009",
+      "kind": "wp",
+      "label": "Define guidance level semantics in standard",
+      "state": "draft",
+      "path": "docs/planning/work-packages/core/wp-009-define-guidance-level-semantics-in-standard.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-010": {
+      "id": "wp-010",
+      "kind": "wp",
+      "label": "Implement canonical guidance semantics",
+      "state": "draft",
+      "path": "docs/planning/work-packages/core/wp-010-implement-canonical-guidance-semantics.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-011": {
+      "id": "wp-011",
+      "kind": "wp",
+      "label": "Implement unified workflow states and cascade archive",
+      "state": "draft",
+      "path": "docs/planning/work-packages/core/wp-011-implement-unified-workflow-states-and-cascade-archive.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-012": {
+      "id": "wp-012",
+      "kind": "wp",
       "label": "Implement unified workflow states",
       "state": "draft",
-      "path": "docs/planning/work-packages/core/wp-0019-implement-unified-workflow-states.md",
+      "path": "docs/planning/work-packages/core/wp-012-implement-unified-workflow-states.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-013": {
+      "id": "wp-013",
+      "kind": "wp",
+      "label": "Knowledge Component Improvements Work Package",
+      "state": "draft",
+      "path": "docs/planning/work-packages/core/wp-013-knowledge-component-improvements-work-package.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-014": {
+      "id": "wp-014",
+      "kind": "wp",
+      "label": "Planning Module Critical Fixes Work Package",
+      "state": "done",
+      "path": "docs/planning/work-packages/core/wp-014-planning-module-critical-fixes-work-package.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-015": {
+      "id": "wp-015",
+      "kind": "wp",
+      "label": "Interoperability layer and state propagation implementation",
+      "state": "draft",
+      "path": "docs/planning/work-packages/core/wp-015-interoperability-layer-and-state-propagation-implementation.md",
       "deleted": false,
       "archived": false
     }

@@ -1,0 +1,51 @@
+providers:
+  disabled:
+    handler: audiagentic_knowledge.llm:provider_disabled
+  mock_overseer:
+    handler: audiagentic_knowledge.llm:provider_mock_overseer
+    defaults:
+      supports_async: true
+      supports_blocking: true
+  openai_compatible_remote:
+    handler: audiagentic_knowledge.llm:provider_disabled
+    defaults:
+      note: Placeholder registry entry for a future remote provider adapter.
+profiles:
+  knowledge-triage:
+    description: Small fast profile for classification and source triage.
+    capabilities:
+    - classification
+    - reranking
+    - short_summary
+    supports_blocking: true
+    supports_async: true
+    structured_output: true
+    citation_friendly: true
+  knowledge-proposal:
+    description: Structured proposal drafting profile.
+    capabilities:
+    - proposal_synthesis
+    - diff_summary
+    supports_blocking: true
+    supports_async: true
+    structured_output: true
+    citation_friendly: true
+  knowledge-deep-answer:
+    description: Broader synthesis profile for answering questions over retrieved pages.
+    capabilities:
+    - question_answering
+    - topic_brief
+    supports_blocking: true
+    supports_async: true
+    structured_output: true
+    citation_friendly: true
+  knowledge-bootstrap-scan:
+    description: Asynchronous interrogation profile for larger project scans.
+    capabilities:
+    - repo_interrogation
+    - entity_extraction
+    - relation_extraction
+    supports_blocking: false
+    supports_async: true
+    structured_output: true
+    citation_friendly: true

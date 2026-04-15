@@ -1,0 +1,29 @@
+{
+  "item": {
+    "id": "task-0258",
+    "label": "Create event schema registry and documentation",
+    "state": "done",
+    "summary": "Define event schema registry and governance \u2014 complete",
+    "spec_ref": "spec-019",
+    "request_refs": [
+      "request-017"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0258.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006",
+    "standard-0011"
+  ],
+  "body": "\n\n\n\n\n\n\n# Description\n\nDefine event type schemas, namespaces, and example payloads. This task creates the event registry documenting all event types used by the interoperability layer.\n\n**Registry location:** `.audiagentic/interoperability/events.yaml`\n\n**Event types documented:**\n- planning.item.state.changed\n- planning.item.created\n- planning.item.updated\n- planning.item.deleted\n- planning.reconciled\n- knowledge.entry.created\n- knowledge.drift.detected\n- interop.bus.started\n- interop.subscriber.failed\n- interop.store.write_failed\n\n**Note:** This is documentation-only. Event validation/schema governance is V2 (post-core-stable).\n\n# Acceptance Criteria\n\n- Event registry created at `.audiagentic/interoperability/events.yaml` \u2705\n- All event types documented with: type, version, subject, payload, metadata \u2705\n- Example payloads provided for each event type \u2705\n- Namespace organization: planning, knowledge, interop \u2705\n- Documentation proves registry is complete and accurate \u2705\n- Smoke test proves registry file loads as valid YAML \u2705\n\n# Implementation\n\nCreated `.audiagentic/interoperability/events.yaml` with:\n- 10 event types across 3 namespaces (planning, knowledge, interop)\n- Subject, payload, and metadata schemas for each event\n- JSON examples for each event type\n- Event lifecycle documentation\n- Event ordering rules\n- Error handling guidelines\n\n# Notes\n\nThis task is documentation only. Event validation/schema governance is V2 (post-core-stable).\n"
+}

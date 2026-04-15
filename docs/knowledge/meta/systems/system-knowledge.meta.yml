@@ -1,0 +1,12 @@
+id: system-knowledge
+title: Knowledge System
+type: system
+status: active
+summary: Current-state documentation of the AUDiaGentic knowledge component for deterministic knowledge
+  management.
+owners:
+- core-team
+tags: []
+related: []
+updated_at: '2026-04-15T05:28:26.134600+00:00'
+source_refs: []

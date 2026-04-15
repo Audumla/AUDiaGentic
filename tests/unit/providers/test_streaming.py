@@ -12,8 +12,7 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.interoperability.protocols.streaming import provider_streaming as streaming
-from audiagentic.interoperability.protocols.streaming.sinks import ConsoleSink
-from audiagentic.interoperability.protocols.streaming.sinks import InMemorySink
+from audiagentic.interoperability.protocols.streaming.sinks import ConsoleSink, InMemorySink
 
 
 def test_run_streaming_command_captures_stdout_and_stderr(monkeypatch, tmp_path: Path) -> None:

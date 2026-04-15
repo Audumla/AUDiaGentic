@@ -10,9 +10,10 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.execution.jobs.stages import execute_stage, stage_output_path
 from tests.helpers import sandbox as sandbox_helper
+
+from audiagentic.execution.jobs.stages import execute_stage, stage_output_path
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def test_stage_execution_persists_output(tmp_path: Path) -> None:

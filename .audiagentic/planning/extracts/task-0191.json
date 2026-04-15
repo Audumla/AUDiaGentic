@@ -1,25 +1,18 @@
 {
   "item": {
     "id": "task-0191",
-    "label": "Implement state-based archive and restore behavior",
-    "state": "draft",
-    "summary": "Extend planning state transition behavior to support archive and restore metadata, events, and guardrails",
-    "spec_ref": "spec-0023",
-    "meta": {
-      "task_refs": [
-        {
-          "ref": "wp-0009",
-          "seq": 1001
-        }
-      ]
-    },
+    "label": "Fix move() for work-packages",
+    "state": "done",
+    "summary": "Fix path resolution inconsistency for wp domain in move() operation",
+    "spec_ref": "spec-003",
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0191.md"
+    "path": "docs/planning/tasks/core/task-0191.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
   },
-  "effective_standard_refs": [
-    "standard-0006",
-    "standard-0005",
-    "standard-0009"
-  ],
-  "body": "\n\n# Description\n\nImplement archive and restore behavior through the planning core's canonical state transition model.\n\n## Requirements\n\n### Archive Transition\n\n```python\ndef tm_state(\n    id_: str,\n    new_state: str,\n    reason: str | None = None,\n    actor: str | None = None,\n    root: Path | None = None,\n) -> dict[str, Any]:\n    \"\"\"Change planning item state, including archive transitions.\n    \n    Args:\n        id_: Item ID to change\n        new_state: Target state (`archived` for archive)\n        reason: Optional archive reason\n        actor: Optional actor identifier\n        root: Optional project root\n    \n    Returns:\n        Dict with id, state, archived_at, archived_by, reason\n    \"\"\"\n```\n\n### Restore Transition\n\n```python\ndef tm_state(\n    id_: str,\n    new_state: str,\n    actor: str | None = None,\n    root: Path | None = None,\n) -> dict[str, Any]:\n    \"\"\"Change planning item state, including restore transitions.\n    \n    Args:\n        id_: Item ID to change\n        new_state: Target state (`ready` for restore from archive)\n        actor: Optional actor identifier\n        root: Optional project root\n    \n    Returns:\n        Dict with id, state, restored_at, restored_by\n    \"\"\"\n```\n\n## Implementation\n\n- Extend the planning core state/lifecycle path\n- Update `tools/planning/tm_helper.py` and underlying planning API surfaces as needed\n- Keep any MCP convenience exposure aligned to the same core semantics\n- Record archive metadata (archived_at, archived_by, reason)\n- Log archive events\n\n## Acceptance Criteria\n\n1. State-driven archive transitions move items to archived state\n2. State-driven restore transitions move items back to ready state\n3. Archive metadata is recorded (timestamp, user, reason)\n4. Archive events are logged\n5. Archived items cannot be modified directly\n"
+  "effective_standard_refs": [],
+  "body": "\n\n# Description\n\nFix work-package moves so they resolve the correct domain path and behave the same way as task moves.\n\n# Acceptance Criteria\n\n1. Work-packages can move to `contrib`\n2. The returned path points at the moved work-package\n3. Regression coverage proves wp moves no longer fail\n\n# Notes\n\n- Verified by the passing `move()` coverage tests for work-packages\n- Current implementation uses `Paths.kind_dir()` in `PlanningAPI.move()`\n"
 }

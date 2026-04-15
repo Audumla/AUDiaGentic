@@ -1,0 +1,46 @@
+{
+  "item": {
+    "id": "wp-004",
+    "label": "Supporting docs, subsection access, and documentation sync",
+    "state": "done",
+    "summary": "Extend the planning delta with supporting-doc metadata, subsection-aware MCP access, and explicit documentation-sync rules while clarifying current indexing and validation limits.",
+    "plan_ref": "plan-0007",
+    "task_refs": [
+      {
+        "ref": "task-0187",
+        "seq": 1000
+      },
+      {
+        "ref": "task-0188",
+        "seq": 2000
+      }
+    ],
+    "standard_refs": [
+      "standard-0001",
+      "standard-0002"
+    ],
+    "workflow": "standard",
+    "meta": {
+      "doc_surface_refs": [
+        "readme",
+        "changelog",
+        "planning_references"
+      ],
+      "doc_sync_required": true,
+      "doc_sync_status": "pending"
+    },
+    "kind": "wp",
+    "path": "docs/planning/work-packages/core/wp-004-supporting-docs-subsection-access-and-documentation-sync.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0001",
+    "standard-0002",
+    "standard-0006"
+  ],
+  "body": "\n\n\n\n\n\n\n# Objective\n\nAdd explicit supporting-doc sidecar conventions and documentation-sync support without changing the core planning hierarchy.\n\n# Scope of This Package\n\n- supporting-doc metadata and registry\n- supporting-doc indexing/validation decision\n- documentation sync requirement queries\n- verification coverage expectations\n\n# Inputs\n\n- spec-0021\n- plan-003\n- current MCP server and helper\n- current repo scan and validator behavior\n\n# Instructions\n\nKeep the MCP/API compact and high-value. Prefer additive helpers and schemas over large structural changes, and do not claim first-class support-doc behavior unless the pack also scopes the repo/index/validator work required.\n\n# Required Outputs\n\n- support-doc schema and sample docs\n- review notes locking support docs as sidecar docs for this phase\n- references docs updates\n- test and validation checklist\n\n# Acceptance Checks\n\n- support docs are modeled as structured sidecar docs and are discoverable\n- support-doc indexing status is explicit\n- doc-sync requirements are queryable\n- feature list and review notes reflect the additions\n\n# Non-Goals\n\n- no separate support-doc MCP\n- no full implementation of project-doc workflow state\n"
+}

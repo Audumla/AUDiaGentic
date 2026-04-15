@@ -2,13 +2,53 @@ planning:
   convention_version: 1
   default_profile: feature
   default_guidance: standard
+  
+  # Config-driven kind definitions - add new kinds here without code changes
+  kinds:
+    request:
+      dir: requests
+      id_prefix: request
+      counter_file: requests.json
+      has_domain: false
+      required_refs: []
+      
+    spec:
+      dir: specifications
+      id_prefix: spec
+      counter_file: specs.json
+      has_domain: false
+      required_refs: []
+      
+    plan:
+      dir: plans
+      id_prefix: plan
+      counter_file: plans.json
+      has_domain: false
+      required_refs: []
+      
+    task:
+      dir: tasks
+      id_prefix: task
+      counter_file: tasks.json
+      has_domain: true
+      required_refs: [spec]
+      
+    wp:
+      dir: work-packages
+      id_prefix: wp
+      counter_file: wps.json
+      has_domain: true
+      required_refs: [plan]
+      
+    standard:
+      dir: standards
+      id_prefix: standard
+      counter_file: standards.json
+      has_domain: false
+      required_refs: []
+      
   dirs:
-    requests: docs/planning/requests
-    specifications: docs/planning/specifications
-    plans: docs/planning/plans
-    tasks: docs/planning/tasks
-    work_packages: docs/planning/work-packages
-    standards: docs/planning/standards
+    base: docs/planning
     attachments: docs/planning/attachments
     indexes: .audiagentic/planning/indexes
     meta: .audiagentic/planning/meta

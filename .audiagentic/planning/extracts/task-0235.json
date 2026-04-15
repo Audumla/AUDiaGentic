@@ -1,21 +1,26 @@
 {
   "item": {
     "id": "task-0235",
-    "label": "Write tests for sensitive data detection",
+    "label": "Validate documentation",
     "state": "draft",
-    "summary": "Add tests for AWS key, API key, password detection; confirm non-blocking behavior; test false positive edge cases",
-    "spec_ref": "spec-0045",
+    "summary": "Review and validate that the knowledge component documentation is well-written and accurate.",
+    "spec_ref": "spec-014",
     "request_refs": [],
     "standard_refs": [
       "standard-0005",
       "standard-0006"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0235.md"
+    "path": "docs/planning/tasks/core/task-0235.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
   },
   "effective_standard_refs": [
     "standard-0005",
     "standard-0006"
   ],
-  "body": "\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+  "body": "\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
 }

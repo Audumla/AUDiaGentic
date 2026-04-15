@@ -158,9 +158,7 @@ class TestContent:
     def test_update_content_insert_at_position(self, pr):
         _, api = pr
         spec = _new_spec(api)
-        api.update_content(
-            spec.data["id"], "# Purpose\n\nLine A.\n\nLine B.\n", mode="replace"
-        )
+        api.update_content(spec.data["id"], "# Purpose\n\nLine A.\n\nLine B.\n", mode="replace")
         api.update_content(spec.data["id"], "INSERTED", mode="insert", position=3)
         body = api.get_content(spec.data["id"])
         assert "INSERTED" in body
@@ -186,9 +184,7 @@ class TestContent:
             "# Purpose\n\nOld content.\n\n# Scope\n\nScope text.\n",
             mode="replace",
         )
-        api.update_content(
-            spec.data["id"], "New content.", mode="section", section="# Purpose"
-        )
+        api.update_content(spec.data["id"], "New content.", mode="section", section="# Purpose")
         body = api.get_content(spec.data["id"])
         assert "New content." in body
         assert "Old content." not in body
@@ -263,9 +259,7 @@ class TestCreateWithContent:
     def test_create_standard_with_content(self, pr):
         _, api = pr
         content = "# Standard\n\nUse snake_case.\n"
-        item = api.create_with_content(
-            "standard", label="Naming", summary="S", content=content
-        )
+        item = api.create_with_content("standard", label="Naming", summary="S", content=content)
         assert "snake_case" in api.get_content(item.data["id"])
 
     def test_create_with_content_task_without_spec_allowed(self, pr):
@@ -290,9 +284,7 @@ class TestMove:
         task = api.new("task", label="T", summary="S", spec=spec.data["id"])
         moved = api.move(task.data["id"], "contrib")
         assert "contrib" in str(moved.path)
-        assert (
-            root / "docs" / "planning" / "tasks" / "contrib" / f"{task.data['id']}.md"
-        ).exists()
+        assert (root / "docs" / "planning" / "tasks" / "contrib" / f"{task.data['id']}.md").exists()
 
     def test_move_wp_to_contrib(self, pr):
         root, api = pr
@@ -367,9 +359,7 @@ class TestRelink:
         plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
         task = api.new("task", label="T", summary="S", spec=spec.data["id"])
         wp = api.new("wp", label="W", summary="S", plan=plan.data["id"])
-        result = api.relink(
-            wp.data["id"], "task_refs", task.data["id"], seq=100, display="T.1"
-        )
+        result = api.relink(wp.data["id"], "task_refs", task.data["id"], seq=100, display="T.1")
         refs = result.data.get("task_refs", [])
         assert any(r.get("ref") == task.data["id"] for r in refs)
 
@@ -409,9 +399,7 @@ class TestReconcile:
         root, api = pr
         api.new("request", label="R", summary="S", source="test")
         api.reconcile()
-        assert (
-            root / ".audiagentic" / "planning" / "indexes" / "requests.json"
-        ).exists()
+        assert (root / ".audiagentic" / "planning" / "indexes" / "requests.json").exists()
 
 
 # ===========================================================================
@@ -455,21 +443,18 @@ class TestStateTransitions:
         spec = _new_spec(api)
         api.state(spec.data["id"], "ready")
         events_path = root / ".audiagentic" / "planning" / "events" / "events.jsonl"
-        events = [
-            json.loads(line)
-            for line in events_path.read_text().splitlines()
-            if line.strip()
-        ]
-        assert any(e.get("event", "").endswith("after_state_change") for e in events)
+        events = [json.loads(line) for line in events_path.read_text().splitlines() if line.strip()]
+        assert any(
+            e.get("event") == "planning.item.state.changed" and e.get("id") == spec.data["id"]
+            for e in events
+        )
 
     def test_state_updates_index(self, pr):
         root, api = pr
         spec = _new_spec(api)
         api.state(spec.data["id"], "ready")
         idx = json.loads(
-            (
-                root / ".audiagentic" / "planning" / "indexes" / "specifications.json"
-            ).read_text()
+            (root / ".audiagentic" / "planning" / "indexes" / "specifications.json").read_text()
         )
         entry = next(e for e in idx["items"] if e["id"] == spec.data["id"])
         assert entry["state"] == "ready"
@@ -550,9 +535,7 @@ class TestShowExtract:
     def test_extract_includes_body(self, pr):
         _, api = pr
         spec = _new_spec(api)
-        api.update_content(
-            spec.data["id"], "# Purpose\n\nSome body text.\n", mode="replace"
-        )
+        api.update_content(spec.data["id"], "# Purpose\n\nSome body text.\n", mode="replace")
         result = api.extracts.extract(spec.data["id"])
         assert "body" in result
         assert "Some body text." in result["body"]
@@ -584,9 +567,7 @@ class TestShowExtract:
         root, api = pr
         req = api.new("request", label="R", summary="S", source="test")
         api.extracts.extract(req.data["id"])
-        cache = (
-            root / ".audiagentic" / "planning" / "extracts" / f"{req.data['id']}.json"
-        )
+        cache = root / ".audiagentic" / "planning" / "extracts" / f"{req.data['id']}.json"
         assert cache.exists()
         cached = json.loads(cache.read_text())
         assert cached["item"]["id"] == req.data["id"]
@@ -595,9 +576,7 @@ class TestShowExtract:
         root, api = pr
         req = api.new("request", label="R", summary="S", source="test")
         api.extracts.extract(req.data["id"], write_to_disk=False)
-        cache = (
-            root / ".audiagentic" / "planning" / "extracts" / f"{req.data['id']}.json"
-        )
+        cache = root / ".audiagentic" / "planning" / "extracts" / f"{req.data['id']}.json"
         assert not cache.exists()
 
     def test_extract_effective_standard_refs_field_present(self, pr):
@@ -675,9 +654,7 @@ class TestNextItems:
         _, api = pr
         spec = _new_spec(api)
         plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
-        core_task = api.new(
-            "task", label="Core", summary="S", spec=spec.data["id"], domain="core"
-        )
+        core_task = api.new("task", label="Core", summary="S", spec=spec.data["id"], domain="core")
         contrib_task = api.new(
             "task", label="Contrib", summary="S", spec=spec.data["id"], domain="contrib"
         )
@@ -754,65 +731,45 @@ class TestClaimsTTL:
 
 
 # ===========================================================================
-# Hook actions: review_stub, report_stub, note_stub
+# Event emission tests (replaces removed hooks system)
 # ===========================================================================
 
 
-class TestHookActions:
-    def test_review_stub_emits_event(self, pr):
+class TestEventEmission:
+    def test_state_change_emits_event(self, pr):
+        """State changes emit planning.item.state.changed events."""
         root, api = pr
-        api.hooks.run(
-            "after_state_change",
-            "wp",
-            {"id": "wp-0001", "old_state": "draft", "new_state": "ready"},
-        )
+        spec = _new_spec(api)
+        api.state(spec.data["id"], "ready")
         events_path = root / ".audiagentic" / "planning" / "events" / "events.jsonl"
-        if events_path.exists():
-            lines = [l for l in events_path.read_text().splitlines() if l.strip()]
-            events = [json.loads(l) for l in lines]
-            # The automations.yaml wp-ready-review-stub fires on wp state→ready
-            assert any("review_stub" in e.get("event", "") for e in events)
-
-    def test_note_stub_emits_note_in_payload(self, pr):
-        root, api = pr
-        api.hooks.apply(
-            "note_stub",
-            "request",
-            "after_create",
-            {"id": "request-0001"},
-            {"note": "Hello note"},
+        events = [json.loads(line) for line in events_path.read_text().splitlines() if line.strip()]
+        assert any(
+            e.get("event") == "planning.item.state.changed" and e.get("id") == spec.data["id"]
+            for e in events
         )
+
+    def test_create_emits_event(self, pr):
+        """Item creation emits planning.item.created events."""
+        root, api = pr
+        req = api.new("request", label="R", summary="S", source="test")
         events_path = root / ".audiagentic" / "planning" / "events" / "events.jsonl"
-        events = [
-            json.loads(l) for l in events_path.read_text().splitlines() if l.strip()
-        ]
-        assert any(e.get("note") == "Hello note" for e in events)
-
-    def test_report_stub_emits_event(self, pr):
-        root, api = pr
-        api.hooks.apply(
-            "report_stub", "wp", "after_state_change", {"id": "wp-0001"}, {}
+        events = [json.loads(line) for line in events_path.read_text().splitlines() if line.strip()]
+        assert any(
+            e.get("event") == "planning.item.created" and e.get("id") == req.data["id"]
+            for e in events
         )
+
+    def test_update_emits_event(self, pr):
+        """Item updates emit planning.item.updated events."""
+        root, api = pr
+        spec = _new_spec(api)
+        api.update(spec.data["id"], label="Updated")
         events_path = root / ".audiagentic" / "planning" / "events" / "events.jsonl"
-        events = [
-            json.loads(l) for l in events_path.read_text().splitlines() if l.strip()
-        ]
-        assert any("report_stub" in e.get("event", "") for e in events)
-
-    def test_dispatch_job_writes_to_dispatch_registry(self, pr):
-        root, api = pr
-        api.hooks.apply(
-            "dispatch_job",
-            "task",
-            "after_state_change",
-            {"id": "task-0001", "target": "PKT-TST-001"},
-            {},
+        events = [json.loads(line) for line in events_path.read_text().splitlines() if line.strip()]
+        assert any(
+            e.get("event") == "planning.item.updated" and e.get("id") == spec.data["id"]
+            for e in events
         )
-        dispatch_path = root / ".audiagentic" / "planning" / "indexes" / "dispatch.json"
-        assert dispatch_path.exists()
-        data = json.loads(dispatch_path.read_text())
-        assert "entries" in data
-        assert any(e.get("planning-id") == "task-0001" for e in data["entries"])
 
 
 # ===========================================================================
@@ -821,12 +778,18 @@ class TestHookActions:
 
 
 class TestValidationCoverage:
-    def test_validate_request_no_required_sections(self, pr):
-        """Requests have no required body sections in REQ_SECTIONS."""
+    def test_validate_request_required_sections(self, pr):
+        """Requests have required sections: Understanding, Open Questions, Notes."""
         _, api = pr
         api.new("request", label="R", summary="S", source="test")
         errors = api.validate()
-        assert not any("missing section" in e for e in errors)
+        # Should have missing section errors for Understanding, Open Questions, Notes
+        missing_section_errors = [e for e in errors if "missing section" in e]
+        assert len(missing_section_errors) == 3
+        section_names = [e.split("'")[1] for e in missing_section_errors]
+        assert "Understanding" in section_names
+        assert "Open Questions" in section_names
+        assert "Notes" in section_names
 
     def test_validate_standard_no_required_sections(self, pr):
         """Standards have no required body sections in REQ_SECTIONS."""
@@ -852,8 +815,8 @@ class TestValidationCoverage:
         spec = _new_spec(api)
         task = api.new("task", label="T", summary="S", spec=spec.data["id"])
         # Wipe the body so Description section is absent
-        from audiagentic.planning.fs.write import dump_markdown
         from audiagentic.planning.fs.read import parse_markdown
+        from audiagentic.planning.fs.write import dump_markdown
 
         data, _ = parse_markdown(task.path)
         dump_markdown(task.path, data, "\n")
@@ -896,9 +859,7 @@ class TestBatchOperations:
         tm.set_root(pr[0])
         try:
             spec = _new_spec(pr[1])
-            task = pr[1].new(
-                "task", label="Old Label", summary="S", spec=spec.data["id"]
-            )
+            task = pr[1].new("task", label="Old Label", summary="S", spec=spec.data["id"])
             pr[1].state(task.data["id"], "ready")
             result = tm.update(
                 task.data["id"],
@@ -1017,9 +978,7 @@ class TestPackage:
         plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
         t1 = api.new("task", label="T1", summary="S", spec=spec.data["id"])
         t2 = api.new("task", label="T2", summary="S", spec=spec.data["id"])
-        wp = api.package(
-            plan.data["id"], [t1.data["id"], t2.data["id"]], label="W", summary="S"
-        )
+        wp = api.package(plan.data["id"], [t1.data["id"], t2.data["id"]], label="W", summary="S")
         seqs = [r["seq"] for r in wp.data["task_refs"]]
         assert seqs[0] < seqs[1]
 

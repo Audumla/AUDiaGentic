@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-0184",
+    "label": "Implement automatic counter sync on delete",
+    "state": "done",
+    "summary": "Add automatic counter synchronization after hard deletions to ensure the next ID stays correct without reusing deleted IDs",
+    "spec_ref": "spec-002",
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0184.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n# Description\n\nWhen planning items are hard-deleted, the persisted counter must be synchronized to ensure the next ID generation is correct. This does NOT mean decrementing the counter to prevent gaps; IDs must remain stable and monotonic for auditability.\n\nThis task implements automatic calls to `sync_counter()` after hard deletes and ensures the counter never moves backwards, even if the highest existing file has been removed.\n\n# Acceptance Criteria\n\n1. After hard delete operations, `sync_counter()` is called automatically\n2. Counter remains monotonic and does not move backwards to reuse deleted IDs\n3. Next ID generation after delete produces the correct next sequential ID\n4. No decrement logic that would reuse deleted IDs\n5. Works for all planning kinds (request, spec, plan, task, wp, standard)\n\n# Notes\n\n- **Do not** implement \"decrement to prevent gaps\" - this breaks auditability\n- **Do** implement safe counter synchronization after hard delete without moving the stored counter backwards\n- Gaps in IDs are acceptable and expected when items are deleted\n- The counter file stores the highest ID seen, not the count of items\n- Implementation result: added automatic counter synchronization after hard deletes only, and updated `sync_counter()` so it never moves the persisted counter backwards. This preserves monotonic IDs and avoids deleted-ID reuse.\n"
+}

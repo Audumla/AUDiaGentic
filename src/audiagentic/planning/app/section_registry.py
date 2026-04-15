@@ -1,31 +1,33 @@
 from __future__ import annotations
 
-SECTION_KEYS = {
-    "request": [],
-    "spec": [
-        "purpose",
-        "scope",
-        "requirements",
-        "constraints",
-        "acceptance_criteria",
-    ],
-    "plan": ["objectives", "delivery_approach", "dependencies"],
-    "task": ["description", "acceptance_criteria", "notes", "implementation_notes"],
-    "wp": [
-        "objective",
-        "scope_of_this_package",
-        "inputs",
-        "instructions",
-        "required_outputs",
-        "acceptance_checks",
-        "non_goals",
-    ],
-    "reference": ["overview", "usage", "notes"],
-}
+from pathlib import Path
+
+from .config import Config
 
 
-def list_sections(kind: str) -> list[str]:
-    return SECTION_KEYS.get(kind, [])
+def list_sections(
+    kind: str, guidance_level: str = "standard", root: Path | None = None
+) -> list[str]:
+    """List sections for a document kind based on guidance level.
+
+    Sections are loaded from config profiles, with fallback to defaults.
+    """
+    if root is None:
+        root = Path(".")
+    config = Config(root)
+    template = config.document_template(kind, guidance_level)
+
+    if not template:
+        return []
+
+    sections = []
+    for line in template.split("\n"):
+        if line.startswith("# "):
+            section_name = line[2:].strip().lower().replace(" ", "_")
+            if section_name and section_name not in sections:
+                sections.append(section_name)
+
+    return sections
 
 
 def split_section_path(section_path: str) -> list[str]:
@@ -37,4 +39,3 @@ def split_section_path(section_path: str) -> list[str]:
     # Support both . and / as delimiters; normalize to dots
     path = section_path.replace("/", ".")
     return [part.strip() for part in path.split(".") if part.strip()]
-

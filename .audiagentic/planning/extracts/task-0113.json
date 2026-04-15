@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-0113",
+    "label": "[PKT-PRV-036](task-0113): Provider Bulkhead",
+    "state": "cancelled",
+    "summary": "Implement provider bulkhead isolation",
+    "spec_ref": "spec-0012",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-0113.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0006",
+    "standard-0005"
+  ],
+  "body": "\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The Continue prompt-trigger line was superseded and archived.\n\n\n# [PKT-PRV-036](task-0103): Provider Bulkhead\n\n## Purpose\n\nImplement provider bulkhead isolation.\n\n## Scope\n\n- Bulkhead design\n- Resource limits\n- Failure isolation\n\n## Implementation\n\n1. Design bulkhead\n2. Add limits\n3. Isolate failures\n\n## Acceptance Criteria\n\n1. Bulkhead designed\n2. Limits work\n3. Failures isolated\n"
+}

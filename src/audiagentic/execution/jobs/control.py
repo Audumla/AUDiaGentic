@@ -1,4 +1,20 @@
-"""Job control and cancellation helpers."""
+"""Job control and cancellation helpers.
+
+Provides job control request building, persistence, and application logic.
+Supports dependency injection for testability while maintaining backward
+compatibility with global store access.
+
+Key functions:
+- build_job_control_request: Create control request payload
+- request_job_control: Submit control request with state validation
+- apply_pending_job_control: Apply pending control requests
+
+Dependency injection:
+- Functions accept optional `store` parameter for test isolation
+- Defaults to global jobs_store for backward compatibility
+- Use `from audiagentic.runtime.state import jobs_store` for explicit injection
+"""
+
 from __future__ import annotations
 
 import json
@@ -6,11 +22,14 @@ import os
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.runtime.state import jobs_store as store
 from audiagentic.execution.jobs.state_machine import TERMINAL_STATES, transition_and_persist
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.runtime.state import jobs_store as _default_store
+
+# Type alias for store interface
+JobStoreInterface = Callable[[Path, str], dict[str, Any]]
 
 
 def _now_timestamp() -> str:
@@ -97,7 +116,31 @@ def write_job_control(project_root: Path, payload: dict[str, Any]) -> Path:
     return _write_atomic(_control_path(project_root, payload["job-id"]), payload)
 
 
-def request_job_control(project_root: Path, payload: dict[str, Any]) -> dict[str, Any]:
+def request_job_control(
+    project_root: Path,
+    payload: dict[str, Any],
+    store: JobStoreInterface = _default_store,
+) -> dict[str, Any]:
+    """Submit job control request with state validation.
+
+    Checks job state and applies control request appropriately:
+    - Terminal states: Ignore request, mark as ignored
+    - Ready/awaiting-approval: Transition to cancelled immediately
+    - Other states: Mark request as pending for later application
+
+    Args:
+        project_root: Project root directory path
+        payload: Control request payload with job-id, action, etc.
+        store: Job store interface for reading job records (default: global jobs_store)
+
+    Returns:
+        Updated payload with result and applied-at fields
+
+    Example:
+        >>> payload = build_job_control_request(job_id="job-001", ...)
+        >>> result = request_job_control(project_root, payload)
+        >>> print(result["result"])  # "applied", "pending", or "ignored"
+    """
     job = store.read_job_record(project_root, payload["job-id"])
     if job["state"] in TERMINAL_STATES:
         payload = dict(payload)
@@ -145,7 +188,32 @@ def request_job_control(project_root: Path, payload: dict[str, Any]) -> dict[str
     return payload
 
 
-def apply_pending_job_control(project_root: Path, job_id: str) -> dict[str, Any] | None:
+def apply_pending_job_control(
+    project_root: Path,
+    job_id: str,
+    store: JobStoreInterface = _default_store,
+) -> dict[str, Any] | None:
+    """Apply pending job control request.
+
+    Checks for pending control requests and applies them based on current job state:
+    - No control request: Return None
+    - Already applied/ignored: Return existing control record
+    - Terminal state: Mark as ignored
+    - Active state: Transition to cancelled and mark as applied
+
+    Args:
+        project_root: Project root directory path
+        job_id: Job identifier
+        store: Job store interface for reading job records (default: global jobs_store)
+
+    Returns:
+        Updated control record or None if no control request exists
+
+    Example:
+        >>> control = apply_pending_job_control(project_root, "job-001")
+        >>> if control and control["result"] == "applied":
+        ...     print("Job cancelled")
+    """
     control = read_job_control(project_root, job_id)
     if control is None:
         return None

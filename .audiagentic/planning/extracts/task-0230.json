@@ -1,0 +1,26 @@
+{
+  "item": {
+    "id": "task-0230",
+    "label": "Review knowledge component codebase",
+    "state": "done",
+    "summary": "Critically review all source files in the knowledge component for correctness, config-driven design, and compatibility with AUDiaGentic conventions.",
+    "spec_ref": "spec-014",
+    "request_refs": [],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0230.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+}

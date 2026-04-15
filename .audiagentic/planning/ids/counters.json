@@ -1,10 +1,11 @@
 {
   "version": 1,
   "counters": {
-    "plan": 16,
-    "request": 31,
-    "spec": 48,
-    "task": 250,
-    "wp": 19
+    "plan": 23,
+    "request": 27,
+    "spec": 79,
+    "standard": 14,
+    "task": 3264,
+    "wp": 27
   }
 }

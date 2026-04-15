@@ -1,0 +1,11 @@
+id: glossary-current-state
+title: Current State
+type: glossary_term
+status: active
+summary: Documentation describing how the system works now, not how it should work.
+owners:
+- core-team
+tags: []
+related: []
+updated_at: '2026-04-14'
+source_refs: []

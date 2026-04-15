@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 from .api_types import ItemView
+
 
 def effective_standard_refs(item: ItemView, items_by_id: dict[str, ItemView]) -> list[str]:
     refs = list(item.data.get('standard_refs', []) or [])

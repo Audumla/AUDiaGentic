@@ -1,13 +1,32 @@
-"""Live session input capture helpers."""
+"""Live session input capture helpers.
+
+Provides session input building and persistence with dependency injection support.
+Supports test isolation while maintaining backward compatibility with global store access.
+
+Key functions:
+- build_session_input_record: Create session input record payload
+- persist_session_input: Persist record to NDJSON files
+- build_and_persist_session_input: Combined build and persist operation
+
+Dependency injection:
+- Functions accept optional `job_store` parameter for test isolation
+- Defaults to global jobs_store for backward compatibility
+- Use `from audiagentic.runtime.state import jobs_store` for explicit injection
+"""
+
 from __future__ import annotations
 
 import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.runtime.state import jobs_store as _default_store
+
+# Type alias for job store interface
+JobStoreInterface = Callable[[Path, str], dict[str, Any]]
 
 
 def _now_timestamp() -> str:
@@ -104,7 +123,34 @@ def build_and_persist_session_input(
     message: str,
     timestamp: str | None = None,
     details: dict[str, Any] | None = None,
+    job_store: JobStoreInterface = _default_store.read_job_record,
 ) -> dict[str, Any]:
+    """Build and persist a session input record.
+
+    Args:
+        project_root: Project root directory path
+        job_id: Job identifier
+        prompt_id: Optional prompt identifier
+        provider_id: Optional provider identifier (falls back to job record if not provided)
+        surface: Input surface (e.g., "cli", "api", "ide")
+        stage: Processing stage (e.g., "planning", "execution")
+        event_kind: Event kind (e.g., "user.input", "system.response")
+        message: Input message content
+        timestamp: Optional ISO timestamp (defaults to current UTC time)
+        details: Optional additional details dict
+        job_store: Optional job store function for reading job records (defaults to global store)
+
+    Returns:
+        Built and persisted session input record
+
+    Note:
+        For test isolation, pass explicit job_store:
+        `build_and_persist_session_input(..., job_store=mock_store.read_job_record)`
+    """
+    if provider_id is None:
+        job = job_store(project_root, job_id)
+        provider_id = job.get("provider-id")
+
     record = build_session_input_record(
         job_id=job_id,
         prompt_id=prompt_id,

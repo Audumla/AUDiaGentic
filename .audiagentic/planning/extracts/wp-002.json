@@ -1,0 +1,56 @@
+{
+  "item": {
+    "id": "wp-002",
+    "label": "Profile packs and documentation config scaffolding",
+    "state": "done",
+    "summary": "Define profile-pack, documentation-surface, request-profile, and manifest scaffolding with template-safe ownership rules and validation impacts called out.",
+    "plan_ref": "plan-0007",
+    "task_refs": [
+      {
+        "ref": "task-0181",
+        "seq": 1000
+      },
+      {
+        "ref": "task-0182",
+        "seq": 2000
+      },
+      {
+        "ref": "task-0183",
+        "seq": 3000
+      },
+      {
+        "ref": "task-0184",
+        "seq": 4000
+      }
+    ],
+    "standard_refs": [
+      "standard-0001",
+      "standard-0002"
+    ],
+    "workflow": "standard",
+    "meta": {
+      "doc_surface_refs": [
+        "readme",
+        "changelog",
+        "planning_references"
+      ],
+      "doc_sync_required": true,
+      "doc_sync_status": "pending"
+    },
+    "kind": "wp",
+    "path": "docs/planning/work-packages/core/wp-002-profile-packs-and-documentation-config-scaffolding.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0001",
+    "standard-0002",
+    "standard-0006",
+    "standard-0005",
+    "standard-0009"
+  ],
+  "body": "\n\n\n\n\n\n\n# Objective\n\nPrepare the configuration and documentation scaffolding for profile packs and documentation surfaces without yet implementing the runtime behavior.\n\n# Scope of This Package\n\n- documentation-surface config and schema\n- profile-pack and request-profile structure\n- references docs guidance\n- manifest and migration-registry scaffolding\n- template-installation ownership and update-policy alignment\n\n# Inputs\n\n- request-003\n- spec-0021\n- architecture docs 12 and 50\n- current planning config split under `.audiagentic/planning/config/`\n\n# Instructions\n\nKeep this package additive. Do not introduce new planning concepts that duplicate execution workflow profiles or imply installer behavior that does not exist yet.\n\n# Required Outputs\n\n- reviewed config shape for documentation surfaces\n- reviewed profile-pack shape and naming guidance\n- reviewed request-profile placement and default semantics\n- reviewed manifest/migration scaffolding notes\n- updated implementation docs for the four leaf tasks\n\n# Acceptance Checks\n\n- config changes identify every existing file/class/schema that must be updated\n- naming avoids collisions with workflow profiles already defined in the repo\n- documentation-surface ownership rules align to the managed-surface contract\n- manifest/migration work is scoped as scaffolding rather than hidden installer work\n\n# Non-Goals\n\n- implementing install scripts\n- changing execution/job workflow profiles\n- converting project docs into opaque generated output\n"
+}

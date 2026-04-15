@@ -1,60 +1,102 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-10T14:28:01.531820+00:00",
+  "generated_at": "2026-04-15T11:09:44.688136+00:00",
   "items": [
     {
-      "id": "plan-0005",
+      "id": "plan-001",
       "label": "Implement archive functionality in planning core",
       "state": "draft",
-      "path": "docs\\planning\\plans\\plan-0005-implement-archive-functionality-in-planning-core.md"
-    },
-    {
-      "id": "plan-0006",
-      "label": "Phase 0 Build Book",
-      "state": "draft",
-      "path": "docs\\planning\\plans\\plan-0006-phase-0-build-book.md"
-    },
-    {
-      "id": "plan-0007",
-      "label": "Implement installable profiles and documentation surfaces",
-      "state": "done",
-      "path": "docs\\planning\\plans\\plan-0007-implement-installable-profiles-and-documentation-surfaces.md"
-    },
-    {
-      "id": "plan-0009",
-      "label": "Implement archive functionality",
-      "state": "done",
-      "path": "docs\\planning\\plans\\plan-0009-implement-archive-functionality.md"
-    },
-    {
-      "id": "plan-0010",
-      "label": "Implement planning module improvements",
-      "state": "done",
-      "path": "docs\\planning\\plans\\plan-0010-implement-planning-module-improvements.md"
-    },
-    {
-      "id": "plan-0011",
-      "label": "Fix planning API and MCP gaps",
-      "state": "in_progress",
-      "path": "docs\\planning\\plans\\plan-0011-fix-planning-api-and-mcp-gaps.md"
+      "path": "docs\\planning\\plans\\plan-001-implement-archive-functionality-in-planning-core.md"
     },
     {
       "id": "plan-0014",
+      "label": "Implement config-driven planning structure",
+      "state": "done",
+      "path": "docs\\planning\\plans\\plan-0014-implement-config-driven-planning-structure.md"
+    },
+    {
+      "id": "plan-002",
+      "label": "Phase 0 Build Book",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-002-phase-0-build-book.md"
+    },
+    {
+      "id": "plan-0021",
+      "label": "Test Plan",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-0021-test-plan.md"
+    },
+    {
+      "id": "plan-0022",
+      "label": "Test Plan",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-0022-test-plan.md"
+    },
+    {
+      "id": "plan-003",
+      "label": "Implement installable profiles and documentation surfaces",
+      "state": "done",
+      "path": "docs\\planning\\plans\\plan-003-implement-installable-profiles-and-documentation-surfaces.md"
+    },
+    {
+      "id": "plan-004",
+      "label": "Implement archive functionality",
+      "state": "done",
+      "path": "docs\\planning\\plans\\plan-004-implement-archive-functionality.md"
+    },
+    {
+      "id": "plan-005",
+      "label": "Implement planning module improvements",
+      "state": "done",
+      "path": "docs\\planning\\plans\\plan-005-implement-planning-module-improvements.md"
+    },
+    {
+      "id": "plan-006",
+      "label": "Fix planning API and MCP gaps",
+      "state": "in_progress",
+      "path": "docs\\planning\\plans\\plan-006-fix-planning-api-and-mcp-gaps.md"
+    },
+    {
+      "id": "plan-007",
       "label": "Implement guidance levels for planning depth-of-detail",
       "state": "draft",
-      "path": "docs\\planning\\plans\\plan-0014-implement-guidance-levels-for-planning-depth-of-detail.md"
+      "path": "docs\\planning\\plans\\plan-007-implement-guidance-levels-for-planning-depth-of-detail.md"
     },
     {
-      "id": "plan-0015",
+      "id": "plan-008",
       "label": "Implement canonical guidance semantics standard",
       "state": "draft",
-      "path": "docs\\planning\\plans\\plan-0015-implement-canonical-guidance-semantics-standard.md"
+      "path": "docs\\planning\\plans\\plan-008-implement-canonical-guidance-semantics-standard.md"
     },
     {
-      "id": "plan-0016",
+      "id": "plan-009",
       "label": "Implement unified workflow states",
       "state": "draft",
-      "path": "docs\\planning\\plans\\plan-0016-implement-unified-workflow-states.md"
+      "path": "docs\\planning\\plans\\plan-009-implement-unified-workflow-states.md"
+    },
+    {
+      "id": "plan-010",
+      "label": "Knowledge Component Integration Plan",
+      "state": "done",
+      "path": "docs\\planning\\plans\\plan-010-knowledge-component-integration-plan.md"
+    },
+    {
+      "id": "plan-011",
+      "label": "Knowledge Component Improvements Plan",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-011-knowledge-component-improvements-plan.md"
+    },
+    {
+      "id": "plan-012",
+      "label": "Planning Module Critical Fixes Plan",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-012-planning-module-critical-fixes-plan.md"
+    },
+    {
+      "id": "plan-013",
+      "label": "Interoperability layer and state propagation implementation plan",
+      "state": "ready",
+      "path": "docs\\planning\\plans\\plan-013-interoperability-layer-and-state-propagation-implementation-plan.md"
     }
   ]
 }

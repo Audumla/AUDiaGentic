@@ -40,6 +40,7 @@ Read-only structural integrity and analysis scripts. Safe to run at any time —
 - `check_baseline_assets.py` — Verify that required baseline assets exist in `.audiagentic/`
 - `check_cross_domain_imports.py` — Detect imports that cross domain boundaries per v3 dependency rules; reports violations
 - `find_legacy_paths.py` — Search for import paths that refer to pre-v3 module locations (moved roots such as the old contracts, config, streaming, and execution/providers paths)
+- `repair_broken_refs.py` — Find and repair broken references in planning documents. By default only checks metadata fields (YAML frontmatter) to avoid false positives from historical body text references. See `docs/planning/docs/BROKEN_REFERENCE_POLICY.md` for details.
 
 ### `mcp/`
 
@@ -53,6 +54,7 @@ MCP (Model Context Protocol) server implementations for AI agent integration.
 Development utilities that do not fit a narrower bucket.
 
 - `claude_hooks.py` — Executed by Claude Code hooks (`UserPromptSubmit`, `PreToolUse`); routes canonical tags through the bridge
+- `cleanup_test_artifacts.py` — Remove test artifacts (files with `test-` prefix) and optionally reset ID counters
 - `create_sandbox.py` — Spin up an isolated sandbox project for manual testing
 - `inventory_imports.py` — Audit all imports across `src/` and report domain breakdown
 - `lifecycle_stub.py` — Stub lifecycle operations for development without a live project
@@ -112,6 +114,21 @@ result = tm.new_task("Label", "Summary", spec="spec-0001", domain="core")
 # Get status
 status = tm.status()
 ```
+
+### Cleanup Test Artifacts
+
+```bash
+# Dry run: see what would be removed
+python tools/cleanup_test_artifacts.py --dry-run
+
+# Remove test artifacts (files with test- prefix)
+python tools/cleanup_test_artifacts.py
+
+# Remove test artifacts and reset ID counters
+python tools/cleanup_test_artifacts.py --reset-counters
+```
+
+This tool helps prevent ID counter inflation from test artifacts. Test artifacts should use the `test-` prefix convention (e.g., `test-task-0001.md`) to be identified for cleanup.
 
 ## Adding New Tools
 

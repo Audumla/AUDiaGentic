@@ -1,30 +1,28 @@
 {
   "item": {
     "id": "task-0244",
-    "label": "Write tests for guidance levels",
-    "state": "draft",
-    "summary": "Add tests for guidance_levels config, guidance field validation, CLI parameter, and section enforcement per guidance level",
-    "spec_ref": "spec-0046",
+    "label": "Fix val_mgr.py duplicated validation",
+    "state": "done",
+    "summary": "Consolidate validation logic in val_mgr.py to single scan and single pass",
+    "spec_ref": "spec-018",
     "request_refs": [
-      "request-0029"
+      "request-016"
     ],
     "standard_refs": [
       "standard-0005",
       "standard-0006"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0244.md"
+    "path": "docs/planning/tasks/core/task-0244.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
   },
   "effective_standard_refs": [
     "standard-0005",
-    "standard-0006",
-    "standard-0009"
+    "standard-0006"
   ],
-  "body": "\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n",
-  "related": {
-    "request_refs": [
-      "request-0029"
-    ],
-    "spec_ref": "spec-0046"
-  }
+  "body": "\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
 }

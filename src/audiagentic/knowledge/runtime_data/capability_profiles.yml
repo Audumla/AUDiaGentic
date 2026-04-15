@@ -1,0 +1,42 @@
+capability_profiles:
+  deterministic-minimal:
+    description: Deterministic-first knowledge capability for broad project use.
+    config_overrides:
+      llm:
+        enabled: false
+        default_provider: disabled
+      sync:
+        proposal_default_mode: review_only
+    notes:
+      - Good default before any optional provider integration exists.
+      - Keeps MCP and CLI behavior deterministic-first.
+  docs-and-runtime:
+    description: Deterministic-first profile tuned for current-state docs plus runtime artifacts.
+    config_overrides:
+      llm:
+        enabled: false
+        default_provider: disabled
+      sync:
+        proposal_default_mode: review_only
+      page_types:
+        - system
+        - guide
+        - tool
+        - pattern
+        - decision
+        - glossary_term
+        - runbook
+    notes:
+      - Includes both repo-doc and runtime-artifact defaults.
+      - Suitable for AUDiaGentic-style projects with operational docs and event streams.
+  headless-maintenance:
+    description: Deterministic profile for automation and CI style maintenance tasks.
+    config_overrides:
+      llm:
+        enabled: false
+        default_provider: disabled
+      sync:
+        proposal_default_mode: review_only
+    notes:
+      - Pairs well with headless host profile.
+      - Focuses on drift, validation, and proposal generation.

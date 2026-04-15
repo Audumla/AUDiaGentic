@@ -1,0 +1,25 @@
+# Interoperability layer configuration
+# Location: .audiagentic/interoperability/config.yaml
+
+runtime:
+  # Event store configuration
+  event_store:
+    enabled: true
+    path: runtime/interoperability/events
+    retention_days: 365
+  
+  # Async queue configuration
+  async_queue:
+    enabled: true
+    max_queue_size: 10000
+    shutdown_timeout: 30  # seconds
+    persist_on_checkpoint: false  # V2: persist queue to disk on crash
+  
+  # Cycle detection configuration
+  cycle_detection:
+    max_depth: 10
+    correlation_tracking: true
+  
+  # Replay configuration
+  replay:
+    dispatch_on_replay: false  # Default: skip replayed events

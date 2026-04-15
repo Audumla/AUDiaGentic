@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -10,11 +9,12 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
+from tests.helpers import sandbox as sandbox_helper
+from tools.misc.seed_example_project import seed_example_project
+
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.lifecycle.manifest import build_manifest, write_manifest
 from audiagentic.runtime.lifecycle.uninstall import apply_uninstall
-from tests.helpers import sandbox as sandbox_helper
-from tools.misc.seed_example_project import seed_example_project
 
 
 def _write_manifest(root: Path) -> None:

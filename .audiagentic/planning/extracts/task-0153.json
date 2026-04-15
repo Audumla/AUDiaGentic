@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-0153",
+    "label": "[PKT-PRV-075](task-0153): Provider Data Lineage Monitoring",
+    "state": "draft",
+    "summary": "Implement provider data lineage monitoring",
+    "spec_ref": "spec-0012",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-0153.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0006",
+    "standard-0005"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-075](task-0142): Provider Data Lineage Monitoring\n\n## Purpose\n\nImplement provider data lineage monitoring.\n\n## Scope\n\n- Monitoring logic\n- Tracking\n- Alerts\n\n## Implementation\n\n1. Implement monitoring\n2. Add tracking\n3. Add alerts\n\n## Acceptance Criteria\n\n1. Monitoring works\n2. Tracking works\n3. Alerts sent\n"
+}

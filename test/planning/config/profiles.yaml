@@ -1,0 +1,171 @@
+planning:
+  guidance_levels:
+    light:
+      description: Minimal planning for experienced implementors who need less hand-holding
+      label: Light (minimal)
+      defaults:
+        current_understanding: Initial intake captured; key details need refinement.
+        open_questions:
+          - What is the core requirement?
+          - What are the main constraints?
+          - How will success be verified?
+      spec_sections:
+        required: [Purpose, Scope, Requirements]
+        suggested: [Constraints, Acceptance Criteria]
+      task_sections:
+        required: [Description]
+        suggested: [Acceptance Criteria, Notes]
+      acceptance_criteria_depth: basic
+      semantics:
+        target_implementor: "Experienced architect or designer who prefers minimal scaffolding"
+        philosophy: "Trust the implementor to fill in gaps; provide structure but not hand-holding"
+        use_cases:
+          - "Senior devs working on familiar codebase"
+          - "Quick prototypes where speed matters more than documentation"
+          - "Internal tools with low user impact"
+          - "Experienced designers implementing their own patterns"
+        expectations:
+          - "Implementor fills in missing details during implementation"
+          - "Acceptance criteria can be minimal (1-2 bullets per requirement)"
+          - "Less upfront planning, more iteration during build"
+    standard:
+      description: Balanced depth for typical team workflows and AI agents
+      label: Standard (balanced)
+      defaults:
+        current_understanding: Initial intake captured; requirements are understood well enough to proceed.
+        open_questions:
+          - What exact outcome is required?
+          - What constraints or non-goals apply?
+          - How will success be verified?
+      spec_sections:
+        required: [Purpose, Scope, Requirements, Constraints]
+        suggested: [Acceptance Criteria]
+      task_sections:
+        required: [Description]
+        suggested: [Acceptance Criteria, Notes]
+      acceptance_criteria_depth: standard
+      semantics:
+        target_implementor: "AI agent or mid-level developer who needs clear direction"
+        philosophy: "Provide enough structure for autonomous execution without over-specifying"
+        use_cases:
+          - "Typical feature work"
+          - "AI agent implementation"
+          - "Cross-team work with unclear context"
+          - "User-facing changes"
+        expectations:
+          - "All constraints documented upfront"
+          - "Acceptance criteria are detailed and testable"
+          - "Implementor can execute without constant clarification"
+    deep:
+      description: Comprehensive planning for complex work or less experienced implementors
+      label: Deep (comprehensive)
+      defaults:
+        current_understanding: Initial intake captured; requirements are well-understood with clear implementation path.
+        open_questions:
+          - What exact outcome is required?
+          - What constraints or non-goals apply?
+          - How will success be verified?
+          - What are the implementation risks?
+      spec_sections:
+        required: [Purpose, Scope, Requirements, Constraints, Acceptance Criteria]
+        suggested: [Non-Goals, Compatibility]
+      task_sections:
+        required: [Description, Acceptance Criteria]
+        suggested: [Notes, Implementation Notes]
+      acceptance_criteria_depth: rigorous
+      semantics:
+        target_implementor: "Junior dev, complex system, or high-stakes work"
+        philosophy: "Leave nothing to chance; comprehensive documentation reduces ambiguity"
+        use_cases:
+          - "Junior developers needing clear guidance"
+          - "Complex systems with many dependencies"
+          - "Public APIs or critical infrastructure"
+          - "Work with high user impact or regulatory requirements"
+          - "Cross-functional work with unclear ownership"
+        expectations:
+          - "All edge cases documented"
+          - "Acceptance criteria cover edge cases and error conditions"
+          - "Implementation notes and risk analysis included"
+          - "Minimal ambiguity for the implementor"
+  profiles:
+    enhancement:
+      description: Broader enhancement with request and specification, plus optional execution overlay
+      label: Enhancement request
+      # Stack topology
+      on_request_create: [request, specification]
+      allow_plan_overlay: true
+      # Request defaults
+      defaults:
+        meta:
+          request_type: enhancement
+        current_understanding: Initial enhancement intake captured; desired outcome, shared-surface impact, and implementation boundaries need refinement.
+        open_questions:
+          - What exact outcome is required?
+          - What compatibility, workflow, or shared-surface impacts need to be considered?
+          - How will success be verified?
+      suggested_sections: [Problem, Desired Outcome, Constraints, Compatibility]
+    feature:
+      description: Bounded feature work with request, specification, and direct execution tasking
+      label: Feature request
+      on_request_create: [request, specification]
+      allow_plan_overlay: false
+      defaults:
+        meta:
+          request_type: feature
+        current_understanding: Initial feature intake captured; the desired capability is understood well enough to refine directly into implementation work.
+        open_questions:
+          - What exact outcome is required?
+          - What constraints or non-goals apply?
+          - How will success be verified?
+      suggested_sections: [Problem, Desired Outcome, Constraints]
+    issue:
+      description: Issue report with direct request-to-task execution and stronger diagnosis framing
+      label: Issue report
+      on_request_create: [request, task]
+      allow_plan_overlay: false
+      defaults:
+        meta:
+          request_type: issue
+        current_understanding: Initial issue intake captured; impact and reproduction detail are the priority before implementation is considered complete.
+        open_questions:
+          - What is the observed impact or failure mode?
+          - How can this be reproduced or verified?
+          - What constraints or non-goals apply?
+      suggested_sections: [Problem, Impact, Reproduction, Constraints]
+    fix:
+      description: Implementation-ready corrective change with direct request-to-task execution
+      label: Fix request
+      on_request_create: [request, task]
+      allow_plan_overlay: false
+      defaults:
+        meta:
+          request_type: fix
+        current_understanding: Initial fix intake captured; expected correction and verification path are understood well enough to implement directly.
+        open_questions:
+          - What is the expected correction?
+          - What should be verified after the fix?
+      suggested_sections: [Problem, Correction, Verification]
+  standard_defaults:
+    spec:
+      - standard-0006  # Planning structure and record quality
+      - standard-0005  # Verification and test evidence
+    task:
+      - standard-0005  # Verification and test evidence (what counts as done)
+      - standard-0006  # Planning structure (acceptance criteria clarity)
+    plan:
+      - standard-0006  # Planning structure (decomposition, sequencing)
+    wp:
+      - standard-0006  # Planning structure
+    request:
+      - standard-0001  # Planning documentation and maintenance
+  object_profiles:
+    spec_precise:
+      applies_to: spec
+      required_sections: [Purpose, Scope, Requirements, Constraints, Acceptance Criteria]
+    task_brief:
+      applies_to: task
+      required_sections: [Description]
+      suggested_sections: [Acceptance Criteria, Notes, Implementation Notes]
+    wp_standard:
+      applies_to: wp
+      required_sections: [Objective, Scope of This Package, Inputs, Instructions, Required Outputs, Acceptance Checks, Non-Goals]

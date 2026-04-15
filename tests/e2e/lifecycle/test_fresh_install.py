@@ -4,8 +4,8 @@ import json
 import sys
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
 import yaml
+from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parents[3]
 SRC = ROOT / "src"
@@ -13,10 +13,11 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
+from tests.helpers import sandbox as sandbox_helper
+
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import read_schema
 from audiagentic.runtime.lifecycle.fresh_install import apply_fresh_install
-from tests.helpers import sandbox as sandbox_helper
 
 
 def _load_yaml(path: Path) -> dict:

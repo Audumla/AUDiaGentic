@@ -1,0 +1,30 @@
+{
+  "item": {
+    "id": "wp-0016",
+    "label": "Phase 1: Config Schema",
+    "state": "ready",
+    "summary": "Extend config schemas for document structure",
+    "plan_ref": "plan-0014",
+    "task_refs": [
+      {
+        "ref": "task-0329",
+        "seq": 1000
+      }
+    ],
+    "standard_refs": [
+      "standard-0006"
+    ],
+    "kind": "wp",
+    "path": "docs/planning/work-packages/core/wp-0016-phase-1-config-schema.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0006",
+    "standard-0005"
+  ],
+  "body": "\n\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n"
+}

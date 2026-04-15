@@ -1,0 +1,34 @@
+{
+  "item": {
+    "id": "spec-022",
+    "label": "Auto-state propagation with event subscription implementation specification",
+    "state": "draft",
+    "summary": "Implement event subscription for StatePropagationEngine to enable automatic state propagation across planning hierarchies",
+    "request_refs": [
+      "request-020"
+    ],
+    "task_refs": [
+      {
+        "ref": "task-0321"
+      }
+    ],
+    "standard_refs": [
+      "standard-0001",
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "spec",
+    "path": "docs/planning/specifications/spec-022-auto-state-propagation-with-event-subscription-implementation-specification.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0001",
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n\n\n\n# Purpose\n\n\n# Scope\n\n\n# Requirements\n\n\n# Constraints\n\n\n# Acceptance Criteria\n\n\n# Purpose\n\nImplement event subscription wiring to enable automatic state propagation across planning hierarchies. The `StatePropagationEngine` exists with config-driven rules but is never subscribed to events. This spec defines how to wire event subscription while respecting workflow configuration.\n\n# Scope\n\n- Event subscription in `PlanningAPI` or `StatePropagationEngine`\n- Workflow-aware propagation triggering\n- Failure handling and logging\n- Cycle detection implementation\n- Integration tests for propagation scenarios\n\n# Requirements\n\n## Event Subscription\n\nThe `StatePropagationEngine` must subscribe to `planning.item.state.changed` events upon initialization.\n\n**Requirements:**\n- Subscription happens in `__init__` after config is loaded\n- Subscription respects global `enabled` flag\n- Handler method `_on_state_change` processes events\n- Unsubscribe on cleanup (if engine is destroyed)\n\n## Event Handler\n\nThe `_on_state_change` handler must process events and trigger propagation.\n\n**Requirements:**\n- Extract `item_id` and `new_state` from event payload\n- Call existing `propagate()` method\n- Apply each propagation by calling `planning_api.state()`\n- Log failures but don't re-raise exceptions\n- Include `triggered_by: \"automatic\"` in metadata for propagated changes\n\n## Propagation Application\n\nThe `_apply_propagation` method must apply state changes to target items.\n\n**Requirements:**\n- Skip if target already in desired state (idempotent)\n- Call `planning_api.state()` with `triggered_by: \"automatic\"` metadata\n- Include reason with source item ID\n- Use `actor: \"system\"` for automatic changes\n- Catch and log `ValueError` for invalid transitions\n- Catch and log other exceptions without re-raising\n\n## Cycle Detection\n\nThe propagation must track depth to prevent infinite loops.\n\n**Requirements:**\n- Track depth parameter in `propagate()` method\n- Check against `max_depth` from config (default 10)\n- Log when max depth is reached\n- Return empty list to stop propagation\n- Depth increments with each propagation level\n\n## Workflow Configuration Respect\n\nPropagation must respect workflow configuration at all levels.\n\n**Requirements:**\n- Check global `enabled` first\n- Check per-item `propagation.enabled` override\n- Check per-kind `enabled` flag\n- Respect workflow-specific config if item has `workflow` field\n- Return config that disables propagation if any level disables it\n\n## Delivery Mode\n\nPropagation must respect delivery mode configuration.\n\n**Requirements:**\n- Default to `DeliveryMode.ASYNC` for non-blocking\n- Allow workflow config to override mode\n- `fast-track` workflow uses `SYNC` mode for immediate feedback\n- Mode affects subscription, not individual propagations\n\n# Acceptance Criteria\n\n1. **Event subscription**: `StatePropagationEngine` subscribes to `planning.item.state.changed` events\n2. **Automatic propagation**: State changes trigger propagation without manual intervention\n3. **Config respect**: Workflow configuration controls propagation behavior\n4. **Cascade propagation**: Changes propagate up the full hierarchy when rules allow\n5. **Failure isolation**: Propagation failures don't break original state changes\n6. **Cycle detection**: Max depth prevents infinite loops\n7. **Per-item override**: Items can disable propagation via frontmatter\n8. **Delivery mode**: ASYNC by default, SYNC for fast-track workflow\n9. **Logging**: Propagation events are logged for debugging\n10. **Tests**: All integration tests pass\n"
+}

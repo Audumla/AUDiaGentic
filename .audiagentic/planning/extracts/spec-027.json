@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "spec-027",
+    "label": "Test hooks fix \u2014 Specification",
+    "state": "draft",
+    "summary": "Specification for Verify hooks removal works",
+    "request_refs": [
+      "request-0043"
+    ],
+    "task_refs": [],
+    "kind": "spec",
+    "path": "docs/planning/specifications/spec-027-test-hooks-fix-specification.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n# Purpose\n\n\n# Scope\n\n\n# Requirements\n\n\n# Constraints\n\n\n# Acceptance Criteria\n"
+}

@@ -9,11 +9,12 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.execution.jobs.packet_runner import run_packet
-from audiagentic.runtime.state.jobs_store import job_record_path
-from audiagentic.interoperability.providers.selection import select_provider
 from tests.helpers import sandbox as sandbox_helper
+
+from audiagentic.execution.jobs.packet_runner import run_packet
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.interoperability.providers.selection import select_provider
+from audiagentic.runtime.state.jobs_store import job_record_path
 
 
 def _descriptor(provider_id: str) -> dict:

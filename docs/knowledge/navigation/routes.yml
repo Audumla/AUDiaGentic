@@ -1,0 +1,54 @@
+routes:
+- id: registry_and_current_state
+  label: Current operational state
+  keywords:
+  - registry
+  - build status
+  - current state
+  - claim
+  - verified
+  page_ids: []
+  deterministic_actions:
+  - scan_drift
+  - generate_sync_proposals
+  note: Use this route for current operational docs and sync review.
+- id: runtime_events
+  label: Runtime event artifacts
+  keywords:
+  - runtime
+  - events
+  - stream
+  - ndjson
+  page_ids: []
+  deterministic_actions:
+  - scan_events
+  - process_events
+  note: Use this route when runtime artifacts may have changed.
+fallbacks:
+- action_id: search_pages
+  keywords:
+  - find
+  - where
+  - what page
+  label: Search pages
+  note: Lexical search across current-state pages.
+- action_id: scan_drift
+  keywords:
+  - drift
+  - stale
+  - sync
+  label: Scan drift
+  note: Deterministic fallback when sources may have changed.
+- action_id: scan_events
+  keywords:
+  - event
+  - runtime
+  label: Scan events
+  note: Deterministic fallback for runtime/planning event artifacts.
+- action_id: doctor
+  keywords:
+  - doctor
+  - health
+  - install
+  label: Doctor
+  note: Check the capability contract and project-owned files.

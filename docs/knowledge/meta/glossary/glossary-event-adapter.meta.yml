@@ -1,0 +1,11 @@
+id: glossary-event-adapter
+title: Event Adapter
+type: glossary_term
+status: active
+summary: Configuration that bridges external events to knowledge sync.
+owners:
+- core-team
+tags: []
+related: []
+updated_at: '2026-04-14'
+source_refs: []

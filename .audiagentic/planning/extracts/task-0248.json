@@ -1,0 +1,29 @@
+{
+  "item": {
+    "id": "task-0248",
+    "label": "Implement InProcessEventBus satisfying EventBusProtocol",
+    "state": "done",
+    "summary": "Implement InProcessEventBus in bus.py satisfying EventBusProtocol: SYNC/ASYNC dispatch, single-segment wildcard pattern matching, subscriber isolation, cycle detection via propagation_depth and correlation_id",
+    "spec_ref": "spec-019",
+    "request_refs": [
+      "request-017"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0248.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006",
+    "standard-0011"
+  ],
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement the core in-process `EventBus` for the interoperability layer. This task owns synchronous and asynchronous publish/subscribe, subscription registry, wildcard pattern matching, unsubscribe support, subscriber isolation, event envelope generation, and **cycle detection via propagation_depth limits**.\n\n**Core API:**\n```python\n# Explicit dependency injection (preferred)\nbus = EventBus()\nhandle = bus.subscribe(\"planning.task.*\", handler)\n\n# Or singleton for bootstrap convenience\nfrom audiagentic.interoperability import EventBus\nbus = EventBus.get_instance()\n```\n\n**Key behaviors:**\n- SYNC mode: blocks until all subscribers complete\n- ASYNC mode: returns immediately, events processed by background worker (task-0264)\n- Registration order: subscribers invoked in subscription order\n- **Wildcard patterns:**\n  - `*` matches exactly one segment (e.g., `planning.task.*` matches `planning.task.done`)\n  - `**` matches zero or more segments (e.g., `planning.**` matches all planning events)\n- Subscriber isolation: one failure doesn't affect others\n- Envelope generation: auto-generate `id`, `occurred_at`, `source_component`, `is_replay`, `propagation_depth`\n- **Cycle detection: reject events with `propagation_depth >= 10` or `correlation_id` in current chain**\n\n# Acceptance Criteria\n\n- `EventBus.publish(event_type, payload, metadata=None, mode=SYNC)` delivers to all matching subscribers (blocking)\n- `EventBus.publish(event_type, payload, metadata=None, mode=ASYNC)` returns immediately (non-blocking)\n- `EventBus.subscribe(pattern, handler)` returns `SubscriptionHandle`\n- `EventBus.unsubscribe(handle)` removes subscriber\n- Wildcard `planning.task.*` matches `planning.task.done` but not `planning.task.subtask.done`\n- Subscriber exceptions logged but don't crash bus or affect other subscribers\n- Event envelope includes: `id`, `type`, `version`, `occurred_at`, `source_component`, `payload`, `metadata`, `is_replay`, `propagation_depth`\n- **Events with `propagation_depth >= 10` rejected and logged**\n- **Events with `correlation_id` in current chain skipped and logged**\n- Unit tests cover: SYNC/ASYNC delivery, wildcard matching, unsubscribe, subscriber failure isolation, cycle detection\n- Smoke test proves EventBus imports and basic publish/subscribe works\n\n# Notes\n\nPersistence is task-0249, replay is task-0250, async queue is task-0264. This task is in-memory bus with cycle detection.\n"
+}

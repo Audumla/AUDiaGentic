@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 class Relationships:
     @staticmethod
     def ensure_rel_list(current, ref: str, seq: int | None = None, display: str | None = None):

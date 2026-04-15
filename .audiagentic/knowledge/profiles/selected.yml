@@ -1,0 +1,2 @@
+capability_profile: deterministic-minimal
+host_profile: mcp-stdio

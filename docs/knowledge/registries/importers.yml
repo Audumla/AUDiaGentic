@@ -1,0 +1,9 @@
+importer_strategies:
+  markdown_doc:
+    handler: audiagentic_knowledge.importers:import_markdown_doc
+  yaml_config:
+    handler: audiagentic_knowledge.importers:import_yaml_config
+  ndjson_events:
+    handler: audiagentic_knowledge.importers:import_ndjson_events
+  json_snapshot:
+    handler: audiagentic_knowledge.importers:import_json_snapshot

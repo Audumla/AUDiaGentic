@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-0186",
+    "label": "Extend auto-reference updates to plans and tasks",
+    "state": "done",
+    "summary": "Ensure plans and tasks preserve request traceability when they reference requests",
+    "spec_ref": "spec-002",
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0186.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n# Description\n\nThis task ensures plans and tasks preserve request traceability consistently when they reference requests.\n\n**Current:**\n- Specs, plans, and tasks can carry `request_refs`\n- Reverse traceability should be discoverable from the planning graph/indexes\n\n**Required:**\n- Plans and tasks must persist `request_refs` consistently\n- Referenced requests must be validated\n- Reverse traceability must remain visible through the planning graph/index model\n\n# Acceptance Criteria\n\n1. Creating plan with request_refs persists the relationship cleanly\n2. Creating task with request_refs persists the relationship cleanly\n3. Validation ensures referenced requests exist\n4. Error handling for missing requests\n5. Reverse traceability is visible through the planning graph/index output\n\n# Notes\n\n- Add request_refs parameter to plan and task creation if not present\n- Test graph-based reverse traceability\n- Implementation result: extended plan and task creation to accept `request_refs`, validate referenced requests, and preserve reverse traceability through the planning graph/indexes rather than request frontmatter mutation.\n"
+}

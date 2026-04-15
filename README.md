@@ -31,3 +31,31 @@ No agent or developer should begin packet or module work until:
 - the owner has read the packet build sheet and relevant contracts
 
 The build-status registry is the live operational starting point for all work.
+
+## Validation and Maintenance
+
+### Planning Document Integrity
+
+Before merging planning changes or after bulk operations, run:
+
+```bash
+# Check for broken references in planning documents
+python tools/checks/repair_broken_refs.py
+```
+
+This tool checks metadata fields (YAML frontmatter) for broken references. Body text references are intentionally excluded as they are often historical/documentation. See `docs/planning/docs/BROKEN_REFERENCE_POLICY.md` for details.
+
+### Other Validation Tools
+
+```bash
+# Validate all planning objects
+python tools/planning/tm.py validate
+
+# Check ID format and uniqueness
+python tools/validation/validate_ids.py
+
+# Verify schema validity
+python tools/validation/validate_schemas.py
+```
+
+See `tools/README.md` for a complete list of available tools.

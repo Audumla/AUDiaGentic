@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-0323",
+    "label": "Phase 1-11 Build Books",
+    "state": "draft",
+    "summary": "Migrate all phase build books",
+    "spec_ref": "spec-0020",
+    "kind": "task",
+    "path": "docs/planning/tasks/implementation-docs/task-0323.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n# Description\n\nImplement this task.\n\n\n# Phase 1-11 Build Books\n\n## Purpose\n\nMigrate all phase build books.\n\n## Scope\n\n- Phase 0-11 build books\n- Cross-references\n- Dependencies\n\n## Implementation\n\n1. Migrate build books\n2. Resolve references\n3. Link objects\n\n## Acceptance Criteria\n\n1. Build books migrated\n2. References resolved\n3. Linked correctly\n"
+}

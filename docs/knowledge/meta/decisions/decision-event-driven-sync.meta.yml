@@ -1,0 +1,11 @@
+id: decision-event-driven-sync
+title: Event-Driven Knowledge Sync
+type: decision
+status: active
+summary: Decision to use event-driven architecture for knowledge updates.
+owners:
+- core-team
+tags: []
+related: []
+updated_at: '2026-04-14'
+source_refs: []
