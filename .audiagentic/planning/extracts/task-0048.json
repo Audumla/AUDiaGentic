@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-0048",
+    "label": "[PKT-LFC-004](task-0048): Update Dispatch and Version Module Selection",
+    "state": "draft",
+    "summary": "Dispatch updates and select version modules",
+    "spec_ref": "spec-0009",
+    "kind": "task",
+    "path": "docs/planning/tasks/lifecycle/task-0048.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0006",
+    "standard-0005"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-LFC-004](task-0038): Update Dispatch and Version Module Selection\n\n## Purpose\n\nDispatch updates and select version modules.\n\n## Scope\n\n- Update dispatch\n- Version selection\n- Module loading\n\n## Implementation\n\n1. Implement dispatch\n2. Add version selection\n3. Load modules\n\n## Acceptance Criteria\n\n1. Updates dispatched correctly\n2. Versions selected properly\n3. Modules loaded\n"
+}

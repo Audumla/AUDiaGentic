@@ -1,0 +1,22 @@
+tasks:
+  answer_question:
+    deterministic_handler: audiagentic_knowledge.llm:deterministic_answer_question
+    provider: disabled
+    profile: knowledge-deep-answer
+    mode: blocking
+    allow_llm: true
+    fallback: return_candidates_and_gaps
+  draft_sync_proposal:
+    deterministic_handler: audiagentic_knowledge.llm:deterministic_draft_sync_proposal
+    provider: disabled
+    profile: knowledge-proposal
+    mode: blocking
+    allow_llm: true
+    fallback: return_patch_skeleton
+  bootstrap_project_knowledge:
+    deterministic_handler: audiagentic_knowledge.llm:deterministic_bootstrap_project_knowledge
+    provider: disabled
+    profile: knowledge-bootstrap-scan
+    mode: async
+    allow_llm: true
+    fallback: return_seed_inventory

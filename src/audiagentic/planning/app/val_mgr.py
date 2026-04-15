@@ -1,27 +1,14 @@
 from __future__ import annotations
+
 import json
 from pathlib import Path
+
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
-from ..fs.scan import scan_items
-from .config import Config, _PLANNING_SCHEMA_DIR
-from .util import body_has_section
 
-REQ_SECTIONS = {
-    "request": ["Understanding", "Open Questions", "Notes"],
-    "spec": ["Purpose", "Scope", "Requirements", "Constraints", "Acceptance Criteria"],
-    "plan": ["Objectives", "Delivery Approach", "Dependencies"],
-    "wp": [
-        "Objective",
-        "Scope of This Package",
-        "Inputs",
-        "Instructions",
-        "Required Outputs",
-        "Acceptance Checks",
-        "Non-Goals",
-    ],
-    "task": ["Description"],
-}
+from ..fs.scan import scan_items
+from .config import _PLANNING_SCHEMA_DIR, Config
+from .util import body_has_section
 
 
 class Validator:
@@ -29,6 +16,10 @@ class Validator:
         self.root = root
         self.schemas = _PLANNING_SCHEMA_DIR
         self.config = Config(root)
+
+    def _get_required_sections(self, kind: str) -> list[str]:
+        """Get required sections for a kind from config."""
+        return self.config.required_sections(kind) or []
 
     def validate_all(self) -> list[str]:
         errors = []
@@ -67,9 +58,7 @@ class Validator:
             }[item.kind]
             sch = None
             if schema_name:
-                sch = json.loads(
-                    (self.schemas / schema_name).read_text(encoding="utf-8")
-                )
+                sch = json.loads((self.schemas / schema_name).read_text(encoding="utf-8"))
                 v = Draft202012Validator(sch)
                 for e in v.iter_errors(item.data):
                     errors.append(f"{item.path}: {self._format_error(e)}")
@@ -80,19 +69,16 @@ class Validator:
             )
             for k in item.data.keys():
                 if sch and k not in allowed:
-                    errors.append(
-                        f"{item.path}: forbidden top-level field '{k}', use meta"
-                    )
+                    errors.append(f"{item.path}: forbidden top-level field '{k}', use meta")
             if item.kind in {"request", "task"}:
                 if item.path.name != f"{item.data['id']}.md":
                     errors.append(f"{item.path}: filename must be {item.data['id']}.md")
             elif item.kind in {"spec", "plan", "wp", "standard"}:
                 if not item.path.name.startswith(item.data["id"]):
-                    errors.append(
-                        f"{item.path}: filename must start with {item.data['id']}"
-                    )
-        # Check guidance-appropriate sections
+                    errors.append(f"{item.path}: filename must start with {item.data['id']}")
+        # Check sections and path structure (single pass)
         for item in items:
+            # Check guidance-appropriate sections
             if item.kind == "request" and item.data.get("guidance"):
                 guidance = item.data["guidance"]
                 guidance_cfg = self.config.guidance_levels().get(guidance, {})
@@ -114,16 +100,15 @@ class Validator:
                                 f"{item.path}: missing required section '{sec}' for {guidance} guidance"
                             )
 
-        # Check guidance-appropriate sections (original check)
-        for item in items:
-            for sec in REQ_SECTIONS.get(item.kind, []):
+            # Check required sections for kind
+            for sec in self._get_required_sections(item.kind):
                 if not body_has_section(item.body, sec):
                     errors.append(f"{item.path}: missing section '{sec}'")
+
+            # Check path structure
             if item.kind == "task":
                 if item.path.parent.parent.name != "tasks":
-                    errors.append(
-                        f"{item.path}: task must be under docs/planning/tasks/<domain>/"
-                    )
+                    errors.append(f"{item.path}: task must be under docs/planning/tasks/<domain>/")
             if item.kind == "wp":
                 if item.path.parent.parent.name != "work-packages":
                     errors.append(
@@ -136,6 +121,22 @@ class Validator:
                 continue
             if item.data.get("state") == "archived":
                 continue
+
+            # Specs must have at least one request reference (request-012)
+            if item.kind == "spec":
+                request_refs = item.data.get("request_refs", []) or []
+                if not request_refs:
+                    errors.append(
+                        f"{item.path}: spec has no request references (orphan spec is not allowed)"
+                    )
+                else:
+                    # Verify all request refs exist
+                    for req_id in request_refs:
+                        found = any(i.data["id"] == req_id and i.kind == "request" for i in items)
+                        if not found:
+                            errors.append(
+                                f"{item.path}: spec references non-existent request '{req_id}'"
+                            )
 
             # Requests in distilled/ready/done state should have specs
             if item.kind == "request" and item.data.get("state") in (

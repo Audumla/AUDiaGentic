@@ -1,0 +1,27 @@
+{
+  "item": {
+    "id": "task-0208",
+    "label": "Implement tm_bulk_state for state transitions",
+    "state": "cancelled",
+    "summary": "Add tm_bulk_state(ids, new_state, summary_only) operation optimized for bulk state changes",
+    "spec_ref": "spec-008",
+    "request_refs": [],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0208.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006",
+    "standard-0009"
+  ],
+  "body": "\n\n# Description\n\nCancelled with `spec-008` after the owning request record was removed. Recreate this task under a new request if bulk state support is resumed.\n\n# Acceptance Criteria\n\nCancelled with parent specification.\n\n# Notes\n\nThis task was never fleshed into implementation-ready detail before the request chain disappeared.\n"
+}

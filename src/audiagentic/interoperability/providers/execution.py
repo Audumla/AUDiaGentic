@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from importlib import import_module
-from typing import Any, Callable
+from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 

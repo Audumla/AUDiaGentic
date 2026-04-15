@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-0079",
+    "label": "[PKT-PRV-002](task-0079): Health Checks",
+    "state": "draft",
+    "summary": "Implement provider health checks",
+    "spec_ref": "spec-0012",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-0079.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0006",
+    "standard-0005"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-002](task-0069): Health Checks\n\n## Purpose\n\nImplement provider health checks.\n\n## Scope\n\n- Health check logic\n- Status reporting\n- Alerts\n\n## Implementation\n\n1. Implement checks\n2. Add status reporting\n3. Add alerts\n\n## Acceptance Criteria\n\n1. Checks work\n2. Status reported\n3. Alerts sent\n"
+}

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -12,10 +12,11 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
+from tests.helpers import sandbox as sandbox_helper
+
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.release.fragments import record_change_event
 from audiagentic.release.sync import sync_current_release_ledger
-from tests.helpers import sandbox as sandbox_helper
 
 FIXTURES = ROOT / "docs" / "examples" / "fixtures"
 

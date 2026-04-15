@@ -1,0 +1,27 @@
+{
+  "item": {
+    "id": "task-0277",
+    "label": "Fix global state access in job_control_tool",
+    "state": "draft",
+    "summary": "Implement dependency injection for job_control_tool",
+    "request_refs": [
+      "request-019"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0277.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n\n\nDirect global state access in channels/cli/main.py at lines 175-180. The job_control_tool.request_job_control function directly accesses job_store without dependency injection, violating standard-0011 (Component Architecture). Refactor to: 1) Accept job_store as parameter via dependency injection, 2) Create JobControlTool class with __init__ that takes job_store in constructor, 3) Remove all direct global variable access from method bodies, 4) Update all callers to pass job_store instance. Follow pattern from other tools in codebase that use dependency injection. Create a dependency injection container or use constructor injection pattern. Document the dependency requirements and how tools should be instantiated. Ensure all global state access is moved to class initialization or explicitly injected. Provide migration guide for updating all callers of request_job_control. Test that tool works with mocked job_store dependency. Verify no remaining direct references to global job_store in the tool code. Update any other tools that directly access global state using same pattern. Document the new instantiation pattern and ensure it's consistent across all CLI tools. Consider creating a CLIContext or Application context that holds all dependencies and passes them to tools as needed. Ensure the refactoring maintains backward compatibility or provides clear migration path. Test that all existing CLI commands continue to work after refactoring with the new dependency injection pattern.\n"
+}

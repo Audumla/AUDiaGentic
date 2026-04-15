@@ -5,9 +5,6 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any
-
-import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 SRC = ROOT / "src"
@@ -20,7 +17,6 @@ from audiagentic.interoperability.protocols.streaming.sinks import (
     InMemorySink,
     NormalizedEventSink,
     RawLogSink,
-    StreamSink,
 )
 
 
@@ -220,7 +216,9 @@ class TestSafeSinkCall:
 
     def test_successful_call(self) -> None:
         """Successful calls should complete without issues."""
-        from audiagentic.interoperability.protocols.streaming.provider_streaming import _safe_sink_call
+        from audiagentic.interoperability.protocols.streaming.provider_streaming import (
+            _safe_sink_call,
+        )
 
         sink = InMemorySink()
         _safe_sink_call(sink, "write", "test")
@@ -228,7 +226,9 @@ class TestSafeSinkCall:
 
     def test_failed_call_does_not_propagate(self) -> None:
         """Failed calls should not propagate exceptions."""
-        from audiagentic.interoperability.protocols.streaming.provider_streaming import _safe_sink_call
+        from audiagentic.interoperability.protocols.streaming.provider_streaming import (
+            _safe_sink_call,
+        )
 
         class FailingSink:
             def write(self, _):
@@ -245,7 +245,9 @@ class TestSafeSinkCall:
 
     def test_failed_call_logs_debug(self, caplog) -> None:
         """Failed calls should log at debug level."""
-        from audiagentic.interoperability.protocols.streaming.provider_streaming import _safe_sink_call
+        from audiagentic.interoperability.protocols.streaming.provider_streaming import (
+            _safe_sink_call,
+        )
 
         class FailingSink:
             def write(self, _):

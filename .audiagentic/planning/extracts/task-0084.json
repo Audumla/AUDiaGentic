@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-0084",
+    "label": "[PKT-PRV-007](task-0084): Provider Configuration Schema",
+    "state": "draft",
+    "summary": "Define provider configuration schema",
+    "spec_ref": "spec-0012",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-0084.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0006",
+    "standard-0005"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-007](task-0074): Provider Configuration Schema\n\n## Purpose\n\nDefine provider configuration schema.\n\n## Scope\n\n- Schema format\n- Validation\n- Defaults\n\n## Implementation\n\n1. Define schema\n2. Add validation\n3. Set defaults\n\n## Acceptance Criteria\n\n1. Schema defined\n2. Validation works\n3. Defaults set\n"
+}

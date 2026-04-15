@@ -1,0 +1,24 @@
+{
+  "item": {
+    "id": "wp-009",
+    "label": "Define guidance level semantics in standard",
+    "state": "draft",
+    "summary": "Create standard-0010 with canonical definitions for light/standard/deep guidance levels",
+    "plan_ref": "plan-007",
+    "task_refs": [],
+    "standard_refs": [
+      "standard-0006"
+    ],
+    "kind": "wp",
+    "path": "docs/planning/work-packages/core/wp-009-define-guidance-level-semantics-in-standard.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0006"
+  ],
+  "body": "\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n"
+}

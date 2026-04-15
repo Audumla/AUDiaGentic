@@ -1,404 +1,245 @@
 #!/usr/bin/env python3
-"""AUDiaGentic planning MCP server.
+"""AUDiaGentic planning MCP server — 13-tool consolidated surface.
 
-This overlay extends the planning MCP with documentation surfaces, reference docs,
-and structured sidecar support-doc visibility. These documentation surfaces are
-queryable through planning MCP in this phase, but they are not promoted to new
-first-class planning kinds in the core scan/index/validator model.
+Single entry point for all MCP clients (Claude Code, OpenCode, Codex, Cline, etc.).
+Uses FastMCP standard stdio transport — no custom framing required.
 """
 
 from __future__ import annotations
 
 import os
 import sys
-from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+try:
+    from mcp.server.fastmcp import FastMCP
+except ImportError:
+    print("Error: mcp package not installed. Run: pip install mcp", file=sys.stderr)
+    sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Root Discovery — robust, env-var-first, .audiagentic/ marker
+# ---------------------------------------------------------------------------
+
+
+def _find_root_via_marker() -> Path:
+    """Find root by walking up from current dir looking for .audiagentic/."""
+    current = Path.cwd()
+    for parent in [current, *current.parents]:
+        if (parent / ".audiagentic").exists():
+            return parent
+    # Fallback to cwd
+    return current
+
 
 def _bootstrap_repo_root() -> Path:
-    """Find a repo root well enough to import the shared planning helper.
+    """Bootstrap repo root with env var override support.
 
-    The helper owns canonical project-root detection. This bootstrap only needs
-    to locate the repository so `tools.planning.tm_helper` can be imported.
+    Returns:
+        Path to the repository root
+
+    Raises:
+        RuntimeError: If AUDIAGENTIC_ROOT is set but points to invalid path
     """
-    markers = (("tools", "planning", "tm_helper.py"),)
-    search_roots = [
-        Path.cwd(),
-        *Path.cwd().parents,
-        Path(__file__).resolve().parent,
-        *Path(__file__).resolve().parent.parents,
-    ]
-    for candidate in search_roots:
-        if any((candidate / Path(*marker)).exists() for marker in markers):
-            return candidate
-    raise RuntimeError(
-        f"Could not locate repository root for planning MCP import. "
-        f"Searched from cwd={Path.cwd()} and module={Path(__file__).resolve()}"
-    )
+    env_root = os.environ.get("AUDIAGENTIC_ROOT")
+    if env_root:
+        root = Path(env_root).resolve()
+        if not root.exists() or not (root / ".audiagentic").exists():
+            raise RuntimeError(
+                f"AUDIAGENTIC_ROOT={env_root} is invalid. "
+                f"Path must exist and contain .audiagentic/ directory."
+            )
+        return root
+    return _find_root_via_marker()
 
 
+# ---------------------------------------------------------------------------
+# Operation validation and error handling
+# ---------------------------------------------------------------------------
+
+VALID_OPS = {"state", "label", "summary", "section", "content", "meta"}
+VALID_MODES = {"set", "append", "replace"}
+
+
+def validate_operations(operations: list[dict[str, Any]]) -> None:
+    """Validate edit operations.
+
+    Args:
+        operations: List of operation dicts
+
+    Raises:
+        PlanningError: If any operation is invalid
+    """
+    for i, op in enumerate(operations):
+        if not isinstance(op, dict):
+            raise PlanningError(
+                f"Operation {i} must be a dict",
+                suggestion="Each operation should be {{op: 'state', value: 'done'}}",
+            )
+
+        op_type = op.get("op")
+        if not op_type or op_type not in VALID_OPS:
+            raise PlanningError(
+                f"Operation {i}: invalid op '{op_type}'",
+                suggestion=f"Supported operations: {', '.join(sorted(VALID_OPS))}",
+            )
+
+        # Validate mode if present
+        if "mode" in op and op["mode"] not in VALID_MODES:
+            raise PlanningError(
+                f"Operation {i}: invalid mode '{op['mode']}'",
+                suggestion=f"Valid modes: {', '.join(sorted(VALID_MODES))}",
+            )
+
+        # Validate required fields per operation type
+        if op_type == "section" and "name" not in op:
+            raise PlanningError(
+                f"Operation {i}: section requires 'name' field",
+                suggestion="Example: {{op: 'section', name: 'Notes', content: '...', mode: 'set'}}",
+            )
+
+        if op_type == "meta" and "field" not in op:
+            raise PlanningError(
+                f"Operation {i}: meta requires 'field' field",
+                suggestion="Example: {{op: 'meta', field: 'tags', value: '...'}}",
+            )
+
+
+class PlanningError(Exception):
+    """Structured error with suggestion for agent recovery."""
+
+    def __init__(self, message: str, suggestion: str | None = None):
+        super().__init__(message)
+        self.message = message
+        self.suggestion = suggestion
+
+
+# ---------------------------------------------------------------------------
+# Bootstrap and imports
+# ---------------------------------------------------------------------------
+
+# Bootstrap root discovery FIRST (before tm import)
 _BOOTSTRAP_ROOT = _bootstrap_repo_root()
 for _p in (str(_BOOTSTRAP_ROOT), str(_BOOTSTRAP_ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-try:
-    import anyio
-    import mcp.types as types
-    from mcp.server.fastmcp import FastMCP
-    from mcp.shared.message import SessionMessage
-except ImportError:
-    print("Error: mcp package not installed. Run: pip install mcp", file=sys.stderr)
-    sys.exit(1)
-
+# Import tm after path is set
 import tools.planning.tm_helper as tm
 
-_ROOT = tm._find_project_root()
-if os.environ.get("AUDIAGENTIC_ROOT"):
-    tm.set_root(Path(os.environ["AUDIAGENTIC_ROOT"]).resolve())
-    _ROOT = tm._get_root()
+_ROOT = _bootstrap_repo_root()
+tm.set_root(_ROOT)
 for _p in (str(_ROOT), str(_ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-mcp = FastMCP("audiagentic-planning")
+
+# ---------------------------------------------------------------------------
+# MCP Server
+# ---------------------------------------------------------------------------
+
+mcp = FastMCP(
+    "audiagentic-planning",
+    instructions="""
+EDIT FIRST: Use tm_edit for all mutations to a single item. It accepts a list of operations
+executed atomically: state, label, summary, section (set/append), content (replace/append), meta.
+Prefer one tm_edit call over multiple separate calls.
+
+READ COST LADDER (cheapest to most tokens):
+  tm_get depth=head < depth=meta < depth=full < depth=body
+Use depth=head for existence/state checks. depth=body only when the raw text is needed.
+
+WORK QUEUE: tm_list mode=next returns unclaimed ready items filtered by kind and domain.
+
+MULTI-AGENT: Multiple agents can work on the same repository. Use tm_claim to coordinate
+access: claim items before work (op=claim), check available work (mode=next skips claimed),
+release when done (op=unclaim). Claims can have TTL for auto-release.
+""",
+)
 
 
-def _wrap_tool_result(func):
-    """Wrap tool function to ensure lists are serialized as single content block.
+# ---------------------------------------------------------------------------
+# 1. EDIT — listed first so agents discover it before narrower mutation tools
+# ---------------------------------------------------------------------------
 
-    FastMCP serializes Python lists as multiple content blocks (one per item).
-    This wrapper ensures all lists are returned as {"_result": list} so they
-    serialize as a single content block.
+
+@mcp.tool(
+    description=(
+        "PREFERRED for mutations: execute one or more operations on a planning item atomically. "
+        "operations — list of dicts with 'op' key. "
+        "Supported ops: "
+        "  state: {{op:'state', value:'done'}} "
+        "  label: {{op:'label', value:'New label'}} "
+        "  summary: {{op:'summary', value:'New summary'}} "
+        "  section: {{op:'section', name:'Notes', content:'...', mode:'set'|'append'}} "
+        "  content: {{op:'content', value:'...', mode:'replace'|'append'}} "
+        "  meta: {{op:'meta', field:'tags', value:'...'}} "
+        "Example: [{{op:'state',value:'done'}},{{op:'section',name:'Notes',content:'...',mode:'set'}}]"
+    )
+)
+def tm_edit(id: str, operations: list[dict[str, Any]]) -> dict[str, Any]:
+    """Execute atomic operations on a planning item.
+
+    Args:
+        id: Planning item ID (e.g., task-0123)
+        operations: List of operation dicts (validated at runtime)
+
+    Returns:
+        dict with item ID, executed operations count, and result
+
+    Raises:
+        PlanningError: If operation is invalid or item not found
     """
-    import functools
-
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        result = func(*args, **kwargs)
-        # Wrap all lists and None in a dict
-        if isinstance(result, list) or result is None:
-            return {"_result": result}
-        return result
-
-    return wrapper
-
-
-def tool_with_empty_list_fix(description=None):
-    """Tool decorator that fixes empty list serialization."""
-
-    def decorator(func):
-        wrapped = _wrap_tool_result(func)
-        return mcp.tool(description=description)(wrapped)
-
-    return decorator
-
-
-def _read_stdio_message() -> tuple[str | None, bool | None]:
-    """Read either header-framed or newline-delimited JSON from stdin.
-
-    The installed `mcp` package in this environment uses newline-delimited JSON
-    for stdio, while some clients still speak the older Content-Length framing.
-    Support both so the planning server can initialize reliably across clients.
-    """
-
-    stdin = sys.stdin.buffer
-    first_line = stdin.readline()
-    if not first_line:
-        return None, None
-
-    while first_line in (b"\r\n", b"\n"):
-        first_line = stdin.readline()
-        if not first_line:
-            return None, None
-
-    stripped = first_line.lstrip()
-    if stripped.startswith(b"{"):
-        return first_line.decode("utf-8", errors="replace").strip(), False
-
-    headers: dict[str, str] = {}
-    line = first_line
-    while line not in (b"", b"\r\n", b"\n"):
-        decoded = line.decode("ascii", errors="replace").strip()
-        if ":" not in decoded:
-            raise ValueError(f"Invalid MCP header line: {decoded!r}")
-        key, value = decoded.split(":", 1)
-        headers[key.lower().strip()] = value.strip()
-        line = stdin.readline()
-
-    content_length = int(headers.get("content-length", "0"))
-    if content_length <= 0:
-        raise ValueError("Missing or invalid Content-Length header")
-
-    payload = stdin.read(content_length)
-    if len(payload) != content_length:
-        raise ValueError(
-            f"Incomplete MCP payload: expected {content_length} bytes, got {len(payload)}"
-        )
-    return payload.decode("utf-8", errors="replace"), True
-
-
-def _write_stdio_message(payload: str, use_headers: bool) -> None:
-    stdout = sys.stdout.buffer
-    encoded = payload.encode("utf-8")
-    if use_headers:
-        stdout.write(f"Content-Length: {len(encoded)}\r\n\r\n".encode("ascii"))
-        stdout.write(encoded)
-    else:
-        stdout.write(encoded + b"\n")
-    stdout.flush()
-
-
-@asynccontextmanager
-async def _compat_stdio_server():
-    """Expose a stdio transport compatible with both MCP framing styles."""
-
-    read_stream_writer, read_stream = anyio.create_memory_object_stream(0)
-    write_stream, write_stream_reader = anyio.create_memory_object_stream(0)
-    framing_mode: dict[str, bool] = {"use_headers": True}
-
-    async def stdin_reader() -> None:
-        try:
-            async with read_stream_writer:
-                while True:
-                    try:
-                        payload, use_headers = await anyio.to_thread.run_sync(
-                            _read_stdio_message
-                        )
-                    except Exception as exc:
-                        await read_stream_writer.send(exc)
-                        continue
-
-                    if payload is None:
-                        break
-                    if use_headers is not None:
-                        framing_mode["use_headers"] = use_headers
-
-                    try:
-                        message = types.JSONRPCMessage.model_validate_json(payload)
-                    except Exception as exc:
-                        await read_stream_writer.send(exc)
-                        continue
-
-                    await read_stream_writer.send(SessionMessage(message))
-        except anyio.ClosedResourceError:  # pragma: no cover
-            await anyio.lowlevel.checkpoint()
-
-    async def stdout_writer() -> None:
-        try:
-            async with write_stream_reader:
-                async for session_message in write_stream_reader:
-                    payload = session_message.message.model_dump_json(
-                        by_alias=True, exclude_none=True
-                    )
-                    await anyio.to_thread.run_sync(
-                        _write_stdio_message,
-                        payload,
-                        framing_mode["use_headers"],
-                    )
-        except anyio.ClosedResourceError:  # pragma: no cover
-            await anyio.lowlevel.checkpoint()
-
-    async with anyio.create_task_group() as tg:
-        tg.start_soon(stdin_reader)
-        tg.start_soon(stdout_writer)
-        yield read_stream, write_stream
-
-
-async def _run_compat_stdio() -> None:
-    async with _compat_stdio_server() as (read_stream, write_stream):
-        await mcp._mcp_server.run(
-            read_stream,
-            write_stream,
-            mcp._mcp_server.create_initialization_options(),
+    # Validate ID to prevent path traversal
+    try:
+        tm._validate_id(id)
+    except ValueError as e:
+        raise PlanningError(
+            str(e), suggestion="Ensure ID is a simple string without path separators"
         )
 
+    # Validate operations before execution
+    validate_operations(operations)
 
-@mcp.tool(description="Create a new Request planning document with duplicate detection")
-def tm_new_request(
-    label: str,
-    summary: str,
-    profile: str | None = None,
-    current_understanding: str | None = None,
-    open_questions: list[str] | None = None,
-    source: str | None = None,
-    context: str | None = None,
-    check_duplicates: bool = True,
-) -> dict[str, Any]:
-    return tm.new_request(
-        label,
-        summary,
-        profile=profile,
-        current_understanding=current_understanding,
-        open_questions=open_questions,
-        source=source,
-        context=context,
-        check_duplicates=check_duplicates,
+    try:
+        result = tm.update(id, operations=operations)
+        return {"id": id, "operations_executed": len(operations), "result": result}
+    except ValueError as e:
+        error_msg = str(e)
+        if "Unknown op" in error_msg or "unknown operation" in error_msg.lower():
+            raise PlanningError(
+                error_msg, suggestion=f"Supported operations: {', '.join(sorted(VALID_OPS))}"
+            )
+        if "not found" in error_msg.lower():
+            raise PlanningError(
+                error_msg,
+                suggestion=f"Use tm_list to find valid item IDs, or tm_create to create '{id}'",
+            )
+        raise PlanningError(error_msg)
+    except Exception as e:
+        raise PlanningError(f"Failed to edit {id}: {e}")
+
+
+# ---------------------------------------------------------------------------
+# 2. CREATE
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description=(
+        "Create a planning item. kind: request|spec|plan|task|wp|standard. "
+        "Provide content for initial markdown body. "
+        "Kind requirements: spec needs request_refs; task needs spec; wp needs plan. "
+        "Request extras: profile, source, context, current_understanding, open_questions."
     )
-
-
-@mcp.tool(
-    description="Create a new Specification planning document with duplicate detection"
 )
-def tm_new_spec(
-    label: str,
-    summary: str,
-    request_refs: list[str] | None = None,
-    check_duplicates: bool = True,
-) -> dict[str, Any]:
-    return tm.new_spec(label, summary, request_refs, check_duplicates=check_duplicates)
-
-
-@mcp.tool(
-    description="Create a new Plan planning document, optionally linked to a Specification"
-)
-def tm_new_plan(
-    label: str,
-    summary: str,
-    spec: str | None = None,
-    request_refs: list[str] | None = None,
-) -> dict[str, Any]:
-    return tm.new_plan(label, summary, spec, request_refs)
-
-
-@mcp.tool(
-    description="Create a new Task planning document with spec, optional target packet, parent, and workflow"
-)
-def tm_new_task(
-    label: str,
-    summary: str,
-    spec: str,
-    domain: str = "core",
-    target: str | None = None,
-    parent: str | None = None,
-    workflow: str | None = None,
-    request_refs: list[str] | None = None,
-) -> dict[str, Any]:
-    return tm.new_task(
-        label, summary, spec, domain, target, parent, workflow, request_refs
-    )
-
-
-@mcp.tool(
-    description="Soft delete a planning item by default, or hard delete it and sync counters"
-)
-def tm_delete(
-    id: str,
-    hard: bool = False,
-    reason: str | None = None,
-) -> dict[str, Any]:
-    return tm.delete(id, hard=hard, reason=reason)
-
-
-@mcp.tool(description="Create a new WorkPackage planning document linked to a Plan")
-def tm_new_wp(
-    label: str,
-    summary: str,
-    plan: str,
-    domain: str = "core",
-    workflow: str | None = None,
-) -> dict[str, Any]:
-    return tm.new_wp(label, summary, plan, domain, workflow)
-
-
-@mcp.tool(description="Create a new Standard planning document")
-def tm_new_standard(label: str, summary: str) -> dict[str, Any]:
-    return tm.new_standard(label, summary)
-
-
-@mcp.tool(
-    description="Change the state of a planning item (e.g., ready → in_progress → done)"
-)
-def tm_state(
-    id: str,
-    new_state: str,
-    reason: str | None = None,
-    actor: str | None = None,
-) -> dict[str, Any]:
-    return tm.state(id, new_state, reason=reason, actor=actor)
-
-
-@mcp.tool(
-    description="Move a planning item to a different domain (e.g., core → contrib)"
-)
-def tm_move(id: str, domain: str) -> dict[str, Any]:
-    return tm.move(id, domain)
-
-
-@mcp.tool(description="Update label, summary, or body text of a planning item")
-def tm_update(
-    id: str,
-    label: str | None = None,
-    summary: str | None = None,
-    append: str | None = None,
-    operations: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    """Update a planning item or execute batch operations.
-
-    Supports single updates (label/summary/append) or batch operations:
-    - state: {"op": "state", "value": "done"}
-    - label: {"op": "label", "value": "New Label"}
-    - summary: {"op": "summary", "value": "New summary"}
-    - section: {"op": "section", "name": "Notes", "content": "...", "mode": "set|append"}
-    - content: {"op": "content", "value": "...", "mode": "replace|append"}
-    """
-    return tm.update(id, label, summary, append, operations=operations)
-
-
-@mcp.tool(
-    description="Execute multiple operations on a planning item atomically (state changes, section updates, etc.)"
-)
-def tm_batch_update(
-    id: str,
-    operations: list[dict[str, Any]],
-) -> dict[str, Any]:
-    """Execute batch operations atomically.
-
-    Supported operations:
-    - state: {"op": "state", "value": "done"}
-    - label: {"op": "label", "value": "New Label"}
-    - summary: {"op": "summary", "value": "New summary"}
-    - section: {"op": "section", "name": "Notes", "content": "...", "mode": "set|append"}
-    - content: {"op": "content", "value": "...", "mode": "replace|append"}
-    - meta: {"op": "meta", "field": "key", "value": "val"}
-
-    Example:
-    tm_batch_update("task-0001", [
-        {"op": "state", "value": "done"},
-        {"op": "section", "name": "Implementation", "content": "Completed..."},
-        {"op": "label", "value": "Task Completed"}
-    ])
-    """
-    return tm.update(id, operations=operations)
-
-
-@mcp.tool(description="Get the full markdown content of a planning document")
-def tm_get_content(id: str) -> str:
-    return tm.get_content(id)
-
-
-@mcp.tool(
-    description="Update content of a planning document (replace, append, or insert at position)"
-)
-def tm_update_content(
-    id: str,
-    content: str,
-    mode: str = "replace",
-    section: str | None = None,
-    position: int | None = None,
-) -> dict[str, Any]:
-    return tm.update_content(id, content, mode, section, position)
-
-
-@mcp.tool(
-    description="Create a new planning document of any kind with initial content in one operation"
-)
-def tm_create_with_content(
+def tm_create(
     kind: str,
     label: str,
     summary: str,
-    content: str,
+    content: str | None = None,
     source: str | None = None,
     domain: str = "core",
     spec: str | None = None,
@@ -407,254 +248,424 @@ def tm_create_with_content(
     target: str | None = None,
     workflow: str | None = None,
     request_refs: list[str] | None = None,
+    check_duplicates: bool = True,
+    profile: str | None = None,
+    current_understanding: str | None = None,
+    open_questions: list[str] | None = None,
+    context: str | None = None,
 ) -> dict[str, Any]:
-    return tm.create_with_content(
-        kind,
-        label,
-        summary,
-        content,
-        source,
-        domain,
-        spec,
-        plan,
-        parent,
-        target,
-        workflow,
-        request_refs,
-    )
+    """Create a planning item. kind: request|spec|plan|task|wp|standard.
+    Provide content for initial markdown body.
+    Kind requirements: spec needs request_refs; task needs spec; wp needs plan.
+    Request extras: profile, source, context, current_understanding, open_questions."""
+    try:
+        return tm.create(
+            kind=kind,
+            label=label,
+            summary=summary,
+            content=content,
+            source=source,
+            domain=domain,
+            spec=spec,
+            plan=plan,
+            parent=parent,
+            target=target,
+            workflow=workflow,
+            request_refs=request_refs,
+            check_duplicates=check_duplicates,
+            profile=profile,
+            current_understanding=current_understanding,
+            open_questions=open_questions,
+            context=context,
+        )
+    except ValueError as e:
+        raise PlanningError(str(e))
+    except Exception as e:
+        raise PlanningError(f"Failed to create {kind}: {e}")
+
+
+# ---------------------------------------------------------------------------
+# 3. GET — read at any depth
+# ---------------------------------------------------------------------------
 
 
 @mcp.tool(
-    description="Update a link field in a planning item (e.g., add/change spec, parent, or related items)"
+    description=(
+        "Read a planning item. "
+        "depth: head (index-only, no parse — cheapest, use for existence/state checks) | "
+        "meta (frontmatter only — use when metadata fields are needed) | "
+        "full (metadata + body, default) | "
+        "body (raw markdown body only — most tokens, use only when text is needed). "
+        "with_related: include linked items (depth=full only, adds cost)."
+    )
+)
+def tm_get(
+    id: str,
+    depth: str = "full",
+    with_related: bool = False,
+    with_resources: bool = False,
+) -> dict[str, Any] | str:
+    """Read a planning item.
+    depth: head (index-only, no parse — cheapest, use for existence/state checks) |
+    meta (frontmatter only — use when metadata fields are needed) |
+    full (metadata + body, default) |
+    body (raw markdown body only — most tokens, use only when text is needed).
+    with_related: include linked items (depth=full only, adds cost)."""
+    # Validate ID to prevent path traversal
+    try:
+        tm._validate_id(id)
+    except ValueError as e:
+        raise PlanningError(
+            str(e), suggestion="Ensure ID is a simple string without path separators"
+        )
+
+    valid_depths = {"head", "meta", "full", "body"}
+    if depth not in valid_depths:
+        raise PlanningError(
+            f"Unknown depth: {depth!r}",
+            suggestion=f"Valid depths: {', '.join(sorted(valid_depths))}",
+        )
+
+    try:
+        if depth == "head":
+            return tm.head(id)
+        elif depth == "meta":
+            return tm.show(id)
+        elif depth == "body":
+            return tm.get_content(id)
+        else:  # full
+            result = tm.extract(
+                id,
+                with_related=with_related,
+                with_resources=with_resources,
+                include_body=True,
+                write_to_disk=True,
+            )
+            # Resource Exhaustion Guard: Warn if result is excessively large
+            if isinstance(result, dict) and "item" in result:
+                body_len = len(result["item"].get("body", ""))
+                if body_len > 20000:
+                    # Log warning or return as is, but the agent is now informed
+                    pass
+            return result
+    except ValueError as e:
+        raise PlanningError(str(e), suggestion="Use tm_list to find valid item IDs")
+
+
+# ---------------------------------------------------------------------------
+# 4. LIST — list items, count by state, or get next work items
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description=(
+        "Query planning items. "
+        "mode: list (items, default) | count (kind×state summary) | next (unclaimed items for agent work queue). "
+        "kind: request|spec|plan|task|wp|standard — omit for all (list/count) or defaults to task (next). "
+        "state: filter by state (list) or target state (next, defaults to ready). "
+        "domain: domain filter (next only)."
+    )
+)
+def tm_list(
+    kind: str | list[str] | None = None,
+    state: str | list[str] | None = None,
+    domain: str | None = None,
+    mode: str = "list",
+    include_deleted: bool = False,
+    include_archived: bool = False,
+) -> Any:
+    valid_modes = {"list", "count", "next"}
+    if mode not in valid_modes:
+        raise PlanningError(
+            f"Unknown mode: {mode!r}", suggestion=f"Valid modes: {', '.join(sorted(valid_modes))}"
+        )
+
+    if mode == "count":
+        return tm.status()
+    elif mode == "next":
+        result = tm.next_items(kind or "task", state or "ready", domain)
+        return result if result is not None else []
+    else:  # list
+        items = tm.list_kind(
+            kind,
+            include_deleted=include_deleted,
+            include_archived=include_archived,
+            state=state,
+        )
+        return items
+
+
+# ---------------------------------------------------------------------------
+# 5. SECTION — read/write named sections and subsections
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description=(
+        "Read or write a named section in a planning document. "
+        "op: get (read section) | set (replace section, requires content) | "
+        "append (append to section, requires content) | "
+        "get_sub (subsection via dot notation, e.g. 'Requirements.Functional'). "
+        "For multiple section changes prefer tm_edit."
+    )
+)
+def tm_section(
+    id: str,
+    op: str,
+    section: str,
+    content: str | None = None,
+) -> dict[str, Any]:
+    valid_ops = {"get", "get_sub", "set", "append"}
+    if op not in valid_ops:
+        raise PlanningError(
+            f"Unknown op: {op!r}", suggestion=f"Valid ops: {', '.join(sorted(valid_ops))}"
+        )
+
+    if op in {"set", "append"} and content is None:
+        raise PlanningError(
+            f"content is required for op={op!r}",
+            suggestion="Provide content parameter for set or append operations",
+        )
+
+    try:
+        if op == "get":
+            return tm.get_section(id, section)
+        elif op == "get_sub":
+            return tm.get_subsection(id, section)
+        elif op == "set":
+            return tm.set_section(id, section, content)
+        elif op == "append":
+            return tm.append_section(id, section, content)
+    except ValueError as e:
+        raise PlanningError(str(e))
+
+
+# ---------------------------------------------------------------------------
+# 6–9. MOVE, DELETE, RELINK, PACKAGE
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(description="Move a task or wp to a different domain (e.g. core → provider)")
+def tm_move(id: str, domain: str) -> dict[str, Any]:
+    try:
+        return tm.move(id, domain)
+    except ValueError as e:
+        raise PlanningError(str(e))
+
+
+@mcp.tool(
+    description="Delete a planning item. hard=False (default) soft-deletes; hard=True removes file."
+)
+def tm_delete(id: str, hard: bool = False, reason: str | None = None) -> dict[str, Any]:
+    try:
+        return tm.delete(id, hard=hard, reason=reason)
+    except ValueError as e:
+        raise PlanningError(str(e))
+
+
+@mcp.tool(
+    description="Update a reference/link field in a planning item (e.g. add spec, parent, request_refs)"
 )
 def tm_relink(
     src: str, field: str, dst: str, seq: int | None = None, display: str | None = None
 ) -> dict[str, Any]:
-    return tm.relink(src, field, dst, seq, display)
+    try:
+        return tm.relink(src, field, dst, seq, display)
+    except ValueError as e:
+        raise PlanningError(str(e))
 
 
-@mcp.tool(description="Group multiple Tasks into a new WorkPackage within a Plan")
+@mcp.tool(description="Group Tasks into a new WorkPackage within a Plan")
 def tm_package(
     plan: str, tasks: list[str], label: str, summary: str, domain: str = "core"
 ) -> dict[str, Any]:
-    return tm.package(plan, tasks, label, summary, domain)
+    try:
+        return tm.package(plan, tasks, label, summary, domain)
+    except ValueError as e:
+        raise PlanningError(str(e))
 
 
-@tool_with_empty_list_fix(
-    description="List planning items, optionally filtered by kind (request, spec, plan, task, wp, standard)"
-)
-def tm_list(
-    kind: str | None = None,
-    include_deleted: bool = False,
-    include_archived: bool = False,
-) -> dict[str, Any]:
-    return tm.list_kind(
-        kind, include_deleted=include_deleted, include_archived=include_archived
+# ---------------------------------------------------------------------------
+# 10. STANDARDS
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description=(
+        "Standards lookup. "
+        "Omit id → list all standards. "
+        "id=standard-XXXX → get that standard with body. "
+        "id=task-XXXX (or any non-standard item) → list applicable standards for that item."
     )
-
-
-@mcp.tool(
-    description="Get frontmatter metadata for a single planning item via one file parse. No body content."
 )
-def tm_show(id: str) -> dict[str, Any]:
-    return tm.show(id)
-
-
-@mcp.tool(
-    description="Return a planning extract. Can include related refs, resources, and optionally body content."
-)
-def tm_extract(
-    id: str,
+def tm_standards(
+    id: str | None = None,
     with_related: bool = False,
     with_resources: bool = False,
-    include_body: bool = True,
-    write_to_disk: bool = True,
-) -> dict[str, Any]:
-    return tm.extract(id, with_related, with_resources, include_body, write_to_disk)
+) -> Any:
+    if id is None:
+        return tm.list_standards()
+    elif id.startswith("standard-"):
+        return tm.get_standard(id, with_related, with_resources)
+    else:
+        return tm.standards(id)
+
+
+# ---------------------------------------------------------------------------
+# 11. CLAIM
+# ---------------------------------------------------------------------------
 
 
 @mcp.tool(
-    description="Return lean index-only metadata for a planning item. No markdown parse. Lowest token cost."
+    description=(
+        "Manage planning item ownership claims. "
+        "op: claim (requires kind, id, holder; optional ttl seconds) | "
+        "unclaim (requires id) | "
+        "list (optional kind filter)."
+    )
 )
-def tm_head(id: str) -> dict[str, Any]:
-    return tm.head(id)
+def tm_claim(
+    op: str,
+    id: str | None = None,
+    kind: str | None = None,
+    holder: str | None = None,
+    ttl: int | None = None,
+) -> Any:
+    valid_ops = {"claim", "unclaim", "list"}
+    if op not in valid_ops:
+        raise PlanningError(
+            f"Unknown op: {op!r}", suggestion=f"Valid ops: {', '.join(sorted(valid_ops))}"
+        )
+
+    if op == "claim":
+        if not kind or not id or not holder:
+            raise PlanningError(
+                "op=claim requires kind, id, and holder",
+                suggestion="Example: {{op:'claim', kind:'task', id:'task-0123', holder:'agent-1'}}",
+            )
+        return tm.claim(kind, id, holder, ttl)
+    elif op == "unclaim":
+        if not id:
+            raise PlanningError(
+                "op=unclaim requires id", suggestion="Example: {{op:'unclaim', id:'task-0123'}}"
+            )
+        return tm.unclaim(id)
+    elif op == "list":
+        return tm.claims(kind)
 
 
-@tool_with_empty_list_fix(
-    description="List Tasks in a given state (default: ready), optionally filtered by domain"
-)
-def tm_next_tasks(
-    state: str = "ready", domain: str | None = None
-) -> dict[str, Any]:
-    return tm.next_tasks(state, domain)
-
-
-@tool_with_empty_list_fix(
-    description="List items of a given kind in a given state, optionally filtered by domain"
-)
-def tm_next_items(
-    kind: str = "task", state: str = "ready", domain: str | None = None
-) -> dict[str, Any]:
-    return tm.next_items(kind, state, domain)
+# ---------------------------------------------------------------------------
+# 12. DOCS
+# ---------------------------------------------------------------------------
 
 
 @mcp.tool(
-    description="Get summary counts of all planning items grouped by kind and state"
+    description=(
+        "Access documentation resources. "
+        "op: surfaces (list doc surfaces) | surface (get one, id=surface_id) | "
+        "refs (list reference docs) | profiles (list request profiles) | "
+        "profile (get one, id=profile_id) | support (list support docs, optional id and role) | "
+        "sync_req (doc sync requirements, requires kind) | pending (pending doc updates, requires kind)."
+    )
 )
-def tm_status() -> dict[str, Any]:
-    return tm.status()
+def tm_docs(
+    op: str,
+    id: str | None = None,
+    kind: str | None = None,
+    profile_pack: str = "standard",
+    role: str | None = None,
+) -> Any:
+    valid_ops = {
+        "surfaces",
+        "surface",
+        "refs",
+        "profiles",
+        "profile",
+        "support",
+        "sync_req",
+        "pending",
+    }
+    if op not in valid_ops:
+        raise PlanningError(
+            f"Unknown op: {op!r}", suggestion=f"Valid ops: {', '.join(sorted(valid_ops))}"
+        )
+
+    if op == "surfaces":
+        return tm.list_doc_surfaces()
+    elif op == "surface":
+        return tm.get_doc_surface(id)
+    elif op == "refs":
+        return tm.list_reference_docs()
+    elif op == "profiles":
+        return tm.list_request_profiles()
+    elif op == "profile":
+        return tm.get_request_profile(id)
+    elif op == "support":
+        return tm.list_support_docs(id, role)
+    elif op == "sync_req":
+        if not kind:
+            raise PlanningError(
+                "op=sync_req requires kind", suggestion="Example: {{op:'sync_req', kind:'task'}}"
+            )
+        return tm.get_doc_sync_requirements(kind, profile_pack)
+    elif op == "pending":
+        if not kind:
+            raise PlanningError(
+                "op=pending requires kind", suggestion="Example: {{op:'pending', kind:'task'}}"
+            )
+        return tm.pending_doc_updates(kind, profile_pack)
 
 
-@tool_with_empty_list_fix(
-    description="List applicable standards (e.g., coding styles, docs requirements) for a planning item"
-)
-def tm_standards(id: str) -> dict[str, Any]:
-    return tm.standards(id)
-
-
-@tool_with_empty_list_fix(description="List all standard planning documents")
-def tm_list_standards() -> dict[str, Any]:
-    return tm.list_standards()
-
-
-@mcp.tool(description="Get a standard planning document with metadata and body")
-def tm_get_standard(
-    standard_id: str, with_related: bool = False, with_resources: bool = False
-) -> dict[str, Any]:
-    return tm.get_standard(standard_id, with_related, with_resources)
-
-
-@tool_with_empty_list_fix(
-    description="List all documentation surfaces (generated views of planning items for different audiences)"
-)
-def tm_list_doc_surfaces() -> dict[str, Any]:
-    return tm.list_doc_surfaces()
-
-
-@tool_with_empty_list_fix(description="Get a specific documentation surface by ID")
-def tm_get_doc_surface(surface_id: str) -> dict[str, Any] | None:
-    return tm.get_doc_surface(surface_id)
-
-
-@tool_with_empty_list_fix(
-    description="List reference documentation that applies to planning items"
-)
-def tm_list_reference_docs() -> dict[str, Any]:
-    return tm.list_reference_docs()
-
-
-@tool_with_empty_list_fix(
-    description="List available request profiles (templates/configs for creating Requests)"
-)
-def tm_list_request_profiles() -> dict[str, Any]:
-    return tm.list_request_profiles()
-
-
-@tool_with_empty_list_fix(description="Get a specific request profile by ID")
-def tm_get_request_profile(profile_id: str) -> dict[str, Any] | None:
-    return tm.get_request_profile(profile_id)
-
-
-@tool_with_empty_list_fix(
-    description="List supporting documentation (sidecars) for a planning item or by role"
-)
-def tm_list_support_docs(
-    supports_id: str | None = None, role: str | None = None
-) -> dict[str, Any]:
-    return tm.list_support_docs(supports_id, role)
+# ---------------------------------------------------------------------------
+# 13. ADMIN
+# ---------------------------------------------------------------------------
 
 
 @mcp.tool(
-    description="Get a named section (heading) from a planning document's markdown content"
+    description=(
+        "Admin and maintenance operations. "
+        "op: validate (check all items against schemas, returns errors) | "
+        "index (rebuild lookup indexes) | "
+        "reconcile (fix filesystem/state inconsistencies) | "
+        "events (recent event log, optional tail count, default 20) | "
+        "verify (health check — dirs, configs, API) | "
+        "check_sensitive (scan item body for API keys/tokens, requires id)."
+    )
 )
-def tm_get_section(id: str, section: str) -> dict[str, Any]:
-    return tm.get_section(id, section)
+def tm_admin(
+    op: str,
+    id: str | None = None,
+    tail: int = 20,
+) -> Any:
+    valid_ops = {"validate", "index", "reconcile", "events", "verify", "check_sensitive"}
+    if op not in valid_ops:
+        raise PlanningError(
+            f"Unknown op: {op!r}", suggestion=f"Valid ops: {', '.join(sorted(valid_ops))}"
+        )
 
-
-@mcp.tool(description="Replace the content of a named section in a planning document")
-def tm_set_section(id: str, section: str, content: str) -> dict[str, Any]:
-    return tm.set_section(id, section, content)
-
-
-@mcp.tool(description="Append content to a named section in a planning document")
-def tm_append_section(id: str, section: str, content: str) -> dict[str, Any]:
-    return tm.append_section(id, section, content)
-
-
-@mcp.tool(
-    description="Get nested subsection content using dot notation (e.g., 'section.subsection')"
-)
-def tm_get_subsection(id: str, section_path: str) -> dict[str, Any]:
-    return tm.get_subsection(id, section_path)
-
-
-@mcp.tool(
-    description="Get documentation sync requirements for a planning item kind and profile pack"
-)
-def tm_doc_sync_requirements(
-    kind: str, profile_pack: str = "standard"
-) -> dict[str, Any]:
-    return tm.get_doc_sync_requirements(kind, profile_pack)
-
-
-@tool_with_empty_list_fix(
-    description="List pending documentation updates needed for a planning item kind"
-)
-def tm_pending_doc_updates(kind: str, profile_pack: str = "standard") -> dict[str, Any]:
-    return tm.pending_doc_updates(kind, profile_pack)
-
-
-@mcp.tool(
-    description="Claim ownership of a planning item (prevent concurrent edits) with optional TTL"
-)
-def tm_claim(kind: str, id: str, holder: str, ttl: int | None = None) -> dict[str, Any]:
-    return tm.claim(kind, id, holder, ttl)
-
-
-@tool_with_empty_list_fix(description="Release ownership of a planning item (unclaim)")
-def tm_unclaim(id: str) -> bool:
-    return tm.unclaim(id)
-
-
-@tool_with_empty_list_fix(
-    description="List active claims on planning items, optionally filtered by kind"
-)
-def tm_claims(kind: str | None = None) -> dict[str, Any]:
-    return tm.claims(kind)
-
-
-@tool_with_empty_list_fix(
-    description="Validate all planning documents against schemas and rules; returns list of errors"
-)
-def tm_validate() -> dict[str, Any]:
-    return tm.validate()
-
-
-@tool_with_empty_list_fix(
-    description="Re-index all planning documents (scan, parse, build indices)"
-)
-def tm_index() -> None:
-    tm.index()
-
-
-@tool_with_empty_list_fix(
-    description="Reconcile planning state with filesystem (fix inconsistencies)"
-)
-def tm_reconcile() -> dict[str, Any]:
-    return tm.reconcile()
-
-
-@tool_with_empty_list_fix(description="Get recent planning events from the event log")
-def tm_events(tail: int = 20) -> dict[str, Any]:
-    return tm.events(tail)
-
-
-@mcp.tool(
-    description="Verify planning module structure is healthy (directories, configs, API)"
-)
-def tm_verify_structure() -> dict[str, Any]:
-    return tm.verify_structure()
+    if op == "validate":
+        return tm.validate()
+    elif op == "index":
+        tm.index()
+        return None
+    elif op == "reconcile":
+        return tm.reconcile()
+    elif op == "events":
+        return tm.events(tail)
+    elif op == "verify":
+        return tm.verify_structure()
+    elif op == "check_sensitive":
+        if not id:
+            raise PlanningError(
+                "op=check_sensitive requires id",
+                suggestion="Example: {{op:'check_sensitive', id:'task-0123'}}",
+            )
+        return tm.check_sensitive_data(id)
 
 
 if __name__ == "__main__":
-    anyio.run(_run_compat_stdio)
+    try:
+        mcp.run()
+    except Exception as exc:
+        print(f"Fatal MCP startup error: {exc}", file=sys.stderr)
+        raise

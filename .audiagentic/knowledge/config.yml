@@ -1,0 +1,140 @@
+knowledge_root: docs/knowledge
+pages_dir: pages
+meta_dir: meta
+proposals_dir: proposals
+archive_dir: archive
+state_dir: state
+sync_state_file: sync-state.yml
+snapshots_dir: snapshots
+event_state_file: event-state.yml
+event_journal_file: event-journal.ndjson
+llm_job_state_file: llm-jobs.yml
+hook_config_file: sync/hooks.yml
+import_manifest_dir: import/manifests
+importer_registry_file: registries/importers.yml
+action_registry_file: registries/actions.yml
+execution_registry_file: registries/execution.yml
+llm_registry_file: registries/llm.yml
+navigation_config_file: navigation/routes.yml
+docs_root: docs
+templates_root: templates
+page_types:
+- system
+- guide
+- tool
+- pattern
+- decision
+- glossary_term
+- runbook
+required_metadata:
+- id
+- title
+- type
+- status
+- summary
+- owners
+- updated_at
+required_sections:
+- Summary
+- Current state
+- How to use
+- Sync notes
+- References
+related_field: related
+allow_archived_links: false
+page_type_dirs:
+  system: systems
+  guide: guides
+  tool: tools
+  pattern: patterns
+  decision: decisions
+  glossary_term: glossary
+  runbook: runbooks
+search:
+  snippet_length: 220
+  weights:
+    title: 4.0
+    tags: 3.0
+    sections: 2.0
+    body: 1.0
+scaffolding:
+  default_sections:
+  - Summary
+  - Current state
+  - How to use
+  - Sync notes
+  - References
+sync:
+  stale_statuses:
+  - changed
+  - missing
+  - untracked
+  - manual_stale
+  auto_hook_allowed_states:
+  - implemented
+  - verified
+  - active
+  - current
+  diff_context_lines: 2
+  diff_max_lines: 80
+  diff_excerpt_lines: 12
+  proposal_default_mode: review_only
+events:
+  # Standard: standard-0013 (Event subscription configuration standard)
+  # Protocol: spec-0055 (Interoperability event layer specification)
+  
+  # Auto-apply behavior (configurable, not hardcoded)
+  auto_apply_proposals: true
+  auto_mark_stale: true
+  
+  # Default handler when no pattern matches
+  default_handler: deterministic
+  
+  # Configuration files (relative to knowledge_root)
+  adapters_file: events/adapters.yml
+  handlers_file: events/handlers.yml
+llm:
+  enabled: false
+  default_provider: disabled
+  default_mode: blocking
+runtime:
+  capability_id: knowledge
+  contract_version: v0.7
+  config_relpath: .audiagentic/knowledge/config.yml
+  project_mode: pre_installer_aligned
+  expose_mcp_stdio: true
+selected_profiles:
+  capability_profile: deterministic-minimal
+  host_profile: mcp-stdio
+runtime_contract:
+  capability_id: knowledge
+  contract_version: v0.7
+  runtime_owned:
+  - CLI commands and validators
+  - importer and action registry defaults
+  - execution registry defaults
+  - MCP server implementation
+  - install profiles and host profiles
+  - templates and scaffolding defaults
+  project_owned:
+  - knowledge vault pages
+  - sidecar metadata and state
+  - manifests
+  - hooks
+  - event adapters
+  - execution overrides
+  - proposals
+  design_rules:
+  - deterministic-first behavior is the baseline
+  - MCP is host-agnostic and optional
+  - project content remains human-readable
+  - runtime defaults should be replaceable by project overrides without code edits
+  - the capability must work before the wider AUDiaGentic installer exists
+  future_cli_shape:
+  - audiagentic knowledge init
+  - audiagentic knowledge validate
+  - audiagentic knowledge seed
+  - audiagentic knowledge scan-drift
+  - audiagentic knowledge scan-events
+  - audiagentic knowledge answer-question
+  - audiagentic knowledge mcp serve

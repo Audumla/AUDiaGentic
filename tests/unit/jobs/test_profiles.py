@@ -9,7 +9,6 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.execution.jobs.profiles import (
     BUILTIN_PROFILES,
     apply_overrides,
@@ -17,6 +16,7 @@ from audiagentic.execution.jobs.profiles import (
     load_workflow_overrides,
     validate_profile,
 )
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def test_builtin_profiles_validate() -> None:

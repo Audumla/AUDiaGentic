@@ -6,8 +6,6 @@ import shutil
 import sys
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[3]
 for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:
@@ -25,14 +23,11 @@ def _seed_test_project(tmp_path: Path) -> Path:
         "profiles.yaml",
         "workflows.yaml",
         "automations.yaml",
-        "hooks.yaml",
     ):
         shutil.copy(src_config / name, config_dir / name)
 
     for rel in ("ids", "indexes", "events", "claims", "meta"):
-        (tmp_path / ".audiagentic" / "planning" / rel).mkdir(
-            parents=True, exist_ok=True
-        )
+        (tmp_path / ".audiagentic" / "planning" / rel).mkdir(parents=True, exist_ok=True)
 
     docs_dir = tmp_path / "docs" / "planning"
     for d in (
@@ -67,9 +62,7 @@ class TestMCPHelperRootConfigurability:
 
             task = tm.new_task(label="Test", summary="Test", spec="spec-0001")
 
-            isolated_file = (
-                tmp_path / "docs" / "planning" / "tasks" / "core" / f"{task['id']}.md"
-            )
+            isolated_file = tmp_path / "docs" / "planning" / "tasks" / "core" / f"{task['id']}.md"
             assert isolated_file.exists()
 
         finally:
@@ -82,13 +75,9 @@ class TestMCPHelperRootConfigurability:
 
         _seed_test_project(tmp_path)
 
-        task = tm.new_task(
-            label="Test", summary="Test", spec="spec-0001", root=tmp_path
-        )
+        task = tm.new_task(label="Test", summary="Test", spec="spec-0001", root=tmp_path)
 
-        isolated_file = (
-            tmp_path / "docs" / "planning" / "tasks" / "core" / f"{task['id']}.md"
-        )
+        isolated_file = tmp_path / "docs" / "planning" / "tasks" / "core" / f"{task['id']}.md"
         assert isolated_file.exists()
 
     def test_validate_with_custom_root(self, tmp_path: Path) -> None:

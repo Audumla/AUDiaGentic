@@ -1,0 +1,29 @@
+{
+  "item": {
+    "id": "task-0250",
+    "label": "Implement replay functionality with is_replay flag",
+    "state": "done",
+    "summary": "Create replay service that re-publishes persisted events with is_replay flag set",
+    "spec_ref": "spec-019",
+    "request_refs": [
+      "request-017"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0250.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006",
+    "standard-0011"
+  ],
+  "body": "\n\n\n\n\n\n# Description\n\nImplement replay support for persisted events. This task owns reading stored event envelopes, filtering when requested, re-publishing in chronological order, and marking replayed deliveries so consumers remain idempotent.\n\n**API:**\n```python\nreplay_service.replay(\n    from_timestamp=\"2026-04-14T00:00:00Z\",\n    to_timestamp=\"2026-04-14T23:59:59Z\",\n    event_type_pattern=\"planning.*\"\n)\n```\n\n**Key behaviors:**\n- Chronological order: events re-published in timestamp order\n- `is_replay: true`: replayed events marked in envelope\n- **Opt-in dispatch:** Subscribers receive replayed events only if `config.replay.dispatch_on_replay: true` (default: false)\n- No re-persist: replay doesn't create duplicate files\n- Filtering: support timestamp range and event type pattern\n\n# Acceptance Criteria\n\n- `replay()` reads persisted events and re-publishes via EventBus in chronological order\n- Replayed events have `is_replay: true` in envelope\n- Replay supports filtering by timestamp range and event type pattern\n- Replay doesn't re-persist events (no infinite loops)\n- **Opt-in replay:** Subscribers receive replayed events only if `config.replay.dispatch_on_replay: true`\n- Malformed event files handled gracefully (logged, skipped)\n- Unit tests cover: chronological replay, `is_replay` flag, filtering, no-repersist, opt-in behavior\n- Smoke test proves replay imports and executes on sample persisted events\n\n# Notes\n\nConsumers must check `is_replay` flag for idempotency (task-0251, task-0261).\n"
+}

@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-0032",
+    "label": "[PKT-FND-001](task-0032): Canonical IDs and Naming Normalization",
+    "state": "draft",
+    "summary": "Define canonical ID formats and naming conventions",
+    "spec_ref": "spec-0004",
+    "kind": "task",
+    "path": "docs/planning/tasks/contracts-scaffolding/task-0032.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n# Description\n\nImplement canonical ID formats and naming normalization.\n\n# [PKT-FND-001](task-0022): Canonical IDs and Naming Normalization\n\n## Purpose\n\nDefine canonical ID formats and naming conventions for all AUDiaGentic entities.\n\n## Scope\n\n- Packet ID format (PKT-XXX-NNN)\n- Task ID format (task-NNNN)\n- Plan ID format (plan-NNNN)\n- Spec ID format (spec-NNNN)\n- Naming conventions for files, directories, classes, functions\n\n## Implementation\n\n1. Define ID format regex patterns\n2. Create ID validator script\n3. Implement naming normalization utilities\n4. Update all existing IDs to canonical format\n\n## Acceptance Criteria\n\n1. All IDs match canonical format\n2. Naming validator passes on all docs\n3. ID conflicts detected and reported\n"
+}

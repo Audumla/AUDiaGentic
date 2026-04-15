@@ -1,0 +1,538 @@
+proposal_id: 20260415T052805Z-system-planning-event-review
+proposal_kind: event_review
+proposal_mode: deterministic
+target_page_id: system-planning
+generated_at: '2026-04-15T05:28:05.993107+00:00'
+summary: Planning/runtime event drift detected for system-planning. Review the current-state page.
+events:
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::fa386285d98c85b7
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0021'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-07T14:18:27.328695+00:00'
+      event: task.after_state_change
+      id: task-0021
+      old_state: in_progress
+      new_state: done
+      _stream_line: 135
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::5ca203d85bca5083
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0319'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-09T10:56:03.680513+00:00'
+      event: task.after_state_change
+      id: task-0319
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1455
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::acd144ea1409bd36
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0320'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-09T10:56:49.979506+00:00'
+      event: task.after_state_change
+      id: task-0320
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1461
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::0ce4335f3a3a31cd
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0321'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-09T10:57:05.012790+00:00'
+      event: task.after_state_change
+      id: task-0321
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1464
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::41f488117f1aca2a
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0318'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-09T10:57:43.201288+00:00'
+      event: task.after_state_change
+      id: task-0318
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1467
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::b8592d8890fe17d1
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0322'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-09T10:58:04.809683+00:00'
+      event: task.after_state_change
+      id: task-0322
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1470
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::99b9913a02a8c2dd
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0323'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-09T10:58:34.438105+00:00'
+      event: task.after_state_change
+      id: task-0323
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1473
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::690125b88627f293
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0324'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-09T10:59:01.217556+00:00'
+      event: task.after_state_change
+      id: task-0324
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1476
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::19e7ecd9389326a5
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0325'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-09T11:50:22.819757+00:00'
+      event: task.after_state_change
+      id: task-0325
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1508
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::400af9d4bc70107a
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0183'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-09T14:21:37.682051+00:00'
+      event: task.after_state_change
+      id: task-0183
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1653
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::7db0332ace195544
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0185'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-09T14:21:38.474776+00:00'
+      event: task.after_state_change
+      id: task-0185
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1654
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::feaa09d7b427bc26
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0184'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-09T14:21:39.263091+00:00'
+      event: task.after_state_change
+      id: task-0184
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1655
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::d27e23dadd200a4d
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0186'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-09T14:21:40.044095+00:00'
+      event: task.after_state_change
+      id: task-0186
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1656
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::b3cf0ed26a9b64e5
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0187'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-09T14:21:40.841082+00:00'
+      event: task.after_state_change
+      id: task-0187
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1657
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::9be3cb5ab63f1048
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0188'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-09T14:21:41.647153+00:00'
+      event: task.after_state_change
+      id: task-0188
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1658
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::0655cb5b4c468991
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0189'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-09T14:21:42.457179+00:00'
+      event: task.after_state_change
+      id: task-0189
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1659
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::bcdca9cc7dbee440
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0200'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-10T10:23:20.713853+00:00'
+      event: task.after_state_change
+      id: task-0200
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1898
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::8d0c711ebbbf9e58
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0201'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-10T10:23:21.063957+00:00'
+      event: task.after_state_change
+      id: task-0201
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1899
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::00031795bf6d83e0
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0202'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-10T10:23:21.390617+00:00'
+      event: task.after_state_change
+      id: task-0202
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1900
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::befa3d4276b8dd5a
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0203'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-10T10:23:21.731770+00:00'
+      event: task.after_state_change
+      id: task-0203
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1901
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::3ef30bca9cedbe63
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0204'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-10T10:23:22.073993+00:00'
+      event: task.after_state_change
+      id: task-0204
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1902
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::c9ff37b8272da5e2
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0205'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-10T10:23:22.405778+00:00'
+      event: task.after_state_change
+      id: task-0205
+      old_state: in_progress
+      new_state: done
+      _stream_line: 1903
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::d252b1ae870c796d
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0212'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-10T10:51:23.842651+00:00'
+      event: task.after_state_change
+      id: task-0212
+      old_state: in_progress
+      new_state: done
+      reason: Implementation complete with all tests passing
+      _stream_line: 1950
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::4ff9abf789e3a3de
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0213'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-10T10:51:51.234247+00:00'
+      event: task.after_state_change
+      id: task-0213
+      old_state: in_progress
+      new_state: done
+      reason: Implementation complete with tests passing
+      _stream_line: 1952
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::8f10cb20f29b6ce0
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0214'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-10T10:51:51.936387+00:00'
+      event: task.after_state_change
+      id: task-0214
+      old_state: in_progress
+      new_state: done
+      reason: Implementation complete with tests passing
+      _stream_line: 1954
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::2088994877c8850a
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0216'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-10T14:27:53.639107+00:00'
+      event: task.after_state_change
+      id: task-0216
+      old_state: in_progress
+      new_state: done
+      _stream_line: 2072
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::078927ef963e1d5d
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0217'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-10T14:27:54.077780+00:00'
+      event: task.after_state_change
+      id: task-0217
+      old_state: in_progress
+      new_state: done
+      _stream_line: 2073
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::6810c25d41ed800a
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0218'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-10T14:27:54.502719+00:00'
+      event: task.after_state_change
+      id: task-0218
+      old_state: in_progress
+      new_state: done
+      _stream_line: 2074
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::211c7055e976056a
+  adapter_id: planning-state-changes
+  event_name: task.after_state_change
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=task.after_state_change | id=task-0219'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-10T14:27:54.947277+00:00'
+      event: task.after_state_change
+      id: task-0219
+      old_state: in_progress
+      new_state: done
+      _stream_line: 2075
+  diff_excerpt: null
+suggested_steps:
+- Review the event source change.
+- Update the current-state page only if durable behavior changed.
+- Keep draft or incomplete work out of current-state pages.
+- Record fresh sync and event baselines after review.
+actions: []

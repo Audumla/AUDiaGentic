@@ -1,25 +1,18 @@
 {
   "item": {
     "id": "task-0193",
-    "label": "Update tm_validate with archive validation rules",
-    "state": "draft",
-    "summary": "Add archive validation rules to tm_validate() for archived items",
-    "spec_ref": "spec-0023",
-    "meta": {
-      "task_refs": [
-        {
-          "ref": "wp-0009",
-          "seq": 1003
-        }
-      ]
-    },
+    "label": "Fix hook event payloads",
+    "state": "done",
+    "summary": "Fix review_stub, report_stub, note_stub hook payloads to have correct structure",
+    "spec_ref": "spec-003",
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0193.md"
+    "path": "docs/planning/tasks/core/task-0193.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
   },
-  "effective_standard_refs": [
-    "standard-0006",
-    "standard-0005",
-    "standard-0009"
-  ],
-  "body": "\n\n# Description\n\nAdd archive validation rules to tm_validate() for archived items.\n\n## Requirements\n\nArchived items should have relaxed validation rules:\n\n1. **Required fields still validated**: id, label, state\n2. **Optional fields relaxed**: References can be stale\n3. **No cross-reference validation**: Archived items don't need valid refs\n4. **Content validation skipped**: Archived content is frozen\n\n## Implementation\n\n- Update validation behavior in the planning core\n- Add archived state check\n- Skip cross-reference validation for archived items\n- Still validate required fields\n- Report archived-item validation distinctly enough for review/debugging\n\n## Acceptance Criteria\n\n1. Archived items pass validation for required fields\n2. Archived items skip cross-reference validation\n3. tm_validate() reports archived items separately\n4. Non-archived items still fully validated\n"
+  "effective_standard_refs": [],
+  "body": "\n\n# Description\n\nAlign hook stub payloads for review/report/note actions with the event shape expected by the coverage tests.\n\n# Acceptance Criteria\n\n1. `review_stub` emits the expected event payload\n2. `report_stub` emits the expected event payload\n3. `note_stub` includes the note content in payload\n\n# Notes\n\n- Implemented in `src/audiagentic/planning/app/hook_mgr.py`\n- Verified by the `review_stub`, `report_stub`, and `note_stub` coverage tests\n"
 }
