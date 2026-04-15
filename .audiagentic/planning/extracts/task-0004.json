@@ -1,0 +1,19 @@
+{
+  "item": {
+    "id": "task-0004",
+    "label": "Migrate Phase 1 docs (lifecycle and project enablement)",
+    "state": "draft",
+    "summary": "Convert Phase 1 implementation docs to planning objects with reference resolution",
+    "spec_ref": "spec-004",
+    "parent_task_ref": "None",
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0004.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+}

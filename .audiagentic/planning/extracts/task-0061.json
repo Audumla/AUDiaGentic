@@ -1,0 +1,20 @@
+{
+  "item": {
+    "id": "task-0061",
+    "label": "[PKT-RLS-006](task-0061): Release Please Baseline Workflow",
+    "state": "draft",
+    "summary": "Create Release Please baseline workflow",
+    "spec_ref": "spec-0010",
+    "kind": "task",
+    "path": "docs/planning/tasks/release/task-0061.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0009"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-006](task-0051): Release Please Baseline Workflow\n\n## Purpose\n\nCreate Release Please baseline workflow.\n\n## Scope\n\n- Workflow definition\n- Configuration\n- Integration\n\n## Implementation\n\n1. Define workflow\n2. Configure\n3. Integrate\n\n## Acceptance Criteria\n\n1. Workflow defined\n2. Configured\n3. Integrated\n"
+}

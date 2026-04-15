@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-0010",
+    "label": "Resolve all cross-references between planning objects",
+    "state": "draft",
+    "summary": "Update all references in migrated docs to point to new planning object IDs, link objects via tm_relink",
+    "spec_ref": "spec-004",
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0010.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+}

@@ -1,0 +1,27 @@
+{
+  "item": {
+    "id": "task-0270",
+    "label": "Add class and method docstrings to base_mgr.py",
+    "state": "draft",
+    "summary": "Document BaseManager class and methods",
+    "request_refs": [
+      "request-019"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0270.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n\n\nFix missing class and method docstrings in planning/app/base_mgr.py to comply with standard-0008 (Python Implementation) - comprehensive documentation requirement. The base manager class lacks docstrings for the BaseManager class itself and its methods. Add comprehensive documentation including class purpose, key methods, parameter descriptions, return values, and usage examples. Follow patterns from other managers like task_mgr, wp_mgr, and req_mgr which have complete docstrings. Ensure all methods with side effects or complex logic include detailed documentation of their behavior and any validation performed.\n"
+}

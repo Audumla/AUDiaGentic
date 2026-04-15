@@ -1,0 +1,60 @@
+{
+  "item": {
+    "id": "wp-007",
+    "label": "Fix PlanningAPI and MCP gaps",
+    "state": "in_progress",
+    "summary": "Implement 9 fixes: section-mode regex, wp move, claims TTL, hook payloads, batch meta, status shape, empty-list serialization, and root isolation",
+    "plan_ref": "plan-0011",
+    "task_refs": [
+      {
+        "ref": "task-0202",
+        "seq": 1000
+      },
+      {
+        "ref": "task-0203",
+        "seq": 2000
+      },
+      {
+        "ref": "task-0204",
+        "seq": 3000
+      },
+      {
+        "ref": "task-0205",
+        "seq": 4000
+      },
+      {
+        "ref": "task-0206",
+        "seq": 5000
+      },
+      {
+        "ref": "task-0207",
+        "seq": 6000
+      },
+      {
+        "ref": "task-0208",
+        "seq": 7000
+      },
+      {
+        "ref": "task-0209",
+        "seq": 8000
+      },
+      {
+        "ref": "task-0210",
+        "seq": 9000
+      }
+    ],
+    "kind": "wp",
+    "path": "docs/planning/work-packages/core/wp-007-fix-planningapi-and-mcp-gaps.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0006",
+    "standard-0005",
+    "standard-0009"
+  ],
+  "body": "\n\n\n# Objective\n\nBring the planning hardening work tracked under `spec-003` into a consistent state by recording completed fixes and isolating the remaining MCP root-selection gap.\n\n# Scope of This Package\n\n- Mark completed API/MCP fixes as done where code and tests prove delivery\n- Leave root-isolation work active until isolated MCP mutation tests are no longer xfailed\n- Update task notes so future implementers can see why a task is done or still open\n\n# Inputs\n\n- `request-007`\n- `spec-003`\n- `tests/integration/planning/test_planning_api_coverage.py`\n- `tests/integration/planning/test_mcp_tool_calls.py`\n- current planning code in `src/audiagentic/planning/` and `tools/mcp/audiagentic-planning/`\n\n# Instructions\n\n- Use passing tests as the standard for completed tasks.\n- Do not mark the root-isolation tasks done until the xfailed isolation class is genuinely implemented.\n- Keep the documentation trail concise but specific enough to explain the state decisions.\n\n# Required Outputs\n\n- Updated task states for the implemented fixes\n- Request/spec/plan/wp states that no longer imply either \u201cnothing started\u201d or \u201ceverything finished\u201d\n- Notes tying the remaining open work to MCP isolation\n\n# Acceptance Checks\n\n- Completed fixes are marked `done` only where current code and tests support that claim\n- Remaining MCP isolation work is still visible in active tasks\n- Planning validation passes after the documentation updates\n\n# Non-Goals\n\n- Implementing the remaining root-isolation feature in this documentation pass\n- Reworking unrelated planning requests/specifications\n"
+}

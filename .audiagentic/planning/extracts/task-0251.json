@@ -1,0 +1,28 @@
+{
+  "item": {
+    "id": "task-0251",
+    "label": "Implement state propagation engine for planning hierarchies",
+    "state": "done",
+    "summary": "Create propagation logic that subscribes to planning.item.state.changed and cascades state changes up hierarchy",
+    "spec_ref": "spec-020",
+    "request_refs": [
+      "request-018"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0251.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n\n\n\n\n\n# Description\n\nImplement planning state propagation engine. This task owns subscribing to `planning.item.state.changed` events, evaluating parent-child relationships, and applying automatic propagation across task \u2192 wp \u2192 plan \u2192 spec.\n\n**Propagation rules:**\n- Any child `in_progress` \u2192 parent `in_progress` (if parent is `ready`)\n- All children `done` \u2192 parent `done`\n- Any child `blocked` \u2192 parent `blocked` (unless terminal state)\n- Rollback: child reverts \u2192 parent reverts (if no other children in target state)\n\n**Key behaviors:**\n- Subscribe to `planning.item.state.changed` events\n- **Use ASYNC mode by default (non-blocking, eventual consistency)**\n- Skip replayed events (`is_replay: true`) unless opt-in via config\n- Skip events with `propagation_depth >= 10` (cycle detection)\n- Emit new event for each propagation step (enables chaining)\n- Respect config from task-0252\n- Idempotent: safe to run multiple times on same event\n- **Log all propagation attempts to `.audiagentic/planning/meta/propagation_log.json`**\n- **Batch parent state changes to minimize disk I/O**\n- Conflict resolution: `blocked` > `in_progress` > `ready` > `draft`\n- Terminal states (`done`, `archived`) not overwritten\n\n# Acceptance Criteria\n\n- Task\u2192WP propagation: `in_progress`, `done`, `blocked` scenarios work (ASYNC)\n- WP\u2192Plan propagation: same rules apply\n- Plan\u2192Spec propagation: same rules apply\n- Conflict resolution: `blocked` > `in_progress` > `ready` > `draft`\n- Terminal states (`done`, `archived`) not overwritten\n- Rollback handling: child revert triggers parent revert\n- Replayed events skipped (`is_replay: true`)\n- Events with `propagation_depth >= 10` rejected and logged\n- Each propagation emits `planning.item.state.changed` event with incremented depth\n- **All propagation attempts logged to `propagation_log.json`**\n- **Batched writes reduce disk I/O compared to naive implementation**\n- Integration tests cover: forward propagation, rollback, conflicts, idempotency, cycle detection\n- Smoke test proves planning state transitions work with propagation enabled (ASYNC mode)\n\n# Notes\n\nDepends on: task-0248 (EventBus), task-0252 (config), task-0253 (planning emits events), task-0264 (async queue). Audit tool is task-0265.\n"
+}

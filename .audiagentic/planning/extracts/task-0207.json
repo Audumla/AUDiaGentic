@@ -1,0 +1,27 @@
+{
+  "item": {
+    "id": "task-0207",
+    "label": "Extend tm_batch_update to support multi-item operations",
+    "state": "cancelled",
+    "summary": "Extend tm_batch_update(id, operations) to also accept multi-item format with backward compatibility",
+    "spec_ref": "spec-008",
+    "request_refs": [],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0207.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006",
+    "standard-0009"
+  ],
+  "body": "\n\n# Description\n\nCancelled with `spec-008` after the owning request record was removed. Recreate this task under a new request if multi-item batch update work is resumed.\n\n# Acceptance Criteria\n\nCancelled with parent specification.\n\n# Notes\n\nThis task was never fleshed into implementation-ready detail before the request chain disappeared.\n"
+}

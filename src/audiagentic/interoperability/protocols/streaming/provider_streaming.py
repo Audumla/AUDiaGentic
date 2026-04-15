@@ -19,7 +19,6 @@ from audiagentic.interoperability.protocols.streaming.sinks import (
     StreamSink,
 )
 
-
 _logger = logging.getLogger(__name__)
 
 

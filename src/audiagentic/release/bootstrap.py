@@ -1,19 +1,18 @@
 """Project release bootstrap orchestration."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from audiagentic.runtime.lifecycle.baseline_sync import ensure_project_layout, sync_managed_baseline
-from audiagentic.runtime.lifecycle.detector import detect_installed_state
-from audiagentic.runtime.lifecycle.manifest import build_manifest, read_manifest, write_manifest
 from audiagentic.release.audit import generate_audit_and_checkin
 from audiagentic.release.current_summary import regenerate_current_release
 from audiagentic.release.release_please import ensure_release_please_baseline
 from audiagentic.release.sync import sync_current_release_ledger
+from audiagentic.runtime.lifecycle.baseline_sync import ensure_project_layout, sync_managed_baseline
+from audiagentic.runtime.lifecycle.detector import detect_installed_state
+from audiagentic.runtime.lifecycle.manifest import build_manifest, read_manifest, write_manifest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 

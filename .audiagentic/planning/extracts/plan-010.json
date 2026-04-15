@@ -1,0 +1,29 @@
+{
+  "item": {
+    "id": "plan-010",
+    "label": "Knowledge Component Integration Plan",
+    "state": "done",
+    "summary": "Plan for integrating knowledge component v7.4 with review, testing, configuration, and event bridging.",
+    "spec_refs": [
+      "spec-014"
+    ],
+    "request_refs": [
+      "request-014"
+    ],
+    "work_package_refs": [],
+    "standard_refs": [
+      "standard-0006"
+    ],
+    "kind": "plan",
+    "path": "docs/planning/plans/plan-010-knowledge-component-integration-plan.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0006"
+  ],
+  "body": "\n\n\n\n\n\n# Objectives\n\n\n# Delivery Approach\n\n\n# Dependencies\n"
+}
