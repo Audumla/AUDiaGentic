@@ -1,0 +1,32 @@
+event_actions:
+  generate_sync_proposal:
+    handler: audiagentic.knowledge.events:action_generate_sync_proposal
+  mark_stale:
+    handler: audiagentic.knowledge.events:action_mark_stale
+  mark_stale_and_generate_sync_proposal:
+    handler: audiagentic.knowledge.events:action_mark_stale_and_generate_sync_proposal
+  ignore:
+    handler: audiagentic.knowledge.events:action_ignore
+deterministic_actions:
+  scan_drift:
+    handler: audiagentic.knowledge.actions:action_scan_drift
+  generate_sync_proposals:
+    handler: audiagentic.knowledge.actions:action_generate_sync_proposals
+  apply_proposals:
+    handler: audiagentic.knowledge.actions:action_apply_proposals
+  record_sync:
+    handler: audiagentic.knowledge.actions:action_record_sync
+  scan_events:
+    handler: audiagentic.knowledge.actions:action_scan_events
+  process_events:
+    handler: audiagentic.knowledge.actions:action_process_events
+  record_event_baseline:
+    handler: audiagentic.knowledge.actions:action_record_event_baseline
+  seed_from_manifest:
+    handler: audiagentic.knowledge.actions:action_seed_from_manifest
+  scaffold_page:
+    handler: audiagentic.knowledge.actions:action_scaffold_page
+  search_pages:
+    handler: audiagentic.knowledge.actions:action_search_pages
+  doctor:
+    handler: audiagentic.knowledge.actions:action_doctor

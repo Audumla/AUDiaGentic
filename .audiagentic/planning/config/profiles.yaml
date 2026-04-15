@@ -169,3 +169,79 @@ planning:
     wp_standard:
       applies_to: wp
       required_sections: [Objective, Scope of This Package, Inputs, Instructions, Required Outputs, Acceptance Checks, Non-Goals]
+  document_templates:
+    spec:
+      default: "# Purpose\n\n\n# Scope\n\n\n# Requirements\n\n\n# Constraints\n\n\n# Acceptance Criteria\n\n"
+      by_guidance:
+        light: "# Purpose\n\n\n# Scope\n\n\n# Requirements\n\n"
+        standard: "# Purpose\n\n\n# Scope\n\n\n# Requirements\n\n\n# Constraints\n\n\n# Acceptance Criteria\n\n"
+        deep: "# Purpose\n\n\n# Scope\n\n\n# Requirements\n\n\n# Constraints\n\n\n# Acceptance Criteria\n\n\n# Non-Goals\n\n\n# Compatibility\n\n"
+    task:
+      default: "# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n\n"
+      by_guidance:
+        light: "# Description\n\n"
+        standard: "# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n\n"
+        deep: "# Description\n\n\n# Acceptance Criteria\n\n\n# Implementation Notes\n\n\n# Notes\n\n"
+    plan:
+      default: "# Objectives\n\n\n# Delivery Approach\n\n\n# Dependencies\n\n"
+      by_guidance:
+        light: "# Objectives\n\n\n# Delivery Approach\n\n"
+        standard: "# Objectives\n\n\n# Delivery Approach\n\n\n# Dependencies\n\n"
+        deep: "# Objectives\n\n\n# Delivery Approach\n\n\n# Dependencies\n\n\n# Risks\n\n\n# Milestones\n\n"
+    wp:
+      default: "# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n\n"
+      by_guidance:
+        light: "# Objective\n\n\n# Instructions\n\n\n# Required Outputs\n\n"
+        standard: "# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n\n"
+        deep: "# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n\n\n# Risks\n\n\n# Dependencies\n\n"
+    standard:
+      default: "# Standard\n\n\n# Requirements\n\n"
+      by_guidance:
+        light: "# Standard\n\n"
+        standard: "# Standard\n\n\n# Requirements\n\n"
+        deep: "# Standard\n\n\n# Requirements\n\n\n# Rationale\n\n\n# Examples\n\n"
+    request:
+      default: "# Problem\n\n\n# Desired Outcome\n\n\n# Constraints\n\n"
+      by_guidance:
+        light: "# Problem\n\n\n# Desired Outcome\n\n"
+        standard: "# Problem\n\n\n# Desired Outcome\n\n\n# Constraints\n\n"
+        deep: "# Problem\n\n\n# Desired Outcome\n\n\n# Constraints\n\n\n# Compatibility\n\n\n# Success Criteria\n\n"
+  relationship_config:
+    request:
+      can_reference: [spec, task, plan]
+      required_for_children: []
+    spec:
+      can_reference: [request, standard]
+      required_for_children: [request_refs]
+      referenced_by:
+        task: spec_ref
+        plan: spec_refs
+    task:
+      can_reference: [request, spec, standard]
+      required_for_children: []
+      referenced_by:
+        wp: task_refs
+        task: parent_task_ref
+    plan:
+      can_reference: [request, spec, standard]
+      required_for_children: [spec_refs]
+      referenced_by:
+        wp: plan_ref
+    wp:
+      can_reference: [plan, task, standard]
+      required_for_children: [plan_ref, task_refs]
+    standard:
+      can_reference: []
+      required_for_children: []
+      referenced_by:
+        spec: standard_refs
+        task: standard_refs
+        plan: standard_refs
+        wp: standard_refs
+  required_sections:
+    request: [Understanding, Open Questions, Notes]
+    spec: [Purpose, Scope, Requirements, Constraints, Acceptance Criteria]
+    plan: [Objectives, Delivery Approach, Dependencies]
+    wp: [Objective, Scope of This Package, Inputs, Instructions, Required Outputs, Acceptance Checks, Non-Goals]
+    task: [Description]
+    standard: []

@@ -1,0 +1,32 @@
+capability_contract:
+  capability_id: knowledge
+  contract_version: v0.7
+  runtime_owned:
+    - CLI commands and validators
+    - importer and action registry defaults
+    - execution registry defaults
+    - MCP server implementation
+    - install profiles and host profiles
+    - templates and scaffolding defaults
+  project_owned:
+    - knowledge vault pages
+    - sidecar metadata and state
+    - manifests
+    - hooks
+    - event adapters
+    - execution overrides
+    - proposals
+  design_rules:
+    - deterministic-first behavior is the baseline
+    - MCP is host-agnostic and optional
+    - project content remains human-readable
+    - runtime defaults should be replaceable by project overrides without code edits
+    - the capability must work before the wider AUDiaGentic installer exists
+  future_cli_shape:
+    - audiagentic knowledge init
+    - audiagentic knowledge validate
+    - audiagentic knowledge seed
+    - audiagentic knowledge scan-drift
+    - audiagentic knowledge scan-events
+    - audiagentic knowledge answer-question
+    - audiagentic knowledge mcp serve

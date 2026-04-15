@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-0159",
+    "label": "[PKT-DSC-002](task-0159): Release Summary Publishing",
+    "state": "cancelled",
+    "summary": "Implement Discord release summary publishing",
+    "spec_ref": "spec-0013",
+    "kind": "task",
+    "path": "docs/planning/tasks/discord/task-0159.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The Discord overlay line was superseded and archived.\n\n\n# [PKT-DSC-002](task-0148): Release Summary Publishing\n\n## Purpose\n\nImplement Discord release summary publishing.\n\n## Scope\n\n- Summary format\n- Publishing logic\n- Scheduling\n\n## Implementation\n\n1. Define format\n2. Implement publishing\n3. Add scheduling\n\n## Acceptance Criteria\n\n1. Format defined\n2. Publishing works\n3. Scheduled\n"
+}

@@ -10,8 +10,9 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.release.audit import generate_audit_and_checkin
 from tests.helpers import sandbox as sandbox_helper
+
+from audiagentic.release.audit import generate_audit_and_checkin
 
 FIXTURES = ROOT / "docs" / "examples" / "fixtures"
 

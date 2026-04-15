@@ -1,0 +1,27 @@
+{
+  "item": {
+    "id": "task-0279",
+    "label": "Refactor event bus singleton pattern",
+    "state": "draft",
+    "summary": "Remove global state from event bus",
+    "request_refs": [
+      "request-019"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0279.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n\n\nSingleton pattern with global _bus_instance in src/audiagentic/interoperability/__init__.py at lines 30-46. The event bus uses direct global variable access, violating standard-0011 (Component Architecture). Refactor to: 1) Use dependency injection to pass event bus instance, 2) Remove global _bus_instance variable, 3) Create EventBus class with proper constructor, 4) Update all event publishers/subscribers to accept bus via injection or use factory pattern. Follow pattern from stages.py and sync.py which use proper initialization. Create application context or dependency injection container. Document new event bus usage pattern. Ensure no remaining direct global access to _bus_instance. Test with mocked event bus. Update all callers. Verify event publishing continues to work correctly. Consider using singleton pattern only at application level via dependency injection container, not in module-level code. Ensure the refactoring maintains event ordering and delivery guarantees. Document migration path for existing code that directly accesses _bus_instance. Provide examples of proper event bus usage with injection pattern.\n"
+}

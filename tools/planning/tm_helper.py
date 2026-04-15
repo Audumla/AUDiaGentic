@@ -61,6 +61,8 @@ def _find_project_root() -> Path:
 
 
 _ROOT = _find_project_root()
+_current_root = None  # Override for set_root()
+_api = None  # Lazy API instance
 for _p in (str(_ROOT), str(_ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
@@ -73,9 +75,17 @@ from audiagentic.planning.app.section_registry import split_section_path
 from audiagentic.planning.fs.read import parse_markdown
 from audiagentic.planning.fs.write import dump_markdown
 
-# Module-level root - can be overridden for isolated operations
-_current_root: Path | None = None
-_api: PlanningAPI | None = None
+
+def _validate_id(id_: str) -> None:
+    """Prevent path traversal by ensuring ID contains no path separators or dot-dot.
+
+    Raises:
+        ValueError: If ID is potentially malicious.
+    """
+    if not id_:
+        raise ValueError("ID cannot be empty")
+    if "/" in id_ or "\\" in id_ or ".." in id_:
+        raise ValueError(f"Invalid ID '{id_}': path separators or '..' are not allowed")
 
 
 def _get_root() -> Path:
@@ -87,15 +97,18 @@ def _get_root() -> Path:
     return _current_root or _ROOT
 
 
-def _get_api() -> PlanningAPI:
+def _get_api(test_mode: bool = False) -> PlanningAPI:
     """Get or create the PlanningAPI instance for the current root.
+
+    Args:
+        test_mode: If True, use test directory structure
 
     Returns:
         PlanningAPI instance
     """
     global _api
     if _api is None:
-        _api = PlanningAPI(_get_root())
+        _api = PlanningAPI(_get_root(), test_mode=test_mode)
     return _api
 
 
@@ -123,6 +136,146 @@ def reset_root() -> None:
     global _current_root, _api
     _current_root = None
     _api = PlanningAPI(_ROOT)
+
+
+def set_test_mode(enabled: bool = True) -> None:
+    """Enable or disable test mode for all subsequent operations.
+
+    When test mode is enabled, planning artifacts are created in a separate
+    test directory structure (docs/planning/test/) to avoid polluting
+    the primary planning directory.
+
+    Args:
+        enabled: If True, enable test mode; if False, disable test mode
+
+    Usage:
+        tm.set_test_mode()  # Enable test mode
+        tm.set_test_mode(False)  # Disable test mode
+    """
+    global _api
+    _api = PlanningAPI(_get_root(), test_mode=enabled)
+
+
+def new_test_request(
+    label: str,
+    summary: str,
+    source: str = "test",
+    prefix: str = "test",
+    **kwargs,
+) -> dict[str, Any]:
+    """Create a test request with optional prefix.
+
+    Args:
+        label: Request label
+        summary: Request summary
+        source: Creator identifier (default: test)
+        prefix: Prefix for test ID (default: test)
+        **kwargs: Additional arguments passed to new_request
+
+    Returns:
+        Dict with id, path, and created flag
+    """
+    project_root = kwargs.get("root") or _get_root()
+    api = _get_api(test_mode=True)
+
+    # Override label to include prefix
+    prefixed_label = f"[{prefix.upper()}] {label}" if prefix else label
+
+    item = api.new(
+        "request",
+        label=prefixed_label,
+        summary=summary,
+        profile=kwargs.get("profile"),
+        guidance=kwargs.get("guidance"),
+        current_understanding=kwargs.get("current_understanding"),
+        open_questions=kwargs.get("open_questions"),
+        source=source,
+        context=kwargs.get("context"),
+        check_duplicates=kwargs.get("check_duplicates", True),
+    )
+    return {
+        "id": item.data["id"],
+        "path": str(item.path.relative_to(project_root)),
+        "created": True,
+    }
+
+
+def new_test_spec(
+    label: str,
+    summary: str,
+    request_refs: list[str],
+    prefix: str = "test",
+    **kwargs,
+) -> dict[str, Any]:
+    """Create a test spec with optional prefix.
+
+    Args:
+        label: Spec label
+        summary: Spec summary
+        request_refs: Required list of request IDs
+        prefix: Prefix for test ID (default: test)
+        **kwargs: Additional arguments passed to new_spec
+
+    Returns:
+        Dict with id, path, and created flag
+    """
+    project_root = kwargs.get("root") or _get_root()
+    api = _get_api(test_mode=True)
+
+    prefixed_label = f"[{prefix.upper()}] {label}" if prefix else label
+
+    item = api.new(
+        "spec",
+        label=prefixed_label,
+        summary=summary,
+        request_refs=request_refs,
+        check_duplicates=kwargs.get("check_duplicates", True),
+    )
+    return {
+        "id": item.data["id"],
+        "path": str(item.path.relative_to(project_root)),
+        "created": True,
+    }
+
+
+def new_test_task(
+    label: str,
+    summary: str,
+    spec: str,
+    domain: str = "core",
+    prefix: str = "test",
+    **kwargs,
+) -> dict[str, Any]:
+    """Create a test task with optional prefix.
+
+    Args:
+        label: Task label
+        summary: Task summary
+        spec: Spec ID
+        domain: Task domain (default: core)
+        prefix: Prefix for test ID (default: test)
+        **kwargs: Additional arguments passed to new_task
+
+    Returns:
+        Dict with id and path
+    """
+    project_root = kwargs.get("root") or _get_root()
+    api = _get_api(test_mode=True)
+
+    prefixed_label = f"[{prefix.upper()}] {label}" if prefix else label
+
+    item = api.new(
+        "task",
+        label=prefixed_label,
+        summary=summary,
+        spec=spec,
+        domain=domain,
+        target=kwargs.get("target"),
+        parent=kwargs.get("parent"),
+        workflow=kwargs.get("workflow"),
+        request_refs=kwargs.get("request_refs"),
+    )
+    return {"id": item.data["id"], "path": str(item.path.relative_to(project_root))}
 
 
 def update_task_status(
@@ -463,9 +616,7 @@ def new_wp(
     project_root = root or _get_root()
     _validate_reference(plan, "plan", project_root)
     api = PlanningAPI(project_root)
-    item = api.new(
-        "wp", label=label, summary=summary, plan=plan, domain=domain, workflow=workflow
-    )
+    item = api.new("wp", label=label, summary=summary, plan=plan, domain=domain, workflow=workflow)
     return {"id": item.data["id"], "path": str(item.path.relative_to(project_root))}
 
 
@@ -575,7 +726,7 @@ def update(
 def _execute_batch_operations(
     api: PlanningAPI, id_: str, operations: list[dict[str, Any]]
 ) -> dict[str, Any]:
-    """Execute a batch of operations atomically.
+    """Execute a batch of operations atomically with backup/restore.
 
     Supported operations:
     - state: {"op": "state", "value": "new_state"}
@@ -585,33 +736,38 @@ def _execute_batch_operations(
     - content: {"op": "content", "value": "...", "mode": "replace|append"}
     - meta: {"op": "meta", "field": "key", "value": "val"}
     """
+    _validate_id(id_)
+    item = api._find(id_)
+    backup_path = item.path.with_suffix(".bak")
+    backup_created = False
+
     results = []
     errors = []
 
     try:
+        # Create backup of the original file
+        import shutil
+
+        shutil.copy2(item.path, backup_path)
+        backup_created = True
+
         for i, op in enumerate(operations):
             op_type = op.get("op") or op.get("operation")
             try:
                 if op_type == "state":
                     value = op["value"]
                     api.state(id_, value)
-                    results.append(
-                        {"index": i, "op": "state", "success": True, "value": value}
-                    )
+                    results.append({"index": i, "op": "state", "success": True, "value": value})
 
                 elif op_type == "label":
                     value = op["value"]
                     api.update(id_, label=value)
-                    results.append(
-                        {"index": i, "op": "label", "success": True, "value": value}
-                    )
+                    results.append({"index": i, "op": "label", "success": True, "value": value})
 
                 elif op_type == "summary":
                     value = op["value"]
                     api.update(id_, summary=value)
-                    results.append(
-                        {"index": i, "op": "summary", "success": True, "value": value}
-                    )
+                    results.append({"index": i, "op": "summary", "success": True, "value": value})
 
                 elif op_type == "section":
                     name = op["name"]
@@ -620,17 +776,11 @@ def _execute_batch_operations(
                     # Get current content and modify section
                     current = api.get_content(id_)
                     if mode == "append":
-                        new_content = _replace_section_body(
-                            current, name, content, append=True
-                        )
+                        new_content = _replace_section_body(current, name, content, append=True)
                     else:
-                        new_content = _replace_section_body(
-                            current, name, content, append=False
-                        )
+                        new_content = _replace_section_body(current, name, content, append=False)
                     api.update_content(id_, new_content, mode="replace")
-                    results.append(
-                        {"index": i, "op": "section", "name": name, "success": True}
-                    )
+                    results.append({"index": i, "op": "section", "name": name, "success": True})
 
                 elif op_type == "content":
                     value = op["value"]
@@ -642,12 +792,12 @@ def _execute_batch_operations(
                     field = op["field"]
                     value = op["value"]
                     # Update meta field in frontmatter
-                    item = api._find(id_)
-                    data, body = parse_markdown(item.path)
+                    item_curr = api._find(id_)
+                    data, body = parse_markdown(item_curr.path)
                     if "meta" not in data:
                         data["meta"] = {}
                     data["meta"][field] = value
-                    dump_markdown(item.path, data, body)
+                    dump_markdown(item_curr.path, data, body)
                     api.index()
                     results.append(
                         {
@@ -664,10 +814,38 @@ def _execute_batch_operations(
 
             except Exception as e:
                 errors.append({"index": i, "op": op_type, "error": str(e)})
-                raise  # Stop on first error for atomicity
+                raise  # Trigger backup restore
 
         # Re-index after successful batch
         api.index()
+
+        # Clean up backup
+        if backup_created:
+            backup_path.unlink(missing_ok=True)
+
+        return {
+            "id": id_,
+            "batch": True,
+            "operations_executed": len(results),
+            "results": results,
+            "errors": [],
+        }
+
+    except Exception as e:
+        # Restore backup on failure
+        if backup_created:
+            import shutil
+
+            shutil.move(str(backup_path), str(item.path))
+
+        return {
+            "id": id_,
+            "batch": True,
+            "success": False,
+            "error": str(e),
+            "results": results,
+            "errors": errors,
+        }
 
         return {
             "id": id_,
@@ -852,12 +1030,87 @@ def validate(root: Path | None = None) -> list[str]:
     return api.validate()
 
 
-def delete(
-    id_: str,
-    hard: bool = False,
-    reason: str | None = None,
+def create(
+    kind: str,
+    label: str,
+    summary: str,
+    content: str | None = None,
+    source: str | None = None,
+    domain: str = "core",
+    spec: str | None = None,
+    plan: str | None = None,
+    parent: str | None = None,
+    target: str | None = None,
+    workflow: str | None = None,
+    request_refs: list[str] | None = None,
+    check_duplicates: bool = True,
+    profile: str | None = None,
+    current_understanding: str | None = None,
+    open_questions: list[str] | None = None,
+    context: str | None = None,
     root: Path | None = None,
 ) -> dict[str, Any]:
+    """Generic create helper that dispatches to specific item creators.
+
+    Args:
+        kind: Item kind (request, spec, plan, task, wp, standard)
+        ... (other args)
+        root: Optional project root.
+
+    Returns:
+        Dict with id and path
+    """
+    if content is not None:
+        return create_with_content(
+            kind,
+            label,
+            summary,
+            content,
+            source,
+            domain,
+            spec,
+            plan,
+            parent,
+            target,
+            workflow,
+            request_refs,
+            root=root,
+        )
+
+    if kind == "request":
+        return new_request(
+            label,
+            summary,
+            source=source or "unknown",
+            profile=profile,
+            current_understanding=current_understanding,
+            open_questions=open_questions,
+            context=context,
+            root=root,
+            check_duplicates=check_duplicates,
+        )
+    elif kind == "spec":
+        return new_spec(label, summary, request_refs, root=root, check_duplicates=check_duplicates)
+    elif kind == "plan":
+        return new_plan(label, summary, spec, request_refs, root=root)
+    elif kind == "task":
+        return new_task(
+            label,
+            summary,
+            spec,
+            domain=domain,
+            target=target,
+            parent=parent,
+            workflow=workflow,
+            request_refs=request_refs,
+            root=root,
+        )
+    elif kind == "wp":
+        return new_wp(label, summary, plan, domain=domain, workflow=workflow, root=root)
+    elif kind == "standard":
+        return new_standard(label, summary, root=root)
+    else:
+        raise ValueError(f"Unknown kind: {kind!r}. Must be request|spec|plan|task|wp|standard")
     """Delete a planning item.
 
     Soft delete is the default; hard delete removes the file and syncs counters.
@@ -947,20 +1200,22 @@ def extract(
 
 
 def list_kind(
-    kind: str | None = None,
+    kind: str | list[str] | None = None,
     root: Path | None = None,
     include_deleted: bool = False,
     include_archived: bool = False,
     include_superseded: bool = False,
+    state: str | list[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """List planning items, optionally filtered by kind.
+    """List planning items, optionally filtered by kind and state.
 
     Args:
-        kind: Optional kind filter (request, spec, plan, task, wp, standard)
+        kind: Optional kind filter (request, spec, plan, task, wp, standard). Can be a single kind or list of kinds.
         root: Optional project root. If None, uses current root.
         include_deleted: Include deleted items
         include_archived: Include archived items
         include_superseded: Include superseded items (default: excluded)
+        state: Filter by state (captured, distilled, in_progress, ready, done, archive, etc.). Can be a single state or list of states.
 
     Returns:
         List of item summaries
@@ -968,14 +1223,24 @@ def list_kind(
     project_root = root or _get_root()
     api = PlanningAPI(project_root)
     items = api._scan()
-    if kind:
-        items = [i for i in items if i.kind == kind]
+
+    # Normalize kind to list
+    kind_list = [kind] if isinstance(kind, str) else kind if kind else None
+    if kind_list:
+        items = [i for i in items if i.kind in kind_list]
+
     if not include_deleted:
         items = [i for i in items if not i.data.get("deleted")]
     if not include_archived:
         items = [i for i in items if i.data.get("state") != "archived"]
     if not include_superseded:
         items = [i for i in items if i.data.get("state") != "superseded"]
+
+    # Normalize state to list
+    state_list = [state] if isinstance(state, str) else state if state else None
+    if state_list:
+        items = [i for i in items if i.data.get("state") in state_list]
+
     return [
         {
             "id": i.data["id"],
@@ -1157,17 +1422,18 @@ def events(tail: int = 20, root: Path | None = None) -> list[dict[str, Any]]:
     return [json.loads(x) for x in lines if x.strip()]
 
 
-def status(root: Path | None = None) -> dict[str, Any]:
+def status(root: Path | None = None, test_mode: bool = False) -> dict[str, Any]:
     """Get summary counts of all planning items grouped by kind and state.
 
     Args:
         root: Optional project root. If None, uses current root.
+        test_mode: If True, include test artifacts in counts
 
     Returns:
         Status summary dict with counts per kind per state
     """
     project_root = root or _get_root()
-    api = PlanningAPI(project_root)
+    api = PlanningAPI(project_root, test_mode=test_mode)
     items = api._scan()
     out: dict[str, dict[str, int]] = {}
     for i in items:
@@ -1178,6 +1444,52 @@ def status(root: Path | None = None) -> dict[str, Any]:
     for kind in out:
         out[kind]["_total"] = sum(out[kind].values())
     return out
+
+
+def list_test_artifacts(root: Path | None = None) -> list[dict[str, Any]]:
+    """List all test artifacts in the planning system.
+
+    Args:
+        root: Optional project root. If None, uses current root.
+
+    Returns:
+        List of test artifact summaries
+    """
+    project_root = root or _get_root()
+    api = PlanningAPI(project_root, test_mode=True)
+    items = api._scan()
+    return [
+        {
+            "id": i.data["id"],
+            "kind": i.kind,
+            "label": i.data["label"],
+            "state": i.data["state"],
+            "path": str(i.path.relative_to(project_root)),
+        }
+        for i in items
+    ]
+
+
+def delete_test_artifacts(
+    ids: list[str], reason: str = "Test artifact cleanup", root: Path | None = None
+) -> list[dict[str, Any]]:
+    """Delete multiple test artifacts.
+
+    Args:
+        ids: List of artifact IDs to delete
+        reason: Deletion reason
+        root: Optional project root. If None, uses current root.
+
+    Returns:
+        List of deletion results
+    """
+    project_root = root or _get_root()
+    api = PlanningAPI(project_root, test_mode=True)
+    results = []
+    for id_ in ids:
+        result = api.delete(id_, hard=False, reason=reason)
+        results.append(result)
+    return results
 
 
 def list_doc_surfaces(root: Path | None = None) -> list[dict[str, Any]]:
@@ -1242,9 +1554,7 @@ def list_request_profiles(root: Path | None = None) -> list[dict[str, Any]]:
     return out
 
 
-def get_request_profile(
-    profile_id: str, root: Path | None = None
-) -> dict[str, Any] | None:
+def get_request_profile(profile_id: str, root: Path | None = None) -> dict[str, Any] | None:
     """Get a request profile by ID.
 
     Args:
@@ -1313,9 +1623,7 @@ def _find_section(
     return (start, end) if start is not None else (None, None)
 
 
-def _replace_section_body(
-    text: str, section: str, content: str, append: bool = False
-) -> str:
+def _replace_section_body(text: str, section: str, content: str, append: bool = False) -> str:
     lines = text.splitlines()
     start, end = _find_section(lines, section, level=1)
 
@@ -1325,9 +1633,7 @@ def _replace_section_body(
         return text.rstrip() + f"\n\n# {heading}\n\n" + content.strip() + "\n"
 
     old = "\n".join(lines[start:end]).strip()
-    new_body = (
-        (old + "\n\n" + content.strip()).strip() if append and old else content.strip()
-    )
+    new_body = (old + "\n\n" + content.strip()).strip() if append and old else content.strip()
     new_lines = lines[:start] + ([new_body] if new_body else []) + lines[end:]
     return "\n".join(new_lines).rstrip() + "\n"
 
@@ -1355,9 +1661,7 @@ def get_section(id_: str, section: str, root: Path | None = None) -> dict[str, A
     return {"id": id_, "section": section, "content": content, "found": True}
 
 
-def set_section(
-    id_: str, section: str, content: str, root: Path | None = None
-) -> dict[str, Any]:
+def set_section(id_: str, section: str, content: str, root: Path | None = None) -> dict[str, Any]:
     """Replace the content of a named section.
 
     Args:
@@ -1372,9 +1676,7 @@ def set_section(
     project_root = root or _get_root()
     return update_content(
         id_,
-        _replace_section_body(
-            get_content(id_, project_root), section, content, append=False
-        ),
+        _replace_section_body(get_content(id_, project_root), section, content, append=False),
         mode="replace",
         root=project_root,
     )
@@ -1397,17 +1699,13 @@ def append_section(
     project_root = root or _get_root()
     return update_content(
         id_,
-        _replace_section_body(
-            get_content(id_, project_root), section, content, append=True
-        ),
+        _replace_section_body(get_content(id_, project_root), section, content, append=True),
         mode="replace",
         root=project_root,
     )
 
 
-def get_subsection(
-    id_: str, section_path: str, root: Path | None = None
-) -> dict[str, Any]:
+def get_subsection(id_: str, section_path: str, root: Path | None = None) -> dict[str, Any]:
     """Get nested subsection content using dot or slash notation.
 
     Supports arbitrary heading levels (doesn't assume sequential ##, ###, etc.).
@@ -1466,9 +1764,7 @@ def _validate_profile_pack(profile_pack: str, root: Path | None = None) -> None:
         ValueError: If profile pack doesn't exist or is invalid
     """
     project_root = root or _get_root()
-    path = (
-        project_root / f".audiagentic/planning/config/profile-packs/{profile_pack}.yaml"
-    )
+    path = project_root / f".audiagentic/planning/config/profile-packs/{profile_pack}.yaml"
     if not path.exists():
         raise ValueError(
             f"Profile pack '{profile_pack}' not found at {path}. "
@@ -1505,12 +1801,8 @@ def get_doc_sync_requirements(
     return {
         "profile_pack": profile_pack,
         "kind": kind,
-        "required_updates": _docs_manager(project_root).pending_updates_for_kind(
-            kind, pp
-        ),
-        "all_required_updates": _docs_manager(
-            project_root
-        ).profile_pack_required_updates(pp),
+        "required_updates": _docs_manager(project_root).pending_updates_for_kind(kind, pp),
+        "all_required_updates": _docs_manager(project_root).profile_pack_required_updates(pp),
     }
 
 
@@ -1532,9 +1824,7 @@ def pending_doc_updates(
     cfg = _load_yaml(
         project_root, f".audiagentic/planning/config/profile-packs/{profile_pack}.yaml"
     )
-    return _docs_manager(project_root).pending_updates_for_kind(
-        kind, cfg.get("profile_pack", {})
-    )
+    return _docs_manager(project_root).pending_updates_for_kind(kind, cfg.get("profile_pack", {}))
 
 
 def verify_structure(root: Path | None = None) -> dict[str, Any]:
@@ -1632,14 +1922,10 @@ def verify_structure(root: Path | None = None) -> dict[str, Any]:
         }
 
     required_failures = [
-        k
-        for k, v in checks.items()
-        if v.get("required", False) and not v.get("ok", False)
+        k for k, v in checks.items() if v.get("required", False) and not v.get("ok", False)
     ]
     optional_failures = [
-        k
-        for k, v in checks.items()
-        if not v.get("required", False) and not v.get("ok", False)
+        k for k, v in checks.items() if not v.get("required", False) and not v.get("ok", False)
     ]
     healthy = len(required_failures) == 0
 
@@ -1650,9 +1936,7 @@ def verify_structure(root: Path | None = None) -> dict[str, Any]:
     elif optional_failures:
         summary = f"Structure check OK: {len(optional_failures)} optional extension(s) not installed - {', '.join(optional_failures)}"
     else:
-        summary = (
-            "Structure check PASSED: planning module is healthy and fully equipped"
-        )
+        summary = "Structure check PASSED: planning module is healthy and fully equipped"
 
     return {
         "root": str(project_root),
@@ -1686,12 +1970,8 @@ def get_doc_sync_requirements(
     return {
         "profile_pack": profile_pack,
         "kind": kind,
-        "required_updates": _docs_manager(project_root).pending_updates_for_kind(
-            kind, pp
-        ),
-        "all_required_updates": _docs_manager(
-            project_root
-        ).profile_pack_required_updates(pp),
+        "required_updates": _docs_manager(project_root).pending_updates_for_kind(kind, pp),
+        "all_required_updates": _docs_manager(project_root).profile_pack_required_updates(pp),
     }
 
 
@@ -1713,9 +1993,7 @@ def pending_doc_updates(
     cfg = _load_yaml(
         project_root, f".audiagentic/planning/config/profile-packs/{profile_pack}.yaml"
     )
-    return _docs_manager(project_root).pending_updates_for_kind(
-        kind, cfg.get("profile_pack", {})
-    )
+    return _docs_manager(project_root).pending_updates_for_kind(kind, cfg.get("profile_pack", {}))
 
 
 def verify_structure() -> dict[str, Any]:
@@ -1820,14 +2098,10 @@ def verify_structure() -> dict[str, Any]:
 
     # Overall health: only required checks determine healthiness
     required_failures = [
-        k
-        for k, v in checks.items()
-        if v.get("required", False) and not v.get("ok", False)
+        k for k, v in checks.items() if v.get("required", False) and not v.get("ok", False)
     ]
     optional_failures = [
-        k
-        for k, v in checks.items()
-        if not v.get("required", False) and not v.get("ok", False)
+        k for k, v in checks.items() if not v.get("required", False) and not v.get("ok", False)
     ]
     healthy = len(required_failures) == 0
 
@@ -1838,9 +2112,7 @@ def verify_structure() -> dict[str, Any]:
     elif optional_failures:
         summary = f"Structure check OK: {len(optional_failures)} optional extension(s) not installed - {', '.join(optional_failures)}"
     else:
-        summary = (
-            "Structure check PASSED: planning module is healthy and fully equipped"
-        )
+        summary = "Structure check PASSED: planning module is healthy and fully equipped"
 
     return {
         "root": str(_ROOT),
@@ -1906,9 +2178,7 @@ def check_sensitive_data(id_: str, root: Path | None = None) -> dict[str, Any]:
 
     for pattern_name, pattern in _SENSITIVE_PATTERNS.items():
         if re.search(pattern, body, re.IGNORECASE):
-            warnings.append(
-                f"Possible {pattern_name.replace('_', ' ')} detected in body"
-            )
+            warnings.append(f"Possible {pattern_name.replace('_', ' ')} detected in body")
 
     return {
         "id": id_,
@@ -1916,3 +2186,21 @@ def check_sensitive_data(id_: str, root: Path | None = None) -> dict[str, Any]:
         "warnings": warnings,
         "patterns_checked": list(_SENSITIVE_PATTERNS.keys()),
     }
+
+
+def delete(
+    id_: str, hard: bool = False, reason: str | None = None, root: Path | None = None
+) -> dict[str, Any]:
+    """Delete a planning item.
+
+    Args:
+        id_: Item ID to delete
+        hard: If True, remove file; if False, soft-delete
+        reason: Optional deletion reason
+        root: Optional project root
+
+    Returns:
+        Dict with id and deleted status
+    """
+    api = _get_api()
+    return api.delete(id_, hard=hard, reason=reason)

@@ -8,6 +8,7 @@ in the core scan/index/validator model.
 """
 
 from pathlib import Path
+
 import yaml
 
 

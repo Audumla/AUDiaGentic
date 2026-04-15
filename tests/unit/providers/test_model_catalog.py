@@ -9,8 +9,11 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
+from audiagentic.foundation.config.provider_catalog import (
+    build_model_catalog,
+    validate_model_catalog,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.config.provider_catalog import build_model_catalog, validate_model_catalog
 from audiagentic.interoperability.providers.models import resolve_model_selection
 
 

@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-0045",
+    "label": "[PKT-LFC-001](task-0045): Installed-State Detector",
+    "state": "draft",
+    "summary": "Detect installed state of AUDiaGentic in a project",
+    "spec_ref": "spec-0009",
+    "kind": "task",
+    "path": "docs/planning/tasks/lifecycle/task-0045.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0006",
+    "standard-0005"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-LFC-001](task-0035): Installed-State Detector\n\n## Purpose\n\nDetect installed state of AUDiaGentic in a project.\n\n## Scope\n\n- Detect installed vs not installed\n- Detect version if installed\n- Detect installation path\n\n## Implementation\n\n1. Define state detection logic\n2. Implement detector\n3. Add version detection\n\n## Acceptance Criteria\n\n1. Correctly detects installed state\n2. Returns version when installed\n3. Returns path when installed\n"
+}

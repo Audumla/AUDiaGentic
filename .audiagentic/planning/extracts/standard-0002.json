@@ -1,0 +1,17 @@
+{
+  "item": {
+    "id": "standard-0002",
+    "label": "Documentation surface and content organization standard",
+    "state": "ready",
+    "summary": "Default standard for how AUDiaGentic planning and project-facing documentation should be structured, named, and maintained across surfaces.",
+    "kind": "standard",
+    "path": "docs/planning/standards/standard-0002-documentation-surface-and-content-organization-standard.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n# Standard\n\nDefault standard for planning-related documentation surfaces and content organization in AUDiaGentic-based projects.\n\n# Source Basis\n\nThis standard is derived from Diataxis and adapted for AUDiaGentic planning and template-installation needs.\n\nSources:\n\n- [Diataxis \u2014 A systematic approach to technical documentation](https://diataxis.fr/)\n- Architecture docs governing template ownership and managed surfaces in this repository\n\n# Requirements\n\n1. Documentation surfaces must be explicit and human-readable. A project should not hide core documentation behind opaque generated output.\n2. Documentation families must stay distinct:\n\n   - tutorials and how-to guidance belong in project-facing help docs\n   - reference material belongs under `docs/references/`\n   - specifications and architecture material remain in their canonical specification locations\n   - planning objects remain under `docs/planning/`\n\n3. Each managed documentation surface must declare its ownership mode using the repository vocabulary:\n\n   - `manual`\n   - `hybrid`\n   - `managed`\n   - optional `seed_on_install`\n\n4. `README.md` and `CHANGELOG.md` must be treated as high-sensitivity surfaces because installed projects may already own them.\n5. New documentation surfaces must be additive and template-safe. They must not assume this repository is a standalone application.\n6. Reference documentation must have a clear entrypoint and must remain separate from release ledgers, specifications, and planning records.\n7. Section and subsection navigation is an ergonomic helper only unless the underlying planning API provides a stronger structured model. Docs must not overstate determinism.\n8. Supporting docs in this phase are structured sidecar docs, not first-class planning kinds.\n\n# Default Rules\n\n- Prefer concise, task-oriented reference docs over large narrative dumps.\n- Keep documentation queryable through planning helper and MCP surfaces where practical.\n- Align documentation labels and examples with the real file paths used in the repository.\n- Document implementation limits honestly when behavior is best-effort.\n\n# Non-Goals\n\n- Defining installer behavior.\n- Redefining execution workflow profiles.\n- Widening planning object kinds beyond the current model.\n"
+}

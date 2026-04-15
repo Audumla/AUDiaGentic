@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-0164",
+    "label": "[PKT-MIG-003](task-0164): Cutover Runbooks",
+    "state": "draft",
+    "summary": "Create cutover runbooks",
+    "spec_ref": "spec-0014",
+    "kind": "task",
+    "path": "docs/planning/tasks/migration/task-0164.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0006",
+    "standard-0005"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-MIG-003](task-0153): Cutover Runbooks\n\n## Purpose\n\nCreate cutover runbooks.\n\n## Scope\n\n- Runbook format\n- Steps\n- Validation\n\n## Implementation\n\n1. Define format\n2. Document steps\n3. Add validation\n\n## Acceptance Criteria\n\n1. Format defined\n2. Steps documented\n3. Validated\n"
+}

@@ -1,0 +1,27 @@
+{
+  "item": {
+    "id": "task-0274",
+    "label": "Add validation for session_input --details-json",
+    "state": "draft",
+    "summary": "Validate event data structure in CLI arguments",
+    "request_refs": [
+      "request-019"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0274.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n\n\nMissing argument validation for session_input command in channels/cli/main.py at line 132. The --details-json parameter accepts JSON without schema validation, violating standard-0005 (Verification). Add validation that: 1) details_json contains valid JSON structure, 2) The parsed JSON contains required event data fields (e.g., kind, label, summary), 3) Field types match expected schema (strings for text fields, boolean for flags, arrays for lists). Follow pattern from _load_json_argument function and use jsonschema library. Provide structured error messages with recovery guidance instead of generic errors. Document the validation requirements and provide example valid input format. Ensure validation is applied before any processing of the details data.\n"
+}

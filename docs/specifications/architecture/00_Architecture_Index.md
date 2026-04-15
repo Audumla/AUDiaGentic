@@ -68,6 +68,7 @@ The following areas were strengthened specifically to close pre-implementation g
 - 47_Provider_Prompt_Templates_and_Defaults.md
 - 48_Installable_Project_Baseline_and_Managed_Asset_Synchronization.md
 - 55_Provider_Availability_and_Quota_Handling.md
+- 56_Passive_Utility_Pattern_for_Event_Driven_Propagation.md
 
 ## Structural correction docs
 

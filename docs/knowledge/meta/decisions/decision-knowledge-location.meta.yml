@@ -1,0 +1,11 @@
+id: decision-knowledge-location
+title: Knowledge Vault Location
+type: decision
+status: active
+summary: Decision to place knowledge vault under docs/knowledge for better organization.
+owners:
+- core-team
+tags: []
+related: []
+updated_at: '2026-04-14'
+source_refs: []

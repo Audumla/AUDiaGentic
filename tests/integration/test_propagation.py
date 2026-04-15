@@ -1,0 +1,449 @@
+"""Integration tests for state propagation with event subscription.
+
+Tests automatic state propagation across planning hierarchies via event subscription.
+"""
+
+from __future__ import annotations
+
+import shutil
+import time
+from pathlib import Path
+
+import pytest
+
+from audiagentic.planning.app.api import PlanningAPI
+
+ROOT = Path(__file__).resolve().parents[2]
+PLANNING_CONFIG_SRC = ROOT / ".audiagentic" / "planning" / "config"
+
+
+def _seed_planning_project(root: Path) -> None:
+    """Seed the minimum planning config needed for PlanningAPI."""
+    config_dir = root / ".audiagentic" / "planning" / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    for f in PLANNING_CONFIG_SRC.glob("*.yaml"):
+        shutil.copy(f, config_dir / f.name)
+    for d in (
+        "requests",
+        "specifications",
+        "plans",
+        "tasks/core",
+        "work-packages/core",
+        "standards",
+    ):
+        (root / "docs" / "planning" / d).mkdir(parents=True, exist_ok=True)
+
+
+def _seed_propagation_config(root: Path) -> None:
+    """Seed state propagation config."""
+    config_dir = root / ".audiagentic" / "planning" / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_file = config_dir / "state_propagation.yaml"
+    config_file.write_text("""
+global:
+  enabled: true
+  max_depth: 10
+  default_mode: sync
+
+kinds:
+  task:
+    enabled: true
+    parent_kind: wp
+    parent_field: task_refs
+    state_rules:
+      in_progress:
+        rule: trigger_parent_if_ready
+        new_state: in_progress
+      done:
+        rule: check_all_children_done
+        new_state: done
+      blocked:
+        rule: trigger_parent_unless_terminal
+        new_state: blocked
+
+  wp:
+    enabled: true
+    parent_kind: plan
+    parent_field: plan_ref
+    state_rules:
+      in_progress:
+        rule: trigger_parent_if_ready
+        new_state: in_progress
+      done:
+        rule: check_all_children_done
+        new_state: done
+      blocked:
+        rule: trigger_parent_unless_terminal
+        new_state: blocked
+
+  plan:
+    enabled: true
+    parent_kind: spec
+    parent_field: spec_refs
+    state_rules:
+      in_progress:
+        rule: trigger_parent_if_ready
+        new_state: in_progress
+      done:
+        rule: check_all_children_done
+        new_state: done
+      blocked:
+        rule: trigger_parent_unless_terminal
+        new_state: blocked
+
+  spec:
+    enabled: true
+    parent_kind: request
+    parent_field: request_refs
+    state_rules:
+      in_progress:
+        rule: trigger_parent_if_ready
+        new_state: in_progress
+      done:
+        rule: check_all_children_done
+        new_state: done
+        check_request_completion: true
+      blocked:
+        rule: trigger_parent_unless_terminal
+        new_state: blocked
+
+  request:
+    enabled: false
+    parent_kind: null
+    state_rules:
+      done:
+        rule: none
+        new_state: null
+
+terminal_states:
+  - done
+  - archived
+
+state_priority:
+  archived: 100
+  done: 90
+  blocked: 50
+  in_progress: 20
+  ready: 10
+
+rules:
+  none:
+    enabled: true
+    description: "No state propagation"
+    logic: "audiagentic.interoperability.propagation_rules.rule_none"
+
+  trigger_parent_if_ready:
+    enabled: true
+    description: "Set parent to new_state if parent is ready"
+    logic: "audiagentic.interoperability.propagation_rules.rule_trigger_parent_if_ready"
+
+  check_all_children_done:
+    enabled: true
+    description: "Set parent to new_state if all sibling children are in new_state"
+    logic: "audiagentic.interoperability.propagation_rules.rule_check_all_children_done"
+
+  trigger_parent_unless_terminal:
+    enabled: true
+    description: "Set parent to new_state unless parent is done/archived"
+    logic: "audiagentic.interoperability.propagation_rules.rule_trigger_parent_unless_terminal"
+
+actions:
+  check_request_completion:
+    enabled: true
+    description: "Auto-complete request when all specs are done"
+    logic: "audiagentic.interoperability.propagation_rules.action_check_request_completion"
+""")
+
+
+def _wait_for_propagation(planning_api: PlanningAPI, timeout: float = 5.0) -> None:
+    """Wait for async propagation to complete.
+
+    Args:
+        planning_api: PlanningAPI instance
+        timeout: Maximum time to wait in seconds
+    """
+    from audiagentic.interoperability.queue import AsyncQueue
+
+    queue = AsyncQueue.get_instance()
+    start_time = time.time()
+    while queue.size() > 0 and (time.time() - start_time) < timeout:
+        time.sleep(0.1)
+
+
+class TestStatePropagationIntegration:
+    """Integration tests for state propagation engine."""
+
+    @pytest.fixture(autouse=True)
+    def reset_event_bus(self):
+        """Reset event bus singleton before each test for isolation."""
+        from audiagentic.interoperability import get_bus, reset_bus
+
+        reset_bus()
+        # Create a fresh bus for this test
+        bus = get_bus()
+        yield bus
+        reset_bus()
+
+    @pytest.fixture
+    def planning_root(self, tmp_path: Path):
+        """Create a temporary project directory with planning items."""
+        # Reset bus before creating PlanningAPI so they share the same instance
+        from audiagentic.interoperability import reset_bus
+
+        reset_bus()
+        _seed_planning_project(tmp_path)
+        _seed_propagation_config(tmp_path)
+        return tmp_path, PlanningAPI(tmp_path)
+
+    def test_task_to_wp_propagation(self, planning_root):
+        """Test task state propagation to WP."""
+        _, planning_api = planning_root
+        plan = planning_api.new("plan", label="Test Plan", summary="Test plan")
+        plan_id = plan.data["id"]
+        wp = planning_api.new("wp", label="Test WP", summary="Test work package", plan=plan_id)
+        wp_id = wp.data["id"]
+        task = planning_api.new("task", label="Test Task", summary="Test task")
+        task_id = task.data["id"]
+        # Link task to WP via task_refs
+        planning_api.relink(wp_id, "task_refs", task_id)
+        # Transition WP to ready first (required for trigger_parent_if_ready rule)
+        planning_api.state(wp_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        # Transition task to ready
+        planning_api.state(task_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        # Transition task to in_progress (should propagate to WP)
+        planning_api.state(task_id, "in_progress", metadata={})
+        _wait_for_propagation(planning_api)
+        wp_view = planning_api.lookup(wp_id)
+        assert wp_view is not None
+        assert wp_view.data["state"] == "in_progress"
+
+    def test_wp_to_plan_propagation(self, planning_root):
+        """Test WP state propagation to Plan."""
+        _, planning_api = planning_root
+        plan = planning_api.new("plan", label="Test Plan", summary="Test plan")
+        plan_id = plan.data["id"]
+        wp = planning_api.new("wp", label="Test WP", summary="Test work package", plan=plan_id)
+        wp_id = wp.data["id"]
+        # Transition plan to ready first (required for trigger_parent_if_ready rule)
+        planning_api.state(plan_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        # Transition WP to ready
+        planning_api.state(wp_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        # Transition WP to in_progress (should propagate to plan)
+        planning_api.state(wp_id, "in_progress", metadata={})
+        _wait_for_propagation(planning_api)
+        plan_view = planning_api.lookup(plan_id)
+        assert plan_view is not None
+        assert plan_view.data["state"] == "in_progress"
+
+    def test_plan_to_spec_propagation(self, planning_root):
+        """Test Plan state propagation to Spec."""
+        _, planning_api = planning_root
+        # Create request first (spec needs a valid request_ref)
+        request = planning_api.new(
+            "request", label="Test Request", summary="Test request", source="test"
+        )
+        request_id = request.data["id"]
+        # Create spec with valid request reference
+        spec = planning_api.new(
+            "spec", label="Test Spec", summary="Test specification", request_refs=[request_id]
+        )
+        spec_id = spec.data["id"]
+        plan = planning_api.new("plan", label="Test Plan", summary="Test plan", spec=spec_id)
+        plan_id = plan.data["id"]
+        # Transition spec to ready first (required for trigger_parent_if_ready rule)
+        planning_api.state(spec_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        # Transition plan to ready
+        planning_api.state(plan_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        # Transition plan to in_progress (should propagate to spec)
+        planning_api.state(plan_id, "in_progress", metadata={})
+        _wait_for_propagation(planning_api)
+        spec_view = planning_api.lookup(spec_id)
+        assert spec_view is not None
+        assert spec_view.data["state"] == "in_progress"
+
+    def test_spec_to_request_propagation(self, planning_root):
+        """Test Spec state propagation to Request."""
+        _, planning_api = planning_root
+        request = planning_api.new(
+            "request", label="Test Request", summary="Test request", source="test"
+        )
+        request_id = request.data["id"]
+        spec = planning_api.new(
+            "spec", label="Test Spec", summary="Test specification", request_refs=[request_id]
+        )
+        spec_id = spec.data["id"]
+        # Request uses "captured" as initial state, not "ready"
+        # Transition request to distilled (equivalent to ready for requests)
+        planning_api.state(request_id, "distilled", metadata={})
+        _wait_for_propagation(planning_api)
+        # Transition spec to ready
+        planning_api.state(spec_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        # Transition spec to in_progress (should propagate to request)
+        planning_api.state(spec_id, "in_progress", metadata={})
+        _wait_for_propagation(planning_api)
+        request_view = planning_api.lookup(request_id)
+        assert request_view is not None
+        # Request state machine doesn't have in_progress, so it stays in distilled
+        # The propagation rule tries to set in_progress but request workflow doesn't allow it
+        assert request_view.data["state"] == "distilled"
+
+    def test_full_hierarchy_propagation(self, planning_root):
+        """Test state propagation through full hierarchy."""
+        _, planning_api = planning_root
+        request = planning_api.new(
+            "request", label="Test Request", summary="Test request", source="test"
+        )
+        request_id = request.data["id"]
+        spec = planning_api.new(
+            "spec", label="Test Spec", summary="Test spec", request_refs=[request_id]
+        )
+        spec_id = spec.data["id"]
+        plan = planning_api.new("plan", label="Test Plan", summary="Test plan", spec=spec_id)
+        plan_id = plan.data["id"]
+        wp = planning_api.new("wp", label="Test WP", summary="Test WP", plan=plan_id)
+        wp_id = wp.data["id"]
+        task = planning_api.new("task", label="Test Task", summary="Test task")
+        task_id = task.data["id"]
+        # Link task to WP via task_refs
+        planning_api.relink(wp_id, "task_refs", task_id)
+        # Transition all items to ready first (required for trigger_parent_if_ready rule)
+        planning_api.state(request_id, "distilled", metadata={})
+        _wait_for_propagation(planning_api)
+        planning_api.state(spec_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        planning_api.state(plan_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        planning_api.state(wp_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        planning_api.state(task_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        # Transition task to in_progress (should propagate up the hierarchy)
+        planning_api.state(task_id, "in_progress", metadata={})
+        _wait_for_propagation(planning_api)
+        wp_view = planning_api.lookup(wp_id)
+        assert wp_view.data["state"] == "in_progress"
+        plan_view = planning_api.lookup(plan_id)
+        assert plan_view.data["state"] == "in_progress"
+        spec_view = planning_api.lookup(spec_id)
+        assert spec_view.data["state"] == "in_progress"
+        request_view = planning_api.lookup(request_id)
+        # Request state machine doesn't have in_progress, so it stays in distilled
+        assert request_view.data["state"] == "distilled"
+
+    def test_propagation_disabled_globally(self, tmp_path: Path):
+        """Test that propagation is disabled when globally disabled."""
+        _seed_planning_project(tmp_path)
+        # Override config to disable propagation
+        config_dir = tmp_path / ".audiagentic" / "planning" / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        config_file = config_dir / "state_propagation.yaml"
+        config_file.write_text("""
+global:
+  enabled: false
+  max_depth: 10
+  default_mode: sync
+kinds: {}
+terminal_states: [done, archived]
+state_priority: {}
+""")
+        planning_api = PlanningAPI(tmp_path)
+        plan = planning_api.new("plan", label="Test Plan", summary="Test plan")
+        plan_id = plan.data["id"]
+        wp = planning_api.new("wp", label="Test WP", summary="Test WP", plan=plan_id)
+        wp_id = wp.data["id"]
+        task = planning_api.new("task", label="Test Task", summary="Test task")
+        task_id = task.data["id"]
+        # Link task to WP via task_refs
+        planning_api.relink(wp_id, "task_refs", task_id)
+        planning_api.state(wp_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        planning_api.state(task_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        planning_api.state(task_id, "in_progress", metadata={})
+        _wait_for_propagation(planning_api)
+        wp_view = planning_api.lookup(wp_id)
+        assert wp_view.data["state"] == "ready"
+
+    def test_propagation_respects_terminal_states(self, planning_root):
+        """Test that propagation respects terminal states."""
+        _, planning_api = planning_root
+        plan = planning_api.new("plan", label="Test Plan", summary="Test plan")
+        plan_id = plan.data["id"]
+        wp = planning_api.new("wp", label="Test WP", summary="Test WP", plan=plan_id)
+        wp_id = wp.data["id"]
+        task = planning_api.new("task", label="Test Task", summary="Test task")
+        task_id = task.data["id"]
+        # Link task to WP via task_refs
+        planning_api.relink(wp_id, "task_refs", task_id)
+        # Transition WP to done (draft -> ready -> in_progress -> done)
+        planning_api.state(wp_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        planning_api.state(wp_id, "in_progress", metadata={})
+        _wait_for_propagation(planning_api)
+        planning_api.state(wp_id, "done", metadata={})
+        _wait_for_propagation(planning_api)
+        # Transition task to in_progress (should NOT propagate because WP is in terminal state)
+        planning_api.state(task_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        planning_api.state(task_id, "in_progress", metadata={})
+        _wait_for_propagation(planning_api)
+        wp_view = planning_api.lookup(wp_id)
+        assert wp_view.data["state"] == "done"
+
+    def test_cycle_detection_with_max_depth(self, tmp_path: Path):
+        """Test that cycle detection prevents infinite loops."""
+        _seed_planning_project(tmp_path)
+        _seed_propagation_config(tmp_path)
+        planning_api = PlanningAPI(tmp_path)
+        config = planning_api._propagation_engine.load_workflow_config()
+        config["global"]["max_depth"] = 2
+        planning_api._propagation_engine._config = config
+        request = planning_api.new(
+            "request", label="Test Request", summary="Test request", source="test"
+        )
+        request_id = request.data["id"]
+        spec = planning_api.new(
+            "spec", label="Test Spec", summary="Test spec", request_refs=[request_id]
+        )
+        spec_id = spec.data["id"]
+        plan = planning_api.new("plan", label="Test Plan", summary="Test plan", spec=spec_id)
+        plan_id = plan.data["id"]
+        # Transition spec to ready first
+        planning_api.state(spec_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        # Call handler with propagation_depth exceeding max_depth
+        metadata = {"propagation_depth": 3}
+        planning_api._on_state_change_for_propagation(
+            "planning.item.state.changed",
+            {"id": plan_id, "old_state": "ready", "new_state": "in_progress"},
+            metadata,
+        )
+        spec_view = planning_api.lookup(spec_id)
+        # Spec should remain in ready state because propagation was blocked by max_depth
+        assert spec_view.data["state"] == "ready"
+
+    def test_propagation_failure_isolation(self, planning_root):
+        """Test that propagation failures don't break original state changes."""
+        _, planning_api = planning_root
+        plan = planning_api.new("plan", label="Test Plan", summary="Test plan")
+        plan_id = plan.data["id"]
+        wp = planning_api.new("wp", label="Test WP", summary="Test WP", plan=plan_id)
+        wp_id = wp.data["id"]
+        task = planning_api.new("task", label="Test Task", summary="Test task")
+        task_id = task.data["id"]
+        # Link task to WP via task_refs
+        planning_api.relink(wp_id, "task_refs", task_id)
+        # Transition task to in_progress (draft -> ready -> in_progress)
+        planning_api.state(task_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        planning_api.state(task_id, "in_progress", metadata={})
+        _wait_for_propagation(planning_api)
+        task_view = planning_api.lookup(task_id)
+        assert task_view.data["state"] == "in_progress"

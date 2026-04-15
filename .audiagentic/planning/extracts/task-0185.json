@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-0185",
+    "label": "Implement soft delete functionality",
+    "state": "done",
+    "summary": "Add tm_delete() function that marks items as deleted without removing files, with retention policy",
+    "spec_ref": "spec-002",
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0185.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n\n# Description\n\nImplement tm_delete() to allow safe deletion of planning items without manual filesystem operations. Soft delete (default) marks items as deleted while preserving files for audit/recovery. Hard delete removes files.\n\n# Acceptance Criteria\n\n1. `tm_delete(id_)` soft deletes by default (adds deleted: true, deleted_at: timestamp)\n2. `tm_delete(id_, hard=True)` permanently removes file\n3. Soft deleted items remain queryable via tm_list(include_deleted=True)\n4. Deletion reason can be recorded\n5. Counter sync is triggered only for hard deletes (task-0184)\n\n# Notes\n\n- Add to `tools/planning/tm_helper.py`\n- Add to `src/audiagentic/planning/app/api.py`\n- Schema needs `deleted` and `deleted_at` fields added\n- Implementation result: added `delete()` to the planning API plus helper, CLI, and MCP surfaces. Soft delete now marks items with `deleted`, `deleted_at`, and optional `deletion_reason`; hard delete removes the file and syncs counters.\n"
+}

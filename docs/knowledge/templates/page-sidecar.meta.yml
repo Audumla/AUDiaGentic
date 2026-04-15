@@ -1,0 +1,11 @@
+id: know-example-page
+title: Example Page
+type: guide
+status: active
+summary: Current-state summary.
+owners:
+- core
+tags: []
+related: []
+updated_at: YYYY-MM-DD
+source_refs: []

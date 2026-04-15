@@ -9,8 +9,8 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.execution.jobs.prompt_parser import parse_prompt_launch_request
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def test_parse_prompt_launch_request_normalizes_plan_prompt() -> None:

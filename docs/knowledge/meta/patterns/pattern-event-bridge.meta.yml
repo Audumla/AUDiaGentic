@@ -1,0 +1,11 @@
+id: pattern-event-bridge
+title: Event Bridge Pattern
+type: pattern
+status: active
+summary: Pattern for bridging external events to knowledge sync proposals.
+owners:
+- core-team
+tags: []
+related: []
+updated_at: '2026-04-15T05:28:22.048042+00:00'
+source_refs: []

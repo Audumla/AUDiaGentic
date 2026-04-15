@@ -1,0 +1,27 @@
+{
+  "item": {
+    "id": "task-0273",
+    "label": "Add JSON schema validation to _load_json_argument",
+    "state": "draft",
+    "summary": "Implement comprehensive JSON validation",
+    "request_refs": [
+      "request-019"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0273.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n\n\nMissing JSON schema validation in channels/cli/main.py at line 31. The _load_json_argument function lacks validation for nested structures and expected keys, violating standard-0005 (Verification). Add schema validation using jsonschema library with: 1) Required keys validation, 2) Nested structure validation, 3) Type validation for all fields, 4) Custom error messages with recovery guidance. Follow pattern from stages.py:29-39 which implements comprehensive schema validation. Include example schema definition and validation error handling that returns structured errors with suggestions instead of generic messages. Ensure validation is applied to all JSON argument types used in CLI commands. Document the validation behavior with examples of valid and invalid inputs.\n"
+}

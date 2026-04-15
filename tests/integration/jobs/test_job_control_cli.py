@@ -11,10 +11,11 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
+from tests.helpers import sandbox as sandbox_helper
+
 from audiagentic.channels.cli.main import main
 from audiagentic.execution.jobs.records import build_job_record
 from audiagentic.runtime.state.jobs_store import read_job_record, write_job_record
-from tests.helpers import sandbox as sandbox_helper
 
 
 def test_job_control_cli_cancels_ready_job(tmp_path: Path) -> None:

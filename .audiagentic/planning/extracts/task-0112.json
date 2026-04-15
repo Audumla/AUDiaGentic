@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-0112",
+    "label": "[PKT-PRV-035](task-0112): Provider Circuit Breaker",
+    "state": "draft",
+    "summary": "Implement provider circuit breaker",
+    "spec_ref": "spec-0012",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-0112.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0006",
+    "standard-0005"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-035](task-0102): Provider Circuit Breaker\n\n## Purpose\n\nImplement provider circuit breaker.\n\n## Scope\n\n- Circuit logic\n- State transitions\n- Recovery\n\n## Implementation\n\n1. Implement circuit\n2. Add transitions\n3. Add recovery\n\n## Acceptance Criteria\n\n1. Circuit works\n2. Transitions work\n3. Recovery works\n"
+}
