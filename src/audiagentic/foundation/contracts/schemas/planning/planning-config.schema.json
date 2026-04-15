@@ -39,7 +39,7 @@
           "type": "object",
           "additionalProperties": {
             "type": "object",
-            "required": ["dir", "id_prefix", "counter_file", "has_domain", "required_refs"],
+            "required": ["dir", "id_prefix", "counter_file", "has_domain", "required_refs", "required_fields", "optional_fields"],
             "properties": {
               "dir": {
                 "type": "string"
@@ -54,6 +54,18 @@
                 "type": "boolean"
               },
               "required_refs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "required_fields": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "optional_fields": {
                 "type": "array",
                 "items": {
                   "type": "string"
