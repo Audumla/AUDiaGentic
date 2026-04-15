@@ -318,3 +318,27 @@ class Config:
         """
         kind_cfg = self.kind_config(kind)
         return kind_cfg.get("standard_refs_inheritance", [])
+
+    def required_fields(self, kind: str) -> list[str]:
+        """Get required fields for a kind.
+
+        Args:
+            kind: Planning kind name
+
+        Returns:
+            List of required field names
+        """
+        kind_cfg = self.kind_config(kind)
+        return kind_cfg.get("required_fields", [])
+
+    def optional_fields(self, kind: str) -> list[str]:
+        """Get optional fields for a kind.
+
+        Args:
+            kind: Planning kind name
+
+        Returns:
+            List of optional field names
+        """
+        kind_cfg = self.kind_config(kind)
+        return kind_cfg.get("optional_fields", [])
