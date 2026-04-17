@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-17T13:34:02.955291+00:00",
+  "generated_at": "2026-04-17T13:35:20.317126+00:00",
   "refs": [
     {
       "src": "plan-0001",
@@ -34,6 +34,11 @@
     },
     {
       "src": "plan-0003",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "plan-0004",
       "dst": "standard-0006",
       "field": "standard_refs"
     },
@@ -1482,6 +1487,96 @@
     {
       "src": "task-318",
       "dst": "spec-18",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0014",
+      "dst": "standard-0005",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-0014",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-0014",
+      "dst": "spec-0011",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0015",
+      "dst": "standard-0005",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-0015",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-0015",
+      "dst": "spec-0011",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0016",
+      "dst": "standard-0005",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-0016",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-0016",
+      "dst": "spec-0011",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0017",
+      "dst": "standard-0005",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-0017",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-0017",
+      "dst": "spec-0011",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0018",
+      "dst": "standard-0005",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-0018",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-0018",
+      "dst": "spec-0011",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-0019",
+      "dst": "standard-0005",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-0019",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-0019",
+      "dst": "spec-0011",
       "field": "spec_ref"
     },
     {
