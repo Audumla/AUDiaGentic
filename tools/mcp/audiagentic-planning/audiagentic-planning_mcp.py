@@ -161,6 +161,9 @@ WORK QUEUE: tm_list mode=next returns unclaimed ready items filtered by kind and
 MULTI-AGENT: Multiple agents can work on the same repository. Use tm_claim to coordinate
 access: claim items before work (op=claim), check available work (mode=next skips claimed),
 release when done (op=unclaim). Claims can have TTL for auto-release.
+
+BEFORE CREATING: Call tm_docs(op='config') to discover supported kinds, required refs, and
+required fields. Cache the result for the session. This avoids invalid tm_create attempts.
 """,
 )
 
@@ -580,7 +583,9 @@ def tm_claim(
         "op: surfaces (list doc surfaces) | surface (get one, id=surface_id) | "
         "refs (list reference docs) | profiles (list request profiles) | "
         "profile (get one, id=profile_id) | support (list support docs, optional id and role) | "
-        "sync_req (doc sync requirements, requires kind) | pending (pending doc updates, requires kind)."
+        "sync_req (doc sync requirements, requires kind) | pending (pending doc updates, requires kind) | "
+        "config (read-only planning config discovery for agents — call before tm_create; "
+        "mode=compact (default, low-token) or mode=full; optional kind filter)."
     )
 )
 def tm_docs(
@@ -589,6 +594,7 @@ def tm_docs(
     kind: str | None = None,
     profile_pack: str = "standard",
     role: str | None = None,
+    mode: str = "compact",
 ) -> Any:
     valid_ops = {
         "surfaces",
@@ -599,6 +605,7 @@ def tm_docs(
         "support",
         "sync_req",
         "pending",
+        "config",
     }
     if op not in valid_ops:
         raise PlanningError(
@@ -629,6 +636,13 @@ def tm_docs(
                 "op=pending requires kind", suggestion="Example: {{op:'pending', kind:'task'}}"
             )
         return tm.pending_doc_updates(kind, profile_pack)
+    elif op == "config":
+        if mode not in ("compact", "full"):
+            raise PlanningError(
+                f"Invalid mode: {mode!r}",
+                suggestion="Use mode='compact' (default) or mode='full'",
+            )
+        return tm.planning_config_summary(mode=mode, kind=kind)
 
 
 # ---------------------------------------------------------------------------
@@ -642,6 +656,7 @@ def tm_docs(
         "op: validate (check all items against schemas, returns errors) | "
         "index (rebuild lookup indexes) | "
         "reconcile (fix filesystem/state inconsistencies) | "
+        "maintain (canonical reconcile + rebuild of derived planning state) | "
         "events (recent event log, optional tail count, default 20) | "
         "verify (health check — dirs, configs, API) | "
         "check_sensitive (scan item body for API keys/tokens, requires id)."
@@ -652,7 +667,7 @@ def tm_admin(
     id: str | None = None,
     tail: int = 20,
 ) -> Any:
-    valid_ops = {"validate", "index", "reconcile", "events", "verify", "check_sensitive"}
+    valid_ops = {"validate", "index", "reconcile", "maintain", "events", "verify", "check_sensitive"}
     if op not in valid_ops:
         raise PlanningError(
             f"Unknown op: {op!r}", suggestion=f"Valid ops: {', '.join(sorted(valid_ops))}"
@@ -665,6 +680,8 @@ def tm_admin(
         return None
     elif op == "reconcile":
         return tm.reconcile()
+    elif op == "maintain":
+        return tm._get_api().maintain()
     elif op == "events":
         return tm.events(tail)
     elif op == "verify":

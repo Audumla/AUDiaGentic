@@ -68,6 +68,7 @@ for _p in (str(_ROOT), str(_ROOT / "src")):
         sys.path.insert(0, _p)
 
 from audiagentic.planning.app.api import PlanningAPI
+from audiagentic.planning.app.config import Config
 from audiagentic.planning.app.docs_mgr import DocumentationManager
 from audiagentic.planning.app.refs_mgr import ReferencesManager
 from audiagentic.planning.app.support_mgr import SupportingDocsManager
@@ -2204,3 +2205,85 @@ def delete(
     """
     api = _get_api()
     return api.delete(id_, hard=hard, reason=reason)
+
+
+def planning_config_summary(
+    mode: str = "compact",
+    kind: str | None = None,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    """Return live planning config in agent-friendly form.
+
+    Compact mode (default) — low token, cacheable per session:
+      - default_profile, default_guidance
+      - per-kind: has_domain, required_fields, optional_fields, required_refs,
+        required_sections, state_on_create, usage hint
+      - available profiles (names only) and guidance levels (names only)
+
+    Full mode — deeper detail on request:
+      - everything in compact plus relationship rules, workflow defaults,
+        standard defaults, template section names
+
+    Args:
+        mode: "compact" or "full"
+        kind: Optional kind filter. If given, returns single-kind dict.
+        root: Optional project root. If None, uses current root.
+
+    Returns:
+        Structured dict suitable for agent consumption.
+    """
+    project_root = root or _get_root()
+    cfg = Config(project_root)
+
+    kinds = cfg.all_kinds()
+    if kind is not None:
+        if kind not in kinds:
+            raise ValueError(f"Unknown kind: {kind!r}. Available: {kinds}")
+        kinds = [kind]
+
+    def _kind_entry(k: str) -> dict[str, Any]:
+        kc = cfg.kind_config(k)
+        wf = cfg.workflow_for(k)
+        entry: dict[str, Any] = {
+            "has_domain": cfg.kind_has_domain(k),
+            "required_fields": cfg.required_fields(k),
+            "optional_fields": cfg.optional_fields(k),
+            "required_refs": cfg.kind_required_refs(k),
+            "required_sections": cfg.required_sections(k) or [],
+            "state_on_create": wf.get("initial_state", "draft"),
+            "usage": (
+                f"tm_create(kind='{k}'"
+                + (", domain='<domain>'" if cfg.kind_has_domain(k) else "")
+                + "".join(f", {r}='<id>'" for r in cfg.kind_required_refs(k))
+                + ", label='...')"
+            ),
+        }
+        if mode == "full":
+            entry["relationship_rules"] = cfg.relationship_rules(k)
+            entry["workflow_states"] = list(wf.get("states", {}).keys())
+            entry["standard_defaults"] = cfg.standard_defaults_for(k)
+            template = cfg.document_template(k)
+            import re as _re
+            entry["template_sections"] = _re.findall(r"^## (.+)$", template, _re.MULTILINE)
+        return entry
+
+    profiles = cfg.profiles.get("planning", {}).get("profiles", {})
+    guidance_levels = cfg.guidance_levels()
+
+    out: dict[str, Any] = {
+        "default_profile": cfg.default_profile(),
+        "default_guidance": cfg.default_guidance(),
+        "kinds": {k: _kind_entry(k) for k in kinds},
+        "profiles": list(profiles.keys()),
+        "guidance_levels": list(guidance_levels.keys()),
+    }
+
+    if mode == "full":
+        out["profiles_detail"] = {
+            name: {k: v for k, v in data.items() if k not in ("on_request_create",)}
+            for name, data in profiles.items()
+            if isinstance(data, dict)
+        }
+        out["guidance_levels_detail"] = guidance_levels
+
+    return out
