@@ -1,0 +1,48 @@
+proposal_id: 20260417T084243Z-system-knowledge-event-review
+proposal_kind: event_review
+proposal_mode: review_only
+target_page_id: system-knowledge
+generated_at: '2026-04-17T08:42:43.956851+00:00'
+summary: Planning/runtime event drift detected for system-knowledge. Review the current-state page.
+events:
+- event_id: runtime-planning::planning.item.state.changed::request::request-1::distilled::manual
+  adapter_id: planning-state-changes
+  event_name: planning.item.state.changed
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: distilled
+  summary: Planning request request-1 state changed to distilled
+  details:
+    payload:
+      id: request-1
+      old_state: captured
+      new_state: distilled
+    metadata: &id001
+      subject:
+        kind: request
+        id: request-1
+      triggered_by: manual
+    raw_event:
+      event: planning.item.state.changed
+      event_name: planning.item.state.changed
+      id: request-1
+      subject:
+        kind: request
+        id: request-1
+      old_state: captured
+      new_state: distilled
+      metadata: *id001
+    source_system: planning-runtime
+  diff_excerpt: null
+suggested_steps:
+- Review the event source change.
+- Update the current-state page only if durable behavior changed.
+- Keep draft or incomplete work out of current-state pages.
+- Record fresh sync and event baselines after review.
+actions: []
+status: rejected
+status_reason: duplicate_of_pending
+status_updated_at: '2026-04-17T10:35:46.362662+00:00'
+archived_at: '2026-04-17T10:35:46.362662+00:00'
+duplicate_of: 20260417T084300Z-system-knowledge-event-review
+duplicate_of_path: docs/knowledge/data/proposals/20260417T084300Z-system-knowledge-event-review.yml
+dedupe_key: a663f0b041da7a40

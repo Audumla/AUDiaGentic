@@ -70,6 +70,7 @@ def action_cleanup_lifecycle(
         proposal_retention_days=action_args.get("proposal_retention_days"),
         archive_retention_days=action_args.get("archive_retention_days"),
         prune_pending_proposals=bool(action_args.get("prune_pending_proposals", True)),
+        dedupe_pending_proposals=bool(action_args.get("dedupe_pending_proposals", True)),
     )
     return {"action_id": action_id, "result": result}
 

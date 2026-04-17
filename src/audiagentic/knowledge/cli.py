@@ -204,6 +204,7 @@ def main() -> None:
                 proposal_retention_days=args.proposal_retention_days,
                 archive_retention_days=args.archive_retention_days,
                 prune_pending_proposals=not args.keep_pending_proposals,
+                dedupe_pending_proposals=not args.keep_duplicate_proposals,
             ),
             args.json,
         )
@@ -474,6 +475,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--proposal-retention-days", type=int)
     p.add_argument("--archive-retention-days", type=int)
     p.add_argument("--keep-pending-proposals", action="store_true")
+    p.add_argument("--keep-duplicate-proposals", action="store_true")
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("evaluate-source")
