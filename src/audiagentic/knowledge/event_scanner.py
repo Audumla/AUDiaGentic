@@ -5,6 +5,7 @@ Detects source file changes and event stream entries, generates sync proposals.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Iterable
 from fnmatch import fnmatch
@@ -138,7 +139,22 @@ def _scan_event_stream_adapter(
         abs_path = config.root / rel_path
         if not abs_path.exists():
             continue
+        source_state = state.get("sources", {}).get(rel_path, {})
+        last_stream_line = (
+            int(source_state.get("last_stream_line", 0))
+            if isinstance(source_state, dict)
+            else 0
+        )
+        total_lines = sum(
+            1
+            for line in abs_path.read_text(encoding="utf-8", errors="replace").splitlines()
+            if line.strip()
+        )
+        if total_lines < last_stream_line:
+            last_stream_line = 0
         for raw in _iter_event_stream_entries(abs_path, adapter):
+            if int(raw.get("_stream_line", 0)) <= last_stream_line:
+                continue
             event_name = str(
                 raw.get("event_name")
                 or raw.get("event")
@@ -209,13 +225,13 @@ def _write_event_proposal(
 ) -> Path:
     """Write event proposal YAML file."""
     timestamp = now_utc().strftime("%Y%m%dT%H%M%SZ")
-    proposal_path = config.proposals_root / f"{timestamp}-{page_id}-event-review.yml"
     payload = {
-        "proposal_id": f"{timestamp}-{page_id}-event-review",
         "proposal_kind": "event_review",
         "proposal_mode": mode,
         "target_page_id": page_id,
         "generated_at": now_utc().isoformat(),
+        "status": "pending",
+        "status_updated_at": now_utc().isoformat(),
         "summary": f"Planning/runtime event drift detected for {page_id}. Review the current-state page.",
         "events": [
             {
@@ -238,6 +254,13 @@ def _write_event_proposal(
         ],
         "actions": [],
     }
+    dedupe_key = _event_proposal_dedupe_key(payload)
+    existing_path = _find_existing_event_proposal(config, page_id, dedupe_key)
+    if existing_path is not None:
+        return existing_path
+    proposal_path = config.proposals_root / f"{timestamp}-{page_id}-event-review.yml"
+    payload["proposal_id"] = f"{timestamp}-{page_id}-event-review"
+    payload["dedupe_key"] = dedupe_key
     proposal_path.parent.mkdir(parents=True, exist_ok=True)
     proposal_path.write_text(dump_yaml(payload), encoding="utf-8")
     return proposal_path
@@ -294,3 +317,39 @@ def _build_event_stream_summary(
         if value is not None and value != "":
             fragments.append(f"{field}={value}")
     return " | ".join(fragments)
+
+
+def _event_proposal_dedupe_key(payload: dict[str, Any]) -> str:
+    normalized = dict(payload)
+    normalized.pop("proposal_id", None)
+    normalized.pop("generated_at", None)
+    normalized.pop("status_updated_at", None)
+    normalized.pop("dedupe_key", None)
+    material = json.dumps(normalized, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
+
+
+def _find_existing_event_proposal(
+    config: KnowledgeConfig, page_id: str, dedupe_key: str
+) -> Path | None:
+    if not config.proposals_root.exists():
+        return None
+    for proposal_path in sorted(config.proposals_root.glob(f"*-{page_id}-event-review.yml")):
+        try:
+            import yaml
+
+            proposal = yaml.safe_load(proposal_path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            continue
+        if not isinstance(proposal, dict):
+            continue
+        if proposal.get("proposal_kind") != "event_review":
+            continue
+        if proposal.get("status", "pending") != "pending":
+            continue
+        existing_key = proposal.get("dedupe_key")
+        if not existing_key:
+            existing_key = _event_proposal_dedupe_key(proposal)
+        if existing_key == dedupe_key:
+            return proposal_path
+    return None
