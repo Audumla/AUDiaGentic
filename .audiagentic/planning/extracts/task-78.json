@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-78",
+    "label": "[PKT-PRV-001](task-0078): Provider Registry",
+    "state": "draft",
+    "summary": "Create provider registry",
+    "spec_ref": "spec-12",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-78-pkt-prv-001-task-0078-provider-registry.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-001](task-0068): Provider Registry\n\n## Purpose\n\nCreate provider registry.\n\n## Scope\n\n- Registry format\n- Registration logic\n- Discovery\n\n## Implementation\n\n1. Define format\n2. Implement registration\n3. Add discovery\n\n## Acceptance Criteria\n\n1. Format defined\n2. Registration works\n3. Discovery works\n"
+}

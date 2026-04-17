@@ -4,11 +4,11 @@
     "label": "Atomicity Task",
     "state": "cancelled",
     "summary": "Summary",
-    "spec_ref": "spec-0077",
+    "spec_ref": "spec-77",
     "request_refs": [],
     "standard_refs": [
-      "standard-0005",
-      "standard-0006"
+      "standard-5",
+      "standard-6"
     ],
     "kind": "task",
     "path": "docs/planning/tasks/core/task-3263-atomicity-task.md",
@@ -19,8 +19,8 @@
     "restored_by": null
   },
   "effective_standard_refs": [
-    "standard-0005",
-    "standard-0006"
+    "standard-5",
+    "standard-6"
   ],
   "body": "\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\nCancelled on 2026-04-17 as redundant placeholder work under superseded `request-21`. Current knowledge architecture still intentionally uses hook-based sync alongside event-driven behavior.\n"
 }

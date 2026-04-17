@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-97",
+    "label": "[PKT-PRV-020](task-0097): Provider Configuration Management",
+    "state": "draft",
+    "summary": "Manage provider configuration",
+    "spec_ref": "spec-12",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-97-pkt-prv-020-task-0097-provider-configuration-management.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-020](task-0087): Provider Configuration Management\n\n## Purpose\n\nManage provider configuration.\n\n## Scope\n\n- Config format\n- Loading\n- Validation\n\n## Implementation\n\n1. Define format\n2. Implement loading\n3. Add validation\n\n## Acceptance Criteria\n\n1. Format defined\n2. Loading works\n3. Validated\n"
+}

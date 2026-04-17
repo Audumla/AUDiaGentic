@@ -3,11 +3,11 @@ id: task-3252
 label: Clean up req_mgr hardcoded defaults
 state: done
 summary: Remove fallback hardcoded methods from RequestMgr
-spec_ref: spec-0029
+spec_ref: spec-29
 request_refs: []
 standard_refs:
-- standard-0005
-- standard-0006
+- standard-5
+- standard-6
 ---
 
 

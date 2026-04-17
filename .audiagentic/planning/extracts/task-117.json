@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-117",
+    "label": "[PKT-PRV-039](task-0117): Provider SSL/TLS Support",
+    "state": "draft",
+    "summary": "Implement provider SSL/TLS support",
+    "spec_ref": "spec-12",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-117-pkt-prv-039-task-0117-provider-ssl-tls-support.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-039](task-0106): Provider SSL/TLS Support\n\n## Purpose\n\nImplement provider SSL/TLS support.\n\n## Scope\n\n- SSL configuration\n- Certificate handling\n- Validation\n\n## Implementation\n\n1. Configure SSL\n2. Handle certs\n3. Add validation\n\n## Acceptance Criteria\n\n1. SSL configured\n2. Certs handled\n3. Validated\n"
+}

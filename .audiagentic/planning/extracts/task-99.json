@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-99",
+    "label": "[PKT-PRV-022](task-0099): Provider Lifecycle",
+    "state": "draft",
+    "summary": "Manage provider lifecycle",
+    "spec_ref": "spec-12",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-99-pkt-prv-022-task-0099-provider-lifecycle.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-022](task-0089): Provider Lifecycle\n\n## Purpose\n\nManage provider lifecycle.\n\n## Scope\n\n- Lifecycle states\n- Transitions\n- Cleanup\n\n## Implementation\n\n1. Define states\n2. Implement transitions\n3. Add cleanup\n\n## Acceptance Criteria\n\n1. States defined\n2. Transitions work\n3. Cleanup works\n"
+}

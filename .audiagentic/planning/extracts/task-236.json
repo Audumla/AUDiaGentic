@@ -1,0 +1,29 @@
+{
+  "item": {
+    "id": "task-236",
+    "label": "Add unit tests for knowledge component",
+    "state": "draft",
+    "summary": "Add unit tests for events.py, sync.py, validation.py with 70%+ coverage target",
+    "spec_ref": "spec-16",
+    "parent_task_ref": "wp-13",
+    "request_refs": [
+      "request-15"
+    ],
+    "standard_refs": [
+      "standard-5",
+      "standard-6"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-236-add-unit-tests-for-knowledge-component.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-5",
+    "standard-6"
+  ],
+  "body": "\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+}

@@ -4,11 +4,11 @@
     "label": "Refactor section_registry to use config",
     "state": "done",
     "summary": "Replace hardcoded SECTION_KEYS with config-driven section lists",
-    "spec_ref": "spec-0029",
+    "spec_ref": "spec-29",
     "request_refs": [],
     "standard_refs": [
-      "standard-0005",
-      "standard-0006"
+      "standard-5",
+      "standard-6"
     ],
     "kind": "task",
     "path": "docs/planning/tasks/core/task-3251-refactor-section-registry-to-use-config.md",
@@ -19,8 +19,8 @@
     "restored_by": null
   },
   "effective_standard_refs": [
-    "standard-0005",
-    "standard-0006"
+    "standard-5",
+    "standard-6"
   ],
   "body": "\n\n\n\n## Description\n\nRefactor `section_registry.py` to load section lists from config instead of hardcoded `SECTION_KEYS` dict.\n\n## Current State\n\n`section_registry.py:3-24` contains hardcoded `SECTION_KEYS` dict:\n- request: []\n- spec: [purpose, scope, requirements, constraints, acceptance_criteria]\n- plan: [objectives, delivery_approach, dependencies]\n- task: [description, acceptance_criteria, notes, implementation_notes]\n- wp: [objective, scope_of_this_package, inputs, instructions, required_outputs, acceptance_checks, non_goals]\n- reference: [overview, usage, notes]\n\nThis is NOT used by managers (they have their own hardcoded templates), but the `list_sections()` function exists and should be config-driven for consistency.\n\n## Required Changes\n\n1. Remove `SECTION_KEYS` hardcoded dict\n2. Update `list_sections(kind)` to load from config\n3. Config must provide section lists for each kind\n4. Support guidance-level overrides (light/standard/deep can have different sections)\n\n## Acceptance Criteria\n\n- `SECTION_KEYS` dict removed from section_registry.py\n- `list_sections(kind)` loads from config\n- `list_sections(kind, guidance)` optional parameter for guidance-level sections\n- Backward compatible - existing calls without guidance param still work\n- Config provides sensible defaults matching current hardcoded values\n"
 }
