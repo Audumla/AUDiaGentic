@@ -1,0 +1,24 @@
+{
+  "item": {
+    "id": "wp-14",
+    "label": "Planning Module Critical Fixes Work Package",
+    "state": "done",
+    "summary": "Tasks for fixing critical bugs in planning module",
+    "plan_ref": "plan-12",
+    "task_refs": [],
+    "standard_refs": [
+      "standard-6"
+    ],
+    "kind": "wp",
+    "path": "docs/planning/work-packages/core/wp-14-planning-module-critical-fixes-work-package.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6"
+  ],
+  "body": "\n\n\n\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n"
+}

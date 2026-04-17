@@ -1,0 +1,37 @@
+---
+id: task-136
+label: '[PKT-PRV-058](task-0136): Provider Data Quality Rules'
+state: draft
+summary: Implement provider data quality rules
+spec_ref: spec-12
+---
+
+
+# Description
+
+Implement this task.
+
+
+# [PKT-PRV-058](task-0125): Provider Data Quality Rules
+
+## Purpose
+
+Implement provider data quality rules.
+
+## Scope
+
+- Rule format
+- Evaluation
+- Reporting
+
+## Implementation
+
+1. Define format
+2. Implement evaluation
+3. Add reporting
+
+## Acceptance Criteria
+
+1. Format defined
+2. Evaluation works
+3. Reports generated

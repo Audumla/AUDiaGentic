@@ -1,0 +1,37 @@
+---
+id: task-68
+label: '[PKT-JOB-002](task-0068): State Machine'
+state: draft
+summary: Implement job state machine
+spec_ref: spec-11
+---
+
+
+# Description
+
+Implement this task.
+
+
+# [PKT-JOB-002](task-0058): State Machine
+
+## Purpose
+
+Implement job state machine.
+
+## Scope
+
+- States
+- Transitions
+- Validation
+
+## Implementation
+
+1. Define states
+2. Implement transitions
+3. Add validation
+
+## Acceptance Criteria
+
+1. States defined
+2. Transitions work
+3. Validated

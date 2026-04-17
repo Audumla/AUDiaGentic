@@ -1,0 +1,37 @@
+---
+id: task-62
+label: '[PKT-RLS-007](task-0062): Release Please Config Management'
+state: draft
+summary: Manage Release Please configuration
+spec_ref: spec-10
+---
+
+
+# Description
+
+Implement this task.
+
+
+# [PKT-RLS-007](task-0052): Release Please Config Management
+
+## Purpose
+
+Manage Release Please configuration.
+
+## Scope
+
+- Config format
+- Management logic
+- Validation
+
+## Implementation
+
+1. Define config format
+2. Implement management
+3. Add validation
+
+## Acceptance Criteria
+
+1. Config format defined
+2. Management works
+3. Validated

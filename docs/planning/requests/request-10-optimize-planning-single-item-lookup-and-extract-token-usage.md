@@ -24,9 +24,9 @@ context: 'Derived from review of planning API and MCP read paths. Key concerns: 
   scan_items() usage in single-item operations, extract() always including body and
   persisting extracts, and need for lean single-item MCP/read surfaces.'
 spec_refs:
-- spec-007
+- spec-7
 standard_refs:
-- standard-0001
+- standard-1
 meta:
   current_understanding: 'All optimization work complete and verified: lookup.json
     generates correctly, lookup(id) and head(id) helpers implemented with proper fallback,

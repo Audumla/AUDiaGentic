@@ -1,0 +1,23 @@
+---
+id: task-192
+label: Implement claims TTL lazy purge
+state: done
+summary: Add lazy purge of expired claims on read in Claims._load() or next_items()/claims()
+spec_ref: spec-3
+---
+
+
+# Description
+
+Lazily purge expired claims on read so stale claims do not appear in planning queries or block work selection.
+
+# Acceptance Criteria
+
+1. Expired claims are filtered out during claim loads/reads
+2. `claims()` and `next_items()` ignore stale claims
+3. Coverage proves expired claims no longer block workflows
+
+# Notes
+
+- Implemented in `src/audiagentic/planning/app/claims.py`
+- Verified by the passing planning coverage suite

@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-109",
+    "label": "[PKT-PRV-032](task-0109): Provider Sync Support",
+    "state": "draft",
+    "summary": "Implement provider sync support",
+    "spec_ref": "spec-12",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-109-pkt-prv-032-task-0109-provider-sync-support.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-032](task-0099): Provider Sync Support\n\n## Purpose\n\nImplement provider sync support.\n\n## Scope\n\n- Sync interface\n- Blocking\n- Completion\n\n## Implementation\n\n1. Define interface\n2. Implement blocking\n3. Add completion\n\n## Acceptance Criteria\n\n1. Interface defined\n2. Blocking works\n3. Completion works\n"
+}

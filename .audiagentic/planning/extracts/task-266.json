@@ -1,0 +1,29 @@
+{
+  "item": {
+    "id": "task-266",
+    "label": "Improve MCP layer robustness and type safety",
+    "state": "done",
+    "summary": "Fix root discovery, add Pydantic schemas for operations, structured errors, and standard MCP types",
+    "spec_ref": "spec-19",
+    "request_refs": [
+      "request-17"
+    ],
+    "standard_refs": [
+      "standard-5",
+      "standard-6"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-266-improve-mcp-layer-robustness-and-type-safety.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-5",
+    "standard-6",
+    "standard-11"
+  ],
+  "body": "\n\n\n\n\n\n\n# Description\n\nImprove MCP server robustness and type safety. This task addresses root discovery, operation schemas, error handling, and protocol compliance.\n\n**Changes:**\n1. **Root discovery**: Use `.audiagentic/` marker, prioritize `AUDIAGENTIC_ROOT` env var\n2. **Pydantic schemas**: Strict JSON schema for `tm_edit` operations\n3. **Structured errors**: Custom `PlanningError` with suggestions\n4. **Protocol compliance**: Remove `_wrap`, use standard MCP types\n5. **Documentation**: Update MCP_README.md with concurrency limitations\n\n# Acceptance Criteria\n\n- Root discovery checks `AUDIAGENTIC_ROOT` env var first, then searches for `.audiagentic/`\n- Clear error message if project root not found\n- `tm_edit` operations validated by Pydantic schema before execution\n- Invalid operations return structured error with suggestion\n- `_wrap` removed, responses use standard MCP types\n- MCP_README.md updated with concurrency limitations and new error format\n- All existing tools still work correctly\n- Smoke test proves MCP server starts and tools execute\n\n# Notes\n\nFile locking and performance optimizations deferred to V2. Atomic writes already implemented in task-0243.\n"
+}
