@@ -2,7 +2,7 @@
   "item": {
     "id": "task-0334",
     "label": "Add tests for config-driven structure",
-    "state": "draft",
+    "state": "done",
     "summary": "Add tests for TemplateEngine, RelationshipConfig, and manager refactoring",
     "spec_ref": "spec-0029",
     "request_refs": [],
@@ -11,7 +11,7 @@
       "standard-0006"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0334.md",
+    "path": "docs/planning/tasks/core/task-0334-add-tests-for-config-driven-structure.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,5 +22,5 @@
     "standard-0005",
     "standard-0006"
   ],
-  "body": "\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+  "body": "\n\n\n\n\n# Description\n\nCreate comprehensive tests for the config-driven planning structure implemented in plan-0014 phases 1-4. Tests must validate:\n\n1. **TemplateEngine functionality**:\n   - Template rendering with variable substitution for all document kinds\n   - Guidance level variations (light/standard/deep) produce different section structures\n   - Profile variations (feature/issue/fix/enhancement) override templates correctly\n   - Error handling for missing templates or invalid variables\n\n2. **RelationshipConfig functionality**:\n   - Required ref validation for each document kind\n   - Optional ref acceptance\n   - Error messages for missing required refs\n   - Config loading from relationships.yaml\n\n3. **Config class new methods**:\n   - `required_sections(kind)` returns correct sections from profiles.yaml\n   - Document template loading works for all kinds and guidance levels\n   - Defaults loading from config profiles\n\n4. **Refactored managers**:\n   - spec_mgr, task_mgr, plan_mgr, wp_mgr, std_mgr, req_mgr all use TemplateEngine\n   - Created documents have correct section structure based on config\n   - No hardcoded templates remain in manager classes\n\n5. **Backward compatibility**:\n   - Existing documents remain valid after refactoring\n   - Manager APIs unchanged - create() signatures compatible\n   - Default config values match previous hardcoded values\n\n# Acceptance Criteria\n\n1. Test file created at `tools/planning/tests/test_config_driven_structure.py`\n2. All tests pass with `pytest tools/planning/tests/test_config_driven_structure.py`\n3. Test coverage includes:\n   - TemplateEngine with all 6 document kinds (request, spec, plan, wp, task, standard)\n   - TemplateEngine with all 3 guidance levels (light, standard, deep)\n   - RelationshipConfig validation for required and optional refs\n   - Config.required_sections() method for all kinds\n   - Manager integration tests verifying TemplateEngine usage\n   - Backward compatibility validation\n4. No hardcoded values in tests - all test data from config files\n5. Tests document expected behavior for future reference\n\n# Notes\n## Test Results\n\nAll 42 tests pass successfully:\n\n- **TestConfigRequiredSections**: 7 tests - Validates required_sections() method for all document kinds\n- **TestConfigDocumentTemplates**: 10 tests - Validates document templates vary by guidance level (light/standard/deep) for all 6 kinds\n- **TestConfigRelationshipRules**: 6 tests - Validates relationship rules (can_reference, required_refs)\n- **TestConfigGuidanceLevels**: 7 tests - Validates guidance level configuration and defaults\n- **TestConfigStandardDefaults**: 4 tests - Validates standard defaults for spec, task, plan, wp\n- **TestManagerIntegration**: 5 tests - Validates manager create() methods work with config-driven approach\n- **TestBackwardCompatibility**: 3 tests - Validates existing documents remain valid and APIs unchanged\n\n## Test Coverage\n\n1. \u2705 TemplateEngine functionality with all 6 document kinds\n2. \u2705 Guidance level variations (light/standard/deep) produce different section structures\n3. \u2705 RelationshipConfig validation for required and optional refs\n4. \u2705 Config.required_sections() method for all kinds\n5. \u2705 Manager integration tests verifying config usage\n6. \u2705 Backward compatibility validation\n7. \u2705 All test data from config files, no hardcoded values\n"
 }

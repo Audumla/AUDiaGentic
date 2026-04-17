@@ -1,0 +1,33 @@
+{
+  "item": {
+    "id": "request-30",
+    "label": "Expose planning config for agents",
+    "state": "closed",
+    "summary": "Add read-only Planning API and MCP surface that exposes effective live creation/config requirements so agents know what kinds they can create and what each kind requires",
+    "source": "codex",
+    "guidance": "standard",
+    "current_understanding": "Initial intake captured; requirements are understood well enough to proceed.",
+    "open_questions": [
+      "What exact outcome is required?",
+      "What constraints or non-goals apply?",
+      "How will success be verified?"
+    ],
+    "standard_refs": [
+      "standard-0001"
+    ],
+    "spec_refs": [
+      "spec-4"
+    ],
+    "kind": "request",
+    "path": "docs/planning/requests/request-30-expose-planning-config-for-agents.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0001"
+  ],
+  "body": "\n\n\n\n# Understanding\n\nPlanning API and planning MCP already enforce creation rules from config, but agents do not have one cheap read path that explains current creation contract.\n\nToday an agent can discover some behavior indirectly from docs, schemas, or trial/error through `tm_create` validation. That is weak for autonomous use because agent needs to know, before creating or editing items:\n- what kinds exist\n- which kinds support domains\n- what refs are required per kind\n- what optional fields are allowed\n- what profiles and guidance levels exist\n- what document templates / required sections apply\n- what relationship rules and workflow defaults are active\n\n# Problem\n\nPlanning system lacks a dedicated read method that exposes effective live configuration in agent-friendly form.\n\nCurrent shortcomings:\n1. Agents must infer creation contract from multiple files or errors.\n2. `tm_create` validates inputs, but does not help enough before mutation.\n3. Config-driven planning is harder to use safely without a discovery endpoint.\n4. Different kinds have different required refs and workflow semantics, but there is no single read surface for that.\n5. This increases invalid create attempts and weakens agent autonomy.\n\n# Desired Outcome\n\nAdd a read-only Planning API / MCP method that exposes current effective configuration for agent consumption.\n\nObservable outcomes:\n1. Agent can query supported kinds and creation requirements before calling `tm_create`.\n2. Response includes per-kind fields such as dir, id prefix, domain support, required refs, optional fields, required sections, and relationship rules.\n3. Response includes available profiles, guidance levels, default profile, default guidance, and workflow names/defaults.\n4. Response is cheap, structured, and safe to call often.\n5. MCP guidance can point agents to this method before mutation, reducing trial-and-error.\n\n# Constraints\n\n- Read-only surface only.\n- Must reflect live config from project root, not hardcoded defaults.\n- Keep output compact enough for agent use.\n- Prefer one coherent API/MCP surface over forcing agents to read raw YAML files.\n- Stay aligned with existing config-driven planning design.\n\n# Verification Expectations\n\n1. Agent can query creation requirements for each planning kind without mutation.\n2. Output matches live project config.\n3. Output is structured enough to drive creation prompts/tooling.\n4. Docs/MCP guidance updated to reference new read method.\n5. Tests cover shape and correctness of returned config summary.\n\n# Notes\n\n## Proposed Direction\n\nMost efficient design is a cheap read-only config surface for agents, preferably `tm_docs op=config` or equivalent compact schema tool.\n\nRecommended behavior:\n- default `mode=compact`\n- optional `kind` filter\n- optional `include_templates=false` by default\n- return compact structured JSON, not long prose\n\nRecommended compact payload:\n- top-level defaults: default profile, default guidance\n- per-kind creation contract: create support, has_domain, required_fields, optional_fields, required_refs, state_on_create\n- agent-facing usage string per kind\n- available profiles and guidance levels\n- template section names only in compact mode\n- optional higher-cost `mode=full` for relationship rules, workflow defaults, standards defaults, and template bodies\n\nAgent workflow target:\n1. call config tool once in compact mode\n2. choose kind and required refs\n3. call `tm_create` with valid fields first try\n4. optionally request `mode=full kind=<kind>` when richer body/template detail needed\n\nDesign goal: low token, machine-usable, cacheable for session, reduces invalid create attempts.\n"
+}

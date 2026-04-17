@@ -1,0 +1,26 @@
+{
+  "item": {
+    "id": "task-12",
+    "label": "Implement agent-facing planning config discovery",
+    "state": "done",
+    "summary": "Add compact read-only config discovery so agents know valid planning object creation requirements before using tm_create",
+    "domain": "core",
+    "spec_ref": "spec-4",
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-12-implement-agent-facing-planning-config-discovery.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n\n\n\n\n\n\n\n# Objective\nImplement a read-only planning config discovery surface that gives agents low-token, machine-usable creation guidance before they call planning mutation tools.\n# Deliverables\n- Add a read-only config discovery surface, preferably `tm_docs op=config` unless a dedicated read tool is a better fit for the current MCP surface\n- Implement default compact mode optimized for frequent agent use\n- Support optional fuller mode for deeper config inspection\n- Return structured JSON with per-kind creation contract and usage hints\n- Update MCP guidance/docs so agents are directed to this read path before `tm_create`\n- Add tests that verify output shape and correctness against live config\n# Acceptance Criteria\n1. Agents can query supported planning kinds and current creation requirements without mutation.\n2. Compact output is sufficient to form valid `tm_create` calls for request, spec, plan, task, wp, and standard.\n3. Compact output includes default profile, default guidance, and one short usage hint per kind.\n4. Optional fuller mode exposes deeper relationship/workflow/template detail only when requested.\n5. Returned config summary matches live project config from the active root.\n6. MCP guidance/docs reference this discovery path as the preferred pre-mutation read step.\n7. Tests verify output shape and correctness against current config.\n# Implementation Notes\n\nPreferred compact output should include:\n- default profile\n- default guidance\n- supported kinds\n- per-kind: create support, domain support, required fields, optional fields, required refs, state on create, section/template names, and a short usage hint\n- available profiles and guidance levels\n\nOptional fuller mode should include deeper config detail such as:\n- relationship rules\n- workflow defaults / named workflows\n- standard defaults\n- richer template details or template bodies\n\nKeep compact mode small and cacheable for an agent session.\nDo not require agents to read raw planning YAML files for normal create-path discovery.\n"
+}

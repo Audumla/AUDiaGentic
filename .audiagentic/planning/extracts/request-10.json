@@ -18,7 +18,7 @@
       "current_understanding": "All optimization work complete and verified: lookup.json generates correctly, lookup(id) and head(id) helpers implemented with proper fallback, single-item read paths refactored to use index-backed lookup eliminating O(n) scans, extract() controls (include_body, write_to_disk) fully exposed in API/MCP/helper, all 15 test cases passing."
     },
     "kind": "request",
-    "path": "docs/planning/requests/request-10.md",
+    "path": "docs/planning/requests/request-10-optimize-planning-single-item-lookup-and-extract-token-usage.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,

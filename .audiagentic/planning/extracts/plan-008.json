@@ -2,7 +2,7 @@
   "item": {
     "id": "plan-008",
     "label": "Implement canonical guidance semantics standard",
-    "state": "draft",
+    "state": "done",
     "summary": "Create standard-0010 defining canonical semantics for light/standard/deep guidance levels",
     "spec_refs": [
       "spec-012"
@@ -25,5 +25,5 @@
   "effective_standard_refs": [
     "standard-0006"
   ],
-  "body": "\n\n\n# Objectives\n\n\n# Delivery Approach\n\n\n# Dependencies\n"
+  "body": "\n\n\n\n\n\n\n# Objectives\n\n\n# Delivery Approach\n\n\n# Dependencies\n\n# Notes\n\nMarked done on 2026-04-17 after confirming linked guidance-semantics tasks were already completed and the plan outcome exists in the repository.\n"
 }

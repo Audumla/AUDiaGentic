@@ -2,13 +2,13 @@
   "item": {
     "id": "task-0302",
     "label": "req-0038",
-    "state": "ready",
+    "state": "cancelled",
     "summary": "Refactor request-38 sync",
     "request_refs": [
       "request-19"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0302.md",
+    "path": "docs/planning/tasks/core/task-0302-req-0038.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
