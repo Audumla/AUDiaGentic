@@ -3,11 +3,11 @@ id: task-3251
 label: Refactor section_registry to use config
 state: done
 summary: Replace hardcoded SECTION_KEYS with config-driven section lists
-spec_ref: spec-0029
+spec_ref: spec-29
 request_refs: []
 standard_refs:
-- standard-0005
-- standard-0006
+- standard-5
+- standard-6
 ---
 
 

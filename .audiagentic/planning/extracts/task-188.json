@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-188",
+    "label": "Improve schema validation error messages",
+    "state": "done",
+    "summary": "Provide clear error messages indicating expected field formats (e.g., work_package_refs requires objects with ref/seq)",
+    "spec_ref": "spec-2",
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-188-improve-schema-validation-error-messages.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n\n# Description\n\nImprove schema validation error messages to be actionable and clear. Current errors like `'wp-006' is not of type 'object'` don't indicate what format is expected.\n\n**Current behavior:**\n```\n'wp-006' is not of type 'object'\n```\n\n**Required behavior:**\n```\nwork_package_refs must be a list of objects with 'ref' (string) and 'seq' (integer) fields.\nExpected: - ref: wp-6\\n  seq: 1000\nGot: wp-6\n```\n\n# Acceptance Criteria\n\n1. Validation errors include expected format examples\n2. Validation errors indicate which field has the issue\n3. Validation errors suggest correct format for reference fields (ref/seq objects)\n4. Common high-friction mistakes get clearer messages without replacing the whole validator\n5. `tm_validate()` output is human-readable and actionable\n\n# Notes\n\n- Update JSON schema files in `src/audiagentic/contracts/schemas/planning/`\n- Improve formatting in `src/audiagentic/planning/app/val_mgr.py`\n- Use `jsonschema` with custom error formatting\n- Focus on the common relation-shape errors first instead of trying to prettify every schema error\n- Implementation result: improved planning validation output so common relation-shape mistakes now explain the expected `{ref, seq}` object form instead of only surfacing raw jsonschema type errors.\n"
+}

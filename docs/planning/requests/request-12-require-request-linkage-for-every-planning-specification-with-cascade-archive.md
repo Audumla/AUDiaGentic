@@ -19,11 +19,11 @@ open_questions:
 - Should cascade archive be automatic or manual?
 - How should we handle specs with multiple request refs?
 standard_refs:
-- standard-0001
-- standard-0006
-- standard-0009
+- standard-1
+- standard-6
+- standard-9
 spec_refs:
-- spec-011
+- spec-11
 ---
 
 

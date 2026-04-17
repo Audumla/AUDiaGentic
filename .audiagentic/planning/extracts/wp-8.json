@@ -1,0 +1,58 @@
+{
+  "item": {
+    "id": "wp-8",
+    "label": "Implement guidance levels in config, API, and validation",
+    "state": "draft",
+    "summary": "Add guidance_levels to profiles.yaml, implement guidance field in requests, update validation and CLI",
+    "plan_ref": "plan-7",
+    "task_refs": [
+      {
+        "ref": "task-237",
+        "seq": 1999
+      },
+      {
+        "ref": "task-238",
+        "seq": 2999
+      },
+      {
+        "ref": "task-239",
+        "seq": 3999
+      },
+      {
+        "ref": "task-240",
+        "seq": 4999
+      },
+      {
+        "ref": "task-241",
+        "seq": 5999
+      },
+      {
+        "ref": "task-242",
+        "seq": 6999
+      },
+      {
+        "ref": "task-243",
+        "seq": 7999
+      },
+      {
+        "ref": "task-244",
+        "seq": 8999
+      }
+    ],
+    "standard_refs": [
+      "standard-6"
+    ],
+    "kind": "wp",
+    "path": "docs/planning/work-packages/core/wp-8-implement-guidance-levels-in-config-api-and-validation.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n\n\n\n# Objective\n\nImplement guidance levels (light/standard/deep) as an orthogonal dimension to work-type profiles for controlling planning depth-of-detail.\n\n# Scope of This Package\n\n- Add guidance_levels to profiles.yaml\n- Add guidance field to request schema\n- Update Config class to load guidance configuration\n- Add guidance parameter to tm_helper.py new_request()\n- Add --guidance CLI parameter to tm.py\n- Update validation rules in val_mgr.py\n- Add default_guidance to planning.yaml\n- Write tests for all guidance level functionality\n\n# Inputs\n\n- spec-10: Guidance levels specification\n- profiles.yaml: Current profile configuration\n- request.schema.json: Current request schema\n- config.py: Current Config class\n- tm_helper.py: Current helper functions\n- tm.py: Current CLI implementation\n- val_mgr.py: Current validation manager\n- planning.yaml: Current planning configuration\n\n# Instructions\n\n1. **Define guidance_levels** in profiles.yaml with light/standard/deep levels\n2. **Update request.schema.json** to include optional guidance field\n3. **Update Config class** to load guidance_levels and default_guidance\n4. **Update new_request()** in tm_helper.py to accept guidance parameter\n5. **Add --guidance argument** to tm.py request command\n6. **Update validation** in val_mgr.py to enforce guidance-appropriate sections\n7. **Add default_guidance** to planning.yaml\n8. **Write tests** covering all guidance level scenarios\n\n# Required Outputs\n\n- profiles.yaml with guidance_levels section\n- request.schema.json with guidance field\n- config.py with guidance accessor\n- tm_helper.py with guidance parameter\n- tm.py with --guidance CLI flag\n- val_mgr.py with guidance validation\n- planning.yaml with default_guidance\n- Test coverage for guidance levels\n\n# Acceptance Checks\n\n- [ ] All 8 tasks (task-0216 through task-0223) completed\n- [ ] Guidance levels load correctly from profiles.yaml\n- [ ] Guidance field validates against light/standard/deep\n- [ ] Default guidance applies when not specified\n- [ ] CLI --guidance parameter works correctly\n- [ ] Validation enforces guidance-appropriate sections\n- [ ] All tests pass\n- [ ] Backward compatible (no guidance = standard defaults)\n\n# Non-Goals\n\n- Hook/automation rules based on guidance\n- Event metadata changes for downstream tooling\n- Dynamic content generation based on guidance\n- Per-user or per-role guidance assignment\n"
+}

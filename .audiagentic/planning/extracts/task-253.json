@@ -1,0 +1,30 @@
+{
+  "item": {
+    "id": "task-253",
+    "label": "Integrate interoperability layer with planning component",
+    "state": "done",
+    "summary": "Wire up EventBus in planning, emit planning.item.state.changed events after state commits",
+    "spec_ref": "spec-19",
+    "request_refs": [
+      "request-17",
+      "request-18"
+    ],
+    "standard_refs": [
+      "standard-5",
+      "standard-6"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-253-integrate-interoperability-layer-with-planning-component.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-5",
+    "standard-6",
+    "standard-11"
+  ],
+  "body": "\n\n\n\n\n\n\n# Description\n\nIntegrate interoperability event layer into planning component. This task owns wiring planning to emit canonical post-commit events after valid state transitions.\n\n**Event emission point:**\nAfter successful state transition in `api.py.state()`:\n```python\nself.state(id_, new_state)\n# After commit:\nbus.publish(\"planning.item.state.changed\", {\n    \"old_state\": old_state,\n    \"new_state\": new_state\n}, {\n    \"subject\": {\"kind\": kind, \"id\": id_},\n    \"triggered_by\": \"manual\"  # or \"automatic\" for propagation\n})\n```\n\n**Key behaviors:**\n- Emit AFTER state commit (events are facts, not commands)\n- Include metadata: `subject`, `triggered_by`, `correlation_id`\n- Don't break existing planning behavior\n- Keep hooks functional during transition\n- Optional integration: use try/except to avoid breaking if EventBus not available\n- Default to ASYNC mode for non-blocking propagation\n\n# Acceptance Criteria\n\n- Planning emits `planning.item.state.changed` after successful state commits\n- Event includes: `subject.kind`, `subject.id`, `payload.old_state`, `payload.new_state`\n- Metadata includes: `triggered_by` (manual/automatic), `correlation_id`\n- Event emission happens after commit, not before\n- Existing planning operations work with event emission enabled\n- Unit tests cover: event emission timing, payload shape, compatibility\n- Smoke test proves planning state transitions work and events emitted\n\n# Notes\n\nDepends on: task-248 (EventBus). This task is planning emission only, not propagation.\n\n# Accomplished\n\n**Completed:**\n- \u2705 Created standard-0013 (event subscription configuration standard)\n- \u2705 Implemented configurable event-driven knowledge updates\n- \u2705 Moved event config files to `.audiagentic/knowledge/events/`\n- \u2705 Updated knowledge component to use event handlers\n- \u2705 Backfilled documentation (request-43, spec-023)\n- \u2705 Verified config loading works (3 adapters, 4 handlers)\n- \u2705 Fixed PlanningAPI hooks reference error (task-0253)\n- \u2705 Removed hooks.yaml from config loading\n- \u2705 Removed hooks validation from schema checks\n- \u2705 Verified MCP planning tools work after fix\n\n**Remaining:**\n- [ ] Delete hooks-config.schema.json (optional - keep for backward compat)\n- [ ] Update any documentation referencing hooks\n"
+}

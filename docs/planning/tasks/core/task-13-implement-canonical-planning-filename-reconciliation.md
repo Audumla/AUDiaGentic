@@ -7,8 +7,8 @@ summary: Make planning filename conventions config-driven, reconcile legacy file
 domain: core
 spec_ref: spec-5
 standard_refs:
-- standard-0005
-- standard-0006
+- standard-5
+- standard-6
 ---
 
 

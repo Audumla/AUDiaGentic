@@ -1,0 +1,37 @@
+---
+id: task-127
+label: '[PKT-PRV-049](task-0127): Provider Data Import'
+state: draft
+summary: Implement provider data import
+spec_ref: spec-12
+---
+
+
+# Description
+
+Implement this task.
+
+
+# [PKT-PRV-049](task-0116): Provider Data Import
+
+## Purpose
+
+Implement provider data import.
+
+## Scope
+
+- Import format
+- Import logic
+- Validation
+
+## Implementation
+
+1. Define format
+2. Implement import
+3. Add validation
+
+## Acceptance Criteria
+
+1. Format defined
+2. Import works
+3. Validated

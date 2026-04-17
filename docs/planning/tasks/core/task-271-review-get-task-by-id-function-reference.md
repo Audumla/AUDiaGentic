@@ -1,0 +1,36 @@
+---
+id: task-271
+label: Review get_task_by_id function reference
+state: cancelled
+summary: Function does not exist - task cancelled
+request_refs:
+- request-19
+standard_refs:
+- standard-5
+- standard-6
+---
+
+
+
+## Investigation
+
+The `get_task_by_id` function referenced in request-19 at line 645 of api.py does not exist in the codebase.
+
+## Findings
+
+1. **Searched for function**: No `get_task_by_id` function found in:
+   - `src/audiagentic/planning/app/api.py`
+   - `src/audiagentic/planning/app/task_mgr.py`
+   - Any other planning module
+
+2. **Line 645 contains**: `create_with_content` method, not `get_task_by_id`
+
+3. **Available get methods**: Only `get_content(self, id_: str) -> str` at line 808
+
+## Resolution
+
+This task is cancelled as the referenced function does not exist. The original issue in request-19 was likely based on outdated code or incorrect line reference.
+
+## Recommendation
+
+Review request-19 to identify the correct function that needs type hints and documentation, or remove this compliance issue if it was a false positive.

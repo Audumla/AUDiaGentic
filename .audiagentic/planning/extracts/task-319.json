@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-319",
+    "label": "[PKT-DIS-003](task-0170): Optional Provider Seams",
+    "state": "draft",
+    "summary": "Implement optional zeroconf and external registry provider seams",
+    "spec_ref": "spec-16",
+    "kind": "task",
+    "path": "docs/planning/tasks/discovery/task-319-pkt-dis-003-task-0170-optional-provider-seams.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-DIS-003](task-0159): Optional Provider Seams\n\n## Purpose\n\nImplement optional zeroconf and external registry provider seams.\n\n## Scope\n\n- Zeroconf seam\n- External registry seam\n- Configuration\n\n## Implementation\n\n1. Define seams\n2. Implement zeroconf\n3. Implement external\n\n## Acceptance Criteria\n\n1. Seams defined\n2. Zeroconf works\n3. External works\n"
+}

@@ -3,11 +3,11 @@ id: task-3263
 label: Atomicity Task
 state: cancelled
 summary: Summary
-spec_ref: spec-0077
+spec_ref: spec-77
 request_refs: []
 standard_refs:
-- standard-0005
-- standard-0006
+- standard-5
+- standard-6
 ---
 
 

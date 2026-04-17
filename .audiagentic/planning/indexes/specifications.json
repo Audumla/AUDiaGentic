@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-17T13:15:43.984810+00:00",
+  "generated_at": "2026-04-17T13:23:03.885942+00:00",
   "items": [
     {
       "id": "spec-0001",
@@ -21,64 +21,10 @@
       "path": "docs\\planning\\specifications\\spec-0003-specx.md"
     },
     {
-      "id": "spec-001",
-      "label": "Archive state and functionality specification",
-      "state": "done",
-      "path": "docs\\planning\\specifications\\spec-001-archive-state-and-functionality-specification.md"
-    },
-    {
-      "id": "spec-002",
-      "label": "Planning module improvements implementation specification",
-      "state": "done",
-      "path": "docs\\planning\\specifications\\spec-002-planning-module-improvements-implementation-specification.md"
-    },
-    {
-      "id": "spec-0028",
-      "label": "Test request \u2014 Specification",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0028-test-request-specification.md"
-    },
-    {
-      "id": "spec-0029",
-      "label": "Config-driven planning document structure",
-      "state": "ready",
-      "path": "docs\\planning\\specifications\\spec-0029-config-driven-planning-document-structure.md"
-    },
-    {
-      "id": "spec-003",
-      "label": "Fix planning API and MCP gaps revealed by coverage tests",
-      "state": "in_progress",
-      "path": "docs\\planning\\specifications\\spec-003-fix-planning-api-and-mcp-gaps-revealed-by-coverage-tests.md"
-    },
-    {
-      "id": "spec-0030",
-      "label": "MCP Test Request \u2014 Specification",
-      "state": "cancelled",
-      "path": "docs\\planning\\specifications\\spec-0030-mcp-test-request-specification.md"
-    },
-    {
-      "id": "spec-0031",
-      "label": "MCP Test Spec",
-      "state": "cancelled",
-      "path": "docs\\planning\\specifications\\spec-0031-mcp-test-spec.md"
-    },
-    {
       "id": "spec-0039",
       "label": "Test spec with defaults",
       "state": "draft",
       "path": "docs\\planning\\specifications\\spec-0039-test-spec-with-defaults.md"
-    },
-    {
-      "id": "spec-004",
-      "label": "Comprehensive implementation migration \u2014 Master specification",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-004-comprehensive-implementation-migration-master-specification.md"
-    },
-    {
-      "id": "spec-005",
-      "label": "MCP layer efficiency and planning surface ergonomics \u2014 Master specification",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-005-mcp-layer-efficiency-and-planning-surface-ergonomics-master-specification.md"
     },
     {
       "id": "spec-0057",
@@ -99,22 +45,10 @@
       "path": "docs\\planning\\specifications\\spec-0059-claim-test-request-specification.md"
     },
     {
-      "id": "spec-006",
-      "label": "Stack profiles and unified configuration \u2014 Implementation specification",
-      "state": "done",
-      "path": "docs\\planning\\specifications\\spec-006-stack-profiles-and-unified-configuration-implementation-specification.md"
-    },
-    {
       "id": "spec-0061",
       "label": "Test Request \u2014 Specification",
       "state": "draft",
       "path": "docs\\planning\\specifications\\spec-0061-test-request-specification.md"
-    },
-    {
-      "id": "spec-007",
-      "label": "Index-backed planning lookup and lean extract/read surfaces",
-      "state": "ready",
-      "path": "docs\\planning\\specifications\\spec-007-index-backed-planning-lookup-and-lean-extract-read-surfaces.md"
     },
     {
       "id": "spec-0070",
@@ -123,166 +57,154 @@
       "path": "docs\\planning\\specifications\\spec-0070-standard-0007-implementation-spec.md"
     },
     {
-      "id": "spec-0071",
-      "label": "Get Test Request \u2014 Specification",
-      "state": "cancelled",
-      "path": "docs\\planning\\specifications\\spec-0071-get-test-request-specification.md"
+      "id": "spec-1",
+      "label": "Archive state and functionality specification",
+      "state": "done",
+      "path": "docs\\planning\\specifications\\spec-1-archive-state-and-functionality-specification.md"
     },
     {
-      "id": "spec-0072",
-      "label": "Get Test Spec",
-      "state": "cancelled",
-      "path": "docs\\planning\\specifications\\spec-0072-get-test-spec.md"
-    },
-    {
-      "id": "spec-0073",
-      "label": "Get Test Request 2 \u2014 Specification",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0073-get-test-request-2-specification.md"
-    },
-    {
-      "id": "spec-0075",
-      "label": "Test Request \u2014 Specification",
-      "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-0075-test-request-specification.md"
-    },
-    {
-      "id": "spec-0077",
-      "label": "Test Spec",
-      "state": "cancelled",
-      "path": "docs\\planning\\specifications\\spec-0077-test-spec.md"
-    },
-    {
-      "id": "spec-0078",
-      "label": "Generic Req \u2014 Specification",
-      "state": "cancelled",
-      "path": "docs\\planning\\specifications\\spec-0078-generic-req-specification.md"
-    },
-    {
-      "id": "spec-0079",
-      "label": "Generic Spec",
-      "state": "cancelled",
-      "path": "docs\\planning\\specifications\\spec-0079-generic-spec.md"
-    },
-    {
-      "id": "spec-008",
-      "label": "Multi-item batch updates and bulk operations for planning MCP",
-      "state": "cancelled",
-      "path": "docs\\planning\\specifications\\spec-008-multi-item-batch-updates-and-bulk-operations-for-planning-mcp.md"
-    },
-    {
-      "id": "spec-009",
-      "label": "Cursory sensitive data detection in planning validation (v1)",
-      "state": "ready",
-      "path": "docs\\planning\\specifications\\spec-009-cursory-sensitive-data-detection-in-planning-validation-v1.md"
-    },
-    {
-      "id": "spec-010",
+      "id": "spec-10",
       "label": "Guidance levels for controlling planning depth-of-detail",
       "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-010-guidance-levels-for-controlling-planning-depth-of-detail.md"
+      "path": "docs\\planning\\specifications\\spec-10-guidance-levels-for-controlling-planning-depth-of-detail.md"
     },
     {
-      "id": "spec-011",
+      "id": "spec-11",
       "label": "Unified workflow states for all planning item types",
       "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-011-unified-workflow-states-for-all-planning-item-types.md"
+      "path": "docs\\planning\\specifications\\spec-11-unified-workflow-states-for-all-planning-item-types.md"
     },
     {
-      "id": "spec-012",
+      "id": "spec-12",
       "label": "Canonical semantics for guidance levels",
       "state": "done",
-      "path": "docs\\planning\\specifications\\spec-012-canonical-semantics-for-guidance-levels.md"
+      "path": "docs\\planning\\specifications\\spec-12-canonical-semantics-for-guidance-levels.md"
     },
     {
-      "id": "spec-013",
+      "id": "spec-13",
       "label": "Integrate Knowledge Component v7.4 \u2014 Specification",
       "state": "cancelled",
-      "path": "docs\\planning\\specifications\\spec-013-integrate-knowledge-component-v7-4-specification.md"
+      "path": "docs\\planning\\specifications\\spec-13-integrate-knowledge-component-v7-4-specification.md"
     },
     {
-      "id": "spec-014",
+      "id": "spec-14",
       "label": "Knowledge Component Integration Specification",
       "state": "done",
-      "path": "docs\\planning\\specifications\\spec-014-knowledge-component-integration-specification.md"
+      "path": "docs\\planning\\specifications\\spec-14-knowledge-component-integration-specification.md"
     },
     {
-      "id": "spec-015",
+      "id": "spec-15",
       "label": "Knowledge Component Improvements \u2014 Specification",
       "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-015-knowledge-component-improvements-specification.md"
+      "path": "docs\\planning\\specifications\\spec-15-knowledge-component-improvements-specification.md"
     },
     {
-      "id": "spec-016",
+      "id": "spec-16",
       "label": "Knowledge Component Improvements Specification",
       "state": "in_progress",
-      "path": "docs\\planning\\specifications\\spec-016-knowledge-component-improvements-specification.md"
+      "path": "docs\\planning\\specifications\\spec-16-knowledge-component-improvements-specification.md"
     },
     {
-      "id": "spec-017",
+      "id": "spec-17",
       "label": "Planning Module Critical Fixes \u2014 Specification",
       "state": "cancelled",
-      "path": "docs\\planning\\specifications\\spec-017-planning-module-critical-fixes-specification.md"
+      "path": "docs\\planning\\specifications\\spec-17-planning-module-critical-fixes-specification.md"
     },
     {
-      "id": "spec-018",
+      "id": "spec-18",
       "label": "Planning Module Critical Fixes Specification",
       "state": "done",
-      "path": "docs\\planning\\specifications\\spec-018-planning-module-critical-fixes-specification.md"
+      "path": "docs\\planning\\specifications\\spec-18-planning-module-critical-fixes-specification.md"
     },
     {
-      "id": "spec-019",
+      "id": "spec-19",
       "label": "Interoperability event layer specification",
       "state": "in_progress",
-      "path": "docs\\planning\\specifications\\spec-019-interoperability-event-layer-specification.md"
+      "path": "docs\\planning\\specifications\\spec-19-interoperability-event-layer-specification.md"
     },
     {
-      "id": "spec-020",
+      "id": "spec-2",
+      "label": "Planning module improvements implementation specification",
+      "state": "done",
+      "path": "docs\\planning\\specifications\\spec-2-planning-module-improvements-implementation-specification.md"
+    },
+    {
+      "id": "spec-20",
       "label": "Planning state propagation over events specification",
       "state": "in_progress",
-      "path": "docs\\planning\\specifications\\spec-020-planning-state-propagation-over-events-specification.md"
+      "path": "docs\\planning\\specifications\\spec-20-planning-state-propagation-over-events-specification.md"
     },
     {
-      "id": "spec-021",
+      "id": "spec-21",
       "label": "Code Standards Compliance Review \u2014 Specification",
       "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-021-code-standards-compliance-review-specification.md"
+      "path": "docs\\planning\\specifications\\spec-21-code-standards-compliance-review-specification.md"
     },
     {
-      "id": "spec-022",
+      "id": "spec-22",
       "label": "Auto-state propagation with event subscription implementation specification",
       "state": "cancelled",
-      "path": "docs\\planning\\specifications\\spec-022-auto-state-propagation-with-event-subscription-implementation-specification.md"
+      "path": "docs\\planning\\specifications\\spec-22-auto-state-propagation-with-event-subscription-implementation-specification.md"
     },
     {
-      "id": "spec-023",
+      "id": "spec-23",
       "label": "Configurable event-driven knowledge updates implementation specification",
       "state": "implemented",
-      "path": "docs\\planning\\specifications\\spec-023-configurable-event-driven-knowledge-updates-implementation-specification.md"
+      "path": "docs\\planning\\specifications\\spec-23-configurable-event-driven-knowledge-updates-implementation-specification.md"
     },
     {
-      "id": "spec-024",
+      "id": "spec-24",
       "label": "Test deterministic events \u2014 Specification",
       "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-024-test-deterministic-events-specification.md"
+      "path": "docs\\planning\\specifications\\spec-24-test-deterministic-events-specification.md"
     },
     {
-      "id": "spec-025",
+      "id": "spec-25",
       "label": "api-requirements",
       "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-025-api-requirements.md"
+      "path": "docs\\planning\\specifications\\spec-25-api-requirements.md"
     },
     {
-      "id": "spec-026",
+      "id": "spec-26",
       "label": "validation-requirements",
       "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-026-validation-requirements.md"
+      "path": "docs\\planning\\specifications\\spec-26-validation-requirements.md"
     },
     {
-      "id": "spec-027",
+      "id": "spec-27",
       "label": "Test hooks fix \u2014 Specification",
       "state": "draft",
-      "path": "docs\\planning\\specifications\\spec-027-test-hooks-fix-specification.md"
+      "path": "docs\\planning\\specifications\\spec-27-test-hooks-fix-specification.md"
+    },
+    {
+      "id": "spec-28",
+      "label": "Test request \u2014 Specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-28-test-request-specification.md"
+    },
+    {
+      "id": "spec-29",
+      "label": "Config-driven planning document structure",
+      "state": "ready",
+      "path": "docs\\planning\\specifications\\spec-29-config-driven-planning-document-structure.md"
+    },
+    {
+      "id": "spec-3",
+      "label": "Fix planning API and MCP gaps revealed by coverage tests",
+      "state": "in_progress",
+      "path": "docs\\planning\\specifications\\spec-3-fix-planning-api-and-mcp-gaps-revealed-by-coverage-tests.md"
+    },
+    {
+      "id": "spec-30",
+      "label": "MCP Test Request \u2014 Specification",
+      "state": "cancelled",
+      "path": "docs\\planning\\specifications\\spec-30-mcp-test-request-specification.md"
+    },
+    {
+      "id": "spec-31",
+      "label": "MCP Test Spec",
+      "state": "cancelled",
+      "path": "docs\\planning\\specifications\\spec-31-mcp-test-spec.md"
     },
     {
       "id": "spec-4",
@@ -291,10 +213,88 @@
       "path": "docs\\planning\\specifications\\spec-4-compact-planning-config-discovery-for-agents.md"
     },
     {
+      "id": "spec-4",
+      "label": "Comprehensive implementation migration \u2014 Master specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-4-comprehensive-implementation-migration-master-specification.md"
+    },
+    {
       "id": "spec-5",
       "label": "Canonical planning filename and maintenance reconciliation",
       "state": "draft",
       "path": "docs\\planning\\specifications\\spec-5-canonical-planning-filename-and-maintenance-reconciliation.md"
+    },
+    {
+      "id": "spec-5",
+      "label": "MCP layer efficiency and planning surface ergonomics \u2014 Master specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-5-mcp-layer-efficiency-and-planning-surface-ergonomics-master-specification.md"
+    },
+    {
+      "id": "spec-6",
+      "label": "Stack profiles and unified configuration \u2014 Implementation specification",
+      "state": "done",
+      "path": "docs\\planning\\specifications\\spec-6-stack-profiles-and-unified-configuration-implementation-specification.md"
+    },
+    {
+      "id": "spec-7",
+      "label": "Index-backed planning lookup and lean extract/read surfaces",
+      "state": "ready",
+      "path": "docs\\planning\\specifications\\spec-7-index-backed-planning-lookup-and-lean-extract-read-surfaces.md"
+    },
+    {
+      "id": "spec-71",
+      "label": "Get Test Request \u2014 Specification",
+      "state": "cancelled",
+      "path": "docs\\planning\\specifications\\spec-71-get-test-request-specification.md"
+    },
+    {
+      "id": "spec-72",
+      "label": "Get Test Spec",
+      "state": "cancelled",
+      "path": "docs\\planning\\specifications\\spec-72-get-test-spec.md"
+    },
+    {
+      "id": "spec-73",
+      "label": "Get Test Request 2 \u2014 Specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-73-get-test-request-2-specification.md"
+    },
+    {
+      "id": "spec-75",
+      "label": "Test Request \u2014 Specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-75-test-request-specification.md"
+    },
+    {
+      "id": "spec-77",
+      "label": "Test Spec",
+      "state": "cancelled",
+      "path": "docs\\planning\\specifications\\spec-77-test-spec.md"
+    },
+    {
+      "id": "spec-78",
+      "label": "Generic Req \u2014 Specification",
+      "state": "cancelled",
+      "path": "docs\\planning\\specifications\\spec-78-generic-req-specification.md"
+    },
+    {
+      "id": "spec-79",
+      "label": "Generic Spec",
+      "state": "cancelled",
+      "path": "docs\\planning\\specifications\\spec-79-generic-spec.md"
+    },
+    {
+      "id": "spec-8",
+      "label": "Multi-item batch updates and bulk operations for planning MCP",
+      "state": "cancelled",
+      "path": "docs\\planning\\specifications\\spec-8-multi-item-batch-updates-and-bulk-operations-for-planning-mcp.md"
+    },
+    {
+      "id": "spec-9",
+      "label": "Cursory sensitive data detection in planning validation (v1)",
+      "state": "ready",
+      "path": "docs\\planning\\specifications\\spec-9-cursory-sensitive-data-detection-in-planning-validation-v1.md"
     }
   ]
 }

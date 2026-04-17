@@ -16,11 +16,11 @@
       "request_type": "feature"
     },
     "standard_refs": [
-      "standard-0001"
+      "standard-1"
     ],
     "spec_refs": [
-      "spec-0078",
-      "spec-0079"
+      "spec-78",
+      "spec-79"
     ],
     "kind": "request",
     "path": "docs/planning/requests/request-28-generic-req.md",
@@ -31,7 +31,7 @@
     "restored_by": null
   },
   "effective_standard_refs": [
-    "standard-0001"
+    "standard-1"
   ],
   "body": "\n\n\n\n\n# Understanding\n\nInitial feature intake captured; the desired capability is understood well enough to refine directly into implementation work.\n\n# Open Questions\n\n- What exact outcome is required?\n- What constraints or non-goals apply?\n- How will success be verified?\n# Notes\nSuperseded on 2026-04-17 as a generic placeholder artifact rather than substantive project work.\n"
 }

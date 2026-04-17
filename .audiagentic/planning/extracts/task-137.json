@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-137",
+    "label": "[PKT-PRV-059](task-0137): Provider Data Profiling",
+    "state": "draft",
+    "summary": "Implement provider data profiling",
+    "spec_ref": "spec-12",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-137-pkt-prv-059-task-0137-provider-data-profiling.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-059](task-0126): Provider Data Profiling\n\n## Purpose\n\nImplement provider data profiling.\n\n## Scope\n\n- Profile format\n- Analysis\n- Reporting\n\n## Implementation\n\n1. Define format\n2. Implement analysis\n3. Add reporting\n\n## Acceptance Criteria\n\n1. Format defined\n2. Analysis works\n3. Reports generated\n"
+}

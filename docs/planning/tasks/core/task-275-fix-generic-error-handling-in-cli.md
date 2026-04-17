@@ -1,0 +1,45 @@
+---
+id: task-275
+label: Fix generic error handling in CLI
+state: completed
+summary: Implement structured error handling with suggestions
+request_refs:
+- request-19
+standard_refs:
+- standard-5
+- standard-6
+---
+
+
+
+## Completed Work
+
+Fixed generic error handling in `channels/cli/main.py` prompt-launch command.
+
+### Changes Made:
+
+1. **Enhanced error response structure**:
+   - Added `error-code` field: "CLI-VALIDATION-001"
+   - Added `suggestion` field with recovery guidance
+   - Maintained existing `status`, `kind`, and `message` fields
+
+2. **Context-aware suggestions**:
+   - JSON errors: "Check that JSON arguments are valid and properly formatted"
+   - Prompt errors: "Ensure prompt contains valid @ag-* tag and required fields"
+   - Generic errors: "Review argument values and ensure they match expected format"
+
+3. **Machine-parseable output**:
+   - All errors returned as structured JSON
+   - Consistent field names across error types
+   - Error codes follow CLI-VALIDATION-XXX pattern
+
+## Standards Compliance
+- **standard-0010**: Structured error handling with suggestions
+- **standard-0005**: Verification with recovery guidance
+
+## Testing
+Error handling now provides:
+- Specific error codes for tracking
+- Context-aware recovery suggestions
+- Machine-parseable JSON format
+- User-friendly messages with technical details

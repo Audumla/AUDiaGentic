@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-187",
+    "label": "Add duplicate detection for requests and specs",
+    "state": "done",
+    "summary": "Prevent creation of duplicate requests/specs with the same label during first-pass creation",
+    "spec_ref": "spec-2",
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-187-add-duplicate-detection-for-requests-and-specs.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n\n# Description\n\nAdd duplicate detection to prevent creating multiple requests or specs with the same label. This prevents the issue where request-6 was created multiple times due to lack of a simple first-pass duplicate guard.\n\n**Current behavior:**\n- Creating a request with label \"Planning module critical fixes...\" creates a new ID each time\n- No check for existing requests with the same label\n\n**Required behavior:**\n- `tm_new_request()` checks for existing requests with the same label (case-insensitive exact match)\n- `tm_new_spec()` checks for existing specs with same label\n- Returns an explicit duplicate result or error instead of silently creating a new item\n\n# Acceptance Criteria\n\n1. `tm_new_request(label=\"...\")` raises error if request with same label exists\n2. `tm_new_spec(label=\"...\")` raises error if spec with same label exists\n3. Duplicate detection uses exact label matching for the first pass\n4. Error message or helper result suggests the existing ID when a duplicate is found\n5. Works for both helper/MCP creation paths and direct API calls\n\n# Notes\n- Implement in `tools/planning/tm_helper.py` and `src/audiagentic/planning/app/api.py`\n- Keep the first pass narrow and explainable; broader fuzzy matching can be added later if needed\n- Implementation result: added first-pass duplicate detection for requests and specifications in the core API and helper layer. The guard now blocks exact label duplicates while still allowing common reused summaries.\n"
+}

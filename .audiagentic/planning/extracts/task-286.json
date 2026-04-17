@@ -1,0 +1,20 @@
+{
+  "item": {
+    "id": "task-286",
+    "label": "plan-19",
+    "state": "cancelled",
+    "summary": "Refactor plan-0019 drift detection",
+    "request_refs": [
+      "request-19"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-286-plan-19.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n\n# Description\n\nRefactor plan-012 drift detection\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
+}

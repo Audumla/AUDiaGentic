@@ -1,0 +1,37 @@
+---
+id: task-121
+label: '[PKT-PRV-043](task-0121): Provider Compliance Checks'
+state: draft
+summary: Implement provider compliance checks
+spec_ref: spec-12
+---
+
+
+# Description
+
+Implement this task.
+
+
+# [PKT-PRV-043](task-0110): Provider Compliance Checks
+
+## Purpose
+
+Implement provider compliance checks.
+
+## Scope
+
+- Compliance rules
+- Validation
+- Reporting
+
+## Implementation
+
+1. Define rules
+2. Implement validation
+3. Add reporting
+
+## Acceptance Criteria
+
+1. Rules defined
+2. Validation works
+3. Reports generated

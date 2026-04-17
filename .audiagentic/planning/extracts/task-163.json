@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-163",
+    "label": "[PKT-MIG-002](task-0163): Provider Migration Rules",
+    "state": "draft",
+    "summary": "Define provider migration rules",
+    "spec_ref": "spec-14",
+    "kind": "task",
+    "path": "docs/planning/tasks/migration/task-163-pkt-mig-002-task-0163-provider-migration-rules.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-MIG-002](task-0152): Provider Migration Rules\n\n## Purpose\n\nDefine provider migration rules.\n\n## Scope\n\n- Rule format\n- Migration logic\n- Validation\n\n## Implementation\n\n1. Define format\n2. Implement migration\n3. Add validation\n\n## Acceptance Criteria\n\n1. Format defined\n2. Migration works\n3. Validated\n"
+}

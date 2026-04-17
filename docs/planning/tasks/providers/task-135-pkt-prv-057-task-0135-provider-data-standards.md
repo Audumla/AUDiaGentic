@@ -1,0 +1,37 @@
+---
+id: task-135
+label: '[PKT-PRV-057](task-0135): Provider Data Standards'
+state: draft
+summary: Implement provider data standards
+spec_ref: spec-12
+---
+
+
+# Description
+
+Implement this task.
+
+
+# [PKT-PRV-057](task-0124): Provider Data Standards
+
+## Purpose
+
+Implement provider data standards.
+
+## Scope
+
+- Standard format
+- Enforcement
+- Compliance
+
+## Implementation
+
+1. Define format
+2. Implement enforcement
+3. Check compliance
+
+## Acceptance Criteria
+
+1. Format defined
+2. Enforcement works
+3. Compliant
