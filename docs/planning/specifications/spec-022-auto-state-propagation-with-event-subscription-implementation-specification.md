@@ -5,7 +5,7 @@ state: cancelled
 summary: Implement event subscription for StatePropagationEngine to enable automatic
   state propagation across planning hierarchies
 request_refs:
-- request-020
+- request-20
 task_refs:
 - ref: task-0321
 standard_refs:
@@ -128,4 +128,4 @@ Propagation must respect delivery mode configuration.
 
 # Notes
 
-Cancelled on 2026-04-17 because `request-020` was superseded by implemented subscription wiring and the broader remaining work tracked under `request-018`.
+Cancelled on 2026-04-17 because `request-20` was superseded by implemented subscription wiring and the broader remaining work tracked under `request-18`.

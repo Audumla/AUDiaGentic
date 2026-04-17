@@ -6,7 +6,7 @@
     "summary": "Define event schema registry and governance \u2014 complete",
     "spec_ref": "spec-019",
     "request_refs": [
-      "request-017"
+      "request-17"
     ],
     "standard_refs": [
       "standard-0005",

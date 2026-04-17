@@ -5,7 +5,7 @@
     "state": "draft",
     "summary": "Unified specification for MCP layer improvements and planning surface usability. Covers both wrapper/template efficiency work and planning mutation coverage gaps.",
     "request_refs": [
-      "request-003"
+      "request-3"
     ],
     "task_refs": [],
     "kind": "spec",

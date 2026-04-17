@@ -6,7 +6,7 @@
     "summary": "Update val_mgr.py to enforce required sections and acceptance criteria depth based on guidance level",
     "spec_ref": "spec-012",
     "request_refs": [
-      "request-013"
+      "request-13"
     ],
     "standard_refs": [
       "standard-0005",

@@ -4,7 +4,7 @@ label: Tmp Spec B
 state: draft
 summary: tmp
 request_refs:
-- request-0003
+- request-23
 task_refs: []
 standard_refs:
 - standard-0006

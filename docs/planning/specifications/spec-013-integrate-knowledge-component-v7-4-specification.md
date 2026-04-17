@@ -7,7 +7,7 @@ summary: Specification for Critically review and integrate the knowledge compone
   design, compatibility with existing planning system, and proper event bridging for
   task completion tracking.
 request_refs:
-- request-014
+- request-14
 task_refs: []
 ---
 

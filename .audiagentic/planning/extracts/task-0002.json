@@ -5,7 +5,7 @@
     "state": "draft",
     "summary": "Delete docs/knowledge/sync/hooks.yml and remove CLI hooks commands",
     "request_refs": [
-      "request-0001"
+      "request-21"
     ],
     "standard_refs": [
       "standard-0005",

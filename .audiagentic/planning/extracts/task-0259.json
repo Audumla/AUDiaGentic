@@ -6,7 +6,7 @@
     "summary": "Implement CLI commands for event layer diagnostics \u2014 blocked: deferred until core is stable and operational need confirmed in practice",
     "spec_ref": "spec-019",
     "request_refs": [
-      "request-017"
+      "request-17"
     ],
     "standard_refs": [
       "standard-0005",

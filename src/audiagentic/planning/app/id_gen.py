@@ -140,7 +140,7 @@ def next_id(
         finally:
             lock_file.unlink(missing_ok=True)
 
-    return f"{kind}-{n:04d}"
+    return f"{kind}-{n}"
 
 
 def _next_id_config_mode(counter_path: Path, id_prefix: str) -> str:
