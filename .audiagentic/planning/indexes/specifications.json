@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-17T08:43:08.905022+00:00",
+  "generated_at": "2026-04-17T13:15:43.984810+00:00",
   "items": [
     {
       "id": "spec-0001",
@@ -283,6 +283,18 @@
       "label": "Test hooks fix \u2014 Specification",
       "state": "draft",
       "path": "docs\\planning\\specifications\\spec-027-test-hooks-fix-specification.md"
+    },
+    {
+      "id": "spec-4",
+      "label": "Compact planning config discovery for agents",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-4-compact-planning-config-discovery-for-agents.md"
+    },
+    {
+      "id": "spec-5",
+      "label": "Canonical planning filename and maintenance reconciliation",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-5-canonical-planning-filename-and-maintenance-reconciliation.md"
     }
   ]
 }

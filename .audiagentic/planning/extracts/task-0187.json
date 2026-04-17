@@ -6,7 +6,7 @@
     "summary": "Prevent creation of duplicate requests/specs with the same label during first-pass creation",
     "spec_ref": "spec-002",
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0187.md",
+    "path": "docs/planning/tasks/core/task-0187-add-duplicate-detection-for-requests-and-specs.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
