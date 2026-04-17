@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-17T13:34:02.955291+00:00",
+  "generated_at": "2026-04-17T13:35:20.317126+00:00",
   "items": {
     "plan-0001": {
       "id": "plan-0001",
@@ -27,6 +27,15 @@
       "state": "draft",
       "path": "docs/planning/plans/plan-0003-plan-with-request.md",
       "deleted": true,
+      "archived": false
+    },
+    "plan-0004": {
+      "id": "plan-0004",
+      "kind": "plan",
+      "label": "Knowledge proposal targeting and classification",
+      "state": "draft",
+      "path": "docs/planning/plans/plan-0004-knowledge-proposal-targeting-and-classification.md",
+      "deleted": false,
       "archived": false
     },
     "plan-0021": {
@@ -1106,6 +1115,60 @@
       "label": "[PKT-CRD-001](task-0173): Coordinator Consumption Seam",
       "state": "draft",
       "path": "docs/planning/tasks/coordinator/task-318-pkt-crd-001-task-0173-coordinator-consumption-seam.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0014": {
+      "id": "task-0014",
+      "kind": "task",
+      "label": "Implement proposal targeting logic from drift analysis",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-0014-implement-proposal-targeting-logic-from-drift-analysis.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0015": {
+      "id": "task-0015",
+      "kind": "task",
+      "label": "Implement proposal classification (actionable, review-only, no-op)",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-0015-implement-proposal-classification-actionable-review-only-no-op.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0016": {
+      "id": "task-0016",
+      "kind": "task",
+      "label": "Filter and skip no-op transient proposals",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-0016-filter-and-skip-no-op-transient-proposals.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0017": {
+      "id": "task-0017",
+      "kind": "task",
+      "label": "Generate patch actions for high-confidence proposals",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-0017-generate-patch-actions-for-high-confidence-proposals.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0018": {
+      "id": "task-0018",
+      "kind": "task",
+      "label": "Add tests and benchmark proposal volume reduction",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-0018-add-tests-and-benchmark-proposal-volume-reduction.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0019": {
+      "id": "task-0019",
+      "kind": "task",
+      "label": "Integrate with apply_proposal workflow",
+      "state": "draft",
+      "path": "docs/planning/tasks/core/task-0019-integrate-with-apply-proposal-workflow.md",
       "deleted": false,
       "archived": false
     },
