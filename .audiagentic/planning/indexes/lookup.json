@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-17T13:31:29.078340+00:00",
+  "generated_at": "2026-04-17T13:34:02.955291+00:00",
   "items": {
     "plan-0001": {
       "id": "plan-0001",
@@ -178,7 +178,7 @@
       "kind": "request",
       "label": "Comprehensive implementation docs migration",
       "state": "closed",
-      "path": "docs/planning/requests/request-1.md",
+      "path": "docs/planning/requests/request-1-comprehensive-implementation-docs-migration.md",
       "deleted": false,
       "archived": false
     },
@@ -187,7 +187,7 @@
       "kind": "request",
       "label": "Optimize planning single-item lookup and extract token usage",
       "state": "closed",
-      "path": "docs/planning/requests/request-10.md",
+      "path": "docs/planning/requests/request-10-optimize-planning-single-item-lookup-and-extract-token-usage.md",
       "deleted": false,
       "archived": false
     },
@@ -196,7 +196,7 @@
       "kind": "request",
       "label": "Add guidance levels (light/standard/deep) to control planning depth-of-detail",
       "state": "closed",
-      "path": "docs/planning/requests/request-11.md",
+      "path": "docs/planning/requests/request-11-add-guidance-levels-light-standard-deep-to-control-planning-depth-of-detail.md",
       "deleted": false,
       "archived": false
     },
@@ -205,7 +205,7 @@
       "kind": "request",
       "label": "Require request linkage for every planning specification, with cascade archive",
       "state": "closed",
-      "path": "docs/planning/requests/request-12.md",
+      "path": "docs/planning/requests/request-12-require-request-linkage-for-every-planning-specification-with-cascade-archive.md",
       "deleted": false,
       "archived": false
     },
@@ -214,7 +214,7 @@
       "kind": "request",
       "label": "Define canonical semantics for planning guidance levels",
       "state": "closed",
-      "path": "docs/planning/requests/request-13.md",
+      "path": "docs/planning/requests/request-13-define-canonical-semantics-for-planning-guidance-levels.md",
       "deleted": false,
       "archived": false
     },
@@ -223,7 +223,7 @@
       "kind": "request",
       "label": "Integrate Knowledge Component v7.4",
       "state": "closed",
-      "path": "docs/planning/requests/request-14.md",
+      "path": "docs/planning/requests/request-14-integrate-knowledge-component-v7-4.md",
       "deleted": false,
       "archived": false
     },
@@ -232,7 +232,7 @@
       "kind": "request",
       "label": "Knowledge Component Improvements",
       "state": "distilled",
-      "path": "docs/planning/requests/request-15.md",
+      "path": "docs/planning/requests/request-15-knowledge-component-improvements.md",
       "deleted": false,
       "archived": false
     },
@@ -241,7 +241,7 @@
       "kind": "request",
       "label": "Planning Module Critical Fixes",
       "state": "closed",
-      "path": "docs/planning/requests/request-16.md",
+      "path": "docs/planning/requests/request-16-planning-module-critical-fixes.md",
       "deleted": false,
       "archived": false
     },
@@ -250,7 +250,7 @@
       "kind": "request",
       "label": "Interoperability layer for cross-component communication",
       "state": "closed",
-      "path": "docs/planning/requests/request-17.md",
+      "path": "docs/planning/requests/request-17-interoperability-layer-for-cross-component-communication.md",
       "deleted": false,
       "archived": false
     },
@@ -259,7 +259,7 @@
       "kind": "request",
       "label": "Automatic state propagation for planning hierarchies",
       "state": "closed",
-      "path": "docs/planning/requests/request-18.md",
+      "path": "docs/planning/requests/request-18-automatic-state-propagation-for-planning-hierarchies.md",
       "deleted": false,
       "archived": false
     },
@@ -268,7 +268,7 @@
       "kind": "request",
       "label": "Code Standards Compliance Review",
       "state": "closed",
-      "path": "docs/planning/requests/request-19.md",
+      "path": "docs/planning/requests/request-19-code-standards-compliance-review.md",
       "deleted": false,
       "archived": false
     },
@@ -277,7 +277,7 @@
       "kind": "request",
       "label": "Add archive functionality to planning core",
       "state": "superseded",
-      "path": "docs/planning/requests/request-2.md",
+      "path": "docs/planning/requests/request-2-add-archive-functionality-to-planning-core.md",
       "deleted": false,
       "archived": false
     },
@@ -286,7 +286,7 @@
       "kind": "request",
       "label": "Auto-state propagation with event subscription",
       "state": "superseded",
-      "path": "docs/planning/requests/request-20.md",
+      "path": "docs/planning/requests/request-20-auto-state-propagation-with-event-subscription.md",
       "deleted": false,
       "archived": false
     },
@@ -295,7 +295,7 @@
       "kind": "request",
       "label": "Refactor knowledge component hooks to use event-driven architecture",
       "state": "superseded",
-      "path": "docs/planning/requests/request-21.md",
+      "path": "docs/planning/requests/request-21-refactor-knowledge-component-hooks-to-use-event-driven-architecture.md",
       "deleted": false,
       "archived": false
     },
@@ -304,7 +304,7 @@
       "kind": "request",
       "label": "Config-driven planning document structure",
       "state": "distilled",
-      "path": "docs/planning/requests/request-25.md",
+      "path": "docs/planning/requests/request-25-config-driven-planning-document-structure.md",
       "deleted": false,
       "archived": false
     },
@@ -313,7 +313,7 @@
       "kind": "request",
       "label": "MCP Test Request",
       "state": "superseded",
-      "path": "docs/planning/requests/request-26.md",
+      "path": "docs/planning/requests/request-26-mcp-test-request.md",
       "deleted": false,
       "archived": false
     },
@@ -322,7 +322,7 @@
       "kind": "request",
       "label": "Get Test Request",
       "state": "superseded",
-      "path": "docs/planning/requests/request-27.md",
+      "path": "docs/planning/requests/request-27-get-test-request.md",
       "deleted": false,
       "archived": false
     },
@@ -331,7 +331,7 @@
       "kind": "request",
       "label": "Generic Req",
       "state": "superseded",
-      "path": "docs/planning/requests/request-28.md",
+      "path": "docs/planning/requests/request-28-generic-req.md",
       "deleted": false,
       "archived": false
     },
@@ -340,7 +340,7 @@
       "kind": "request",
       "label": "Upgrade knowledge proposal automation",
       "state": "captured",
-      "path": "docs/planning/requests/request-29.md",
+      "path": "docs/planning/requests/request-29-upgrade-knowledge-proposal-automation.md",
       "deleted": false,
       "archived": false
     },
@@ -349,7 +349,7 @@
       "kind": "request",
       "label": "MCP layer efficiency improvements and usage enforcement",
       "state": "closed",
-      "path": "docs/planning/requests/request-3.md",
+      "path": "docs/planning/requests/request-3-mcp-layer-efficiency-improvements-and-usage-enforcement.md",
       "deleted": false,
       "archived": false
     },
@@ -358,7 +358,7 @@
       "kind": "request",
       "label": "Expose planning config for agents",
       "state": "closed",
-      "path": "docs/planning/requests/request-30.md",
+      "path": "docs/planning/requests/request-30-expose-planning-config-for-agents.md",
       "deleted": false,
       "archived": false
     },
@@ -367,7 +367,7 @@
       "kind": "request",
       "label": "Reconcile planning filename and numbering conventions",
       "state": "closed",
-      "path": "docs/planning/requests/request-31.md",
+      "path": "docs/planning/requests/request-31-reconcile-planning-filename-and-numbering-conventions.md",
       "deleted": false,
       "archived": false
     },
@@ -376,7 +376,7 @@
       "kind": "request",
       "label": "Archive functionality for planning items",
       "state": "closed",
-      "path": "docs/planning/requests/request-4.md",
+      "path": "docs/planning/requests/request-4-archive-functionality-for-planning-items.md",
       "deleted": false,
       "archived": false
     },
@@ -385,7 +385,7 @@
       "kind": "request",
       "label": "Sensitive data detection and review for planning items",
       "state": "closed",
-      "path": "docs/planning/requests/request-5.md",
+      "path": "docs/planning/requests/request-5-sensitive-data-detection-and-review-for-planning-items.md",
       "deleted": false,
       "archived": false
     },
@@ -394,7 +394,7 @@
       "kind": "request",
       "label": "Planning module hardening: delete safety, traceability, validation, and duplicate guards",
       "state": "closed",
-      "path": "docs/planning/requests/request-6.md",
+      "path": "docs/planning/requests/request-6-planning-module-hardening-delete-safety-traceability-validation-and-duplicate-guards.md",
       "deleted": false,
       "archived": false
     },
@@ -403,7 +403,7 @@
       "kind": "request",
       "label": "Fix planning API and MCP gaps revealed by coverage tests",
       "state": "closed",
-      "path": "docs/planning/requests/request-7.md",
+      "path": "docs/planning/requests/request-7-fix-planning-api-and-mcp-gaps-revealed-by-coverage-tests.md",
       "deleted": false,
       "archived": false
     },
@@ -412,7 +412,7 @@
       "kind": "request",
       "label": "Add audience-level profile system to control planning depth-of-detail",
       "state": "superseded",
-      "path": "docs/planning/requests/request-8.md",
+      "path": "docs/planning/requests/request-8-add-audience-level-profile-system-to-control-planning-depth-of-detail.md",
       "deleted": false,
       "archived": false
     },
@@ -421,7 +421,7 @@
       "kind": "request",
       "label": "Implement configurable stack profiles for lightweight req\u2192spec\u2192task workflows",
       "state": "closed",
-      "path": "docs/planning/requests/request-9.md",
+      "path": "docs/planning/requests/request-9-implement-configurable-stack-profiles-for-lightweight-req-spec-task-workflows.md",
       "deleted": false,
       "archived": false
     },
@@ -988,7 +988,7 @@
       "kind": "task",
       "label": "[PKT-FND-001](task-0032): Canonical IDs and Naming Normalization",
       "state": "draft",
-      "path": "docs/planning/tasks/contracts-scaffolding/task-32.md",
+      "path": "docs/planning/tasks/contracts-scaffolding/task-32-pkt-fnd-001-task-0032-canonical-ids-and-naming-normalization.md",
       "deleted": false,
       "archived": false
     },
@@ -997,7 +997,7 @@
       "kind": "task",
       "label": "[PKT-FND-002](task-0033): Schema Package and Fixtures",
       "state": "draft",
-      "path": "docs/planning/tasks/contracts-scaffolding/task-33.md",
+      "path": "docs/planning/tasks/contracts-scaffolding/task-33-pkt-fnd-002-task-0033-schema-package-and-fixtures.md",
       "deleted": false,
       "archived": false
     },
@@ -1006,7 +1006,7 @@
       "kind": "task",
       "label": "[PKT-FND-003](task-0034): Example Project Scaffold",
       "state": "draft",
-      "path": "docs/planning/tasks/contracts-scaffolding/task-34.md",
+      "path": "docs/planning/tasks/contracts-scaffolding/task-34-pkt-fnd-003-task-0034-example-project-scaffold.md",
       "deleted": false,
       "archived": false
     },
@@ -1015,7 +1015,7 @@
       "kind": "task",
       "label": "[PKT-FND-004](task-0035): Lifecycle CLI Stub",
       "state": "draft",
-      "path": "docs/planning/tasks/contracts-scaffolding/task-35.md",
+      "path": "docs/planning/tasks/contracts-scaffolding/task-35-pkt-fnd-004-task-0035-lifecycle-cli-stub.md",
       "deleted": false,
       "archived": false
     },
@@ -1024,7 +1024,7 @@
       "kind": "task",
       "label": "[PKT-FND-005](task-0036): Packet/Test Harness Scaffolding",
       "state": "draft",
-      "path": "docs/planning/tasks/contracts-scaffolding/task-36.md",
+      "path": "docs/planning/tasks/contracts-scaffolding/task-36-pkt-fnd-005-task-0036-packet-test-harness-scaffolding.md",
       "deleted": false,
       "archived": false
     },
@@ -1033,7 +1033,7 @@
       "kind": "task",
       "label": "[PKT-FND-006](task-0037): Naming Validator Script",
       "state": "draft",
-      "path": "docs/planning/tasks/contracts-scaffolding/task-37.md",
+      "path": "docs/planning/tasks/contracts-scaffolding/task-37-pkt-fnd-006-task-0037-naming-validator-script.md",
       "deleted": false,
       "archived": false
     },
@@ -1042,7 +1042,7 @@
       "kind": "task",
       "label": "[PKT-FND-007](task-0038): Schema Validator Script",
       "state": "draft",
-      "path": "docs/planning/tasks/contracts-scaffolding/task-38.md",
+      "path": "docs/planning/tasks/contracts-scaffolding/task-38-pkt-fnd-007-task-0038-schema-validator-script.md",
       "deleted": false,
       "archived": false
     },
@@ -1051,7 +1051,7 @@
       "kind": "task",
       "label": "[PKT-FND-008](task-0039): Checkpoint Writer",
       "state": "draft",
-      "path": "docs/planning/tasks/contracts-scaffolding/task-39.md",
+      "path": "docs/planning/tasks/contracts-scaffolding/task-39-pkt-fnd-008-task-0039-checkpoint-writer.md",
       "deleted": false,
       "archived": false
     },
@@ -1060,7 +1060,7 @@
       "kind": "task",
       "label": "[PKT-FND-009](task-0040): Fixture Generator",
       "state": "draft",
-      "path": "docs/planning/tasks/contracts-scaffolding/task-40.md",
+      "path": "docs/planning/tasks/contracts-scaffolding/task-40-pkt-fnd-009-task-0040-fixture-generator.md",
       "deleted": false,
       "archived": false
     },
@@ -1069,7 +1069,7 @@
       "kind": "task",
       "label": "[PKT-FND-010](task-0041): Integration Tests",
       "state": "draft",
-      "path": "docs/planning/tasks/contracts-scaffolding/task-41.md",
+      "path": "docs/planning/tasks/contracts-scaffolding/task-41-pkt-fnd-010-task-0041-integration-tests.md",
       "deleted": false,
       "archived": false
     },
@@ -1078,7 +1078,7 @@
       "kind": "task",
       "label": "[PKT-FND-011](task-0042): Documentation",
       "state": "draft",
-      "path": "docs/planning/tasks/contracts-scaffolding/task-42.md",
+      "path": "docs/planning/tasks/contracts-scaffolding/task-42-pkt-fnd-011-task-0042-documentation.md",
       "deleted": false,
       "archived": false
     },
@@ -1087,7 +1087,7 @@
       "kind": "task",
       "label": "[PKT-FND-012](task-0043): Migration Runbook",
       "state": "draft",
-      "path": "docs/planning/tasks/contracts-scaffolding/task-43.md",
+      "path": "docs/planning/tasks/contracts-scaffolding/task-43-pkt-fnd-012-task-0043-migration-runbook.md",
       "deleted": false,
       "archived": false
     },
@@ -1096,7 +1096,7 @@
       "kind": "task",
       "label": "[PKT-FND-013](task-0044): Exit Gate Validation",
       "state": "draft",
-      "path": "docs/planning/tasks/contracts-scaffolding/task-44.md",
+      "path": "docs/planning/tasks/contracts-scaffolding/task-44-pkt-fnd-013-task-0044-exit-gate-validation.md",
       "deleted": false,
       "archived": false
     },
@@ -1105,7 +1105,7 @@
       "kind": "task",
       "label": "[PKT-CRD-001](task-0173): Coordinator Consumption Seam",
       "state": "draft",
-      "path": "docs/planning/tasks/coordinator/task-318.md",
+      "path": "docs/planning/tasks/coordinator/task-318-pkt-crd-001-task-0173-coordinator-consumption-seam.md",
       "deleted": false,
       "archived": false
     },
@@ -1114,7 +1114,7 @@
       "kind": "task",
       "label": "Remove hooks.py from knowledge component",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-1.md",
+      "path": "docs/planning/tasks/core/task-1-remove-hooks-py-from-knowledge-component.md",
       "deleted": false,
       "archived": false
     },
@@ -1123,7 +1123,7 @@
       "kind": "task",
       "label": "Enhance search with fuzzy matching or BM25",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-10.md",
+      "path": "docs/planning/tasks/core/task-10-enhance-search-with-fuzzy-matching-or-bm25.md",
       "deleted": false,
       "archived": false
     },
@@ -1132,7 +1132,7 @@
       "kind": "task",
       "label": "Implement lifecycle tracking for proposals and jobs",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-11.md",
+      "path": "docs/planning/tasks/core/task-11-implement-lifecycle-tracking-for-proposals-and-jobs.md",
       "deleted": false,
       "archived": false
     },
@@ -1141,7 +1141,7 @@
       "kind": "task",
       "label": "Implement archive state in planning core",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-12.md",
+      "path": "docs/planning/tasks/core/task-12-implement-archive-state-in-planning-core.md",
       "deleted": false,
       "archived": false
     },
@@ -1150,7 +1150,7 @@
       "kind": "task",
       "label": "Update tm_list with archive filter",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-13.md",
+      "path": "docs/planning/tasks/core/task-13-update-tm-list-with-archive-filter.md",
       "deleted": false,
       "archived": false
     },
@@ -1159,7 +1159,7 @@
       "kind": "task",
       "label": "Update tm_validate with archive rules",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-14.md",
+      "path": "docs/planning/tasks/core/task-14-update-tm-validate-with-archive-rules.md",
       "deleted": false,
       "archived": false
     },
@@ -1168,7 +1168,7 @@
       "kind": "task",
       "label": "Update tm_show to include archive metadata",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-15.md",
+      "path": "docs/planning/tasks/core/task-15-update-tm-show-to-include-archive-metadata.md",
       "deleted": false,
       "archived": false
     },
@@ -1177,7 +1177,7 @@
       "kind": "task",
       "label": "Add archived state to planning state machine",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-16.md",
+      "path": "docs/planning/tasks/core/task-16-add-archived-state-to-planning-state-machine.md",
       "deleted": false,
       "archived": false
     },
@@ -1186,7 +1186,7 @@
       "kind": "task",
       "label": "Implement tm_archive and tm_restore functions",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-17.md",
+      "path": "docs/planning/tasks/core/task-17-implement-tm-archive-and-tm-restore-functions.md",
       "deleted": false,
       "archived": false
     },
@@ -1195,7 +1195,7 @@
       "kind": "task",
       "label": "Implement update_task_status() wrapper function",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-170.md",
+      "path": "docs/planning/tasks/core/task-170-implement-update-task-status-wrapper-function.md",
       "deleted": false,
       "archived": false
     },
@@ -1204,7 +1204,7 @@
       "kind": "task",
       "label": "Define reference docs and project-facing documentation surfaces",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-171.md",
+      "path": "docs/planning/tasks/core/task-171-define-reference-docs-and-project-facing-documentation-surfaces.md",
       "deleted": false,
       "archived": false
     },
@@ -1213,7 +1213,7 @@
       "kind": "task",
       "label": "Scope manifest and migration-registry scaffolding",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-172.md",
+      "path": "docs/planning/tasks/core/task-172-scope-manifest-and-migration-registry-scaffolding.md",
       "deleted": false,
       "archived": false
     },
@@ -1222,7 +1222,7 @@
       "kind": "task",
       "label": "Expand helper and MCP surfaces for documentation views",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-173.md",
+      "path": "docs/planning/tasks/core/task-173-expand-helper-and-mcp-surfaces-for-documentation-views.md",
       "deleted": false,
       "archived": false
     },
@@ -1231,7 +1231,7 @@
       "kind": "task",
       "label": "Define section registry and subsection navigation limits",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-174.md",
+      "path": "docs/planning/tasks/core/task-174-define-section-registry-and-subsection-navigation-limits.md",
       "deleted": false,
       "archived": false
     },
@@ -1240,7 +1240,7 @@
       "kind": "task",
       "label": "Define supporting-doc metadata and registry behavior",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-175.md",
+      "path": "docs/planning/tasks/core/task-175-define-supporting-doc-metadata-and-registry-behavior.md",
       "deleted": false,
       "archived": false
     },
@@ -1249,7 +1249,7 @@
       "kind": "task",
       "label": "Define documentation-sync obligations and verification coverage",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-176.md",
+      "path": "docs/planning/tasks/core/task-176-define-documentation-sync-obligations-and-verification-coverage.md",
       "deleted": false,
       "archived": false
     },
@@ -1258,7 +1258,7 @@
       "kind": "task",
       "label": "Implement MCP helper root configurability",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-177.md",
+      "path": "docs/planning/tasks/core/task-177-implement-mcp-helper-root-configurability.md",
       "deleted": false,
       "archived": false
     },
@@ -1267,7 +1267,7 @@
       "kind": "task",
       "label": "Add archived state to planning state machine",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-178.md",
+      "path": "docs/planning/tasks/core/task-178-add-archived-state-to-planning-state-machine.md",
       "deleted": false,
       "archived": false
     },
@@ -1276,7 +1276,7 @@
       "kind": "task",
       "label": "Implement state-based archive and restore behavior",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-179.md",
+      "path": "docs/planning/tasks/core/task-179-implement-state-based-archive-and-restore-behavior.md",
       "deleted": false,
       "archived": false
     },
@@ -1285,7 +1285,7 @@
       "kind": "task",
       "label": "Update tm_list with archive filter parameter",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-18.md",
+      "path": "docs/planning/tasks/core/task-18-update-tm-list-with-archive-filter-parameter.md",
       "deleted": false,
       "archived": false
     },
@@ -1294,7 +1294,7 @@
       "kind": "task",
       "label": "Update tm_list with archive filter parameter",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-180.md",
+      "path": "docs/planning/tasks/core/task-180-update-tm-list-with-archive-filter-parameter.md",
       "deleted": false,
       "archived": false
     },
@@ -1303,7 +1303,7 @@
       "kind": "task",
       "label": "Update tm_validate with archive validation rules",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-181.md",
+      "path": "docs/planning/tasks/core/task-181-update-tm-validate-with-archive-validation-rules.md",
       "deleted": false,
       "archived": false
     },
@@ -1312,7 +1312,7 @@
       "kind": "task",
       "label": "Update tm_show to include archive metadata",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-182.md",
+      "path": "docs/planning/tasks/core/task-182-update-tm-show-to-include-archive-metadata.md",
       "deleted": false,
       "archived": false
     },
@@ -1321,7 +1321,7 @@
       "kind": "task",
       "label": "Verify and preserve schema-compliant task reference placement",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-183.md",
+      "path": "docs/planning/tasks/core/task-183-verify-and-preserve-schema-compliant-task-reference-placement.md",
       "deleted": false,
       "archived": false
     },
@@ -1330,7 +1330,7 @@
       "kind": "task",
       "label": "Implement automatic counter sync on delete",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-184.md",
+      "path": "docs/planning/tasks/core/task-184-implement-automatic-counter-sync-on-delete.md",
       "deleted": false,
       "archived": false
     },
@@ -1339,7 +1339,7 @@
       "kind": "task",
       "label": "Implement soft delete functionality",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-185.md",
+      "path": "docs/planning/tasks/core/task-185-implement-soft-delete-functionality.md",
       "deleted": false,
       "archived": false
     },
@@ -1348,7 +1348,7 @@
       "kind": "task",
       "label": "Extend auto-reference updates to plans and tasks",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-186.md",
+      "path": "docs/planning/tasks/core/task-186-extend-auto-reference-updates-to-plans-and-tasks.md",
       "deleted": false,
       "archived": false
     },
@@ -1357,7 +1357,7 @@
       "kind": "task",
       "label": "Add duplicate detection for requests and specs",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-187.md",
+      "path": "docs/planning/tasks/core/task-187-add-duplicate-detection-for-requests-and-specs.md",
       "deleted": false,
       "archived": false
     },
@@ -1366,7 +1366,7 @@
       "kind": "task",
       "label": "Improve schema validation error messages",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-188.md",
+      "path": "docs/planning/tasks/core/task-188-improve-schema-validation-error-messages.md",
       "deleted": false,
       "archived": false
     },
@@ -1375,7 +1375,7 @@
       "kind": "task",
       "label": "Add integration tests for critical fixes",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-189.md",
+      "path": "docs/planning/tasks/core/task-189-add-integration-tests-for-critical-fixes.md",
       "deleted": false,
       "archived": false
     },
@@ -1384,7 +1384,7 @@
       "kind": "task",
       "label": "Update tm_validate with archive validation rules",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-19.md",
+      "path": "docs/planning/tasks/core/task-19-update-tm-validate-with-archive-validation-rules.md",
       "deleted": false,
       "archived": false
     },
@@ -1393,7 +1393,7 @@
       "kind": "task",
       "label": "Fix update_content() section-mode regex",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-190.md",
+      "path": "docs/planning/tasks/core/task-190-fix-update-content-section-mode-regex.md",
       "deleted": false,
       "archived": false
     },
@@ -1402,7 +1402,7 @@
       "kind": "task",
       "label": "Fix move() for work-packages",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-191.md",
+      "path": "docs/planning/tasks/core/task-191-fix-move-for-work-packages.md",
       "deleted": false,
       "archived": false
     },
@@ -1411,7 +1411,7 @@
       "kind": "task",
       "label": "Implement claims TTL lazy purge",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-192.md",
+      "path": "docs/planning/tasks/core/task-192-implement-claims-ttl-lazy-purge.md",
       "deleted": false,
       "archived": false
     },
@@ -1420,7 +1420,7 @@
       "kind": "task",
       "label": "Fix hook event payloads",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-193.md",
+      "path": "docs/planning/tasks/core/task-193-fix-hook-event-payloads.md",
       "deleted": false,
       "archived": false
     },
@@ -1429,7 +1429,7 @@
       "kind": "task",
       "label": "Fix batch meta op",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-194.md",
+      "path": "docs/planning/tasks/core/task-194-fix-batch-meta-op.md",
       "deleted": false,
       "archived": false
     },
@@ -1438,7 +1438,7 @@
       "kind": "task",
       "label": "Fix tm.status() return shape",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-195.md",
+      "path": "docs/planning/tasks/core/task-195-fix-tm-status-return-shape.md",
       "deleted": false,
       "archived": false
     },
@@ -1447,7 +1447,7 @@
       "kind": "task",
       "label": "Fix FastMCP empty-list serialization",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-196.md",
+      "path": "docs/planning/tasks/core/task-196-fix-fastmcp-empty-list-serialization.md",
       "deleted": false,
       "archived": false
     },
@@ -1456,7 +1456,7 @@
       "kind": "task",
       "label": "Add AUDIAGENTIC_ROOT env var support",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-197.md",
+      "path": "docs/planning/tasks/core/task-197-add-audiagentic-root-env-var-support.md",
       "deleted": false,
       "archived": false
     },
@@ -1465,7 +1465,7 @@
       "kind": "task",
       "label": "Add --root CLI flag support",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-198.md",
+      "path": "docs/planning/tasks/core/task-198-add-root-cli-flag-support.md",
       "deleted": false,
       "archived": false
     },
@@ -1474,7 +1474,7 @@
       "kind": "task",
       "label": "Unify --profile and --stack-profile into single parameter",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-199.md",
+      "path": "docs/planning/tasks/core/task-199-unify-profile-and-stack-profile-into-single-parameter.md",
       "deleted": false,
       "archived": false
     },
@@ -1483,7 +1483,7 @@
       "kind": "task",
       "label": "Remove hooks.yml and update CLI",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-2.md",
+      "path": "docs/planning/tasks/core/task-2-remove-hooks-yml-and-update-cli.md",
       "deleted": false,
       "archived": false
     },
@@ -1492,7 +1492,7 @@
       "kind": "task",
       "label": "Update tm_show to include archive metadata",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-20.md",
+      "path": "docs/planning/tasks/core/task-20-update-tm-show-to-include-archive-metadata.md",
       "deleted": false,
       "archived": false
     },
@@ -1501,7 +1501,7 @@
       "kind": "task",
       "label": "Add lookup.json global index generation to idx_mgr",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-200.md",
+      "path": "docs/planning/tasks/core/task-200-add-lookup-json-global-index-generation-to-idx-mgr.md",
       "deleted": false,
       "archived": false
     },
@@ -1510,7 +1510,7 @@
       "kind": "task",
       "label": "Add internal lookup(id) and head(id) helpers to api.py",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-201.md",
+      "path": "docs/planning/tasks/core/task-201-add-internal-lookup-id-and-head-id-helpers-to-api-py.md",
       "deleted": false,
       "archived": false
     },
@@ -1519,7 +1519,7 @@
       "kind": "task",
       "label": "Refactor _find(), show(), and extract() onto lookup path",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-202.md",
+      "path": "docs/planning/tasks/core/task-202-refactor-find-show-and-extract-onto-lookup-path.md",
       "deleted": false,
       "archived": false
     },
@@ -1528,7 +1528,7 @@
       "kind": "task",
       "label": "Add include_body and write_to_disk controls to extract()",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-203.md",
+      "path": "docs/planning/tasks/core/task-203-add-include-body-and-write-to-disk-controls-to-extract.md",
       "deleted": false,
       "archived": false
     },
@@ -1537,7 +1537,7 @@
       "kind": "task",
       "label": "Expose head(id) and refined extract controls in MCP and tm_helper",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-204.md",
+      "path": "docs/planning/tasks/core/task-204-expose-head-id-and-refined-extract-controls-in-mcp-and-tm-helper.md",
       "deleted": false,
       "archived": false
     },
@@ -1546,7 +1546,7 @@
       "kind": "task",
       "label": "Add stale-index handling for lookup misses",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-205.md",
+      "path": "docs/planning/tasks/core/task-205-add-stale-index-handling-for-lookup-misses.md",
       "deleted": false,
       "archived": false
     },
@@ -1555,7 +1555,7 @@
       "kind": "task",
       "label": "Add body content parameters to task creation and enforce non-empty body via validation",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-206.md",
+      "path": "docs/planning/tasks/core/task-206-add-body-content-parameters-to-task-creation-and-enforce-non-empty-body-via-validation.md",
       "deleted": false,
       "archived": false
     },
@@ -1564,7 +1564,7 @@
       "kind": "task",
       "label": "Extend tm_batch_update to support multi-item operations",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-207.md",
+      "path": "docs/planning/tasks/core/task-207-extend-tm-batch-update-to-support-multi-item-operations.md",
       "deleted": false,
       "archived": false
     },
@@ -1573,7 +1573,7 @@
       "kind": "task",
       "label": "Implement tm_bulk_state for state transitions",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-208.md",
+      "path": "docs/planning/tasks/core/task-208-implement-tm-bulk-state-for-state-transitions.md",
       "deleted": false,
       "archived": false
     },
@@ -1582,7 +1582,7 @@
       "kind": "task",
       "label": "Add summary_only flag to individual operations",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-209.md",
+      "path": "docs/planning/tasks/core/task-209-add-summary-only-flag-to-individual-operations.md",
       "deleted": false,
       "archived": false
     },
@@ -1591,7 +1591,7 @@
       "kind": "task",
       "label": "Extend planning tools with full content management",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-21.md",
+      "path": "docs/planning/tasks/core/task-21-extend-planning-tools-with-full-content-management.md",
       "deleted": false,
       "archived": false
     },
@@ -1600,7 +1600,7 @@
       "kind": "task",
       "label": "Expose bulk operations in MCP and tm_helper",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-210.md",
+      "path": "docs/planning/tasks/core/task-210-expose-bulk-operations-in-mcp-and-tm-helper.md",
       "deleted": false,
       "archived": false
     },
@@ -1609,7 +1609,7 @@
       "kind": "task",
       "label": "Write tests for bulk operations and backward compatibility",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-211.md",
+      "path": "docs/planning/tasks/core/task-211-write-tests-for-bulk-operations-and-backward-compatibility.md",
       "deleted": false,
       "archived": false
     },
@@ -1618,7 +1618,7 @@
       "kind": "task",
       "label": "Implement detect_sensitive_patterns function with regex patterns",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-212.md",
+      "path": "docs/planning/tasks/core/task-212-implement-detect-sensitive-patterns-function-with-regex-patterns.md",
       "deleted": false,
       "archived": false
     },
@@ -1627,7 +1627,7 @@
       "kind": "task",
       "label": "Integrate sensitive data detection into tm_validate output",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-213.md",
+      "path": "docs/planning/tasks/core/task-213-integrate-sensitive-data-detection-into-tm-validate-output.md",
       "deleted": false,
       "archived": false
     },
@@ -1636,7 +1636,7 @@
       "kind": "task",
       "label": "Write tests for sensitive data detection",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-214.md",
+      "path": "docs/planning/tasks/core/task-214-write-tests-for-sensitive-data-detection.md",
       "deleted": false,
       "archived": false
     },
@@ -1645,7 +1645,7 @@
       "kind": "task",
       "label": "Implement audience profile system in config and API",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-215.md",
+      "path": "docs/planning/tasks/core/task-215-implement-audience-profile-system-in-config-and-api.md",
       "deleted": false,
       "archived": false
     },
@@ -1654,7 +1654,7 @@
       "kind": "task",
       "label": "Add guidance_levels to profiles.yaml",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-216.md",
+      "path": "docs/planning/tasks/core/task-216-add-guidance-levels-to-profiles-yaml.md",
       "deleted": false,
       "archived": false
     },
@@ -1663,7 +1663,7 @@
       "kind": "task",
       "label": "Update config.py to load guidance levels",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-217.md",
+      "path": "docs/planning/tasks/core/task-217-update-config-py-to-load-guidance-levels.md",
       "deleted": false,
       "archived": false
     },
@@ -1672,7 +1672,7 @@
       "kind": "task",
       "label": "Add guidance field to request schema",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-218.md",
+      "path": "docs/planning/tasks/core/task-218-add-guidance-field-to-request-schema.md",
       "deleted": false,
       "archived": false
     },
@@ -1681,7 +1681,7 @@
       "kind": "task",
       "label": "Update tm_helper.py new_request() with guidance parameter",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-219.md",
+      "path": "docs/planning/tasks/core/task-219-update-tm-helper-py-new-request-with-guidance-parameter.md",
       "deleted": false,
       "archived": false
     },
@@ -1690,7 +1690,7 @@
       "kind": "task",
       "label": "Add --guidance CLI parameter to tm.py",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-220.md",
+      "path": "docs/planning/tasks/core/task-220-add-guidance-cli-parameter-to-tm-py.md",
       "deleted": false,
       "archived": false
     },
@@ -1699,7 +1699,7 @@
       "kind": "task",
       "label": "Update validation to enforce guidance-appropriate sections",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-221.md",
+      "path": "docs/planning/tasks/core/task-221-update-validation-to-enforce-guidance-appropriate-sections.md",
       "deleted": false,
       "archived": false
     },
@@ -1708,7 +1708,7 @@
       "kind": "task",
       "label": "Add default_guidance to planning.yaml",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-222.md",
+      "path": "docs/planning/tasks/core/task-222-add-default-guidance-to-planning-yaml.md",
       "deleted": false,
       "archived": false
     },
@@ -1717,7 +1717,7 @@
       "kind": "task",
       "label": "Write tests for guidance levels",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-223.md",
+      "path": "docs/planning/tasks/core/task-223-write-tests-for-guidance-levels.md",
       "deleted": false,
       "archived": false
     },
@@ -1726,7 +1726,7 @@
       "kind": "task",
       "label": "Draft standard-0010 with guidance level definitions",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-224.md",
+      "path": "docs/planning/tasks/core/task-224-draft-standard-0010-with-guidance-level-definitions.md",
       "deleted": false,
       "archived": false
     },
@@ -1735,7 +1735,7 @@
       "kind": "task",
       "label": "Update validation to enforce guidance level requirements",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-225.md",
+      "path": "docs/planning/tasks/core/task-225-update-validation-to-enforce-guidance-level-requirements.md",
       "deleted": false,
       "archived": false
     },
@@ -1744,7 +1744,7 @@
       "kind": "task",
       "label": "Add guidance level selection guide to documentation",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-226.md",
+      "path": "docs/planning/tasks/core/task-226-add-guidance-level-selection-guide-to-documentation.md",
       "deleted": false,
       "archived": false
     },
@@ -1753,7 +1753,7 @@
       "kind": "task",
       "label": "Update workflows.yaml with unified states",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-227.md",
+      "path": "docs/planning/tasks/core/task-227-update-workflows-yaml-with-unified-states.md",
       "deleted": false,
       "archived": false
     },
@@ -1762,7 +1762,7 @@
       "kind": "task",
       "label": "Implement cascade archive for requests",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-228.md",
+      "path": "docs/planning/tasks/core/task-228-implement-cascade-archive-for-requests.md",
       "deleted": false,
       "archived": false
     },
@@ -1771,7 +1771,7 @@
       "kind": "task",
       "label": "Implement cascade archive for specs",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-229.md",
+      "path": "docs/planning/tasks/core/task-229-implement-cascade-archive-for-specs.md",
       "deleted": false,
       "archived": false
     },
@@ -1780,7 +1780,7 @@
       "kind": "task",
       "label": "Review knowledge component codebase",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-230.md",
+      "path": "docs/planning/tasks/core/task-230-review-knowledge-component-codebase.md",
       "deleted": false,
       "archived": false
     },
@@ -1789,7 +1789,7 @@
       "kind": "task",
       "label": "Integrate knowledge component source code",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-231.md",
+      "path": "docs/planning/tasks/core/task-231-integrate-knowledge-component-source-code.md",
       "deleted": false,
       "archived": false
     },
@@ -1798,7 +1798,7 @@
       "kind": "task",
       "label": "Bootstrap knowledge component configuration",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-232.md",
+      "path": "docs/planning/tasks/core/task-232-bootstrap-knowledge-component-configuration.md",
       "deleted": false,
       "archived": false
     },
@@ -1807,7 +1807,7 @@
       "kind": "task",
       "label": "Configure event adapter for planning bridge",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-233.md",
+      "path": "docs/planning/tasks/core/task-233-configure-event-adapter-for-planning-bridge.md",
       "deleted": false,
       "archived": false
     },
@@ -1816,7 +1816,7 @@
       "kind": "task",
       "label": "Test knowledge component integration",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-234.md",
+      "path": "docs/planning/tasks/core/task-234-test-knowledge-component-integration.md",
       "deleted": false,
       "archived": false
     },
@@ -1825,7 +1825,7 @@
       "kind": "task",
       "label": "Validate documentation",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-235.md",
+      "path": "docs/planning/tasks/core/task-235-validate-documentation.md",
       "deleted": false,
       "archived": false
     },
@@ -1834,7 +1834,7 @@
       "kind": "task",
       "label": "Add unit tests for knowledge component",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-236.md",
+      "path": "docs/planning/tasks/core/task-236-add-unit-tests-for-knowledge-component.md",
       "deleted": false,
       "archived": false
     },
@@ -1843,7 +1843,7 @@
       "kind": "task",
       "label": "Refactor events.py into separate modules",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-237.md",
+      "path": "docs/planning/tasks/core/task-237-refactor-events-py-into-separate-modules.md",
       "deleted": false,
       "archived": false
     },
@@ -1852,7 +1852,7 @@
       "kind": "task",
       "label": "Enhance lexical search",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-238.md",
+      "path": "docs/planning/tasks/core/task-238-enhance-lexical-search.md",
       "deleted": false,
       "archived": false
     },
@@ -1861,7 +1861,7 @@
       "kind": "task",
       "label": "Add lifecycle management for jobs and proposals",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-239.md",
+      "path": "docs/planning/tasks/core/task-239-add-lifecycle-management-for-jobs-and-proposals.md",
       "deleted": false,
       "archived": false
     },
@@ -1870,7 +1870,7 @@
       "kind": "task",
       "label": "Consolidate MCP tools",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-240.md",
+      "path": "docs/planning/tasks/core/task-240-consolidate-mcp-tools.md",
       "deleted": false,
       "archived": false
     },
@@ -1879,7 +1879,7 @@
       "kind": "task",
       "label": "Fix create_with_content() standard_refs bug",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-241.md",
+      "path": "docs/planning/tasks/core/task-241-fix-create-with-content-standard-refs-bug.md",
       "deleted": false,
       "archived": false
     },
@@ -1888,7 +1888,7 @@
       "kind": "task",
       "label": "Remove dead code in update_content() section mode",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-242.md",
+      "path": "docs/planning/tasks/core/task-242-remove-dead-code-in-update-content-section-mode.md",
       "deleted": false,
       "archived": false
     },
@@ -1897,7 +1897,7 @@
       "kind": "task",
       "label": "Add atomic write guarantee to dump_markdown()",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-243.md",
+      "path": "docs/planning/tasks/core/task-243-add-atomic-write-guarantee-to-dump-markdown.md",
       "deleted": false,
       "archived": false
     },
@@ -1906,7 +1906,7 @@
       "kind": "task",
       "label": "Fix val_mgr.py duplicated validation",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-244.md",
+      "path": "docs/planning/tasks/core/task-244-fix-val-mgr-py-duplicated-validation.md",
       "deleted": false,
       "archived": false
     },
@@ -1915,7 +1915,7 @@
       "kind": "task",
       "label": "Add cycle detection to standards cascade",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-245.md",
+      "path": "docs/planning/tasks/core/task-245-add-cycle-detection-to-standards-cascade.md",
       "deleted": false,
       "archived": false
     },
@@ -1924,7 +1924,7 @@
       "kind": "task",
       "label": "Improve validation error messages",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-246.md",
+      "path": "docs/planning/tasks/core/task-246-improve-validation-error-messages.md",
       "deleted": false,
       "archived": false
     },
@@ -1933,7 +1933,7 @@
       "kind": "task",
       "label": "Consolidate new() and create_with_content() logic",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-247.md",
+      "path": "docs/planning/tasks/core/task-247-consolidate-new-and-create-with-content-logic.md",
       "deleted": false,
       "archived": false
     },
@@ -1942,7 +1942,7 @@
       "kind": "task",
       "label": "Implement InProcessEventBus satisfying EventBusProtocol",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-248.md",
+      "path": "docs/planning/tasks/core/task-248-implement-inprocesseventbus-satisfying-eventbusprotocol.md",
       "deleted": false,
       "archived": false
     },
@@ -1951,7 +1951,7 @@
       "kind": "task",
       "label": "Implement FileEventStore for optional persistence",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-249.md",
+      "path": "docs/planning/tasks/core/task-249-implement-fileeventstore-for-optional-persistence.md",
       "deleted": false,
       "archived": false
     },
@@ -1960,7 +1960,7 @@
       "kind": "task",
       "label": "Implement replay functionality with is_replay flag",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-250.md",
+      "path": "docs/planning/tasks/core/task-250-implement-replay-functionality-with-is-replay-flag.md",
       "deleted": false,
       "archived": false
     },
@@ -1969,7 +1969,7 @@
       "kind": "task",
       "label": "Implement state propagation engine for planning hierarchies",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-251.md",
+      "path": "docs/planning/tasks/core/task-251-implement-state-propagation-engine-for-planning-hierarchies.md",
       "deleted": false,
       "archived": false
     },
@@ -1978,7 +1978,7 @@
       "kind": "task",
       "label": "Create state propagation config system",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-252.md",
+      "path": "docs/planning/tasks/core/task-252-create-state-propagation-config-system.md",
       "deleted": false,
       "archived": false
     },
@@ -1987,7 +1987,7 @@
       "kind": "task",
       "label": "Integrate interoperability layer with planning component",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-253.md",
+      "path": "docs/planning/tasks/core/task-253-integrate-interoperability-layer-with-planning-component.md",
       "deleted": false,
       "archived": false
     },
@@ -1996,7 +1996,7 @@
       "kind": "task",
       "label": "Integrate interoperability layer with knowledge component",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-254.md",
+      "path": "docs/planning/tasks/core/task-254-integrate-interoperability-layer-with-knowledge-component.md",
       "deleted": false,
       "archived": false
     },
@@ -2005,7 +2005,7 @@
       "kind": "task",
       "label": "Bridge planning hooks onto canonical events without removing legacy hooks",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-255.md",
+      "path": "docs/planning/tasks/core/task-255-bridge-planning-hooks-onto-canonical-events-without-removing-legacy-hooks.md",
       "deleted": false,
       "archived": false
     },
@@ -2014,7 +2014,7 @@
       "kind": "task",
       "label": "Add integration tests for event layer and state propagation",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-256.md",
+      "path": "docs/planning/tasks/core/task-256-add-integration-tests-for-event-layer-and-state-propagation.md",
       "deleted": false,
       "archived": false
     },
@@ -2023,7 +2023,7 @@
       "kind": "task",
       "label": "Create interoperability package structure with transport protocol abstraction",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-257.md",
+      "path": "docs/planning/tasks/core/task-257-create-interoperability-package-structure-with-transport-protocol-abstraction.md",
       "deleted": false,
       "archived": false
     },
@@ -2032,7 +2032,7 @@
       "kind": "task",
       "label": "Create event schema registry and documentation",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-258.md",
+      "path": "docs/planning/tasks/core/task-258-create-event-schema-registry-and-documentation.md",
       "deleted": false,
       "archived": false
     },
@@ -2041,7 +2041,7 @@
       "kind": "task",
       "label": "Add CLI commands and diagnostics for event layer",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-259.md",
+      "path": "docs/planning/tasks/core/task-259-add-cli-commands-and-diagnostics-for-event-layer.md",
       "deleted": false,
       "archived": false
     },
@@ -2050,7 +2050,7 @@
       "kind": "task",
       "label": "Validate event layer performance targets",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-260.md",
+      "path": "docs/planning/tasks/core/task-260-validate-event-layer-performance-targets.md",
       "deleted": false,
       "archived": false
     },
@@ -2059,7 +2059,7 @@
       "kind": "task",
       "label": "Implement knowledge event handler for planning state changes",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-261.md",
+      "path": "docs/planning/tasks/core/task-261-implement-knowledge-event-handler-for-planning-state-changes.md",
       "deleted": false,
       "archived": false
     },
@@ -2068,7 +2068,7 @@
       "kind": "task",
       "label": "Inventory planning hooks and create migration plan",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-262.md",
+      "path": "docs/planning/tasks/core/task-262-inventory-planning-hooks-and-create-migration-plan.md",
       "deleted": false,
       "archived": false
     },
@@ -2077,7 +2077,7 @@
       "kind": "task",
       "label": "Remove legacy hook system after migration complete",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-263.md",
+      "path": "docs/planning/tasks/core/task-263-remove-legacy-hook-system-after-migration-complete.md",
       "deleted": false,
       "archived": false
     },
@@ -2086,7 +2086,7 @@
       "kind": "task",
       "label": "Implement async event queue for background processing",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-264.md",
+      "path": "docs/planning/tasks/core/task-264-implement-async-event-queue-for-background-processing.md",
       "deleted": false,
       "archived": false
     },
@@ -2095,7 +2095,7 @@
       "kind": "task",
       "label": "Implement planning audit and repair CLI command",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-265.md",
+      "path": "docs/planning/tasks/core/task-265-implement-planning-audit-and-repair-cli-command.md",
       "deleted": false,
       "archived": false
     },
@@ -2104,7 +2104,7 @@
       "kind": "task",
       "label": "Improve MCP layer robustness and type safety",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-266.md",
+      "path": "docs/planning/tasks/core/task-266-improve-mcp-layer-robustness-and-type-safety.md",
       "deleted": false,
       "archived": false
     },
@@ -2113,7 +2113,7 @@
       "kind": "task",
       "label": "Add module docstring to execution/jobs/__init__.py",
       "state": "completed",
-      "path": "docs/planning/tasks/core/task-267.md",
+      "path": "docs/planning/tasks/core/task-267-add-module-docstring-to-execution-jobs-init-py.md",
       "deleted": false,
       "archived": false
     },
@@ -2122,7 +2122,7 @@
       "kind": "task",
       "label": "Fix empty planning/app/__init__.py",
       "state": "completed",
-      "path": "docs/planning/tasks/core/task-268.md",
+      "path": "docs/planning/tasks/core/task-268-fix-empty-planning-app-init-py.md",
       "deleted": false,
       "archived": false
     },
@@ -2131,7 +2131,7 @@
       "kind": "task",
       "label": "Fix incomplete runtime/__init__.py docstring",
       "state": "completed",
-      "path": "docs/planning/tasks/core/task-269.md",
+      "path": "docs/planning/tasks/core/task-269-fix-incomplete-runtime-init-py-docstring.md",
       "deleted": false,
       "archived": false
     },
@@ -2140,7 +2140,7 @@
       "kind": "task",
       "label": "Add class and method docstrings to base_mgr.py",
       "state": "completed",
-      "path": "docs/planning/tasks/core/task-270.md",
+      "path": "docs/planning/tasks/core/task-270-add-class-and-method-docstrings-to-base-mgr-py.md",
       "deleted": false,
       "archived": false
     },
@@ -2149,7 +2149,7 @@
       "kind": "task",
       "label": "Review get_task_by_id function reference",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-271.md",
+      "path": "docs/planning/tasks/core/task-271-review-get-task-by-id-function-reference.md",
       "deleted": false,
       "archived": false
     },
@@ -2158,7 +2158,7 @@
       "kind": "task",
       "label": "Fix error handling in validation.py:42",
       "state": "completed",
-      "path": "docs/planning/tasks/core/task-272.md",
+      "path": "docs/planning/tasks/core/task-272-fix-error-handling-in-validation-py-42.md",
       "deleted": false,
       "archived": false
     },
@@ -2167,7 +2167,7 @@
       "kind": "task",
       "label": "Add JSON schema validation to _load_json_argument",
       "state": "completed",
-      "path": "docs/planning/tasks/core/task-273.md",
+      "path": "docs/planning/tasks/core/task-273-add-json-schema-validation-to-load-json-argument.md",
       "deleted": false,
       "archived": false
     },
@@ -2176,7 +2176,7 @@
       "kind": "task",
       "label": "Add validation for session_input --details-json",
       "state": "completed",
-      "path": "docs/planning/tasks/core/task-274.md",
+      "path": "docs/planning/tasks/core/task-274-add-validation-for-session-input-details-json.md",
       "deleted": false,
       "archived": false
     },
@@ -2185,7 +2185,7 @@
       "kind": "task",
       "label": "Fix generic error handling in CLI",
       "state": "completed",
-      "path": "docs/planning/tasks/core/task-275.md",
+      "path": "docs/planning/tasks/core/task-275-fix-generic-error-handling-in-cli.md",
       "deleted": false,
       "archived": false
     },
@@ -2194,7 +2194,7 @@
       "kind": "task",
       "label": "standard-12-knowledge-maintenance-impl",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-276.md",
+      "path": "docs/planning/tasks/core/task-276-standard-12-knowledge-maintenance-impl.md",
       "deleted": false,
       "archived": false
     },
@@ -2203,7 +2203,7 @@
       "kind": "task",
       "label": "Fix global state access in job_control_tool",
       "state": "completed",
-      "path": "docs/planning/tasks/core/task-277.md",
+      "path": "docs/planning/tasks/core/task-277-fix-global-state-access-in-job-control-tool.md",
       "deleted": false,
       "archived": false
     },
@@ -2212,7 +2212,7 @@
       "kind": "task",
       "label": "Fix tight coupling in session_input_tool",
       "state": "completed",
-      "path": "docs/planning/tasks/core/task-278.md",
+      "path": "docs/planning/tasks/core/task-278-fix-tight-coupling-in-session-input-tool.md",
       "deleted": false,
       "archived": false
     },
@@ -2221,7 +2221,7 @@
       "kind": "task",
       "label": "Refactor event bus singleton pattern",
       "state": "completed",
-      "path": "docs/planning/tasks/core/task-279.md",
+      "path": "docs/planning/tasks/core/task-279-refactor-event-bus-singleton-pattern.md",
       "deleted": false,
       "archived": false
     },
@@ -2230,7 +2230,7 @@
       "kind": "task",
       "label": "spec-60",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-280.md",
+      "path": "docs/planning/tasks/core/task-280-spec-60.md",
       "deleted": false,
       "archived": false
     },
@@ -2239,7 +2239,7 @@
       "kind": "task",
       "label": "spec-65",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-281.md",
+      "path": "docs/planning/tasks/core/task-281-spec-65.md",
       "deleted": false,
       "archived": false
     },
@@ -2248,7 +2248,7 @@
       "kind": "task",
       "label": "std-0010",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-282.md",
+      "path": "docs/planning/tasks/core/task-282-std-0010.md",
       "deleted": false,
       "archived": false
     },
@@ -2257,7 +2257,7 @@
       "kind": "task",
       "label": "std-0011",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-283.md",
+      "path": "docs/planning/tasks/core/task-283-std-0011.md",
       "deleted": false,
       "archived": false
     },
@@ -2266,7 +2266,7 @@
       "kind": "task",
       "label": "plan-17",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-284.md",
+      "path": "docs/planning/tasks/core/task-284-plan-17.md",
       "deleted": false,
       "archived": false
     },
@@ -2275,7 +2275,7 @@
       "kind": "task",
       "label": "plan-18",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-285.md",
+      "path": "docs/planning/tasks/core/task-285-plan-18.md",
       "deleted": false,
       "archived": false
     },
@@ -2284,7 +2284,7 @@
       "kind": "task",
       "label": "plan-19",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-286.md",
+      "path": "docs/planning/tasks/core/task-286-plan-19.md",
       "deleted": false,
       "archived": false
     },
@@ -2293,7 +2293,7 @@
       "kind": "task",
       "label": "plan-20",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-287.md",
+      "path": "docs/planning/tasks/core/task-287-plan-20.md",
       "deleted": false,
       "archived": false
     },
@@ -2302,7 +2302,7 @@
       "kind": "task",
       "label": "plan-21",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-288.md",
+      "path": "docs/planning/tasks/core/task-288-plan-21.md",
       "deleted": false,
       "archived": false
     },
@@ -2311,7 +2311,7 @@
       "kind": "task",
       "label": "plan-22",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-289.md",
+      "path": "docs/planning/tasks/core/task-289-plan-22.md",
       "deleted": false,
       "archived": false
     },
@@ -2320,7 +2320,7 @@
       "kind": "task",
       "label": "wp-20",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-290.md",
+      "path": "docs/planning/tasks/core/task-290-wp-20.md",
       "deleted": false,
       "archived": false
     },
@@ -2329,7 +2329,7 @@
       "kind": "task",
       "label": "wp-21",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-291.md",
+      "path": "docs/planning/tasks/core/task-291-wp-21.md",
       "deleted": false,
       "archived": false
     },
@@ -2338,7 +2338,7 @@
       "kind": "task",
       "label": "wp-22",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-292.md",
+      "path": "docs/planning/tasks/core/task-292-wp-22.md",
       "deleted": false,
       "archived": false
     },
@@ -2347,7 +2347,7 @@
       "kind": "task",
       "label": "wp-23",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-293.md",
+      "path": "docs/planning/tasks/core/task-293-wp-23.md",
       "deleted": false,
       "archived": false
     },
@@ -2356,7 +2356,7 @@
       "kind": "task",
       "label": "wp-24",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-294.md",
+      "path": "docs/planning/tasks/core/task-294-wp-24.md",
       "deleted": false,
       "archived": false
     },
@@ -2365,7 +2365,7 @@
       "kind": "task",
       "label": "wp-25",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-295.md",
+      "path": "docs/planning/tasks/core/task-295-wp-25.md",
       "deleted": false,
       "archived": false
     },
@@ -2374,7 +2374,7 @@
       "kind": "task",
       "label": "req-0032",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-296.md",
+      "path": "docs/planning/tasks/core/task-296-req-0032.md",
       "deleted": false,
       "archived": false
     },
@@ -2383,7 +2383,7 @@
       "kind": "task",
       "label": "req-0033",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-297.md",
+      "path": "docs/planning/tasks/core/task-297-req-0033.md",
       "deleted": false,
       "archived": false
     },
@@ -2392,7 +2392,7 @@
       "kind": "task",
       "label": "req-0034",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-298.md",
+      "path": "docs/planning/tasks/core/task-298-req-0034.md",
       "deleted": false,
       "archived": false
     },
@@ -2401,7 +2401,7 @@
       "kind": "task",
       "label": "req-0035",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-299.md",
+      "path": "docs/planning/tasks/core/task-299-req-0035.md",
       "deleted": false,
       "archived": false
     },
@@ -2410,7 +2410,7 @@
       "kind": "task",
       "label": "Remove hook_config_file from config.py",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-3.md",
+      "path": "docs/planning/tasks/core/task-3-remove-hook-config-file-from-config-py.md",
       "deleted": false,
       "archived": false
     },
@@ -2419,7 +2419,7 @@
       "kind": "task",
       "label": "req-0036",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-300.md",
+      "path": "docs/planning/tasks/core/task-300-req-0036.md",
       "deleted": false,
       "archived": false
     },
@@ -2428,7 +2428,7 @@
       "kind": "task",
       "label": "Implement agent-facing planning config discovery",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-3000.md",
+      "path": "docs/planning/tasks/core/task-3000-implement-agent-facing-planning-config-discovery.md",
       "deleted": false,
       "archived": false
     },
@@ -2437,7 +2437,7 @@
       "kind": "task",
       "label": "req-0037",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-301.md",
+      "path": "docs/planning/tasks/core/task-301-req-0037.md",
       "deleted": false,
       "archived": false
     },
@@ -2446,7 +2446,7 @@
       "kind": "task",
       "label": "req-0038",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-302.md",
+      "path": "docs/planning/tasks/core/task-302-req-0038.md",
       "deleted": false,
       "archived": false
     },
@@ -2455,7 +2455,7 @@
       "kind": "task",
       "label": "req-0039",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-303.md",
+      "path": "docs/planning/tasks/core/task-303-req-0039.md",
       "deleted": false,
       "archived": false
     },
@@ -2464,7 +2464,7 @@
       "kind": "task",
       "label": "req-0040",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-304.md",
+      "path": "docs/planning/tasks/core/task-304-req-0040.md",
       "deleted": false,
       "archived": false
     },
@@ -2473,7 +2473,7 @@
       "kind": "task",
       "label": "req-0041",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-305.md",
+      "path": "docs/planning/tasks/core/task-305-req-0041.md",
       "deleted": false,
       "archived": false
     },
@@ -2482,7 +2482,7 @@
       "kind": "task",
       "label": "req-0042",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-306.md",
+      "path": "docs/planning/tasks/core/task-306-req-0042.md",
       "deleted": false,
       "archived": false
     },
@@ -2491,7 +2491,7 @@
       "kind": "task",
       "label": "req-0043",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-307.md",
+      "path": "docs/planning/tasks/core/task-307-req-0043.md",
       "deleted": false,
       "archived": false
     },
@@ -2500,7 +2500,7 @@
       "kind": "task",
       "label": "interop",
       "state": "closed",
-      "path": "docs/planning/tasks/core/task-308.md",
+      "path": "docs/planning/tasks/core/task-308-interop.md",
       "deleted": false,
       "archived": false
     },
@@ -2509,7 +2509,7 @@
       "kind": "task",
       "label": "knowledge",
       "state": "closed",
-      "path": "docs/planning/tasks/core/task-309.md",
+      "path": "docs/planning/tasks/core/task-309-knowledge.md",
       "deleted": false,
       "archived": false
     },
@@ -2518,7 +2518,7 @@
       "kind": "task",
       "label": "docs",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-310.md",
+      "path": "docs/planning/tasks/core/task-310-docs.md",
       "deleted": false,
       "archived": false
     },
@@ -2527,7 +2527,7 @@
       "kind": "task",
       "label": "docs2",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-311.md",
+      "path": "docs/planning/tasks/core/task-311-docs2.md",
       "deleted": false,
       "archived": false
     },
@@ -2536,7 +2536,7 @@
       "kind": "task",
       "label": "extracts",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-312.md",
+      "path": "docs/planning/tasks/core/task-312-extracts.md",
       "deleted": false,
       "archived": false
     },
@@ -2545,7 +2545,7 @@
       "kind": "task",
       "label": "standard-7-migration-change-control-impl",
       "state": "ready",
-      "path": "docs/planning/tasks/core/task-313.md",
+      "path": "docs/planning/tasks/core/task-313-standard-7-migration-change-control-impl.md",
       "deleted": false,
       "archived": false
     },
@@ -2554,7 +2554,7 @@
       "kind": "task",
       "label": "standard-8-python-impl-impl",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-314.md",
+      "path": "docs/planning/tasks/core/task-314-standard-8-python-impl-impl.md",
       "deleted": false,
       "archived": false
     },
@@ -2563,7 +2563,7 @@
       "kind": "task",
       "label": "standard-9-planning-enhancement-impl",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-315.md",
+      "path": "docs/planning/tasks/core/task-315-standard-9-planning-enhancement-impl.md",
       "deleted": false,
       "archived": false
     },
@@ -2572,7 +2572,7 @@
       "kind": "task",
       "label": "standard-0010-mcp-server-impl",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-316.md",
+      "path": "docs/planning/tasks/core/task-316-standard-0010-mcp-server-impl.md",
       "deleted": false,
       "archived": false
     },
@@ -2581,7 +2581,7 @@
       "kind": "task",
       "label": "standard-11-component-arch-impl",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-317.md",
+      "path": "docs/planning/tasks/core/task-317-standard-11-component-arch-impl.md",
       "deleted": false,
       "archived": false
     },
@@ -2590,7 +2590,7 @@
       "kind": "task",
       "label": "Implement source/target documentation (standard-0007 req 1-3)",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-3245.md",
+      "path": "docs/planning/tasks/core/task-3245-implement-source-target-documentation-standard-0007-req-1-3.md",
       "deleted": true,
       "archived": false
     },
@@ -2599,7 +2599,7 @@
       "kind": "task",
       "label": "Refactor section_registry to use config",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-3251.md",
+      "path": "docs/planning/tasks/core/task-3251-refactor-section-registry-to-use-config.md",
       "deleted": false,
       "archived": false
     },
@@ -2608,7 +2608,7 @@
       "kind": "task",
       "label": "Clean up req_mgr hardcoded defaults",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-3252.md",
+      "path": "docs/planning/tasks/core/task-3252-clean-up-req-mgr-hardcoded-defaults.md",
       "deleted": false,
       "archived": false
     },
@@ -2617,7 +2617,7 @@
       "kind": "task",
       "label": "Integrate relationship validation into managers",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-3253.md",
+      "path": "docs/planning/tasks/core/task-3253-integrate-relationship-validation-into-managers.md",
       "deleted": false,
       "archived": false
     },
@@ -2626,7 +2626,7 @@
       "kind": "task",
       "label": "Test Task",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-3258.md",
+      "path": "docs/planning/tasks/core/task-3258-test-task.md",
       "deleted": false,
       "archived": false
     },
@@ -2635,7 +2635,7 @@
       "kind": "task",
       "label": "API Compatibility Test",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-3259.md",
+      "path": "docs/planning/tasks/core/task-3259-api-compatibility-test.md",
       "deleted": false,
       "archived": false
     },
@@ -2644,7 +2644,7 @@
       "kind": "task",
       "label": "Atomicity Test",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-3261.md",
+      "path": "docs/planning/tasks/core/task-3261-atomicity-test.md",
       "deleted": false,
       "archived": false
     },
@@ -2653,7 +2653,7 @@
       "kind": "task",
       "label": "Atomicity Test",
       "state": "draft",
-      "path": "docs/planning/tasks/core/task-3262.md",
+      "path": "docs/planning/tasks/core/task-3262-atomicity-test.md",
       "deleted": false,
       "archived": false
     },
@@ -2662,7 +2662,7 @@
       "kind": "task",
       "label": "Atomicity Task",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-3263.md",
+      "path": "docs/planning/tasks/core/task-3263-atomicity-task.md",
       "deleted": false,
       "archived": false
     },
@@ -2671,7 +2671,7 @@
       "kind": "task",
       "label": "Generic Task",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-3264.md",
+      "path": "docs/planning/tasks/core/task-3264-generic-task.md",
       "deleted": false,
       "archived": false
     },
@@ -2680,7 +2680,7 @@
       "kind": "task",
       "label": "Extend config schema for document structure",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-329.md",
+      "path": "docs/planning/tasks/core/task-329-extend-config-schema-for-document-structure.md",
       "deleted": false,
       "archived": false
     },
@@ -2689,7 +2689,7 @@
       "kind": "task",
       "label": "Create TemplateEngine class",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-330.md",
+      "path": "docs/planning/tasks/core/task-330-create-templateengine-class.md",
       "deleted": false,
       "archived": false
     },
@@ -2698,7 +2698,7 @@
       "kind": "task",
       "label": "Create RelationshipConfig class",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-331.md",
+      "path": "docs/planning/tasks/core/task-331-create-relationshipconfig-class.md",
       "deleted": false,
       "archived": false
     },
@@ -2707,7 +2707,7 @@
       "kind": "task",
       "label": "Refactor managers to use config",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-332.md",
+      "path": "docs/planning/tasks/core/task-332-refactor-managers-to-use-config.md",
       "deleted": false,
       "archived": false
     },
@@ -2716,7 +2716,7 @@
       "kind": "task",
       "label": "Migrate hardcoded values to config",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-333.md",
+      "path": "docs/planning/tasks/core/task-333-migrate-hardcoded-values-to-config.md",
       "deleted": false,
       "archived": false
     },
@@ -2725,7 +2725,7 @@
       "kind": "task",
       "label": "Add tests for config-driven structure",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-334.md",
+      "path": "docs/planning/tasks/core/task-334-add-tests-for-config-driven-structure.md",
       "deleted": false,
       "archived": false
     },
@@ -2734,7 +2734,7 @@
       "kind": "task",
       "label": "Updated Test Task",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-335.md",
+      "path": "docs/planning/tasks/core/task-335-updated-test-task.md",
       "deleted": false,
       "archived": false
     },
@@ -2743,7 +2743,7 @@
       "kind": "task",
       "label": "Update events.py to remove hooks dependency",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-4.md",
+      "path": "docs/planning/tasks/core/task-4-update-events-py-to-remove-hooks-dependency.md",
       "deleted": false,
       "archived": false
     },
@@ -2752,7 +2752,7 @@
       "kind": "task",
       "label": "Update documentation and remove hooks references",
       "state": "cancelled",
-      "path": "docs/planning/tasks/core/task-5.md",
+      "path": "docs/planning/tasks/core/task-5-update-documentation-and-remove-hooks-references.md",
       "deleted": false,
       "archived": false
     },
@@ -2761,7 +2761,7 @@
       "kind": "task",
       "label": "Fix invalid parent propagation transitions",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-6.md",
+      "path": "docs/planning/tasks/core/task-6-fix-invalid-parent-propagation-transitions.md",
       "deleted": false,
       "archived": false
     },
@@ -2770,7 +2770,7 @@
       "kind": "task",
       "label": "Add unit test coverage for knowledge component modules",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-8.md",
+      "path": "docs/planning/tasks/core/task-8-add-unit-test-coverage-for-knowledge-component-modules.md",
       "deleted": false,
       "archived": false
     },
@@ -2779,7 +2779,7 @@
       "kind": "task",
       "label": "Refactor events.py into modular handlers",
       "state": "done",
-      "path": "docs/planning/tasks/core/task-9.md",
+      "path": "docs/planning/tasks/core/task-9-refactor-events-py-into-modular-handlers.md",
       "deleted": false,
       "archived": false
     },
@@ -2788,7 +2788,7 @@
       "kind": "task",
       "label": "[PKT-DSC-001](task-0158): Event Subscriber",
       "state": "cancelled",
-      "path": "docs/planning/tasks/discord/task-158.md",
+      "path": "docs/planning/tasks/discord/task-158-pkt-dsc-001-task-0158-event-subscriber.md",
       "deleted": false,
       "archived": false
     },
@@ -2797,7 +2797,7 @@
       "kind": "task",
       "label": "[PKT-DSC-002](task-0159): Release Summary Publishing",
       "state": "cancelled",
-      "path": "docs/planning/tasks/discord/task-159.md",
+      "path": "docs/planning/tasks/discord/task-159-pkt-dsc-002-task-0159-release-summary-publishing.md",
       "deleted": false,
       "archived": false
     },
@@ -2806,7 +2806,7 @@
       "kind": "task",
       "label": "[PKT-DSC-003](task-0160): Approval Publishing/Response Handling",
       "state": "cancelled",
-      "path": "docs/planning/tasks/discord/task-160.md",
+      "path": "docs/planning/tasks/discord/task-160-pkt-dsc-003-task-0160-approval-publishing-response-handling.md",
       "deleted": false,
       "archived": false
     },
@@ -2815,7 +2815,7 @@
       "kind": "task",
       "label": "[PKT-DSC-004](task-0161): Lifecycle/Migration Notices",
       "state": "cancelled",
-      "path": "docs/planning/tasks/discord/task-161.md",
+      "path": "docs/planning/tasks/discord/task-161-pkt-dsc-004-task-0161-lifecycle-migration-notices.md",
       "deleted": false,
       "archived": false
     },
@@ -2824,7 +2824,7 @@
       "kind": "task",
       "label": "[PKT-DIS-001](task-0168): Locator Provider Contract",
       "state": "draft",
-      "path": "docs/planning/tasks/discovery/task-168.md",
+      "path": "docs/planning/tasks/discovery/task-168-pkt-dis-001-task-0168-locator-provider-contract.md",
       "deleted": false,
       "archived": false
     },
@@ -2833,7 +2833,7 @@
       "kind": "task",
       "label": "[PKT-DIS-002](task-0169): Static Registry Provider",
       "state": "draft",
-      "path": "docs/planning/tasks/discovery/task-169.md",
+      "path": "docs/planning/tasks/discovery/task-169-pkt-dis-002-task-0169-static-registry-provider.md",
       "deleted": false,
       "archived": false
     },
@@ -2842,7 +2842,7 @@
       "kind": "task",
       "label": "[PKT-DIS-003](task-0170): Optional Provider Seams",
       "state": "draft",
-      "path": "docs/planning/tasks/discovery/task-319.md",
+      "path": "docs/planning/tasks/discovery/task-319-pkt-dis-003-task-0170-optional-provider-seams.md",
       "deleted": false,
       "archived": false
     },
@@ -2851,7 +2851,7 @@
       "kind": "task",
       "label": "[PKT-EVT-001](task-0171): Node Event Families",
       "state": "draft",
-      "path": "docs/planning/tasks/eventing/task-320.md",
+      "path": "docs/planning/tasks/eventing/task-320-pkt-evt-001-task-0171-node-event-families.md",
       "deleted": false,
       "archived": false
     },
@@ -2860,7 +2860,7 @@
       "kind": "task",
       "label": "[PKT-EVT-002](task-0172): Control Request Contracts",
       "state": "draft",
-      "path": "docs/planning/tasks/eventing/task-321.md",
+      "path": "docs/planning/tasks/eventing/task-321-pkt-evt-002-task-0172-control-request-contracts.md",
       "deleted": false,
       "archived": false
     },
@@ -2869,7 +2869,7 @@
       "kind": "task",
       "label": "[PKT-EXT-001](task-0174): External Connector Contract and Mock",
       "state": "draft",
-      "path": "docs/planning/tasks/external-tools/task-322.md",
+      "path": "docs/planning/tasks/external-tools/task-322-pkt-ext-001-task-0174-external-connector-contract-and-mock.md",
       "deleted": false,
       "archived": false
     },
@@ -2878,7 +2878,7 @@
       "kind": "task",
       "label": "Phase 1-11 Build Books",
       "state": "draft",
-      "path": "docs/planning/tasks/implementation-docs/task-323.md",
+      "path": "docs/planning/tasks/implementation-docs/task-323-phase-1-11-build-books.md",
       "deleted": false,
       "archived": false
     },
@@ -2887,7 +2887,7 @@
       "kind": "task",
       "label": "Provider Plans and Runbooks",
       "state": "draft",
-      "path": "docs/planning/tasks/implementation-docs/task-324.md",
+      "path": "docs/planning/tasks/implementation-docs/task-324-provider-plans-and-runbooks.md",
       "deleted": false,
       "archived": false
     },
@@ -2896,7 +2896,7 @@
       "kind": "task",
       "label": "Refactor Docs",
       "state": "draft",
-      "path": "docs/planning/tasks/implementation-docs/task-325.md",
+      "path": "docs/planning/tasks/implementation-docs/task-325-refactor-docs.md",
       "deleted": false,
       "archived": false
     },
@@ -2905,7 +2905,7 @@
       "kind": "task",
       "label": "Testing and Status Reports",
       "state": "draft",
-      "path": "docs/planning/tasks/implementation-docs/task-326.md",
+      "path": "docs/planning/tasks/implementation-docs/task-326-testing-and-status-reports.md",
       "deleted": false,
       "archived": false
     },
@@ -2914,7 +2914,7 @@
       "kind": "task",
       "label": "Reference Resolution",
       "state": "draft",
-      "path": "docs/planning/tasks/implementation-docs/task-327.md",
+      "path": "docs/planning/tasks/implementation-docs/task-327-reference-resolution.md",
       "deleted": false,
       "archived": false
     },
@@ -2923,7 +2923,7 @@
       "kind": "task",
       "label": "Final Validation and Cleanup",
       "state": "draft",
-      "path": "docs/planning/tasks/implementation-docs/task-328.md",
+      "path": "docs/planning/tasks/implementation-docs/task-328-final-validation-and-cleanup.md",
       "deleted": false,
       "archived": false
     },
@@ -2932,7 +2932,7 @@
       "kind": "task",
       "label": "[PKT-JOB-001](task-0067): Job Records and Store",
       "state": "draft",
-      "path": "docs/planning/tasks/jobs/task-67.md",
+      "path": "docs/planning/tasks/jobs/task-67-pkt-job-001-task-0067-job-records-and-store.md",
       "deleted": false,
       "archived": false
     },
@@ -2941,7 +2941,7 @@
       "kind": "task",
       "label": "[PKT-JOB-002](task-0068): State Machine",
       "state": "draft",
-      "path": "docs/planning/tasks/jobs/task-68.md",
+      "path": "docs/planning/tasks/jobs/task-68-pkt-job-002-task-0068-state-machine.md",
       "deleted": false,
       "archived": false
     },
@@ -2950,7 +2950,7 @@
       "kind": "task",
       "label": "[PKT-JOB-003](task-0069): Workflow Profiles",
       "state": "draft",
-      "path": "docs/planning/tasks/jobs/task-69.md",
+      "path": "docs/planning/tasks/jobs/task-69-pkt-job-003-task-0069-workflow-profiles.md",
       "deleted": false,
       "archived": false
     },
@@ -2959,7 +2959,7 @@
       "kind": "task",
       "label": "[PKT-JOB-004](task-0070): Packet Runner",
       "state": "draft",
-      "path": "docs/planning/tasks/jobs/task-70.md",
+      "path": "docs/planning/tasks/jobs/task-70-pkt-job-004-task-0070-packet-runner.md",
       "deleted": false,
       "archived": false
     },
@@ -2968,7 +2968,7 @@
       "kind": "task",
       "label": "[PKT-JOB-005](task-0071): Approval Handling",
       "state": "draft",
-      "path": "docs/planning/tasks/jobs/task-71.md",
+      "path": "docs/planning/tasks/jobs/task-71-pkt-job-005-task-0071-approval-handling.md",
       "deleted": false,
       "archived": false
     },
@@ -2977,7 +2977,7 @@
       "kind": "task",
       "label": "[PKT-JOB-006](task-0072): Release Bridge",
       "state": "draft",
-      "path": "docs/planning/tasks/jobs/task-72.md",
+      "path": "docs/planning/tasks/jobs/task-72-pkt-job-006-task-0072-release-bridge.md",
       "deleted": false,
       "archived": false
     },
@@ -2986,7 +2986,7 @@
       "kind": "task",
       "label": "[PKT-JOB-007](task-0073): Job Validation",
       "state": "draft",
-      "path": "docs/planning/tasks/jobs/task-73.md",
+      "path": "docs/planning/tasks/jobs/task-73-pkt-job-007-task-0073-job-validation.md",
       "deleted": false,
       "archived": false
     },
@@ -2995,7 +2995,7 @@
       "kind": "task",
       "label": "[PKT-JOB-008](task-0074): Job Monitoring",
       "state": "draft",
-      "path": "docs/planning/tasks/jobs/task-74.md",
+      "path": "docs/planning/tasks/jobs/task-74-pkt-job-008-task-0074-job-monitoring.md",
       "deleted": false,
       "archived": false
     },
@@ -3004,7 +3004,7 @@
       "kind": "task",
       "label": "[PKT-JOB-009](task-0075): Job Cancellation",
       "state": "draft",
-      "path": "docs/planning/tasks/jobs/task-75.md",
+      "path": "docs/planning/tasks/jobs/task-75-pkt-job-009-task-0075-job-cancellation.md",
       "deleted": false,
       "archived": false
     },
@@ -3013,7 +3013,7 @@
       "kind": "task",
       "label": "[PKT-JOB-010](task-0076): Job Documentation",
       "state": "draft",
-      "path": "docs/planning/tasks/jobs/task-76.md",
+      "path": "docs/planning/tasks/jobs/task-76-pkt-job-010-task-0076-job-documentation.md",
       "deleted": false,
       "archived": false
     },
@@ -3022,7 +3022,7 @@
       "kind": "task",
       "label": "[PKT-JOB-011](task-0077): Job Testing",
       "state": "draft",
-      "path": "docs/planning/tasks/jobs/task-77.md",
+      "path": "docs/planning/tasks/jobs/task-77-pkt-job-011-task-0077-job-testing.md",
       "deleted": false,
       "archived": false
     },
@@ -3031,7 +3031,7 @@
       "kind": "task",
       "label": "[PKT-LFC-001](task-0045): Installed-State Detector",
       "state": "draft",
-      "path": "docs/planning/tasks/lifecycle/task-45.md",
+      "path": "docs/planning/tasks/lifecycle/task-45-pkt-lfc-001-task-0045-installed-state-detector.md",
       "deleted": false,
       "archived": false
     },
@@ -3040,7 +3040,7 @@
       "kind": "task",
       "label": "[PKT-LFC-002](task-0046): Lifecycle Manifest and Checkpoint Writer",
       "state": "draft",
-      "path": "docs/planning/tasks/lifecycle/task-46.md",
+      "path": "docs/planning/tasks/lifecycle/task-46-pkt-lfc-002-task-0046-lifecycle-manifest-and-checkpoint-writer.md",
       "deleted": false,
       "archived": false
     },
@@ -3049,7 +3049,7 @@
       "kind": "task",
       "label": "[PKT-LFC-003](task-0047): Fresh Install Apply/Validate",
       "state": "draft",
-      "path": "docs/planning/tasks/lifecycle/task-47.md",
+      "path": "docs/planning/tasks/lifecycle/task-47-pkt-lfc-003-task-0047-fresh-install-apply-validate.md",
       "deleted": false,
       "archived": false
     },
@@ -3058,7 +3058,7 @@
       "kind": "task",
       "label": "[PKT-LFC-004](task-0048): Update Dispatch and Version Module Selection",
       "state": "draft",
-      "path": "docs/planning/tasks/lifecycle/task-48.md",
+      "path": "docs/planning/tasks/lifecycle/task-48-pkt-lfc-004-task-0048-update-dispatch-and-version-module-selection.md",
       "deleted": false,
       "archived": false
     },
@@ -3067,7 +3067,7 @@
       "kind": "task",
       "label": "[PKT-LFC-005](task-0049): Legacy Cutover",
       "state": "draft",
-      "path": "docs/planning/tasks/lifecycle/task-49.md",
+      "path": "docs/planning/tasks/lifecycle/task-49-pkt-lfc-005-task-0049-legacy-cutover.md",
       "deleted": false,
       "archived": false
     },
@@ -3076,7 +3076,7 @@
       "kind": "task",
       "label": "[PKT-LFC-006](task-0050): Uninstall Current AUDiaGentic",
       "state": "draft",
-      "path": "docs/planning/tasks/lifecycle/task-50.md",
+      "path": "docs/planning/tasks/lifecycle/task-50-pkt-lfc-006-task-0050-uninstall-current-audiagentic.md",
       "deleted": false,
       "archived": false
     },
@@ -3085,7 +3085,7 @@
       "kind": "task",
       "label": "[PKT-LFC-007](task-0051): Document Migration Outcomes and Reports",
       "state": "draft",
-      "path": "docs/planning/tasks/lifecycle/task-51.md",
+      "path": "docs/planning/tasks/lifecycle/task-51-pkt-lfc-007-task-0051-document-migration-outcomes-and-reports.md",
       "deleted": false,
       "archived": false
     },
@@ -3094,7 +3094,7 @@
       "kind": "task",
       "label": "[PKT-LFC-010](task-0052): Preserve Provider Auto-Install Policy Fields",
       "state": "draft",
-      "path": "docs/planning/tasks/lifecycle/task-52.md",
+      "path": "docs/planning/tasks/lifecycle/task-52-pkt-lfc-010-task-0052-preserve-provider-auto-install-policy-fields.md",
       "deleted": false,
       "archived": false
     },
@@ -3103,7 +3103,7 @@
       "kind": "task",
       "label": "[PKT-LFC-011](task-0053): Installable Baseline Inventory and Sync-Mode Classification",
       "state": "draft",
-      "path": "docs/planning/tasks/lifecycle/task-53.md",
+      "path": "docs/planning/tasks/lifecycle/task-53-pkt-lfc-011-task-0053-installable-baseline-inventory-and-sync-mode-classification.md",
       "deleted": false,
       "archived": false
     },
@@ -3112,7 +3112,7 @@
       "kind": "task",
       "label": "[PKT-LFC-012](task-0054): Shared Baseline Sync Engine for Lifecycle and Bootstrap",
       "state": "draft",
-      "path": "docs/planning/tasks/lifecycle/task-54.md",
+      "path": "docs/planning/tasks/lifecycle/task-54-pkt-lfc-012-task-0054-shared-baseline-sync-engine-for-lifecycle-and-bootstrap.md",
       "deleted": false,
       "archived": false
     },
@@ -3121,7 +3121,7 @@
       "kind": "task",
       "label": "[PKT-LFC-013](task-0055): Converge Fresh-Install and Release-Bootstrap on Baseline Sync",
       "state": "draft",
-      "path": "docs/planning/tasks/lifecycle/task-55.md",
+      "path": "docs/planning/tasks/lifecycle/task-55-pkt-lfc-013-task-0055-converge-fresh-install-and-release-bootstrap-on-baseline-sync.md",
       "deleted": false,
       "archived": false
     },
@@ -3130,7 +3130,7 @@
       "kind": "task",
       "label": "[PKT-MIG-001](task-0162): Migration Fixtures and Examples",
       "state": "draft",
-      "path": "docs/planning/tasks/migration/task-162.md",
+      "path": "docs/planning/tasks/migration/task-162-pkt-mig-001-task-0162-migration-fixtures-and-examples.md",
       "deleted": false,
       "archived": false
     },
@@ -3139,7 +3139,7 @@
       "kind": "task",
       "label": "[PKT-MIG-002](task-0163): Provider Migration Rules",
       "state": "draft",
-      "path": "docs/planning/tasks/migration/task-163.md",
+      "path": "docs/planning/tasks/migration/task-163-pkt-mig-002-task-0163-provider-migration-rules.md",
       "deleted": false,
       "archived": false
     },
@@ -3148,7 +3148,7 @@
       "kind": "task",
       "label": "[PKT-MIG-003](task-0164): Cutover Runbooks",
       "state": "draft",
-      "path": "docs/planning/tasks/migration/task-164.md",
+      "path": "docs/planning/tasks/migration/task-164-pkt-mig-003-task-0164-cutover-runbooks.md",
       "deleted": false,
       "archived": false
     },
@@ -3157,7 +3157,7 @@
       "kind": "task",
       "label": "[PKT-NOD-001](task-0165): Node Descriptor and Heartbeat",
       "state": "draft",
-      "path": "docs/planning/tasks/node-execution/task-165.md",
+      "path": "docs/planning/tasks/node-execution/task-165-pkt-nod-001-task-0165-node-descriptor-and-heartbeat.md",
       "deleted": false,
       "archived": false
     },
@@ -3166,7 +3166,7 @@
       "kind": "task",
       "label": "[PKT-NOD-002](task-0166): Node-Local Status Persistence",
       "state": "draft",
-      "path": "docs/planning/tasks/node-execution/task-166.md",
+      "path": "docs/planning/tasks/node-execution/task-166-pkt-nod-002-task-0166-node-local-status-persistence.md",
       "deleted": false,
       "archived": false
     },
@@ -3175,7 +3175,7 @@
       "kind": "task",
       "label": "[PKT-NOD-003](task-0167): Node Runtime Module Skeleton",
       "state": "draft",
-      "path": "docs/planning/tasks/node-execution/task-167.md",
+      "path": "docs/planning/tasks/node-execution/task-167-pkt-nod-003-task-0167-node-runtime-module-skeleton.md",
       "deleted": false,
       "archived": false
     },
@@ -3184,7 +3184,7 @@
       "kind": "task",
       "label": "[PKT-PRV-023](task-0100): Provider Plugin System",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-100.md",
+      "path": "docs/planning/tasks/providers/task-100-pkt-prv-023-task-0100-provider-plugin-system.md",
       "deleted": false,
       "archived": false
     },
@@ -3193,7 +3193,7 @@
       "kind": "task",
       "label": "[PKT-PRV-024](task-0101): Provider API Gateway",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-101.md",
+      "path": "docs/planning/tasks/providers/task-101-pkt-prv-024-task-0101-provider-api-gateway.md",
       "deleted": false,
       "archived": false
     },
@@ -3202,7 +3202,7 @@
       "kind": "task",
       "label": "[PKT-PRV-025](task-0102): Provider Webhook Support",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-102.md",
+      "path": "docs/planning/tasks/providers/task-102-pkt-prv-025-task-0102-provider-webhook-support.md",
       "deleted": false,
       "archived": false
     },
@@ -3211,7 +3211,7 @@
       "kind": "task",
       "label": "[PKT-PRV-026](task-0103): Provider Event Bus",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-103.md",
+      "path": "docs/planning/tasks/providers/task-103-pkt-prv-026-task-0103-provider-event-bus.md",
       "deleted": false,
       "archived": false
     },
@@ -3220,7 +3220,7 @@
       "kind": "task",
       "label": "[PKT-PRV-027](task-0104): Provider Message Queue",
       "state": "cancelled",
-      "path": "docs/planning/tasks/providers/task-104.md",
+      "path": "docs/planning/tasks/providers/task-104-pkt-prv-027-task-0104-provider-message-queue.md",
       "deleted": false,
       "archived": false
     },
@@ -3229,7 +3229,7 @@
       "kind": "task",
       "label": "[PKT-PRV-028](task-0105): Provider Queue Management",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-105.md",
+      "path": "docs/planning/tasks/providers/task-105-pkt-prv-028-task-0105-provider-queue-management.md",
       "deleted": false,
       "archived": false
     },
@@ -3238,7 +3238,7 @@
       "kind": "task",
       "label": "[PKT-PRV-029](task-0106): Provider Batch Processing",
       "state": "cancelled",
-      "path": "docs/planning/tasks/providers/task-106.md",
+      "path": "docs/planning/tasks/providers/task-106-pkt-prv-029-task-0106-provider-batch-processing.md",
       "deleted": false,
       "archived": false
     },
@@ -3247,7 +3247,7 @@
       "kind": "task",
       "label": "[PKT-PRV-030](task-0107): Provider Stream Processing",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-107.md",
+      "path": "docs/planning/tasks/providers/task-107-pkt-prv-030-task-0107-provider-stream-processing.md",
       "deleted": false,
       "archived": false
     },
@@ -3256,7 +3256,7 @@
       "kind": "task",
       "label": "[PKT-PRV-031](task-0108): Provider Async Support",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-108.md",
+      "path": "docs/planning/tasks/providers/task-108-pkt-prv-031-task-0108-provider-async-support.md",
       "deleted": false,
       "archived": false
     },
@@ -3265,7 +3265,7 @@
       "kind": "task",
       "label": "[PKT-PRV-032](task-0109): Provider Sync Support",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-109.md",
+      "path": "docs/planning/tasks/providers/task-109-pkt-prv-032-task-0109-provider-sync-support.md",
       "deleted": false,
       "archived": false
     },
@@ -3274,7 +3274,7 @@
       "kind": "task",
       "label": "[PKT-PRV-033](task-0110): Provider Timeout Handling",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-110.md",
+      "path": "docs/planning/tasks/providers/task-110-pkt-prv-033-task-0110-provider-timeout-handling.md",
       "deleted": false,
       "archived": false
     },
@@ -3283,7 +3283,7 @@
       "kind": "task",
       "label": "[PKT-PRV-034](task-0111): Provider Retry Logic",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-111.md",
+      "path": "docs/planning/tasks/providers/task-111-pkt-prv-034-task-0111-provider-retry-logic.md",
       "deleted": false,
       "archived": false
     },
@@ -3292,7 +3292,7 @@
       "kind": "task",
       "label": "[PKT-PRV-035](task-0112): Provider Circuit Breaker",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-112.md",
+      "path": "docs/planning/tasks/providers/task-112-pkt-prv-035-task-0112-provider-circuit-breaker.md",
       "deleted": false,
       "archived": false
     },
@@ -3301,7 +3301,7 @@
       "kind": "task",
       "label": "[PKT-PRV-036](task-0113): Provider Bulkhead",
       "state": "cancelled",
-      "path": "docs/planning/tasks/providers/task-113.md",
+      "path": "docs/planning/tasks/providers/task-113-pkt-prv-036-task-0113-provider-bulkhead.md",
       "deleted": false,
       "archived": false
     },
@@ -3310,7 +3310,7 @@
       "kind": "task",
       "label": "[PKT-PRV-037](task-0114): Provider Load Balancing",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-114.md",
+      "path": "docs/planning/tasks/providers/task-114-pkt-prv-037-task-0114-provider-load-balancing.md",
       "deleted": false,
       "archived": false
     },
@@ -3319,7 +3319,7 @@
       "kind": "task",
       "label": "[PKT-PRV-038](task-0115): Provider Connection Pooling",
       "state": "cancelled",
-      "path": "docs/planning/tasks/providers/task-115.md",
+      "path": "docs/planning/tasks/providers/task-115-pkt-prv-038-task-0115-provider-connection-pooling.md",
       "deleted": false,
       "archived": false
     },
@@ -3328,7 +3328,7 @@
       "kind": "task",
       "label": "[PKT-PRV-039](task-0117): Provider SSL/TLS Support",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-117.md",
+      "path": "docs/planning/tasks/providers/task-117-pkt-prv-039-task-0117-provider-ssl-tls-support.md",
       "deleted": false,
       "archived": false
     },
@@ -3337,7 +3337,7 @@
       "kind": "task",
       "label": "[PKT-PRV-040](task-0118): Provider Authentication",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-118.md",
+      "path": "docs/planning/tasks/providers/task-118-pkt-prv-040-task-0118-provider-authentication.md",
       "deleted": false,
       "archived": false
     },
@@ -3346,7 +3346,7 @@
       "kind": "task",
       "label": "[PKT-PRV-041](task-0119): Provider Authorization",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-119.md",
+      "path": "docs/planning/tasks/providers/task-119-pkt-prv-041-task-0119-provider-authorization.md",
       "deleted": false,
       "archived": false
     },
@@ -3355,7 +3355,7 @@
       "kind": "task",
       "label": "[PKT-PRV-042](task-0120): Provider Audit Logging",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-120.md",
+      "path": "docs/planning/tasks/providers/task-120-pkt-prv-042-task-0120-provider-audit-logging.md",
       "deleted": false,
       "archived": false
     },
@@ -3364,7 +3364,7 @@
       "kind": "task",
       "label": "[PKT-PRV-043](task-0121): Provider Compliance Checks",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-121.md",
+      "path": "docs/planning/tasks/providers/task-121-pkt-prv-043-task-0121-provider-compliance-checks.md",
       "deleted": false,
       "archived": false
     },
@@ -3373,7 +3373,7 @@
       "kind": "task",
       "label": "[PKT-PRV-044](task-0122): Provider Policy Enforcement",
       "state": "cancelled",
-      "path": "docs/planning/tasks/providers/task-122.md",
+      "path": "docs/planning/tasks/providers/task-122-pkt-prv-044-task-0122-provider-policy-enforcement.md",
       "deleted": false,
       "archived": false
     },
@@ -3382,7 +3382,7 @@
       "kind": "task",
       "label": "[PKT-PRV-045](task-0123): Provider Data Encryption",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-123.md",
+      "path": "docs/planning/tasks/providers/task-123-pkt-prv-045-task-0123-provider-data-encryption.md",
       "deleted": false,
       "archived": false
     },
@@ -3391,7 +3391,7 @@
       "kind": "task",
       "label": "[PKT-PRV-046](task-0124): Provider Data Masking",
       "state": "cancelled",
-      "path": "docs/planning/tasks/providers/task-124.md",
+      "path": "docs/planning/tasks/providers/task-124-pkt-prv-046-task-0124-provider-data-masking.md",
       "deleted": false,
       "archived": false
     },
@@ -3400,7 +3400,7 @@
       "kind": "task",
       "label": "[PKT-PRV-047](task-0125): Provider Data Retention",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-125.md",
+      "path": "docs/planning/tasks/providers/task-125-pkt-prv-047-task-0125-provider-data-retention.md",
       "deleted": false,
       "archived": false
     },
@@ -3409,7 +3409,7 @@
       "kind": "task",
       "label": "[PKT-PRV-048](task-0126): Provider Data Export",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-126.md",
+      "path": "docs/planning/tasks/providers/task-126-pkt-prv-048-task-0126-provider-data-export.md",
       "deleted": false,
       "archived": false
     },
@@ -3418,7 +3418,7 @@
       "kind": "task",
       "label": "[PKT-PRV-049](task-0127): Provider Data Import",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-127.md",
+      "path": "docs/planning/tasks/providers/task-127-pkt-prv-049-task-0127-provider-data-import.md",
       "deleted": false,
       "archived": false
     },
@@ -3427,7 +3427,7 @@
       "kind": "task",
       "label": "[PKT-PRV-050](task-0128): Provider Data Transformation",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-128.md",
+      "path": "docs/planning/tasks/providers/task-128-pkt-prv-050-task-0128-provider-data-transformation.md",
       "deleted": false,
       "archived": false
     },
@@ -3436,7 +3436,7 @@
       "kind": "task",
       "label": "[PKT-PRV-051](task-0129): Provider Data Validation",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-129.md",
+      "path": "docs/planning/tasks/providers/task-129-pkt-prv-051-task-0129-provider-data-validation.md",
       "deleted": false,
       "archived": false
     },
@@ -3445,7 +3445,7 @@
       "kind": "task",
       "label": "[PKT-PRV-052](task-0130): Provider Data Quality",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-130.md",
+      "path": "docs/planning/tasks/providers/task-130-pkt-prv-052-task-0130-provider-data-quality.md",
       "deleted": false,
       "archived": false
     },
@@ -3454,7 +3454,7 @@
       "kind": "task",
       "label": "[PKT-PRV-053](task-0131): Provider Data Governance",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-131.md",
+      "path": "docs/planning/tasks/providers/task-131-pkt-prv-053-task-0131-provider-data-governance.md",
       "deleted": false,
       "archived": false
     },
@@ -3463,7 +3463,7 @@
       "kind": "task",
       "label": "[PKT-PRV-054](task-0132): Provider Data Lineage",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-132.md",
+      "path": "docs/planning/tasks/providers/task-132-pkt-prv-054-task-0132-provider-data-lineage.md",
       "deleted": false,
       "archived": false
     },
@@ -3472,7 +3472,7 @@
       "kind": "task",
       "label": "[PKT-PRV-055](task-0133): Provider Data Catalog",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-133.md",
+      "path": "docs/planning/tasks/providers/task-133-pkt-prv-055-task-0133-provider-data-catalog.md",
       "deleted": false,
       "archived": false
     },
@@ -3481,7 +3481,7 @@
       "kind": "task",
       "label": "[PKT-PRV-056](task-0134): Provider Data Dictionary",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-134.md",
+      "path": "docs/planning/tasks/providers/task-134-pkt-prv-056-task-0134-provider-data-dictionary.md",
       "deleted": false,
       "archived": false
     },
@@ -3490,7 +3490,7 @@
       "kind": "task",
       "label": "[PKT-PRV-057](task-0135): Provider Data Standards",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-135.md",
+      "path": "docs/planning/tasks/providers/task-135-pkt-prv-057-task-0135-provider-data-standards.md",
       "deleted": false,
       "archived": false
     },
@@ -3499,7 +3499,7 @@
       "kind": "task",
       "label": "[PKT-PRV-058](task-0136): Provider Data Quality Rules",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-136.md",
+      "path": "docs/planning/tasks/providers/task-136-pkt-prv-058-task-0136-provider-data-quality-rules.md",
       "deleted": false,
       "archived": false
     },
@@ -3508,7 +3508,7 @@
       "kind": "task",
       "label": "[PKT-PRV-059](task-0137): Provider Data Profiling",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-137.md",
+      "path": "docs/planning/tasks/providers/task-137-pkt-prv-059-task-0137-provider-data-profiling.md",
       "deleted": false,
       "archived": false
     },
@@ -3517,7 +3517,7 @@
       "kind": "task",
       "label": "[PKT-PRV-060](task-0138): Provider Data Anomaly Detection",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-138.md",
+      "path": "docs/planning/tasks/providers/task-138-pkt-prv-060-task-0138-provider-data-anomaly-detection.md",
       "deleted": false,
       "archived": false
     },
@@ -3526,7 +3526,7 @@
       "kind": "task",
       "label": "[PKT-PRV-061](task-0139): Provider Data Masking Rules",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-139.md",
+      "path": "docs/planning/tasks/providers/task-139-pkt-prv-061-task-0139-provider-data-masking-rules.md",
       "deleted": false,
       "archived": false
     },
@@ -3535,7 +3535,7 @@
       "kind": "task",
       "label": "[PKT-PRV-062](task-0140): Provider Data Retention Rules",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-140.md",
+      "path": "docs/planning/tasks/providers/task-140-pkt-prv-062-task-0140-provider-data-retention-rules.md",
       "deleted": false,
       "archived": false
     },
@@ -3544,7 +3544,7 @@
       "kind": "task",
       "label": "[PKT-PRV-063](task-0141): Provider Data Export Rules",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-141.md",
+      "path": "docs/planning/tasks/providers/task-141-pkt-prv-063-task-0141-provider-data-export-rules.md",
       "deleted": false,
       "archived": false
     },
@@ -3553,7 +3553,7 @@
       "kind": "task",
       "label": "[PKT-PRV-064](task-0142): Provider Data Import Rules",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-142.md",
+      "path": "docs/planning/tasks/providers/task-142-pkt-prv-064-task-0142-provider-data-import-rules.md",
       "deleted": false,
       "archived": false
     },
@@ -3562,7 +3562,7 @@
       "kind": "task",
       "label": "[PKT-PRV-065](task-0143): Provider Data Transformation Rules",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-143.md",
+      "path": "docs/planning/tasks/providers/task-143-pkt-prv-065-task-0143-provider-data-transformation-rules.md",
       "deleted": false,
       "archived": false
     },
@@ -3571,7 +3571,7 @@
       "kind": "task",
       "label": "[PKT-PRV-066](task-0144): Provider Data Validation Rules",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-144.md",
+      "path": "docs/planning/tasks/providers/task-144-pkt-prv-066-task-0144-provider-data-validation-rules.md",
       "deleted": false,
       "archived": false
     },
@@ -3580,7 +3580,7 @@
       "kind": "task",
       "label": "[PKT-PRV-067](task-0145): Provider Data Quality Rules",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-145.md",
+      "path": "docs/planning/tasks/providers/task-145-pkt-prv-067-task-0145-provider-data-quality-rules.md",
       "deleted": false,
       "archived": false
     },
@@ -3589,7 +3589,7 @@
       "kind": "task",
       "label": "[PKT-PRV-068](task-0146): Provider Data Governance Rules",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-146.md",
+      "path": "docs/planning/tasks/providers/task-146-pkt-prv-068-task-0146-provider-data-governance-rules.md",
       "deleted": false,
       "archived": false
     },
@@ -3598,7 +3598,7 @@
       "kind": "task",
       "label": "[PKT-PRV-069](task-0147): Provider Data Lineage Rules",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-147.md",
+      "path": "docs/planning/tasks/providers/task-147-pkt-prv-069-task-0147-provider-data-lineage-rules.md",
       "deleted": false,
       "archived": false
     },
@@ -3607,7 +3607,7 @@
       "kind": "task",
       "label": "[PKT-PRV-070](task-0148): Provider Data Catalog Rules",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-148.md",
+      "path": "docs/planning/tasks/providers/task-148-pkt-prv-070-task-0148-provider-data-catalog-rules.md",
       "deleted": false,
       "archived": false
     },
@@ -3616,7 +3616,7 @@
       "kind": "task",
       "label": "[PKT-PRV-071](task-0149): Provider Data Dictionary Rules",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-149.md",
+      "path": "docs/planning/tasks/providers/task-149-pkt-prv-071-task-0149-provider-data-dictionary-rules.md",
       "deleted": false,
       "archived": false
     },
@@ -3625,7 +3625,7 @@
       "kind": "task",
       "label": "[PKT-PRV-072](task-0150): Provider Data Standards Rules",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-150.md",
+      "path": "docs/planning/tasks/providers/task-150-pkt-prv-072-task-0150-provider-data-standards-rules.md",
       "deleted": false,
       "archived": false
     },
@@ -3634,7 +3634,7 @@
       "kind": "task",
       "label": "[PKT-PRV-073](task-0151): Provider Data Quality Monitoring",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-151.md",
+      "path": "docs/planning/tasks/providers/task-151-pkt-prv-073-task-0151-provider-data-quality-monitoring.md",
       "deleted": false,
       "archived": false
     },
@@ -3643,7 +3643,7 @@
       "kind": "task",
       "label": "[PKT-PRV-074](task-0152): Provider Data Governance Monitoring",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-152.md",
+      "path": "docs/planning/tasks/providers/task-152-pkt-prv-074-task-0152-provider-data-governance-monitoring.md",
       "deleted": false,
       "archived": false
     },
@@ -3652,7 +3652,7 @@
       "kind": "task",
       "label": "[PKT-PRV-075](task-0153): Provider Data Lineage Monitoring",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-153.md",
+      "path": "docs/planning/tasks/providers/task-153-pkt-prv-075-task-0153-provider-data-lineage-monitoring.md",
       "deleted": false,
       "archived": false
     },
@@ -3661,7 +3661,7 @@
       "kind": "task",
       "label": "[PKT-PRV-076](task-0154): Provider Data Catalog Monitoring",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-154.md",
+      "path": "docs/planning/tasks/providers/task-154-pkt-prv-076-task-0154-provider-data-catalog-monitoring.md",
       "deleted": false,
       "archived": false
     },
@@ -3670,7 +3670,7 @@
       "kind": "task",
       "label": "[PKT-PRV-077](task-0155): Provider Data Dictionary Monitoring",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-155.md",
+      "path": "docs/planning/tasks/providers/task-155-pkt-prv-077-task-0155-provider-data-dictionary-monitoring.md",
       "deleted": false,
       "archived": false
     },
@@ -3679,7 +3679,7 @@
       "kind": "task",
       "label": "[PKT-PRV-078](task-0156): Provider Data Standards Monitoring",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-156.md",
+      "path": "docs/planning/tasks/providers/task-156-pkt-prv-078-task-0156-provider-data-standards-monitoring.md",
       "deleted": false,
       "archived": false
     },
@@ -3688,7 +3688,7 @@
       "kind": "task",
       "label": "[PKT-SRV-001](task-0157): Provider Service Seam",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-157.md",
+      "path": "docs/planning/tasks/providers/task-157-pkt-srv-001-task-0157-provider-service-seam.md",
       "deleted": false,
       "archived": false
     },
@@ -3697,7 +3697,7 @@
       "kind": "task",
       "label": "[PKT-PRV-001](task-0078): Provider Registry",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-78.md",
+      "path": "docs/planning/tasks/providers/task-78-pkt-prv-001-task-0078-provider-registry.md",
       "deleted": false,
       "archived": false
     },
@@ -3706,7 +3706,7 @@
       "kind": "task",
       "label": "[PKT-PRV-002](task-0079): Health Checks",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-79.md",
+      "path": "docs/planning/tasks/providers/task-79-pkt-prv-002-task-0079-health-checks.md",
       "deleted": false,
       "archived": false
     },
@@ -3715,7 +3715,7 @@
       "kind": "task",
       "label": "[PKT-PRV-003](task-0080): Provider Selection",
       "state": "cancelled",
-      "path": "docs/planning/tasks/providers/task-80.md",
+      "path": "docs/planning/tasks/providers/task-80-pkt-prv-003-task-0080-provider-selection.md",
       "deleted": false,
       "archived": false
     },
@@ -3724,7 +3724,7 @@
       "kind": "task",
       "label": "[PKT-PRV-004](task-0081): Provider Adapters",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-81.md",
+      "path": "docs/planning/tasks/providers/task-81-pkt-prv-004-task-0081-provider-adapters.md",
       "deleted": false,
       "archived": false
     },
@@ -3733,7 +3733,7 @@
       "kind": "task",
       "label": "[PKT-PRV-005](task-0082): Service Seam",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-82.md",
+      "path": "docs/planning/tasks/providers/task-82-pkt-prv-005-task-0082-service-seam.md",
       "deleted": false,
       "archived": false
     },
@@ -3742,7 +3742,7 @@
       "kind": "task",
       "label": "[PKT-PRV-006](task-0083): Provider Implementation Template",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-83.md",
+      "path": "docs/planning/tasks/providers/task-83-pkt-prv-006-task-0083-provider-implementation-template.md",
       "deleted": false,
       "archived": false
     },
@@ -3751,7 +3751,7 @@
       "kind": "task",
       "label": "[PKT-PRV-007](task-0084): Provider Configuration Schema",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-84.md",
+      "path": "docs/planning/tasks/providers/task-84-pkt-prv-007-task-0084-provider-configuration-schema.md",
       "deleted": false,
       "archived": false
     },
@@ -3760,7 +3760,7 @@
       "kind": "task",
       "label": "[PKT-PRV-008](task-0085): Provider Documentation",
       "state": "cancelled",
-      "path": "docs/planning/tasks/providers/task-85.md",
+      "path": "docs/planning/tasks/providers/task-85-pkt-prv-008-task-0085-provider-documentation.md",
       "deleted": false,
       "archived": false
     },
@@ -3769,7 +3769,7 @@
       "kind": "task",
       "label": "[PKT-PRV-009](task-0086): Provider Testing Framework",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-86.md",
+      "path": "docs/planning/tasks/providers/task-86-pkt-prv-009-task-0086-provider-testing-framework.md",
       "deleted": false,
       "archived": false
     },
@@ -3778,7 +3778,7 @@
       "kind": "task",
       "label": "[PKT-PRV-010](task-0087): Provider Performance Benchmarks",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-87.md",
+      "path": "docs/planning/tasks/providers/task-87-pkt-prv-010-task-0087-provider-performance-benchmarks.md",
       "deleted": false,
       "archived": false
     },
@@ -3787,7 +3787,7 @@
       "kind": "task",
       "label": "[PKT-PRV-011](task-0088): Provider Security Audit",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-88.md",
+      "path": "docs/planning/tasks/providers/task-88-pkt-prv-011-task-0088-provider-security-audit.md",
       "deleted": false,
       "archived": false
     },
@@ -3796,7 +3796,7 @@
       "kind": "task",
       "label": "[PKT-PRV-012](task-0089): Provider Version Management",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-89.md",
+      "path": "docs/planning/tasks/providers/task-89-pkt-prv-012-task-0089-provider-version-management.md",
       "deleted": false,
       "archived": false
     },
@@ -3805,7 +3805,7 @@
       "kind": "task",
       "label": "[PKT-PRV-013](task-0090): Provider Feature Flags",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-90.md",
+      "path": "docs/planning/tasks/providers/task-90-pkt-prv-013-task-0090-provider-feature-flags.md",
       "deleted": false,
       "archived": false
     },
@@ -3814,7 +3814,7 @@
       "kind": "task",
       "label": "[PKT-PRV-014](task-0091): Provider Rate Limiting",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-91.md",
+      "path": "docs/planning/tasks/providers/task-91-pkt-prv-014-task-0091-provider-rate-limiting.md",
       "deleted": false,
       "archived": false
     },
@@ -3823,7 +3823,7 @@
       "kind": "task",
       "label": "[PKT-PRV-015](task-0092): Provider Caching",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-92.md",
+      "path": "docs/planning/tasks/providers/task-92-pkt-prv-015-task-0092-provider-caching.md",
       "deleted": false,
       "archived": false
     },
@@ -3832,7 +3832,7 @@
       "kind": "task",
       "label": "[PKT-PRV-016](task-0093): Provider Error Handling",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-93.md",
+      "path": "docs/planning/tasks/providers/task-93-pkt-prv-016-task-0093-provider-error-handling.md",
       "deleted": false,
       "archived": false
     },
@@ -3841,7 +3841,7 @@
       "kind": "task",
       "label": "[PKT-PRV-017](task-0094): Provider Logging",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-94.md",
+      "path": "docs/planning/tasks/providers/task-94-pkt-prv-017-task-0094-provider-logging.md",
       "deleted": false,
       "archived": false
     },
@@ -3850,7 +3850,7 @@
       "kind": "task",
       "label": "[PKT-PRV-018](task-0095): Provider Metrics",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-95.md",
+      "path": "docs/planning/tasks/providers/task-95-pkt-prv-018-task-0095-provider-metrics.md",
       "deleted": false,
       "archived": false
     },
@@ -3859,7 +3859,7 @@
       "kind": "task",
       "label": "[PKT-PRV-019](task-0096): Provider Tracing",
       "state": "cancelled",
-      "path": "docs/planning/tasks/providers/task-96.md",
+      "path": "docs/planning/tasks/providers/task-96-pkt-prv-019-task-0096-provider-tracing.md",
       "deleted": false,
       "archived": false
     },
@@ -3868,7 +3868,7 @@
       "kind": "task",
       "label": "[PKT-PRV-020](task-0097): Provider Configuration Management",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-97.md",
+      "path": "docs/planning/tasks/providers/task-97-pkt-prv-020-task-0097-provider-configuration-management.md",
       "deleted": false,
       "archived": false
     },
@@ -3877,7 +3877,7 @@
       "kind": "task",
       "label": "[PKT-PRV-021](task-0098): Provider Discovery",
       "state": "cancelled",
-      "path": "docs/planning/tasks/providers/task-98.md",
+      "path": "docs/planning/tasks/providers/task-98-pkt-prv-021-task-0098-provider-discovery.md",
       "deleted": false,
       "archived": false
     },
@@ -3886,7 +3886,7 @@
       "kind": "task",
       "label": "[PKT-PRV-022](task-0099): Provider Lifecycle",
       "state": "draft",
-      "path": "docs/planning/tasks/providers/task-99.md",
+      "path": "docs/planning/tasks/providers/task-99-pkt-prv-022-task-0099-provider-lifecycle.md",
       "deleted": false,
       "archived": false
     },
@@ -3895,7 +3895,7 @@
       "kind": "task",
       "label": "[PKT-RLS-001](task-0056): Fragment Capture",
       "state": "draft",
-      "path": "docs/planning/tasks/release/task-56.md",
+      "path": "docs/planning/tasks/release/task-56-pkt-rls-001-task-0056-fragment-capture.md",
       "deleted": false,
       "archived": false
     },
@@ -3904,7 +3904,7 @@
       "kind": "task",
       "label": "[PKT-RLS-002](task-0057): Sync with Locking and Idempotency",
       "state": "draft",
-      "path": "docs/planning/tasks/release/task-57.md",
+      "path": "docs/planning/tasks/release/task-57-pkt-rls-002-task-0057-sync-with-locking-and-idempotency.md",
       "deleted": false,
       "archived": false
     },
@@ -3913,7 +3913,7 @@
       "kind": "task",
       "label": "[PKT-RLS-003](task-0058): Current Release Summary",
       "state": "draft",
-      "path": "docs/planning/tasks/release/task-58.md",
+      "path": "docs/planning/tasks/release/task-58-pkt-rls-003-task-0058-current-release-summary.md",
       "deleted": false,
       "archived": false
     },
@@ -3922,7 +3922,7 @@
       "kind": "task",
       "label": "[PKT-RLS-004](task-0059): Audit/Check-in Summary Generation",
       "state": "draft",
-      "path": "docs/planning/tasks/release/task-59.md",
+      "path": "docs/planning/tasks/release/task-59-pkt-rls-004-task-0059-audit-check-in-summary-generation.md",
       "deleted": false,
       "archived": false
     },
@@ -3931,7 +3931,7 @@
       "kind": "task",
       "label": "[PKT-RLS-005](task-0060): Finalization with Exactly-Once Historical Append",
       "state": "draft",
-      "path": "docs/planning/tasks/release/task-60.md",
+      "path": "docs/planning/tasks/release/task-60-pkt-rls-005-task-0060-finalization-with-exactly-once-historical-append.md",
       "deleted": false,
       "archived": false
     },
@@ -3940,7 +3940,7 @@
       "kind": "task",
       "label": "[PKT-RLS-006](task-0061): Release Please Baseline Workflow",
       "state": "draft",
-      "path": "docs/planning/tasks/release/task-61.md",
+      "path": "docs/planning/tasks/release/task-61-pkt-rls-006-task-0061-release-please-baseline-workflow.md",
       "deleted": false,
       "archived": false
     },
@@ -3949,7 +3949,7 @@
       "kind": "task",
       "label": "[PKT-RLS-007](task-0062): Release Please Config Management",
       "state": "draft",
-      "path": "docs/planning/tasks/release/task-62.md",
+      "path": "docs/planning/tasks/release/task-62-pkt-rls-007-task-0062-release-please-config-management.md",
       "deleted": false,
       "archived": false
     },
@@ -3958,7 +3958,7 @@
       "kind": "task",
       "label": "[PKT-RLS-008](task-0063): Ledger Integration",
       "state": "draft",
-      "path": "docs/planning/tasks/release/task-63.md",
+      "path": "docs/planning/tasks/release/task-63-pkt-rls-008-task-0063-ledger-integration.md",
       "deleted": false,
       "archived": false
     },
@@ -3967,7 +3967,7 @@
       "kind": "task",
       "label": "[PKT-RLS-009](task-0064): Audit Trail",
       "state": "draft",
-      "path": "docs/planning/tasks/release/task-64.md",
+      "path": "docs/planning/tasks/release/task-64-pkt-rls-009-task-0064-audit-trail.md",
       "deleted": false,
       "archived": false
     },
@@ -3976,7 +3976,7 @@
       "kind": "task",
       "label": "[PKT-RLS-010](task-0065): Release Validation",
       "state": "draft",
-      "path": "docs/planning/tasks/release/task-65.md",
+      "path": "docs/planning/tasks/release/task-65-pkt-rls-010-task-0065-release-validation.md",
       "deleted": false,
       "archived": false
     },
@@ -3985,7 +3985,7 @@
       "kind": "task",
       "label": "[PKT-RLS-011](task-0066): Release Documentation",
       "state": "draft",
-      "path": "docs/planning/tasks/release/task-66.md",
+      "path": "docs/planning/tasks/release/task-66-pkt-rls-011-task-0066-release-documentation.md",
       "deleted": false,
       "archived": false
     },
@@ -3994,7 +3994,7 @@
       "kind": "task",
       "label": "Bad Parent Task",
       "state": "draft",
-      "path": "docs/planning/tasks/task-7.md",
+      "path": "docs/planning/tasks/task-7-bad-parent-task.md",
       "deleted": false,
       "archived": false
     },
