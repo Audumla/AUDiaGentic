@@ -1,0 +1,19 @@
+{
+  "item": {
+    "id": "plan-2",
+    "label": "Phase 0 Build Book",
+    "state": "draft",
+    "summary": "Complete implementation guide for Phase 0 contracts and scaffolding",
+    "spec_refs": [],
+    "work_package_refs": [],
+    "kind": "plan",
+    "path": "docs/planning/plans/plan-2-phase-0-build-book.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n# Phase 0 Build Book\n\n## Overview\n\nThis build book documents the complete implementation of Phase 0 - Contracts and Scaffolding.\n\n## Implementation Sequence\n\n### Foundation Packets ([PKT-FND-001](task-0022) to [PKT-FND-005](task-0026))\n\n1. **[PKT-FND-001](task-0022)**: Canonical IDs and naming normalization\n2. **[PKT-FND-002](task-0023)**: Schema package and fixtures\n3. **[PKT-FND-003](task-0024)**: Example project scaffold\n4. **[PKT-FND-004](task-0025)**: Lifecycle CLI stub\n5. **[PKT-FND-005](task-0026)**: Packet/test harness scaffolding\n\n### Supporting Packets ([PKT-FND-006](task-0027) to [PKT-FND-013](task-0034))\n\n6. **[PKT-FND-006](task-0027)**: Naming validator script\n7. **[PKT-FND-007](task-0028)**: Schema validator script\n8. **[PKT-FND-008](task-0029)**: Checkpoint writer\n9. **[PKT-FND-009](task-0030)**: Fixture generator\n10. **[PKT-FND-010](task-0031)**: Integration tests\n11. **[PKT-FND-011](task-0032)**: Documentation\n12. **[PKT-FND-012](task-0033)**: Migration runbook\n13. **[PKT-FND-013](task-0034)**: Exit gate validation\n\n## Dependencies\n\n- [spec-0004](spec-0004): Phase 0 Contracts and Scaffolding\n\n## Exit Criteria\n\n- All schema files non-placeholder\n- Validators pass/fail correctly\n- Lifecycle CLI stub functional\n- Example scaffold complete\n\n# Objectives\n\nComplete Phase 0 implementation with all foundation packets.\n\n# Delivery Approach\n\nSequential packet execution with validation at each step.\n\n# Dependencies\n\n- spec-0004: Phase 0 Contracts and Scaffolding\n"
+}

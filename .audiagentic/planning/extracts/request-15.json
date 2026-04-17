@@ -16,11 +16,11 @@
       "request_type": "feature"
     },
     "standard_refs": [
-      "standard-0001"
+      "standard-1"
     ],
     "spec_refs": [
-      "spec-015",
-      "spec-016"
+      "spec-15",
+      "spec-16"
     ],
     "kind": "request",
     "path": "docs/planning/requests/request-15-knowledge-component-improvements.md",
@@ -31,7 +31,7 @@
     "restored_by": null
   },
   "effective_standard_refs": [
-    "standard-0001"
+    "standard-1"
   ],
   "body": "\n\n\n\n\n\n# Understanding\n\nKnowledge component integrated successfully but has gaps: zero tests, events.py too large (413 lines), naive search, no lifecycle for proposals/jobs, 28 MCP tools too many. README updated, bootstrap idempotency verified, config paths verified. Need to track improvements.\n\n# Open Questions\n\n- What is the priority order for adding tests?\n- Should MCP consolidation happen before or after tests?\n- What search enhancement approach: BM25 vs fuzzy matching?\n\n# Problem\n\n\n\n# Desired Outcome\n\n\n\n# Constraints\n\n\n# Notes\nAssessment on 2026-04-17: request remains valid and open, but its remaining scope is narrower than originally described. Real remaining work is tests, `events.py` refactor, search improvements, and lifecycle cleanup. MCP consolidation is already implemented via grouped knowledge MCP operations, so that task was closed as stale-complete.\n"
 }

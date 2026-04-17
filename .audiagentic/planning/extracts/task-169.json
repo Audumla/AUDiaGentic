@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-169",
+    "label": "[PKT-DIS-002](task-0169): Static Registry Provider",
+    "state": "draft",
+    "summary": "Implement static registry provider",
+    "spec_ref": "spec-16",
+    "kind": "task",
+    "path": "docs/planning/tasks/discovery/task-169-pkt-dis-002-task-0169-static-registry-provider.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-DIS-002](task-0158): Static Registry Provider\n\n## Purpose\n\nImplement static registry provider.\n\n## Scope\n\n- Registry format\n- Static registration\n- Lookup\n\n## Implementation\n\n1. Define format\n2. Implement registration\n3. Add lookup\n\n## Acceptance Criteria\n\n1. Format defined\n2. Registration works\n3. Lookup works\n"
+}

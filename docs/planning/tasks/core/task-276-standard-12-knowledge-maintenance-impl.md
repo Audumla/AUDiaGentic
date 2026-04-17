@@ -1,0 +1,96 @@
+---
+id: task-276
+label: standard-12-knowledge-maintenance-impl
+state: done
+summary: Implement standard-0012 knowledge maintenance rules
+request_refs:
+- request-19
+standard_refs:
+- standard-5
+- standard-6
+---
+
+
+
+# Description
+
+Implement standard-0012 knowledge maintenance rules.
+
+**What to implement:**
+
+1. **Knowledge Pages**
+   - Current-state documentation in `docs/knowledge/pages/`
+   - Required YAML frontmatter: id, title, type, status, summary, owners, updated_at, tags, related
+
+2. **Event-Driven Sync**
+   - Event adapters keep pages synchronized with source artifacts
+   - Planning artifacts done/verified → mark knowledge pages stale
+   - Deterministic sync proposals auto-applied without manual review
+   - Review-only proposals require manual review
+
+3. **Sync Notes Section**
+   - When page should be refreshed
+   - What sources trigger updates
+   - Sync frequency expectations
+
+4. **Stale Page Handling**
+   - Review stale pages before they mislead agents/users
+   - Incorrect knowledge worse than missing knowledge
+
+5. **Event Actions**
+   - `mark_stale` - pages needing review
+   - `generate_sync_proposal` - pages needing auto-update suggestions
+   - `mark_stale_and_generate_sync_proposal` - default for planning events
+
+6. **Proposal Modes**
+   - `deterministic` - auto-apply without manual review
+   - `review_only` - require manual review
+
+7. **Page Lifecycle**
+   - Scaffold → Populate → Link → Monitor → Auto-apply → Maintain
+
+**When planning tasks complete:**
+- Tasks documenting knowledge pages → mark stale, generate sync proposal
+- Tasks implementing features → mark related system/guide pages stale
+- Tasks fixing bugs → mark related tool/runbook pages stale
+
+**When work-packages complete:**
+- Review related plan/system pages for accuracy
+- Mark pages stale if implementation differs from documentation
+
+**When plans complete:**
+- Review spec/overview pages
+- Update current-state documentation to reflect completed work
+
+**When specs change:**
+- Do NOT update current-state knowledge until implementation done
+- Mark related pages as needing review when spec moves to in_progress
+
+# Acceptance Criteria
+
+- [ ] Knowledge pages include all required YAML frontmatter fields
+- [ ] Knowledge pages document current-state, not historical state or plans
+- [ ] Event adapters configured to sync knowledge with source artifacts
+- [ ] Planning artifacts done/verified → related knowledge pages marked stale
+- [ ] Sync proposals generated for stale pages
+- [ ] Deterministic proposals auto-applied without manual review
+- [ ] Review-only proposals require manual review
+- [ ] Sync notes section documents refresh triggers, sources, frequency
+- [ ] Stale pages reviewed before misleading agents/users
+- [ ] Knowledge pages linked via event adapter `affects_pages`
+- [ ] Page lifecycle followed: scaffold → populate → link → monitor → auto-apply → maintain
+
+# Notes
+
+Standard-0012 covers knowledge pages as current-state documentation with event-driven updates.
+
+**Implementation Status:** Already implemented in codebase. Task updated to reflect existing implementation.
+
+**Bug Fix Applied:**
+- Fixed duplicate code in `events.py:628-631` (stray payload filter logic in `on_planning_state_change`)
+
+Sources:
+- Knowledge Component System
+- Event-Driven Sync Decision
+- Event Bridge Pattern
+- Page Lifecycle Pattern

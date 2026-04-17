@@ -18,7 +18,7 @@ open_questions:
 - How should approved test credentials, fixtures, or known-safe examples be allow-listed
   without weakening the review?
 spec_refs:
-- spec-009
+- spec-9
 meta:
   open_questions: []
   current_understanding: 'Lightweight v1 scope defined: cursory regex-based detection

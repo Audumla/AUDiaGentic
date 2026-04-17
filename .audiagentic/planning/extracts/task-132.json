@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-132",
+    "label": "[PKT-PRV-054](task-0132): Provider Data Lineage",
+    "state": "draft",
+    "summary": "Implement provider data lineage tracking",
+    "spec_ref": "spec-12",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-132-pkt-prv-054-task-0132-provider-data-lineage.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-054](task-0121): Provider Data Lineage\n\n## Purpose\n\nImplement provider data lineage tracking.\n\n## Scope\n\n- Lineage format\n- Tracking\n- Visualization\n\n## Implementation\n\n1. Define format\n2. Implement tracking\n3. Add visualization\n\n## Acceptance Criteria\n\n1. Format defined\n2. Tracking works\n3. Visualization works\n"
+}

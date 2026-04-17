@@ -13,7 +13,7 @@
       "How will success be verified?"
     ],
     "spec_refs": [
-      "spec-0029"
+      "spec-29"
     ],
     "kind": "request",
     "path": "docs/planning/requests/request-25-config-driven-planning-document-structure.md",

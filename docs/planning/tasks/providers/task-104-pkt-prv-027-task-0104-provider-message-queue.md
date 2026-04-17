@@ -1,0 +1,37 @@
+---
+id: task-104
+label: '[PKT-PRV-027](task-0104): Provider Message Queue'
+state: cancelled
+summary: Implement provider message queue
+spec_ref: spec-12
+---
+
+
+# Description
+
+Cancelled by the 2026-04 pre-ACP archive pass. The Continue execution line was superseded and archived.
+
+
+# [PKT-PRV-027](task-0094): Provider Message Queue
+
+## Purpose
+
+Implement provider message queue.
+
+## Scope
+
+- Queue format
+- Messages
+- Processing
+
+## Implementation
+
+1. Define format
+2. Add messages
+3. Implement processing
+
+## Acceptance Criteria
+
+1. Format defined
+2. Messages work
+3. Processing works

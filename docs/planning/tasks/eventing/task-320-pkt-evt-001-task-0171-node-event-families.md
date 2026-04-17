@@ -1,0 +1,37 @@
+---
+id: task-320
+label: '[PKT-EVT-001](task-0171): Node Event Families'
+state: draft
+summary: Define node event families
+spec_ref: spec-17
+---
+
+
+# Description
+
+Implement this task.
+
+
+# [PKT-EVT-001](task-0160): Node Event Families
+
+## Purpose
+
+Define node event families.
+
+## Scope
+
+- Event format
+- Event types
+- Publishing
+
+## Implementation
+
+1. Define format
+2. Define types
+3. Implement publishing
+
+## Acceptance Criteria
+
+1. Format defined
+2. Types defined
+3. Publishing works

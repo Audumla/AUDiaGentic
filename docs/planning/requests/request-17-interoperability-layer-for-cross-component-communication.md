@@ -15,9 +15,9 @@ open_questions: []
 meta:
   request_type: enhancement
 standard_refs:
-- standard-0001
+- standard-1
 spec_refs:
-- spec-019
+- spec-19
 ---
 
 

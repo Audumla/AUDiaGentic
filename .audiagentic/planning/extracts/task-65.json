@@ -1,0 +1,20 @@
+{
+  "item": {
+    "id": "task-65",
+    "label": "[PKT-RLS-010](task-0065): Release Validation",
+    "state": "draft",
+    "summary": "Validate releases",
+    "spec_ref": "spec-10",
+    "kind": "task",
+    "path": "docs/planning/tasks/release/task-65-pkt-rls-010-task-0065-release-validation.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-9"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-010](task-0055): Release Validation\n\n## Purpose\n\nValidate releases.\n\n## Scope\n\n- Validation rules\n- Check logic\n- Error reporting\n\n## Implementation\n\n1. Define rules\n2. Implement checks\n3. Report errors\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Checks work\n3. Errors reported\n"
+}
