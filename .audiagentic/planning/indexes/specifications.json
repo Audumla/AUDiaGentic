@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-17T13:23:03.885942+00:00",
+  "generated_at": "2026-04-17T13:31:29.078340+00:00",
   "items": [
     {
       "id": "spec-0001",
@@ -19,6 +19,12 @@
       "label": "SpecX",
       "state": "draft",
       "path": "docs\\planning\\specifications\\spec-0003-specx.md"
+    },
+    {
+      "id": "spec-0011",
+      "label": "Precise knowledge proposal targeting and classification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0011-precise-knowledge-proposal-targeting-and-classification.md"
     },
     {
       "id": "spec-0039",

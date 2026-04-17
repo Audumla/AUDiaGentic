@@ -15,7 +15,20 @@ open_questions:
 - How will success be verified?
 standard_refs:
 - standard-1
+spec_refs:
+- spec-0006
+- spec-0007
+- spec-0008
+- spec-0009
+- spec-0010
+- spec-0011
 ---
+
+
+
+
+
+
 
 # Understanding
 
