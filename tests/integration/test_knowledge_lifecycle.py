@@ -208,3 +208,69 @@ def test_cleanup_lifecycle_prunes_terminal_jobs_and_old_proposals(tmp_path: Path
     assert "docs/knowledge/data/archive/old-archived.yml" in result["proposals"][
         "deleted_archived_proposals"
     ]
+
+
+def test_cleanup_lifecycle_archives_older_duplicate_pending_proposals(tmp_path: Path) -> None:
+    _seed_knowledge_project(tmp_path)
+    config = load_config(tmp_path)
+    now = datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)
+
+    first = config.proposals_root / "20260417T010000Z-tool-cli-event-review.yml"
+    second = config.proposals_root / "20260417T020000Z-tool-cli-event-review.yml"
+    payload = {
+        "proposal_kind": "event_review",
+        "proposal_mode": "review_only",
+        "target_page_id": "tool-cli",
+        "summary": "Planning/runtime event drift detected for tool-cli. Review the current-state page.",
+        "events": [
+            {
+                "event_id": "runtime-planning::planning.item.state.changed::task::task-1::ready::manual",
+                "adapter_id": "planning-state-changes",
+                "event_name": "planning.item.state.changed",
+                "source_path": ".audiagentic/planning/events/events.jsonl",
+                "status": "ready",
+                "summary": "Planning task task-1 state changed to ready",
+                "details": {"payload": {"id": "task-1", "old_state": "draft", "new_state": "ready"}},
+                "diff_excerpt": None,
+            }
+        ],
+        "suggested_steps": ["Review the event source change."],
+        "actions": [],
+        "status": "pending",
+    }
+    first.write_text(
+        yaml.safe_dump(
+            {
+                **payload,
+                "proposal_id": "20260417T010000Z-tool-cli-event-review",
+                "generated_at": "2026-04-17T01:00:00+00:00",
+                "status_updated_at": "2026-04-17T01:00:00+00:00",
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    second.write_text(
+        yaml.safe_dump(
+            {
+                **payload,
+                "proposal_id": "20260417T020000Z-tool-cli-event-review",
+                "generated_at": "2026-04-17T02:00:00+00:00",
+                "status_updated_at": "2026-04-17T02:00:00+00:00",
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = cleanup_lifecycle(config, now=now)
+
+    assert second.exists()
+    assert not first.exists()
+    archived = config.archive_root / first.name
+    archived_payload = yaml.safe_load(archived.read_text(encoding="utf-8"))
+    assert archived_payload["status"] == "rejected"
+    assert archived_payload["status_reason"] == "duplicate_of_pending"
+    assert archived_payload["duplicate_of"] == "20260417T020000Z-tool-cli-event-review"
+    assert archived_payload["duplicate_of_path"] == "docs/knowledge/data/proposals/20260417T020000Z-tool-cli-event-review.yml"
+    assert archived.relative_to(config.root).as_posix() in result["duplicates"]["archived_duplicates"]

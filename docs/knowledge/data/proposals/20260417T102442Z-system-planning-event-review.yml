@@ -1,0 +1,47 @@
+proposal_kind: event_review
+proposal_mode: review_only
+target_page_id: system-planning
+generated_at: '2026-04-17T10:24:42.771907+00:00'
+status: pending
+status_updated_at: '2026-04-17T10:24:42.771911+00:00'
+summary: Planning/runtime event drift detected for system-planning. Review the current-state page.
+events:
+- event_id: runtime-planning::planning.item.state.changed::plan::plan-1::in_progress::manual
+  adapter_id: planning-state-changes
+  event_name: planning.item.state.changed
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: in_progress
+  summary: Planning plan plan-1 state changed to in_progress
+  details:
+    payload:
+      id: spec-1
+      old_state: ready
+      new_state: in_progress
+    metadata: &id001
+      subject:
+        kind: plan
+        id: plan-1
+      triggered_by: manual
+      propagation_depth: 1
+      propagation_source: plan-1
+      propagation_trigger: plan-1:in_progress
+    raw_event:
+      event: planning.item.state.changed
+      event_name: planning.item.state.changed
+      id: spec-1
+      subject:
+        kind: plan
+        id: plan-1
+      old_state: ready
+      new_state: in_progress
+      metadata: *id001
+    source_system: planning-runtime
+  diff_excerpt: null
+suggested_steps:
+- Review the event source change.
+- Update the current-state page only if durable behavior changed.
+- Keep draft or incomplete work out of current-state pages.
+- Record fresh sync and event baselines after review.
+actions: []
+proposal_id: 20260417T102442Z-system-planning-event-review
+dedupe_key: 4cacd8c9ee7c4c21
