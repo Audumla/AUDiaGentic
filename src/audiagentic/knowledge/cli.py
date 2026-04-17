@@ -13,6 +13,7 @@ from .config import load_config
 from .events import load_event_adapters, process_events, record_event_baseline, scan_events
 from .hooks import evaluate_source, load_hooks
 from .importers import scaffold_page, seed_from_manifest
+from .index_maintenance import maintain_index_pages, refresh_index, validate_index_links
 from .llm import (
     answer_question,
     bootstrap_project_knowledge,
@@ -37,6 +38,7 @@ from .search import search_pages
 from .status import build_status
 from .sync import (
     apply_all_proposals,
+    cleanup_lifecycle,
     clear_manual_stale,
     generate_sync_proposals,
     mark_pages_stale,
@@ -140,6 +142,12 @@ def main() -> None:
     if args.command == "get-job-result":
         _print(get_job_result(config, args.job_id), args.json)
         return
+    if args.command == "prune-events":
+        from .events import prune_event_state
+
+        payload = prune_event_state(config, max_events=args.max_events)
+        _print(payload, args.json)
+        return
     if args.command == "get-page":
         page = load_page_by_id(config.pages_root, config.meta_root, args.page_id)
         if page is None:
@@ -187,6 +195,18 @@ def main() -> None:
         return
     if args.command == "apply-proposals":
         _print(apply_all_proposals(config), args.json)
+        return
+    if args.command == "cleanup-lifecycle":
+        _print(
+            cleanup_lifecycle(
+                config,
+                job_retention_days=args.job_retention_days,
+                proposal_retention_days=args.proposal_retention_days,
+                archive_retention_days=args.archive_retention_days,
+                prune_pending_proposals=not args.keep_pending_proposals,
+            ),
+            args.json,
+        )
         return
     if args.command == "show-hooks":
         _print(load_hooks(config), args.json)
@@ -272,6 +292,29 @@ def main() -> None:
         )
         _print(payload, args.json)
         return
+    if args.command == "maintain-index":
+        updated = maintain_index_pages(config)
+        _print(
+            {
+                "status": "maintained",
+                "updated_files": [str(p.relative_to(config.root)) for p in updated],
+            },
+            args.json,
+        )
+        return
+    if args.command == "validate-index":
+        errors = validate_index_links(config)
+        _print(
+            {
+                "status": "valid" if not errors else "invalid",
+                "errors": errors,
+            },
+            args.json,
+        )
+        raise SystemExit(1 if errors else 0)
+    if args.command == "refresh-index":
+        _print(refresh_index(config), args.json)
+        raise SystemExit(0 if not refresh_index(config).get("errors") else 1)
     parser.error(f"Unsupported command: {args.command}")
 
 
@@ -378,6 +421,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("job_id")
     p.add_argument("--json", action="store_true")
 
+    p = sub.add_parser("prune-events")
+    p.add_argument("--max-events", type=int, default=1000)
+    p.add_argument("--json", action="store_true")
+
     p = sub.add_parser("navigate")
     p.add_argument("goal")
     p.add_argument("--limit", type=int, default=5)
@@ -422,6 +469,13 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("apply-proposals")
     p.add_argument("--json", action="store_true")
 
+    p = sub.add_parser("cleanup-lifecycle")
+    p.add_argument("--job-retention-days", type=int)
+    p.add_argument("--proposal-retention-days", type=int)
+    p.add_argument("--archive-retention-days", type=int)
+    p.add_argument("--keep-pending-proposals", action="store_true")
+    p.add_argument("--json", action="store_true")
+
     p = sub.add_parser("evaluate-source")
     p.add_argument("relative_path")
     p.add_argument("--json", action="store_true")
@@ -448,5 +502,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--related", action="append", default=[])
     p.add_argument("--source-refs", default="[]")
     p.add_argument("--update-existing", action="store_true")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("maintain-index")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("validate-index")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("refresh-index")
     p.add_argument("--json", action="store_true")
     return parser

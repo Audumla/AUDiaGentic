@@ -1,0 +1,41 @@
+proposal_id: 20260417T064341Z-tool-cli-event-review
+proposal_kind: event_review
+proposal_mode: review_only
+target_page_id: tool-cli
+generated_at: '2026-04-17T06:43:41.421838+00:00'
+summary: Planning/runtime event drift detected for tool-cli. Review the current-state page.
+events:
+- event_id: runtime-planning::planning.item.state.changed::request::request-018::closed::manual
+  adapter_id: planning-state-changes
+  event_name: planning.item.state.changed
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: closed
+  summary: Planning request request-018 state changed to closed
+  details:
+    payload:
+      id: request-018
+      old_state: distilled
+      new_state: closed
+    metadata: &id001
+      subject:
+        kind: request
+        id: request-018
+      triggered_by: manual
+    raw_event:
+      event: planning.item.state.changed
+      event_name: planning.item.state.changed
+      id: request-018
+      subject:
+        kind: request
+        id: request-018
+      old_state: distilled
+      new_state: closed
+      metadata: *id001
+    source_system: planning-runtime
+  diff_excerpt: null
+suggested_steps:
+- Review the event source change.
+- Update the current-state page only if durable behavior changed.
+- Keep draft or incomplete work out of current-state pages.
+- Record fresh sync and event baselines after review.
+actions: []

@@ -1,7 +1,7 @@
 ---
 id: request-013
 label: Define canonical semantics for planning guidance levels
-state: captured
+state: closed
 summary: Create a normative standard that defines what light, standard, and deep guidance
   levels mean in terms of required planning detail, section depth, acceptance rigor,
   and implementation granularity.
@@ -30,6 +30,8 @@ meta:
 
 
 
+
+
 # Understanding
 
 The planning system needs more than the ability to store a guidance level. It also needs a canonical definition of what `light`, `standard`, and `deep` require. Those definitions should be normative so that requests, specs, tasks, validation rules, documentation guidance, and future automation all interpret the levels the same way.
@@ -43,5 +45,6 @@ The preferred output is a standard, not just a request-local note. A supporting 
 - Should examples and selection advice live in the same standard or in a separate supporting/reference document?
 
 # Notes
-
 This request is intentionally separate from `request-011`. `request-011` is about introducing the guidance-level capability into the planning layer. This request is about defining the durable meaning of those levels so the feature has a canonical governance source.
+
+Closed on 2026-04-17 after assessment. Canonical guidance semantics were delivered through the guidance-level standard, config semantics, validation rules, and documentation. Remaining stale planning records were updated to match implemented reality.

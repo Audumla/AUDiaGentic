@@ -1,12 +1,14 @@
 ---
 id: spec-0030
 label: MCP Test Request — Specification
-state: draft
+state: cancelled
 summary: Specification for Request for testing MCP server
 request_refs:
 - request-0023
 task_refs: []
 ---
+
+
 
 # Purpose
 
@@ -21,3 +23,7 @@ task_refs: []
 
 
 # Acceptance Criteria
+
+# Notes
+
+Cancelled on 2026-04-17 as a test artifact under superseded `request-0023`.

@@ -1,0 +1,15 @@
+id: system-interoperability
+title: Interoperability System
+type: system
+status: active
+summary: Current-state documentation of the AUDiaGentic interoperability system for event bus and cross-component
+  communication.
+owners:
+- core-team
+tags:
+- interoperability
+- events
+- messaging
+related: []
+updated_at: '2026-04-17'
+source_refs: []

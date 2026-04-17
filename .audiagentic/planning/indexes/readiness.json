@@ -1,7 +1,25 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-15T11:09:44.688136+00:00",
+  "generated_at": "2026-04-17T07:06:05.392236+00:00",
   "items": [
+    {
+      "id": "plan-0001",
+      "kind": "plan",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "plan-0002",
+      "kind": "plan",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "plan-0003",
+      "kind": "plan",
+      "state": "draft",
+      "claimed": false
+    },
     {
       "id": "plan-001",
       "kind": "plan",
@@ -65,7 +83,7 @@
     {
       "id": "plan-008",
       "kind": "plan",
-      "state": "draft",
+      "state": "done",
       "claimed": false
     },
     {
@@ -83,19 +101,43 @@
     {
       "id": "plan-011",
       "kind": "plan",
-      "state": "draft",
+      "state": "ready",
       "claimed": false
     },
     {
       "id": "plan-012",
       "kind": "plan",
-      "state": "draft",
+      "state": "done",
       "claimed": false
     },
     {
       "id": "plan-013",
       "kind": "plan",
-      "state": "ready",
+      "state": "in_progress",
+      "claimed": false
+    },
+    {
+      "id": "request-0001",
+      "kind": "request",
+      "state": "superseded",
+      "claimed": false
+    },
+    {
+      "id": "request-0002",
+      "kind": "request",
+      "state": "captured",
+      "claimed": false
+    },
+    {
+      "id": "request-0003",
+      "kind": "request",
+      "state": "captured",
+      "claimed": false
+    },
+    {
+      "id": "request-0004",
+      "kind": "request",
+      "state": "captured",
       "claimed": false
     },
     {
@@ -113,25 +155,25 @@
     {
       "id": "request-0021",
       "kind": "request",
-      "state": "captured",
+      "state": "distilled",
       "claimed": false
     },
     {
       "id": "request-0023",
       "kind": "request",
-      "state": "captured",
+      "state": "superseded",
       "claimed": false
     },
     {
       "id": "request-0024",
       "kind": "request",
-      "state": "captured",
+      "state": "superseded",
       "claimed": false
     },
     {
       "id": "request-0027",
       "kind": "request",
-      "state": "captured",
+      "state": "superseded",
       "claimed": false
     },
     {
@@ -197,25 +239,25 @@
     {
       "id": "request-013",
       "kind": "request",
-      "state": "captured",
+      "state": "closed",
       "claimed": false
     },
     {
       "id": "request-014",
       "kind": "request",
-      "state": "captured",
+      "state": "closed",
       "claimed": false
     },
     {
       "id": "request-015",
       "kind": "request",
-      "state": "captured",
+      "state": "distilled",
       "claimed": false
     },
     {
       "id": "request-016",
       "kind": "request",
-      "state": "captured",
+      "state": "closed",
       "claimed": false
     },
     {
@@ -227,7 +269,7 @@
     {
       "id": "request-018",
       "kind": "request",
-      "state": "distilled",
+      "state": "closed",
       "claimed": false
     },
     {
@@ -239,7 +281,25 @@
     {
       "id": "request-020",
       "kind": "request",
-      "state": "captured",
+      "state": "superseded",
+      "claimed": false
+    },
+    {
+      "id": "spec-0001",
+      "kind": "spec",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "spec-0002",
+      "kind": "spec",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "spec-0003",
+      "kind": "spec",
+      "state": "draft",
       "claimed": false
     },
     {
@@ -263,7 +323,7 @@
     {
       "id": "spec-0029",
       "kind": "spec",
-      "state": "draft",
+      "state": "ready",
       "claimed": false
     },
     {
@@ -275,13 +335,13 @@
     {
       "id": "spec-0030",
       "kind": "spec",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
       "id": "spec-0031",
       "kind": "spec",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
@@ -347,13 +407,13 @@
     {
       "id": "spec-0071",
       "kind": "spec",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
       "id": "spec-0072",
       "kind": "spec",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
@@ -371,19 +431,19 @@
     {
       "id": "spec-0077",
       "kind": "spec",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
       "id": "spec-0078",
       "kind": "spec",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
       "id": "spec-0079",
       "kind": "spec",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
@@ -413,19 +473,19 @@
     {
       "id": "spec-012",
       "kind": "spec",
-      "state": "draft",
+      "state": "done",
       "claimed": false
     },
     {
       "id": "spec-013",
       "kind": "spec",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
       "id": "spec-014",
       "kind": "spec",
-      "state": "draft",
+      "state": "done",
       "claimed": false
     },
     {
@@ -437,31 +497,31 @@
     {
       "id": "spec-016",
       "kind": "spec",
-      "state": "draft",
+      "state": "ready",
       "claimed": false
     },
     {
       "id": "spec-017",
       "kind": "spec",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
       "id": "spec-018",
       "kind": "spec",
-      "state": "draft",
+      "state": "done",
       "claimed": false
     },
     {
       "id": "spec-019",
       "kind": "spec",
-      "state": "ready",
+      "state": "in_progress",
       "claimed": false
     },
     {
       "id": "spec-020",
       "kind": "spec",
-      "state": "ready",
+      "state": "in_progress",
       "claimed": false
     },
     {
@@ -473,7 +533,7 @@
     {
       "id": "spec-022",
       "kind": "spec",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
@@ -683,19 +743,37 @@
     {
       "id": "task-0001",
       "kind": "task",
-      "state": "done",
+      "state": "cancelled",
       "claimed": false
     },
     {
       "id": "task-0002",
       "kind": "task",
-      "state": "done",
+      "state": "cancelled",
       "claimed": false
     },
     {
       "id": "task-0003",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
+      "claimed": false
+    },
+    {
+      "id": "task-0004",
+      "kind": "task",
+      "state": "cancelled",
+      "claimed": false
+    },
+    {
+      "id": "task-0005",
+      "kind": "task",
+      "state": "cancelled",
+      "claimed": false
+    },
+    {
+      "id": "task-0006",
+      "kind": "task",
+      "state": "done",
       "claimed": false
     },
     {
@@ -1175,7 +1253,7 @@
     {
       "id": "task-0235",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
@@ -1289,7 +1367,7 @@
     {
       "id": "task-0254",
       "kind": "task",
-      "state": "ready",
+      "state": "done",
       "claimed": false
     },
     {
@@ -1319,19 +1397,19 @@
     {
       "id": "task-0259",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
       "id": "task-0260",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
       "id": "task-0261",
       "kind": "task",
-      "state": "blocked",
+      "state": "done",
       "claimed": false
     },
     {
@@ -1355,7 +1433,7 @@
     {
       "id": "task-0265",
       "kind": "task",
-      "state": "ready",
+      "state": "done",
       "claimed": false
     },
     {
@@ -1673,19 +1751,19 @@
     {
       "id": "task-0329",
       "kind": "task",
-      "state": "ready",
+      "state": "done",
       "claimed": false
     },
     {
       "id": "task-0330",
       "kind": "task",
-      "state": "ready",
+      "state": "done",
       "claimed": false
     },
     {
       "id": "task-0331",
       "kind": "task",
-      "state": "ready",
+      "state": "done",
       "claimed": false
     },
     {
@@ -1709,7 +1787,7 @@
     {
       "id": "task-0335",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
@@ -1763,13 +1841,13 @@
     {
       "id": "task-3263",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
       "id": "task-3264",
       "kind": "task",
-      "state": "draft",
+      "state": "cancelled",
       "claimed": false
     },
     {
@@ -2577,6 +2655,12 @@
       "claimed": false
     },
     {
+      "id": "task-0007",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
       "id": "wp-001",
       "kind": "wp",
       "state": "draft",
@@ -2585,13 +2669,13 @@
     {
       "id": "wp-0016",
       "kind": "wp",
-      "state": "ready",
+      "state": "done",
       "claimed": false
     },
     {
       "id": "wp-0017",
       "kind": "wp",
-      "state": "ready",
+      "state": "done",
       "claimed": false
     },
     {
@@ -2693,7 +2777,7 @@
     {
       "id": "wp-010",
       "kind": "wp",
-      "state": "draft",
+      "state": "done",
       "claimed": false
     },
     {
@@ -2711,7 +2795,7 @@
     {
       "id": "wp-013",
       "kind": "wp",
-      "state": "draft",
+      "state": "ready",
       "claimed": false
     },
     {
@@ -2722,6 +2806,12 @@
     },
     {
       "id": "wp-015",
+      "kind": "wp",
+      "state": "ready",
+      "claimed": false
+    },
+    {
+      "id": "wp-0001",
       "kind": "wp",
       "state": "draft",
       "claimed": false

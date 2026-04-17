@@ -1,0 +1,30 @@
+---
+id: wp-0001
+label: Loose WP
+state: draft
+summary: tmp
+plan_ref: plan-0002
+task_refs: []
+standard_refs:
+- standard-0006
+---
+
+# Objective
+
+
+# Scope of This Package
+
+
+# Inputs
+
+
+# Instructions
+
+
+# Required Outputs
+
+
+# Acceptance Checks
+
+
+# Non-Goals

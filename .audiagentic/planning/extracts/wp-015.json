@@ -2,7 +2,7 @@
   "item": {
     "id": "wp-015",
     "label": "Interoperability layer and state propagation implementation",
-    "state": "draft",
+    "state": "ready",
     "summary": "Tasks for implementing event-driven interoperability layer and automatic state propagation (16 tasks, restructured)",
     "plan_ref": "plan-013",
     "task_refs": [
@@ -58,5 +58,5 @@
     "standard-0006",
     "standard-0005"
   ],
-  "body": "\n\n\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n"
+  "body": "\n\n\n\n\n\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n\n# Notes\nAssessment on 2026-04-17: work package remains valid with a reduced remaining slice focused on `task-0261` and `task-0265`.\n\nRemaining work package scope now explicitly includes `task-0006` for invalid parent-transition handling in propagation logic.\n"
 }

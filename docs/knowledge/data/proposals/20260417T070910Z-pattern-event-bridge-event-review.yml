@@ -1,0 +1,41 @@
+proposal_id: 20260417T070910Z-pattern-event-bridge-event-review
+proposal_kind: event_review
+proposal_mode: review_only
+target_page_id: pattern-event-bridge
+generated_at: '2026-04-17T07:09:10.644652+00:00'
+summary: Planning/runtime event drift detected for pattern-event-bridge. Review the current-state page.
+events:
+- event_id: runtime-planning::planning.item.state.changed::task::task-0001::in_progress::manual
+  adapter_id: planning-state-changes
+  event_name: planning.item.state.changed
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: in_progress
+  summary: Planning task task-0001 state changed to in_progress
+  details:
+    payload:
+      id: task-0001
+      old_state: ready
+      new_state: in_progress
+    metadata: &id001
+      subject:
+        kind: task
+        id: task-0001
+      triggered_by: manual
+    raw_event:
+      event: planning.item.state.changed
+      event_name: planning.item.state.changed
+      id: task-0001
+      subject:
+        kind: task
+        id: task-0001
+      old_state: ready
+      new_state: in_progress
+      metadata: *id001
+    source_system: planning-runtime
+  diff_excerpt: null
+suggested_steps:
+- Review the event source change.
+- Update the current-state page only if durable behavior changed.
+- Keep draft or incomplete work out of current-state pages.
+- Record fresh sync and event baselines after review.
+actions: []

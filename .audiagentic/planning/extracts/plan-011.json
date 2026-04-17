@@ -2,7 +2,7 @@
   "item": {
     "id": "plan-011",
     "label": "Knowledge Component Improvements Plan",
-    "state": "draft",
+    "state": "ready",
     "summary": "Plan for implementing knowledge component improvements from critical review",
     "spec_refs": [
       "spec-016"
@@ -25,5 +25,5 @@
   "effective_standard_refs": [
     "standard-0006"
   ],
-  "body": "\n\n\n# Objectives\n\n\n# Delivery Approach\n\n\n# Dependencies\n"
+  "body": "\n\n\n\n\n# Objectives\n\n\n# Delivery Approach\n\n\n# Dependencies\n\n# Notes\n\nAssessment on 2026-04-17: plan still represents valid follow-up work, but the remaining scope is narrower after confirming MCP consolidation already landed.\n"
 }

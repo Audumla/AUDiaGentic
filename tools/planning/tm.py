@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Bootstrap: make tools.lib importable, then use robust multi-fallback root discovery.
@@ -42,6 +43,101 @@ def print_json(data):
     # Force UTF-8 encoding for stdout
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     print(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+def _propagation_log_path(root: Path) -> Path:
+    return root / ".audiagentic" / "planning" / "meta" / "propagation_log.json"
+
+
+def _append_propagation_audit_log(root: Path, entries: list[dict]) -> Path:
+    path = _propagation_log_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        existing = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(existing, list):
+            existing = []
+    else:
+        existing = []
+    existing.extend(entries)
+    path.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def _run_audit(api, root: Path, *, auto_fix: bool, verbose: bool) -> tuple[dict, int]:
+    auditable_kinds = {"task", "wp", "plan", "spec"}
+    findings = []
+    log_entries = []
+
+    for item in api._scan():
+        if item.kind not in auditable_kinds or item.data.get("deleted"):
+            continue
+        errors = api._propagation_engine.validate_hierarchy(item.data["id"])
+        if not errors:
+            continue
+
+        finding = {
+            "id": item.data["id"],
+            "kind": item.kind,
+            "state": item.data.get("state"),
+            "errors": errors,
+        }
+
+        if auto_fix:
+            healing = api._propagation_engine.heal_hierarchy(item.data["id"], auto_fix=True)
+            finding["fixes"] = healing.get("fixes", [])
+            for fix in finding["fixes"]:
+                if fix.get("can_auto_fix") and not fix.get("applied"):
+                    api._propagation_engine._apply_fix(fix)  # noqa: SLF001 - CLI repair path
+                    fix["applied"] = True
+            for fix in healing.get("fixes", []):
+                if fix.get("applied"):
+                    log_entries.append(
+                        {
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "source": "planning.audit",
+                            "fixed_by_audit": True,
+                            "item_id": item.data["id"],
+                            "kind": item.kind,
+                            "target_id": fix.get("target_id"),
+                            "target_state": fix.get("target_state"),
+                            "suggestion": fix.get("suggestion"),
+                            "error": fix.get("error"),
+                            "status": "fixed",
+                        }
+                    )
+        elif verbose:
+            finding["fixes"] = [
+                api._propagation_engine._suggest_fix(error)  # noqa: SLF001 - CLI introspection
+                for error in errors
+            ]
+
+        findings.append(finding)
+
+    log_path = None
+    if log_entries:
+        log_path = _append_propagation_audit_log(root, log_entries)
+
+    remaining = 0
+    for finding in findings:
+        fixes = finding.get("fixes", [])
+        if auto_fix and fixes and all(fix.get("applied") for fix in fixes if fix.get("can_auto_fix")):
+            post_errors = api._propagation_engine.validate_hierarchy(finding["id"])
+            finding["remaining_errors"] = post_errors
+            remaining += len(post_errors)
+        else:
+            remaining += len(finding["errors"])
+
+    payload = {
+        "ok": remaining == 0,
+        "items_scanned": len([i for i in api._scan() if i.kind in auditable_kinds and not i.data.get("deleted")]),
+        "findings": findings,
+        "issues_found": sum(len(f["errors"]) for f in findings),
+        "remaining_issues": remaining,
+        "fixes_applied": len(log_entries),
+        "log_path": str(log_path.relative_to(root)) if log_path else None,
+    }
+    exit_code = 0 if payload["ok"] else 1
+    return payload, exit_code
 
 
 def main():
@@ -155,6 +251,9 @@ def main():
     sp.add_parser("index")
     sp.add_parser("reconcile")
     sp.add_parser("rebaseline")
+    p_audit = sp.add_parser("audit")
+    p_audit.add_argument("--fix", action="store_true")
+    p_audit.add_argument("--verbose", action="store_true")
     p_dump = sp.add_parser("dump")
     p_dump.add_argument("--output", help="Output directory (default: stdout as JSON)")
     p_dump.add_argument("--format", choices=["json", "yaml"], default="json", help="Output format")
@@ -296,6 +395,10 @@ def main():
         print_json(api.reconcile())
     elif args.cmd == "rebaseline":
         print_json(api.rebaseline())
+    elif args.cmd == "audit":
+        payload, exit_code = _run_audit(api, root, auto_fix=args.fix, verbose=args.verbose)
+        print_json(payload)
+        raise SystemExit(exit_code)
     elif args.cmd == "dump":
         print_json(api.dump_all(args.output, args.format))
     elif args.cmd == "claim":

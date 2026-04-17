@@ -1,7 +1,7 @@
 ---
 id: wp-010
 label: Implement canonical guidance semantics
-state: draft
+state: done
 summary: Create standard-0010 with guidance level definitions and update validation
   rules
 plan_ref: plan-008
@@ -15,6 +15,11 @@ task_refs:
 standard_refs:
 - standard-0006
 ---
+
+
+
+
+
 
 
 
@@ -37,3 +42,7 @@ standard_refs:
 
 
 # Non-Goals
+
+# Notes
+
+Marked done on 2026-04-17 to align the work package with the already-completed guidance semantics tasks under `request-013`.

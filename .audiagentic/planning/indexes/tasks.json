@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-15T11:09:44.688136+00:00",
+  "generated_at": "2026-04-17T07:06:05.392236+00:00",
   "items": [
     {
       "id": "task-0032",
@@ -88,21 +88,39 @@
     },
     {
       "id": "task-0001",
-      "label": "Migration Reference Map",
-      "state": "done",
+      "label": "Remove hooks.py from knowledge component",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-0001.md"
     },
     {
       "id": "task-0002",
-      "label": "Inventory all implementation docs and build reference map",
-      "state": "done",
+      "label": "Remove hooks.yml and update CLI",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-0002.md"
     },
     {
       "id": "task-0003",
-      "label": "Migrate Phase 0 docs (contracts and scaffolding)",
-      "state": "draft",
+      "label": "Remove hook_config_file from config.py",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-0003.md"
+    },
+    {
+      "id": "task-0004",
+      "label": "Update events.py to remove hooks dependency",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0004.md"
+    },
+    {
+      "id": "task-0005",
+      "label": "Update documentation and remove hooks references",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-0005.md"
+    },
+    {
+      "id": "task-0006",
+      "label": "Fix invalid parent propagation transitions",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-0006.md"
     },
     {
       "id": "task-0008",
@@ -581,7 +599,7 @@
     {
       "id": "task-0235",
       "label": "Validate documentation",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-0235.md"
     },
     {
@@ -695,7 +713,7 @@
     {
       "id": "task-0254",
       "label": "Integrate interoperability layer with knowledge component",
-      "state": "ready",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0254.md"
     },
     {
@@ -725,19 +743,19 @@
     {
       "id": "task-0259",
       "label": "Add CLI commands and diagnostics for event layer",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-0259.md"
     },
     {
       "id": "task-0260",
       "label": "Validate event layer performance targets",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-0260.md"
     },
     {
       "id": "task-0261",
       "label": "Implement knowledge event handler for planning state changes",
-      "state": "blocked",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0261.md"
     },
     {
@@ -761,7 +779,7 @@
     {
       "id": "task-0265",
       "label": "Implement planning audit and repair CLI command",
-      "state": "ready",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0265.md"
     },
     {
@@ -1079,19 +1097,19 @@
     {
       "id": "task-0329",
       "label": "Extend config schema for document structure",
-      "state": "ready",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0329.md"
     },
     {
       "id": "task-0330",
       "label": "Create TemplateEngine class",
-      "state": "ready",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0330.md"
     },
     {
       "id": "task-0331",
       "label": "Create RelationshipConfig class",
-      "state": "ready",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0331.md"
     },
     {
@@ -1115,7 +1133,7 @@
     {
       "id": "task-0335",
       "label": "Updated Test Task",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-0335.md"
     },
     {
@@ -1169,13 +1187,13 @@
     {
       "id": "task-3263",
       "label": "Atomicity Task",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-3263.md"
     },
     {
       "id": "task-3264",
       "label": "Generic Task",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\tasks\\core\\task-3264.md"
     },
     {
@@ -1981,6 +1999,12 @@
       "label": "[PKT-RLS-011](task-0066): Release Documentation",
       "state": "draft",
       "path": "docs\\planning\\tasks\\release\\task-0066.md"
+    },
+    {
+      "id": "task-0007",
+      "label": "Bad Parent Task",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\task-0007.md"
     }
   ]
 }

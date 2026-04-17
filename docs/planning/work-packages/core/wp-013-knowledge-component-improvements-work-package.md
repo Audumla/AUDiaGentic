@@ -1,13 +1,15 @@
 ---
 id: wp-013
 label: Knowledge Component Improvements Work Package
-state: draft
+state: ready
 summary: Tasks for addressing critical review findings
 plan_ref: plan-011
 task_refs: []
 standard_refs:
 - standard-0006
 ---
+
+
 
 
 # Objective
@@ -29,3 +31,7 @@ standard_refs:
 
 
 # Non-Goals
+
+# Notes
+
+Assessment on 2026-04-17: work package remains active for tests, event-module refactor, search improvement, and lifecycle cleanup.

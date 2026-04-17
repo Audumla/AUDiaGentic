@@ -1,0 +1,11 @@
+id: tool-mcp
+title: MCP Server
+type: tool
+status: active
+summary: Reference for the Model Context Protocol server implementation.
+owners:
+- core-team
+tags: []
+related: []
+updated_at: '2026-04-17T03:27:01.362463+00:00'
+source_refs: []

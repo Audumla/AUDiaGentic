@@ -1,0 +1,211 @@
+proposal_id: 20260417T032701Z-tool-mcp-event-review
+proposal_kind: event_review
+proposal_mode: deterministic
+target_page_id: tool-mcp
+generated_at: '2026-04-17T03:27:01.010798+00:00'
+summary: Planning/runtime event drift detected for tool-mcp. Review the current-state page.
+events:
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::ce6009d6b0da5e0b
+  adapter_id: planning-state-changes
+  event_name: planning.item.state.changed
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=planning.item.state.changed | id=task-0197'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-15T08:01:15.681266+00:00'
+      event: planning.item.state.changed
+      id: task-0197
+      old_state: in_progress
+      new_state: done
+      _stream_line: 2665
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::93661a7440bb4976
+  adapter_id: planning-state-changes
+  event_name: planning.item.state.changed
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=planning.item.state.changed | id=task-0198'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-15T08:02:11.560257+00:00'
+      event: planning.item.state.changed
+      id: task-0198
+      old_state: in_progress
+      new_state: done
+      _stream_line: 2667
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::531ca972b73cbae2
+  adapter_id: planning-state-changes
+  event_name: planning.item.state.changed
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=planning.item.state.changed | id=task-3251'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-15T08:39:43.654821+00:00'
+      event: planning.item.state.changed
+      id: task-3251
+      old_state: in_progress
+      new_state: done
+      _stream_line: 2741
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::a6eacd71d53469c1
+  adapter_id: planning-state-changes
+  event_name: planning.item.state.changed
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=planning.item.state.changed | id=task-3252'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-15T08:40:17.658504+00:00'
+      event: planning.item.state.changed
+      id: task-3252
+      old_state: in_progress
+      new_state: done
+      _stream_line: 2743
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::980e501d480d8020
+  adapter_id: planning-state-changes
+  event_name: planning.item.state.changed
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=planning.item.state.changed | id=task-0332'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-15T08:40:57.844525+00:00'
+      event: planning.item.state.changed
+      id: task-0332
+      old_state: in_progress
+      new_state: done
+      _stream_line: 2746
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::ed004402135ac3d9
+  adapter_id: planning-state-changes
+  event_name: planning.item.state.changed
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=planning.item.state.changed | id=wp-0018'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-15T08:40:58.163590+00:00'
+      event: planning.item.state.changed
+      id: wp-0018
+      old_state: in_progress
+      new_state: done
+      _stream_line: 2747
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::c386d57cf9d6e205
+  adapter_id: planning-state-changes
+  event_name: planning.item.state.changed
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=planning.item.state.changed | id=task-0333'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-15T08:58:53.060818+00:00'
+      event: planning.item.state.changed
+      id: task-0333
+      old_state: in_progress
+      new_state: done
+      _stream_line: 2756
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::f92a883c7e67eb36
+  adapter_id: planning-state-changes
+  event_name: planning.item.state.changed
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=planning.item.state.changed | id=wp-0019'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-15T08:58:53.207335+00:00'
+      event: planning.item.state.changed
+      id: wp-0019
+      old_state: in_progress
+      new_state: done
+      _stream_line: 2757
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::3c048ac3d23cdc81
+  adapter_id: planning-state-changes
+  event_name: planning.item.state.changed
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=planning.item.state.changed | id=task-0334'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-15T09:23:14.760965+00:00'
+      event: planning.item.state.changed
+      id: task-0334
+      old_state: in_progress
+      new_state: done
+      _stream_line: 2807
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::e2874171192238f8
+  adapter_id: planning-state-changes
+  event_name: planning.item.state.changed
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=planning.item.state.changed | id=wp-0020'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-15T09:24:23.496801+00:00'
+      event: planning.item.state.changed
+      id: wp-0020
+      old_state: in_progress
+      new_state: done
+      _stream_line: 2813
+  diff_excerpt: null
+- event_id: planning-state-changes::.audiagentic/planning/events/events.jsonl::stream::233c260abf0b3ff0
+  adapter_id: planning-state-changes
+  event_name: planning.item.state.changed
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: done
+  summary: 'Planning {subject.kind} {subject.id} state changed: .audiagentic/planning/events/events.jsonl
+    | event=planning.item.state.changed | id=plan-0014'
+  details:
+    payload: {}
+    source_system: null
+    raw_event:
+      ts: '2026-04-15T09:26:13.412380+00:00'
+      event: planning.item.state.changed
+      id: plan-0014
+      old_state: in_progress
+      new_state: done
+      _stream_line: 2816
+  diff_excerpt: null
+suggested_steps:
+- Review the event source change.
+- Update the current-state page only if durable behavior changed.
+- Keep draft or incomplete work out of current-state pages.
+- Record fresh sync and event baselines after review.
+actions: []

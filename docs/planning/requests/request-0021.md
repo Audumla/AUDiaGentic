@@ -1,7 +1,7 @@
 ---
 id: request-0021
 label: Config-driven planning document structure
-state: captured
+state: distilled
 summary: Refactor planning module to use config-driven document structure, relationships,
   and defaults instead of hardcoded values
 source: code-review
@@ -15,6 +15,8 @@ open_questions:
 spec_refs:
 - spec-0029
 ---
+
+
 
 
 ## Problem Statement
@@ -149,3 +151,7 @@ But this config is **not used** by the managers - they ignore it and use hardcod
 2. Provide sensible defaults in config
 3. Provide migration scripts and documentation
 4. Template rendering is minimal overhead for document creation
+
+# Notes
+
+Assessment on 2026-04-17: request remains valid and still open. `TemplateEngine` and `RelationshipConfig` are implemented and stale task records for that work have been completed. Remaining valid work is narrower: finish schema/config cleanup (`task-0329`) and integrate relationship validation into manager create paths (`task-3253`).
