@@ -1,0 +1,26 @@
+{
+  "item": {
+    "id": "task-0017",
+    "label": "Generate patch actions for high-confidence proposals",
+    "state": "draft",
+    "summary": "For actionable_high_confidence proposals, synthesize and generate replace_section or append_section actions",
+    "domain": "core",
+    "spec_ref": "spec-0011",
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0017-generate-patch-actions-for-high-confidence-proposals.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+}

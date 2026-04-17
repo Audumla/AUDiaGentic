@@ -1,0 +1,26 @@
+{
+  "item": {
+    "id": "task-0019",
+    "label": "Integrate with apply_proposal workflow",
+    "state": "draft",
+    "summary": "Ensure generated patch actions work end-to-end: generate \u2192 review \u2192 apply via lifecycle.py and patches.py",
+    "domain": "core",
+    "spec_ref": "spec-0011",
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-0019-integrate-with-apply-proposal-workflow.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+}
