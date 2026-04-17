@@ -6,7 +6,7 @@
     "summary": "Create tm_archive(id, reason, actor) and tm_restore(id, state, actor) functions with validation",
     "spec_ref": "spec-004",
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0017.md",
+    "path": "docs/planning/tasks/core/task-0017-implement-tm-archive-and-tm-restore-functions.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,

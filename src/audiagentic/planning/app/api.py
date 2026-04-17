@@ -392,17 +392,63 @@ class PlanningAPI:
             "total_items": len(items),
         }
 
-    def reconcile(self):
-        result = self.reconciler.run()
-        self.index()
+    def clean_indexes(self) -> dict:
+        """Clear and rebuild planning indexes only — cheaper than maintain.
+
+        Does not reconcile filenames or touch extracts. Use when lookup state
+        is stale but docs are known-good.
+
+        Returns:
+            Summary with indexes_rebuilt count.
+        """
+        import shutil
+
+        idx_dir = self.root / ".audiagentic/planning/indexes"
+        if idx_dir.exists():
+            shutil.rmtree(idx_dir)
+            idx_dir.mkdir(parents=True)
+
+        self.indexer.write_indexes()
 
         self._publish_event(
-            "planning.reconciled",
-            {"orphans": result["orphans"]},
+            "planning.indexes_cleaned",
+            {"indexes_rebuilt": True},
             {"triggered_by": "manual"},
         )
 
-        return result
+        return {"indexes_rebuilt": True}
+
+    def maintain(self) -> dict:
+        """Canonical maintenance path: reconcile filenames + rebuild derived state."""
+        reconcile_result = self.reconciler.run()
+        rebaseline_result = self.rebaseline()
+
+        self._publish_event(
+            "planning.maintained",
+            {
+                "renames": len(reconcile_result["renames"]),
+                "orphans": reconcile_result["orphans"],
+                "indexes_rebuilt": rebaseline_result["indexes_rebuilt"],
+                "extracts_rebuilt": rebaseline_result["extracts_rebuilt"],
+                "extracts_skipped": rebaseline_result["extracts_skipped"],
+            },
+            {"triggered_by": "manual"},
+        )
+
+        return {
+            "renames": reconcile_result["renames"],
+            "orphans": reconcile_result["orphans"],
+            **rebaseline_result,
+        }
+
+    def reconcile(self):
+        result = self.maintain()
+        self._publish_event(
+            "planning.reconciled",
+            {"renames": len(result["renames"]), "orphans": result["orphans"]},
+            {"triggered_by": "manual"},
+        )
+        return {"renames": result["renames"], "orphans": result["orphans"]}
 
     def new(
         self,

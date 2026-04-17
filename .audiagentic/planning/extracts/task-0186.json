@@ -6,7 +6,7 @@
     "summary": "Ensure plans and tasks preserve request traceability when they reference requests",
     "spec_ref": "spec-002",
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0186.md",
+    "path": "docs/planning/tasks/core/task-0186-extend-auto-reference-updates-to-plans-and-tasks.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,

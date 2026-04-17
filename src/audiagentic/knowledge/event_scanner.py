@@ -26,6 +26,7 @@ from .event_state import (
     load_event_state,
     save_event_state,
 )
+from .markdown_io import load_page_by_id
 from .models import EventRecord
 from .utils import dump_yaml, now_utc
 
@@ -225,6 +226,7 @@ def _write_event_proposal(
 ) -> Path:
     """Write event proposal YAML file."""
     timestamp = now_utc().strftime("%Y%m%dT%H%M%SZ")
+    assessment = _assess_event_proposal(config, page_id, events)
     payload = {
         "proposal_kind": "event_review",
         "proposal_mode": mode,
@@ -233,6 +235,9 @@ def _write_event_proposal(
         "status": "pending",
         "status_updated_at": now_utc().isoformat(),
         "summary": f"Planning/runtime event drift detected for {page_id}. Review the current-state page.",
+        "assessment": assessment,
+        "recommendation": assessment["recommended_action"],
+        "affected_sections": assessment["affected_sections"],
         "events": [
             {
                 "event_id": event.event_id,
@@ -247,12 +252,10 @@ def _write_event_proposal(
             for event in events
         ],
         "suggested_steps": [
-            "Review the event source change.",
-            "Update the current-state page only if durable behavior changed.",
-            "Keep draft or incomplete work out of current-state pages.",
+            *assessment["suggested_steps"],
             "Record fresh sync and event baselines after review.",
         ],
-        "actions": [],
+        "actions": assessment["actions"],
     }
     dedupe_key = _event_proposal_dedupe_key(payload)
     existing_path = _find_existing_event_proposal(config, page_id, dedupe_key)
@@ -317,6 +320,70 @@ def _build_event_stream_summary(
         if value is not None and value != "":
             fragments.append(f"{field}={value}")
     return " | ".join(fragments)
+
+
+def _assess_event_proposal(
+    config: KnowledgeConfig, page_id: str, events: list[EventRecord]
+) -> dict[str, Any]:
+    page = load_page_by_id(config.pages_root, config.meta_root, page_id)
+    section_titles = [section.title for section in page.sections] if page else []
+    event_states = [str(event.status) for event in events]
+    durable_states = {"done", "verified", "archived", "superseded"}
+    durable = any(state in durable_states for state in event_states)
+    likely_requires_doc_change = durable
+    confidence = "high" if durable or event_states else "medium"
+    recommended_action = "review_update" if durable else "reject_no_doc_change"
+    reason = (
+        "Event reached a durable lifecycle state that may change current-state documentation."
+        if durable
+        else "Event appears to be workflow churn without a durable behavior change."
+    )
+    affected_sections = _select_affected_sections(section_titles, durable)
+    actions = _build_assessment_actions(affected_sections, durable)
+    suggested_steps = (
+        [
+            "Review the event source change.",
+            "Confirm whether durable behavior changed.",
+            "Update the highlighted sections if current-state docs are now stale.",
+        ]
+        if durable
+        else [
+            "Review the event source change.",
+            "Reject this proposal unless the workflow state caused a real user-facing behavior change.",
+            "Keep in-progress or transient execution churn out of current-state pages.",
+        ]
+    )
+    return {
+        "likely_requires_doc_change": likely_requires_doc_change,
+        "reason": reason,
+        "confidence": confidence,
+        "recommended_action": recommended_action,
+        "affected_sections": affected_sections,
+        "state_sequence": event_states,
+        "actions": actions,
+        "suggested_steps": suggested_steps,
+    }
+
+
+def _select_affected_sections(section_titles: list[str], durable: bool) -> list[str]:
+    preferred = ["Current state", "How to use", "Sync notes", "References"]
+    if not durable:
+        preferred = ["Sync notes", "References"]
+    matched = [title for title in preferred if title in section_titles]
+    return matched or section_titles[:2]
+
+
+def _build_assessment_actions(affected_sections: list[str], durable: bool) -> list[dict[str, Any]]:
+    if not durable:
+        return []
+    return [
+        {
+            "action": "review_section",
+            "section": section,
+            "intent": "confirm current-state documentation still matches durable runtime behavior",
+        }
+        for section in affected_sections
+    ]
 
 
 def _event_proposal_dedupe_key(payload: dict[str, Any]) -> str:

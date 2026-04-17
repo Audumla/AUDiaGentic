@@ -6,7 +6,7 @@
     "summary": "Confirm the real schema layout for task and work-package task references and remove the stale meta.task_refs assumption from the implementation slice",
     "spec_ref": "spec-002",
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0183.md",
+    "path": "docs/planning/tasks/core/task-0183-verify-and-preserve-schema-compliant-task-reference-placement.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,

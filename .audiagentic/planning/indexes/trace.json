@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-17T08:43:08.905022+00:00",
+  "generated_at": "2026-04-17T13:15:43.984810+00:00",
   "refs": [
     {
       "src": "plan-0001",
@@ -518,6 +518,31 @@
     },
     {
       "src": "request-28",
+      "dst": "standard-0001",
+      "field": "standard_refs"
+    },
+    {
+      "src": "request-29",
+      "dst": "standard-0001",
+      "field": "standard_refs"
+    },
+    {
+      "src": "request-30",
+      "dst": "spec-4",
+      "field": "spec_refs"
+    },
+    {
+      "src": "request-30",
+      "dst": "standard-0001",
+      "field": "standard_refs"
+    },
+    {
+      "src": "request-31",
+      "dst": "spec-5",
+      "field": "spec_refs"
+    },
+    {
+      "src": "request-31",
       "dst": "standard-0001",
       "field": "standard_refs"
     },
@@ -1308,6 +1333,36 @@
       "src": "spec-027",
       "dst": "request-43",
       "field": "request_refs"
+    },
+    {
+      "src": "spec-4",
+      "dst": "request-30",
+      "field": "request_refs"
+    },
+    {
+      "src": "spec-4",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "spec-4",
+      "dst": "standard-0005",
+      "field": "standard_refs"
+    },
+    {
+      "src": "spec-5",
+      "dst": "request-31",
+      "field": "request_refs"
+    },
+    {
+      "src": "spec-5",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "spec-5",
+      "dst": "standard-0005",
+      "field": "standard_refs"
     },
     {
       "src": "standard-0010-python",
@@ -3547,6 +3602,36 @@
     {
       "src": "task-0335",
       "dst": "spec-0031",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-12",
+      "dst": "standard-0005",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-12",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-12",
+      "dst": "spec-4",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-13",
+      "dst": "standard-0005",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-13",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-13",
+      "dst": "spec-5",
       "field": "spec_ref"
     },
     {

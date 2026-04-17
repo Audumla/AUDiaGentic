@@ -1,156 +1,174 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-17T08:43:08.905022+00:00",
+  "generated_at": "2026-04-17T13:15:43.984810+00:00",
   "items": [
     {
       "id": "request-1",
       "label": "Comprehensive implementation docs migration",
       "state": "closed",
-      "path": "docs\\planning\\requests\\request-1.md"
+      "path": "docs\\planning\\requests\\request-1-comprehensive-implementation-docs-migration.md"
     },
     {
       "id": "request-10",
       "label": "Optimize planning single-item lookup and extract token usage",
       "state": "closed",
-      "path": "docs\\planning\\requests\\request-10.md"
+      "path": "docs\\planning\\requests\\request-10-optimize-planning-single-item-lookup-and-extract-token-usage.md"
     },
     {
       "id": "request-11",
       "label": "Add guidance levels (light/standard/deep) to control planning depth-of-detail",
       "state": "closed",
-      "path": "docs\\planning\\requests\\request-11.md"
+      "path": "docs\\planning\\requests\\request-11-add-guidance-levels-light-standard-deep-to-control-planning-depth-of-detail.md"
     },
     {
       "id": "request-12",
       "label": "Require request linkage for every planning specification, with cascade archive",
       "state": "closed",
-      "path": "docs\\planning\\requests\\request-12.md"
+      "path": "docs\\planning\\requests\\request-12-require-request-linkage-for-every-planning-specification-with-cascade-archive.md"
     },
     {
       "id": "request-13",
       "label": "Define canonical semantics for planning guidance levels",
       "state": "closed",
-      "path": "docs\\planning\\requests\\request-13.md"
+      "path": "docs\\planning\\requests\\request-13-define-canonical-semantics-for-planning-guidance-levels.md"
     },
     {
       "id": "request-14",
       "label": "Integrate Knowledge Component v7.4",
       "state": "closed",
-      "path": "docs\\planning\\requests\\request-14.md"
+      "path": "docs\\planning\\requests\\request-14-integrate-knowledge-component-v7-4.md"
     },
     {
       "id": "request-15",
       "label": "Knowledge Component Improvements",
       "state": "distilled",
-      "path": "docs\\planning\\requests\\request-15.md"
+      "path": "docs\\planning\\requests\\request-15-knowledge-component-improvements.md"
     },
     {
       "id": "request-16",
       "label": "Planning Module Critical Fixes",
       "state": "closed",
-      "path": "docs\\planning\\requests\\request-16.md"
+      "path": "docs\\planning\\requests\\request-16-planning-module-critical-fixes.md"
     },
     {
       "id": "request-17",
       "label": "Interoperability layer for cross-component communication",
       "state": "closed",
-      "path": "docs\\planning\\requests\\request-17.md"
+      "path": "docs\\planning\\requests\\request-17-interoperability-layer-for-cross-component-communication.md"
     },
     {
       "id": "request-18",
       "label": "Automatic state propagation for planning hierarchies",
       "state": "closed",
-      "path": "docs\\planning\\requests\\request-18.md"
+      "path": "docs\\planning\\requests\\request-18-automatic-state-propagation-for-planning-hierarchies.md"
     },
     {
       "id": "request-19",
       "label": "Code Standards Compliance Review",
       "state": "closed",
-      "path": "docs\\planning\\requests\\request-19.md"
+      "path": "docs\\planning\\requests\\request-19-code-standards-compliance-review.md"
     },
     {
       "id": "request-2",
       "label": "Add archive functionality to planning core",
       "state": "superseded",
-      "path": "docs\\planning\\requests\\request-2.md"
+      "path": "docs\\planning\\requests\\request-2-add-archive-functionality-to-planning-core.md"
     },
     {
       "id": "request-20",
       "label": "Auto-state propagation with event subscription",
       "state": "superseded",
-      "path": "docs\\planning\\requests\\request-20.md"
+      "path": "docs\\planning\\requests\\request-20-auto-state-propagation-with-event-subscription.md"
     },
     {
       "id": "request-21",
       "label": "Refactor knowledge component hooks to use event-driven architecture",
       "state": "superseded",
-      "path": "docs\\planning\\requests\\request-21.md"
+      "path": "docs\\planning\\requests\\request-21-refactor-knowledge-component-hooks-to-use-event-driven-architecture.md"
     },
     {
       "id": "request-25",
       "label": "Config-driven planning document structure",
       "state": "distilled",
-      "path": "docs\\planning\\requests\\request-25.md"
+      "path": "docs\\planning\\requests\\request-25-config-driven-planning-document-structure.md"
     },
     {
       "id": "request-26",
       "label": "MCP Test Request",
       "state": "superseded",
-      "path": "docs\\planning\\requests\\request-26.md"
+      "path": "docs\\planning\\requests\\request-26-mcp-test-request.md"
     },
     {
       "id": "request-27",
       "label": "Get Test Request",
       "state": "superseded",
-      "path": "docs\\planning\\requests\\request-27.md"
+      "path": "docs\\planning\\requests\\request-27-get-test-request.md"
     },
     {
       "id": "request-28",
       "label": "Generic Req",
       "state": "superseded",
-      "path": "docs\\planning\\requests\\request-28.md"
+      "path": "docs\\planning\\requests\\request-28-generic-req.md"
+    },
+    {
+      "id": "request-29",
+      "label": "Upgrade knowledge proposal automation",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-29-upgrade-knowledge-proposal-automation.md"
     },
     {
       "id": "request-3",
       "label": "MCP layer efficiency improvements and usage enforcement",
       "state": "closed",
-      "path": "docs\\planning\\requests\\request-3.md"
+      "path": "docs\\planning\\requests\\request-3-mcp-layer-efficiency-improvements-and-usage-enforcement.md"
+    },
+    {
+      "id": "request-30",
+      "label": "Expose planning config for agents",
+      "state": "closed",
+      "path": "docs\\planning\\requests\\request-30-expose-planning-config-for-agents.md"
+    },
+    {
+      "id": "request-31",
+      "label": "Reconcile planning filename and numbering conventions",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-31-reconcile-planning-filename-and-numbering-conventions.md"
     },
     {
       "id": "request-4",
       "label": "Archive functionality for planning items",
       "state": "closed",
-      "path": "docs\\planning\\requests\\request-4.md"
+      "path": "docs\\planning\\requests\\request-4-archive-functionality-for-planning-items.md"
     },
     {
       "id": "request-5",
       "label": "Sensitive data detection and review for planning items",
       "state": "closed",
-      "path": "docs\\planning\\requests\\request-5.md"
+      "path": "docs\\planning\\requests\\request-5-sensitive-data-detection-and-review-for-planning-items.md"
     },
     {
       "id": "request-6",
       "label": "Planning module hardening: delete safety, traceability, validation, and duplicate guards",
       "state": "closed",
-      "path": "docs\\planning\\requests\\request-6.md"
+      "path": "docs\\planning\\requests\\request-6-planning-module-hardening-delete-safety-traceability-validation-and-duplicate-guards.md"
     },
     {
       "id": "request-7",
       "label": "Fix planning API and MCP gaps revealed by coverage tests",
       "state": "closed",
-      "path": "docs\\planning\\requests\\request-7.md"
+      "path": "docs\\planning\\requests\\request-7-fix-planning-api-and-mcp-gaps-revealed-by-coverage-tests.md"
     },
     {
       "id": "request-8",
       "label": "Add audience-level profile system to control planning depth-of-detail",
       "state": "superseded",
-      "path": "docs\\planning\\requests\\request-8.md"
+      "path": "docs\\planning\\requests\\request-8-add-audience-level-profile-system-to-control-planning-depth-of-detail.md"
     },
     {
       "id": "request-9",
       "label": "Implement configurable stack profiles for lightweight req\u2192spec\u2192task workflows",
       "state": "closed",
-      "path": "docs\\planning\\requests\\request-9.md"
+      "path": "docs\\planning\\requests\\request-9-implement-configurable-stack-profiles-for-lightweight-req-spec-task-workflows.md"
     }
   ]
 }

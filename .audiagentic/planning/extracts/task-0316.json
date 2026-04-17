@@ -2,7 +2,7 @@
   "item": {
     "id": "task-0316",
     "label": "standard-0010-mcp-server-impl",
-    "state": "draft",
+    "state": "cancelled",
     "summary": "Implement standard-0010 MCP server development rules",
     "request_refs": [
       "request-19"
@@ -12,7 +12,7 @@
       "standard-0006"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0316.md",
+    "path": "docs/planning/tasks/core/task-0316-standard-0010-mcp-server-impl.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -23,5 +23,5 @@
     "standard-0005",
     "standard-0006"
   ],
-  "body": "\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+  "body": "\n\n# Description\n\nImplement standard-0010 MCP server development rules.\n\n# Cancellation Reason\n\nThis task was created as a generic placeholder during request-19 compliance review but lacks actionable content. The task description is too vague to be actionable - it references implementing rules without specifying:\n- Which specific MCP servers need changes\n- What specific compliance issues exist\n- What changes need to be made\n\nStandard-0010 compliance review during request-19 found that all MCP servers (audiagentic-planning_mcp.py, audiagentic-knowledge/mcp_server.py) are already compliant with standard-0010. They follow the FastMCP stdio transport pattern with comprehensive docstrings.\n\n# Next Steps\n\nNo action required. MCP servers are already compliant with standard-0010.\n"
 }

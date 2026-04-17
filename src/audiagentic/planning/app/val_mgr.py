@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ..fs.scan import scan_items
 from .config import Config
+from .paths import Paths
 from .util import body_has_section
 
 _ID_PATTERN = re.compile(r'^[a-z]+-\d+(-[a-z0-9]+)?$')
@@ -14,6 +15,7 @@ class Validator:
     def __init__(self, root: Path):
         self.root = root
         self.config = Config(root)
+        self.paths = Paths(root)
 
     def _get_required_sections(self, kind: str) -> list[str]:
         """Get required sections for a kind from config."""
@@ -103,12 +105,9 @@ class Validator:
             errors.extend(self._validate_item_against_config(item))
 
             # Validate filename conventions
-            if item.kind in {"request", "task"}:
-                if item.path.name != f"{item.data['id']}.md":
-                    errors.append(f"{item.path}: filename must be {item.data['id']}.md")
-            elif item.kind in {"spec", "plan", "wp", "standard"}:
-                if not item.path.name.startswith(item.data["id"]):
-                    errors.append(f"{item.path}: filename must start with {item.data['id']}")
+            expected_name = self.paths.filename_for(item.kind, item.data["id"], item.data["label"])
+            if item.path.name != expected_name:
+                errors.append(f"{item.path}: filename must be {expected_name}")
         # Check sections and path structure (single pass)
         for item in items:
             # Check guidance-appropriate sections

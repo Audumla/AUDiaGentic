@@ -2,13 +2,13 @@
   "item": {
     "id": "task-0298",
     "label": "req-0034",
-    "state": "ready",
+    "state": "cancelled",
     "summary": "Refactor request-34 registry",
     "request_refs": [
       "request-19"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0298.md",
+    "path": "docs/planning/tasks/core/task-0298-req-0034.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,

@@ -2,13 +2,13 @@
   "item": {
     "id": "task-0312",
     "label": "extracts",
-    "state": "ready",
+    "state": "cancelled",
     "summary": "Remove temporary extracts/",
     "request_refs": [
       "request-19"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0312.md",
+    "path": "docs/planning/tasks/core/task-0312-extracts.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n# Description\n\nRemove temporary extracts/\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
+  "body": "\n\n# Description\n\nRemove temporary extracts/\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n\n# Cancellation Reason\n\nThe `extracts/` directory referenced in this task does not exist in the codebase. The task was created as part of request-19 cleanup but the target directory was already removed or never existed.\n\n# Next Steps\n\nNo action required. This task can be safely ignored as the cleanup has already been completed.\n"
 }

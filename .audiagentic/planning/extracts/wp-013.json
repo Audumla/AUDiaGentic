@@ -2,10 +2,27 @@
   "item": {
     "id": "wp-013",
     "label": "Knowledge Component Improvements Work Package",
-    "state": "ready",
+    "state": "done",
     "summary": "Tasks for addressing critical review findings",
     "plan_ref": "plan-011",
-    "task_refs": [],
+    "task_refs": [
+      {
+        "ref": "task-0008",
+        "seq": 1000
+      },
+      {
+        "ref": "task-0009",
+        "seq": 2000
+      },
+      {
+        "ref": "task-0010",
+        "seq": 3000
+      },
+      {
+        "ref": "task-0011",
+        "seq": 4000
+      }
+    ],
     "standard_refs": [
       "standard-0006"
     ],
@@ -18,7 +35,8 @@
     "restored_by": null
   },
   "effective_standard_refs": [
-    "standard-0006"
+    "standard-0006",
+    "standard-0005"
   ],
-  "body": "\n\n\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n\n# Notes\n\nAssessment on 2026-04-17: work package remains active for tests, event-module refactor, search improvement, and lifecycle cleanup.\n"
+  "body": "\n\n\n\n\n\n\n# Objective\n\nImplement knowledge component improvements identified in critical review: comprehensive test coverage, refactored event handling, enhanced search, and lifecycle tracking.\n\n# Scope of This Package\n\n4 focused tasks:\n1. Add unit test coverage for knowledge component modules (search, bootstrap, sync, config)\n2. Refactor events.py (792 lines) into modular event handler, state machine, validation\n3. Enhance search from token-based weighting to fuzzy matching or BM25\n4. Implement lifecycle tracking for proposals and jobs (status, history, rollback)\n\n# Inputs\n\n- Current knowledge component: src/audiagentic/knowledge/ (23 modules, 4.7K LOC)\n- Existing test files: 2 integration tests (minimal coverage)\n- Events.py: 792 lines, monolithic event handling\n- Search.py: 136 lines, token-based with metadata filtering\n- Request-15: Critical review findings from 2026-04-14\n\n# Instructions\n\n1. Create tasks in order (tests first, then refactoring, then enhancements)\n2. Each task should target a single module or concern\n3. Use standard-0006 for test structure and coverage expectations\n4. Follow existing code patterns (models, config, validation approach)\n5. Update README and docs as you go\n\n# Required Outputs\n\n- 40+ unit tests covering core modules (search, bootstrap, sync, config, models)\n- events.py split into: events_handler.py (event dispatch), events_state.py (state machine), events_validation.py (rules)\n- search.py enhanced with fuzzy matching (or BM25 if chosen after analysis)\n- lifecycle.py implementing Job/Proposal tracking with status, history, rollback\n- Updated knowledge/README.md with test and module overview\n\n# Acceptance Checks\n\n- [ ] Unit tests run clean, coverage >80% for search/bootstrap/sync/config\n- [ ] events.py split: 3 focused modules, each <300 lines\n- [ ] Search tests demonstrate fuzzy matching behavior\n- [ ] Lifecycle API tests demonstrate status transitions and history\n- [ ] All tests passing\n- [ ] No regressions in existing MCP tools or CLI\n\n# Non-Goals\n\n- Rewriting LLM module (llm.py stays as-is unless test-required refactoring)\n- Major CLI surface changes\n- Breaking changes to MCP tools\n"
 }

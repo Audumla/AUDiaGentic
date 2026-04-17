@@ -2,13 +2,13 @@
   "item": {
     "id": "task-0307",
     "label": "req-0043",
-    "state": "ready",
+    "state": "cancelled",
     "summary": "Refactor request-43 audit",
     "request_refs": [
       "request-19"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0307.md",
+    "path": "docs/planning/tasks/core/task-0307-req-0043.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,

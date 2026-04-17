@@ -24,11 +24,5 @@
     "standard-0006",
     "standard-0005"
   ],
-  "body": "\n# Purpose\n\n\n# Scope\n\n\n# Requirements\n\n\n# Constraints\n\n\n# Acceptance Criteria\n",
-  "related": {
-    "request_refs": [
-      "request-22"
-    ],
-    "task_refs": []
-  }
+  "body": "\n# Purpose\n\n\n# Scope\n\n\n# Requirements\n\n\n# Constraints\n\n\n# Acceptance Criteria\n"
 }

@@ -6,7 +6,7 @@
     "summary": "Add tm_delete() function that marks items as deleted without removing files, with retention policy",
     "spec_ref": "spec-002",
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0185.md",
+    "path": "docs/planning/tasks/core/task-0185-implement-soft-delete-functionality.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,

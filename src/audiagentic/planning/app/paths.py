@@ -5,6 +5,7 @@ from pathlib import Path
 import yaml
 
 from ..domain.states import KIND_MAP
+from .util import slugify
 
 
 class Paths:
@@ -65,16 +66,16 @@ class Paths:
         Returns:
             Full path to the item's markdown file
         """
-        from .util import slugify
-
         kind_dir = self.kind_dir(kind, domain)
 
-        # Requests and tasks use ID-only filenames
-        if kind in {"request", "task"}:
-            return kind_dir / f"{id_}.md"
+        return kind_dir / self.filename_for(kind, id_, label)
 
-        # Other kinds use ID-label format
-        return kind_dir / f"{id_}-{slugify(label)}.md"
+    def filename_for(self, kind: str, id_: str, label: str) -> str:
+        """Render canonical filename for a planning item from config."""
+        kind_cfg = self.get_kind_config(kind)
+        naming = self.planning_cfg["planning"].get("naming", {})
+        pattern = kind_cfg.get("filename_pattern") or naming.get("default_pattern", "{id}-{slug}.md")
+        return pattern.format(id=id_, slug=slugify(label))
 
     def support_dir(self, name: str) -> Path:
         if self.test_dir:

@@ -1,0 +1,28 @@
+{
+  "item": {
+    "id": "spec-0079",
+    "label": "Generic Spec",
+    "state": "cancelled",
+    "summary": "Summary",
+    "request_refs": [
+      "request-28"
+    ],
+    "task_refs": [],
+    "standard_refs": [
+      "standard-0006",
+      "standard-0005"
+    ],
+    "kind": "spec",
+    "path": "docs/planning/specifications/spec-0079-generic-spec.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0006",
+    "standard-0005"
+  ],
+  "body": "\n\n\n# Purpose\n\n\n# Scope\n\n\n# Requirements\n\n\n# Constraints\n\n\n# Acceptance Criteria\n\n# Notes\n\nCancelled on 2026-04-17 as a placeholder artifact under superseded `request-28`.\n"
+}
