@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-15T11:09:44.688136+00:00",
+  "generated_at": "2026-04-17T07:06:05.392236+00:00",
   "items": [
     {
       "id": "wp-001",
@@ -11,13 +11,13 @@
     {
       "id": "wp-0016",
       "label": "Phase 1: Config Schema",
-      "state": "ready",
+      "state": "done",
       "path": "docs\\planning\\work-packages\\core\\wp-0016-phase-1-config-schema.md"
     },
     {
       "id": "wp-0017",
       "label": "Phase 2: Core Infrastructure",
-      "state": "ready",
+      "state": "done",
       "path": "docs\\planning\\work-packages\\core\\wp-0017-phase-2-core-infrastructure.md"
     },
     {
@@ -119,7 +119,7 @@
     {
       "id": "wp-010",
       "label": "Implement canonical guidance semantics",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\work-packages\\core\\wp-010-implement-canonical-guidance-semantics.md"
     },
     {
@@ -137,7 +137,7 @@
     {
       "id": "wp-013",
       "label": "Knowledge Component Improvements Work Package",
-      "state": "draft",
+      "state": "ready",
       "path": "docs\\planning\\work-packages\\core\\wp-013-knowledge-component-improvements-work-package.md"
     },
     {
@@ -149,8 +149,14 @@
     {
       "id": "wp-015",
       "label": "Interoperability layer and state propagation implementation",
-      "state": "draft",
+      "state": "ready",
       "path": "docs\\planning\\work-packages\\core\\wp-015-interoperability-layer-and-state-propagation-implementation.md"
+    },
+    {
+      "id": "wp-0001",
+      "label": "Loose WP",
+      "state": "draft",
+      "path": "docs\\planning\\work-packages\\wp-0001-loose-wp.md"
     }
   ]
 }

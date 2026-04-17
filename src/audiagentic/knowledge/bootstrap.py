@@ -122,8 +122,8 @@ def _base_config(knowledge_root: str, config_relpath: str) -> dict[str, Any]:
         },
         'search': {'snippet_length': 220, 'weights': {'title': 4.0, 'tags': 3.0, 'sections': 2.0, 'body': 1.0}},
         'scaffolding': {'default_sections': ['Summary', 'Current state', 'How to use', 'Sync notes', 'References']},
-        'sync': {'stale_statuses': ['changed', 'missing', 'untracked', 'manual_stale'], 'auto_hook_allowed_states': ['implemented', 'verified', 'active', 'current'], 'diff_context_lines': 2, 'diff_max_lines': 80, 'diff_excerpt_lines': 12, 'proposal_default_mode': 'review_only'},
-        'llm': {'enabled': False, 'default_provider': 'disabled', 'default_mode': 'blocking'},
+        'sync': {'stale_statuses': ['changed', 'missing', 'untracked', 'manual_stale'], 'auto_hook_allowed_states': ['implemented', 'verified', 'active', 'current'], 'diff_context_lines': 2, 'diff_max_lines': 80, 'diff_excerpt_lines': 12, 'proposal_default_mode': 'review_only', 'proposal_retention_days': 30, 'archive_retention_days': 90},
+        'llm': {'enabled': False, 'default_provider': 'disabled', 'default_mode': 'blocking', 'job_retention_days': 7},
         'runtime': {
             'capability_id': 'knowledge',
             'contract_version': 'v0.7',
@@ -156,6 +156,7 @@ def _default_actions() -> dict[str, Any]:
         'deterministic_actions': {
             'scan_drift': {'handler': 'audiagentic_knowledge.actions:action_scan_drift'},
             'generate_sync_proposals': {'handler': 'audiagentic_knowledge.actions:action_generate_sync_proposals'},
+            'cleanup_lifecycle': {'handler': 'audiagentic_knowledge.actions:action_cleanup_lifecycle'},
             'record_sync': {'handler': 'audiagentic_knowledge.actions:action_record_sync'},
             'scan_events': {'handler': 'audiagentic_knowledge.actions:action_scan_events'},
             'process_events': {'handler': 'audiagentic_knowledge.actions:action_process_events'},

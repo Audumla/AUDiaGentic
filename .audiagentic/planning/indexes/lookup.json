@@ -1,7 +1,34 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-15T11:09:44.688136+00:00",
+  "generated_at": "2026-04-17T07:06:05.392236+00:00",
   "items": {
+    "plan-0001": {
+      "id": "plan-0001",
+      "kind": "plan",
+      "label": "Tmp Plan",
+      "state": "draft",
+      "path": "docs/planning/plans/plan-0001-tmp-plan.md",
+      "deleted": false,
+      "archived": false
+    },
+    "plan-0002": {
+      "id": "plan-0002",
+      "kind": "plan",
+      "label": "Tmp Plan B",
+      "state": "draft",
+      "path": "docs/planning/plans/plan-0002-tmp-plan-b.md",
+      "deleted": false,
+      "archived": false
+    },
+    "plan-0003": {
+      "id": "plan-0003",
+      "kind": "plan",
+      "label": "Plan With Request",
+      "state": "draft",
+      "path": "docs/planning/plans/plan-0003-plan-with-request.md",
+      "deleted": false,
+      "archived": false
+    },
     "plan-001": {
       "id": "plan-001",
       "kind": "plan",
@@ -96,7 +123,7 @@
       "id": "plan-008",
       "kind": "plan",
       "label": "Implement canonical guidance semantics standard",
-      "state": "draft",
+      "state": "done",
       "path": "docs/planning/plans/plan-008-implement-canonical-guidance-semantics-standard.md",
       "deleted": false,
       "archived": false
@@ -123,7 +150,7 @@
       "id": "plan-011",
       "kind": "plan",
       "label": "Knowledge Component Improvements Plan",
-      "state": "draft",
+      "state": "ready",
       "path": "docs/planning/plans/plan-011-knowledge-component-improvements-plan.md",
       "deleted": false,
       "archived": false
@@ -132,7 +159,7 @@
       "id": "plan-012",
       "kind": "plan",
       "label": "Planning Module Critical Fixes Plan",
-      "state": "draft",
+      "state": "done",
       "path": "docs/planning/plans/plan-012-planning-module-critical-fixes-plan.md",
       "deleted": false,
       "archived": false
@@ -141,8 +168,44 @@
       "id": "plan-013",
       "kind": "plan",
       "label": "Interoperability layer and state propagation implementation plan",
-      "state": "ready",
+      "state": "in_progress",
       "path": "docs/planning/plans/plan-013-interoperability-layer-and-state-propagation-implementation-plan.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-0001": {
+      "id": "request-0001",
+      "kind": "request",
+      "label": "Refactor knowledge component hooks to use event-driven architecture",
+      "state": "superseded",
+      "path": "docs/planning/requests/request-0001.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-0002": {
+      "id": "request-0002",
+      "kind": "request",
+      "label": "Tmp Request",
+      "state": "captured",
+      "path": "docs/planning/requests/request-0002.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-0003": {
+      "id": "request-0003",
+      "kind": "request",
+      "label": "Tmp Request B",
+      "state": "captured",
+      "path": "docs/planning/requests/request-0003.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-0004": {
+      "id": "request-0004",
+      "kind": "request",
+      "label": "ReqX",
+      "state": "captured",
+      "path": "docs/planning/requests/request-0004.md",
       "deleted": false,
       "archived": false
     },
@@ -168,7 +231,7 @@
       "id": "request-0021",
       "kind": "request",
       "label": "Config-driven planning document structure",
-      "state": "captured",
+      "state": "distilled",
       "path": "docs/planning/requests/request-0021.md",
       "deleted": false,
       "archived": false
@@ -177,7 +240,7 @@
       "id": "request-0023",
       "kind": "request",
       "label": "MCP Test Request",
-      "state": "captured",
+      "state": "superseded",
       "path": "docs/planning/requests/request-0023.md",
       "deleted": false,
       "archived": false
@@ -186,7 +249,7 @@
       "id": "request-0024",
       "kind": "request",
       "label": "Get Test Request",
-      "state": "captured",
+      "state": "superseded",
       "path": "docs/planning/requests/request-0024.md",
       "deleted": false,
       "archived": false
@@ -195,7 +258,7 @@
       "id": "request-0027",
       "kind": "request",
       "label": "Generic Req",
-      "state": "captured",
+      "state": "superseded",
       "path": "docs/planning/requests/request-0027.md",
       "deleted": false,
       "archived": false
@@ -294,7 +357,7 @@
       "id": "request-013",
       "kind": "request",
       "label": "Define canonical semantics for planning guidance levels",
-      "state": "captured",
+      "state": "closed",
       "path": "docs/planning/requests/request-013.md",
       "deleted": false,
       "archived": false
@@ -303,7 +366,7 @@
       "id": "request-014",
       "kind": "request",
       "label": "Integrate Knowledge Component v7.4",
-      "state": "captured",
+      "state": "closed",
       "path": "docs/planning/requests/request-014.md",
       "deleted": false,
       "archived": false
@@ -312,7 +375,7 @@
       "id": "request-015",
       "kind": "request",
       "label": "Knowledge Component Improvements",
-      "state": "captured",
+      "state": "distilled",
       "path": "docs/planning/requests/request-015.md",
       "deleted": false,
       "archived": false
@@ -321,7 +384,7 @@
       "id": "request-016",
       "kind": "request",
       "label": "Planning Module Critical Fixes",
-      "state": "captured",
+      "state": "closed",
       "path": "docs/planning/requests/request-016.md",
       "deleted": false,
       "archived": false
@@ -339,7 +402,7 @@
       "id": "request-018",
       "kind": "request",
       "label": "Automatic state propagation for planning hierarchies",
-      "state": "distilled",
+      "state": "closed",
       "path": "docs/planning/requests/request-018.md",
       "deleted": false,
       "archived": false
@@ -357,8 +420,35 @@
       "id": "request-020",
       "kind": "request",
       "label": "Auto-state propagation with event subscription",
-      "state": "captured",
+      "state": "superseded",
       "path": "docs/planning/requests/request-020.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-0001": {
+      "id": "spec-0001",
+      "kind": "spec",
+      "label": "Tmp Spec",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0001-tmp-spec.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-0002": {
+      "id": "spec-0002",
+      "kind": "spec",
+      "label": "Tmp Spec B",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0002-tmp-spec-b.md",
+      "deleted": false,
+      "archived": false
+    },
+    "spec-0003": {
+      "id": "spec-0003",
+      "kind": "spec",
+      "label": "SpecX",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-0003-specx.md",
       "deleted": false,
       "archived": false
     },
@@ -393,7 +483,7 @@
       "id": "spec-0029",
       "kind": "spec",
       "label": "Config-driven planning document structure",
-      "state": "draft",
+      "state": "ready",
       "path": "docs/planning/specifications/spec-0029-config-driven-planning-document-structure.md",
       "deleted": false,
       "archived": false
@@ -411,7 +501,7 @@
       "id": "spec-0030",
       "kind": "spec",
       "label": "MCP Test Request \u2014 Specification",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/specifications/spec-0030-mcp-test-request-specification.md",
       "deleted": false,
       "archived": false
@@ -420,7 +510,7 @@
       "id": "spec-0031",
       "kind": "spec",
       "label": "MCP Test Spec",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/specifications/spec-0031-mcp-test-spec.md",
       "deleted": false,
       "archived": false
@@ -519,7 +609,7 @@
       "id": "spec-0071",
       "kind": "spec",
       "label": "Get Test Request \u2014 Specification",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/specifications/spec-0071-get-test-request-specification.md",
       "deleted": false,
       "archived": false
@@ -528,7 +618,7 @@
       "id": "spec-0072",
       "kind": "spec",
       "label": "Get Test Spec",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/specifications/spec-0072-get-test-spec.md",
       "deleted": false,
       "archived": false
@@ -555,7 +645,7 @@
       "id": "spec-0077",
       "kind": "spec",
       "label": "Test Spec",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/specifications/spec-0077-test-spec.md",
       "deleted": false,
       "archived": false
@@ -564,7 +654,7 @@
       "id": "spec-0078",
       "kind": "spec",
       "label": "Generic Req \u2014 Specification",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/specifications/spec-0078-generic-req-specification.md",
       "deleted": false,
       "archived": false
@@ -573,7 +663,7 @@
       "id": "spec-0079",
       "kind": "spec",
       "label": "Generic Spec",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/specifications/spec-0079-generic-spec.md",
       "deleted": false,
       "archived": false
@@ -618,7 +708,7 @@
       "id": "spec-012",
       "kind": "spec",
       "label": "Canonical semantics for guidance levels",
-      "state": "draft",
+      "state": "done",
       "path": "docs/planning/specifications/spec-012-canonical-semantics-for-guidance-levels.md",
       "deleted": false,
       "archived": false
@@ -627,7 +717,7 @@
       "id": "spec-013",
       "kind": "spec",
       "label": "Integrate Knowledge Component v7.4 \u2014 Specification",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/specifications/spec-013-integrate-knowledge-component-v7-4-specification.md",
       "deleted": false,
       "archived": false
@@ -636,7 +726,7 @@
       "id": "spec-014",
       "kind": "spec",
       "label": "Knowledge Component Integration Specification",
-      "state": "draft",
+      "state": "done",
       "path": "docs/planning/specifications/spec-014-knowledge-component-integration-specification.md",
       "deleted": false,
       "archived": false
@@ -654,7 +744,7 @@
       "id": "spec-016",
       "kind": "spec",
       "label": "Knowledge Component Improvements Specification",
-      "state": "draft",
+      "state": "ready",
       "path": "docs/planning/specifications/spec-016-knowledge-component-improvements-specification.md",
       "deleted": false,
       "archived": false
@@ -663,7 +753,7 @@
       "id": "spec-017",
       "kind": "spec",
       "label": "Planning Module Critical Fixes \u2014 Specification",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/specifications/spec-017-planning-module-critical-fixes-specification.md",
       "deleted": false,
       "archived": false
@@ -672,7 +762,7 @@
       "id": "spec-018",
       "kind": "spec",
       "label": "Planning Module Critical Fixes Specification",
-      "state": "draft",
+      "state": "done",
       "path": "docs/planning/specifications/spec-018-planning-module-critical-fixes-specification.md",
       "deleted": false,
       "archived": false
@@ -681,7 +771,7 @@
       "id": "spec-019",
       "kind": "spec",
       "label": "Interoperability event layer specification",
-      "state": "ready",
+      "state": "in_progress",
       "path": "docs/planning/specifications/spec-019-interoperability-event-layer-specification.md",
       "deleted": false,
       "archived": false
@@ -690,7 +780,7 @@
       "id": "spec-020",
       "kind": "spec",
       "label": "Planning state propagation over events specification",
-      "state": "ready",
+      "state": "in_progress",
       "path": "docs/planning/specifications/spec-020-planning-state-propagation-over-events-specification.md",
       "deleted": false,
       "archived": false
@@ -708,7 +798,7 @@
       "id": "spec-022",
       "kind": "spec",
       "label": "Auto-state propagation with event subscription implementation specification",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/specifications/spec-022-auto-state-propagation-with-event-subscription-implementation-specification.md",
       "deleted": false,
       "archived": false
@@ -1013,8 +1103,8 @@
     "task-0001": {
       "id": "task-0001",
       "kind": "task",
-      "label": "Migration Reference Map",
-      "state": "done",
+      "label": "Remove hooks.py from knowledge component",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-0001.md",
       "deleted": false,
       "archived": false
@@ -1022,8 +1112,8 @@
     "task-0002": {
       "id": "task-0002",
       "kind": "task",
-      "label": "Inventory all implementation docs and build reference map",
-      "state": "done",
+      "label": "Remove hooks.yml and update CLI",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-0002.md",
       "deleted": false,
       "archived": false
@@ -1031,9 +1121,36 @@
     "task-0003": {
       "id": "task-0003",
       "kind": "task",
-      "label": "Migrate Phase 0 docs (contracts and scaffolding)",
-      "state": "draft",
+      "label": "Remove hook_config_file from config.py",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-0003.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0004": {
+      "id": "task-0004",
+      "kind": "task",
+      "label": "Update events.py to remove hooks dependency",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0004.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0005": {
+      "id": "task-0005",
+      "kind": "task",
+      "label": "Update documentation and remove hooks references",
+      "state": "cancelled",
+      "path": "docs/planning/tasks/core/task-0005.md",
+      "deleted": false,
+      "archived": false
+    },
+    "task-0006": {
+      "id": "task-0006",
+      "kind": "task",
+      "label": "Fix invalid parent propagation transitions",
+      "state": "done",
+      "path": "docs/planning/tasks/core/task-0006.md",
       "deleted": false,
       "archived": false
     },
@@ -1752,7 +1869,7 @@
       "id": "task-0235",
       "kind": "task",
       "label": "Validate documentation",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-0235.md",
       "deleted": false,
       "archived": false
@@ -1923,7 +2040,7 @@
       "id": "task-0254",
       "kind": "task",
       "label": "Integrate interoperability layer with knowledge component",
-      "state": "ready",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0254.md",
       "deleted": false,
       "archived": false
@@ -1968,7 +2085,7 @@
       "id": "task-0259",
       "kind": "task",
       "label": "Add CLI commands and diagnostics for event layer",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-0259.md",
       "deleted": false,
       "archived": false
@@ -1977,7 +2094,7 @@
       "id": "task-0260",
       "kind": "task",
       "label": "Validate event layer performance targets",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-0260.md",
       "deleted": false,
       "archived": false
@@ -1986,7 +2103,7 @@
       "id": "task-0261",
       "kind": "task",
       "label": "Implement knowledge event handler for planning state changes",
-      "state": "blocked",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0261.md",
       "deleted": false,
       "archived": false
@@ -2022,7 +2139,7 @@
       "id": "task-0265",
       "kind": "task",
       "label": "Implement planning audit and repair CLI command",
-      "state": "ready",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0265.md",
       "deleted": false,
       "archived": false
@@ -2499,7 +2616,7 @@
       "id": "task-0329",
       "kind": "task",
       "label": "Extend config schema for document structure",
-      "state": "ready",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0329.md",
       "deleted": false,
       "archived": false
@@ -2508,7 +2625,7 @@
       "id": "task-0330",
       "kind": "task",
       "label": "Create TemplateEngine class",
-      "state": "ready",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0330.md",
       "deleted": false,
       "archived": false
@@ -2517,7 +2634,7 @@
       "id": "task-0331",
       "kind": "task",
       "label": "Create RelationshipConfig class",
-      "state": "ready",
+      "state": "done",
       "path": "docs/planning/tasks/core/task-0331.md",
       "deleted": false,
       "archived": false
@@ -2553,7 +2670,7 @@
       "id": "task-0335",
       "kind": "task",
       "label": "Updated Test Task",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-0335.md",
       "deleted": false,
       "archived": false
@@ -2634,7 +2751,7 @@
       "id": "task-3263",
       "kind": "task",
       "label": "Atomicity Task",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-3263.md",
       "deleted": false,
       "archived": false
@@ -2643,7 +2760,7 @@
       "id": "task-3264",
       "kind": "task",
       "label": "Generic Task",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs/planning/tasks/core/task-3264.md",
       "deleted": false,
       "archived": false
@@ -3854,6 +3971,15 @@
       "deleted": false,
       "archived": false
     },
+    "task-0007": {
+      "id": "task-0007",
+      "kind": "task",
+      "label": "Bad Parent Task",
+      "state": "draft",
+      "path": "docs/planning/tasks/task-0007.md",
+      "deleted": false,
+      "archived": false
+    },
     "wp-001": {
       "id": "wp-001",
       "kind": "wp",
@@ -3867,7 +3993,7 @@
       "id": "wp-0016",
       "kind": "wp",
       "label": "Phase 1: Config Schema",
-      "state": "ready",
+      "state": "done",
       "path": "docs/planning/work-packages/core/wp-0016-phase-1-config-schema.md",
       "deleted": false,
       "archived": false
@@ -3876,7 +4002,7 @@
       "id": "wp-0017",
       "kind": "wp",
       "label": "Phase 2: Core Infrastructure",
-      "state": "ready",
+      "state": "done",
       "path": "docs/planning/work-packages/core/wp-0017-phase-2-core-infrastructure.md",
       "deleted": false,
       "archived": false
@@ -4020,7 +4146,7 @@
       "id": "wp-010",
       "kind": "wp",
       "label": "Implement canonical guidance semantics",
-      "state": "draft",
+      "state": "done",
       "path": "docs/planning/work-packages/core/wp-010-implement-canonical-guidance-semantics.md",
       "deleted": false,
       "archived": false
@@ -4047,7 +4173,7 @@
       "id": "wp-013",
       "kind": "wp",
       "label": "Knowledge Component Improvements Work Package",
-      "state": "draft",
+      "state": "ready",
       "path": "docs/planning/work-packages/core/wp-013-knowledge-component-improvements-work-package.md",
       "deleted": false,
       "archived": false
@@ -4065,8 +4191,17 @@
       "id": "wp-015",
       "kind": "wp",
       "label": "Interoperability layer and state propagation implementation",
-      "state": "draft",
+      "state": "ready",
       "path": "docs/planning/work-packages/core/wp-015-interoperability-layer-and-state-propagation-implementation.md",
+      "deleted": false,
+      "archived": false
+    },
+    "wp-0001": {
+      "id": "wp-0001",
+      "kind": "wp",
+      "label": "Loose WP",
+      "state": "draft",
+      "path": "docs/planning/work-packages/wp-0001-loose-wp.md",
       "deleted": false,
       "archived": false
     }
