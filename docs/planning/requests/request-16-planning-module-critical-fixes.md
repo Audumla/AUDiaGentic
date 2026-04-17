@@ -19,10 +19,10 @@ open_questions:
 meta:
   request_type: feature
 standard_refs:
-- standard-0001
+- standard-1
 spec_refs:
-- spec-017
-- spec-018
+- spec-17
+- spec-18
 ---
 
 

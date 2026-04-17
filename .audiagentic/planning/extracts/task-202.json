@@ -1,0 +1,26 @@
+{
+  "item": {
+    "id": "task-202",
+    "label": "Refactor _find(), show(), and extract() onto lookup path",
+    "state": "done",
+    "summary": "Replace scan_items() calls in api._find(), ext_mgr.show(), and ext_mgr.extract() with the new lookup(id) resolver to eliminate O(n) full-repo scans for single-item reads",
+    "spec_ref": "spec-7",
+    "request_refs": [],
+    "standard_refs": [
+      "standard-5",
+      "standard-6"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-202-refactor-find-show-and-extract-onto-lookup-path.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-5",
+    "standard-6"
+  ],
+  "body": "\n\n\n\n\n\n# Description\n\nRefactor three internal single-item read paths to use `lookup(id)` from task-0201 instead of calling `scan_items()`:\n\n**`api._find(id_)`** \u2014 currently iterates all items from `scan_items()` to find one by id. Replace with `self.lookup(id_)`.\n\n**`ext_mgr.ExtractsMgr.show(id_)`** \u2014 currently calls `scan_items()`, builds a full dict keyed by id, then returns one entry. Replace with a direct `lookup(id_)` call and return the item's frontmatter.\n\n**`ext_mgr.ExtractsMgr.extract(id_)`** \u2014 currently calls `scan_items()` again, then calls `show()` internally (causing a triple scan). Replace with a single `lookup(id_)` call and build the extract result from that.\n\nNo changes to the public method signatures. The refactor is internal only.\n\n# Acceptance Criteria\n\n- `_find()`, `show()`, and `extract()` no longer call `scan_items()` for single-item reads\n- Behaviour is identical to before for all existing callers\n- All existing tests pass without modification\n- A test confirms that a single-item `show()` or `extract()` call does not trigger `scan_items()`\n\n# Notes\n\nDepends on task-0200 (lookup.json) and task-0201 (lookup/head helpers). Bulk operations \u2014 `validate()`, `index()`, `status()` \u2014 still use `scan_items()` and are not in scope here.\n"
+}

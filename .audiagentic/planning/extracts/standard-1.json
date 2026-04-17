@@ -1,0 +1,17 @@
+{
+  "item": {
+    "id": "standard-1",
+    "label": "Planning documentation and maintenance standard",
+    "state": "ready",
+    "summary": "Default standard for maintaining planning records and adjacent documentation as first-class, reviewable project assets.",
+    "kind": "standard",
+    "path": "docs/planning/standards/standard-1-planning-documentation-and-maintenance-standard.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n# Standard\n\nDefault standard for how planning records and adjacent documentation should be written, maintained, and kept current in AUDiaGentic-based projects.\n\n# Source Basis\n\nThis standard is derived from the Write the Docs guidance on docs-as-code, documentation principles, and style guidance, adapted for the repository's planning model.\n\nSources:\n\n- [Write the Docs \u2014 Docs as Code](https://www.writethedocs.org/guide/docs-as-code/)\n- [Write the Docs \u2014 Documentation Principles](https://www.writethedocs.org/guide/writing/docs-principles/)\n- [Write the Docs \u2014 Style Guide](https://www.writethedocs.org/style-guide/)\n\n# Requirements\n\n1. Planning records are maintained as versioned, reviewable text assets in the repository.\n2. Documentation updates should happen alongside the relevant planning or implementation change, not as an afterthought.\n3. Documentation must stay current. Incorrect documentation is treated as worse than missing documentation.\n4. Planning items must use clear, stable labels and summaries so humans and tools can identify them quickly.\n5. The scope, non-goals, and verification expectations for work should be visible in the planning record before implementation begins.\n6. Documentation should be structured for skimmability:\n\n   - clear headings\n   - concise sections\n   - explicit examples where useful\n   - separation between reference material and explanatory material\n\n7. Changes to documentation should follow the same quality expectations as code changes:\n\n   - version control\n   - review\n   - traceable ownership\n   - verification where practical\n\n# Default Rules\n\n- Prefer Markdown planning documents that are easy to diff and review.\n- Keep acceptance criteria and verification steps explicit.\n- Keep planning docs aligned with the actual repository structure and tool behavior.\n- Do not claim implementation completeness where only scaffolding or review prep exists.\n- Planning outputs (extracts, exports, reports) must be isolated from project source code and stored under a dedicated artifact root (e.g., `.audiagentic/planning/extracts/`) or external location. Never write planning artifacts into source directories.\n\n# Non-Goals\n\n- Defining execution workflow policy.\n- Replacing project-specific architecture decisions.\n- Forcing one universal prose style across all documentation surfaces.\n"
+}

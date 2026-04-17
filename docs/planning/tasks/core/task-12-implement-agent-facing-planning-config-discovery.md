@@ -7,8 +7,8 @@ summary: Add compact read-only config discovery so agents know valid planning ob
 domain: core
 spec_ref: spec-4
 standard_refs:
-- standard-0005
-- standard-0006
+- standard-5
+- standard-6
 ---
 
 

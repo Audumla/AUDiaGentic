@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-91",
+    "label": "[PKT-PRV-014](task-0091): Provider Rate Limiting",
+    "state": "draft",
+    "summary": "Implement provider rate limiting",
+    "spec_ref": "spec-12",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-91-pkt-prv-014-task-0091-provider-rate-limiting.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-014](task-0081): Provider Rate Limiting\n\n## Purpose\n\nImplement provider rate limiting.\n\n## Scope\n\n- Rate limit logic\n- Throttling\n- Retry\n\n## Implementation\n\n1. Implement limits\n2. Add throttling\n3. Add retry\n\n## Acceptance Criteria\n\n1. Limits work\n2. Throttling works\n3. Retry works\n"
+}

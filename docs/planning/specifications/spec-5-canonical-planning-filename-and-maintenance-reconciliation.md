@@ -8,8 +8,8 @@ request_refs:
 - request-31
 task_refs: []
 standard_refs:
-- standard-0006
-- standard-0005
+- standard-6
+- standard-5
 ---
 
 
