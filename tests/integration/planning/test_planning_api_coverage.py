@@ -401,6 +401,20 @@ class TestReconcile:
         api.reconcile()
         assert (root / ".audiagentic" / "planning" / "indexes" / "requests.json").exists()
 
+    def test_reconcile_normalizes_request_filename_to_slugged_shape(self, pr):
+        _, api = pr
+        req = api.new("request", label="My Request", summary="S", source="test")
+        api.reconcile()
+        updated = api.lookup(req.data["id"])
+        assert updated.path.name == f"{req.data['id']}-my-request.md"
+
+    def test_maintain_rebuilds_extracts(self, pr):
+        root, api = pr
+        req = api.new("request", label="R", summary="S", source="test")
+        result = api.maintain()
+        assert result["indexes_rebuilt"] is True
+        assert (root / ".audiagentic" / "planning" / "extracts" / f"{req.data['id']}.json").exists()
+
 
 # ===========================================================================
 # state() for request, plan, wp
@@ -844,6 +858,14 @@ class TestValidationCoverage:
         task.path.rename(bad_path)
         errors = api.validate()
         assert any("filename must be" in e for e in errors)
+
+    def test_validate_request_requires_slugged_filename(self, pr):
+        root, api = pr
+        req = api.new("request", label="My Request", summary="S", source="test")
+        bad_path = req.path.parent / f"{req.data['id']}.md"
+        req.path.rename(bad_path)
+        errors = api.validate()
+        assert any(f"filename must be {req.data['id']}-my-request.md" in e for e in errors)
 
 
 # ===========================================================================

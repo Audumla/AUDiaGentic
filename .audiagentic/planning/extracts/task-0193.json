@@ -6,7 +6,7 @@
     "summary": "Fix review_stub, report_stub, note_stub hook payloads to have correct structure",
     "spec_ref": "spec-003",
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0193.md",
+    "path": "docs/planning/tasks/core/task-0193-fix-hook-event-payloads.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,

@@ -1,19 +1,26 @@
 {
   "item": {
     "id": "task-0008",
-    "label": "Migrate Phase 5-6 docs (Discord overlay and migration hardening)",
-    "state": "draft",
-    "summary": "Convert Phase 5-6 implementation docs to planning objects with reference resolution",
-    "spec_ref": "spec-004",
-    "parent_task_ref": "task-0003",
+    "label": "Add unit test coverage for knowledge component modules",
+    "state": "done",
+    "summary": "Create unit tests for search, bootstrap, sync, config modules targeting 80%+ coverage",
+    "domain": "core",
+    "spec_ref": "wp-013",
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0008.md",
+    "path": "docs/planning/tasks/core/task-0008-add-unit-test-coverage-for-knowledge-component-modules.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
-  "body": "\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n\n\n\n# Description\\n\\nAdd comprehensive unit tests for core knowledge component modules:\\n\\n1. **search.py** (136 lines) \u2014 Test filter_by_metadata, search_pages, scoring\\n2. **bootstrap.py** (296 lines) \u2014 Test initialization, config loading, validation\\n3. **sync.py** (546 lines) \u2014 Test file watch, sync operations, event emission\\n4. **config.py** (311 lines) \u2014 Test config loading, schema validation, defaults\\n5. **models.py** (111 lines) \u2014 Test SearchResult, page models\\n\\nTarget: 40+ unit tests, 80%+ code coverage for these modules.\\n\\n# Acceptance Criteria\\n\\n- [ ] Unit tests added to tests/unit/knowledge/ (new directory)\\n- [ ] Test files: test_search.py, test_bootstrap.py, test_sync.py, test_config.py, test_models.py\\n- [ ] Each module has tests for main functions and edge cases\\n- [ ] Coverage report shows >80% for target modules\\n- [ ] Tests run clean with pytest\\n- [ ] No dependencies on external services (all mocked)\\n\\n# Notes\\n\\nDo not include tests for llm.py (leave for separate test work).\\nUse fixtures for file I/O and config setup.\\nSee standard-0006 for test structure expectations.\\n\"\n"
 }

@@ -1,0 +1,26 @@
+{
+  "item": {
+    "id": "task-13",
+    "label": "Implement canonical planning filename reconciliation",
+    "state": "ready",
+    "summary": "Make planning filename conventions config-driven, reconcile legacy files, repair references, and rebuild derived planning state through one maintenance path",
+    "domain": "core",
+    "spec_ref": "spec-5",
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-13-implement-canonical-planning-filename-reconciliation.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n\n\n\n\n# Objective\n\nImplement canonical planning filename reconciliation from config and expose one maintenance path that repairs references and rebuilds derived planning state.\n\n# Deliverables\n- Add config-owned canonical naming rules for planning filenames\n- Update creation path to emit canonical filenames for all supported planning kinds\n- Update reconcile/repair path to normalize legacy mixed-format files to canonical names\n- Include reference repair in maintenance flow\n- Expose one canonical API/MCP maintenance entry point for rebuild/cleanup\n- Ensure existing admin maintenance paths delegate to or align with the canonical path\n- Add tests for filename generation, migration, reference repair, and rebuild behavior\n# Acceptance Criteria\n1. New planning objects use canonical config-driven filenames automatically.\n2. Reconcile path normalizes legacy mixed-format filenames.\n3. Reference repair occurs as part of maintenance flow.\n4. Canonical maintenance flow rebuilds indexes/extracts/derived state cleanly.\n5. Existing maintenance/admin entry points do not diverge from canonical repair behavior.\n6. Tests cover migration and lookup behavior after reconciliation.\n# Implementation Notes\n\nUse config as source of truth for filename conventions.\nAvoid keeping separate implicit naming rules in create-path code and reconcile code.\n\nMaintenance flow should leave planning in a clean post-repair state, including:\n- canonical filenames\n- repaired refs\n- refreshed lookup/index artifacts\n- refreshed extracts/derived state where applicable\n- successful validate/verify results\n\nIf current `index`, `reconcile`, or internal rebuild paths overlap, consolidate around one canonical implementation path rather than adding more parallel cleanup logic.\n"
+}

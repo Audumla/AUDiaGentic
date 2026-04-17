@@ -1135,15 +1135,34 @@ def index(root: Path | None = None) -> None:
 def reconcile(root: Path | None = None) -> dict[str, Any]:
     """Reconcile planning state with filesystem.
 
+    Runs full canonical maintenance: filename reconciliation + derived state rebuild.
+
     Args:
         root: Optional project root. If None, uses current root.
 
     Returns:
-        Reconciliation result
+        Reconciliation result with renames and orphans.
     """
     project_root = root or _get_root()
     api = PlanningAPI(project_root)
     return api.reconcile()
+
+
+def clean_indexes(root: Path | None = None) -> dict[str, Any]:
+    """Clear and rebuild planning indexes only.
+
+    Cheaper than full reconcile/maintain. Does not touch filenames or extracts.
+    Use when lookup state is stale but planning docs are known-good.
+
+    Args:
+        root: Optional project root. If None, uses current root.
+
+    Returns:
+        Dict with indexes_rebuilt status.
+    """
+    project_root = root or _get_root()
+    api = PlanningAPI(project_root)
+    return api.clean_indexes()
 
 
 def show(id_: str, root: Path | None = None) -> dict[str, Any]:

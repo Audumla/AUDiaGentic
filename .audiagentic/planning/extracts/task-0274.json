@@ -2,7 +2,7 @@
   "item": {
     "id": "task-0274",
     "label": "Add validation for session_input --details-json",
-    "state": "draft",
+    "state": "completed",
     "summary": "Validate event data structure in CLI arguments",
     "request_refs": [
       "request-19"
@@ -12,7 +12,7 @@
       "standard-0006"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0274.md",
+    "path": "docs/planning/tasks/core/task-0274-add-validation-for-session-input-details-json.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -23,5 +23,5 @@
     "standard-0005",
     "standard-0006"
   ],
-  "body": "\n\n\nMissing argument validation for session_input command in channels/cli/main.py at line 132. The --details-json parameter accepts JSON without schema validation, violating standard-0005 (Verification). Add validation that: 1) details_json contains valid JSON structure, 2) The parsed JSON contains required event data fields (e.g., kind, label, summary), 3) Field types match expected schema (strings for text fields, boolean for flags, arrays for lists). Follow pattern from _load_json_argument function and use jsonschema library. Provide structured error messages with recovery guidance instead of generic errors. Document the validation requirements and provide example valid input format. Ensure validation is applied before any processing of the details data.\n"
+  "body": "\n\n\n## Completed Work\n\nAdded validation for `session_input --details-json` argument in `channels/cli/main.py`.\n\n### Changes Made:\n\n1. **Replaced direct `json.loads` with `_load_json_argument`**:\n   - Now uses the validated JSON loading function\n   - Consistent error handling with other JSON arguments\n\n2. **Added `_validate_session_input_details` function**:\n   - Validates details is a JSON object\n   - Type validation for known fields:\n     - `kind`: must be string\n     - `label`: must be string\n     - `summary`: must be string\n     - `metadata`: must be object\n     - `attachments`: must be array\n   - Comprehensive docstring with valid structure example\n\n3. **Added validation call in session-input command**:\n   - Validates details before processing\n   - Raises ValueError with specific field error if validation fails\n\n## Standards Compliance\n- **standard-0005**: Schema validation for CLI arguments\n- **standard-0008**: Comprehensive documentation and type hints\n\n## Testing\nValidation now properly handles:\n- Non-object JSON (ValueError: details must be a JSON object)\n- Invalid kind type (ValueError: details.kind must be a string)\n- Invalid label type (ValueError: details.label must be a string)\n- Invalid summary type (ValueError: details.summary must be a string)\n- Invalid metadata type (ValueError: details.metadata must be an object)\n- Invalid attachments type (ValueError: details.attachments must be an array)\n- None/missing details (skipped validation, passes None to tool)\n"
 }

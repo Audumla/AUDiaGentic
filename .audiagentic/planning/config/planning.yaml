@@ -2,6 +2,16 @@ planning:
   convention_version: 1
   default_profile: feature
   default_guidance: standard
+  naming:
+    # numeric_format: preserve_id means filenames use the ID exactly as stored in frontmatter.
+    # New items use raw integers (request-1, spec-5, task-12) — no zero padding.
+    # Legacy items retain their original padded IDs (spec-001, task-0001) to avoid collisions.
+    # reconcile/maintain renames files to match their frontmatter ID without renumbering.
+    numeric_format: preserve_id
+    # slug_policy: always means every filename includes a human-readable slug after the ID.
+    # canonical pattern: {id}-{slug}.md  e.g. request-31-reconcile-filename-conventions.md
+    slug_policy: always
+    default_pattern: "{id}-{slug}.md"
   
   # Config-driven kind definitions - add new kinds here without code changes
   kinds:
@@ -14,6 +24,7 @@ planning:
       standard_refs_inheritance: []
       required_fields: [id, label, state, summary]
       optional_fields: [profile, source, context, current_understanding, open_questions, guidance, request_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
+      filename_pattern: "{id}-{slug}.md"
       
     spec:
       dir: specifications
@@ -24,6 +35,7 @@ planning:
       standard_refs_inheritance: []
       required_fields: [id, label, state, summary, request_refs]
       optional_fields: [workflow, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
+      filename_pattern: "{id}-{slug}.md"
       
     plan:
       dir: plans
@@ -34,6 +46,7 @@ planning:
       standard_refs_inheritance: []
       required_fields: [id, label, state, summary]
       optional_fields: [workflow, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
+      filename_pattern: "{id}-{slug}.md"
       
     task:
       dir: tasks
@@ -48,6 +61,7 @@ planning:
           type: direct
       required_fields: [id, label, state, summary]
       optional_fields: [workflow, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by, spec_ref, parent_task_ref, target, packet_ref, request_refs]
+      filename_pattern: "{id}-{slug}.md"
       
     wp:
       dir: work-packages
@@ -68,6 +82,7 @@ planning:
                 - field: standard_refs
       required_fields: [id, label, state, summary, plan_ref]
       optional_fields: [workflow, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by, task_refs]
+      filename_pattern: "{id}-{slug}.md"
       
     standard:
       dir: standards
@@ -78,6 +93,7 @@ planning:
       standard_refs_inheritance: []
       required_fields: [id, label, state, summary]
       optional_fields: [meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
+      filename_pattern: "{id}-{slug}.md"
       
   dirs:
     base: docs/planning

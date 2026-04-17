@@ -2,7 +2,7 @@
   "item": {
     "id": "task-0235",
     "label": "Validate documentation",
-    "state": "draft",
+    "state": "cancelled",
     "summary": "Review and validate that the knowledge component documentation is well-written and accurate.",
     "spec_ref": "spec-014",
     "request_refs": [],
@@ -11,7 +11,7 @@
       "standard-0006"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0235.md",
+    "path": "docs/planning/tasks/core/task-0235-validate-documentation.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,5 +22,5 @@
     "standard-0005",
     "standard-0006"
   ],
-  "body": "\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+  "body": "\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\nCancelled on 2026-04-17 as a stale empty placeholder. The task contained no actionable acceptance criteria, and request closure was based on the implemented integration work rather than this shell record.\n"
 }
