@@ -1,7 +1,7 @@
 ---
 id: plan-011
 label: Knowledge Component Improvements Plan
-state: ready
+state: in_progress
 summary: Plan for implementing knowledge component improvements from critical review
 spec_refs:
 - spec-016
@@ -11,6 +11,7 @@ work_package_refs: []
 standard_refs:
 - standard-0006
 ---
+
 
 # Objectives
 
