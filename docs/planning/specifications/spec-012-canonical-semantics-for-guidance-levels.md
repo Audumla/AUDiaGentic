@@ -6,7 +6,7 @@ summary: Define what light, standard, and deep guidance levels mean in practice 
   planning depth, section requirements, acceptance criteria rigor, and implementation
   granularity
 request_refs:
-- request-013
+- request-13
 task_refs: []
 standard_refs:
 - standard-0006

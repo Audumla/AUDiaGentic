@@ -28,7 +28,7 @@ task_refs:
 
 # Objective
 
-Deliver the focused planning-core hardening slice defined by `request-006` and `spec-002`: relation-schema verification, delete safety, correct counter behavior, traceability, duplicate prevention, clearer validation feedback, and integration coverage.
+Deliver the focused planning-core hardening slice defined by `request-6` and `spec-002`: relation-schema verification, delete safety, correct counter behavior, traceability, duplicate prevention, clearer validation feedback, and integration coverage.
 
 # Scope of This Package
 

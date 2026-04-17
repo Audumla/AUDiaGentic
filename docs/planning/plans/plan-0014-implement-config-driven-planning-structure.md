@@ -6,7 +6,7 @@ summary: Plan to refactor planning module to use config-driven document structur
 spec_refs:
 - spec-0029
 request_refs:
-- request-0021
+- request-25
 work_package_refs:
 - ref: wp-0016
 - ref: wp-0017

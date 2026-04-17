@@ -3,9 +3,9 @@
     "id": "task-0298",
     "label": "req-0034",
     "state": "ready",
-    "summary": "Refactor request-0034 registry",
+    "summary": "Refactor request-34 registry",
     "request_refs": [
-      "request-019"
+      "request-19"
     ],
     "kind": "task",
     "path": "docs/planning/tasks/core/task-0298.md",
@@ -16,5 +16,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n# Description\n\nRefactor request-016 registry\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-019 code standards compliance cleanup.\n"
+  "body": "\n\n# Description\n\nRefactor request-16 registry\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
 }

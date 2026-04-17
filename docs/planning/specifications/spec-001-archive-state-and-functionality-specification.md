@@ -5,7 +5,7 @@ state: done
 summary: Define archive state workflow, state-based archive behavior, and filtering
   behavior
 request_refs:
-- request-004
+- request-4
 standard_refs:
 - standard-0006
 - standard-0005

@@ -5,7 +5,7 @@ state: implemented
 summary: Implementation specification for configurable event-driven knowledge updates
   using standard-0013 event subscription configuration format
 request_refs:
-- request-0043
+- request-43
 spec_refs:
 - spec-019
 - spec-020
@@ -298,7 +298,7 @@ All filters are ANDed together. Any filter section is ORed within that section.
 - `.audiagentic/knowledge/events/adapters.yml`
 - `.audiagentic/knowledge/events/handlers.yml`
 - `docs/knowledge/events/README.md`
-- `docs/planning/requests/request-0043.md`
+- `docs/planning/requests/request-43.md`
 - `docs/planning/specifications/spec-023-configurable-event-driven-knowledge-updates-implementation-specification.md`
 
 ## Modified
@@ -337,7 +337,7 @@ python -c "from src.audiagentic.knowledge.events import load_event_adapters; fro
 
 # Related Documents
 
-- **request-0043**: Configurable event-driven knowledge updates request
+- **request-43**: Configurable event-driven knowledge updates request
 - **standard-0013**: Event subscription configuration standard
 - **spec-019**: Interoperability event layer specification
 - **spec-020**: Planning state propagation over events specification

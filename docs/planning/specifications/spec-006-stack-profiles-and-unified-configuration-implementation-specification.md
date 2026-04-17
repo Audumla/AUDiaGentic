@@ -6,7 +6,7 @@ summary: Specification for the unified profile system enabling lightweight reque
   to specification or request to task workflows, optional planning overlay where allowed,
   and source field tracking
 request_refs:
-- request-009
+- request-9
 task_refs: []
 ---
 
@@ -27,7 +27,7 @@ In scope:
 
 Out of scope:
 
-- audience-level profile depth and narrative style tuning tracked separately by `request-008`
+- audience-level profile depth and narrative style tuning tracked separately by `request-8`
 - reinstating separate `stack_profile` and `request_profile` APIs
 - mandatory plan or work-package creation for all profile-driven requests
 

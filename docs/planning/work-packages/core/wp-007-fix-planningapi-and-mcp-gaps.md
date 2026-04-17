@@ -40,7 +40,7 @@ Bring the planning hardening work tracked under `spec-003` into a consistent sta
 
 # Inputs
 
-- `request-007`
+- `request-7`
 - `spec-003`
 - `tests/integration/planning/test_planning_api_coverage.py`
 - `tests/integration/planning/test_mcp_tool_calls.py`

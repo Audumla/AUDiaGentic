@@ -7,7 +7,7 @@
     "domain": "core",
     "spec_ref": "spec-020",
     "request_refs": [
-      "request-018"
+      "request-18"
     ],
     "standard_refs": [
       "standard-0005",
@@ -28,7 +28,7 @@
   "body": "\n\n# Description\n\nObserved on 2026-04-17 while updating planning records through the planning MCP layer. Automatic propagation attempted invalid parent transitions like `draft -> done` for parent items after child task state changes. Bus logs showed failures from `PlanningAPI.state()` rejecting the propagated transition. This task isolates the root-cause fix in propagation rule evaluation/application so automatic parent updates only request workflow-valid target states or step parents through valid intermediate states.\n\n# Acceptance Criteria\n\n- Reproduction exists for the observed invalid propagation path (`draft -> done` on parent items)\n- Propagation no longer requests workflow-invalid target transitions\n- Parent items either remain unchanged when no valid automatic transition exists, or move only through workflow-valid states\n- Regression test covers child state changes that previously triggered invalid parent transitions\n- MCP/planning edits that change child task states no longer emit propagation errors for this scenario\n\n# Notes\n\nRelated evidence: bus logs during 2026-04-17 planning updates showed `invalid transition draft -> done` raised from `src/audiagentic/planning/app/api.py:state()` via `src/audiagentic/planning/app/propagation.py:apply_propagation()`.\n",
   "related": {
     "request_refs": [
-      "request-018"
+      "request-18"
     ],
     "spec_ref": "spec-020"
   }

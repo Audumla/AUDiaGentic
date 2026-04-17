@@ -8,8 +8,8 @@ spec_refs:
 - spec-019
 - spec-020
 request_refs:
-- request-017
-- request-018
+- request-17
+- request-18
 work_package_refs:
 - ref: wp-0023
 standard_refs:
@@ -26,13 +26,13 @@ standard_refs:
 
 # Objectives
 
-1. Implement lightweight interoperability event layer (request-017, spec-019)
+1. Implement lightweight interoperability event layer (request-17, spec-019)
    - EventBus with explicit dependency injection (singleton for bootstrap)
    - Optional file persistence with crash recovery (V2)
    - Replay with opt-in dispatch (default: skip replayed events)
    - Single and multi-segment wildcards (* and **)
    - Threading-based async queue (not asyncio)
-2. Enable automatic state propagation across planning hierarchies (request-018, spec-020)
+2. Enable automatic state propagation across planning hierarchies (request-18, spec-020)
 3. Bridge legacy hooks to canonical events (task-0255, task-0262, task-0263)
 4. Provide CLI diagnostics and repair tools (task-0259, task-0265)
 5. Integrate with knowledge component for cross-component workflows (task-0254, task-0261)
@@ -76,8 +76,8 @@ standard_refs:
 ## Internal Dependencies
 - spec-019 must be `ready` before implementation starts ✅
 - spec-020 must be `ready` before implementation starts ✅
-- request-017 must be `distilled` ✅
-- request-018 must be `distilled` ✅
+- request-17 must be `distilled` ✅
+- request-18 must be `distilled` ✅
 
 ## External Dependencies
 - Knowledge component integration (task-0254, task-0261)
@@ -170,14 +170,14 @@ task-0248 through task-0264
 - [ ] AsyncQueue processes events in background (threading-based)
 - [ ] Wildcards: single-segment (*) and multi-segment (**)
 - [ ] Performance targets met with failure semantics (<50ms SYNC, <5ms ASYNC, ≥100/sec)
-- [ ] All 18 tasks from request-017 complete
+- [ ] All 18 tasks from request-17 complete
 
 ## AC-2: State Propagation Complete
 - [ ] Task→WP, WP→Plan, Plan→Spec propagation works
 - [ ] Configurable rules via state_propagation.yaml
 - [ ] Conflict resolution (blocked > in_progress > ready)
 - [ ] Rollback handling (task done→ready reverts WP)
-- [ ] All tasks from request-018 complete
+- [ ] All tasks from request-18 complete
 
 ## AC-3: Integration Complete
 - [ ] Planning emits events after state commits

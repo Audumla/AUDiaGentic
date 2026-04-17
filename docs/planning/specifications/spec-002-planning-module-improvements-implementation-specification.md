@@ -6,7 +6,7 @@ summary: Detailed implementation specification for relation-schema verification,
   delete, hard-delete counter safety, bidirectional request traceability, duplicate
   guards, validation feedback, and regression coverage
 request_refs:
-- request-006
+- request-6
 task_refs: []
 ---
 

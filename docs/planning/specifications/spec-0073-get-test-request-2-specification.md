@@ -4,7 +4,7 @@ label: Get Test Request 2 — Specification
 state: draft
 summary: Specification for Request for tm_get testing
 request_refs:
-- request-0025
+- request-25
 task_refs: []
 ---
 

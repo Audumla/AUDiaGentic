@@ -6,7 +6,7 @@
     "summary": "Align workflow states across request/spec/plan/task/wp with consistent transitions",
     "spec_ref": "spec-011",
     "request_refs": [
-      "request-012"
+      "request-12"
     ],
     "standard_refs": [
       "standard-0005",

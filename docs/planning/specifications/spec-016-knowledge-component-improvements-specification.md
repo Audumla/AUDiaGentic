@@ -4,7 +4,7 @@ label: Knowledge Component Improvements Specification
 state: ready
 summary: Specification for addressing critical review findings in knowledge component
 request_refs:
-- request-015
+- request-15
 task_refs: []
 standard_refs:
 - standard-0006
@@ -188,7 +188,7 @@ Maintain backward compatibility via aliases during transition.
 
 - [Critical Review Document](../../docs/knowledge/docs/CRITICAL_REVIEW.md)
 - [Knowledge System](../../docs/knowledge/pages/systems/system-knowledge.md)
-- [Integration Request](../requests/request-014.md)
+- [Integration Request](../requests/request-14.md)
 - [Integration Plan](../plans/plan-010-knowledge-component-integration-plan.md)
 
 # Notes

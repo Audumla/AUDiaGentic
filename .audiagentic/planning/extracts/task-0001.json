@@ -5,7 +5,7 @@
     "state": "draft",
     "summary": "Delete src/audiagentic/knowledge/hooks.py after migrating to event-driven architecture",
     "request_refs": [
-      "request-0001"
+      "request-21"
     ],
     "standard_refs": [
       "standard-0005",

@@ -49,7 +49,7 @@ The planning module is **functionally robust** with real tests, clean config-dri
 
 ## Planning Artifacts Created
 
-- **request-0034**: Planning Module Critical Fixes
+- **request-34**: Planning Module Critical Fixes
 - **spec-0054**: Critical Fixes Specification (7 requirements)
 - **plan-0019**: Critical Fixes Plan
 - **wp-0022**: Critical Fixes Work Package

@@ -5,7 +5,7 @@
     "state": "draft",
     "summary": "Implement event subscription for StatePropagationEngine to enable automatic state propagation across planning hierarchies",
     "request_refs": [
-      "request-020"
+      "request-20"
     ],
     "task_refs": [
       {

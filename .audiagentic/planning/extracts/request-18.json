@@ -1,0 +1,37 @@
+{
+  "item": {
+    "id": "request-18",
+    "label": "Automatic state propagation for planning hierarchies",
+    "state": "distilled",
+    "summary": "Implement automatic state transitions that propagate up planning hierarchies using interoperability layer events",
+    "source": "follow-up to request-35",
+    "guidance": "standard",
+    "current_understanding": "Building on request-35 (event mechanism), need automatic state propagation rules: WP\u2192in_progress when any task\u2192in_progress, WP\u2192done when all tasks\u2192done, Plan\u2192in_progress when any WP\u2192in_progress, Plan\u2192done when all WPs\u2192done, Spec\u2192in_progress when any plan\u2192in_progress, Spec\u2192done when all plans\u2192done. Rules should be configurable per workflow and respect blocking states (e.g., can't go to done if any child is blocked). Need to handle edge cases: manual state overrides, conflicting transitions, and state rollback scenarios. ",
+    "open_questions": [
+      "Should state propagation be immediate or batched?",
+      "How to handle manual state overrides vs automatic propagation?",
+      "What happens on state rollback (e.g., task done\u2192ready)?",
+      "Should propagation rules be workflow-specific or global?"
+    ],
+    "meta": {
+      "request_type": "enhancement"
+    },
+    "standard_refs": [
+      "standard-0001"
+    ],
+    "spec_refs": [
+      "spec-020"
+    ],
+    "kind": "request",
+    "path": "docs/planning/requests/request-18.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0001"
+  ],
+  "body": "\n\n\n\n\n# Understanding\n\nThis request builds on `request-17`. Once a shared event/interoperability layer exists, planning item states should propagate through the hierarchy automatically instead of relying on manual parent updates. The need is clear at the task, work package, plan, and specification levels, but the exact propagation contract belongs in the linked spec rather than in the request itself.\n\n# Open Questions\n\nNo open questions remain at the request level. The remaining rule and contract details belong in [spec-020](../specifications/spec-020-planning-state-propagation-over-events-specification.md).\n\n# Problem\n\nEven when child items progress correctly, parent items can remain stale until someone updates them manually. That creates avoidable maintenance work, inconsistent dashboards, and unreliable workflow signals for both humans and agents. Without automatic propagation, state stops being a trustworthy indicator of what is actually ready, blocked, in progress, or complete.\n\n# Desired Outcome\n\nAdd automatic, event-driven state propagation through the planning hierarchy so parent items stay aligned with meaningful child-state changes. The behavior should support configurable defaults, workflow-specific overrides, conflict handling, rollback-safe behavior, and continued manual control where needed. The exact propagation rules, metadata behavior, and configuration contract are defined in `spec-020`.\n\n# Constraints\n\n- This request depends on the interoperability event layer from `request-17` / `spec-019`.\n- Existing workflow/state-machine definitions must remain authoritative.\n- Manual state changes must remain supported.\n- Propagation must be disableable for debugging and controlled rollout.\n- The work must not retroactively rewrite existing planning records.\n\n# Non-Goals\n\n- Implementing the interoperability layer itself.\n- Redefining the planning workflow/state model.\n- Retrofitting historical records to match new propagation rules.\n\n# Compatibility\n\n- Existing manual `api.state()` usage should continue to work.\n- Existing hooks/automations should remain compatible during rollout.\n- Default behavior should remain predictable even when no explicit propagation config is present.\n\n# Verification Expectations\n\n- A meaningful child-state change updates the appropriate parent item automatically.\n- Propagation behaves correctly across task -> wp -> plan -> spec relationships.\n- Conflict resolution and rollback behavior are observable and testable.\n- Manual overrides remain possible without making automatic propagation unsafe or opaque.\n\n# Notes\nThis request is intentionally narrower than the underlying event-layer work. It depends on the event foundation from `request-17`, and its detailed rule set is owned by `spec-020`.\n\nAssessment on 2026-04-17: request remains valid and still open. Core propagation exists and planning now subscribes to `planning.item.state.changed`, but remaining work still includes knowledge-side integration hardening (`task-0254`, `task-0261`) and propagation audit/repair tooling (`task-0265`). Non-core deferred items were cancelled during this review.\n\nIsolation update on 2026-04-17: created `task-0006` to track an observed propagation defect where automatic parent updates attempted workflow-invalid transitions such as `draft -> done` during child-driven cascades. This is now part of the remaining request scope alongside audit/repair tooling and knowledge-handler follow-up.\n"
+}

@@ -6,7 +6,7 @@
     "summary": "Add guidance_levels section (light/standard/deep) to .audiagentic/planning/config/profiles.yaml with defaults, sections, and acceptance_criteria_depth",
     "spec_ref": "spec-010",
     "request_refs": [
-      "request-011"
+      "request-11"
     ],
     "standard_refs": [
       "standard-0005",

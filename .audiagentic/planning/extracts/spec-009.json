@@ -5,7 +5,7 @@
     "state": "ready",
     "summary": "Add lightweight regex-based detection of common secrets (AWS keys, API keys, passwords) in planning item body content; emit as non-blocking warnings during validation",
     "request_refs": [
-      "request-005"
+      "request-5"
     ],
     "task_refs": [
       {

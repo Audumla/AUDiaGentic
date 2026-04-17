@@ -6,7 +6,7 @@
     "summary": "Fix root discovery, add Pydantic schemas for operations, structured errors, and standard MCP types",
     "spec_ref": "spec-019",
     "request_refs": [
-      "request-017"
+      "request-17"
     ],
     "standard_refs": [
       "standard-0005",

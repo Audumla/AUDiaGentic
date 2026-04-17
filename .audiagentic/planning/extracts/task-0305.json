@@ -3,9 +3,9 @@
     "id": "task-0305",
     "label": "req-0041",
     "state": "ready",
-    "summary": "Refactor request-0041 standards review",
+    "summary": "Refactor request-41 standards review",
     "request_refs": [
-      "request-019"
+      "request-19"
     ],
     "kind": "task",
     "path": "docs/planning/tasks/core/task-0305.md",
@@ -16,5 +16,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n# Description\n\nRefactor request-019 standards review\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-019 code standards compliance cleanup.\n"
+  "body": "\n\n# Description\n\nRefactor request-19 standards review\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
 }

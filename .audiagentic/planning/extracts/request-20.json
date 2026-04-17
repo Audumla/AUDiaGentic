@@ -1,0 +1,37 @@
+{
+  "item": {
+    "id": "request-20",
+    "label": "Auto-state propagation with event subscription",
+    "state": "captured",
+    "summary": "Enable automatic state propagation across planning hierarchies via event subscription driven by workflow configuration",
+    "source": "user feedback on incomplete propagation implementation",
+    "guidance": "standard",
+    "current_understanding": "The StatePropagationEngine exists with config-driven rules in state_propagation.yaml, but it is never subscribed to planning.item.state.changed events. Events are published but nothing consumes them. Need event subscription logic that respects workflow configuration (enabled/disabled per workflow, per-kind, per-item).",
+    "open_questions": [
+      "Should subscription be global (one subscriber for all events) or per-workflow?",
+      "How should propagation failures be handled (retry, log, skip)?",
+      "Should propagation be synchronous (blocking) or asynchronous (background)?"
+    ],
+    "standard_refs": [
+      "standard-0001",
+      "standard-0005",
+      "standard-0006"
+    ],
+    "spec_refs": [
+      "spec-022"
+    ],
+    "kind": "request",
+    "path": "docs/planning/requests/request-20.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-0001",
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n\n\n\n\n# Understanding\n\nThe StatePropagationEngine exists with config-driven rules in state_propagation.yaml, but it is never subscribed to planning.item.state.changed events. Events are published but nothing consumes them. Need event subscription logic that respects workflow configuration (enabled/disabled per workflow, per-kind, per-item).\n\n# Open Questions\n\n- Should subscription be global (one subscriber for all events) or per-workflow?\n- How should propagation failures be handled (retry, log, skip)?\n- Should propagation be synchronous (blocking) or asynchronous (background)?\n# Notes\n\n\n# Understanding\n\nThe state propagation infrastructure is built but incomplete. The `StatePropagationEngine` exists with:\n- Config-driven rules in `.audiagentic/interoperability/state_propagation.yaml`\n- Per-workflow configuration (default, fast-track, conservative, documentation)\n- Per-kind and per-item override support\n- Validation logic for config correctness\n\nHowever, the engine is instantiated in `PlanningAPI.__init__()` but never subscribed to events. When `api.state()` publishes `planning.item.state.changed` events, nothing consumes them to trigger propagation.\n\n# Problem\n\nState propagation is manual and incomplete:\n1. **No event subscription**: The `StatePropagationEngine` sits idle after instantiation\n2. **No automatic triggering**: Propagation must be manually called via `engine.propagate()`\n3. **Config exists but unused**: Workflow configuration defines rules but they're never applied\n4. **Manual state maintenance**: Users must manually update parent states when children change\n\nThis defeats the purpose of the interoperability layer and forces manual state management across hierarchies.\n\n# Desired Outcome\n\nAutomatic state propagation that respects configuration:\n\n**Observable outcomes:**\n1. When a task transitions to `done`, its parent WP automatically evaluates propagation rules\n2. When all tasks in a WP are `done`, the WP transitions to `done` (if configured)\n3. Propagation cascades up: Task \u2192 WP \u2192 Plan \u2192 Spec \u2192 Request\n4. Workflow configuration controls behavior:\n   - `fast-track`: Aggressive propagation, synchronous mode\n   - `conservative`: Minimal propagation, opt-in per-item\n   - `documentation`: No propagation\n5. Per-item overrides in frontmatter can disable propagation for specific items\n6. Propagation failures are logged but don't break the original state change\n\n# Constraints\n\n- Must not break existing planning operations\n- Propagation failures must not rollback the original state change\n- Must respect per-item, per-kind, and per-workflow configuration\n- Cycle detection must prevent infinite propagation loops\n- Must work with both SYNC and ASYNC delivery modes\n- Python 3.10+ compatibility\n\n# Verification Expectations\n\n1. **Event subscription**: `StatePropagationEngine` subscribes to `planning.item.state.changed` events\n2. **Automatic propagation**: State changes trigger propagation without manual intervention\n3. **Config respect**: Workflow configuration controls propagation behavior\n4. **Cascade propagation**: Changes propagate up the full hierarchy when rules allow\n5. **Failure isolation**: Propagation failures don't break original state changes\n6. **Cycle detection**: Max depth prevents infinite loops\n7. **Per-item override**: Items can disable propagation via frontmatter\n"
+}

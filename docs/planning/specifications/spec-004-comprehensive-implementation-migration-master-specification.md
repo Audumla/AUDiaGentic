@@ -6,7 +6,7 @@ summary: 'Umbrella specification for complete migration of docs/implementation c
   to planning structure. Includes all 12 phases: Contracts & Scaffolding through Remaining
   Implementation Docs.'
 request_refs:
-- request-001
+- request-1
 task_refs: []
 ---
 

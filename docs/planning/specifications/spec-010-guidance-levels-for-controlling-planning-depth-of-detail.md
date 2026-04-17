@@ -6,7 +6,7 @@ summary: Specification for orthogonal guidance levels (light/standard/deep) that
   spec/task required sections, detail verbosity, and acceptance criteria depth independently
   of work-type profiles
 request_refs:
-- request-011
+- request-11
 task_refs: []
 standard_refs:
 - standard-0009
@@ -37,7 +37,7 @@ This enables the same workflow (e.g., feature→spec→task) to produce differen
 - Dynamic content generation based on guidance
 - Per-user or per-role guidance assignment
 
-# Decisions (from request-011)
+# Decisions (from request-11)
 
 ## Q1: Top-level field vs meta?
 **Decision**: Top-level field (`guidance: standard`)
@@ -220,7 +220,7 @@ Example: `--profile feature --guidance deep` creates request→spec→task with 
 
 # Notes
 
-This is orthogonal to stack-profiles (request-009). Stack profiles control execution topology (what objects get created). Guidance controls content depth (how detailed the output should be).
+This is orthogonal to stack-profiles (request-9). Stack profiles control execution topology (what objects get created). Guidance controls content depth (how detailed the output should be).
 
 They can be combined: `--profile feature --guidance deep` creates a feature workflow with deep, rigorous content.
 
