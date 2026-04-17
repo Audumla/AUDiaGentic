@@ -4,24 +4,33 @@ import json
 from pathlib import Path
 
 from ..fs.scan import scan_items
-from .util import slugify
+from .paths import Paths
 
 
 class Reconcile:
     def __init__(self, root: Path):
         self.root = root
+        self.paths = Paths(root)
 
     def run(self):
+        """Reconcile planning filenames to canonical pattern and report changes.
+
+        Returns:
+            Dict with 'renames' (list of {id, from, to}) and 'orphans' (attachment dirs with no item).
+        """
         items = scan_items(self.root)
+        renames = []
         for item in items:
-            if item.kind in {'request', 'task'}:
-                desired_name = f"{item.data['id']}.md"
-            else:
-                desired_name = f"{item.data['id']}-{slugify(item.data['label'])}.md"
+            desired_name = self.paths.filename_for(item.kind, item.data["id"], item.data["label"])
             desired = item.path.with_name(desired_name)
             if desired != item.path:
                 desired.parent.mkdir(parents=True, exist_ok=True)
                 item.path.rename(desired)
+                renames.append({
+                    "id": item.data["id"],
+                    "from": item.path.name,
+                    "to": desired_name,
+                })
         ids = {i.data['id'] for i in items}
         attach_root = self.root / 'docs/planning/attachments'
         orphans = []
@@ -32,4 +41,4 @@ class Reconcile:
         out = self.root / '.audiagentic/planning/meta/orphans.json'
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps({'orphans': orphans}, indent=2), encoding='utf-8')
-        return {'orphans': orphans}
+        return {'renames': renames, 'orphans': orphans}

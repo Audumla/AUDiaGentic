@@ -2,13 +2,13 @@
   "item": {
     "id": "task-0286",
     "label": "plan-0019",
-    "state": "ready",
+    "state": "cancelled",
     "summary": "Refactor plan-0019 drift detection",
     "request_refs": [
       "request-19"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0286.md",
+    "path": "docs/planning/tasks/core/task-0286-plan-0019.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,

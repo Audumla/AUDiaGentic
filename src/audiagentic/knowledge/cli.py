@@ -14,6 +14,14 @@ from .events import load_event_adapters, process_events, record_event_baseline, 
 from .hooks import evaluate_source, load_hooks
 from .importers import scaffold_page, seed_from_manifest
 from .index_maintenance import maintain_index_pages, refresh_index, validate_index_links
+from .lifecycle import (
+    accept_proposal,
+    apply_proposal,
+    get_proposal,
+    lifecycle_summary,
+    list_proposals,
+    reject_proposal,
+)
 from .llm import (
     answer_question,
     bootstrap_project_knowledge,
@@ -218,6 +226,28 @@ def main() -> None:
     if args.command == "show-event-adapters":
         _print(load_event_adapters(config), args.json)
         return
+    if args.command == "list-proposals":
+        _print(list_proposals(config, status=args.status), args.json)
+        return
+    if args.command == "get-proposal":
+        proposal = get_proposal(config, args.proposal_id)
+        if proposal is None:
+            print(f"Proposal not found: {args.proposal_id}", file=sys.stderr)
+            raise SystemExit(1)
+        _print(proposal, args.json)
+        return
+    if args.command == "proposal-summary":
+        _print(lifecycle_summary(config), args.json)
+        return
+    if args.command == "accept-proposal":
+        _print(accept_proposal(config, args.proposal_id, note=args.note), args.json)
+        return
+    if args.command == "reject-proposal":
+        _print(reject_proposal(config, args.proposal_id, note=args.note), args.json)
+        return
+    if args.command == "apply-proposal":
+        _print(apply_proposal(config, args.proposal_id, note=args.note), args.json)
+        return
     if args.command == "show-importer-registry":
         _print(load_importer_registry(config), args.json)
         return
@@ -365,6 +395,7 @@ def build_parser() -> argparse.ArgumentParser:
         "show-install-profiles",
         "show-capability-contract",
         "doctor",
+        "proposal-summary",
     ]
     for name in common_json_commands:
         p = sub.add_parser(name)
@@ -468,6 +499,29 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("apply-proposals")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("list-proposals")
+    p.add_argument("--status")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("get-proposal")
+    p.add_argument("proposal_id")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("accept-proposal")
+    p.add_argument("proposal_id")
+    p.add_argument("--note")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("reject-proposal")
+    p.add_argument("proposal_id")
+    p.add_argument("--note")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("apply-proposal")
+    p.add_argument("proposal_id")
+    p.add_argument("--note")
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("cleanup-lifecycle")

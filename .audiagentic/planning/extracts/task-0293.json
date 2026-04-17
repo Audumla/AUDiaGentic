@@ -2,13 +2,13 @@
   "item": {
     "id": "task-0293",
     "label": "wp-0023",
-    "state": "ready",
+    "state": "cancelled",
     "summary": "Refactor wp-0023 events",
     "request_refs": [
       "request-19"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0293.md",
+    "path": "docs/planning/tasks/core/task-0293-wp-0023.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,

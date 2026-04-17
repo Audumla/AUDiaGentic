@@ -6,7 +6,7 @@
     "summary": "Test schema compliance, soft delete, counter sync, and auto-references together",
     "spec_ref": "spec-002",
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0189.md",
+    "path": "docs/planning/tasks/core/task-0189-add-integration-tests-for-critical-fixes.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
