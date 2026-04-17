@@ -6,7 +6,7 @@
     "summary": "Add default_guidance field to .audiagentic/planning/config/planning.yaml, update Config class to load and provide default",
     "spec_ref": "spec-010",
     "request_refs": [
-      "request-011"
+      "request-11"
     ],
     "standard_refs": [
       "standard-0005",

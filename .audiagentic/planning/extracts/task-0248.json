@@ -6,7 +6,7 @@
     "summary": "Implement InProcessEventBus in bus.py satisfying EventBusProtocol: SYNC/ASYNC dispatch, single-segment wildcard pattern matching, subscriber isolation, cycle detection via propagation_depth and correlation_id",
     "spec_ref": "spec-019",
     "request_refs": [
-      "request-017"
+      "request-17"
     ],
     "standard_refs": [
       "standard-0005",

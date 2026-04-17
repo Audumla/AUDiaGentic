@@ -6,7 +6,7 @@
     "summary": "Scaffold src/audiagentic/interoperability/ package: protocol.py (EventBusProtocol, SubscriptionHandle, DeliveryMode), envelope.py, exceptions.py, config.py, adapters/__init__.py, and __init__.py with init_bus()/get_bus() factory \u2014 no singleton",
     "spec_ref": "spec-019",
     "request_refs": [
-      "request-017"
+      "request-17"
     ],
     "standard_refs": [
       "standard-0005",

@@ -45,4 +45,4 @@ standard_refs:
 
 # Notes
 
-Marked done on 2026-04-17 to align the work package with the already-completed guidance semantics tasks under `request-013`.
+Marked done on 2026-04-17 to align the work package with the already-completed guidance semantics tasks under `request-13`.

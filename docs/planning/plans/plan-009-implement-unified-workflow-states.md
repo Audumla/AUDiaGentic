@@ -7,7 +7,7 @@ summary: Align workflow states across all planning item types and implement casc
 spec_refs:
 - spec-011
 request_refs:
-- request-012
+- request-12
 work_package_refs: []
 standard_refs:
 - standard-0006

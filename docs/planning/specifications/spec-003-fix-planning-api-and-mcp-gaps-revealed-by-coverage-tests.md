@@ -6,7 +6,7 @@ summary: 'Implementation specification for 9 fixes: section-mode regex, wp move,
   TTL, hook payloads, batch meta, status shape, empty-list serialization, and root
   isolation'
 request_refs:
-- request-007
+- request-7
 task_refs:
 - ref: task-0227
 ---
@@ -16,7 +16,7 @@ task_refs:
 
 # Purpose
 
-Implement and verify the planning API and MCP fixes identified by the coverage-driven review in `request-007`, keeping the coverage suites as the primary evidence source for completion.
+Implement and verify the planning API and MCP fixes identified by the coverage-driven review in `request-7`, keeping the coverage suites as the primary evidence source for completion.
 
 # Scope
 

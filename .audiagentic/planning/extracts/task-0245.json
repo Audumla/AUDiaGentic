@@ -6,7 +6,7 @@
     "summary": "Add _visited parameter to effective_standard_refs() to prevent infinite loops on circular hierarchies",
     "spec_ref": "spec-018",
     "request_refs": [
-      "request-016"
+      "request-16"
     ],
     "standard_refs": [
       "standard-0005",

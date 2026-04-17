@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from ..fs.scan import scan_items
 from .config import Config
 from .util import body_has_section
+
+_ID_PATTERN = re.compile(r'^[a-z]+-\d+(-[a-z0-9]+)?$')
 
 
 class Validator:
@@ -90,6 +93,11 @@ class Validator:
             if item.data["id"] in ids:
                 errors.append(f"duplicate id: {item.data['id']}")
             ids.add(item.data["id"])
+
+            # Validate ID format: kind-integer with no padding
+            item_id = item.data["id"]
+            if not _ID_PATTERN.match(item_id):
+                errors.append(f"{item.path}: id '{item_id}' does not match format '<kind>-<integer>'")
 
             # Validate against config-driven field rules
             errors.extend(self._validate_item_against_config(item))

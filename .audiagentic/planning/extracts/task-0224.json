@@ -6,7 +6,7 @@
     "summary": "Create standard-0010.md with canonical definitions for light/standard/deep guidance levels including required sections, acceptance criteria depth, and implementation expectations",
     "spec_ref": "spec-012",
     "request_refs": [
-      "request-013"
+      "request-13"
     ],
     "standard_refs": [
       "standard-0005",

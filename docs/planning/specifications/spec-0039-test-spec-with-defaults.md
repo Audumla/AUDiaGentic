@@ -4,7 +4,7 @@ label: Test spec with defaults
 state: draft
 summary: Auto-apply standards-0005, 0006
 request_refs:
-- request-011
+- request-11
 task_refs: []
 standard_refs:
 - standard-0006

@@ -6,7 +6,7 @@
     "summary": "Create propagation logic that subscribes to planning.item.state.changed and cascades state changes up hierarchy",
     "spec_ref": "spec-020",
     "request_refs": [
-      "request-018"
+      "request-18"
     ],
     "standard_refs": [
       "standard-0005",

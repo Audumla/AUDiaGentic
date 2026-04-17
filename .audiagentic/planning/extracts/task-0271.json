@@ -5,7 +5,7 @@
     "state": "draft",
     "summary": "Document get_task_by_id function with type hints",
     "request_refs": [
-      "request-019"
+      "request-19"
     ],
     "standard_refs": [
       "standard-0005",

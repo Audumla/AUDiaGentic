@@ -196,27 +196,8 @@ class PlanningAPI:
             raise ValueError(f"cannot {action} archived item {item.data['id']}; restore it first")
 
     def _normalize_id(self, id_: str) -> str:
-        """Normalize ID format (e.g., request-41 → request-041)."""
-        parts = id_.split("-", 1)
-        if len(parts) != 2:
-            return id_
-
-        kind, num_part = parts
-        try:
-            num = int(num_part)
-            # Determine padding based on kind
-            if kind == "task":
-                return f"{kind}-000{num}"
-            elif kind in ("standard",):
-                # Check if has suffix like standard-0010-python
-                if "-" in num_part:
-                    return id_  # Keep as-is
-                return f"{kind}-00{num}"
-            else:
-                # request, spec, plan, wp use 3-digit padding
-                return f"{kind}-{num:03d}"
-        except ValueError:
-            return id_
+        """IDs stored as-is, no padding normalization."""
+        return id_
 
     def _find_similar_ids(self, id_: str) -> list[str]:
         """Find IDs similar to the requested one, sorted by numeric proximity."""

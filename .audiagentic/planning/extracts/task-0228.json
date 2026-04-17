@@ -6,7 +6,7 @@
     "summary": "When a request is archived, cascade to all specs/tasks/WPs that have no other active request refs",
     "spec_ref": "spec-011",
     "request_refs": [
-      "request-012"
+      "request-12"
     ],
     "standard_refs": [
       "standard-0005",

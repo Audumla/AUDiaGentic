@@ -4,7 +4,7 @@ label: SpecX
 state: draft
 summary: SpecX
 request_refs:
-- request-0004
+- request-24
 task_refs: []
 standard_refs:
 - standard-0006
