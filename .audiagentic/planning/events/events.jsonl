@@ -3186,3 +3186,13 @@
 {"ts": "2026-04-17T13:31:28.899873+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
 {"ts": "2026-04-17T13:31:28.907833+00:00", "event": "planning.item.created", "id": "spec-0011", "kind": "spec", "path": "docs\\planning\\specifications\\spec-0011-precise-knowledge-proposal-targeting-and-classification.md"}
 {"ts": "2026-04-17T13:34:12.846412+00:00", "event": "planning.maintained", "renames": 363, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 422, "extracts_skipped": 30}
+{"ts": "2026-04-17T13:35:08.487007+00:00", "event": "planning.item.updated", "id": "plan-0004", "kind": "plan"}
+{"ts": "2026-04-17T13:35:08.843955+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T13:35:08.852377+00:00", "event": "planning.item.created", "id": "plan-0004", "kind": "plan", "path": "docs\\planning\\plans\\plan-0004-knowledge-proposal-targeting-and-classification.md"}
+{"ts": "2026-04-17T13:35:12.172598+00:00", "event": "planning.item.created", "id": "task-0014", "kind": "task", "path": "docs\\planning\\tasks\\core\\task-0014.md"}
+{"ts": "2026-04-17T13:35:12.915253+00:00", "event": "planning.item.created", "id": "task-0015", "kind": "task", "path": "docs\\planning\\tasks\\core\\task-0015.md"}
+{"ts": "2026-04-17T13:35:13.551021+00:00", "event": "planning.item.created", "id": "task-0016", "kind": "task", "path": "docs\\planning\\tasks\\core\\task-0016.md"}
+{"ts": "2026-04-17T13:35:14.267059+00:00", "event": "planning.item.created", "id": "task-0017", "kind": "task", "path": "docs\\planning\\tasks\\core\\task-0017.md"}
+{"ts": "2026-04-17T13:35:14.839837+00:00", "event": "planning.item.created", "id": "task-0018", "kind": "task", "path": "docs\\planning\\tasks\\core\\task-0018.md"}
+{"ts": "2026-04-17T13:35:15.466029+00:00", "event": "planning.item.created", "id": "task-0019", "kind": "task", "path": "docs\\planning\\tasks\\core\\task-0019.md"}
+{"ts": "2026-04-17T13:35:30.379774+00:00", "event": "planning.maintained", "renames": 369, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 429, "extracts_skipped": 30}

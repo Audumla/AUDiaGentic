@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-17T13:34:02.955291+00:00",
+  "generated_at": "2026-04-17T13:35:20.317126+00:00",
   "items": [
     {
       "id": "plan-0001",
@@ -19,6 +19,12 @@
       "label": "Plan With Request",
       "state": "draft",
       "path": "docs\\planning\\plans\\plan-0003-plan-with-request.md"
+    },
+    {
+      "id": "plan-0004",
+      "label": "Knowledge proposal targeting and classification",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-0004-knowledge-proposal-targeting-and-classification.md"
     },
     {
       "id": "plan-0021",
