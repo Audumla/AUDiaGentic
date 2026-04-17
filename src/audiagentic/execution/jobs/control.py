@@ -20,9 +20,10 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from audiagentic.execution.jobs.state_machine import TERMINAL_STATES, transition_and_persist
 from audiagentic.foundation.contracts.errors import AudiaGenticError

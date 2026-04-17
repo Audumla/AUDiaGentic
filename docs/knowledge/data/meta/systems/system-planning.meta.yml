@@ -1,0 +1,12 @@
+id: system-planning
+title: Planning System
+type: system
+status: active
+summary: Current-state documentation of the AUDiaGentic planning system for managing requests, specs,
+  plans, tasks, and work packages.
+owners:
+- core-team
+tags: []
+related: []
+updated_at: '2026-04-17T03:27:01.046424+00:00'
+source_refs: []

@@ -2822,3 +2822,240 @@
 {"ts": "2026-04-15T10:14:16.726747+00:00", "event": "planning.item.created", "id": "request-0027", "kind": "request", "path": "docs\\planning\\requests\\request-0027.md"}
 {"ts": "2026-04-15T10:14:17.046915+00:00", "event": "planning.item.created", "id": "spec-0079", "kind": "spec", "path": "docs\\planning\\specifications\\spec-0079-generic-spec.md"}
 {"ts": "2026-04-15T10:14:17.299783+00:00", "event": "planning.item.created", "id": "task-3264", "kind": "task", "path": "docs\\planning\\tasks\\core\\task-3264.md"}
+{"ts": "2026-04-15T14:48:09.979318+00:00", "event": "planning.item.updated", "id": "request-0001", "kind": "request"}
+{"ts": "2026-04-15T14:48:10.435164+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-15T14:48:10.445343+00:00", "event": "planning.item.created", "id": "request-0001", "kind": "request", "path": "docs\\planning\\requests\\request-0001.md"}
+{"ts": "2026-04-15T14:48:47.222476+00:00", "event": "planning.item.updated", "id": "task-0001", "kind": "task"}
+{"ts": "2026-04-15T14:48:47.669431+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-15T14:48:47.678146+00:00", "event": "planning.item.created", "id": "task-0001", "kind": "task", "path": "docs\\planning\\tasks\\core\\task-0001.md"}
+{"ts": "2026-04-15T14:49:07.345765+00:00", "event": "planning.item.updated", "id": "task-0002", "kind": "task"}
+{"ts": "2026-04-15T14:49:07.809703+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-15T14:49:07.819285+00:00", "event": "planning.item.created", "id": "task-0002", "kind": "task", "path": "docs\\planning\\tasks\\core\\task-0002.md"}
+{"ts": "2026-04-15T14:49:25.914670+00:00", "event": "planning.item.updated", "id": "task-0003", "kind": "task"}
+{"ts": "2026-04-15T14:49:26.398862+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-15T14:49:26.407405+00:00", "event": "planning.item.created", "id": "task-0003", "kind": "task", "path": "docs\\planning\\tasks\\core\\task-0003.md"}
+{"ts": "2026-04-15T14:49:45.546432+00:00", "event": "planning.item.updated", "id": "task-0004", "kind": "task"}
+{"ts": "2026-04-15T14:49:46.027774+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-15T14:49:46.036627+00:00", "event": "planning.item.created", "id": "task-0004", "kind": "task", "path": "docs\\planning\\tasks\\core\\task-0004.md"}
+{"ts": "2026-04-15T14:50:06.345331+00:00", "event": "planning.item.updated", "id": "task-0005", "kind": "task"}
+{"ts": "2026-04-15T14:50:06.799790+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-15T14:50:06.809977+00:00", "event": "planning.item.created", "id": "task-0005", "kind": "task", "path": "docs\\planning\\tasks\\core\\task-0005.md"}
+{"ts": "2026-04-17T06:01:29.120001+00:00", "event": "planning.item.state.changed", "id": "task-0330", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-17T06:01:29.329573+00:00", "event": "planning.item.state.changed", "id": "wp-0017", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-17T06:01:29.949628+00:00", "event": "planning.item.state.changed", "id": "task-0330", "old_state": "in_progress", "new_state": "done"}
+{"ts": "2026-04-17T06:01:30.544674+00:00", "event": "planning.item.updated", "id": "task-0330", "kind": "task"}
+{"ts": "2026-04-17T06:01:30.915233+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:02.162661+00:00", "event": "request.superseded", "id": "request-0001", "old_state": "captured", "new_state": "superseded"}
+{"ts": "2026-04-17T06:03:07.412237+00:00", "event": "planning.item.state.changed", "id": "request-0001", "old_state": "captured", "new_state": "superseded"}
+{"ts": "2026-04-17T06:03:07.629480+00:00", "event": "planning.item.updated", "id": "request-0001", "kind": "request"}
+{"ts": "2026-04-17T06:03:07.999692+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:08.240936+00:00", "event": "planning.item.state.changed", "id": "spec-0077", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:03:08.469316+00:00", "event": "planning.item.updated", "id": "spec-0077", "kind": "spec"}
+{"ts": "2026-04-17T06:03:08.820950+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:09.070187+00:00", "event": "planning.item.state.changed", "id": "task-0001", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:03:09.291847+00:00", "event": "planning.item.updated", "id": "task-0001", "kind": "task"}
+{"ts": "2026-04-17T06:03:09.663290+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:09.911034+00:00", "event": "planning.item.state.changed", "id": "task-0002", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:03:10.158308+00:00", "event": "planning.item.updated", "id": "task-0002", "kind": "task"}
+{"ts": "2026-04-17T06:03:10.504176+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:10.758278+00:00", "event": "planning.item.state.changed", "id": "task-0003", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:03:10.983217+00:00", "event": "planning.item.updated", "id": "task-0003", "kind": "task"}
+{"ts": "2026-04-17T06:03:11.336618+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:11.586459+00:00", "event": "planning.item.state.changed", "id": "task-0004", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:03:11.823047+00:00", "event": "planning.item.updated", "id": "task-0004", "kind": "task"}
+{"ts": "2026-04-17T06:03:12.179757+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:12.422245+00:00", "event": "planning.item.state.changed", "id": "task-0005", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:03:12.655726+00:00", "event": "planning.item.updated", "id": "task-0005", "kind": "task"}
+{"ts": "2026-04-17T06:03:13.004381+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:13.247627+00:00", "event": "planning.item.state.changed", "id": "task-3263", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:03:13.482022+00:00", "event": "planning.item.updated", "id": "task-3263", "kind": "task"}
+{"ts": "2026-04-17T06:03:13.840740+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:14.094462+00:00", "event": "planning.item.state.changed", "id": "request-0021", "old_state": "captured", "new_state": "distilled"}
+{"ts": "2026-04-17T06:03:14.349946+00:00", "event": "planning.item.updated", "id": "request-0021", "kind": "request"}
+{"ts": "2026-04-17T06:03:14.728603+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:14.986685+00:00", "event": "planning.item.state.changed", "id": "task-0331", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-17T06:03:17.109075+00:00", "event": "planning.item.state.changed", "id": "task-0331", "old_state": "in_progress", "new_state": "done"}
+{"ts": "2026-04-17T06:03:17.295232+00:00", "event": "planning.item.state.changed", "id": "wp-0017", "old_state": "in_progress", "new_state": "done"}
+{"ts": "2026-04-17T06:03:19.593740+00:00", "event": "planning.item.updated", "id": "task-0331", "kind": "task"}
+{"ts": "2026-04-17T06:03:19.964986+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:25.649201+00:00", "event": "planning.item.state.changed", "id": "request-013", "old_state": "captured", "new_state": "closed"}
+{"ts": "2026-04-17T06:03:25.918295+00:00", "event": "planning.item.updated", "id": "request-013", "kind": "request"}
+{"ts": "2026-04-17T06:03:26.268223+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:26.520767+00:00", "event": "planning.item.state.changed", "id": "spec-012", "old_state": "draft", "new_state": "ready"}
+{"ts": "2026-04-17T06:03:26.776654+00:00", "event": "planning.item.state.changed", "id": "spec-012", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-17T06:03:27.060975+00:00", "event": "planning.item.state.changed", "id": "spec-012", "old_state": "in_progress", "new_state": "done"}
+{"ts": "2026-04-17T06:03:27.375020+00:00", "event": "planning.item.updated", "id": "spec-012", "kind": "spec"}
+{"ts": "2026-04-17T06:03:27.724756+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:27.960061+00:00", "event": "planning.item.state.changed", "id": "plan-008", "old_state": "draft", "new_state": "ready"}
+{"ts": "2026-04-17T06:03:28.231502+00:00", "event": "planning.item.state.changed", "id": "plan-008", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-17T06:03:28.521760+00:00", "event": "planning.item.state.changed", "id": "plan-008", "old_state": "in_progress", "new_state": "done"}
+{"ts": "2026-04-17T06:03:28.820430+00:00", "event": "planning.item.updated", "id": "plan-008", "kind": "plan"}
+{"ts": "2026-04-17T06:03:29.173859+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:29.428759+00:00", "event": "planning.item.state.changed", "id": "wp-010", "old_state": "draft", "new_state": "ready"}
+{"ts": "2026-04-17T06:03:29.701578+00:00", "event": "planning.item.state.changed", "id": "wp-010", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-17T06:03:29.997568+00:00", "event": "planning.item.state.changed", "id": "wp-010", "old_state": "in_progress", "new_state": "review"}
+{"ts": "2026-04-17T06:03:30.276393+00:00", "event": "planning.item.state.changed", "id": "wp-010", "old_state": "review", "new_state": "done"}
+{"ts": "2026-04-17T06:03:30.578863+00:00", "event": "planning.item.updated", "id": "wp-010", "kind": "wp"}
+{"ts": "2026-04-17T06:03:30.938701+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:36.590475+00:00", "event": "planning.item.state.changed", "id": "request-014", "old_state": "captured", "new_state": "closed"}
+{"ts": "2026-04-17T06:03:36.870189+00:00", "event": "planning.item.updated", "id": "request-014", "kind": "request"}
+{"ts": "2026-04-17T06:03:37.235159+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:37.479685+00:00", "event": "planning.item.state.changed", "id": "spec-013", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:03:37.744189+00:00", "event": "planning.item.updated", "id": "spec-013", "kind": "spec"}
+{"ts": "2026-04-17T06:03:38.109079+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:38.348261+00:00", "event": "planning.item.state.changed", "id": "spec-014", "old_state": "draft", "new_state": "ready"}
+{"ts": "2026-04-17T06:03:38.629377+00:00", "event": "planning.item.state.changed", "id": "spec-014", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-17T06:03:38.937088+00:00", "event": "planning.item.state.changed", "id": "spec-014", "old_state": "in_progress", "new_state": "done"}
+{"ts": "2026-04-17T06:03:39.269914+00:00", "event": "planning.item.updated", "id": "spec-014", "kind": "spec"}
+{"ts": "2026-04-17T06:03:39.646639+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:39.883824+00:00", "event": "planning.item.state.changed", "id": "task-0235", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:03:40.156814+00:00", "event": "planning.item.updated", "id": "task-0235", "kind": "task"}
+{"ts": "2026-04-17T06:03:40.517251+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:46.260770+00:00", "event": "planning.item.state.changed", "id": "request-016", "old_state": "captured", "new_state": "closed"}
+{"ts": "2026-04-17T06:03:46.558322+00:00", "event": "planning.item.updated", "id": "request-016", "kind": "request"}
+{"ts": "2026-04-17T06:03:46.910676+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:47.147308+00:00", "event": "planning.item.state.changed", "id": "spec-017", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:03:47.427825+00:00", "event": "planning.item.updated", "id": "spec-017", "kind": "spec"}
+{"ts": "2026-04-17T06:03:47.796577+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:48.046407+00:00", "event": "planning.item.state.changed", "id": "spec-018", "old_state": "draft", "new_state": "ready"}
+{"ts": "2026-04-17T06:03:48.357486+00:00", "event": "planning.item.state.changed", "id": "spec-018", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-17T06:03:48.685930+00:00", "event": "planning.item.state.changed", "id": "spec-018", "old_state": "in_progress", "new_state": "done"}
+{"ts": "2026-04-17T06:03:49.068759+00:00", "event": "planning.item.updated", "id": "spec-018", "kind": "spec"}
+{"ts": "2026-04-17T06:03:49.444799+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:49.703884+00:00", "event": "planning.item.state.changed", "id": "plan-012", "old_state": "draft", "new_state": "ready"}
+{"ts": "2026-04-17T06:03:50.004228+00:00", "event": "planning.item.state.changed", "id": "plan-012", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-17T06:03:50.347943+00:00", "event": "planning.item.state.changed", "id": "plan-012", "old_state": "in_progress", "new_state": "done"}
+{"ts": "2026-04-17T06:03:50.698994+00:00", "event": "planning.item.updated", "id": "plan-012", "kind": "plan"}
+{"ts": "2026-04-17T06:03:51.063361+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:51.314022+00:00", "event": "planning.item.updated", "id": "request-018", "kind": "request"}
+{"ts": "2026-04-17T06:03:51.670910+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:51.923119+00:00", "event": "planning.item.state.changed", "id": "task-0259", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:03:52.237509+00:00", "event": "planning.item.updated", "id": "task-0259", "kind": "task"}
+{"ts": "2026-04-17T06:03:52.603622+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:52.853235+00:00", "event": "planning.item.state.changed", "id": "task-0260", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:03:53.167401+00:00", "event": "planning.item.updated", "id": "task-0260", "kind": "task"}
+{"ts": "2026-04-17T06:03:53.525352+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:53.771327+00:00", "event": "request.superseded", "id": "request-020", "old_state": "captured", "new_state": "superseded"}
+{"ts": "2026-04-17T06:03:59.027022+00:00", "event": "planning.item.state.changed", "id": "request-020", "old_state": "captured", "new_state": "superseded"}
+{"ts": "2026-04-17T06:03:59.357487+00:00", "event": "planning.item.updated", "id": "request-020", "kind": "request"}
+{"ts": "2026-04-17T06:03:59.719008+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:03:59.966430+00:00", "event": "planning.item.state.changed", "id": "spec-022", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:04:00.269055+00:00", "event": "planning.item.updated", "id": "spec-022", "kind": "spec"}
+{"ts": "2026-04-17T06:04:00.642294+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:28.174037+00:00", "event": "planning.item.state.changed", "id": "task-0329", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-17T06:18:28.332669+00:00", "event": "planning.item.state.changed", "id": "wp-0016", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-17T06:18:28.819914+00:00", "event": "planning.item.state.changed", "id": "task-0329", "old_state": "in_progress", "new_state": "done"}
+{"ts": "2026-04-17T06:18:28.969935+00:00", "event": "planning.item.state.changed", "id": "wp-0016", "old_state": "in_progress", "new_state": "done"}
+{"ts": "2026-04-17T06:18:29.631939+00:00", "event": "planning.item.updated", "id": "task-0329", "kind": "task"}
+{"ts": "2026-04-17T06:18:29.936147+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:30.153317+00:00", "event": "planning.item.state.changed", "id": "spec-0029", "old_state": "draft", "new_state": "ready"}
+{"ts": "2026-04-17T06:18:30.336481+00:00", "event": "planning.item.updated", "id": "spec-0029", "kind": "spec"}
+{"ts": "2026-04-17T06:18:30.627923+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:30.846073+00:00", "event": "planning.item.state.changed", "id": "request-015", "old_state": "captured", "new_state": "distilled"}
+{"ts": "2026-04-17T06:18:31.034602+00:00", "event": "planning.item.updated", "id": "request-015", "kind": "request"}
+{"ts": "2026-04-17T06:18:31.321239+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:31.574547+00:00", "event": "planning.item.state.changed", "id": "spec-016", "old_state": "draft", "new_state": "ready"}
+{"ts": "2026-04-17T06:18:31.781109+00:00", "event": "planning.item.updated", "id": "spec-016", "kind": "spec"}
+{"ts": "2026-04-17T06:18:32.077368+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:32.298295+00:00", "event": "planning.item.state.changed", "id": "plan-011", "old_state": "draft", "new_state": "ready"}
+{"ts": "2026-04-17T06:18:32.491249+00:00", "event": "planning.item.updated", "id": "plan-011", "kind": "plan"}
+{"ts": "2026-04-17T06:18:32.780686+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:32.985089+00:00", "event": "planning.item.state.changed", "id": "wp-013", "old_state": "draft", "new_state": "ready"}
+{"ts": "2026-04-17T06:18:33.182325+00:00", "event": "planning.item.updated", "id": "wp-013", "kind": "wp"}
+{"ts": "2026-04-17T06:18:33.475497+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:33.676167+00:00", "event": "planning.item.state.changed", "id": "task-0254", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-17T06:18:35.119569+00:00", "event": "planning.item.state.changed", "id": "task-0254", "old_state": "in_progress", "new_state": "done"}
+{"ts": "2026-04-17T06:18:37.220569+00:00", "event": "planning.item.updated", "id": "task-0254", "kind": "task"}
+{"ts": "2026-04-17T06:18:37.510997+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:37.719671+00:00", "event": "planning.item.state.changed", "id": "spec-019", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-17T06:18:37.959003+00:00", "event": "planning.item.updated", "id": "spec-019", "kind": "spec"}
+{"ts": "2026-04-17T06:18:38.247373+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:38.466185+00:00", "event": "planning.item.state.changed", "id": "spec-020", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-17T06:18:38.726445+00:00", "event": "planning.item.updated", "id": "spec-020", "kind": "spec"}
+{"ts": "2026-04-17T06:18:39.021219+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:39.230493+00:00", "event": "planning.item.state.changed", "id": "plan-013", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-17T06:18:39.482861+00:00", "event": "planning.item.updated", "id": "plan-013", "kind": "plan"}
+{"ts": "2026-04-17T06:18:39.777570+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:39.990044+00:00", "event": "planning.item.state.changed", "id": "wp-015", "old_state": "draft", "new_state": "ready"}
+{"ts": "2026-04-17T06:18:40.214378+00:00", "event": "planning.item.updated", "id": "wp-015", "kind": "wp"}
+{"ts": "2026-04-17T06:18:40.526589+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:40.730917+00:00", "event": "request.superseded", "id": "request-0023", "old_state": "captured", "new_state": "superseded"}
+{"ts": "2026-04-17T06:18:44.981019+00:00", "event": "planning.item.state.changed", "id": "request-0023", "old_state": "captured", "new_state": "superseded"}
+{"ts": "2026-04-17T06:18:45.201076+00:00", "event": "planning.item.updated", "id": "request-0023", "kind": "request"}
+{"ts": "2026-04-17T06:18:45.492180+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:45.694805+00:00", "event": "planning.item.state.changed", "id": "spec-0030", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:18:45.928451+00:00", "event": "planning.item.updated", "id": "spec-0030", "kind": "spec"}
+{"ts": "2026-04-17T06:18:46.220998+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:46.447541+00:00", "event": "planning.item.state.changed", "id": "spec-0031", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:18:46.687060+00:00", "event": "planning.item.updated", "id": "spec-0031", "kind": "spec"}
+{"ts": "2026-04-17T06:18:46.978431+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:47.184767+00:00", "event": "planning.item.state.changed", "id": "task-0335", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:18:47.419512+00:00", "event": "planning.item.updated", "id": "task-0335", "kind": "task"}
+{"ts": "2026-04-17T06:18:47.709041+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:47.919062+00:00", "event": "request.superseded", "id": "request-0024", "old_state": "captured", "new_state": "superseded"}
+{"ts": "2026-04-17T06:18:52.202061+00:00", "event": "planning.item.state.changed", "id": "request-0024", "old_state": "captured", "new_state": "superseded"}
+{"ts": "2026-04-17T06:18:52.442791+00:00", "event": "planning.item.updated", "id": "request-0024", "kind": "request"}
+{"ts": "2026-04-17T06:18:52.736553+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:52.945172+00:00", "event": "planning.item.state.changed", "id": "spec-0071", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:18:53.185606+00:00", "event": "planning.item.updated", "id": "spec-0071", "kind": "spec"}
+{"ts": "2026-04-17T06:18:53.481325+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:53.692355+00:00", "event": "planning.item.state.changed", "id": "spec-0072", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:18:53.936880+00:00", "event": "planning.item.updated", "id": "spec-0072", "kind": "spec"}
+{"ts": "2026-04-17T06:18:54.332895+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:54.541884+00:00", "event": "request.superseded", "id": "request-0027", "old_state": "captured", "new_state": "superseded"}
+{"ts": "2026-04-17T06:18:58.807914+00:00", "event": "planning.item.state.changed", "id": "request-0027", "old_state": "captured", "new_state": "superseded"}
+{"ts": "2026-04-17T06:18:59.076945+00:00", "event": "planning.item.updated", "id": "request-0027", "kind": "request"}
+{"ts": "2026-04-17T06:18:59.509665+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:18:59.998012+00:00", "event": "planning.item.state.changed", "id": "spec-0078", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:19:00.512341+00:00", "event": "planning.item.updated", "id": "spec-0078", "kind": "spec"}
+{"ts": "2026-04-17T06:19:01.201633+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:19:01.676714+00:00", "event": "planning.item.state.changed", "id": "spec-0079", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:19:02.307753+00:00", "event": "planning.item.updated", "id": "spec-0079", "kind": "spec"}
+{"ts": "2026-04-17T06:19:03.038669+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:19:03.516594+00:00", "event": "planning.item.state.changed", "id": "task-3264", "old_state": "draft", "new_state": "cancelled"}
+{"ts": "2026-04-17T06:19:04.068164+00:00", "event": "planning.item.updated", "id": "task-3264", "kind": "task"}
+{"ts": "2026-04-17T06:19:04.731583+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:20:50.314919+00:00", "event": "planning.item.updated", "id": "task-0006", "kind": "task"}
+{"ts": "2026-04-17T06:20:50.609155+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:20:50.616901+00:00", "event": "planning.item.created", "id": "task-0006", "kind": "task", "path": "docs\\planning\\tasks\\core\\task-0006.md"}
+{"ts": "2026-04-17T06:20:50.818796+00:00", "event": "planning.item.state.changed", "id": "task-0006", "old_state": "draft", "new_state": "ready"}
+{"ts": "2026-04-17T06:20:51.228636+00:00", "event": "planning.item.updated", "id": "request-018", "kind": "request"}
+{"ts": "2026-04-17T06:20:51.514752+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:20:51.729794+00:00", "event": "planning.item.updated", "id": "spec-020", "kind": "spec"}
+{"ts": "2026-04-17T06:20:52.025288+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:20:52.228452+00:00", "event": "planning.item.updated", "id": "plan-013", "kind": "plan"}
+{"ts": "2026-04-17T06:20:52.522096+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:20:52.737197+00:00", "event": "planning.item.updated", "id": "wp-015", "kind": "wp"}
+{"ts": "2026-04-17T06:20:53.031820+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:20:53.237994+00:00", "event": "planning.item.updated", "id": "task-0265", "kind": "task"}
+{"ts": "2026-04-17T06:20:53.530453+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:33:15.324093+00:00", "event": "planning.item.state.changed", "id": "task-0006", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-17T06:33:15.963151+00:00", "event": "planning.item.state.changed", "id": "task-0006", "old_state": "in_progress", "new_state": "done"}
+{"ts": "2026-04-17T06:33:16.556162+00:00", "event": "planning.item.updated", "id": "task-0006", "kind": "task"}
+{"ts": "2026-04-17T06:33:16.986717+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:43:21.522918+00:00", "event": "planning.item.state.changed", "id": "task-0261", "old_state": "blocked", "new_state": "in_progress"}
+{"ts": "2026-04-17T06:43:23.657190+00:00", "event": "planning.item.state.changed", "id": "task-0261", "old_state": "in_progress", "new_state": "done"}
+{"ts": "2026-04-17T06:43:25.867556+00:00", "event": "planning.item.updated", "id": "task-0261", "kind": "task"}
+{"ts": "2026-04-17T06:43:26.290559+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:43:26.304659+00:00", "event": "planning.item.updated", "id": "task-0261", "kind": "task"}
+{"ts": "2026-04-17T06:43:26.718607+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:43:26.992819+00:00", "event": "planning.item.state.changed", "id": "task-0265", "old_state": "ready", "new_state": "in_progress"}
+{"ts": "2026-04-17T06:43:29.792779+00:00", "event": "planning.item.state.changed", "id": "task-0265", "old_state": "in_progress", "new_state": "done"}
+{"ts": "2026-04-17T06:43:32.628263+00:00", "event": "planning.item.updated", "id": "task-0265", "kind": "task"}
+{"ts": "2026-04-17T06:43:33.042227+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:43:33.056463+00:00", "event": "planning.item.updated", "id": "task-0265", "kind": "task"}
+{"ts": "2026-04-17T06:43:33.473042+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:43:33.764598+00:00", "event": "planning.item.updated", "id": "request-018", "kind": "request"}
+{"ts": "2026-04-17T06:43:34.184908+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T06:43:40.654561+00:00", "event": "planning.item.state.changed", "id": "request-018", "old_state": "distilled", "new_state": "closed"}
+{"ts": "2026-04-17T07:02:34.640738+00:00", "event": "planning.item.created", "id": "request-0002", "kind": "request", "path": "docs\\planning\\requests\\request-0002.md"}
+{"ts": "2026-04-17T07:02:34.957480+00:00", "event": "planning.item.created", "id": "spec-0001", "kind": "spec", "path": "docs\\planning\\specifications\\spec-0001-tmp-spec.md"}
+{"ts": "2026-04-17T07:02:35.128997+00:00", "event": "planning.item.created", "id": "plan-0001", "kind": "plan", "path": "docs\\planning\\plans\\plan-0001-tmp-plan.md"}
+{"ts": "2026-04-17T07:02:54.128941+00:00", "event": "planning.item.created", "id": "request-0003", "kind": "request", "path": "docs\\planning\\requests\\request-0003.md"}
+{"ts": "2026-04-17T07:02:54.456473+00:00", "event": "planning.item.created", "id": "spec-0002", "kind": "spec", "path": "docs\\planning\\specifications\\spec-0002-tmp-spec-b.md"}
+{"ts": "2026-04-17T07:02:54.640693+00:00", "event": "planning.item.created", "id": "plan-0002", "kind": "plan", "path": "docs\\planning\\plans\\plan-0002-tmp-plan-b.md"}
+{"ts": "2026-04-17T07:02:54.813958+00:00", "event": "planning.item.created", "id": "wp-0001", "kind": "wp", "path": "docs\\planning\\work-packages\\wp-0001-loose-wp.md"}
+{"ts": "2026-04-17T07:02:54.992039+00:00", "event": "planning.item.created", "id": "plan-0003", "kind": "plan", "path": "docs\\planning\\plans\\plan-0003-plan-with-request.md"}
+{"ts": "2026-04-17T07:02:55.157037+00:00", "event": "planning.item.created", "id": "task-0007", "kind": "task", "path": "docs\\planning\\tasks\\task-0007.md"}
+{"ts": "2026-04-17T07:06:04.896240+00:00", "event": "planning.item.created", "id": "request-0004", "kind": "request", "path": "docs\\planning\\requests\\request-0004.md"}
+{"ts": "2026-04-17T07:06:05.230311+00:00", "event": "planning.item.created", "id": "spec-0003", "kind": "spec", "path": "docs\\planning\\specifications\\spec-0003-specx.md"}

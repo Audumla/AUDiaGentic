@@ -5,6 +5,8 @@ Tests automatic state propagation across planning hierarchies via event subscrip
 
 from __future__ import annotations
 
+import json
+import logging
 import shutil
 import time
 from pathlib import Path
@@ -130,28 +132,28 @@ rules:
   none:
     enabled: true
     description: "No state propagation"
-    logic: "audiagentic.interoperability.propagation_rules.rule_none"
+    logic: "audiagentic.planning.app.propagation_rules.rule_none"
 
   trigger_parent_if_ready:
     enabled: true
     description: "Set parent to new_state if parent is ready"
-    logic: "audiagentic.interoperability.propagation_rules.rule_trigger_parent_if_ready"
+    logic: "audiagentic.planning.app.propagation_rules.rule_trigger_parent_if_ready"
 
   check_all_children_done:
     enabled: true
     description: "Set parent to new_state if all sibling children are in new_state"
-    logic: "audiagentic.interoperability.propagation_rules.rule_check_all_children_done"
+    logic: "audiagentic.planning.app.propagation_rules.rule_check_all_children_done"
 
   trigger_parent_unless_terminal:
     enabled: true
     description: "Set parent to new_state unless parent is done/archived"
-    logic: "audiagentic.interoperability.propagation_rules.rule_trigger_parent_unless_terminal"
+    logic: "audiagentic.planning.app.propagation_rules.rule_trigger_parent_unless_terminal"
 
 actions:
   check_request_completion:
     enabled: true
     description: "Auto-complete request when all specs are done"
-    logic: "audiagentic.interoperability.propagation_rules.action_check_request_completion"
+    logic: "audiagentic.planning.app.propagation_rules.action_check_request_completion"
 """)
 
 
@@ -168,6 +170,38 @@ def _wait_for_propagation(planning_api: PlanningAPI, timeout: float = 5.0) -> No
     start_time = time.time()
     while queue.size() > 0 and (time.time() - start_time) < timeout:
         time.sleep(0.1)
+
+
+def _read_propagation_log(root: Path) -> list[dict]:
+    path = root / ".audiagentic" / "planning" / "meta" / "propagation_log.json"
+    if not path.exists():
+        return []
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _create_request_and_spec(planning_api: PlanningAPI) -> tuple[str, str]:
+    """Create minimal valid request/spec context for dependent items."""
+    request = planning_api.new(
+        "request", label="Test Request", summary="Test request", source="test"
+    )
+    request_id = request.data["id"]
+    spec = planning_api.new(
+        "spec", label="Test Spec", summary="Test specification", request_refs=[request_id]
+    )
+    return request_id, spec.data["id"]
+
+
+def _create_task_hierarchy(planning_api: PlanningAPI) -> tuple[str, str, str, str, str]:
+    """Create valid request -> spec -> plan -> wp -> task chain."""
+    request_id, spec_id = _create_request_and_spec(planning_api)
+    plan = planning_api.new("plan", label="Test Plan", summary="Test plan", spec=spec_id)
+    plan_id = plan.data["id"]
+    wp = planning_api.new("wp", label="Test WP", summary="Test work package", plan=plan_id)
+    wp_id = wp.data["id"]
+    task = planning_api.new("task", label="Test Task", summary="Test task", spec=spec_id)
+    task_id = task.data["id"]
+    planning_api.relink(wp_id, "task_refs", task_id)
+    return request_id, spec_id, plan_id, wp_id, task_id
 
 
 class TestStatePropagationIntegration:
@@ -198,14 +232,7 @@ class TestStatePropagationIntegration:
     def test_task_to_wp_propagation(self, planning_root):
         """Test task state propagation to WP."""
         _, planning_api = planning_root
-        plan = planning_api.new("plan", label="Test Plan", summary="Test plan")
-        plan_id = plan.data["id"]
-        wp = planning_api.new("wp", label="Test WP", summary="Test work package", plan=plan_id)
-        wp_id = wp.data["id"]
-        task = planning_api.new("task", label="Test Task", summary="Test task")
-        task_id = task.data["id"]
-        # Link task to WP via task_refs
-        planning_api.relink(wp_id, "task_refs", task_id)
+        _, _, _, wp_id, task_id = _create_task_hierarchy(planning_api)
         # Transition WP to ready first (required for trigger_parent_if_ready rule)
         planning_api.state(wp_id, "ready", metadata={})
         _wait_for_propagation(planning_api)
@@ -221,11 +248,8 @@ class TestStatePropagationIntegration:
 
     def test_wp_to_plan_propagation(self, planning_root):
         """Test WP state propagation to Plan."""
-        _, planning_api = planning_root
-        plan = planning_api.new("plan", label="Test Plan", summary="Test plan")
-        plan_id = plan.data["id"]
-        wp = planning_api.new("wp", label="Test WP", summary="Test work package", plan=plan_id)
-        wp_id = wp.data["id"]
+        root, planning_api = planning_root
+        _, _, plan_id, wp_id, _ = _create_task_hierarchy(planning_api)
         # Transition plan to ready first (required for trigger_parent_if_ready rule)
         planning_api.state(plan_id, "ready", metadata={})
         _wait_for_propagation(planning_api)
@@ -238,20 +262,15 @@ class TestStatePropagationIntegration:
         plan_view = planning_api.lookup(plan_id)
         assert plan_view is not None
         assert plan_view.data["state"] == "in_progress"
+        assert any(
+            entry.get("target_id") == plan_id and entry.get("status") == "success"
+            for entry in _read_propagation_log(root)
+        )
 
     def test_plan_to_spec_propagation(self, planning_root):
         """Test Plan state propagation to Spec."""
         _, planning_api = planning_root
-        # Create request first (spec needs a valid request_ref)
-        request = planning_api.new(
-            "request", label="Test Request", summary="Test request", source="test"
-        )
-        request_id = request.data["id"]
-        # Create spec with valid request reference
-        spec = planning_api.new(
-            "spec", label="Test Spec", summary="Test specification", request_refs=[request_id]
-        )
-        spec_id = spec.data["id"]
+        _, spec_id = _create_request_and_spec(planning_api)
         plan = planning_api.new("plan", label="Test Plan", summary="Test plan", spec=spec_id)
         plan_id = plan.data["id"]
         # Transition spec to ready first (required for trigger_parent_if_ready rule)
@@ -270,14 +289,7 @@ class TestStatePropagationIntegration:
     def test_spec_to_request_propagation(self, planning_root):
         """Test Spec state propagation to Request."""
         _, planning_api = planning_root
-        request = planning_api.new(
-            "request", label="Test Request", summary="Test request", source="test"
-        )
-        request_id = request.data["id"]
-        spec = planning_api.new(
-            "spec", label="Test Spec", summary="Test specification", request_refs=[request_id]
-        )
-        spec_id = spec.data["id"]
+        request_id, spec_id = _create_request_and_spec(planning_api)
         # Request uses "captured" as initial state, not "ready"
         # Transition request to distilled (equivalent to ready for requests)
         planning_api.state(request_id, "distilled", metadata={})
@@ -297,22 +309,7 @@ class TestStatePropagationIntegration:
     def test_full_hierarchy_propagation(self, planning_root):
         """Test state propagation through full hierarchy."""
         _, planning_api = planning_root
-        request = planning_api.new(
-            "request", label="Test Request", summary="Test request", source="test"
-        )
-        request_id = request.data["id"]
-        spec = planning_api.new(
-            "spec", label="Test Spec", summary="Test spec", request_refs=[request_id]
-        )
-        spec_id = spec.data["id"]
-        plan = planning_api.new("plan", label="Test Plan", summary="Test plan", spec=spec_id)
-        plan_id = plan.data["id"]
-        wp = planning_api.new("wp", label="Test WP", summary="Test WP", plan=plan_id)
-        wp_id = wp.data["id"]
-        task = planning_api.new("task", label="Test Task", summary="Test task")
-        task_id = task.data["id"]
-        # Link task to WP via task_refs
-        planning_api.relink(wp_id, "task_refs", task_id)
+        request_id, spec_id, plan_id, wp_id, task_id = _create_task_hierarchy(planning_api)
         # Transition all items to ready first (required for trigger_parent_if_ready rule)
         planning_api.state(request_id, "distilled", metadata={})
         _wait_for_propagation(planning_api)
@@ -354,14 +351,7 @@ terminal_states: [done, archived]
 state_priority: {}
 """)
         planning_api = PlanningAPI(tmp_path)
-        plan = planning_api.new("plan", label="Test Plan", summary="Test plan")
-        plan_id = plan.data["id"]
-        wp = planning_api.new("wp", label="Test WP", summary="Test WP", plan=plan_id)
-        wp_id = wp.data["id"]
-        task = planning_api.new("task", label="Test Task", summary="Test task")
-        task_id = task.data["id"]
-        # Link task to WP via task_refs
-        planning_api.relink(wp_id, "task_refs", task_id)
+        _, _, _, wp_id, task_id = _create_task_hierarchy(planning_api)
         planning_api.state(wp_id, "ready", metadata={})
         _wait_for_propagation(planning_api)
         planning_api.state(task_id, "ready", metadata={})
@@ -374,14 +364,7 @@ state_priority: {}
     def test_propagation_respects_terminal_states(self, planning_root):
         """Test that propagation respects terminal states."""
         _, planning_api = planning_root
-        plan = planning_api.new("plan", label="Test Plan", summary="Test plan")
-        plan_id = plan.data["id"]
-        wp = planning_api.new("wp", label="Test WP", summary="Test WP", plan=plan_id)
-        wp_id = wp.data["id"]
-        task = planning_api.new("task", label="Test Task", summary="Test task")
-        task_id = task.data["id"]
-        # Link task to WP via task_refs
-        planning_api.relink(wp_id, "task_refs", task_id)
+        _, _, _, wp_id, task_id = _create_task_hierarchy(planning_api)
         # Transition WP to done (draft -> ready -> in_progress -> done)
         planning_api.state(wp_id, "ready", metadata={})
         _wait_for_propagation(planning_api)
@@ -405,14 +388,7 @@ state_priority: {}
         config = planning_api._propagation_engine.load_workflow_config()
         config["global"]["max_depth"] = 2
         planning_api._propagation_engine._config = config
-        request = planning_api.new(
-            "request", label="Test Request", summary="Test request", source="test"
-        )
-        request_id = request.data["id"]
-        spec = planning_api.new(
-            "spec", label="Test Spec", summary="Test spec", request_refs=[request_id]
-        )
-        spec_id = spec.data["id"]
+        _, spec_id = _create_request_and_spec(planning_api)
         plan = planning_api.new("plan", label="Test Plan", summary="Test plan", spec=spec_id)
         plan_id = plan.data["id"]
         # Transition spec to ready first
@@ -432,14 +408,7 @@ state_priority: {}
     def test_propagation_failure_isolation(self, planning_root):
         """Test that propagation failures don't break original state changes."""
         _, planning_api = planning_root
-        plan = planning_api.new("plan", label="Test Plan", summary="Test plan")
-        plan_id = plan.data["id"]
-        wp = planning_api.new("wp", label="Test WP", summary="Test WP", plan=plan_id)
-        wp_id = wp.data["id"]
-        task = planning_api.new("task", label="Test Task", summary="Test task")
-        task_id = task.data["id"]
-        # Link task to WP via task_refs
-        planning_api.relink(wp_id, "task_refs", task_id)
+        _, _, _, _, task_id = _create_task_hierarchy(planning_api)
         # Transition task to in_progress (draft -> ready -> in_progress)
         planning_api.state(task_id, "ready", metadata={})
         _wait_for_propagation(planning_api)
@@ -447,3 +416,29 @@ state_priority: {}
         _wait_for_propagation(planning_api)
         task_view = planning_api.lookup(task_id)
         assert task_view.data["state"] == "in_progress"
+
+    def test_done_propagation_skips_invalid_parent_transition(self, planning_root, caplog):
+        """Done propagation should skip invalid parent workflow jumps without subscriber errors."""
+        root, planning_api = planning_root
+        _, _, _, wp_id, task_id = _create_task_hierarchy(planning_api)
+
+        with caplog.at_level(logging.ERROR, logger="audiagentic.interoperability.bus"):
+            planning_api.state(task_id, "ready", metadata={})
+            _wait_for_propagation(planning_api)
+            planning_api.state(task_id, "in_progress", metadata={})
+            _wait_for_propagation(planning_api)
+            planning_api.state(task_id, "done", metadata={})
+            _wait_for_propagation(planning_api)
+
+        wp_view = planning_api.lookup(wp_id)
+        assert wp_view is not None
+        assert wp_view.data["state"] == "draft"
+        assert not any(
+            "invalid transition draft -> done" in record.getMessage() for record in caplog.records
+        )
+        assert any(
+            entry.get("target_id") == wp_id
+            and entry.get("status") == "skipped"
+            and entry.get("reason") == "invalid_transition"
+            for entry in _read_propagation_log(root)
+        )

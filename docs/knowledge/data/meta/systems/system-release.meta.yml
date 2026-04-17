@@ -1,0 +1,15 @@
+id: system-release
+title: Release System
+type: system
+status: active
+summary: Current-state documentation of the AUDiaGentic release system for version management and release
+  automation.
+owners:
+- core-team
+tags:
+- release
+- versioning
+- automation
+related: []
+updated_at: '2026-04-17'
+source_refs: []

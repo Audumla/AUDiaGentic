@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import asdict
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .config import KnowledgeConfig
@@ -57,6 +58,39 @@ def load_llm_job_state(config: KnowledgeConfig) -> dict[str, Any]:
 def save_llm_job_state(config: KnowledgeConfig, state: dict[str, Any]) -> None:
     config.llm_job_state_file.parent.mkdir(parents=True, exist_ok=True)
     config.llm_job_state_file.write_text(dump_yaml(state), encoding='utf-8')
+
+
+def cleanup_jobs(
+    config: KnowledgeConfig,
+    *,
+    retention_days: int | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    retention = config.llm_job_retention_days if retention_days is None else int(retention_days)
+    current_time = now or now_utc()
+    cutoff = current_time - timedelta(days=retention)
+    terminal_statuses = {"completed", "unavailable", "failed", "cancelled", "expired"}
+
+    state = load_llm_job_state(config)
+    jobs = state.get("jobs", {})
+    kept: dict[str, Any] = {}
+    removed: list[str] = []
+
+    for job_id, job in jobs.items():
+        submitted_at = _parse_iso_datetime(job.get("submitted_at"))
+        status = str(job.get("status", ""))
+        if submitted_at and submitted_at < cutoff and status in terminal_statuses:
+            removed.append(job_id)
+            continue
+        kept[job_id] = job
+
+    state["jobs"] = kept
+    save_llm_job_state(config, state)
+    return {
+        "retention_days": retention,
+        "removed_job_ids": sorted(removed),
+        "remaining_jobs": sorted(kept.keys()),
+    }
 
 
 def list_profiles(config: KnowledgeConfig) -> dict[str, Any]:
@@ -469,3 +503,18 @@ def _clip(text: str, limit: int = 220) -> str:
     if len(text) <= limit:
         return text
     return text[: limit - 3].rstrip() + '...'
+
+
+def _parse_iso_datetime(value: Any) -> datetime | None:
+    if not value:
+        return None
+    if not isinstance(value, str):
+        return None
+    normalized = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)

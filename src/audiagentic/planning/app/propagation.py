@@ -17,7 +17,9 @@ Architecture:
 from __future__ import annotations
 
 import importlib
+import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -227,9 +229,19 @@ class StatePropagationEngine:
         target_view = self._planning_api.lookup(target_id)
         if not target_view or not target_view.data:
             logger.warning("Target item not found: %s", target_id)
+            self._log_propagation_attempt(
+                status="failed",
+                target_id=target_id,
+                target_state=target_state,
+                source_id=source_id,
+                source_state=source_state,
+                metadata=metadata,
+                reason="target_not_found",
+            )
             return
 
         current_state = target_view.data.get("state", "ready")
+        target_kind = getattr(target_view, "kind", None) or target_view.data.get("kind")
 
         # Skip if already in target state
         if current_state == target_state:
@@ -237,6 +249,37 @@ class StatePropagationEngine:
                 "Skipping propagation to %s: already in state %s",
                 target_id,
                 target_state,
+            )
+            self._log_propagation_attempt(
+                status="skipped",
+                target_id=target_id,
+                target_state=target_state,
+                source_id=source_id,
+                source_state=source_state,
+                metadata=metadata,
+                target_kind=target_kind,
+                old_state=current_state,
+                reason="already_in_target_state",
+            )
+            return
+
+        if not self._is_valid_transition(target_view, target_state):
+            logger.info(
+                "Skipping propagation to %s: invalid workflow transition %s -> %s",
+                target_id,
+                current_state,
+                target_state,
+            )
+            self._log_propagation_attempt(
+                status="skipped",
+                target_id=target_id,
+                target_state=target_state,
+                source_id=source_id,
+                source_state=source_state,
+                metadata=metadata,
+                target_kind=target_kind,
+                old_state=current_state,
+                reason="invalid_transition",
             )
             return
 
@@ -258,6 +301,17 @@ class StatePropagationEngine:
                     current_state,
                     current_priority,
                 )
+                self._log_propagation_attempt(
+                    status="skipped",
+                    target_id=target_id,
+                    target_state=target_state,
+                    source_id=source_id,
+                    source_state=source_state,
+                    metadata=metadata,
+                    target_kind=target_kind,
+                    old_state=current_state,
+                    reason="lower_priority_than_current_state",
+                )
                 return
 
         # Check max depth before applying
@@ -270,6 +324,17 @@ class StatePropagationEngine:
                 current_depth,
                 target_id,
             )
+            self._log_propagation_attempt(
+                status="skipped",
+                target_id=target_id,
+                target_state=target_state,
+                source_id=source_id,
+                source_state=source_state,
+                metadata=metadata,
+                target_kind=target_kind,
+                old_state=current_state,
+                reason="max_depth_reached",
+            )
             return
 
         # Update state via planning API
@@ -280,10 +345,35 @@ class StatePropagationEngine:
         new_metadata["propagation_trigger"] = f"{source_id}:{source_state}"
 
         # Use planning API to update state (which will publish the event)
-        self._planning_api.state(
-            id_=target_id,
-            new_state=target_state,
+        try:
+            self._planning_api.state(
+                id_=target_id,
+                new_state=target_state,
+                metadata=new_metadata,
+            )
+        except Exception as e:
+            self._log_propagation_attempt(
+                status="failed",
+                target_id=target_id,
+                target_state=target_state,
+                source_id=source_id,
+                source_state=source_state,
+                metadata=new_metadata,
+                target_kind=target_kind,
+                old_state=current_state,
+                reason=str(e),
+            )
+            raise
+
+        self._log_propagation_attempt(
+            status="success",
+            target_id=target_id,
+            target_state=target_state,
+            source_id=source_id,
+            source_state=source_state,
             metadata=new_metadata,
+            target_kind=target_kind,
+            old_state=current_state,
         )
 
         logger.info(
@@ -293,6 +383,85 @@ class StatePropagationEngine:
             source_id,
             source_state,
         )
+
+    def _is_valid_transition(self, target_view: Any, target_state: str) -> bool:
+        """Check whether the target item can legally enter the propagated state."""
+        config = getattr(self._planning_api, "config", None)
+        if config is None:
+            return True
+
+        target_kind = getattr(target_view, "kind", None) or target_view.data.get("kind")
+        if not target_kind:
+            return True
+
+        workflow_name = target_view.data.get("workflow")
+        workflow = config.workflow_for(target_kind, workflow_name)
+        current_state = target_view.data.get("state", "ready")
+
+        if target_state not in workflow.get("values", []):
+            return False
+
+        return target_state in workflow.get("transitions", {}).get(current_state, [])
+
+    def _propagation_log_path(self) -> Path | None:
+        root = getattr(self._planning_api, "root", None)
+        if root is None:
+            return None
+        return Path(root) / ".audiagentic" / "planning" / "meta" / "propagation_log.json"
+
+    def _log_propagation_attempt(
+        self,
+        *,
+        status: str,
+        target_id: str,
+        target_state: str,
+        source_id: str,
+        source_state: str,
+        metadata: dict[str, Any],
+        target_kind: str | None = None,
+        old_state: str | None = None,
+        reason: str | None = None,
+    ) -> None:
+        """Append a propagation attempt record for audit/recovery."""
+        log_path = self._propagation_log_path()
+        if log_path is None:
+            return
+
+        source_view = self._planning_api.lookup(source_id)
+        source_kind = getattr(source_view, "kind", None) if source_view else None
+        if source_kind is None and source_view and source_view.data:
+            source_kind = source_view.data.get("kind")
+
+        entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "event_id": metadata.get("correlation_id") or metadata.get("event_id"),
+            "correlation_id": metadata.get("correlation_id"),
+            "source_kind": source_kind,
+            "source_id": source_id,
+            "target_kind": target_kind,
+            "target_id": target_id,
+            "old_state": old_state,
+            "new_state": target_state,
+            "trigger_source_state": source_state,
+            "triggered_by": metadata.get("triggered_by", "automatic"),
+            "propagation_depth": metadata.get("propagation_depth", 0),
+            "status": status,
+        }
+        if reason:
+            entry["reason"] = reason
+
+        try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            if log_path.exists():
+                data = json.loads(log_path.read_text(encoding="utf-8"))
+                if not isinstance(data, list):
+                    data = []
+            else:
+                data = []
+            data.append(entry)
+            log_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        except Exception as exc:
+            logger.warning("Failed to write propagation log entry for %s: %s", target_id, exc)
 
     def load_workflow_config(self) -> dict[str, Any]:
         """Load propagation configuration.

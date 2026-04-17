@@ -1,7 +1,7 @@
 ---
 id: request-016
 label: Planning Module Critical Fixes
-state: captured
+state: closed
 summary: 'Fix critical bugs in planning module: create_with_content() drops standard_refs,
   update_content() has dead code, val_mgr.py has duplicated validation logic'
 source: Planning Module Critical Review (2026-04-14)
@@ -28,6 +28,8 @@ spec_refs:
 
 
 
+
+
 # Understanding
 
 Two comprehensive reviews identified critical bugs and architectural issues. Immediate fixes needed: create_with_content() silently drops standard_refs for specs/tasks/plans/WPs, update_content() section mode has duplicated regex blocks with inconsistent formatting, val_mgr.py runs section validation twice and iterates items 6+ times. Also tracked: api.py God Object (911 lines), no rollback on multi-step ops, lazy claims expiry, unbounded event log growth.
@@ -50,3 +52,4 @@ Two comprehensive reviews identified critical bugs and architectural issues. Imm
 
 
 # Notes
+Closed on 2026-04-17 after assessment. The critical planning fixes tracked here were implemented through the linked tasks and work package; only a duplicate placeholder spec remained to clean up.

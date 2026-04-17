@@ -1,7 +1,7 @@
 ---
 id: plan-013
 label: Interoperability layer and state propagation implementation plan
-state: ready
+state: in_progress
 summary: Implement event-driven interoperability layer and automatic state propagation
   for planning hierarchies
 spec_refs:
@@ -15,6 +15,9 @@ work_package_refs:
 standard_refs:
 - standard-0006
 ---
+
+
+
 
 
 
@@ -220,3 +223,8 @@ task-0248 through task-0264
 - Remove legacy hooks (task-0263)
 - Update documentation
 - Archive old hook-based workflows
+
+# Notes
+Assessment on 2026-04-17: plan remains active but reduced in scope. Core propagation landed; remaining work is concentrated in knowledge-side handler correctness and audit/repair tooling.
+
+Remaining plan scope explicitly includes `task-0006` after observing invalid automatic parent transitions during planning-MCP state changes on 2026-04-17.

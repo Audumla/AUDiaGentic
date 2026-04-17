@@ -6,7 +6,6 @@ from pathlib import Path
 import yaml
 
 from .api_types import ItemView
-from .standards import effective_standard_refs
 
 
 class Extracts:

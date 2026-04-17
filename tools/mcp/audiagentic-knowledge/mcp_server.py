@@ -68,6 +68,7 @@ from audiagentic.knowledge.llm import (
     submit_profile_job,
 )
 from audiagentic.knowledge.markdown_io import load_page_by_id
+from audiagentic.knowledge.models import SearchResult
 from audiagentic.knowledge.navigation import explain_navigation_contract, suggest_navigation
 from audiagentic.knowledge.registry import (
     load_action_registry,
@@ -75,10 +76,15 @@ from audiagentic.knowledge.registry import (
     load_llm_provider_registry,
     load_execution_registry,
 )
-from audiagentic.knowledge.search import search_pages
+from audiagentic.knowledge.search import search_pages, filter_by_metadata
 from audiagentic.knowledge.status import build_status
 from audiagentic.knowledge.sync import generate_sync_proposals, scan_drift
 from audiagentic.knowledge.validation import validate_vault
+from audiagentic.knowledge.index_maintenance import (
+    maintain_index_pages,
+    validate_index_links,
+    refresh_index,
+)
 
 from dataclasses import asdict
 
@@ -93,9 +99,9 @@ Knowledge vault operations for AUDiaGentic project.
 
 READ COST LADDER:
   - knowledge.get_page: Get a page with sidecar metadata and sections
-  - knowledge.search_pages: Lexical search over pages
+  - knowledge.search_pages: Text search or metadata filtering (type, tags, owners, id, title)
   - knowledge.answer_question: Deterministic-first QA with optional LLM
-  - knowledge.navigate: Suggest navigation paths for goals
+  - knowledge.registry(op='navigate', goal='...'): Suggest navigation paths
 
 MUTATIONS:
   - knowledge.scaffold_page: Create new page scaffold
@@ -103,11 +109,18 @@ MUTATIONS:
   - knowledge.run_action: Execute deterministic fallback action
   - knowledge.submit_profile_job: Submit task to optional provider layer
 
-STATUS & VALIDATION:
-  - knowledge.status: Vault status
-  - knowledge.validate: Validate vault
-  - knowledge.doctor: Check against capability contract
-  - knowledge.scan_drift: Scan source drift
+FLEXIBLE SEARCH:
+  - knowledge.search_pages(query='...'): Text search
+  - knowledge.search_pages(filters={'type':'task'}): Metadata filter
+  - knowledge.search_pages(filters={'tags':['template','example']}): Multiple tags (OR)
+  - knowledge.search_pages(query='...', filters={'type':'task'}): Combined search
+
+CONSOLIDATED OPERATIONS:
+   - knowledge.registry(op='...'): Registry/config (execution, importer, llm, capability, navigation, actions, profiles, install, doctor, navigate)
+   - knowledge.events(op='...'): Event ops (scan, process, baseline)
+   - knowledge.job(op='...', job_id='...'): Job ops (status, result)
+   - knowledge.validate(op='...'): Validation (validate, status, drift)
+   - knowledge.index(op='...'): Index maintenance (maintain, validate, refresh)
 """,
 )
 
@@ -134,11 +147,55 @@ def knowledge_get_page(page_id: str) -> dict[str, Any]:
     }
 
 
-@mcp.tool(description="Search pages lexically.")
-def knowledge_search_pages(query: str, limit: int = 10) -> list[dict[str, Any]]:
-    """Search pages by query."""
+@mcp.tool(
+    description=(
+        "Search pages lexically or by metadata filters. "
+        "Provide query for text search, or use filters for metadata-based search. "
+        "filters: dict with keys like 'type', 'tags', 'owners', 'id', 'title' (supports arrays for multiple values). "
+        "Can combine query and filters for refined results."
+    )
+)
+def knowledge_search_pages(
+    query: str | None = None,
+    filters: dict[str, Any] | None = None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Search pages by query or metadata filters."""
     config = load_config(Path.cwd().resolve())
-    return [asdict(item) for item in search_pages(config, query, limit)]
+
+    # Load all pages for filtering
+    from audiagentic.knowledge.markdown_io import load_pages
+
+    pages = load_pages(config.pages_root, config.meta_root)
+
+    # Apply metadata filters first
+    if filters:
+        pages = filter_by_metadata(pages, filters)
+
+    # Apply text search if query provided
+    if query:
+        results = search_pages(config, query, limit)
+        return [asdict(item) for item in results]
+
+    # Return filtered pages as search results
+    if filters:
+        # Convert filtered pages to search result format
+        results = [
+            SearchResult(
+                path=str(p.content_path.relative_to(config.root)),
+                page_id=p.page_id,
+                title=p.title,
+                score=1.0,
+                snippet="",
+                matches=["filtered"],
+            )
+            for p in pages[:limit]
+        ]
+        return [asdict(item) for item in results]
+
+    raise ValueError(
+        "Either query or filters must be provided. Example: {{query:'task templates'}} or {{filters:{{'type':'task'}}}}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -189,13 +246,6 @@ def knowledge_bootstrap_project_knowledge(
     return bootstrap_project_knowledge(config, manifest=manifest, allow_llm=allow_llm, mode=mode)
 
 
-@mcp.tool(description="Scan source drift.")
-def knowledge_scan_drift() -> list[dict[str, Any]]:
-    """Scan for source drift."""
-    config = load_config(Path.cwd().resolve())
-    return [asdict(item) for item in scan_drift(config)]
-
-
 @mcp.tool(description="Generate sync-review proposals.")
 def knowledge_generate_sync_proposals() -> list[str]:
     """Generate sync proposals."""
@@ -229,18 +279,24 @@ def knowledge_submit_profile_job(
     )
 
 
-@mcp.tool(description="Return queued job status.")
-def knowledge_get_job_status(job_id: str) -> Any:
-    """Get job status."""
+@mcp.tool(
+    description=(
+        "Job operations. "
+        "op: status (get job status) | result (get job result). "
+        "Requires job_id parameter."
+    )
+)
+def knowledge_job(op: str, job_id: str) -> Any:
+    """Job operations."""
     config = load_config(Path.cwd().resolve())
-    return get_job_status(config, job_id)
+    valid_ops = {"status", "result"}
+    if op not in valid_ops:
+        raise ValueError(f"Unknown op: {op!r}. Valid ops: {', '.join(sorted(valid_ops))}")
 
-
-@mcp.tool(description="Return queued job result.")
-def knowledge_get_job_result(job_id: str) -> Any:
-    """Get job result."""
-    config = load_config(Path.cwd().resolve())
-    return get_job_result(config, job_id)
+    if op == "status":
+        return get_job_status(config, job_id)
+    elif op == "result":
+        return get_job_result(config, job_id)
 
 
 # ---------------------------------------------------------------------------
@@ -248,52 +304,63 @@ def knowledge_get_job_result(job_id: str) -> Any:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(description="Show the config-driven high-level task registry.")
-def knowledge_show_execution_registry() -> Any:
-    """Show execution registry."""
+@mcp.tool(
+    description=(
+        "Registry and configuration operations. "
+        "op: execution (task registry) | importer (importer strategies) | "
+        "llm (model provider registry) | capability (capability contract) | "
+        "navigation (navigation contract) | actions (list actions) | "
+        "profiles (list profiles) | install (install profiles) | "
+        "doctor (check against capability contract) | "
+        "navigate (suggest navigation, requires goal param)."
+    )
+)
+def knowledge_registry(
+    op: str,
+    goal: str | None = None,
+    limit: int = 5,
+) -> Any:
+    """Registry and configuration operations."""
     config = load_config(Path.cwd().resolve())
-    return show_execution_registry(config)
+    valid_ops = {
+        "execution",
+        "importer",
+        "llm",
+        "capability",
+        "navigation",
+        "actions",
+        "profiles",
+        "install",
+        "doctor",
+        "navigate",
+    }
+    if op not in valid_ops:
+        raise ValueError(f"Unknown op: {op!r}. Valid ops: {', '.join(sorted(valid_ops))}")
 
-
-@mcp.tool(description="Show runtime-owned capability and host profiles.")
-def knowledge_show_install_profiles() -> Any:
-    """Show install profiles."""
-    return show_install_profiles()
-
-
-@mcp.tool(description="Show the capability runtime/project ownership contract.")
-def knowledge_show_capability_contract() -> Any:
-    """Show capability contract."""
-    config = load_config(Path.cwd().resolve())
-    return show_capability_contract(config)
-
-
-@mcp.tool(description="Check the project against the knowledge capability contract.")
-def knowledge_doctor() -> Any:
-    """Run doctor check."""
-    config = load_config(Path.cwd().resolve())
-    return doctor(config)
-
-
-@mcp.tool(description="Suggest navigation and deterministic fallbacks for a goal.")
-def knowledge_navigate(goal: str, limit: int = 5) -> Any:
-    """Suggest navigation."""
-    config = load_config(Path.cwd().resolve())
-    return suggest_navigation(config, goal, limit=limit)
-
-
-@mcp.tool(description="Explain navigation config and registered fallback actions.")
-def knowledge_show_navigation_contract() -> Any:
-    """Show navigation contract."""
-    config = load_config(Path.cwd().resolve())
-    return explain_navigation_contract(config)
-
-
-@mcp.tool(description="List deterministic fallback actions.")
-def knowledge_list_actions() -> list[str]:
-    """List actions."""
-    config = load_config(Path.cwd().resolve())
-    return sorted(load_action_registry(config).keys())
+    if op == "execution":
+        return show_execution_registry(config)
+    elif op == "importer":
+        return load_importer_registry(config)
+    elif op == "llm":
+        return {"providers": load_llm_provider_registry(config)}
+    elif op == "capability":
+        return show_capability_contract(config)
+    elif op == "navigation":
+        return explain_navigation_contract(config)
+    elif op == "actions":
+        return sorted(load_action_registry(config).keys())
+    elif op == "profiles":
+        return list_profiles(config)
+    elif op == "install":
+        return show_install_profiles()
+    elif op == "doctor":
+        return doctor(config)
+    elif op == "navigate":
+        if not goal:
+            raise ValueError(
+                "op=navigate requires goal. Example: {{op:'navigate', goal:'find task templates'}}"
+            )
+        return suggest_navigation(config, goal, limit=limit)
 
 
 @mcp.tool(description="Run a deterministic fallback action.")
@@ -305,37 +372,31 @@ def knowledge_run_action(action_id: str, arguments: dict[str, Any] | None = None
     )
 
 
-@mcp.tool(description="Show importer strategies.")
-def knowledge_show_importer_registry() -> Any:
-    """Show importer registry."""
-    config = load_config(Path.cwd().resolve())
-    return load_importer_registry(config)
-
-
-@mcp.tool(description="Show model provider and task policy registry configuration.")
-def knowledge_show_llm_registry() -> dict[str, Any]:
-    """Show LLM registry."""
-    config = load_config(Path.cwd().resolve())
-    return {"providers": load_llm_provider_registry(config)}
-
-
 # ---------------------------------------------------------------------------
 # 6. VALIDATION & STATUS
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(description="Validate the vault.")
-def knowledge_validate() -> list[dict[str, Any]]:
-    """Validate vault."""
+@mcp.tool(
+    description=(
+        "Validation and status operations. "
+        "op: validate (validate vault) | status (vault status) | "
+        "drift (scan source drift)."
+    )
+)
+def knowledge_validate(op: str = "validate") -> list[dict[str, Any]] | Any:
+    """Validation and status operations."""
     config = load_config(Path.cwd().resolve())
-    return [asdict(item) for item in validate_vault(config)]
+    valid_ops = {"validate", "status", "drift"}
+    if op not in valid_ops:
+        raise ValueError(f"Unknown op: {op!r}. Valid ops: {', '.join(sorted(valid_ops))}")
 
-
-@mcp.tool(description="Return vault status.")
-def knowledge_status() -> Any:
-    """Get vault status."""
-    config = load_config(Path.cwd().resolve())
-    return build_status(config)
+    if op == "validate":
+        return [asdict(item) for item in validate_vault(config)]
+    elif op == "status":
+        return build_status(config)
+    elif op == "drift":
+        return [asdict(item) for item in scan_drift(config)]
 
 
 # ---------------------------------------------------------------------------
@@ -397,25 +458,61 @@ def knowledge_scaffold_page(
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(description="Scan planning/runtime event adapters.")
-def knowledge_scan_events() -> list[dict[str, Any]]:
-    """Scan events."""
+@mcp.tool(
+    description=(
+        "Event operations. "
+        "op: scan (scan event adapters) | process (process events) | "
+        "baseline (record event baselines)."
+    )
+)
+def knowledge_events(op: str) -> Any:
+    """Event operations."""
     config = load_config(Path.cwd().resolve())
-    return [asdict(item) for item in scan_events(config)]
+    valid_ops = {"scan", "process", "baseline"}
+    if op not in valid_ops:
+        raise ValueError(f"Unknown op: {op!r}. Valid ops: {', '.join(sorted(valid_ops))}")
+
+    if op == "scan":
+        return [asdict(item) for item in scan_events(config)]
+    elif op == "process":
+        return process_events(config)
+    elif op == "baseline":
+        return record_event_baseline(config)
 
 
-@mcp.tool(description="Process planning/runtime events.")
-def knowledge_process_events() -> Any:
-    """Process events."""
+# ---------------------------------------------------------------------------
+# 9. INDEX MAINTENANCE
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description=(
+        "Index maintenance operations. "
+        "op: maintain (update index pages) | validate (check index links) | "
+        "refresh (maintain and validate)."
+    )
+)
+def knowledge_index(op: str = "maintain") -> dict[str, Any]:
+    """Index maintenance operations."""
     config = load_config(Path.cwd().resolve())
-    return process_events(config)
+    valid_ops = {"maintain", "validate", "refresh"}
+    if op not in valid_ops:
+        raise ValueError(f"Unknown op: {op!r}. Valid ops: {', '.join(sorted(valid_ops))}")
 
-
-@mcp.tool(description="Record current event baselines.")
-def knowledge_record_event_baseline() -> Any:
-    """Record baseline."""
-    config = load_config(Path.cwd().resolve())
-    return record_event_baseline(config)
+    if op == "maintain":
+        updated = maintain_index_pages(config)
+        return {
+            "status": "maintained",
+            "updated_files": [str(p.relative_to(config.root)) for p in updated],
+        }
+    elif op == "validate":
+        errors = validate_index_links(config)
+        return {
+            "status": "valid" if not errors else "invalid",
+            "errors": errors,
+        }
+    elif op == "refresh":
+        return refresh_index(config)
 
 
 if __name__ == "__main__":

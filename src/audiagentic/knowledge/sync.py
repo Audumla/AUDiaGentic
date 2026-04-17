@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -222,6 +222,8 @@ def generate_sync_proposals(
             "proposal_kind": "sync_review",
             "target_page_id": page_id,
             "generated_at": datetime.now(timezone.utc).isoformat(),
+            "status": "pending",
+            "status_updated_at": datetime.now(timezone.utc).isoformat(),
             "summary": f"Source drift detected for {page_id}. Review and update the current-state page if needed.",
             "drift_items": [
                 {
@@ -346,8 +348,19 @@ def apply_sync_proposal(config: KnowledgeConfig, proposal_path: Path) -> dict[st
     record_sync_state(config, [page_id])
 
     # Move proposal to archive
+    proposal["status"] = "merged"
+    proposal["status_updated_at"] = now_utc().isoformat()
+    proposal["applied_at"] = now_utc().isoformat()
+    proposal["archived_at"] = now_utc().isoformat()
+    proposal_path.write_text(
+        yaml.safe_dump(
+            proposal, sort_keys=False, allow_unicode=True, width=100, default_flow_style=False
+        ),
+        encoding="utf-8",
+    )
     archive_path = config.archive_root / proposal_path.name
     archive_path.parent.mkdir(parents=True, exist_ok=True)
+    archive_path = _dedupe_archive_path(archive_path)
     proposal_path.rename(archive_path)
 
     return {
@@ -389,3 +402,145 @@ def apply_all_proposals(
         results.append(result)
 
     return results
+
+
+def cleanup_proposals(
+    config: KnowledgeConfig,
+    *,
+    proposal_retention_days: int | None = None,
+    archive_retention_days: int | None = None,
+    prune_pending_proposals: bool = True,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    current_time = now or datetime.now(timezone.utc)
+    proposal_retention = (
+        config.proposal_retention_days
+        if proposal_retention_days is None
+        else int(proposal_retention_days)
+    )
+    archive_retention = (
+        config.archive_retention_days
+        if archive_retention_days is None
+        else int(archive_retention_days)
+    )
+    proposal_cutoff = current_time - timedelta(days=proposal_retention)
+    archive_cutoff = current_time - timedelta(days=archive_retention)
+
+    archived_pending: list[str] = []
+    stale_pending: list[str] = []
+    deleted_archived: list[str] = []
+
+    for proposal_path in _iter_proposal_files(config.proposals_root):
+        proposal = _load_proposal_payload(proposal_path)
+        proposal_time = _proposal_timestamp(proposal_path, proposal, "generated_at")
+        if proposal_time >= proposal_cutoff:
+            continue
+        rel_path = proposal_path.relative_to(config.root).as_posix()
+        if not prune_pending_proposals:
+            stale_pending.append(rel_path)
+            continue
+        proposal["status"] = "rejected"
+        proposal["status_reason"] = "expired_by_cleanup"
+        proposal["status_updated_at"] = current_time.isoformat()
+        proposal["archived_at"] = current_time.isoformat()
+        proposal_path.write_text(
+            yaml.safe_dump(
+                proposal, sort_keys=False, allow_unicode=True, width=100, default_flow_style=False
+            ),
+            encoding="utf-8",
+        )
+        archive_path = _dedupe_archive_path(config.archive_root / proposal_path.name)
+        archive_path.parent.mkdir(parents=True, exist_ok=True)
+        proposal_path.rename(archive_path)
+        archived_pending.append(archive_path.relative_to(config.root).as_posix())
+
+    for archive_path in _iter_proposal_files(config.archive_root):
+        proposal = _load_proposal_payload(archive_path)
+        archive_time = _proposal_timestamp(
+            archive_path, proposal, "archived_at", "status_updated_at", "generated_at"
+        )
+        if archive_time >= archive_cutoff:
+            continue
+        deleted_archived.append(archive_path.relative_to(config.root).as_posix())
+        archive_path.unlink()
+
+    return {
+        "proposal_retention_days": proposal_retention,
+        "archive_retention_days": archive_retention,
+        "prune_pending_proposals": prune_pending_proposals,
+        "archived_pending_proposals": sorted(archived_pending),
+        "stale_pending_proposals": sorted(stale_pending),
+        "deleted_archived_proposals": sorted(deleted_archived),
+    }
+
+
+def cleanup_lifecycle(
+    config: KnowledgeConfig,
+    *,
+    job_retention_days: int | None = None,
+    proposal_retention_days: int | None = None,
+    archive_retention_days: int | None = None,
+    prune_pending_proposals: bool = True,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    from .llm import cleanup_jobs
+
+    current_time = now or datetime.now(timezone.utc)
+    jobs = cleanup_jobs(config, retention_days=job_retention_days, now=current_time)
+    proposals = cleanup_proposals(
+        config,
+        proposal_retention_days=proposal_retention_days,
+        archive_retention_days=archive_retention_days,
+        prune_pending_proposals=prune_pending_proposals,
+        now=current_time,
+    )
+    return {
+        "cleaned_at": current_time.isoformat(),
+        "jobs": jobs,
+        "proposals": proposals,
+    }
+
+
+def _load_proposal_payload(path: Path) -> dict[str, Any]:
+    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _iter_proposal_files(root: Path) -> list[Path]:
+    if not root.exists():
+        return []
+    files = [path for path in root.rglob("*.yml") if path.is_file()]
+    files.extend(path for path in root.rglob("*.yaml") if path.is_file())
+    return sorted(files)
+
+
+def _proposal_timestamp(path: Path, proposal: dict[str, Any], *keys: str) -> datetime:
+    for key in keys:
+        parsed = _parse_iso_datetime(proposal.get(key))
+        if parsed is not None:
+            return parsed
+    return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+
+
+def _parse_iso_datetime(value: Any) -> datetime | None:
+    if not value or not isinstance(value, str):
+        return None
+    normalized = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _dedupe_archive_path(path: Path) -> Path:
+    if not path.exists():
+        return path
+    counter = 1
+    while True:
+        candidate = path.with_name(f"{path.stem}-{counter}{path.suffix}")
+        if not candidate.exists():
+            return candidate
+        counter += 1
