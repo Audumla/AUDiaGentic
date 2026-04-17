@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-17T13:23:03.885942+00:00",
+  "generated_at": "2026-04-17T13:31:29.078340+00:00",
   "refs": [
     {
       "src": "plan-0001",
@@ -523,6 +523,36 @@
     },
     {
       "src": "request-29",
+      "dst": "spec-0006",
+      "field": "spec_refs"
+    },
+    {
+      "src": "request-29",
+      "dst": "spec-0007",
+      "field": "spec_refs"
+    },
+    {
+      "src": "request-29",
+      "dst": "spec-0008",
+      "field": "spec_refs"
+    },
+    {
+      "src": "request-29",
+      "dst": "spec-0009",
+      "field": "spec_refs"
+    },
+    {
+      "src": "request-29",
+      "dst": "spec-0010",
+      "field": "spec_refs"
+    },
+    {
+      "src": "request-29",
+      "dst": "spec-0011",
+      "field": "spec_refs"
+    },
+    {
+      "src": "request-29",
       "dst": "standard-1",
       "field": "standard_refs"
     },
@@ -613,6 +643,21 @@
     },
     {
       "src": "spec-0003",
+      "dst": "standard-0005",
+      "field": "standard_refs"
+    },
+    {
+      "src": "spec-0011",
+      "dst": "request-29",
+      "field": "request_refs"
+    },
+    {
+      "src": "spec-0011",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "spec-0011",
       "dst": "standard-0005",
       "field": "standard_refs"
     },
@@ -1486,37 +1531,7 @@
     },
     {
       "src": "task-12",
-      "dst": "standard-5",
-      "field": "standard_refs"
-    },
-    {
-      "src": "task-12",
-      "dst": "standard-6",
-      "field": "standard_refs"
-    },
-    {
-      "src": "task-12",
-      "dst": "spec-4",
-      "field": "spec_ref"
-    },
-    {
-      "src": "task-12",
       "dst": "standard-1",
-      "field": "spec_ref"
-    },
-    {
-      "src": "task-13",
-      "dst": "standard-5",
-      "field": "standard_refs"
-    },
-    {
-      "src": "task-13",
-      "dst": "standard-6",
-      "field": "standard_refs"
-    },
-    {
-      "src": "task-13",
-      "dst": "spec-5",
       "field": "spec_ref"
     },
     {
@@ -3313,6 +3328,21 @@
       "src": "task-300",
       "dst": "request-19",
       "field": "request_refs"
+    },
+    {
+      "src": "task-3000",
+      "dst": "standard-5",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-3000",
+      "dst": "standard-6",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-3000",
+      "dst": "spec-4",
+      "field": "spec_ref"
     },
     {
       "src": "task-301",
