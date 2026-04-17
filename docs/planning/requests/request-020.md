@@ -1,7 +1,7 @@
 ---
 id: request-020
 label: Auto-state propagation with event subscription
-state: captured
+state: superseded
 summary: Enable automatic state propagation across planning hierarchies via event
   subscription driven by workflow configuration
 source: user feedback on incomplete propagation implementation
@@ -27,6 +27,8 @@ spec_refs:
 
 
 
+
+
 # Understanding
 
 The StatePropagationEngine exists with config-driven rules in state_propagation.yaml, but it is never subscribed to planning.item.state.changed events. Events are published but nothing consumes them. Need event subscription logic that respects workflow configuration (enabled/disabled per workflow, per-kind, per-item).
@@ -37,8 +39,7 @@ The StatePropagationEngine exists with config-driven rules in state_propagation.
 - How should propagation failures be handled (retry, log, skip)?
 - Should propagation be synchronous (blocking) or asynchronous (background)?
 # Notes
-
-
+Superseded on 2026-04-17. The gap described here is no longer current: planning now subscribes to `planning.item.state.changed` in `src/audiagentic/planning/app/api.py`. Remaining state-propagation follow-up is tracked under `request-018`, so this narrower request is redundant.
 # Understanding
 
 The state propagation infrastructure is built but incomplete. The `StatePropagationEngine` exists with:

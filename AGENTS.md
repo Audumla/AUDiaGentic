@@ -120,6 +120,12 @@ Centralized in `.audiagentic/prompt-syntax.yaml`. Available shortcuts:
 - `ag-audit`
 - `ag-check-in-prep`
 
+## MCP Tool Usage
+
+- **Planning activities** (requests, specs, tasks, plans, standards, workpackages) must use the `audiagentic-planning` MCP server for all planning item operations (tm_list, tm_create, tm_edit, tm_get, tm_delete, tm_standards, tm_docs, tm_relink, tm_claim, tm_move, tm_package, tm_section)
+- **Context searching** (project documentation) must use the `audiagentic-knowledge` MCP server for knowledge operations (search_pages, knowledge_get_page, scaffold_page, scan_drift, doctor, validate, status)
+- These MCPs provide the execution layer for planning work - agents should not implement these capabilities directly
+
 ## Review doctrine
 
 - review prompts should stay read-focused unless the normalized request explicitly allows more

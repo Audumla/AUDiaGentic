@@ -1,0 +1,15 @@
+id: system-runtime
+title: Runtime System
+type: system
+status: active
+summary: Current-state documentation of the AUDiaGentic runtime system for lifecycle management and state
+  tracking.
+owners:
+- core-team
+tags:
+- runtime
+- lifecycle
+- state
+related: []
+updated_at: '2026-04-17'
+source_refs: []

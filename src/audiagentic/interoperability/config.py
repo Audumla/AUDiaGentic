@@ -12,25 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class InteroperabilityConfig:
-    """Configuration for the interoperability event layer.
-
-    Attributes:
-        root: Project root directory (auto-detected if None)
-        event_store: Event store configuration
-        async_queue: Async queue configuration
-        cycle_detection: Cycle detection configuration
-        replay: Replay configuration
-    """
-
-    root: Path | None = None
-    event_store: EventStoreConfig = field(default_factory=EventStoreConfig)
-    async_queue: AsyncQueueConfig = field(default_factory=AsyncQueueConfig)
-    cycle_detection: CycleDetectionConfig = field(default_factory=CycleDetectionConfig)
-    replay: ReplayConfig = field(default_factory=ReplayConfig)
-
-
-@dataclass
 class EventStoreConfig:
     """Event store configuration."""
 
@@ -62,6 +43,25 @@ class ReplayConfig:
     """Replay configuration."""
 
     dispatch_on_replay: bool = False  # Default: skip replayed events
+
+
+@dataclass
+class InteroperabilityConfig:
+    """Configuration for the interoperability event layer.
+
+    Attributes:
+        root: Project root directory (auto-detected if None)
+        event_store: Event store configuration
+        async_queue: Async queue configuration
+        cycle_detection: Cycle detection configuration
+        replay: Replay configuration
+    """
+
+    root: Path | None = None
+    event_store: EventStoreConfig = field(default_factory=EventStoreConfig)
+    async_queue: AsyncQueueConfig = field(default_factory=AsyncQueueConfig)
+    cycle_detection: CycleDetectionConfig = field(default_factory=CycleDetectionConfig)
+    replay: ReplayConfig = field(default_factory=ReplayConfig)
 
 
 def load_config(root: Path | None = None) -> InteroperabilityConfig:

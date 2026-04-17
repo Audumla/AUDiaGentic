@@ -1,0 +1,179 @@
+# Knowledge Event Adapters for Planning Integration
+# Standard: standard-0013 (Event subscription configuration standard)
+# Event protocol: spec-0055 (Interoperability event layer specification)
+# Canonical event: planning.item.state.changed
+# This adapter consumes planning state change facts and triggers knowledge actions
+#
+# Event envelope (from spec-0055):
+#   - id, type, version, occurred_at, source_component
+#   - correlation_id, subject, payload, metadata, is_replay
+#
+# Planning event payload (from spec-0056):
+#   subject:
+#     kind: task|wp|plan|spec
+#     id: task-0123
+#   payload:
+#     old_state: ready
+#     new_state: in_progress
+#   metadata:
+#     triggered_by: manual|automatic
+#     correlation_id: evt_...
+#     rollback: false
+#     propagation_depth: 0
+
+# Note: Handler logic is defined in handlers.yml (separation of concerns)
+# This file only defines event capture rules
+
+adapters:
+  # Canonical planning state change adapter
+  - id: planning-state-changes
+    name: Planning State Change Bridge
+    description: Consume planning.item.state.changed events and trigger knowledge sync
+    source_kind: event_stream
+    path_globs:
+      - .audiagentic/planning/events/events.jsonl
+    event_name_patterns:
+      - planning.item.state.changed
+      - "*.after_state_change"
+    payload_filters:
+      in:
+        new_state:
+          - done
+          - verified
+    status_field: new_state
+    summary_fields:
+      - event
+      - id
+    event_name: planning.item.state.changed
+    event_field: event
+    summary_prefix: Planning {subject.kind} {subject.id} state changed
+    affects_pages:
+      - system-planning
+      - system-knowledge
+      - guide-using-planning
+      - tool-cli
+      - tool-mcp
+      - pattern-event-bridge
+      - pattern-page-lifecycle
+    note: |
+      Canonical adapter for planning state changes.
+      
+      Knowledge should NOT re-implement planning propagation logic.
+      Instead, react to final emitted events based on:
+      
+      - subject.kind: task, wp, plan, or spec
+      - payload.new_state: done, verified, in_progress, blocked
+      - metadata.rollback: true (treat differently)
+      - metadata.triggered_by: manual vs automatic
+      
+      Example reactions:
+      - task done/verified → review related work-package or implementation knowledge
+      - wp done → mark relevant plan/current-state pages stale
+      - plan done → review spec/overview pages
+      - spec in_progress → do NOT update current-state knowledge yet
+      - blocked → mark operational pages stale, but don't rewrite current-state docs
+      
+      Configured affects_pages:
+      - system-planning: Documents planning system architecture
+      - system-knowledge: Documents knowledge component (includes event integration)
+      - guide-using-planning: How-to guide for planning usage
+      - tool-cli: CLI tool documentation (includes planning commands)
+      - tool-mcp: MCP server documentation (includes planning tools)
+      - pattern-event-bridge: Event bridge pattern documentation
+      - pattern-page-lifecycle: Page lifecycle pattern documentation
+      
+      Handler logic is defined in handlers.yml (separation of concerns per standard-0013).
+      This adapter captures events; handlers.yml defines the response actions.
+      
+      Payload filters ensure only relevant events trigger updates:
+      - Only events with payload.new_state in [done, verified] are processed
+      - This reduces noise and focuses on completed work that should update knowledge
+
+  # Agent-driven review adapter for work-packages
+  - id: wp-review-trigger
+    name: Work-Package Review Trigger
+    description: Captures work-packages entering review state and creates agent review tasks
+    source_kind: event_stream
+    path_globs:
+      - .audiagentic/planning/events/events.jsonl
+    event_name_patterns:
+      - wp.after_state_change
+      - planning.item.state.changed
+    payload_filters:
+      equals:
+        new_state: review
+    status_field: new_state
+    summary_fields:
+      - event
+      - id
+    event_name: wp.after_state_change
+    event_field: event
+    summary_prefix: Work-package {subject.id} entered review
+    affects_pages:
+      - system-planning
+      - pattern-page-lifecycle
+    note: |
+      This adapter captures work-packages entering the review state.
+      
+      Handler logic is defined in handlers.yml (separation of concerns per standard-0013).
+      
+      When a work-package transitions to 'review', the configured handler:
+      - Generates a sync proposal for review
+      - Future: Job/agent manager will assign review tasks
+      
+      Agent review workflow (future):
+      1. Work-package enters 'review' state
+      2. Handler generates proposal for review
+      3. Job/agent manager assigns review task to agent
+      4. Agent performs comprehensive review
+      5. Agent provides feedback or approves transition to 'done'
+      6. Work-package transitions to 'done' or back to 'in_progress'
+      
+      This enables deeper, automated review without bypassing quality gates.
+
+  # Legacy compatibility adapter (temporary, to be removed)
+  - id: planning-task-completed-legacy
+    name: Planning Task Completion Legacy Bridge
+    description: Legacy adapter for task.after_state_change events (backward compatibility)
+    source_kind: event_stream
+    path_globs:
+      - .audiagentic/planning/events/events.jsonl
+    event_name_patterns:
+      - task.after_state_change
+      - spec.after_state_change
+      - plan.after_state_change
+      - wp.after_state_change
+    payload_filters:
+      in:
+        new_state:
+          - done
+          - verified
+    status_field: new_state
+    summary_fields:
+      - event
+      - id
+    event_name: planning.item.state.changed
+    event_field: event
+    summary_prefix: Planning task completed (legacy)
+    affects_pages:
+      - system-planning
+      - system-knowledge
+      - guide-using-planning
+      - tool-cli
+      - tool-mcp
+    note: |
+      LEGACY ADAPTER - To be removed once planning migrates to canonical events.
+      
+      This adapter handles the old task.after_state_change event format.
+      Once planning fully migrates to planning.item.state.changed,
+      this adapter can be removed.
+      
+      Configured affects_pages (subset of canonical adapter):
+      - system-planning: Documents planning system architecture
+      - system-knowledge: Documents knowledge component
+      - guide-using-planning: How-to guide for planning usage
+      - tool-cli: CLI tool documentation
+      - tool-mcp: MCP server documentation
+      
+      Handler logic is defined in handlers.yml (separation of concerns per standard-0013).
+      Legacy events use the same handler as canonical events for consistency.

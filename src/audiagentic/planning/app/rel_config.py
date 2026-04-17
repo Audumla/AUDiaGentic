@@ -53,12 +53,13 @@ class RelationshipConfig:
         """
         return self.config.relationship_rules(kind)
 
-    def validate_refs(self, kind: str, data: dict) -> list[str]:
+    def validate_refs(self, kind: str, data: dict, *, validate_required: bool = True) -> list[str]:
         """Validate references in document data.
 
         Args:
             kind: Planning kind
             data: Document metadata dict
+            validate_required: Whether to enforce required relationship fields
 
         Returns:
             List of validation error messages (empty if valid)
@@ -66,11 +67,21 @@ class RelationshipConfig:
         errors = []
         rules = self.get_rules(kind)
 
-        for field in rules.get("required_for_children", []):
-            if field not in data or not data[field]:
-                errors.append(f"Missing required reference: {field}")
+        if validate_required:
+            for field in rules.get("required_for_children", []):
+                if field not in data or not data[field]:
+                    errors.append(f"Missing required reference: {field}")
 
         can_ref = set(rules.get("can_reference", []))
+        allowed_by_field = {
+            "request_refs": {"request"},
+            "spec_ref": {"spec"},
+            "spec_refs": {"spec"},
+            "standard_refs": {"standard"},
+            "task_refs": {"task"},
+            "plan_ref": {"plan"},
+            "parent_task_ref": {"task"},
+        }
         ref_fields = {
             "request_refs",
             "spec_ref",
@@ -79,6 +90,8 @@ class RelationshipConfig:
             "plan_ref",
             "parent_task_ref",
         }
+        if kind in {"spec", "task", "plan", "wp"}:
+            ref_fields.add("standard_refs")
 
         for field in ref_fields:
             if field not in data:
@@ -91,9 +104,13 @@ class RelationshipConfig:
                 continue
 
             for ref in refs:
-                if ref and not ref.startswith(tuple(can_ref | {kind})):
+                if isinstance(ref, dict):
+                    ref = ref.get("ref")
+                allowed_kinds = allowed_by_field.get(field, can_ref | {kind})
+                if ref and not ref.startswith(tuple(allowed_kinds)):
                     errors.append(
-                        f"Invalid reference '{ref}' for {kind} - can only reference {can_ref}"
+                        f"Invalid reference '{ref}' for field '{field}' on {kind} - "
+                        f"expected {sorted(allowed_kinds)}"
                     )
 
         return errors

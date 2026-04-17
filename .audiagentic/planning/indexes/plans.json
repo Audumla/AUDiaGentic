@@ -1,7 +1,25 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-15T11:09:44.688136+00:00",
+  "generated_at": "2026-04-17T07:06:05.392236+00:00",
   "items": [
+    {
+      "id": "plan-0001",
+      "label": "Tmp Plan",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-0001-tmp-plan.md"
+    },
+    {
+      "id": "plan-0002",
+      "label": "Tmp Plan B",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-0002-tmp-plan-b.md"
+    },
+    {
+      "id": "plan-0003",
+      "label": "Plan With Request",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-0003-plan-with-request.md"
+    },
     {
       "id": "plan-001",
       "label": "Implement archive functionality in planning core",
@@ -65,7 +83,7 @@
     {
       "id": "plan-008",
       "label": "Implement canonical guidance semantics standard",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\plans\\plan-008-implement-canonical-guidance-semantics-standard.md"
     },
     {
@@ -83,19 +101,19 @@
     {
       "id": "plan-011",
       "label": "Knowledge Component Improvements Plan",
-      "state": "draft",
+      "state": "ready",
       "path": "docs\\planning\\plans\\plan-011-knowledge-component-improvements-plan.md"
     },
     {
       "id": "plan-012",
       "label": "Planning Module Critical Fixes Plan",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\plans\\plan-012-planning-module-critical-fixes-plan.md"
     },
     {
       "id": "plan-013",
       "label": "Interoperability layer and state propagation implementation plan",
-      "state": "ready",
+      "state": "in_progress",
       "path": "docs\\planning\\plans\\plan-013-interoperability-layer-and-state-propagation-implementation-plan.md"
     }
   ]

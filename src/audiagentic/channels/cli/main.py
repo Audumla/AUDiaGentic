@@ -26,7 +26,6 @@ from audiagentic.execution.jobs import control as job_control_tool
 from audiagentic.execution.jobs import prompt_launch as prompt_launch_tool
 from audiagentic.execution.jobs import prompt_trigger_bridge as prompt_trigger_bridge_tool
 from audiagentic.execution.jobs.prompt_parser import parse_prompt_launch_request
-from audiagentic.planning.app.audit import audit_cmd
 from audiagentic.release import bootstrap as release_bootstrap
 from audiagentic.runtime.state import jobs_store as job_store
 from audiagentic.runtime.state import session_input_store as session_input_tool
@@ -326,12 +325,6 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
-    if args.command == "audit":
-        return audit_cmd.run(
-            project_root=Path(args.project_root),
-            fix=args.fix,
-            verbose=args.verbose,
-        )
     return 1
 
 

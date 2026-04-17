@@ -1,7 +1,31 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-15T11:09:44.688136+00:00",
+  "generated_at": "2026-04-17T07:06:05.392236+00:00",
   "items": [
+    {
+      "id": "request-0001",
+      "label": "Refactor knowledge component hooks to use event-driven architecture",
+      "state": "superseded",
+      "path": "docs\\planning\\requests\\request-0001.md"
+    },
+    {
+      "id": "request-0002",
+      "label": "Tmp Request",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-0002.md"
+    },
+    {
+      "id": "request-0003",
+      "label": "Tmp Request B",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-0003.md"
+    },
+    {
+      "id": "request-0004",
+      "label": "ReqX",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-0004.md"
+    },
     {
       "id": "request-001",
       "label": "Comprehensive implementation docs migration",
@@ -17,25 +41,25 @@
     {
       "id": "request-0021",
       "label": "Config-driven planning document structure",
-      "state": "captured",
+      "state": "distilled",
       "path": "docs\\planning\\requests\\request-0021.md"
     },
     {
       "id": "request-0023",
       "label": "MCP Test Request",
-      "state": "captured",
+      "state": "superseded",
       "path": "docs\\planning\\requests\\request-0023.md"
     },
     {
       "id": "request-0024",
       "label": "Get Test Request",
-      "state": "captured",
+      "state": "superseded",
       "path": "docs\\planning\\requests\\request-0024.md"
     },
     {
       "id": "request-0027",
       "label": "Generic Req",
-      "state": "captured",
+      "state": "superseded",
       "path": "docs\\planning\\requests\\request-0027.md"
     },
     {
@@ -101,25 +125,25 @@
     {
       "id": "request-013",
       "label": "Define canonical semantics for planning guidance levels",
-      "state": "captured",
+      "state": "closed",
       "path": "docs\\planning\\requests\\request-013.md"
     },
     {
       "id": "request-014",
       "label": "Integrate Knowledge Component v7.4",
-      "state": "captured",
+      "state": "closed",
       "path": "docs\\planning\\requests\\request-014.md"
     },
     {
       "id": "request-015",
       "label": "Knowledge Component Improvements",
-      "state": "captured",
+      "state": "distilled",
       "path": "docs\\planning\\requests\\request-015.md"
     },
     {
       "id": "request-016",
       "label": "Planning Module Critical Fixes",
-      "state": "captured",
+      "state": "closed",
       "path": "docs\\planning\\requests\\request-016.md"
     },
     {
@@ -131,7 +155,7 @@
     {
       "id": "request-018",
       "label": "Automatic state propagation for planning hierarchies",
-      "state": "distilled",
+      "state": "closed",
       "path": "docs\\planning\\requests\\request-018.md"
     },
     {
@@ -143,7 +167,7 @@
     {
       "id": "request-020",
       "label": "Auto-state propagation with event subscription",
-      "state": "captured",
+      "state": "superseded",
       "path": "docs\\planning\\requests\\request-020.md"
     }
   ]

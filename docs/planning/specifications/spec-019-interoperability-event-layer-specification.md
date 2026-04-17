@@ -1,7 +1,7 @@
 ---
 id: spec-019
 label: Interoperability event layer specification
-state: ready
+state: in_progress
 summary: Lightweight in-process event bus with a transport-agnostic protocol that
   enables clean migration to MQTT or other message brokers without changing component
   call sites
@@ -13,6 +13,8 @@ standard_refs:
 - standard-0006
 - standard-0011
 ---
+
+
 
 
 
@@ -312,3 +314,7 @@ Event types follow `{component}.{noun}.{verb}` dot notation. Components own thei
 6. task-0253 — Planning integration: wire `init_bus` at planning bootstrap, emit `planning.item.state.changed`
 7. task-0255 — Hook bridge: route compatible hooks through canonical events, legacy hooks remain
 8. task-0256 — Integration tests: publish/subscribe, isolation, persistence, replay, bootstrap contract
+
+# Notes
+
+Assessment on 2026-04-17: event-layer spec is largely implemented. Remaining open items are knowledge handler correctness (`task-0261`) rather than basic event-bus integration, plus any intentionally retained follow-up tooling.

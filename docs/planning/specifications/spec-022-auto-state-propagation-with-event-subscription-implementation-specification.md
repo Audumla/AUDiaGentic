@@ -1,7 +1,7 @@
 ---
 id: spec-022
 label: Auto-state propagation with event subscription implementation specification
-state: draft
+state: cancelled
 summary: Implement event subscription for StatePropagationEngine to enable automatic
   state propagation across planning hierarchies
 request_refs:
@@ -13,6 +13,8 @@ standard_refs:
 - standard-0005
 - standard-0006
 ---
+
+
 
 
 
@@ -123,3 +125,7 @@ Propagation must respect delivery mode configuration.
 8. **Delivery mode**: ASYNC by default, SYNC for fast-track workflow
 9. **Logging**: Propagation events are logged for debugging
 10. **Tests**: All integration tests pass
+
+# Notes
+
+Cancelled on 2026-04-17 because `request-020` was superseded by implemented subscription wiring and the broader remaining work tracked under `request-018`.

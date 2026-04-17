@@ -1,7 +1,7 @@
 ---
 id: wp-0016
 label: 'Phase 1: Config Schema'
-state: ready
+state: done
 summary: Extend config schemas for document structure
 plan_ref: plan-0014
 task_refs:
@@ -10,6 +10,8 @@ task_refs:
 standard_refs:
 - standard-0006
 ---
+
+
 
 
 

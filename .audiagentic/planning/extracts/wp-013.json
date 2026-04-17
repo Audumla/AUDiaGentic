@@ -2,7 +2,7 @@
   "item": {
     "id": "wp-013",
     "label": "Knowledge Component Improvements Work Package",
-    "state": "draft",
+    "state": "ready",
     "summary": "Tasks for addressing critical review findings",
     "plan_ref": "plan-011",
     "task_refs": [],
@@ -20,5 +20,5 @@
   "effective_standard_refs": [
     "standard-0006"
   ],
-  "body": "\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n"
+  "body": "\n\n\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n\n# Notes\n\nAssessment on 2026-04-17: work package remains active for tests, event-module refactor, search improvement, and lifecycle cleanup.\n"
 }

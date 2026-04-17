@@ -1,0 +1,19 @@
+proposal_id: 20260417T033017Z-tool-mcp-sync-review
+proposal_kind: sync_review
+target_page_id: tool-mcp
+generated_at: '2026-04-17T03:30:17.134483+00:00'
+summary: Source drift detected for tool-mcp. Review and update the current-state page if needed.
+drift_items:
+- source_path: <manual>
+  status: manual_stale
+  message: Page marked stale manually
+  fingerprint_before: null
+  fingerprint_now: null
+  details: {}
+  diff_excerpt: null
+suggested_steps:
+- Review the changed source file(s).
+- Decide whether the page is still current.
+- Create or edit a content patch only if the current-state page should change.
+- After review, record fresh sync fingerprints.
+actions: []

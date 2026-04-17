@@ -9,13 +9,23 @@ from typing import Any
 
 # Standard: standard-0013 (Event subscription configuration standard)
 # Protocol: spec-0055 (Interoperability event layer specification)
-from .config import KnowledgeConfig
+from .config import KnowledgeConfig, load_config
 from .diffing import normalize_text, summarize_structured_change, unified_diff_excerpt
 from .hooks import evaluate_source
 from .models import EventRecord
 from .registry import load_event_action_registry, resolve_registry_handler
 from .sync import mark_pages_stale
 from .utils import dump_yaml, load_yaml_file, now_utc
+
+DEFAULT_PLANNING_AFFECTED_PAGES = [
+    "system-planning",
+    "system-knowledge",
+    "guide-using-planning",
+    "tool-cli",
+    "tool-mcp",
+    "pattern-event-bridge",
+    "pattern-page-lifecycle",
+]
 
 
 def load_event_adapters(config: KnowledgeConfig) -> list[dict[str, Any]]:
@@ -34,8 +44,44 @@ def load_event_state(config: KnowledgeConfig) -> dict[str, Any]:
 
 
 def save_event_state(config: KnowledgeConfig, state: dict[str, Any]) -> None:
+    max_events = config.raw.get("events", {}).get("max_processed_events", 1000)
+    if "processed_event_ids" in state and len(state["processed_event_ids"]) > max_events:
+        state["processed_event_ids"] = state["processed_event_ids"][-max_events:]
     config.event_state_file.parent.mkdir(parents=True, exist_ok=True)
     config.event_state_file.write_text(dump_yaml(state), encoding="utf-8")
+
+
+def prune_event_state(config: KnowledgeConfig, max_events: int | None = None) -> dict[str, Any]:
+    if max_events is None:
+        max_events = config.raw.get("events", {}).get("max_processed_events", 1000)
+    state = load_event_state(config)
+    original_count = len(state.get("processed_event_ids", []))
+    pruned_count = 0
+    if original_count > max_events:
+        state["processed_event_ids"] = state["processed_event_ids"][-max_events:]
+        pruned_count = original_count - max_events
+        save_event_state(config, state)
+    journal_pruned = _prune_event_journal(config, max_events)
+    return {
+        "ok": True,
+        "pruned": pruned_count + journal_pruned,
+        "pruned_state": pruned_count,
+        "pruned_journal": journal_pruned,
+        "remaining": len(state["processed_event_ids"]),
+        "max_events": max_events,
+    }
+
+
+def _prune_event_journal(config: KnowledgeConfig, max_events: int) -> int:
+    journal = config.event_journal_file
+    if not journal.exists():
+        return 0
+    lines = journal.read_text(encoding="utf-8").splitlines()
+    if len(lines) <= max_events:
+        return 0
+    pruned = len(lines) - max_events
+    journal.write_text("\n".join(lines[-max_events:]), encoding="utf-8")
+    return pruned
 
 
 def record_event_baseline(config: KnowledgeConfig) -> dict[str, Any]:
@@ -124,10 +170,16 @@ def process_events(
             handler_config.get("action", adapter.get("action", "generate_sync_proposal"))
         )
         handler, defaults = resolve_registry_handler(action_registry, action_name)
+        hook_action_args = {}
+        if path_evals:
+            for eval_result in path_evals:
+                if eval_result.get("eligible") and eval_result.get("action_args"):
+                    hook_action_args = {**hook_action_args, **eval_result.get("action_args", {})}
         runtime_action = {
             **defaults,
             **handler_config.get("action_args", {}),
             **adapter.get("action_args", {}),
+            **hook_action_args,
         }
         handler(
             config=config,
@@ -598,31 +650,143 @@ def on_planning_state_change(
         payload: Event payload with old_state, new_state, subject
         metadata: Event metadata with is_replay flag
     """
-    # Skip replayed events unless opt-in
+    root = Path.cwd()
+    config = load_config(root)
+
+    # Skip replayed events unless interoperability config explicitly allows dispatch
     if metadata.get("is_replay"):
+        if not _dispatch_on_replay_enabled(root):
+            return
+
+    subject = metadata.get("subject", {}) if isinstance(metadata.get("subject"), dict) else {}
+    if not subject and isinstance(payload.get("subject"), dict):
+        subject = payload.get("subject", {})
+
+    kind = subject.get("kind")
+    new_state = payload.get("new_state")
+    item_id = subject.get("id") or payload.get("id")
+
+    if not kind or not item_id or not new_state:
         return
 
-    kind = payload.get("subject", {}).get("kind")
-    new_state = payload.get("new_state")
-    item_id = payload.get("subject", {}).get("id")
+    event = _build_runtime_planning_event(
+        config=config,
+        event_type=event_type,
+        payload=payload,
+        metadata=metadata,
+        kind=str(kind),
+        item_id=str(item_id),
+        new_state=str(new_state),
+    )
+    if event is None:
+        return
 
-    # Import here to avoid circular dependency
-    from pathlib import Path
+    _process_runtime_planning_event(config, event)
 
-    from .config import load_config
-    from .sync import generate_sync_proposals, mark_pages_stale
 
-    config = load_config(Path.cwd())
+def _build_runtime_planning_event(
+    *,
+    config: KnowledgeConfig,
+    event_type: str,
+    payload: dict[str, Any],
+    metadata: dict[str, Any],
+    kind: str,
+    item_id: str,
+    new_state: str,
+) -> EventRecord | None:
+    """Build a synthetic EventRecord for in-process planning state changes."""
+    raw_event = {
+        "event": event_type,
+        "event_name": event_type,
+        "id": item_id,
+        "subject": {"kind": kind, "id": item_id},
+        **payload,
+        "metadata": metadata,
+    }
+    correlation_id = metadata.get("correlation_id", "manual")
+    event_id = f"runtime-planning::{event_type}::{kind}::{item_id}::{new_state}::{correlation_id}"
 
-    if kind == "task" and new_state in ("done", "verified"):
-        # Mark related work-package/implementation pages stale
-        mark_pages_stale(kind, item_id)
-    elif kind == "wp" and new_state == "done":
-        # Generate sync proposals for plan/current-state pages
-        generate_sync_proposals(config)
-    elif kind == "plan" and new_state == "done":
-        # Review spec/overview pages
-        generate_sync_proposals(config)
-    elif new_state == "blocked":
-        # Mark operational pages stale (don't rewrite)
-        mark_pages_stale(kind, item_id)
+    state = load_event_state(config)
+    processed = set(str(x) for x in state.get("processed_event_ids", []) or [])
+    if event_id in processed:
+        return None
+
+    adapter = _select_runtime_planning_adapter(config, event_type)
+    affected_pages = [str(x) for x in adapter.get("affects_pages", []) or []]
+    if not affected_pages:
+        affected_pages = list(DEFAULT_PLANNING_AFFECTED_PAGES)
+
+    return EventRecord(
+        event_id=event_id,
+        adapter_id=str(adapter.get("id", "runtime-planning-state-change")),
+        event_name=event_type,
+        source_path=".audiagentic/planning/events/events.jsonl",
+        status=new_state,
+        observed_at=now_utc().isoformat(),
+        affected_pages=affected_pages,
+        summary=f"Planning {kind} {item_id} state changed to {new_state}",
+        details={
+            "payload": payload,
+            "metadata": metadata,
+            "raw_event": raw_event,
+            "source_system": "planning-runtime",
+        },
+    )
+
+
+def _select_runtime_planning_adapter(config: KnowledgeConfig, event_type: str) -> dict[str, Any]:
+    """Pick the configured adapter that best represents planning state changes."""
+    for adapter in load_event_adapters(config):
+        patterns = [str(x) for x in adapter.get("event_name_patterns", []) or []]
+        if patterns and any(fnmatch(event_type, pattern) for pattern in patterns):
+            return adapter
+    return {"id": "runtime-planning-state-change", "affects_pages": DEFAULT_PLANNING_AFFECTED_PAGES}
+
+
+def _process_runtime_planning_event(config: KnowledgeConfig, event: EventRecord) -> dict[str, Any]:
+    """Apply configured knowledge actions for an in-process planning event."""
+    state = load_event_state(config)
+    action_registry = load_event_action_registry(config)
+    handlers_config = load_event_handlers(config)
+    adapter = _select_runtime_planning_adapter(config, event.event_name)
+    handler_config = _match_event_handler(event, handlers_config)
+    action_name = str(handler_config.get("action", "generate_sync_proposal"))
+    handler, defaults = resolve_registry_handler(action_registry, action_name)
+    runtime_action = {
+        **defaults,
+        **(handler_config.get("action_args", {}) if isinstance(handler_config, dict) else {}),
+    }
+    context: dict[str, Any] = {
+        "generated_proposals": [],
+        "marked_stale_pages": set(),
+        "handled": [event.event_id],
+        "page_event_map": {},
+        "applied_proposals": [],
+    }
+    handler(
+        config=config,
+        event=event,
+        adapter=adapter,
+        state=state,
+        context=context,
+        action_args=runtime_action,
+    )
+    if config.auto_mark_stale and context["marked_stale_pages"]:
+        mark_pages_stale(config, sorted(context["marked_stale_pages"]))
+    processed = set(str(x) for x in state.get("processed_event_ids", []) or [])
+    processed.add(event.event_id)
+    save_event_state(config, {**state, "processed_event_ids": sorted(processed)})
+    _append_event_journal(config, event)
+    return {
+        "processed_event_ids": list(context["handled"]),
+        "marked_stale_pages": sorted(context["marked_stale_pages"]),
+        "generated_proposals": context["generated_proposals"],
+    }
+
+
+def _dispatch_on_replay_enabled(root: Path) -> bool:
+    """Check interoperability replay config without importing the runtime module."""
+    raw = load_yaml_file(root / ".audiagentic" / "interoperability" / "config.yaml", {})
+    if not isinstance(raw, dict):
+        return False
+    return bool(raw.get("runtime", {}).get("replay", {}).get("dispatch_on_replay", False))

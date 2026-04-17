@@ -1,7 +1,7 @@
 ---
 id: request-015
 label: Knowledge Component Improvements
-state: captured
+state: distilled
 summary: 'Address critical review findings: add tests, split events.py, enhance search,
   add lifecycle management, consolidate MCP tools'
 source: 'Critical Review: Knowledge Component (2026-04-14)'
@@ -22,6 +22,8 @@ spec_refs:
 - spec-015
 - spec-016
 ---
+
+
 
 
 
@@ -48,3 +50,4 @@ Knowledge component integrated successfully but has gaps: zero tests, events.py 
 
 
 # Notes
+Assessment on 2026-04-17: request remains valid and open, but its remaining scope is narrower than originally described. Real remaining work is tests, `events.py` refactor, search improvements, and lifecycle cleanup. MCP consolidation is already implemented via grouped knowledge MCP operations, so that task was closed as stale-complete.

@@ -151,6 +151,11 @@ READ COST LADDER (cheapest to most tokens):
   tm_get depth=head < depth=meta < depth=full < depth=body
 Use depth=head for existence/state checks. depth=body only when the raw text is needed.
 
+FLEXIBLE QUERY: tm_list supports arrays and text search:
+  - tm_list(kind=["task","wp"], state=["ready","in_progress"]): Multiple kinds/states
+  - tm_list(kind="task", query="API integration"): Text search within results
+  - tm_list(kind=["task","spec"], state="ready", query="auth"): Combined filters
+
 WORK QUEUE: tm_list mode=next returns unclaimed ready items filtered by kind and domain.
 
 MULTI-AGENT: Multiple agents can work on the same repository. Use tm_claim to coordinate
@@ -363,7 +368,8 @@ def tm_get(
         "mode: list (items, default) | count (kind×state summary) | next (unclaimed items for agent work queue). "
         "kind: request|spec|plan|task|wp|standard — omit for all (list/count) or defaults to task (next). "
         "state: filter by state (list) or target state (next, defaults to ready). "
-        "domain: domain filter (next only)."
+        "domain: domain filter (next only). "
+        "query: optional text search within item content (list mode only)."
     )
 )
 def tm_list(
@@ -373,6 +379,7 @@ def tm_list(
     mode: str = "list",
     include_deleted: bool = False,
     include_archived: bool = False,
+    query: str | None = None,
 ) -> Any:
     valid_modes = {"list", "count", "next"}
     if mode not in valid_modes:
@@ -392,6 +399,14 @@ def tm_list(
             include_archived=include_archived,
             state=state,
         )
+        # Optional text filtering
+        if query and items:
+            items = [
+                item
+                for item in items
+                if query.lower() in item.get("label", "").lower()
+                or query.lower() in item.get("summary", "").lower()
+            ]
         return items
 
 

@@ -1,0 +1,15 @@
+id: system-execution
+title: Execution System
+type: system
+status: active
+summary: Current-state documentation of the AUDiaGentic execution system for job management and prompt
+  processing.
+owners:
+- core-team
+tags:
+- execution
+- jobs
+- prompts
+related: []
+updated_at: '2026-04-17'
+source_refs: []

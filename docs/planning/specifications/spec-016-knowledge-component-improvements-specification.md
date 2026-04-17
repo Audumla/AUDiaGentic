@@ -1,7 +1,7 @@
 ---
 id: spec-016
 label: Knowledge Component Improvements Specification
-state: draft
+state: ready
 summary: Specification for addressing critical review findings in knowledge component
 request_refs:
 - request-015
@@ -10,6 +10,8 @@ standard_refs:
 - standard-0006
 - standard-0005
 ---
+
+
 
 
 
@@ -188,3 +190,7 @@ Maintain backward compatibility via aliases during transition.
 - [Knowledge System](../../docs/knowledge/pages/systems/system-knowledge.md)
 - [Integration Request](../requests/request-014.md)
 - [Integration Plan](../plans/plan-010-knowledge-component-integration-plan.md)
+
+# Notes
+
+Assessment on 2026-04-17: specification remains valid and open. Remaining work concentrates on tests, decomposition of `events.py`, search quality, and lifecycle/cleanup behavior; MCP consolidation no longer appears to be outstanding.

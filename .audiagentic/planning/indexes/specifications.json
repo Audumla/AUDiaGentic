@@ -1,7 +1,25 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-15T11:09:44.688136+00:00",
+  "generated_at": "2026-04-17T07:06:05.392236+00:00",
   "items": [
+    {
+      "id": "spec-0001",
+      "label": "Tmp Spec",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0001-tmp-spec.md"
+    },
+    {
+      "id": "spec-0002",
+      "label": "Tmp Spec B",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0002-tmp-spec-b.md"
+    },
+    {
+      "id": "spec-0003",
+      "label": "SpecX",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-0003-specx.md"
+    },
     {
       "id": "spec-001",
       "label": "Archive state and functionality specification",
@@ -23,7 +41,7 @@
     {
       "id": "spec-0029",
       "label": "Config-driven planning document structure",
-      "state": "draft",
+      "state": "ready",
       "path": "docs\\planning\\specifications\\spec-0029-config-driven-planning-document-structure.md"
     },
     {
@@ -35,13 +53,13 @@
     {
       "id": "spec-0030",
       "label": "MCP Test Request \u2014 Specification",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\specifications\\spec-0030-mcp-test-request-specification.md"
     },
     {
       "id": "spec-0031",
       "label": "MCP Test Spec",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\specifications\\spec-0031-mcp-test-spec.md"
     },
     {
@@ -107,13 +125,13 @@
     {
       "id": "spec-0071",
       "label": "Get Test Request \u2014 Specification",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\specifications\\spec-0071-get-test-request-specification.md"
     },
     {
       "id": "spec-0072",
       "label": "Get Test Spec",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\specifications\\spec-0072-get-test-spec.md"
     },
     {
@@ -131,19 +149,19 @@
     {
       "id": "spec-0077",
       "label": "Test Spec",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\specifications\\spec-0077-test-spec.md"
     },
     {
       "id": "spec-0078",
       "label": "Generic Req \u2014 Specification",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\specifications\\spec-0078-generic-req-specification.md"
     },
     {
       "id": "spec-0079",
       "label": "Generic Spec",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\specifications\\spec-0079-generic-spec.md"
     },
     {
@@ -173,19 +191,19 @@
     {
       "id": "spec-012",
       "label": "Canonical semantics for guidance levels",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\specifications\\spec-012-canonical-semantics-for-guidance-levels.md"
     },
     {
       "id": "spec-013",
       "label": "Integrate Knowledge Component v7.4 \u2014 Specification",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\specifications\\spec-013-integrate-knowledge-component-v7-4-specification.md"
     },
     {
       "id": "spec-014",
       "label": "Knowledge Component Integration Specification",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\specifications\\spec-014-knowledge-component-integration-specification.md"
     },
     {
@@ -197,31 +215,31 @@
     {
       "id": "spec-016",
       "label": "Knowledge Component Improvements Specification",
-      "state": "draft",
+      "state": "ready",
       "path": "docs\\planning\\specifications\\spec-016-knowledge-component-improvements-specification.md"
     },
     {
       "id": "spec-017",
       "label": "Planning Module Critical Fixes \u2014 Specification",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\specifications\\spec-017-planning-module-critical-fixes-specification.md"
     },
     {
       "id": "spec-018",
       "label": "Planning Module Critical Fixes Specification",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\specifications\\spec-018-planning-module-critical-fixes-specification.md"
     },
     {
       "id": "spec-019",
       "label": "Interoperability event layer specification",
-      "state": "ready",
+      "state": "in_progress",
       "path": "docs\\planning\\specifications\\spec-019-interoperability-event-layer-specification.md"
     },
     {
       "id": "spec-020",
       "label": "Planning state propagation over events specification",
-      "state": "ready",
+      "state": "in_progress",
       "path": "docs\\planning\\specifications\\spec-020-planning-state-propagation-over-events-specification.md"
     },
     {
@@ -233,7 +251,7 @@
     {
       "id": "spec-022",
       "label": "Auto-state propagation with event subscription implementation specification",
-      "state": "draft",
+      "state": "cancelled",
       "path": "docs\\planning\\specifications\\spec-022-auto-state-propagation-with-event-subscription-implementation-specification.md"
     },
     {

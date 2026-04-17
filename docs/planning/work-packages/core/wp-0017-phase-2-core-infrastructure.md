@@ -1,7 +1,7 @@
 ---
 id: wp-0017
 label: 'Phase 2: Core Infrastructure'
-state: ready
+state: done
 summary: Create TemplateEngine and RelationshipConfig classes
 plan_ref: plan-0014
 task_refs:
@@ -12,6 +12,8 @@ task_refs:
 standard_refs:
 - standard-0006
 ---
+
+
 
 
 

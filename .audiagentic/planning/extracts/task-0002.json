@@ -1,10 +1,16 @@
 {
   "item": {
     "id": "task-0002",
-    "label": "Inventory all implementation docs and build reference map",
-    "state": "done",
-    "summary": "Scan docs/implementation, extract all file references, build bidirectional reference map",
-    "spec_ref": "spec-004",
+    "label": "Remove hooks.yml and update CLI",
+    "state": "draft",
+    "summary": "Delete docs/knowledge/sync/hooks.yml and remove CLI hooks commands",
+    "request_refs": [
+      "request-0001"
+    ],
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
     "kind": "task",
     "path": "docs/planning/tasks/core/task-0002.md",
     "archived_at": null,
@@ -13,6 +19,9 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
-  "body": "\n\n\n\n\n\n# Description\n\nScan all implementation documentation files, extract all file references, and build a comprehensive bidirectional reference map to guide the migration.\n\n## Scope\n\n- Scan `docs/implementation/*.md` files\n- Scan `docs/implementation/**/*.md` (subdirectories)\n- Extract all markdown file references (e.g., `01_Master_Implementation_Roadmap.md`)\n- Extract all directory references (e.g., `packets/phase-0/`)\n- Build reference map showing:\n  - Which files reference which other files\n  - Which files are referenced by others\n  - Reference types (doc, packet, directory)\n\n## Reference Patterns\n\n### File References\n- `[01_Master_Implementation_Roadmap.md](path/to/file.md)`\n- `- \\`02_Phase_Gates_and_Exit_Criteria.md\\``\n- `See 03_Target_Codebase_Tree.md`\n\n### Directory References\n- `packets/phase-0/`\n- `packets/phase-1-1/ through phase-1-3/`\n\n### Cross-Document References\n- Internal links within implementation docs\n- Links to planning docs\n- Links to specifications\n\n# Acceptance Criteria\n\n1. Complete inventory of all `docs/implementation/*.md` files\n2. Reference map showing all inter-file dependencies\n3. Identification of root files (no incoming references)\n4. Identification of leaf files (no outgoing references)\n5. Migration order recommendation based on dependencies\n6. Output: `docs/planning/tasks/core/migration-reference-map.md`\n\n# Notes\n\n- This task must complete before any migration begins\n- Reference map will guide the migration order\n- Files with no dependencies can be migrated first\n- Files with many dependencies should be migrated later\n\n# Output\n\nReference map created at: `docs/planning/tasks/core/migration-reference-map.md`\n\nContains:\n- Complete inventory of 234 markdown files\n- Reference analysis showing root files and dependencies\n- Migration order recommendation (9 phases)\n- Cross-reference patterns\n- Next steps for migration\n"
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\nThe hooks.yml file defines hook eligibility rules that should be removed. Also, the CLI has hooks-related commands (`_print_hooks()` and `_print_evaluate()`) that need to be removed from cli.py. The config.py also references `hook_config_file` which needs to be removed.\n"
 }

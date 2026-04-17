@@ -1,7 +1,7 @@
 ---
 id: request-0023
 label: MCP Test Request
-state: captured
+state: superseded
 summary: Request for testing MCP server
 source: test
 guidance: standard
@@ -19,6 +19,8 @@ spec_refs:
 - spec-0030
 - spec-0031
 ---
+
+
 
 
 
@@ -44,3 +46,4 @@ Initial feature intake captured; the desired capability is understood well enoug
 
 
 # Notes
+Superseded on 2026-04-17 as a planning MCP test artifact rather than substantive project work.
