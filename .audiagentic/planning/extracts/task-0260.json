@@ -6,7 +6,7 @@
     "summary": "Benchmark event layer performance \u2014 blocked: aspirational targets removed from V1 spec; revisit only if performance issues observed in practice",
     "spec_ref": "spec-019",
     "request_refs": [
-      "request-017"
+      "request-17"
     ],
     "standard_refs": [
       "standard-0005",

@@ -5,7 +5,7 @@
     "state": "ready",
     "summary": "Refactor planning module managers to use config-driven document structure, relationships, and defaults",
     "request_refs": [
-      "request-0021"
+      "request-25"
     ],
     "task_refs": [],
     "standard_refs": [

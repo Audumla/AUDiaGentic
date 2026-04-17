@@ -47,7 +47,7 @@ Prepare the configuration and documentation scaffolding for profile packs and do
 
 # Inputs
 
-- request-003
+- request-3
 - spec-0021
 - architecture docs 12 and 50
 - current planning config split under `.audiagentic/planning/config/`

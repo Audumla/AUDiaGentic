@@ -6,7 +6,7 @@ summary: 'Specification for Fix critical bugs in planning module: create_with_co
   drops standard_refs, update_content() has dead code, val_mgr.py has duplicated validation
   logic'
 request_refs:
-- request-016
+- request-16
 task_refs: []
 ---
 

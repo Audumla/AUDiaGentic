@@ -6,7 +6,7 @@
     "summary": "Implement state_propagation.yaml config with default rules and workflow overrides",
     "spec_ref": "spec-020",
     "request_refs": [
-      "request-018"
+      "request-18"
     ],
     "standard_refs": [
       "standard-0005",

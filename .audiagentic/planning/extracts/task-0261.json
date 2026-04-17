@@ -6,7 +6,7 @@
     "summary": "Implement knowledge event handler for planning state changes \u2014 blocked on task-0282 (knowledge integration)",
     "spec_ref": "spec-019",
     "request_refs": [
-      "request-017"
+      "request-17"
     ],
     "standard_refs": [
       "standard-0005",

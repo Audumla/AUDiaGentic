@@ -6,7 +6,7 @@
     "summary": "Merge stack_profiles and request_profiles config into unified profiles structure, simplifying the CLI API from two parameters to one",
     "spec_ref": "spec-006",
     "request_refs": [
-      "request-009"
+      "request-9"
     ],
     "kind": "task",
     "path": "docs/planning/tasks/core/task-0199.md",
