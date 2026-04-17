@@ -1,7 +1,7 @@
 ---
 id: spec-016
 label: Knowledge Component Improvements Specification
-state: ready
+state: in_progress
 summary: Specification for addressing critical review findings in knowledge component
 request_refs:
 - request-15
@@ -10,6 +10,7 @@ standard_refs:
 - standard-0006
 - standard-0005
 ---
+
 
 
 

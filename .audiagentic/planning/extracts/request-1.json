@@ -28,5 +28,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n\n\n\n\n# Understanding\n\nThe migration of legacy implementation documentation to the planning module structure has been completed. All canonical docs have been migrated, the planning surface is now the primary source of truth, and old implementation-backup entrypoints have been updated.\n\n# Implementation Summary\n\n- \u2705 Canonical implementation documents migrated to planning structure\n- \u2705 References and cross-links preserved and updated\n- \u2705 Backup content archived in historical records\n- \u2705 Reader-facing entrypoints rewritten to point at canonical planning docs\n- \u2705 `docs/implementation_backup/` no longer serves as primary source\n\n# Acceptance Criteria\n\n- [x] All canonical implementation docs migrated to planning structure\n- [x] Planning surface is the clear reader-facing source of truth\n- [x] Legacy entrypoints updated or deprecated\n- [x] No misleading old documentation paths in reader-facing references\n- [x] Historical backup content preserved for audit trail\n\n# Open Questions\n\nNone \u2014 migration work is complete.\n\n# Notes\n\nThe planning module is now the canonical documentation surface. Legacy implementation-backup directory remains for historical reference only.\n"
+  "body": "\n\n"
 }
