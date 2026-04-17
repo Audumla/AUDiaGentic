@@ -4,7 +4,7 @@ label: Get Test Request — Specification
 state: cancelled
 summary: Specification for Request for tm_get testing
 request_refs:
-- request-0024
+- request-27
 task_refs: []
 ---
 
@@ -26,4 +26,4 @@ task_refs: []
 
 # Notes
 
-Cancelled on 2026-04-17 as a test artifact under superseded `request-0024`.
+Cancelled on 2026-04-17 as a test artifact under superseded `request-27`.

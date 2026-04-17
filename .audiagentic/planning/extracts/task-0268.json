@@ -5,7 +5,7 @@
     "state": "draft",
     "summary": "Add module docstring and proper exports",
     "request_refs": [
-      "request-019"
+      "request-19"
     ],
     "standard_refs": [
       "standard-0005",

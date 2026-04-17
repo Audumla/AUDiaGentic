@@ -6,8 +6,8 @@ summary: Lightweight in-process event bus with a transport-agnostic protocol tha
   enables clean migration to MQTT or other message brokers without changing component
   call sites
 request_refs:
-- request-017
-- request-018
+- request-17
+- request-18
 standard_refs:
 - standard-0005
 - standard-0006
@@ -50,7 +50,7 @@ Create a lightweight interoperability event layer that lets components publish a
 - Event schema registry and governance
 - CLI diagnostics and event management commands
 - Performance benchmarking tasks
-- State propagation engine (request-018 / spec-020)
+- State propagation engine (request-18 / spec-020)
 
 # Architecture
 

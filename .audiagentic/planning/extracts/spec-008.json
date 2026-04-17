@@ -5,7 +5,7 @@
     "state": "cancelled",
     "summary": "Design and implement multi-item batch operations, bulk state transitions, and optional result summarization to reduce token overhead for agent bulk operations",
     "request_refs": [
-      "request-011"
+      "request-11"
     ],
     "task_refs": [
       {

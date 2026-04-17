@@ -3,9 +3,9 @@
     "id": "task-0303",
     "label": "req-0039",
     "state": "ready",
-    "summary": "Refactor request-0039 drift",
+    "summary": "Refactor request-39 drift",
     "request_refs": [
-      "request-019"
+      "request-19"
     ],
     "kind": "task",
     "path": "docs/planning/tasks/core/task-0303.md",
@@ -16,5 +16,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n# Description\n\nRefactor request-0039 drift\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-019 code standards compliance cleanup.\n"
+  "body": "\n\n# Description\n\nRefactor request-39 drift\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
 }

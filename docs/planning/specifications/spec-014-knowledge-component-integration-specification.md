@@ -6,7 +6,7 @@ summary: Specification for integrating the knowledge component v7.4 into AUDiaGe
   including config-driven setup, event bridging with planning system, and deterministic
   knowledge state management.
 request_refs:
-- request-014
+- request-14
 task_refs: []
 standard_refs:
 - standard-0006

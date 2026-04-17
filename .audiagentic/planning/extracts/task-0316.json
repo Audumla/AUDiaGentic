@@ -5,7 +5,7 @@
     "state": "draft",
     "summary": "Implement standard-0010 MCP server development rules",
     "request_refs": [
-      "request-019"
+      "request-19"
     ],
     "standard_refs": [
       "standard-0005",

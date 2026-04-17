@@ -7,7 +7,7 @@ summary: Plan for implementing guidance levels (light/standard/deep) to control 
 spec_refs:
 - spec-010
 request_refs:
-- request-011
+- request-11
 work_package_refs: []
 standard_refs:
 - standard-0006

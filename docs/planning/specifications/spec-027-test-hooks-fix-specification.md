@@ -4,7 +4,7 @@ label: Test hooks fix — Specification
 state: draft
 summary: Specification for Verify hooks removal works
 request_refs:
-- request-0043
+- request-43
 task_refs: []
 ---
 

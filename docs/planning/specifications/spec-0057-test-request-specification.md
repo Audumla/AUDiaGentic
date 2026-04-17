@@ -4,7 +4,7 @@ label: Test Request — Specification
 state: draft
 summary: Specification for Test request
 request_refs:
-- request-0037
+- request-37
 task_refs: []
 deleted: true
 deleted_at: '2026-04-14T08:38:42.356147+00:00'

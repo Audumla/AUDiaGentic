@@ -5,7 +5,7 @@
     "state": "ready",
     "summary": "Review docs/knowledge/",
     "request_refs": [
-      "request-019"
+      "request-19"
     ],
     "kind": "task",
     "path": "docs/planning/tasks/core/task-0310.md",
@@ -16,5 +16,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n# Description\n\nReview docs/knowledge/\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-019 code standards compliance cleanup.\n"
+  "body": "\n\n# Description\n\nReview docs/knowledge/\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
 }
