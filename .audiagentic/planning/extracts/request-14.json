@@ -2,7 +2,7 @@
   "item": {
     "id": "request-14",
     "label": "Integrate Knowledge Component v7.4",
-    "state": "captured",
+    "state": "closed",
     "summary": "Critically review and integrate the knowledge component (audiagentic_knowledge_pack_v7_4) into the AUDiaGentic project, ensuring config-driven design, compatibility with existing planning system, and proper event bridging for task completion tracking.",
     "source": "user",
     "guidance": "standard",
@@ -24,7 +24,7 @@
       "spec-014"
     ],
     "kind": "request",
-    "path": "docs/planning/requests/request-14.md",
+    "path": "docs/planning/requests/request-14-integrate-knowledge-component-v7-4.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -34,5 +34,5 @@
   "effective_standard_refs": [
     "standard-0001"
   ],
-  "body": "\n\n\n\n# Understanding\n\nInitial feature intake captured; the desired capability is understood well enough to refine directly into implementation work.\n\n# Open Questions\n\n- What exact outcome is required?\n- What constraints or non-goals apply?\n- How will success be verified?\n\n# Problem\n\n\n\n# Desired Outcome\n\n\n\n# Constraints\n\n\n# Notes\n"
+  "body": "\n\n\n\n\n\n# Understanding\n\nInitial feature intake captured; the desired capability is understood well enough to refine directly into implementation work.\n\n# Open Questions\n\n- What exact outcome is required?\n- What constraints or non-goals apply?\n- How will success be verified?\n\n# Problem\n\n\n\n# Desired Outcome\n\n\n\n# Constraints\n\n\n# Notes\nClosed on 2026-04-17 after assessment. Knowledge component integration work is present in the repository and linked implementation tasks are complete. The remaining open placeholder task was cancelled as stale planning residue.\n"
 }

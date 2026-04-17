@@ -2,7 +2,7 @@
   "item": {
     "id": "task-0275",
     "label": "Fix generic error handling in CLI",
-    "state": "draft",
+    "state": "completed",
     "summary": "Implement structured error handling with suggestions",
     "request_refs": [
       "request-19"
@@ -12,7 +12,7 @@
       "standard-0006"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0275.md",
+    "path": "docs/planning/tasks/core/task-0275-fix-generic-error-handling-in-cli.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -23,5 +23,5 @@
     "standard-0005",
     "standard-0006"
   ],
-  "body": "\n\n\nGeneric error handling in channels/cli/main.py at lines 137-139. The ValueError catch block returns raw error message without structured error and suggestion, violating standard-0010 (MCP Server Development). Replace with AudiaGenticError that includes: 1) Error code identifying the issue, 2) Descriptive error message, 3) Recovery guidance with specific steps, 4) Suggested commands to fix the issue. Follow pattern from state_machine.py:28-43 and records.py:93-100 which use structured error classes. Ensure all errors returned from CLI handlers include recovery guidance. Document error handling behavior and provide examples of valid vs invalid inputs that trigger this error. Test that error output is machine-parseable and provides actionable recovery steps. Verify error messages are user-friendly while including technical details for debugging. Ensure all caught exceptions are converted to structured AudiaGenticError format with suggestions.\n"
+  "body": "\n\n\n## Completed Work\n\nFixed generic error handling in `channels/cli/main.py` prompt-launch command.\n\n### Changes Made:\n\n1. **Enhanced error response structure**:\n   - Added `error-code` field: \"CLI-VALIDATION-001\"\n   - Added `suggestion` field with recovery guidance\n   - Maintained existing `status`, `kind`, and `message` fields\n\n2. **Context-aware suggestions**:\n   - JSON errors: \"Check that JSON arguments are valid and properly formatted\"\n   - Prompt errors: \"Ensure prompt contains valid @ag-* tag and required fields\"\n   - Generic errors: \"Review argument values and ensure they match expected format\"\n\n3. **Machine-parseable output**:\n   - All errors returned as structured JSON\n   - Consistent field names across error types\n   - Error codes follow CLI-VALIDATION-XXX pattern\n\n## Standards Compliance\n- **standard-0010**: Structured error handling with suggestions\n- **standard-0005**: Verification with recovery guidance\n\n## Testing\nError handling now provides:\n- Specific error codes for tracking\n- Context-aware recovery suggestions\n- Machine-parseable JSON format\n- User-friendly messages with technical details\n"
 }

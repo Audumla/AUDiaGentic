@@ -6,7 +6,7 @@
     "summary": "Fix _execute_batch_operations() to write frontmatter for meta operations instead of silently discarding",
     "spec_ref": "spec-003",
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0194.md",
+    "path": "docs/planning/tasks/core/task-0194-fix-batch-meta-op.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,

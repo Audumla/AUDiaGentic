@@ -655,7 +655,8 @@ def tm_docs(
         "Admin and maintenance operations. "
         "op: validate (check all items against schemas, returns errors) | "
         "index (rebuild lookup indexes) | "
-        "reconcile (fix filesystem/state inconsistencies) | "
+        "clean_indexes (clear and rebuild indexes only — cheaper than maintain, no filename reconcile) | "
+        "reconcile (fix filesystem/state inconsistencies, returns renames+orphans) | "
         "maintain (canonical reconcile + rebuild of derived planning state) | "
         "events (recent event log, optional tail count, default 20) | "
         "verify (health check — dirs, configs, API) | "
@@ -667,7 +668,7 @@ def tm_admin(
     id: str | None = None,
     tail: int = 20,
 ) -> Any:
-    valid_ops = {"validate", "index", "reconcile", "maintain", "events", "verify", "check_sensitive"}
+    valid_ops = {"validate", "index", "clean_indexes", "reconcile", "maintain", "events", "verify", "check_sensitive"}
     if op not in valid_ops:
         raise PlanningError(
             f"Unknown op: {op!r}", suggestion=f"Valid ops: {', '.join(sorted(valid_ops))}"
@@ -678,6 +679,8 @@ def tm_admin(
     elif op == "index":
         tm.index()
         return None
+    elif op == "clean_indexes":
+        return tm.clean_indexes()
     elif op == "reconcile":
         return tm.reconcile()
     elif op == "maintain":

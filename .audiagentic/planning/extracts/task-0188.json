@@ -6,7 +6,7 @@
     "summary": "Provide clear error messages indicating expected field formats (e.g., work_package_refs requires objects with ref/seq)",
     "spec_ref": "spec-002",
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-0188.md",
+    "path": "docs/planning/tasks/core/task-0188-improve-schema-validation-error-messages.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
