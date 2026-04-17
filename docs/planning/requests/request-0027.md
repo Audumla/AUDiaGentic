@@ -1,7 +1,7 @@
 ---
 id: request-0027
 label: Generic Req
-state: captured
+state: superseded
 summary: Summary
 source: test-agent
 guidance: standard
@@ -22,6 +22,8 @@ spec_refs:
 
 
 
+
+
 # Understanding
 
 Initial feature intake captured; the desired capability is understood well enough to refine directly into implementation work.
@@ -32,3 +34,4 @@ Initial feature intake captured; the desired capability is understood well enoug
 - What constraints or non-goals apply?
 - How will success be verified?
 # Notes
+Superseded on 2026-04-17 as a generic placeholder artifact rather than substantive project work.

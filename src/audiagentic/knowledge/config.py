@@ -7,7 +7,7 @@ from typing import Any
 
 from .utils import load_yaml_file
 
-DEFAULT_CONFIG_PATH = ".audiagentic/knowledge/config.yml"
+DEFAULT_CONFIG_PATH = ".audiagentic/knowledge/config/config.yml"
 CONFIG_ENV_VAR = "AUDIAGENTIC_KNOWLEDGE_CONFIG"
 
 
@@ -63,38 +63,73 @@ class KnowledgeConfig:
 
     @property
     def hook_config_file(self) -> Path:
-        rel = self.raw.get("hook_config_file", "sync/hooks.yml")
-        return self.knowledge_root / str(rel)
+        rel = self.raw.get("hook_config_file", "config/sync/hooks.yml")
+        path = Path(str(rel))
+        return (
+            self.root / path
+            if path.is_absolute() or str(path).startswith(".")
+            else self.knowledge_root / path
+        )
 
     @property
     def event_adapter_file(self) -> Path:
-        rel = self.raw.get("events", {}).get("adapters_file", "events/adapters.yml")
-        return self.config_path.parent / str(rel)
+        rel = self.raw.get("events", {}).get("adapters_file", "config/events/adapters.yml")
+        path = Path(str(rel))
+        return (
+            self.root / path
+            if path.is_absolute() or str(path).startswith(".")
+            else self.config_path.parent / path
+        )
 
     @property
     def importer_registry_file(self) -> Path:
-        rel = self.raw.get("importer_registry_file", "registries/importers.yml")
-        return self.knowledge_root / str(rel)
+        rel = self.raw.get("importer_registry_file", "config/registries/importers.yml")
+        path = Path(str(rel))
+        return (
+            self.root / path
+            if path.is_absolute() or str(path).startswith(".")
+            else self.knowledge_root / path
+        )
 
     @property
     def action_registry_file(self) -> Path:
-        rel = self.raw.get("action_registry_file", "registries/actions.yml")
-        return self.knowledge_root / str(rel)
+        rel = self.raw.get("action_registry_file", "config/registries/actions.yml")
+        path = Path(str(rel))
+        return (
+            self.root / path
+            if path.is_absolute() or str(path).startswith(".")
+            else self.knowledge_root / path
+        )
 
     @property
     def llm_registry_file(self) -> Path:
-        rel = self.raw.get("llm_registry_file", "registries/llm.yml")
-        return self.knowledge_root / str(rel)
+        rel = self.raw.get("llm_registry_file", "config/registries/llm.yml")
+        path = Path(str(rel))
+        return (
+            self.root / path
+            if path.is_absolute() or str(path).startswith(".")
+            else self.knowledge_root / path
+        )
 
     @property
     def navigation_config_file(self) -> Path:
-        rel = self.raw.get("navigation_config_file", "navigation/routes.yml")
-        return self.knowledge_root / str(rel)
+        rel = self.raw.get("navigation_config_file", "config/navigation/routes.yml")
+        path = Path(str(rel))
+        return (
+            self.root / path
+            if path.is_absolute() or str(path).startswith(".")
+            else self.knowledge_root / path
+        )
 
     @property
     def execution_registry_file(self) -> Path:
-        rel = self.raw.get("execution_registry_file", "registries/execution.yml")
-        return self.knowledge_root / str(rel)
+        rel = self.raw.get("execution_registry_file", "config/registries/execution.yml")
+        path = Path(str(rel))
+        return (
+            self.root / path
+            if path.is_absolute() or str(path).startswith(".")
+            else self.knowledge_root / path
+        )
 
     @property
     def docs_root(self) -> Path:
@@ -177,6 +212,14 @@ class KnowledgeConfig:
         return str(self.raw.get("sync", {}).get("proposal_default_mode", "review_only"))
 
     @property
+    def proposal_retention_days(self) -> int:
+        return int(self.raw.get("sync", {}).get("proposal_retention_days", 30))
+
+    @property
+    def archive_retention_days(self) -> int:
+        return int(self.raw.get("sync", {}).get("archive_retention_days", 90))
+
+    @property
     def auto_apply_proposals(self) -> bool:
         return bool(self.raw.get("events", {}).get("auto_apply_proposals", True))
 
@@ -186,8 +229,13 @@ class KnowledgeConfig:
 
     @property
     def handlers_file(self) -> Path:
-        rel = self.raw.get("events", {}).get("handlers_file", "events/handlers.yml")
-        return self.config_path.parent / str(rel)
+        rel = self.raw.get("events", {}).get("handlers_file", "config/events/handlers.yml")
+        path = Path(str(rel))
+        return (
+            self.root / path
+            if path.is_absolute() or str(path).startswith(".")
+            else self.config_path.parent / path
+        )
 
     @property
     def scaffold_default_sections(self) -> list[str]:
@@ -207,6 +255,10 @@ class KnowledgeConfig:
     @property
     def llm_default_mode(self) -> str:
         return str(self.raw.get("llm", {}).get("default_mode", "blocking"))
+
+    @property
+    def llm_job_retention_days(self) -> int:
+        return int(self.raw.get("llm", {}).get("job_retention_days", 7))
 
     @property
     def selected_profiles(self) -> dict[str, str]:

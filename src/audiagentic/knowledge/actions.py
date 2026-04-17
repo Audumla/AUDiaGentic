@@ -8,7 +8,13 @@ from .config import KnowledgeConfig
 from .events import process_events, record_event_baseline, scan_events
 from .importers import scaffold_page, seed_from_manifest
 from .search import search_pages
-from .sync import apply_all_proposals, generate_sync_proposals, record_sync_state, scan_drift
+from .sync import (
+    apply_all_proposals,
+    cleanup_lifecycle,
+    generate_sync_proposals,
+    record_sync_state,
+    scan_drift,
+)
 
 
 def execute_deterministic_action(
@@ -53,6 +59,19 @@ def action_apply_proposals(
         paths = None
     results = apply_all_proposals(config, paths)
     return {"action_id": action_id, "result": results}
+
+
+def action_cleanup_lifecycle(
+    *, config: KnowledgeConfig, action_id: str, action_args: dict[str, Any]
+) -> dict[str, Any]:
+    result = cleanup_lifecycle(
+        config,
+        job_retention_days=action_args.get("job_retention_days"),
+        proposal_retention_days=action_args.get("proposal_retention_days"),
+        archive_retention_days=action_args.get("archive_retention_days"),
+        prune_pending_proposals=bool(action_args.get("prune_pending_proposals", True)),
+    )
+    return {"action_id": action_id, "result": result}
 
 
 def action_record_sync(

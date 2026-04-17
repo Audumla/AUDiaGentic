@@ -21,6 +21,8 @@ related:
 ## Summary
 This guide helps new developers and agents get started with the AUDiaGentic project. It covers repository structure, core systems (planning and knowledge), and how to begin contributing effectively.
 
+**Start here for current work:** [Current Operational State](../systems/system-current-state.md) - This page tracks the current build state, active work, and next legal starting points.
+
 ## Current state
 **Repository Structure:**
 ```

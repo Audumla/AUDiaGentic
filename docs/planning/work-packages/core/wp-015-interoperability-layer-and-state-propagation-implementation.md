@@ -1,7 +1,7 @@
 ---
 id: wp-015
 label: Interoperability layer and state propagation implementation
-state: draft
+state: ready
 summary: Tasks for implementing event-driven interoperability layer and automatic
   state propagation (16 tasks, restructured)
 plan_ref: plan-013
@@ -31,6 +31,9 @@ standard_refs:
 
 
 
+
+
+
 # Objective
 
 
@@ -50,3 +53,8 @@ standard_refs:
 
 
 # Non-Goals
+
+# Notes
+Assessment on 2026-04-17: work package remains valid with a reduced remaining slice focused on `task-0261` and `task-0265`.
+
+Remaining work package scope now explicitly includes `task-0006` for invalid parent-transition handling in propagation logic.

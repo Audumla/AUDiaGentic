@@ -1,7 +1,7 @@
 ---
 id: spec-018
 label: Planning Module Critical Fixes Specification
-state: draft
+state: done
 summary: Specification for fixing critical bugs and architectural issues in planning
   module
 request_refs:
@@ -11,6 +11,10 @@ standard_refs:
 - standard-0006
 - standard-0005
 ---
+
+
+
+
 
 
 # Purpose
@@ -313,3 +317,7 @@ def dump_markdown(path: Path, data: dict, body: str) -> None:
 - Review 1: Critical Review: Planning Module (2026-04-14)
 - Review 2: Planning Module Code Review (2026-04-14)
 - Review 3: Architectural Review (2026-04-14)
+
+# Notes
+
+Marked done on 2026-04-17 after confirming the linked critical-fix tasks were completed or explicitly cancelled as no longer needed.

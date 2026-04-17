@@ -18,6 +18,7 @@ from .id_gen import next_id
 from .idx_mgr import Indexer
 from .paths import Paths
 from .rec_mgr import Reconcile
+from .rel_config import RelationshipConfig
 from .rel_mgr import Relationships
 from .val_mgr import Validator
 
@@ -43,6 +44,7 @@ class PlanningAPI:
         self.claims_store = Claims(self.root / ".audiagentic/planning/claims/claims.json")
         self.indexer = Indexer(self.root)
         self.validator = Validator(self.root)
+        self.relationship_config = RelationshipConfig(self.config)
         self.extracts = Extracts(self.root, api_getter=lambda: self)
         self.reconciler = Reconcile(self.root)
 
@@ -154,7 +156,7 @@ class PlanningAPI:
             return
 
         # Calculate propagations
-        propagations = self._propagation_engine.propagate(item_id, new_state)
+        propagations = self._propagation_engine.propagate(item_id, new_state, metadata)
 
         if not propagations:
             return
@@ -968,6 +970,12 @@ class PlanningAPI:
             context=context,
         )
 
+        relationship_errors = self.relationship_config.validate_refs(
+            kind, frontmatter, validate_required=False
+        )
+        if relationship_errors:
+            raise ValueError("; ".join(relationship_errors))
+
         # Render body template
         body = self.config.document_template(kind, guidance)
 
@@ -1753,7 +1761,7 @@ class PlanningAPI:
 
         try:
             self.state(superseded_id, "superseded", reason=f"Auto-superseded by {new_id}")
-        except ValueError as e:
+        except ValueError:
             # If state transition is invalid, still add the metadata
             # but don't change state
             pass

@@ -18,9 +18,10 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.state import jobs_store as _default_store

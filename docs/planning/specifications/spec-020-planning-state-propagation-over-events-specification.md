@@ -1,7 +1,7 @@
 ---
 id: spec-020
 label: Planning state propagation over events specification
-state: ready
+state: in_progress
 summary: Automatic state transitions using interoperability layer events
 request_refs:
 - request-017
@@ -29,6 +29,9 @@ standard_refs:
 - standard-0005
 - standard-0006
 ---
+
+
+
 
 
 
@@ -557,3 +560,8 @@ metadata:
 - [ ] Migration guide from manual to automatic state management
 - [ ] Audit tool usage documented with examples
 - [ ] Eventual consistency model explained (when hierarchies may be temporarily inconsistent)
+
+# Notes
+Assessment on 2026-04-17: propagation core is implemented and event subscription is active. Remaining valid follow-up is the audit/repair CLI (`task-0265`) and finishing knowledge-side propagation behavior via `task-0261`.
+
+Implementation review on 2026-04-17 found a concrete propagation bug: parent items can be targeted with invalid transitions (observed: `draft -> done`) during event-driven cascades. Follow-up isolated in `task-0006`.
