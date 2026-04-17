@@ -16,11 +16,11 @@ open_questions:
 - How should propagation failures be handled (retry, log, skip)?
 - Should propagation be synchronous (blocking) or asynchronous (background)?
 standard_refs:
-- standard-0001
-- standard-0005
-- standard-0006
+- standard-1
+- standard-5
+- standard-6
 spec_refs:
-- spec-022
+- spec-22
 ---
 
 

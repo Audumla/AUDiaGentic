@@ -1,28 +1,21 @@
 {
   "item": {
     "id": "spec-5",
-    "label": "Canonical planning filename and maintenance reconciliation",
+    "label": "MCP layer efficiency and planning surface ergonomics \u2014 Master specification",
     "state": "draft",
-    "summary": "Define config-driven canonical planning filenames, reference repair, and one maintenance path for reconcile plus rebuild of derived planning state",
+    "summary": "Unified specification for MCP layer improvements and planning surface usability. Covers both wrapper/template efficiency work and planning mutation coverage gaps.",
     "request_refs": [
-      "request-31"
+      "request-3"
     ],
     "task_refs": [],
-    "standard_refs": [
-      "standard-0006",
-      "standard-0005"
-    ],
     "kind": "spec",
-    "path": "docs/planning/specifications/spec-5-canonical-planning-filename-and-maintenance-reconciliation.md",
+    "path": "docs/planning/specifications/spec-5-mcp-layer-efficiency-and-planning-surface-ergonomics-master-specification.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
-    "standard-0006",
-    "standard-0005"
-  ],
-  "body": "\n\n\n# Purpose\n\nDefine one canonical, config-driven filename convention for planning objects and one canonical maintenance path that reconciles filenames, repairs references, and rebuilds derived planning state.\n\n# Scope\n\n- Define canonical filename convention for planning objects\n- Store naming convention in planning config\n- Apply same convention to create and reconcile flows\n- Repair references when filenames are reconciled\n- Expose one canonical maintenance/rebuild path in planning API/MCP\n- Rebuild indexes/extracts/derived planning state after repair\n\nOut of scope:\n- introducing new planning object kinds\n- changing planning semantic relationships unrelated to naming/references\n\n# Requirements\n## Canonical Naming\n\n- Naming convention must be defined in planning config, not only in code.\n- Config should clearly capture:\n  - numeric formatting policy\n  - slug inclusion policy\n  - canonical filename pattern shape\n  - any narrow legacy exceptions, if they must exist\n- Canonical pattern should be sortable and human-readable.\n- Create and reconcile flows must read the same config-owned naming rule.\n\n## Reference Repair\n\nReconciliation must update or preserve resolution for:\n- planning frontmatter refs such as `request_refs`, `spec_ref`, `plan_ref`, `task_refs`, `parent_task_ref`, `standard_refs`\n- indexes and lookup artifacts\n- generated artifacts or docs that depend on planning file paths where applicable\n- any maintenance outputs that would otherwise keep stale file paths\n\n## Maintenance Path\n\nThere should be one canonical planning maintenance entry point that orchestrates:\n- filename reconciliation\n- reference repair\n- derived index rebuild\n- extract/cache cleanup or rebuild\n- final validation/verification\n\nOther maintenance flows should delegate to this path rather than duplicating rebuild logic.\n\n## API / MCP Surface\n\nPlanning API should expose one canonical maintenance method.\nPlanning MCP/admin should expose one corresponding operation rather than relying on manual fs cleanup.\nIf existing reindex or reconcile operations remain, their behavior should delegate to or align with the canonical maintenance path.\n\n## Migration Semantics\n\nThe system must support safe reconciliation of already-mixed planning artifacts in repo.\nMigration should not leave stale lookup state or unresolved references after renames.\n# Constraints\n\n- Preserve planning IDs and object semantics safely\n- Do not leave stale derived state after reconciliation\n- Keep naming convention centralized in config, not scattered across code\n- Avoid multiple competing cleanup/rebuild code paths\n\n# Acceptance Criteria\n1. Naming convention is documented clearly and stored in config.\n2. New planning objects use canonical filenames automatically.\n3. Reconcile/repair path applies canonical naming consistently to legacy mixed-format files.\n4. Reference repair is part of reconciliation, not a manual follow-up.\n5. One canonical maintenance API/MCP path rebuilds derived planning state.\n6. Existing reindex/reconcile behaviors either delegate to or remain consistent with the canonical maintenance path.\n7. Indexes/lookups/extracts validate cleanly after repair.\n8. Tests cover filename generation, migration/reconciliation, reference repair, and rebuild behavior.\n"
+  "effective_standard_refs": [],
+  "body": "\n\n# Purpose\n\n\n# Scope\n\n\n# Requirements\n\n\n# Constraints\n\n\n# Acceptance Criteria\n"
 }

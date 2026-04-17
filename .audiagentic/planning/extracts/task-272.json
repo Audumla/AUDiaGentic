@@ -1,0 +1,27 @@
+{
+  "item": {
+    "id": "task-272",
+    "label": "Fix error handling in validation.py:42",
+    "state": "completed",
+    "summary": "Replace generic exception with specific types",
+    "request_refs": [
+      "request-19"
+    ],
+    "standard_refs": [
+      "standard-5",
+      "standard-6"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-272-fix-error-handling-in-validation-py-42.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-5",
+    "standard-6"
+  ],
+  "body": "\n\n\n## Completed Work\n\nFixed inconsistent error handling in `validation.py:_load_archive_ids` function.\n\n### Changes Made:\n\n1. **Replaced generic `Exception` with specific exception types**:\n   - `OSError`: For file I/O errors (file not found, permission denied, etc.)\n   - `ValueError`: For metadata parsing errors (invalid YAML, malformed data, etc.)\n\n2. **Added comprehensive function docstring**:\n   - Documented purpose: Load archived page IDs from archive directory\n   - Documented arguments: config parameter\n   - Documented return value: Set of archived page IDs\n   - Documented exception handling behavior with note about silent skipping\n\n3. **Added unused import**:\n   - Added `Path` import for type hints consistency\n\n## Standards Compliance\n- **standard-0008**: Specific exception types instead of generic Exception\n- **standard-0005**: Comprehensive documentation with docstring\n\n## Testing\nFunction now properly handles:\n- File I/O errors (OSError) - silently skipped\n- Metadata parsing errors (ValueError) - silently skipped\n- All other exceptions still propagate as expected\n"
+}

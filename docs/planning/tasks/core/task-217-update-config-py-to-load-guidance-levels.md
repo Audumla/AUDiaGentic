@@ -1,0 +1,42 @@
+---
+id: task-217
+label: Update config.py to load guidance levels
+state: done
+summary: Add guidance_levels accessor to Config class, update profile_for() to merge
+  work-type profile with guidance level
+spec_ref: spec-10
+request_refs:
+- request-11
+standard_refs:
+- standard-5
+- standard-6
+---
+
+
+
+
+
+
+
+# Description
+
+Add guidance_levels accessor to Config class and update profile_for() to merge work-type profile with guidance level. The Config class should load guidance_levels from profiles.yaml and provide methods to retrieve guidance configuration.
+
+# Acceptance Criteria
+
+- [ ] Config class loads guidance_levels from profiles.yaml
+- [ ] Config class loads default_guidance from planning.yaml
+- [ ] guidance_levels() method returns all guidance levels
+- [ ] guidance_for() method returns specific guidance level config
+- [ ] profile_for() merges work-type profile with guidance level
+- [ ] Default guidance used when not specified
+- [ ] Tests for Config class methods
+- [ ] Backward compatible (no guidance = standard)
+
+# Notes
+
+This task ensures the Config class can access guidance configuration and merge it with work-type profiles for complete profile context.
+
+# State
+
+done

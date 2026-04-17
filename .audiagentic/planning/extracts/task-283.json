@@ -1,0 +1,20 @@
+{
+  "item": {
+    "id": "task-283",
+    "label": "std-0011",
+    "state": "cancelled",
+    "summary": "Refactor standard-0011 dependency injection",
+    "request_refs": [
+      "request-19"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-283-std-0011.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n# Description\n\nRefactor standard-0011 dependency injection\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n\n# Cancellation Reason\n\nTask cancelled: Vague placeholder without actionable content. Standard-0011 compliance work should be done through specific file reviews, not generic refactoring tasks.\n"
+}

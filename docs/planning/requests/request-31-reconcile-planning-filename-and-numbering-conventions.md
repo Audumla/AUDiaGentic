@@ -1,7 +1,7 @@
 ---
 id: request-31
 label: Reconcile planning filename and numbering conventions
-state: captured
+state: closed
 summary: Define and enforce one canonical filename pattern for planning objects, including
   consistent numeric formatting and slugs, then reconcile existing mixed-format artifacts
 source: codex
@@ -13,10 +13,11 @@ open_questions:
 - What constraints or non-goals apply?
 - How will success be verified?
 standard_refs:
-- standard-0001
+- standard-1
 spec_refs:
 - spec-5
 ---
+
 
 
 

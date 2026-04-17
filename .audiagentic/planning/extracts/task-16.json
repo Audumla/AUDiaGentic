@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-16",
+    "label": "Add archived state to planning state machine",
+    "state": "draft",
+    "summary": "Implement archived state, define valid state transitions (done\u2192archived, archived\u2192restored)",
+    "spec_ref": "spec-4",
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-16-add-archived-state-to-planning-state-machine.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n\n# Description\n\nAdd `archived` state to the planning object state machine and define valid state transitions.\n\n## Current States\n\n- `draft` - Object is being created/edited\n- `ready` - Object is ready for work\n- `in_progress` - Work is actively being done\n- `done` - Work is complete\n\n## New State\n\n- `archived` - Object is obsolete but preserved for history\n\n## State Transitions\n\n```\ndraft -> ready -> in_progress -> done -> archived\n   |                           ^\n   +----------- archived <------+\n```\n\n### Valid Transitions\n\n| From State | To State | Condition |\n|------------|----------|-----------|\n| `draft` | `ready` | Object is complete and ready |\n| `ready` | `in_progress` | Work begins |\n| `in_progress` | `done` | Work is complete |\n| `in_progress` | `ready` | Work paused, not complete |\n| `done` | `archived` | Object is obsolete |\n| `archived` | `draft` | Object restored to draft |\n| `archived` | `ready` | Object restored to ready |\n| `archived` | `in_progress` | Object restored to in_progress |\n\n### Invalid Transitions\n\n- `draft` \u2192 `archived` (must go through done)\n- `ready` \u2192 `archived` (must go through in_progress and done)\n- `in_progress` \u2192 `archived` (must complete first)\n- `archived` \u2192 `done` (must restore first)\n\n# Acceptance Criteria\n\n1. `tm_state` accepts `archived` as valid state\n2. `tm_state` validates transitions correctly\n3. Invalid transitions return error with clear message\n4. Archive state persists in object storage\n5. State machine documentation updated\n\n# Notes\n\n- Archive state is additive; existing transitions remain unchanged\n- Backward compatibility: existing objects without archive state work as before\n- State validation must check both state validity and transition validity\n"
+}

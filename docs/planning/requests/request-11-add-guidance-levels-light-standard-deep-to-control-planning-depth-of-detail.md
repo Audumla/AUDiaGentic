@@ -16,10 +16,10 @@ open_questions:
 - Which sections should be required at each guidance level?
 - Should guidance affect automation or only validation?
 standard_refs:
-- standard-0001
-- standard-0009
+- standard-1
+- standard-9
 spec_refs:
-- spec-010
+- spec-10
 meta:
   supersedes: request-0009
 ---

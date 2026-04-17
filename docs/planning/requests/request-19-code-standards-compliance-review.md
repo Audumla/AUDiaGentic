@@ -13,18 +13,18 @@ open_questions:
 meta:
   request_type: feature
   standard_refs:
-  - standard-0001
-  - standard-0005
-  - standard-0006
-  - standard-0008
+  - standard-1
+  - standard-5
+  - standard-6
+  - standard-8
   - standard-0010
-  - standard-0011
+  - standard-11
   spec_refs:
-  - spec-0063
+  - spec-63
 spec_refs:
-- spec-025
-- spec-026
-- spec-0070
+- spec-25
+- spec-26
+- spec-70
 ---
 
 
@@ -53,12 +53,12 @@ Reviewed 90+ Python files against 12 standards covering: planning documentation,
 - 12 of 16 primary tasks completed
 - 34 placeholder/vague tasks cancelled
 - 2 cleanup tasks done
-- 1 task remaining (task-0313 - standard-0007 implementation)
+- 1 task remaining (task-0313 - standard-7 implementation)
 - Request marked as COMPLETED
 
 # Open Questions
 
-- task-0313 (standard-0007 implementation) remains as a separate enhancement task
+- task-313 (standard-0007 implementation) remains as a separate enhancement task
 
 # Problem
 
@@ -225,29 +225,29 @@ Additional compliance issues found in execution/job and interoperability modules
 Created 16 detailed tasks for compliance issues:
 
 **Module Documentation (8 tasks):**
-- task-0267: Add module docstring to execution/jobs/__init__.py
-- task-0268: Fix empty planning/app/__init__.py
-- task-0269: Fix incomplete runtime/__init__.py
-- task-0270: Add class and method docstrings to base_mgr.py
+- task-267: Add module docstring to execution/jobs/__init__.py
+- task-268: Fix empty planning/app/__init__.py
+- task-269: Fix incomplete runtime/__init__.py
+- task-270: Add class and method docstrings to base_mgr.py
 - task-0340: Add comprehensive module docstring to runtime/lifecycle/__init__.py
 - task-0341: Add comprehensive module docstring to runtime/lifecycle/fresh_install.py
 - task-0342: Add comprehensive module docstring to runtime/lifecycle/uninstall.py
 - task-0343: Add comprehensive module docstring to runtime/lifecycle/manifest.py
 
 **API Layer (1 task):**
-- task-0271: Add type hints and docstring to get_task_by_id
+- task-271: Add type hints and docstring to get_task_by_id
 
 **Validation & Error Handling (4 tasks):**
-- task-0272: Fix error handling in validation.py:42
-- task-0273: Add JSON schema validation to _load_json_argument
-- task-0274: Add validation for session_input --details-json
-- task-0275: Fix generic error handling in CLI
+- task-272: Fix error handling in validation.py:42
+- task-273: Add JSON schema validation to _load_json_argument
+- task-274: Add validation for session_input --details-json
+- task-275: Fix generic error handling in CLI
 
 **Architecture (3 tasks):**
-- task-0276: Add JSON parsing error handling
-- task-0277: Fix global state access in job_control_tool
-- task-0278: Fix tight coupling in session_input_tool
-- task-0279: Refactor event bus singleton pattern
+- task-276: Add JSON parsing error handling
+- task-277: Fix global state access in job_control_tool
+- task-278: Fix tight coupling in session_input_tool
+- task-279: Refactor event bus singleton pattern
 
 # Next Steps
 
@@ -287,7 +287,7 @@ Created 16 detailed tasks for compliance issues:
 - Root discovery uses env-var-first pattern (`AUDIAGENTIC_ROOT`) with `.audiagentic/` marker fallback
 
 # Current Understanding
-Reviewed 90+ Python files against 12 planning and implementation standards. Found 16 compliance issues across 7 standards (standard-0005, standard-0008, standard-0010, standard-0011, standard-0001). Created 16 tasks covering: module documentation, type hints, error handling, JSON schema validation, and dependency injection. Completed 12 tasks: task-0267, task-0268, task-0269, task-0270, task-0272, task-0273, task-0274, task-0275, task-0276, task-0277, task-0278, task-0279. Cancelled task-0271 (function does not exist). Created 37 additional cleanup tasks (task-0280 through task-0317): 33 cancelled (placeholder tasks with no actionable content or referring to non-existent items), 2 done (task-0308, task-0309 - directories already clean), 1 remaining (task-0313 - standard-0007 implementation). All tasks properly linked to request-19.
+Reviewed 90+ Python files against 12 planning and implementation standards. Found 16 compliance issues across 7 standards (standard-0005, standard-0008, standard-0010, standard-0011, standard-0001). Created 16 tasks covering: module documentation, type hints, error handling, JSON schema validation, and dependency injection. Completed 12 tasks: task-267, task-0268, task-0269, task-0270, task-0272, task-0273, task-0274, task-0275, task-0276, task-0277, task-0278, task-0279. Cancelled task-0271 (function does not exist). Created 37 additional cleanup tasks (task-0280 through task-0317): 33 cancelled (placeholder tasks with no actionable content or referring to non-existent items), 2 done (task-0308, task-0309 - directories already clean), 1 remaining (task-0313 - standard-7 implementation). All tasks properly linked to request-19.
 
 **Completion Summary:**
 - 90+ files audited
@@ -310,7 +310,7 @@ Reviewed 90+ Python files against 12 planning and implementation standards. Foun
 - Fixed: 12 tasks (task-0267, task-0268, task-0269, task-0270, task-0272, task-0273, task-0274, task-0275, task-0276, task-0277, task-0278, task-0279)
 - Cancelled: 34 tasks (task-0271, task-0280 through task-0312, task-0314 through task-0317)
 - Done: 2 cleanup tasks (task-0308, task-0309)
-- Remaining: 1 task (task-0313 - standard-0007 implementation)
+- Remaining: 1 task (task-0313 - standard-7 implementation)
 
 **MCP Servers:** All compliant with standard-0010
 **Interoperability:** All compliant with standard-0008 and standard-0011

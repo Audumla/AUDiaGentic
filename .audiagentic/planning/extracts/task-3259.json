@@ -7,8 +7,8 @@
     "spec_ref": "spec-0001",
     "request_refs": [],
     "standard_refs": [
-      "standard-0005",
-      "standard-0006"
+      "standard-5",
+      "standard-6"
     ],
     "kind": "task",
     "path": "docs/planning/tasks/core/task-3259-api-compatibility-test.md",
@@ -19,8 +19,10 @@
     "restored_by": null
   },
   "effective_standard_refs": [
-    "standard-0005",
-    "standard-0006"
+    "standard-5",
+    "standard-6",
+    "standard-0006",
+    "standard-0005"
   ],
   "body": "\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
 }

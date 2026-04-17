@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-326",
+    "label": "Testing and Status Reports",
+    "state": "draft",
+    "summary": "Migrate all testing and status reports",
+    "spec_ref": "spec-20",
+    "kind": "task",
+    "path": "docs/planning/tasks/implementation-docs/task-326-testing-and-status-reports.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-5",
+    "standard-6"
+  ],
+  "body": "\n# Description\n\nImplement this task.\n\n\n# Testing and Status Reports\n\n## Purpose\n\nMigrate all testing and status reports.\n\n## Scope\n\n- Testing reports\n- Status reports\n- Validation reports\n\n## Implementation\n\n1. Migrate testing reports\n2. Migrate status reports\n3. Migrate validation reports\n\n## Acceptance Criteria\n\n1. Testing reports migrated\n2. Status reports migrated\n3. Validation reports migrated\n"
+}

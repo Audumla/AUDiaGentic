@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-85",
+    "label": "[PKT-PRV-008](task-0085): Provider Documentation",
+    "state": "cancelled",
+    "summary": "Document provider system",
+    "spec_ref": "spec-12",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-85-pkt-prv-008-task-0085-provider-documentation.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The Continue provider line was superseded and archived.\n\n\n# [PKT-PRV-008](task-0075): Provider Documentation\n\n## Purpose\n\nDocument provider system.\n\n## Scope\n\n- User docs\n- Developer docs\n- API docs\n\n## Implementation\n\n1. Write user docs\n2. Write developer docs\n3. Document API\n\n## Acceptance Criteria\n\nCancelled with superseded provider line.\n"
+}

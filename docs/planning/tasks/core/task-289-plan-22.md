@@ -1,0 +1,22 @@
+---
+id: task-289
+label: plan-22
+state: cancelled
+summary: Refactor plan-0022 capability contract
+request_refs:
+- request-19
+---
+
+
+# Description
+
+Refactor plan-0022 capability contract
+
+# Acceptance Criteria
+
+- Files reviewed and organized
+- Dependencies documented
+
+# Notes
+
+Part of request-19 code standards compliance cleanup.

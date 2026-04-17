@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "plan-6",
+    "label": "Fix planning API and MCP gaps",
+    "state": "in_progress",
+    "summary": "Execute 9 fixes across PlanningAPI and MCP layers to resolve 23 failing tests and 32 xfail mutation tests",
+    "spec_refs": [
+      "spec-3"
+    ],
+    "work_package_refs": [],
+    "kind": "plan",
+    "path": "docs/planning/plans/plan-6-fix-planning-api-and-mcp-gaps.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n# Objectives\n\n- Reflect actual completion across the `spec-003` task set instead of leaving the whole chain in `draft`\n- Keep the remaining root-isolation work visible and actionable\n- Align planning states with current code/test evidence\n\n# Delivery Approach\n\n- Treat the passing planning coverage suite as evidence that tasks `0202` through `0208` are implemented\n- Leave the MCP root-isolation slice (`0209` and `0210`) active until the xfailed mutation tests can run against isolated roots\n- Update the planning docs first so future work starts from an accurate ledger\n\n# Dependencies\n\n- `spec-003`\n- `tests/integration/planning/test_planning_api_coverage.py`\n- `tests/integration/planning/test_mcp_tool_calls.py`\n"
+}

@@ -1,0 +1,37 @@
+---
+id: task-168
+label: '[PKT-DIS-001](task-0168): Locator Provider Contract'
+state: draft
+summary: Define locator provider contract
+spec_ref: spec-16
+---
+
+
+# Description
+
+Implement this task.
+
+
+# [PKT-DIS-001](task-0157): Locator Provider Contract
+
+## Purpose
+
+Define locator provider contract.
+
+## Scope
+
+- Contract format
+- Interface definition
+- Validation
+
+## Implementation
+
+1. Define format
+2. Define interface
+3. Add validation
+
+## Acceptance Criteria
+
+1. Format defined
+2. Interface defined
+3. Validated

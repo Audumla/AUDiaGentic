@@ -1,0 +1,42 @@
+---
+id: task-218
+label: Add guidance field to request schema
+state: done
+summary: Update request.schema.json to include optional guidance field (light/standard/deep),
+  add validation for valid values
+spec_ref: spec-10
+request_refs:
+- request-11
+standard_refs:
+- standard-5
+- standard-6
+---
+
+
+
+
+
+
+
+# Description
+
+Update request.schema.json to include optional guidance field with enum validation for light/standard/deep values. The field should be optional for backward compatibility.
+
+# Acceptance Criteria
+
+- [ ] guidance field added to request.schema.json
+- [ ] Field type: string or null
+- [ ] Enum values: [light, standard, deep]
+- [ ] Field marked as optional (not in required array)
+- [ ] Schema validated against JSON Schema spec
+- [ ] Existing fields preserved
+- [ ] Tests for schema validation
+- [ ] Backward compatible (no guidance = standard defaults)
+
+# Notes
+
+This schema update enables JSON Schema validation for the guidance field across all tools that use the schema.
+
+# State
+
+done

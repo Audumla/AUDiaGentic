@@ -14,10 +14,10 @@ open_questions:
 meta:
   request_type: feature
 standard_refs:
-- standard-0001
+- standard-1
 spec_refs:
-- spec-0078
-- spec-0079
+- spec-78
+- spec-79
 ---
 
 

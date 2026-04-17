@@ -1,0 +1,16 @@
+---
+id: task-10
+label: Enhance search with fuzzy matching or BM25
+state: done
+summary: Replace token-based search with fuzzy matching or BM25 for better relevance
+domain: core
+spec_ref: wp-13
+standard_refs:
+- standard-5
+- standard-6
+---
+
+
+
+
+# Description\n\nCurrent search.py uses simple token-based weighting. Enhance with fuzzy or BM25:\n\n1. **Analyze trade-offs**: Fuzzy (user typo tolerance) vs BM25 (relevance ranking)\n2. **Implement chosen approach** in search.py\n3. **Add tests** demonstrating improved matching behavior\n4. **Preserve metadata filtering** (type, tags, owners still work)\n5. **Document** new search behavior\n\n# Acceptance Criteria\n\n- [ ] Search enhanced with fuzzy or BM25 algorithm\n- [ ] Tests demonstrate fuzzy/BM25 relevance improvements\n- [ ] Metadata filtering still works\n- [ ] Search results maintain compatible format (path, page_id, title, score, snippet, matches)\n- [ ] Performance acceptable (queries <200ms on typical repo)\n- [ ] README updated with search algorithm description\n\n# Notes\n\nConsider using `fuzzywuzzy` or `python-Levenshtein` for fuzzy, or `bm25` package for BM25.\nMay add new dependency (seek approval if needed).\nFuzzy recommended for typical use (CLI, MCP queries often have typos).\n"

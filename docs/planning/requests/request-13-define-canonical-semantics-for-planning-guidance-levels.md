@@ -17,10 +17,10 @@ open_questions:
 - Should examples and selection advice live in the same standard or in a separate
   supporting/reference document?
 standard_refs:
-- standard-0001
-- standard-0009
+- standard-1
+- standard-9
 spec_refs:
-- spec-012
+- spec-12
 meta:
   related_requests:
   - request-0009

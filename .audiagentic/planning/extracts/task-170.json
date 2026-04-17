@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-170",
+    "label": "Implement update_task_status() wrapper function",
+    "state": "done",
+    "summary": "Add single-call wrapper function that updates task state and appends implementation notes",
+    "spec_ref": "spec-5",
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-170-implement-update-task-status-wrapper-function.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n\n\n# Description\n\nAdd single-call wrapper function that updates task state and appends implementation notes.\n\n**Status: IMPLEMENTED**\n\nAll implementation work for task-0170 is complete:\n- Created update_task_status() function in tm_helper.py\n- Function combines state transition with section append in single call\n- Supports custom section (default: description)\n- Backward compatible with existing code\n- Usage: tm.update_task_status(\"task-0001\", \"ready\", \"Notes here\")\n\nFunction signature:\n```python\ndef update_task_status(\n    id_: str,\n    state: str,\n    notes: str,\n    section: str = \"description\",\n    root: Path | None = None,\n) -> dict[str, Any]:\n```\n\nBenefits:\n- Single tool call instead of two (state + append_section)\n- Clear intent - updates state and documents completion together\n- Token efficient - reduces API calls\n- Consistent with MCP root configurability improvements\n"
+}

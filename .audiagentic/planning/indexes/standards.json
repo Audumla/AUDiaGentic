@@ -1,61 +1,7 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-17T13:15:43.984810+00:00",
+  "generated_at": "2026-04-17T13:23:03.885942+00:00",
   "items": [
-    {
-      "id": "standard-0001",
-      "label": "Planning documentation and maintenance standard",
-      "state": "ready",
-      "path": "docs\\planning\\standards\\standard-0001-planning-documentation-and-maintenance-standard.md"
-    },
-    {
-      "id": "standard-0002",
-      "label": "Documentation surface and content organization standard",
-      "state": "ready",
-      "path": "docs\\planning\\standards\\standard-0002-documentation-surface-and-content-organization-standard.md"
-    },
-    {
-      "id": "standard-0003",
-      "label": "Versioning and changelog standard",
-      "state": "ready",
-      "path": "docs\\planning\\standards\\standard-0003-versioning-and-changelog-standard.md"
-    },
-    {
-      "id": "standard-0004",
-      "label": "Review findings and evidence standard",
-      "state": "ready",
-      "path": "docs\\planning\\standards\\standard-0004-review-findings-and-evidence-standard.md"
-    },
-    {
-      "id": "standard-0005",
-      "label": "Verification and test evidence standard",
-      "state": "ready",
-      "path": "docs\\planning\\standards\\standard-0005-verification-and-test-evidence-standard.md"
-    },
-    {
-      "id": "standard-0006",
-      "label": "Planning structure and record quality standard",
-      "state": "ready",
-      "path": "docs\\planning\\standards\\standard-0006-planning-structure-and-record-quality-standard.md"
-    },
-    {
-      "id": "standard-0007",
-      "label": "Migration and change-control standard",
-      "state": "ready",
-      "path": "docs\\planning\\standards\\standard-0007-migration-and-change-control-standard.md"
-    },
-    {
-      "id": "standard-0008",
-      "label": "Python implementation standard",
-      "state": "ready",
-      "path": "docs\\planning\\standards\\standard-0008-python-implementation-standard.md"
-    },
-    {
-      "id": "standard-0009",
-      "label": "Planning layer enhancement impact standard",
-      "state": "ready",
-      "path": "docs\\planning\\standards\\standard-0009-planning-layer-enhancement-impact-standard.md"
-    },
     {
       "id": "standard-0010-python",
       "label": "Python MCP server development standard",
@@ -63,34 +9,88 @@
       "path": "docs\\planning\\standards\\standard-0010-python-python-mcp-server-development-standard.md"
     },
     {
-      "id": "standard-0011",
+      "id": "standard-1",
+      "label": "Planning documentation and maintenance standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-1-planning-documentation-and-maintenance-standard.md"
+    },
+    {
+      "id": "standard-11",
       "label": "Component architecture standard",
       "state": "ready",
-      "path": "docs\\planning\\standards\\standard-0011-component-architecture-standard.md"
+      "path": "docs\\planning\\standards\\standard-11-component-architecture-standard.md"
     },
     {
-      "id": "standard-0012",
+      "id": "standard-12",
       "label": "Knowledge maintenance standard",
       "state": "ready",
-      "path": "docs\\planning\\standards\\standard-0012-knowledge-maintenance-standard.md"
+      "path": "docs\\planning\\standards\\standard-12-knowledge-maintenance-standard.md"
     },
     {
-      "id": "standard-0013",
+      "id": "standard-13",
       "label": "Event subscription configuration standard",
       "state": "ready",
-      "path": "docs\\planning\\standards\\standard-0013-event-subscription-configuration-standard.md"
+      "path": "docs\\planning\\standards\\standard-13-event-subscription-configuration-standard.md"
     },
     {
-      "id": "standard-0014",
+      "id": "standard-14",
       "label": "Project directory layout standard",
       "state": "ready",
-      "path": "docs\\planning\\standards\\standard-0014-project-directory-layout-standard.md"
+      "path": "docs\\planning\\standards\\standard-14-project-directory-layout-standard.md"
     },
     {
-      "id": "standard-0014",
+      "id": "standard-14",
       "label": "Test Standard",
       "state": "ready",
-      "path": "docs\\planning\\standards\\standard-0014-test-standard.md"
+      "path": "docs\\planning\\standards\\standard-14-test-standard.md"
+    },
+    {
+      "id": "standard-2",
+      "label": "Documentation surface and content organization standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-2-documentation-surface-and-content-organization-standard.md"
+    },
+    {
+      "id": "standard-3",
+      "label": "Versioning and changelog standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-3-versioning-and-changelog-standard.md"
+    },
+    {
+      "id": "standard-4",
+      "label": "Review findings and evidence standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-4-review-findings-and-evidence-standard.md"
+    },
+    {
+      "id": "standard-5",
+      "label": "Verification and test evidence standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-5-verification-and-test-evidence-standard.md"
+    },
+    {
+      "id": "standard-6",
+      "label": "Planning structure and record quality standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-6-planning-structure-and-record-quality-standard.md"
+    },
+    {
+      "id": "standard-7",
+      "label": "Migration and change-control standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-7-migration-and-change-control-standard.md"
+    },
+    {
+      "id": "standard-8",
+      "label": "Python implementation standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-8-python-implementation-standard.md"
+    },
+    {
+      "id": "standard-9",
+      "label": "Planning layer enhancement impact standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-9-planning-layer-enhancement-impact-standard.md"
     }
   ]
 }

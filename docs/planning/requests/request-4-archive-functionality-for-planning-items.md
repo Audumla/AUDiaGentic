@@ -17,8 +17,8 @@ open_questions:
 - What test evidence is sufficient to demonstrate archive metadata persistence and
   non-breaking behavior across list, show, validate, archive, and restore flows?
 standard_refs:
-- standard-0001
-- standard-0009
+- standard-1
+- standard-9
 meta:
   current_understanding: Archive functionality implementation ready to begin. Spec-0023
     finalized, plan-0009 and wp-0009 ready, all 5 tasks prepared for implementation.

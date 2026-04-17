@@ -13,7 +13,7 @@ open_questions:
 - What constraints or non-goals apply?
 - How will success be verified?
 spec_refs:
-- spec-0029
+- spec-29
 ---
 
 

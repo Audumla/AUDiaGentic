@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-123",
+    "label": "[PKT-PRV-045](task-0123): Provider Data Encryption",
+    "state": "draft",
+    "summary": "Implement provider data encryption",
+    "spec_ref": "spec-12",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-123-pkt-prv-045-task-0123-provider-data-encryption.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-045](task-0112): Provider Data Encryption\n\n## Purpose\n\nImplement provider data encryption.\n\n## Scope\n\n- Encryption algorithm\n- Key management\n- Data protection\n\n## Implementation\n\n1. Define algorithm\n2. Manage keys\n3. Protect data\n\n## Acceptance Criteria\n\n1. Algorithm defined\n2. Keys managed\n3. Data protected\n"
+}

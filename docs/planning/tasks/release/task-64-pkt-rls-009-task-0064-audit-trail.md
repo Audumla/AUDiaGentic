@@ -1,0 +1,37 @@
+---
+id: task-64
+label: '[PKT-RLS-009](task-0064): Audit Trail'
+state: draft
+summary: Create audit trail for releases
+spec_ref: spec-10
+---
+
+
+# Description
+
+Implement this task.
+
+
+# [PKT-RLS-009](task-0054): Audit Trail
+
+## Purpose
+
+Create audit trail for releases.
+
+## Scope
+
+- Trail format
+- Logging
+- Retention
+
+## Implementation
+
+1. Define trail format
+2. Implement logging
+3. Set retention
+
+## Acceptance Criteria
+
+1. Trail format defined
+2. Logging works
+3. Retention set

@@ -1,0 +1,29 @@
+{
+  "item": {
+    "id": "task-240",
+    "label": "Consolidate MCP tools",
+    "state": "draft",
+    "summary": "Consolidate 28 MCP tools into 7-8 top-level tools with backward compatibility",
+    "spec_ref": "spec-16",
+    "parent_task_ref": "wp-13",
+    "request_refs": [
+      "request-15"
+    ],
+    "standard_refs": [
+      "standard-5",
+      "standard-6"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-240-consolidate-mcp-tools.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-5",
+    "standard-6"
+  ],
+  "body": "\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+}

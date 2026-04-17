@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-122",
+    "label": "[PKT-PRV-044](task-0122): Provider Policy Enforcement",
+    "state": "cancelled",
+    "summary": "Implement provider policy enforcement",
+    "spec_ref": "spec-12",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-122-pkt-prv-044-task-0122-provider-policy-enforcement.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The Continue auto-install line was superseded and archived.\n\n\n# [PKT-PRV-044](task-0111): Provider Policy Enforcement\n\n## Purpose\n\nImplement provider policy enforcement.\n\n## Scope\n\n- Policy format\n- Enforcement logic\n- Exceptions\n\n## Implementation\n\n1. Define format\n2. Implement enforcement\n3. Add exceptions\n\n## Acceptance Criteria\n\n1. Format defined\n2. Enforcement works\n3. Exceptions handled\n"
+}

@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-80",
+    "label": "[PKT-PRV-003](task-0080): Provider Selection",
+    "state": "cancelled",
+    "summary": "Implement deterministic provider selection",
+    "spec_ref": "spec-12",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-80-pkt-prv-003-task-0080-provider-selection.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The local-openai provider line was superseded and archived.\n\n\n# [PKT-PRV-003](task-0070): Provider Selection\n\n## Purpose\n\nImplement deterministic provider selection.\n\n## Scope\n\n- Selection logic\n- Rules\n- Fallback\n\n## Implementation\n\n1. Implement selection\n2. Define rules\n3. Add fallback\n\n## Acceptance Criteria\n\nCancelled with superseded provider line.\n"
+}

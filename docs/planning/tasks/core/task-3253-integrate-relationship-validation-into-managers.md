@@ -3,11 +3,11 @@ id: task-3253
 label: Integrate relationship validation into managers
 state: draft
 summary: '"Add RelationshipConfig validation to manager create() methods"'
-spec_ref: spec-0029
+spec_ref: spec-29
 request_refs: []
 standard_refs:
-- standard-0005
-- standard-0006
+- standard-5
+- standard-6
 ---
 
 ## Description

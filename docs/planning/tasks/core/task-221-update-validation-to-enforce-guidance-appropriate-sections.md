@@ -1,0 +1,45 @@
+---
+id: task-221
+label: Update validation to enforce guidance-appropriate sections
+state: done
+summary: Update val_mgr.py to check guidance field and enforce required/suggested
+  sections per guidance level, warn about excessive/minimal detail
+spec_ref: spec-10
+request_refs:
+- request-11
+standard_refs:
+- standard-5
+- standard-6
+---
+
+
+
+
+
+
+
+# Description
+
+Update val_mgr.py to check guidance field and enforce required/suggested sections per guidance level. Warn about excessive detail for light guidance and minimal detail for deep guidance.
+
+# Acceptance Criteria
+
+- [ ] Validation checks guidance field in frontmatter
+- [ ] Guidance defaults to standard if not specified
+- [ ] Spec sections validated against guidance spec_sections
+- [ ] Task sections validated against guidance task_sections
+- [ ] light: warn about excessive detail
+- [ ] standard: standard validation
+- [ ] deep: require all required sections
+- [ ] Acceptance criteria depth validated
+- [ ] Warnings logged for violations
+- [ ] Tests for validation rules
+- [ ] Backward compatible (no guidance = standard)
+
+# Notes
+
+This task ensures content depth matches guidance level expectations.
+
+# State
+
+done

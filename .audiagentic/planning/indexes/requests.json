@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-17T13:15:43.984810+00:00",
+  "generated_at": "2026-04-17T13:23:03.885942+00:00",
   "items": [
     {
       "id": "request-1",
@@ -131,7 +131,7 @@
     {
       "id": "request-31",
       "label": "Reconcile planning filename and numbering conventions",
-      "state": "captured",
+      "state": "closed",
       "path": "docs\\planning\\requests\\request-31-reconcile-planning-filename-and-numbering-conventions.md"
     },
     {

@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-90",
+    "label": "[PKT-PRV-013](task-0090): Provider Feature Flags",
+    "state": "draft",
+    "summary": "Implement provider feature flags",
+    "spec_ref": "spec-12",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-90-pkt-prv-013-task-0090-provider-feature-flags.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-013](task-0080): Provider Feature Flags\n\n## Purpose\n\nImplement provider feature flags.\n\n## Scope\n\n- Flag format\n- Toggle logic\n- Documentation\n\n## Implementation\n\n1. Define format\n2. Implement toggle\n3. Document\n\n## Acceptance Criteria\n\n1. Format defined\n2. Toggle works\n3. Documented\n"
+}

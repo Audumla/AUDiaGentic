@@ -3165,3 +3165,12 @@
 {"ts": "2026-04-17T13:10:42.944337+00:00", "event": "planning.item.state.changed", "id": "task-12", "old_state": "ready", "new_state": "in_progress"}
 {"ts": "2026-04-17T13:10:54.604849+00:00", "event": "planning.item.state.changed", "id": "task-12", "old_state": "in_progress", "new_state": "done"}
 {"ts": "2026-04-17T13:16:29.198672+00:00", "event": "planning.maintained", "renames": 364, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 305, "extracts_skipped": 154}
+{"ts": "2026-04-17T13:17:39.838965+00:00", "event": "planning.item.state.changed", "id": "request-31", "old_state": "captured", "new_state": "closed"}
+{"ts": "2026-04-17T13:22:37.566743+00:00", "event": "planning.item.deleted", "id": "spec-0001", "hard_delete": false, "deleted_at": "2026-04-17T13:22:37.402907+00:00", "counter_sync": false}
+{"ts": "2026-04-17T13:22:37.736206+00:00", "event": "planning.item.deleted", "id": "spec-0002", "hard_delete": false, "deleted_at": "2026-04-17T13:22:37.574443+00:00", "counter_sync": false}
+{"ts": "2026-04-17T13:22:37.903048+00:00", "event": "planning.item.deleted", "id": "spec-0003", "hard_delete": false, "deleted_at": "2026-04-17T13:22:37.743999+00:00", "counter_sync": false}
+{"ts": "2026-04-17T13:22:38.071697+00:00", "event": "planning.item.deleted", "id": "plan-0001", "hard_delete": false, "deleted_at": "2026-04-17T13:22:37.910456+00:00", "counter_sync": false}
+{"ts": "2026-04-17T13:22:38.242137+00:00", "event": "planning.item.deleted", "id": "plan-0002", "hard_delete": false, "deleted_at": "2026-04-17T13:22:38.080190+00:00", "counter_sync": false}
+{"ts": "2026-04-17T13:22:38.416868+00:00", "event": "planning.item.deleted", "id": "plan-0003", "hard_delete": false, "deleted_at": "2026-04-17T13:22:38.253205+00:00", "counter_sync": false}
+{"ts": "2026-04-17T13:22:38.592651+00:00", "event": "planning.item.deleted", "id": "wp-0001", "hard_delete": false, "deleted_at": "2026-04-17T13:22:38.426256+00:00", "counter_sync": false}
+{"ts": "2026-04-17T13:23:13.665310+00:00", "event": "planning.maintained", "renames": 410, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 422, "extracts_skipped": 30}

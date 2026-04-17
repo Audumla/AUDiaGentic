@@ -1,0 +1,20 @@
+{
+  "item": {
+    "id": "task-280",
+    "label": "spec-60",
+    "state": "cancelled",
+    "summary": "Document spec-0060 knowledge vault",
+    "request_refs": [
+      "request-19"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-280-spec-60.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n# Description\n\nDocument spec-0060 knowledge vault\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n\n# Cancellation Reason\n\nTask cancelled: spec-60 does not exist. Task was a placeholder without actionable content.\n"
+}

@@ -1,0 +1,36 @@
+---
+id: task-187
+label: Add duplicate detection for requests and specs
+state: done
+summary: Prevent creation of duplicate requests/specs with the same label during first-pass
+  creation
+spec_ref: spec-2
+---
+
+
+
+# Description
+
+Add duplicate detection to prevent creating multiple requests or specs with the same label. This prevents the issue where request-6 was created multiple times due to lack of a simple first-pass duplicate guard.
+
+**Current behavior:**
+- Creating a request with label "Planning module critical fixes..." creates a new ID each time
+- No check for existing requests with the same label
+
+**Required behavior:**
+- `tm_new_request()` checks for existing requests with the same label (case-insensitive exact match)
+- `tm_new_spec()` checks for existing specs with same label
+- Returns an explicit duplicate result or error instead of silently creating a new item
+
+# Acceptance Criteria
+
+1. `tm_new_request(label="...")` raises error if request with same label exists
+2. `tm_new_spec(label="...")` raises error if spec with same label exists
+3. Duplicate detection uses exact label matching for the first pass
+4. Error message or helper result suggests the existing ID when a duplicate is found
+5. Works for both helper/MCP creation paths and direct API calls
+
+# Notes
+- Implement in `tools/planning/tm_helper.py` and `src/audiagentic/planning/app/api.py`
+- Keep the first pass narrow and explainable; broader fuzzy matching can be added later if needed
+- Implementation result: added first-pass duplicate detection for requests and specifications in the core API and helper layer. The guard now blocks exact label duplicates while still allowing common reused summaries.
