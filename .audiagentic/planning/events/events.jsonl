@@ -3174,3 +3174,14 @@
 {"ts": "2026-04-17T13:22:38.416868+00:00", "event": "planning.item.deleted", "id": "plan-0003", "hard_delete": false, "deleted_at": "2026-04-17T13:22:38.253205+00:00", "counter_sync": false}
 {"ts": "2026-04-17T13:22:38.592651+00:00", "event": "planning.item.deleted", "id": "wp-0001", "hard_delete": false, "deleted_at": "2026-04-17T13:22:38.426256+00:00", "counter_sync": false}
 {"ts": "2026-04-17T13:23:13.665310+00:00", "event": "planning.maintained", "renames": 410, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 422, "extracts_skipped": 30}
+{"ts": "2026-04-17T13:29:12.134084+00:00", "event": "planning.item.updated", "id": "spec-0006", "kind": "spec"}
+{"ts": "2026-04-17T13:29:25.878560+00:00", "event": "planning.maintained", "renames": 46, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 422, "extracts_skipped": 30}
+{"ts": "2026-04-17T13:29:35.553533+00:00", "event": "planning.item.updated", "id": "spec-0007", "kind": "spec"}
+{"ts": "2026-04-17T13:30:02.014090+00:00", "event": "planning.item.updated", "id": "spec-0008", "kind": "spec"}
+{"ts": "2026-04-17T13:30:16.149623+00:00", "event": "planning.maintained", "renames": 47, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 422, "extracts_skipped": 30}
+{"ts": "2026-04-17T13:30:27.710735+00:00", "event": "planning.item.updated", "id": "spec-0009", "kind": "spec"}
+{"ts": "2026-04-17T13:30:48.085569+00:00", "event": "planning.maintained", "renames": 47, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 422, "extracts_skipped": 30}
+{"ts": "2026-04-17T13:31:02.924972+00:00", "event": "planning.item.updated", "id": "spec-0010", "kind": "spec"}
+{"ts": "2026-04-17T13:31:28.532528+00:00", "event": "planning.item.updated", "id": "spec-0011", "kind": "spec"}
+{"ts": "2026-04-17T13:31:28.899873+00:00", "event": "planning.reconciled", "orphans": ["spec-0021"]}
+{"ts": "2026-04-17T13:31:28.907833+00:00", "event": "planning.item.created", "id": "spec-0011", "kind": "spec", "path": "docs\\planning\\specifications\\spec-0011-precise-knowledge-proposal-targeting-and-classification.md"}

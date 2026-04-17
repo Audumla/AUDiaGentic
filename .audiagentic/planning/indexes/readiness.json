@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-17T13:23:03.885942+00:00",
+  "generated_at": "2026-04-17T13:31:29.078340+00:00",
   "items": [
     {
       "id": "plan-0001",
@@ -298,6 +298,12 @@
     },
     {
       "id": "spec-0003",
+      "kind": "spec",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "spec-0011",
       "kind": "spec",
       "state": "draft",
       "claimed": false
@@ -773,19 +779,7 @@
     {
       "id": "task-12",
       "kind": "task",
-      "state": "done",
-      "claimed": false
-    },
-    {
-      "id": "task-12",
-      "kind": "task",
       "state": "draft",
-      "claimed": false
-    },
-    {
-      "id": "task-13",
-      "kind": "task",
-      "state": "ready",
       "claimed": false
     },
     {
@@ -1638,6 +1632,12 @@
       "id": "task-300",
       "kind": "task",
       "state": "cancelled",
+      "claimed": false
+    },
+    {
+      "id": "task-3000",
+      "kind": "task",
+      "state": "done",
       "claimed": false
     },
     {
