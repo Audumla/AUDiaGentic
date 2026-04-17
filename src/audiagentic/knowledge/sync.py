@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -481,12 +482,18 @@ def cleanup_lifecycle(
     proposal_retention_days: int | None = None,
     archive_retention_days: int | None = None,
     prune_pending_proposals: bool = True,
+    dedupe_pending_proposals: bool = True,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     from .llm import cleanup_jobs
 
     current_time = now or datetime.now(timezone.utc)
     jobs = cleanup_jobs(config, retention_days=job_retention_days, now=current_time)
+    duplicates = cleanup_duplicate_proposals(
+        config,
+        now=current_time,
+        dedupe_pending_proposals=dedupe_pending_proposals,
+    )
     proposals = cleanup_proposals(
         config,
         proposal_retention_days=proposal_retention_days,
@@ -497,7 +504,81 @@ def cleanup_lifecycle(
     return {
         "cleaned_at": current_time.isoformat(),
         "jobs": jobs,
+        "duplicates": duplicates,
         "proposals": proposals,
+    }
+
+
+def cleanup_duplicate_proposals(
+    config: KnowledgeConfig,
+    *,
+    now: datetime | None = None,
+    dedupe_pending_proposals: bool = True,
+) -> dict[str, Any]:
+    current_time = now or datetime.now(timezone.utc)
+    if not dedupe_pending_proposals:
+        return {
+            "dedupe_pending_proposals": False,
+            "duplicate_groups": 0,
+            "archived_duplicates": [],
+            "kept_pending": [],
+        }
+
+    groups: dict[tuple[str, str, str], list[tuple[Path, dict[str, Any], datetime]]] = {}
+    for proposal_path in _iter_proposal_files(config.proposals_root):
+        proposal = _load_proposal_payload(proposal_path)
+        if proposal.get("status", "pending") != "pending":
+            continue
+        target_page_id = str(proposal.get("target_page_id", ""))
+        proposal_kind = str(proposal.get("proposal_kind", ""))
+        if not target_page_id or not proposal_kind:
+            continue
+        dedupe_key = str(proposal.get("dedupe_key") or _proposal_dedupe_key(proposal))
+        proposal_time = _proposal_timestamp(proposal_path, proposal, "generated_at")
+        key = (target_page_id, proposal_kind, dedupe_key)
+        groups.setdefault(key, []).append((proposal_path, proposal, proposal_time))
+
+    archived_duplicates: list[str] = []
+    kept_pending: list[str] = []
+    duplicate_groups = 0
+    for _key, items in groups.items():
+        if len(items) < 2:
+            kept_pending.append(items[0][0].relative_to(config.root).as_posix())
+            continue
+        duplicate_groups += 1
+        items.sort(key=lambda item: (item[2], item[0].name))
+        keep_path, keep_payload, _keep_time = items[-1]
+        keep_rel = keep_path.relative_to(config.root).as_posix()
+        keep_id = str(keep_payload.get("proposal_id", keep_path.name))
+        kept_pending.append(keep_rel)
+        for proposal_path, proposal, _proposal_time in items[:-1]:
+            proposal["status"] = "rejected"
+            proposal["status_reason"] = "duplicate_of_pending"
+            proposal["status_updated_at"] = current_time.isoformat()
+            proposal["archived_at"] = current_time.isoformat()
+            proposal["duplicate_of"] = keep_id
+            proposal["duplicate_of_path"] = keep_rel
+            proposal.setdefault("dedupe_key", _proposal_dedupe_key(proposal))
+            proposal_path.write_text(
+                yaml.safe_dump(
+                    proposal,
+                    sort_keys=False,
+                    allow_unicode=True,
+                    width=100,
+                    default_flow_style=False,
+                ),
+                encoding="utf-8",
+            )
+            archive_path = _dedupe_archive_path(config.archive_root / proposal_path.name)
+            archive_path.parent.mkdir(parents=True, exist_ok=True)
+            proposal_path.rename(archive_path)
+            archived_duplicates.append(archive_path.relative_to(config.root).as_posix())
+
+    return {
+        "dedupe_pending_proposals": True,
+        "duplicate_groups": duplicate_groups,
+        "archived_duplicates": sorted(archived_duplicates),
+        "kept_pending": sorted(kept_pending),
     }
 
 
@@ -520,6 +601,21 @@ def _proposal_timestamp(path: Path, proposal: dict[str, Any], *keys: str) -> dat
         if parsed is not None:
             return parsed
     return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+
+
+def _proposal_dedupe_key(proposal: dict[str, Any]) -> str:
+    normalized = dict(proposal)
+    normalized.pop("proposal_id", None)
+    normalized.pop("generated_at", None)
+    normalized.pop("status_updated_at", None)
+    normalized.pop("archived_at", None)
+    normalized.pop("applied_at", None)
+    normalized.pop("duplicate_of", None)
+    normalized.pop("duplicate_of_path", None)
+    normalized.pop("status_reason", None)
+    normalized.pop("dedupe_key", None)
+    material = json.dumps(normalized, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
 
 
 def _parse_iso_datetime(value: Any) -> datetime | None:

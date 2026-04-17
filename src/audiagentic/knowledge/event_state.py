@@ -129,12 +129,18 @@ def _event_stream_source_state(adapter: dict[str, Any], source_path: Any) -> dic
         "fingerprint": _fingerprint_text(current_text),
         "observed_at": now_utc().isoformat(),
         "snapshot_text": current_text,
+        "last_stream_line": _event_stream_line_count(current_text),
     }
 
 
 def _fingerprint_text(text: str) -> str:
     """Hash text content to detect changes."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _event_stream_line_count(text: str) -> int:
+    """Count non-empty lines in a normalized event stream snapshot."""
+    return sum(1 for line in text.splitlines() if line.strip())
 
 
 def _adapter_source_kind(adapter: dict[str, Any]) -> str:
