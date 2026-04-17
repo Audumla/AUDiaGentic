@@ -22,6 +22,9 @@ def validate_vault(config: KnowledgeConfig) -> list[ValidationIssue]:
     page_ids = {page.page_id for page in pages}
     archived_ids = _load_archive_ids(config)
     for content_path in iter_markdown_files(config.pages_root):
+        # Skip auto-generated index pages
+        if content_path.name == "index.md":
+            continue
         meta_path = sidecar_for_page(config.pages_root, config.meta_root, content_path)
         if not meta_path.exists():
             issues.append(

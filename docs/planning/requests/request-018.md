@@ -1,7 +1,7 @@
 ---
 id: request-018
 label: Automatic state propagation for planning hierarchies
-state: distilled
+state: closed
 summary: Implement automatic state transitions that propagate up planning hierarchies
   using interoperability layer events
 source: follow-up to request-0035
@@ -25,6 +25,10 @@ standard_refs:
 spec_refs:
 - spec-020
 ---
+
+
+
+
 
 
 
@@ -72,5 +76,10 @@ Add automatic, event-driven state propagation through the planning hierarchy so 
 - Manual overrides remain possible without making automatic propagation unsafe or opaque.
 
 # Notes
-
 This request is intentionally narrower than the underlying event-layer work. It depends on the event foundation from `request-017`, and its detailed rule set is owned by `spec-020`.
+
+Assessment on 2026-04-17: request remains valid and still open. Core propagation exists and planning now subscribes to `planning.item.state.changed`, but remaining work still includes knowledge-side integration hardening (`task-0254`, `task-0261`) and propagation audit/repair tooling (`task-0265`). Non-core deferred items were cancelled during this review.
+
+Isolation update on 2026-04-17: created `task-0006` to track an observed propagation defect where automatic parent updates attempted workflow-invalid transitions such as `draft -> done` during child-driven cascades. This is now part of the remaining request scope alongside audit/repair tooling and knowledge-handler follow-up.
+
+Completion update on 2026-04-17: the remaining request-specific follow-ups are now implemented. `task-0006` fixed invalid automatic parent transitions, `task-0265` added audit/repair CLI coverage, and the remaining cross-component knowledge reaction path now executes correctly via the runtime planning event handler work completed alongside this request review. Shared interoperability documentation/plan items may remain active for request-017 bookkeeping, but the request-018 scope itself is complete.

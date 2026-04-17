@@ -1,7 +1,7 @@
 ---
 id: plan-011
 label: Knowledge Component Improvements Plan
-state: draft
+state: ready
 summary: Plan for implementing knowledge component improvements from critical review
 spec_refs:
 - spec-016
@@ -14,6 +14,8 @@ standard_refs:
 
 
 
+
+
 # Objectives
 
 
@@ -21,3 +23,7 @@ standard_refs:
 
 
 # Dependencies
+
+# Notes
+
+Assessment on 2026-04-17: plan still represents valid follow-up work, but the remaining scope is narrower after confirming MCP consolidation already landed.

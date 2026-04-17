@@ -118,18 +118,37 @@ rules:
 """)
 
 
+def _create_request_and_spec(planning_api: PlanningAPI) -> tuple[str, str]:
+    """Create minimal valid request/spec context for dependent items."""
+    request = planning_api.new(
+        "request", label="Test Request", summary="Test request", source="test"
+    )
+    request_id = request.data["id"]
+    spec = planning_api.new(
+        "spec", label="Test Spec", summary="Test specification", request_refs=[request_id]
+    )
+    return request_id, spec.data["id"]
+
+
+def _create_task_hierarchy(planning_api: PlanningAPI) -> tuple[str, str, str, str, str]:
+    """Create valid request -> spec -> plan -> wp -> task chain."""
+    request_id, spec_id = _create_request_and_spec(planning_api)
+    plan = planning_api.new("plan", label="Test Plan", summary="Test plan", spec=spec_id)
+    plan_id = plan.data["id"]
+    wp = planning_api.new("wp", label="Test WP", summary="Test WP", plan=plan_id)
+    wp_id = wp.data["id"]
+    task = planning_api.new("task", label="Test Task", summary="Test task", spec=spec_id)
+    task_id = task.data["id"]
+    planning_api.relink(wp_id, "task_refs", task_id)
+    return request_id, spec_id, plan_id, wp_id, task_id
+
+
 def test_heal_auto_fix(tmp_path: Path) -> None:
     """Test healing with auto_fix=True applies fixes."""
     _seed_planning_project(tmp_path)
     _seed_propagation_config(tmp_path)
     planning_api = PlanningAPI(tmp_path)
-    plan = planning_api.new("plan", label="Test Plan", summary="Test plan")
-    plan_id = plan.data["id"]
-    wp = planning_api.new("wp", label="Test WP", summary="Test WP", plan=plan_id)
-    wp_id = wp.data["id"]
-    task = planning_api.new("task", label="Test Task", summary="Test task")
-    task_id = task.data["id"]
-    planning_api.relink(wp_id, "task_refs", task_id)
+    _, _, _, wp_id, task_id = _create_task_hierarchy(planning_api)
 
     # Create inconsistency
     planning_api.state(task_id, "ready", metadata={})
@@ -152,13 +171,7 @@ def test_validate_parent_done_child_not_done(tmp_path: Path) -> None:
     _seed_planning_project(tmp_path)
     _seed_propagation_config(tmp_path)
     planning_api = PlanningAPI(tmp_path)
-    plan = planning_api.new("plan", label="Test Plan", summary="Test plan")
-    plan_id = plan.data["id"]
-    wp = planning_api.new("wp", label="Test WP", summary="Test WP", plan=plan_id)
-    wp_id = wp.data["id"]
-    task = planning_api.new("task", label="Test Task", summary="Test task")
-    task_id = task.data["id"]
-    planning_api.relink(wp_id, "task_refs", task_id)
+    _, _, _, wp_id, task_id = _create_task_hierarchy(planning_api)
 
     # Transition WP to done but leave task in draft
     planning_api.state(wp_id, "ready", metadata={})
@@ -176,13 +189,7 @@ def test_heal_does_not_auto_fix_dangerous(tmp_path: Path) -> None:
     _seed_planning_project(tmp_path)
     _seed_propagation_config(tmp_path)
     planning_api = PlanningAPI(tmp_path)
-    plan = planning_api.new("plan", label="Test Plan", summary="Test plan")
-    plan_id = plan.data["id"]
-    wp = planning_api.new("wp", label="Test WP", summary="Test WP", plan=plan_id)
-    wp_id = wp.data["id"]
-    task = planning_api.new("task", label="Test Task", summary="Test task")
-    task_id = task.data["id"]
-    planning_api.relink(wp_id, "task_refs", task_id)
+    _, _, _, wp_id, task_id = _create_task_hierarchy(planning_api)
 
     # Create dangerous inconsistency (parent done, child not done)
     planning_api.state(wp_id, "ready", metadata={})
@@ -205,13 +212,7 @@ def test_healing_fix_flag_prevents_propagation(tmp_path: Path) -> None:
     _seed_planning_project(tmp_path)
     _seed_propagation_config(tmp_path)
     planning_api = PlanningAPI(tmp_path)
-    plan = planning_api.new("plan", label="Test Plan", summary="Test plan")
-    plan_id = plan.data["id"]
-    wp = planning_api.new("wp", label="Test WP", summary="Test WP", plan=plan_id)
-    wp_id = wp.data["id"]
-    task = planning_api.new("task", label="Test Task", summary="Test task")
-    task_id = task.data["id"]
-    planning_api.relink(wp_id, "task_refs", task_id)
+    _, _, _, wp_id, task_id = _create_task_hierarchy(planning_api)
 
     # Set up WP in ready state so propagation would normally trigger
     planning_api.state(wp_id, "ready", metadata={})
@@ -297,13 +298,7 @@ healing:
     planning_api = PlanningAPI(tmp_path)
 
     # Create a chain: task -> wp -> plan
-    plan = planning_api.new("plan", label="Test Plan", summary="Test plan")
-    plan_id = plan.data["id"]
-    wp = planning_api.new("wp", label="Test WP", summary="Test WP", plan=plan_id)
-    wp_id = wp.data["id"]
-    task = planning_api.new("task", label="Test Task", summary="Test task")
-    task_id = task.data["id"]
-    planning_api.relink(wp_id, "task_refs", task_id)
+    _, _, plan_id, wp_id, task_id = _create_task_hierarchy(planning_api)
 
     # Set all to ready state
     planning_api.state(plan_id, "ready", metadata={})

@@ -2,7 +2,7 @@
   "item": {
     "id": "task-0313",
     "label": "standard-0007-migration-change-control-impl",
-    "state": "closed",
+    "state": "ready",
     "summary": "Implement standard-0007 migration/change control in planning layer",
     "request_refs": [
       "request-019"
