@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-17T13:34:02.955291+00:00",
+  "generated_at": "2026-04-17T13:35:20.317126+00:00",
   "items": [
     {
       "id": "plan-0001",
@@ -16,6 +16,12 @@
     },
     {
       "id": "plan-0003",
+      "kind": "plan",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "plan-0004",
       "kind": "plan",
       "state": "draft",
       "claimed": false
@@ -754,6 +760,42 @@
     },
     {
       "id": "task-318",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0014",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0015",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0016",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0017",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0018",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-0019",
       "kind": "task",
       "state": "draft",
       "claimed": false
