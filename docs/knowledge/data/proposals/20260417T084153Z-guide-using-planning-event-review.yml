@@ -1,0 +1,47 @@
+proposal_id: 20260417T084153Z-guide-using-planning-event-review
+proposal_kind: event_review
+proposal_mode: review_only
+target_page_id: guide-using-planning
+generated_at: '2026-04-17T08:41:53.377609+00:00'
+summary: Planning/runtime event drift detected for guide-using-planning. Review the current-state page.
+events:
+- event_id: runtime-planning::planning.item.state.changed::task::task-1::archived::manual
+  adapter_id: planning-state-changes
+  event_name: planning.item.state.changed
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: archived
+  summary: Planning task task-1 state changed to archived
+  details:
+    payload:
+      id: task-1
+      old_state: draft
+      new_state: archived
+      archived_at: '2026-04-17T08:41:47.757388+00:00'
+      archived_by: system
+      archive_reason: ''
+    metadata: &id001
+      subject:
+        kind: task
+        id: task-1
+      triggered_by: manual
+    raw_event:
+      event: planning.item.state.changed
+      event_name: planning.item.state.changed
+      id: task-1
+      subject:
+        kind: task
+        id: task-1
+      old_state: draft
+      new_state: archived
+      archived_at: '2026-04-17T08:41:47.757388+00:00'
+      archived_by: system
+      archive_reason: ''
+      metadata: *id001
+    source_system: planning-runtime
+  diff_excerpt: null
+suggested_steps:
+- Review the event source change.
+- Update the current-state page only if durable behavior changed.
+- Keep draft or incomplete work out of current-state pages.
+- Record fresh sync and event baselines after review.
+actions: []

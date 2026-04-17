@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-17T08:24:10.174209+00:00",
+  "generated_at": "2026-04-17T08:43:08.905022+00:00",
   "items": [
     {
       "id": "task-0032",
@@ -125,25 +125,25 @@
     {
       "id": "task-0008",
       "label": "Add unit test coverage for knowledge component modules",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0008.md"
     },
     {
       "id": "task-0009",
       "label": "Refactor events.py into modular handlers",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0009.md"
     },
     {
       "id": "task-0010",
       "label": "Enhance search with fuzzy matching or BM25",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0010.md"
     },
     {
       "id": "task-0011",
       "label": "Implement lifecycle tracking for proposals and jobs",
-      "state": "draft",
+      "state": "done",
       "path": "docs\\planning\\tasks\\core\\task-0011.md"
     },
     {
