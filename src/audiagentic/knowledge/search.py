@@ -4,6 +4,13 @@ import re
 from collections import defaultdict
 from typing import Any
 
+try:
+    from rapidfuzz import fuzz as _fuzz
+
+    _FUZZY_AVAILABLE = True
+except ImportError:
+    _FUZZY_AVAILABLE = False
+
 from .config import KnowledgeConfig
 from .markdown_io import load_pages
 from .models import SearchResult
@@ -81,14 +88,24 @@ def filter_by_metadata(pages: list, filters: dict[str, Any]) -> list:
 
 
 def search_pages(config: KnowledgeConfig, query: str, limit: int = 10) -> list[SearchResult]:
+    """Search pages using token matching with optional fuzzy boost.
+
+    Exact token matches are scored by field weight. When rapidfuzz is available
+    and a query has no exact matches for a page, fuzzy scoring provides a boost
+    if the ratio exceeds config.search_fuzzy_threshold.
+    """
     tokens = [t.lower() for t in re.findall(r"[A-Za-z0-9_\-]+", query) if t.strip()]
     if not tokens:
         return []
+
     weights = config.search_weights
+    fuzzy_threshold = config.search_fuzzy_threshold
+    fuzzy_weight = config.search_fuzzy_weight
     token_patterns = [
         re.compile(r"\b" + re.escape(token) + r"\b", re.IGNORECASE) for token in tokens
     ]
     results: list[SearchResult] = []
+
     for page in load_pages(config.pages_root, config.meta_root):
         score = 0.0
         matches: dict[str, int] = defaultdict(int)
@@ -96,6 +113,7 @@ def search_pages(config: KnowledgeConfig, query: str, limit: int = 10) -> list[S
         tag_blob = " ".join(page.tags).lower()
         section_blob = " ".join(section.title for section in page.sections).lower()
         body_blob = " ".join(section.body for section in page.sections).lower()
+
         for token, pattern in zip(tokens, token_patterns):
             if pattern.search(title):
                 score += weights["title"]
@@ -110,8 +128,20 @@ def search_pages(config: KnowledgeConfig, query: str, limit: int = 10) -> list[S
             if body_count:
                 score += weights["body"] * body_count
                 matches["body"] += body_count
+
+        # Fuzzy boost: when exact scoring is zero, try fuzzy on title + body
+        if score == 0.0 and _FUZZY_AVAILABLE:
+            query_lower = query.lower()
+            title_ratio = _fuzz.partial_ratio(query_lower, title)
+            body_ratio = _fuzz.partial_ratio(query_lower, body_blob[:500])  # limit body for perf
+            best_ratio = max(title_ratio, body_ratio)
+            if best_ratio >= fuzzy_threshold:
+                score = (best_ratio / 100.0) * fuzzy_weight
+                matches["fuzzy"] += 1
+
         if score <= 0:
             continue
+
         snippet = _build_snippet(body_blob, tokens, config.snippet_length)
         results.append(
             SearchResult(
@@ -123,6 +153,7 @@ def search_pages(config: KnowledgeConfig, query: str, limit: int = 10) -> list[S
                 matches=[f"{k}:{v}" for k, v in sorted(matches.items())],
             )
         )
+
     results.sort(key=lambda item: (-item.score, item.title.lower()))
     return results[:limit]
 

@@ -181,6 +181,14 @@ class KnowledgeConfig:
         return int(self.raw.get("search", {}).get("snippet_length", 200))
 
     @property
+    def search_fuzzy_threshold(self) -> int:
+        return int(self.raw.get("search", {}).get("fuzzy_threshold", 70))
+
+    @property
+    def search_fuzzy_weight(self) -> float:
+        return float(self.raw.get("search", {}).get("fuzzy_weight", 0.5))
+
+    @property
     def page_type_dirs(self) -> dict[str, str]:
         mapping = self.raw.get("page_type_dirs", {})
         return {str(k): str(v) for k, v in mapping.items()}
