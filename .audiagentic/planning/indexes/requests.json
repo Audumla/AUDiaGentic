@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-17T08:22:09.635111+00:00",
+  "generated_at": "2026-04-17T08:24:10.174209+00:00",
   "items": [
     {
       "id": "request-1",
@@ -85,24 +85,6 @@
       "label": "Refactor knowledge component hooks to use event-driven architecture",
       "state": "superseded",
       "path": "docs\\planning\\requests\\request-21.md"
-    },
-    {
-      "id": "request-22",
-      "label": "Tmp Request",
-      "state": "captured",
-      "path": "docs\\planning\\requests\\request-22.md"
-    },
-    {
-      "id": "request-23",
-      "label": "Tmp Request B",
-      "state": "captured",
-      "path": "docs\\planning\\requests\\request-23.md"
-    },
-    {
-      "id": "request-24",
-      "label": "ReqX",
-      "state": "captured",
-      "path": "docs\\planning\\requests\\request-24.md"
     },
     {
       "id": "request-25",
