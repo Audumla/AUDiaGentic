@@ -7,7 +7,7 @@ summary: Create standard-0010 defining canonical semantics for light/standard/de
 spec_refs:
 - spec-012
 request_refs:
-- request-013
+- request-13
 work_package_refs: []
 standard_refs:
 - standard-0006

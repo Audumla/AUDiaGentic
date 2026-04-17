@@ -6,7 +6,7 @@ summary: Design and implement a lookup-index-based single-item read path for pla
   objects, add lean metadata fetch capability, and refine extract semantics so body
   inclusion and persistence are explicit and token-efficient.
 request_refs:
-- request-010
+- request-10
 task_refs:
 - ref: task-0221
 - ref: task-0222

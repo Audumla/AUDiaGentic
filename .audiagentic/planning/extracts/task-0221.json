@@ -6,7 +6,7 @@
     "summary": "Update val_mgr.py to check guidance field and enforce required/suggested sections per guidance level, warn about excessive/minimal detail",
     "spec_ref": "spec-010",
     "request_refs": [
-      "request-011"
+      "request-11"
     ],
     "standard_refs": [
       "standard-0005",

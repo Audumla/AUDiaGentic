@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-17T07:06:05.392236+00:00",
+  "generated_at": "2026-04-17T08:22:09.635111+00:00",
   "items": {
     "plan-0001": {
       "id": "plan-0001",
@@ -173,255 +173,255 @@
       "deleted": false,
       "archived": false
     },
-    "request-0001": {
-      "id": "request-0001",
-      "kind": "request",
-      "label": "Refactor knowledge component hooks to use event-driven architecture",
-      "state": "superseded",
-      "path": "docs/planning/requests/request-0001.md",
-      "deleted": false,
-      "archived": false
-    },
-    "request-0002": {
-      "id": "request-0002",
-      "kind": "request",
-      "label": "Tmp Request",
-      "state": "captured",
-      "path": "docs/planning/requests/request-0002.md",
-      "deleted": false,
-      "archived": false
-    },
-    "request-0003": {
-      "id": "request-0003",
-      "kind": "request",
-      "label": "Tmp Request B",
-      "state": "captured",
-      "path": "docs/planning/requests/request-0003.md",
-      "deleted": false,
-      "archived": false
-    },
-    "request-0004": {
-      "id": "request-0004",
-      "kind": "request",
-      "label": "ReqX",
-      "state": "captured",
-      "path": "docs/planning/requests/request-0004.md",
-      "deleted": false,
-      "archived": false
-    },
-    "request-001": {
-      "id": "request-001",
+    "request-1": {
+      "id": "request-1",
       "kind": "request",
       "label": "Comprehensive implementation docs migration",
       "state": "closed",
-      "path": "docs/planning/requests/request-001.md",
+      "path": "docs/planning/requests/request-1.md",
       "deleted": false,
       "archived": false
     },
-    "request-002": {
-      "id": "request-002",
-      "kind": "request",
-      "label": "Add archive functionality to planning core",
-      "state": "superseded",
-      "path": "docs/planning/requests/request-002.md",
-      "deleted": false,
-      "archived": false
-    },
-    "request-0021": {
-      "id": "request-0021",
-      "kind": "request",
-      "label": "Config-driven planning document structure",
-      "state": "distilled",
-      "path": "docs/planning/requests/request-0021.md",
-      "deleted": false,
-      "archived": false
-    },
-    "request-0023": {
-      "id": "request-0023",
-      "kind": "request",
-      "label": "MCP Test Request",
-      "state": "superseded",
-      "path": "docs/planning/requests/request-0023.md",
-      "deleted": false,
-      "archived": false
-    },
-    "request-0024": {
-      "id": "request-0024",
-      "kind": "request",
-      "label": "Get Test Request",
-      "state": "superseded",
-      "path": "docs/planning/requests/request-0024.md",
-      "deleted": false,
-      "archived": false
-    },
-    "request-0027": {
-      "id": "request-0027",
-      "kind": "request",
-      "label": "Generic Req",
-      "state": "superseded",
-      "path": "docs/planning/requests/request-0027.md",
-      "deleted": false,
-      "archived": false
-    },
-    "request-003": {
-      "id": "request-003",
-      "kind": "request",
-      "label": "MCP layer efficiency improvements and usage enforcement",
-      "state": "closed",
-      "path": "docs/planning/requests/request-003.md",
-      "deleted": false,
-      "archived": false
-    },
-    "request-004": {
-      "id": "request-004",
-      "kind": "request",
-      "label": "Archive functionality for planning items",
-      "state": "closed",
-      "path": "docs/planning/requests/request-004.md",
-      "deleted": false,
-      "archived": false
-    },
-    "request-005": {
-      "id": "request-005",
-      "kind": "request",
-      "label": "Sensitive data detection and review for planning items",
-      "state": "closed",
-      "path": "docs/planning/requests/request-005.md",
-      "deleted": false,
-      "archived": false
-    },
-    "request-006": {
-      "id": "request-006",
-      "kind": "request",
-      "label": "Planning module hardening: delete safety, traceability, validation, and duplicate guards",
-      "state": "closed",
-      "path": "docs/planning/requests/request-006.md",
-      "deleted": false,
-      "archived": false
-    },
-    "request-007": {
-      "id": "request-007",
-      "kind": "request",
-      "label": "Fix planning API and MCP gaps revealed by coverage tests",
-      "state": "closed",
-      "path": "docs/planning/requests/request-007.md",
-      "deleted": false,
-      "archived": false
-    },
-    "request-008": {
-      "id": "request-008",
-      "kind": "request",
-      "label": "Add audience-level profile system to control planning depth-of-detail",
-      "state": "superseded",
-      "path": "docs/planning/requests/request-008.md",
-      "deleted": false,
-      "archived": false
-    },
-    "request-009": {
-      "id": "request-009",
-      "kind": "request",
-      "label": "Implement configurable stack profiles for lightweight req\u2192spec\u2192task workflows",
-      "state": "closed",
-      "path": "docs/planning/requests/request-009.md",
-      "deleted": false,
-      "archived": false
-    },
-    "request-010": {
-      "id": "request-010",
+    "request-10": {
+      "id": "request-10",
       "kind": "request",
       "label": "Optimize planning single-item lookup and extract token usage",
       "state": "closed",
-      "path": "docs/planning/requests/request-010.md",
+      "path": "docs/planning/requests/request-10.md",
       "deleted": false,
       "archived": false
     },
-    "request-011": {
-      "id": "request-011",
+    "request-11": {
+      "id": "request-11",
       "kind": "request",
       "label": "Add guidance levels (light/standard/deep) to control planning depth-of-detail",
       "state": "closed",
-      "path": "docs/planning/requests/request-011.md",
+      "path": "docs/planning/requests/request-11.md",
       "deleted": false,
       "archived": false
     },
-    "request-012": {
-      "id": "request-012",
+    "request-12": {
+      "id": "request-12",
       "kind": "request",
       "label": "Require request linkage for every planning specification, with cascade archive",
       "state": "closed",
-      "path": "docs/planning/requests/request-012.md",
+      "path": "docs/planning/requests/request-12.md",
       "deleted": false,
       "archived": false
     },
-    "request-013": {
-      "id": "request-013",
+    "request-13": {
+      "id": "request-13",
       "kind": "request",
       "label": "Define canonical semantics for planning guidance levels",
       "state": "closed",
-      "path": "docs/planning/requests/request-013.md",
+      "path": "docs/planning/requests/request-13.md",
       "deleted": false,
       "archived": false
     },
-    "request-014": {
-      "id": "request-014",
+    "request-14": {
+      "id": "request-14",
       "kind": "request",
       "label": "Integrate Knowledge Component v7.4",
       "state": "closed",
-      "path": "docs/planning/requests/request-014.md",
+      "path": "docs/planning/requests/request-14.md",
       "deleted": false,
       "archived": false
     },
-    "request-015": {
-      "id": "request-015",
+    "request-15": {
+      "id": "request-15",
       "kind": "request",
       "label": "Knowledge Component Improvements",
       "state": "distilled",
-      "path": "docs/planning/requests/request-015.md",
+      "path": "docs/planning/requests/request-15.md",
       "deleted": false,
       "archived": false
     },
-    "request-016": {
-      "id": "request-016",
+    "request-16": {
+      "id": "request-16",
       "kind": "request",
       "label": "Planning Module Critical Fixes",
       "state": "closed",
-      "path": "docs/planning/requests/request-016.md",
+      "path": "docs/planning/requests/request-16.md",
       "deleted": false,
       "archived": false
     },
-    "request-017": {
-      "id": "request-017",
+    "request-17": {
+      "id": "request-17",
       "kind": "request",
       "label": "Interoperability layer for cross-component communication",
       "state": "closed",
-      "path": "docs/planning/requests/request-017.md",
+      "path": "docs/planning/requests/request-17.md",
       "deleted": false,
       "archived": false
     },
-    "request-018": {
-      "id": "request-018",
+    "request-18": {
+      "id": "request-18",
       "kind": "request",
       "label": "Automatic state propagation for planning hierarchies",
       "state": "closed",
-      "path": "docs/planning/requests/request-018.md",
+      "path": "docs/planning/requests/request-18.md",
       "deleted": false,
       "archived": false
     },
-    "request-019": {
-      "id": "request-019",
+    "request-19": {
+      "id": "request-19",
       "kind": "request",
       "label": "Code Standards Compliance Review",
       "state": "closed",
-      "path": "docs/planning/requests/request-019.md",
+      "path": "docs/planning/requests/request-19.md",
       "deleted": false,
       "archived": false
     },
-    "request-020": {
-      "id": "request-020",
+    "request-2": {
+      "id": "request-2",
+      "kind": "request",
+      "label": "Add archive functionality to planning core",
+      "state": "superseded",
+      "path": "docs/planning/requests/request-2.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-20": {
+      "id": "request-20",
       "kind": "request",
       "label": "Auto-state propagation with event subscription",
       "state": "superseded",
-      "path": "docs/planning/requests/request-020.md",
+      "path": "docs/planning/requests/request-20.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-21": {
+      "id": "request-21",
+      "kind": "request",
+      "label": "Refactor knowledge component hooks to use event-driven architecture",
+      "state": "superseded",
+      "path": "docs/planning/requests/request-21.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-22": {
+      "id": "request-22",
+      "kind": "request",
+      "label": "Tmp Request",
+      "state": "captured",
+      "path": "docs/planning/requests/request-22.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-23": {
+      "id": "request-23",
+      "kind": "request",
+      "label": "Tmp Request B",
+      "state": "captured",
+      "path": "docs/planning/requests/request-23.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-24": {
+      "id": "request-24",
+      "kind": "request",
+      "label": "ReqX",
+      "state": "captured",
+      "path": "docs/planning/requests/request-24.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-25": {
+      "id": "request-25",
+      "kind": "request",
+      "label": "Config-driven planning document structure",
+      "state": "distilled",
+      "path": "docs/planning/requests/request-25.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-26": {
+      "id": "request-26",
+      "kind": "request",
+      "label": "MCP Test Request",
+      "state": "superseded",
+      "path": "docs/planning/requests/request-26.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-27": {
+      "id": "request-27",
+      "kind": "request",
+      "label": "Get Test Request",
+      "state": "superseded",
+      "path": "docs/planning/requests/request-27.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-28": {
+      "id": "request-28",
+      "kind": "request",
+      "label": "Generic Req",
+      "state": "superseded",
+      "path": "docs/planning/requests/request-28.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-3": {
+      "id": "request-3",
+      "kind": "request",
+      "label": "MCP layer efficiency improvements and usage enforcement",
+      "state": "closed",
+      "path": "docs/planning/requests/request-3.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-4": {
+      "id": "request-4",
+      "kind": "request",
+      "label": "Archive functionality for planning items",
+      "state": "closed",
+      "path": "docs/planning/requests/request-4.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-5": {
+      "id": "request-5",
+      "kind": "request",
+      "label": "Sensitive data detection and review for planning items",
+      "state": "closed",
+      "path": "docs/planning/requests/request-5.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-6": {
+      "id": "request-6",
+      "kind": "request",
+      "label": "Planning module hardening: delete safety, traceability, validation, and duplicate guards",
+      "state": "closed",
+      "path": "docs/planning/requests/request-6.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-7": {
+      "id": "request-7",
+      "kind": "request",
+      "label": "Fix planning API and MCP gaps revealed by coverage tests",
+      "state": "closed",
+      "path": "docs/planning/requests/request-7.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-8": {
+      "id": "request-8",
+      "kind": "request",
+      "label": "Add audience-level profile system to control planning depth-of-detail",
+      "state": "superseded",
+      "path": "docs/planning/requests/request-8.md",
+      "deleted": false,
+      "archived": false
+    },
+    "request-9": {
+      "id": "request-9",
+      "kind": "request",
+      "label": "Implement configurable stack profiles for lightweight req\u2192spec\u2192task workflows",
+      "state": "closed",
+      "path": "docs/planning/requests/request-9.md",
       "deleted": false,
       "archived": false
     },

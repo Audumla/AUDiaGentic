@@ -1,0 +1,27 @@
+{
+  "item": {
+    "id": "request-3",
+    "label": "MCP layer efficiency improvements and usage enforcement",
+    "state": "closed",
+    "summary": "Add wrapper functions, templates, and guidance to make MCP layer as efficient as direct file edits while ensuring consistent usage for audit trail and validation",
+    "source": "legacy-backfill",
+    "current_understanding": "This request drives the planning MCP and helper ergonomics work: improve read and update flows, reduce unnecessary direct edits, and make the planning surface efficient enough that agents can prefer it without losing auditability or validation safety.",
+    "open_questions": [
+      "Which remaining planning operations still require direct file edits because the MCP or helper layer cannot mutate the needed metadata cleanly?",
+      "How strongly should agent guidance enforce MCP-first behavior versus allowing pragmatic direct edits for unsupported cases?",
+      "Where should the line stay between a thin planning MCP and a more opinionated workflow surface?"
+    ],
+    "meta": {
+      "current_understanding": "Main MCP efficiency work complete via plan-0007 and plan-0010. Analysis of remaining gaps (mutation coverage, enforcement policy, scope boundary) showed no actual blockers \u2014 all planning metadata has MCP/helper paths."
+    },
+    "kind": "request",
+    "path": "docs/planning/requests/request-3.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n\n# Understanding\n\nThis request drives the planning MCP and helper ergonomics work: improve read and update flows, reduce unnecessary direct edits, and make the planning surface efficient enough that agents can prefer it without losing auditability or validation safety.\n\n# Open Questions\n\n- Which remaining planning operations still require direct file edits because the MCP or helper layer cannot mutate the needed metadata cleanly?\n- How strongly should agent guidance enforce MCP-first behavior versus allowing pragmatic direct edits for unsupported cases?\n- Where should the line stay between a thin planning MCP and a more opinionated workflow surface?\n\n# Notes\n\n- This request now spans both the implementation-pack ergonomics work and the planning-surface usability work that followed it.\n- `plan-0008` is already marked done, so parts of this request are satisfied; the remaining value is as provenance for the MCP-first direction and for tracking the unsupported cases that still force direct edits.\n- The most important unresolved gap is still mutation coverage for some planning metadata, not basic discovery or read-only MCP access.\n"
+}

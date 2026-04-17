@@ -6,7 +6,7 @@
     "summary": "Update request.schema.json to include optional guidance field (light/standard/deep), add validation for valid values",
     "spec_ref": "spec-010",
     "request_refs": [
-      "request-011"
+      "request-11"
     ],
     "standard_refs": [
       "standard-0005",

@@ -6,7 +6,7 @@
     "summary": "Remove duplicated regex block in update_content() section mode, ensure consistent formatting",
     "spec_ref": "spec-018",
     "request_refs": [
-      "request-016"
+      "request-16"
     ],
     "standard_refs": [
       "standard-0005",

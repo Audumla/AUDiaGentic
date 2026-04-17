@@ -7,7 +7,7 @@ summary: Plan for integrating knowledge component v7.4 with review, testing, con
 spec_refs:
 - spec-014
 request_refs:
-- request-014
+- request-14
 work_package_refs: []
 standard_refs:
 - standard-0006

@@ -5,7 +5,7 @@
     "state": "ready",
     "summary": "Implement standard-0007 migration/change control in planning layer",
     "request_refs": [
-      "request-019"
+      "request-19"
     ],
     "standard_refs": [
       "standard-0005",

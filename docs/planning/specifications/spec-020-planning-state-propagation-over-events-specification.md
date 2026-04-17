@@ -4,8 +4,8 @@ label: Planning state propagation over events specification
 state: in_progress
 summary: Automatic state transitions using interoperability layer events
 request_refs:
-- request-017
-- request-018
+- request-17
+- request-18
 task_refs:
 - ref: task-0276
 - ref: task-0277

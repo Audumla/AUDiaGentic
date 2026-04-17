@@ -5,7 +5,7 @@
     "state": "ready",
     "summary": "Refactor wp-0021 bootstrap",
     "request_refs": [
-      "request-019"
+      "request-19"
     ],
     "kind": "task",
     "path": "docs/planning/tasks/core/task-0291.md",
@@ -16,5 +16,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n\n# Description\n\nRefactor wp-013 bootstrap\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-019 code standards compliance cleanup.\n"
+  "body": "\n\n\n# Description\n\nRefactor wp-013 bootstrap\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
 }

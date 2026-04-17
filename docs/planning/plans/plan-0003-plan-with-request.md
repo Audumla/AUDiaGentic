@@ -6,7 +6,7 @@ summary: tmp
 spec_refs:
 - spec-0002
 request_refs:
-- request-0003
+- request-23
 work_package_refs: []
 standard_refs:
 - standard-0006
