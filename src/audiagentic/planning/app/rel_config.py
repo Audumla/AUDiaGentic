@@ -73,32 +73,13 @@ class RelationshipConfig:
                     errors.append(f"Missing required reference: {field}")
 
         can_ref = set(rules.get("can_reference", []))
-        allowed_by_field = {
-            "request_refs": {"request"},
-            "spec_ref": {"spec"},
-            "spec_refs": {"spec"},
-            "standard_refs": {"standard"},
-            "task_refs": {"task"},
-            "plan_ref": {"plan"},
-            "parent_task_ref": {"task"},
-        }
-        ref_fields = {
-            "request_refs",
-            "spec_ref",
-            "spec_refs",
-            "task_refs",
-            "plan_ref",
-            "parent_task_ref",
-        }
-        if kind in {"spec", "task", "plan", "wp"}:
-            ref_fields.add("standard_refs")
-
-        for field in ref_fields:
+        for field in self.config.reference_fields(kind):
             if field not in data:
                 continue
 
             refs = data[field]
-            if isinstance(refs, str):
+            shape = self.config.reference_field_shape(field)
+            if shape == "scalar_ref":
                 refs = [refs]
             elif not isinstance(refs, list):
                 continue
@@ -106,7 +87,7 @@ class RelationshipConfig:
             for ref in refs:
                 if isinstance(ref, dict):
                     ref = ref.get("ref")
-                allowed_kinds = allowed_by_field.get(field, can_ref | {kind})
+                allowed_kinds = set(self.config.reference_field_targets(field)) or (can_ref | {kind})
                 if ref and not ref.startswith(tuple(allowed_kinds)):
                     errors.append(
                         f"Invalid reference '{ref}' for field '{field}' on {kind} - "

@@ -73,6 +73,9 @@ def test_operation_validation():
         {"op": "content", "value": "Test", "mode": "replace"},
         {"op": "content", "value": "Test", "mode": "append"},
         {"op": "meta", "field": "tags", "value": "test"},
+        {"op": "field", "field": "spec_refs", "mode": "add", "value": "spec-123"},
+        {"op": "field", "field": "spec_refs", "mode": "remove", "value": "spec-123"},
+        {"op": "field", "field": "spec_ref", "mode": "set", "value": "spec-123"},
     ]
 
     for i, op_dict in enumerate(valid_ops):
@@ -107,7 +110,15 @@ def test_operation_validation():
         assert "field" in str(e).lower()
         print(f"  [OK] Meta without field rejected: {e}")
 
-    # Test 5: Invalid mode
+    # Test 5: Field without field
+    try:
+        validate_operations([{"op": "field", "mode": "remove", "value": "spec-123"}])
+        assert False, "Should have raised PlanningError"
+    except PlanningError as e:
+        assert "field" in str(e).lower()
+        print(f"  [OK] Field without field rejected: {e}")
+
+    # Test 6: Invalid mode
     try:
         validate_operations(
             [{"op": "section", "name": "Notes", "content": "Test", "mode": "invalid"}]
@@ -187,7 +198,20 @@ def test_tm_edit_integration():
         result = tm.update(task_id, operations=ops)
         print(f"  [OK] Multiple operations (label + meta)")
 
-        # Test 4: Invalid operation (may be silently ignored by tm.update)
+        # Test 4: Field add/remove on top-level frontmatter lists
+        ops = [{"op": "field", "field": "standard_refs", "mode": "add", "value": "standard-5"}]
+        tm.update(req_result["id"], operations=ops)
+        shown = tm.show(req_result["id"])
+        assert "standard-5" in shown.get("standard_refs", [])
+        print(f"  [OK] Field add on standard_refs")
+
+        ops = [{"op": "field", "field": "standard_refs", "mode": "remove", "value": "standard-5"}]
+        tm.update(req_result["id"], operations=ops)
+        shown = tm.show(req_result["id"])
+        assert "standard-5" not in shown.get("standard_refs", [])
+        print(f"  [OK] Field remove on standard_refs")
+
+        # Test 5: Invalid operation (may be silently ignored by tm.update)
         # tm.update calls validate_operations but the server may accept it
         ops = [{"op": "invalid_op", "value": "test"}]
         result = tm.update(task_id, operations=ops)

@@ -177,3 +177,68 @@ adapters:
       
       Handler logic is defined in handlers.yml (separation of concerns per standard-0013).
       Legacy events use the same handler as canonical events for consistency.
+
+  # File change adapter
+  - id: current-state-doc-change
+    name: Current State Document Change
+    description: Watch for changes to current-state documentation files and trigger sync proposals
+    source_kind: file_change
+    path_globs:
+      - '**/*.md'
+      - '**/*.yaml'
+      - '**/*.yml'
+    path_filters:
+      reject_when_path_contains:
+        - requests
+        - draft
+        - proposals
+    content_filters:
+      reject_when_content_contains:
+        - DRAFT
+      allow_when_content_contains_any:
+        - VERIFIED
+        - active
+        - current
+    action: generate_sync_proposal
+    affects_pages:
+      - system-knowledge
+      - system-planning
+      - system-execution
+      - system-runtime
+      - system-release
+      - system-interoperability
+      - guide-using-planning
+      - tool-cli
+      - tool-mcp
+      - pattern-event-bridge
+      - pattern-page-lifecycle
+    note: |
+      This adapter watches for changes to documentation files and triggers
+      sync proposals when the content indicates the file is current/verified.
+      
+      Filters:
+      - Rejects files in requests/, draft/, or proposals/ directories
+      - Rejects files containing DRAFT marker
+      - Only triggers on files containing VERIFIED, active, or current markers
+      
+      Handler logic is defined in handlers.yml (separation of concerns per standard-0013).
+
+  # Runtime artifact adapter
+  - id: runtime-artifact-change
+    name: Runtime Artifact Change
+    description: Watch for changes to runtime artifacts and trigger sync proposals
+    source_kind: file_change
+    path_globs:
+      - '**/*.ndjson'
+      - '**/*.json'
+    action: generate_sync_proposal
+    action_args:
+      proposal_mode: review_only
+    affects_pages:
+      - system-runtime
+      - system-knowledge
+      - system-execution
+    note: |
+      Runtime artifacts feed review proposals rather than silent current-state rewrites.
+      
+      Handler logic is defined in handlers.yml (separation of concerns per standard-0013).

@@ -1,14 +1,14 @@
 {
   "item": {
     "id": "task-285",
-    "label": "plan-18",
+    "label": "plan-21",
     "state": "cancelled",
-    "summary": "Refactor plan-0018 sync operations",
+    "summary": "Refactor plan-0021 validation",
     "request_refs": [
       "request-19"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-285-plan-18.md",
+    "path": "docs/planning/tasks/core/task-285-plan-21.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n\n# Description\n\nRefactor plan-011 sync operations\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nRefactor plan-0021 validation\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
 }

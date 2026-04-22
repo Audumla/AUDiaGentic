@@ -1,0 +1,61 @@
+proposal_kind: event_review
+proposal_mode: review_only
+target_page_id: pattern-page-lifecycle
+generated_at: '2026-04-22T00:43:16.118468+00:00'
+status: pending
+status_updated_at: '2026-04-22T00:43:16.118477+00:00'
+summary: Planning/runtime event drift detected for pattern-page-lifecycle. Review the current-state page.
+assessment:
+  likely_requires_doc_change: false
+  reason: Event appears to be workflow churn without a durable behavior change.
+  confidence: high
+  recommended_action: reject_no_doc_change
+  affected_sections: &id001
+  - Sync notes
+  - References
+  state_sequence:
+  - ready
+  actions: &id003 []
+  suggested_steps:
+  - Review the event source change.
+  - Reject this proposal unless the workflow state caused a real user-facing behavior change.
+  - Keep in-progress or transient execution churn out of current-state pages.
+recommendation: reject_no_doc_change
+affected_sections: *id001
+events:
+- event_id: runtime-planning::planning.item.state.changed::task::task-3253::ready::manual
+  adapter_id: planning-state-changes
+  event_name: planning.item.state.changed
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: ready
+  summary: Planning task task-3253 state changed to ready
+  details:
+    payload:
+      id: task-3253
+      old_state: draft
+      new_state: ready
+    metadata: &id002
+      subject:
+        kind: task
+        id: task-3253
+      triggered_by: manual
+    raw_event:
+      event: planning.item.state.changed
+      event_name: planning.item.state.changed
+      id: task-3253
+      subject:
+        kind: task
+        id: task-3253
+      old_state: draft
+      new_state: ready
+      metadata: *id002
+    source_system: planning-runtime
+  diff_excerpt: null
+suggested_steps:
+- Review the event source change.
+- Reject this proposal unless the workflow state caused a real user-facing behavior change.
+- Keep in-progress or transient execution churn out of current-state pages.
+- Record fresh sync and event baselines after review.
+actions: *id003
+proposal_id: 20260422T004316Z-pattern-page-lifecycle-event-review
+dedupe_key: 4296efe1cf8eb26f

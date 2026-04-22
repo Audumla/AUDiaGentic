@@ -1,17 +1,20 @@
 {
   "item": {
     "id": "task-233",
-    "label": "Configure event adapter for planning bridge",
-    "state": "done",
-    "summary": "Configure the event adapter to bridge planning task completion events to knowledge sync.",
-    "spec_ref": "spec-14",
-    "request_refs": [],
+    "label": "Add unit tests for knowledge component",
+    "state": "draft",
+    "summary": "Add unit tests for events.py, sync.py, validation.py with 70%+ coverage target",
+    "spec_ref": "spec-20",
+    "parent_task_ref": "wp-14",
+    "request_refs": [
+      "request-15"
+    ],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-233-configure-event-adapter-for-planning-bridge.md",
+    "path": "docs/planning/tasks/core/task-233-add-unit-tests-for-knowledge-component.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,5 +25,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n# Description\nAdd focused unit and integration tests for knowledge component core modules. Cover event scanning and state persistence in `events.py`, drift detection and proposal lifecycle in `sync.py`, validation rules in `validation.py`, and search scoring/filtering in `search.py`. Target the gaps that still matter after existing integration fixes: deterministic event handling, proposal cleanup, lifecycle expiry, and search behavior.\n\n# Acceptance Criteria\n1. Unit tests cover event state load/save/prune, adapter loading, and scan normalization paths.\n2. Unit tests cover sync drift detection, proposal generation, dedupe, cleanup, and status transitions.\n3. Unit tests cover validation rules for page compliance and required metadata.\n4. Unit tests cover lexical search scoring, filtering, and fuzzy fallback behavior.\n5. Coverage for the core knowledge modules reaches at least 70 percent or the repo-defined target.\n6. Tests run in CI without relying on live network or external services.\n\n# Notes\n- Existing higher-level integration tests should remain green after any unit test additions.\n- Prefer small deterministic fixtures over large end-to-end vault fixtures where possible.\n"
 }

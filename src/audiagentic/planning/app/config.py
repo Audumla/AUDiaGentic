@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import yaml
 from jsonschema import Draft202012Validator
+
+from ..domain.states import KIND_MAP
 
 # Schemas are bundled with the audiagentic package, not in the project root.
 # From app/config.py: parents[2] = src/audiagentic/
 _PLANNING_SCHEMA_DIR = (
     Path(__file__).resolve().parents[2] / "foundation" / "contracts" / "schemas" / "planning"
 )
+_REPO_TEMPLATE_DIR = Path(__file__).resolve().parents[4] / ".audiagentic" / "planning" / "config" / "templates"
+_SECTION_HEADING_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 
 
 class Config:
@@ -23,11 +28,36 @@ class Config:
         self.workflows = self._read_required_yaml("workflows.yaml")
         self.automations = self._read_required_yaml("automations.yaml")
         self.documentation = self._read_optional_yaml("documentation.yaml")
-        # request_profiles is now merged into unified profiles (for backward compatibility)
+        # Backward-compatible alias; primary abstraction is now generic creation profiles.
         self.request_profiles = {
             "request_profiles": self.profiles.get("planning", {}).get("profiles", {})
         }
         self.profile_packs = self._read_profile_packs()
+
+    def kind_aliases(self) -> dict[str, str]:
+        """Get configured kind aliases with legacy fallback support."""
+        configured = self.planning.get("planning", {}).get("kind_aliases", {})
+        return {**KIND_MAP, **configured}
+
+    def normalize_kind(self, kind: str) -> str:
+        """Normalize alias or long-form kind name to canonical config kind."""
+        return self.kind_aliases().get(kind, kind)
+
+    def _template_dir(self) -> Path:
+        return self.config_dir / "templates"
+
+    def _template_path(self, kind: str, guidance: str | None = None) -> Path:
+        normalized_kind = self.normalize_kind(kind)
+        template_name = f"{guidance}.md" if guidance else "default.md"
+        return self._template_dir() / normalized_kind / template_name
+
+    def _template_candidates(self, kind: str, guidance: str | None = None) -> list[Path]:
+        normalized_kind = self.normalize_kind(kind)
+        template_name = f"{guidance}.md" if guidance else "default.md"
+        return [
+            self._template_dir() / normalized_kind / template_name,
+            _REPO_TEMPLATE_DIR / normalized_kind / template_name,
+        ]
 
     def _read_required_yaml(self, filename: str) -> dict:
         return yaml.safe_load((self.config_dir / filename).read_text(encoding="utf-8"))
@@ -84,25 +114,25 @@ class Config:
         wf_name = name or group["default"]
         return group["named"][wf_name]
 
-    def profile_for(self, name: str) -> dict:
-        """Load a unified profile by name.
+    def initial_state(self, kind: str, workflow: str | None = None) -> str:
+        """Get configured initial state for a kind/workflow."""
+        wf = self.workflow_for(kind, workflow)
+        return wf["initial"]
 
-        Profiles combine request defaults (Understanding, Open Questions, suggested sections)
-        and stack topology (on_request_create, allow_plan_overlay).
+    def creation_profiles(self) -> dict[str, dict]:
+        """Get all configured creation profiles."""
+        return self.profiles.get("planning", {}).get("profiles", {})
 
-        Args:
-            name: Profile name (e.g. 'feature', 'issue', 'direct', 'full')
-
-        Returns:
-            Profile dict with both request defaults and stack topology
-
-        Raises:
-            ValueError: If profile not found
-        """
-        profiles = self.profiles.get("planning", {}).get("profiles", {})
+    def creation_profile_for(self, name: str) -> dict:
+        """Load a generic creation profile by name."""
+        profiles = self.creation_profiles()
         if name not in profiles:
             raise ValueError(f"profile '{name}' not found")
         return profiles[name]
+
+    def profile_for(self, name: str) -> dict:
+        """Backward-compatible alias for creation_profile_for()."""
+        return self.creation_profile_for(name)
 
     def standard_defaults_for(self, kind: str) -> list[str]:
         """Get default standards for a planning kind.
@@ -120,7 +150,7 @@ class Config:
         """Get all guidance levels.
 
         Returns:
-            Dict of guidance levels (light, standard, deep)
+            Dict of configured guidance levels
         """
         return self.profiles.get("planning", {}).get("guidance_levels", {})
 
@@ -128,7 +158,7 @@ class Config:
         """Get a specific guidance level by name.
 
         Args:
-            name: Guidance level name (light, standard, deep)
+            name: Guidance level name
 
         Returns:
             Guidance level config dict
@@ -145,7 +175,7 @@ class Config:
         """Get the default guidance level from planning.yaml.
 
         Returns:
-            Default guidance level (light, standard, or deep)
+            Default guidance level name
         """
         return self.planning.get("planning", {}).get("default_guidance", "standard")
 
@@ -153,9 +183,33 @@ class Config:
         """Get the default profile from planning.yaml.
 
         Returns:
-            Default profile name (feature, issue, fix, enhancement)
+            Default profile name
         """
         return self.planning.get("planning", {}).get("default_profile", "feature")
+
+    def guidance_sections_for(self, guidance: str, kind: str) -> dict:
+        """Get guidance-driven section config for a kind.
+
+        Supports generic `sections_by_kind.<kind>` plus legacy `spec_sections`
+        / `task_sections` fallback.
+        """
+        guidance_cfg = self.guidance_for(guidance)
+        by_kind = guidance_cfg.get("sections_by_kind", {})
+        if kind in by_kind:
+            return by_kind.get(kind, {}) or {}
+
+        legacy_key = {"spec": "spec_sections", "task": "task_sections"}.get(kind)
+        if legacy_key:
+            return guidance_cfg.get(legacy_key, {}) or {}
+        return {}
+
+    def guidance_required_sections(self, guidance: str, kind: str) -> list[str]:
+        """Get guidance-required sections for a kind."""
+        return list(self.guidance_sections_for(guidance, kind).get("required", []) or [])
+
+    def guidance_suggested_sections(self, guidance: str, kind: str) -> list[str]:
+        """Get guidance-suggested sections for a kind."""
+        return list(self.guidance_sections_for(guidance, kind).get("suggested", []) or [])
 
     def document_template(self, kind: str, guidance: str | None = None) -> str:
         """Get document body template for a planning kind.
@@ -168,6 +222,16 @@ class Config:
         Returns:
             Template string with section headers
         """
+        for template_path in self._template_candidates(kind, guidance):
+            if template_path.exists():
+                return template_path.read_text(encoding="utf-8")
+
+        if guidance:
+            for default_template_path in self._template_candidates(kind):
+                if default_template_path.exists():
+                    return default_template_path.read_text(encoding="utf-8")
+
+        # Backward-compatible fallback for inline legacy templates.
         templates = self.profiles.get("planning", {}).get("document_templates", {})
         kind_config = templates.get(kind, {})
 
@@ -177,6 +241,43 @@ class Config:
                 return guidance_templates[guidance]
 
         return kind_config.get("default", "")
+
+    def creation_sections(
+        self,
+        kind: str,
+        guidance: str | None = None,
+        profile: str | None = None,
+    ) -> list[str]:
+        """Get ordered document sections for newly created items.
+
+        Uses existing template headings as base source of truth, then layers on
+        minimal profile- and validator-driven additions where creation should
+        include extra sections by default.
+        """
+        sections = _SECTION_HEADING_RE.findall(self.document_template(kind, guidance))
+        if kind != "request":
+            return sections
+
+        profile_cfg = self.creation_profile_for(profile) if profile else {}
+        profile_sections = profile_cfg.get("suggested_sections", [])
+        required_sections = self.required_sections(kind) or []
+        ordered: list[str] = []
+        for section in [*sections, *profile_sections, *required_sections]:
+            if section and section not in ordered:
+                ordered.append(section)
+        return ordered
+
+    def creation_template(
+        self,
+        kind: str,
+        guidance: str | None = None,
+        profile: str | None = None,
+    ) -> str:
+        """Render default creation body from configured sections."""
+        sections = self.creation_sections(kind, guidance=guidance, profile=profile)
+        if not sections:
+            return ""
+        return "".join(f"# {section}\n\n\n" for section in sections)
 
     def relationship_rules(self, kind: str) -> dict:
         """Get relationship rules for a planning kind.
@@ -191,6 +292,23 @@ class Config:
         return rel_config.get(
             kind, {"can_reference": [], "required_for_children": [], "referenced_by": {}}
         )
+
+    def referenced_by(self, kind: str) -> dict[str, str]:
+        """Get child-kind -> field mapping for items that reference this kind."""
+        return self.relationship_rules(kind).get("referenced_by", {})
+
+    def requires_children(self, kind: str) -> dict[str, list[str]]:
+        """Get configured downstream-child requirements for a kind.
+
+        Returns:
+            Mapping of child kind -> workflow states where at least one such child must exist.
+        """
+        rules = self.relationship_rules(kind).get("requires_children", {})
+        out: dict[str, list[str]] = {}
+        for child_kind, child_rules in rules.items():
+            if isinstance(child_rules, dict):
+                out[child_kind] = child_rules.get("states", [])
+        return out
 
     def can_reference(self, from_kind: str, to_kind: str) -> bool:
         """Check if a kind can reference another kind.
@@ -227,7 +345,28 @@ class Config:
             List of required section names, or None if not configured
         """
         req_sections = self.profiles.get("planning", {}).get("required_sections", {})
-        return req_sections.get(kind)
+        if kind in req_sections:
+            return req_sections.get(kind)
+        template = self.document_template(kind)
+        if not template:
+            return None
+        return _SECTION_HEADING_RE.findall(template)
+
+    def state_required_sections(self, kind: str, state: str | None) -> list[str]:
+        """Get extra required sections for a kind when in a specific workflow state.
+
+        Args:
+            kind: Planning kind ('spec', 'task', 'plan', 'wp', 'standard', 'request')
+            state: Workflow state name
+
+        Returns:
+            List of section names required for this kind/state combination.
+        """
+        if not state:
+            return []
+        requirements = self.profiles.get("planning", {}).get("state_section_requirements", {})
+        kind_rules = requirements.get(kind, {})
+        return kind_rules.get(state, [])
 
     def kind_config(self, kind: str) -> dict:
         """Get configuration for a planning kind from planning.yaml.
@@ -248,6 +387,16 @@ class Config:
             )
         return kinds[kind]
 
+    def creation_rules(self, kind: str) -> dict:
+        """Get create-time behavior rules for a kind."""
+        return self.kind_config(kind).get("creation", {})
+
+    def state_cascades(self, kind: str, state: str) -> dict[str, str]:
+        """Get configured child-kind -> target-state cascade rules for a state change."""
+        cascades = self.kind_config(kind).get("state_cascades", {})
+        rules = cascades.get(state, {})
+        return rules if isinstance(rules, dict) else {}
+
     def all_kinds(self) -> list[str]:
         """Get all defined kind names from config.
 
@@ -267,6 +416,150 @@ class Config:
         """
         kind_cfg = self.kind_config(kind)
         return kind_cfg.get("counter_file", f"{kind}s.json")
+
+    def kind_dir_name(self, kind: str) -> str:
+        """Get configured directory name for a kind."""
+        kind_cfg = self.kind_config(kind)
+        return kind_cfg["dir"]
+
+    def reference_fields(self, kind: str) -> list[str]:
+        """Get configured reference-like frontmatter fields for a kind."""
+        fields = set(self.required_fields(kind) + self.optional_fields(kind))
+        fields.update(self.kind_required_refs(kind))
+        return sorted(
+            field for field in fields if field.endswith("_ref") or field.endswith("_refs")
+        )
+
+    def seeded_reference_fields(self, kind: str) -> dict[str, str]:
+        """Get target ref field -> source input field seed mapping for creation."""
+        return self.creation_rules(kind).get("seed_reference_fields", {})
+
+    def all_reference_fields(self) -> list[str]:
+        """Get all configured reference-like fields across kinds."""
+        fields: set[str] = set()
+        for kind in self.all_kinds():
+            fields.update(self.reference_fields(kind))
+        return sorted(fields)
+
+    def reference_field_shape(self, field: str) -> str:
+        """Classify reference field storage shape.
+
+        Returns one of:
+        - scalar_ref: single string id
+        - scalar_ref_list: list of string ids
+        - rel_list: list of {'ref', ...} objects
+        """
+        configured = self.planning.get("planning", {}).get("reference_field_shapes", {})
+        if field in configured:
+            return configured[field]
+        if field.endswith("_ref"):
+            return "scalar_ref"
+        if field.endswith("_refs"):
+            return "scalar_ref_list"
+        raise ValueError(f"field '{field}' is not a reference field")
+
+    def reference_field_targets(self, field: str) -> list[str]:
+        """Infer target planning kinds for a reference field."""
+        target_name = field
+        if target_name.endswith("_refs"):
+            target_name = target_name[: -len("_refs")]
+        elif target_name.endswith("_ref"):
+            target_name = target_name[: -len("_ref")]
+        else:
+            return []
+
+        special_targets = {
+            "parent_task": "task",
+            "work_package": "wp",
+        }
+        normalized = special_targets.get(target_name, self.normalize_kind(target_name))
+        return [normalized] if normalized in self.all_kinds() else []
+
+    def should_duplicate_check(self, kind: str) -> bool:
+        return bool(self.creation_rules(kind).get("duplicate_check"))
+
+    def requires_source_on_create(self, kind: str) -> bool:
+        return bool(self.creation_rules(kind).get("require_source"))
+
+    def validate_request_refs_on_create(self, kind: str) -> bool:
+        return bool(self.creation_rules(kind).get("validate_request_refs"))
+
+    def refinement_source_prefix(self, kind: str) -> str | None:
+        value = self.creation_rules(kind).get("refinement_source_prefix")
+        return value if isinstance(value, str) and value else None
+
+    def profile_cascade_targets(self, profile: str | None) -> list[str]:
+        if not profile:
+            return []
+        profile_cfg = self.creation_profile_for(profile)
+        return profile_cfg.get("on_create", profile_cfg.get("on_request_create", []))
+
+    def build_creation_extra_fields(
+        self,
+        kind: str,
+        *,
+        summary: str,
+        guidance: str | None,
+        profile: str | None,
+        current_understanding: str | None,
+        open_questions: list[str] | None,
+        source: str | None,
+        context: str | None,
+    ) -> dict:
+        """Build config-driven create-time frontmatter extras for a kind."""
+        rules = self.creation_rules(kind)
+        extra = rules.get("extra_fields", {})
+        if not extra:
+            return {}
+
+        if guidance is None:
+            guidance = self.default_guidance()
+
+        fields: dict[str, object] = {}
+        if source_field := extra.get("source_field"):
+            fields[source_field] = source or ""
+        if guidance_field := extra.get("guidance_field"):
+            fields[guidance_field] = guidance
+        if context and (context_field := extra.get("context_field")):
+            fields[context_field] = context
+
+        defaults = {}
+        if extra.get("use_profile_defaults") and profile:
+            try:
+                defaults = self.creation_profile_for(profile).get("defaults", {})
+            except ValueError:
+                defaults = {}
+
+        guidance_defaults = {}
+        if extra.get("use_guidance_defaults"):
+            guidance_defaults = self.guidance_levels().get(guidance, {}).get("defaults", {})
+
+        understanding_field = extra.get("understanding_field")
+        if understanding_field:
+            fields[understanding_field] = (
+                current_understanding
+                or defaults.get("current_understanding")
+                or guidance_defaults.get("current_understanding")
+                or f"Initial request intake captured: {summary}"
+            )
+
+        open_questions_field = extra.get("open_questions_field")
+        if open_questions_field:
+            fields[open_questions_field] = (
+                open_questions
+                if open_questions is not None
+                else (
+                    defaults.get("open_questions")
+                    or guidance_defaults.get("open_questions")
+                    or []
+                )
+            )
+
+        meta_field = extra.get("meta_field")
+        if meta_field and defaults.get("meta"):
+            fields[meta_field] = defaults["meta"]
+
+        return fields
 
     def kind_id_prefix(self, kind: str) -> str:
         """Get ID prefix for a kind.
@@ -304,20 +597,19 @@ class Config:
         kind_cfg = self.kind_config(kind)
         return kind_cfg.get("required_refs", [])
 
-    def standard_refs_inheritance(self, kind: str) -> list[dict]:
-        """Get standard_refs inheritance rules for a kind.
-
-        Args:
-            kind: Planning kind name
-
-        Returns:
-            List of inheritance rules, each with:
-            - field: The reference field to follow (e.g., 'spec_ref', 'task_refs')
-            - type: 'direct' (follow field once) or 'recursive' (follow with sub_inheritance)
-            - sub_inheritance: (for recursive) list of fields to inherit from the referenced item
-        """
+    def reference_inheritance(self, kind: str, target_field: str) -> list[dict]:
+        """Get generic inheritance rules for a reference field on a kind."""
         kind_cfg = self.kind_config(kind)
-        return kind_cfg.get("standard_refs_inheritance", [])
+        generic = kind_cfg.get("reference_inheritance", {}) or {}
+        if target_field in generic:
+            return generic.get(target_field, []) or []
+        if target_field == "standard_refs":
+            return kind_cfg.get("standard_refs_inheritance", [])
+        return []
+
+    def standard_refs_inheritance(self, kind: str) -> list[dict]:
+        """Backward-compatible alias for standard_refs inheritance rules."""
+        return self.reference_inheritance(kind, "standard_refs")
 
     def required_fields(self, kind: str) -> list[str]:
         """Get required fields for a kind.

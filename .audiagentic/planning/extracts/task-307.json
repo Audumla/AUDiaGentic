@@ -1,14 +1,14 @@
 {
   "item": {
     "id": "task-307",
-    "label": "req-0043",
+    "label": "docs",
     "state": "cancelled",
-    "summary": "Refactor request-43 audit",
+    "summary": "Review docs/knowledge/",
     "request_refs": [
       "request-19"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-307-req-0043.md",
+    "path": "docs/planning/tasks/core/task-307-docs.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n# Description\n\nRefactor request-43 audit\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nReview docs/knowledge/\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n\n# Cancellation Reason\n\nTask cancelled: Too vague to be actionable. \"Review docs/knowledge/\" doesn't specify what to review or what criteria to use. Directory is already well-organized with clear structure.\n"
 }

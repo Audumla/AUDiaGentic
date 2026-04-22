@@ -19,20 +19,20 @@ The knowledge component consists of:
   - `decisions/` - Architecture decision records
   - `glossary/` - Terminology definitions
   - `runbooks/` - Operational procedures
-- **Metadata** (`meta/`): Sidecar YAML files mirroring page structure
-- **Proposals** (`proposals/`): Sync proposals generated from events
-- **State** (`state/`): Sync state, event state, snapshots
-- **Archive** (`archive/`): Applied proposals and archived pages
-- **Import** (`import/manifests/`): Import manifests for seeding
+- **Metadata** (`data/meta/`): Sidecar YAML files mirroring page structure
+- **Proposals** (`data/proposals/`): Sync proposals generated from events
+- **State** (`data/state/`): Sync state, event state, snapshots
+- **Archive** (`data/archive/`): Applied proposals and archived pages
+- **Import** (`data/import/manifests/`): Import manifests for seeding
 - **Templates** (`templates/`): Page scaffolding templates
 
 **Configuration** (`.audiagentic/knowledge/`):
-- **Config** (`config.yml`): Main configuration file
-- **Events** (`events/`): Event adapters and handlers configuration
-- **Registries** (`registries/`): Action, importer, execution, and LLM registries
-- **Sync** (`sync/`): Sync hooks configuration
-- **Navigation** (`navigation/`): Navigation routes configuration
-- **Profiles** (`profiles/`): Capability and host profiles
+- **Config** (`config/config.yml`): Main configuration file
+- **Events** (`config/events/`): Event adapters and handlers configuration
+- **Registries** (`config/registries/`): Action, importer, execution, and LLM registries
+- **Events** (`config/events/`): Event adapters and handlers configuration
+- **Navigation** (`config/navigation/`): Navigation routes configuration
+- **Profiles** (`config/profiles/`): Capability and host profiles
 
 **Core Capabilities:**
 - **Index Maintenance**: Automatic index page generation and link validation
@@ -47,7 +47,7 @@ The knowledge component consists of:
 - Planning events bridge: `.audiagentic/planning/events/events.jsonl` → knowledge sync
 - Event adapters configured in `.audiagentic/knowledge/events/adapters.yml`
 - Event handlers configured in `.audiagentic/knowledge/events/handlers.yml`
-- 2607+ planning events tracked, 7346 event records processed (baseline recorded)
+- Event baseline recorded (counts tracked in event state)
 - Event adapters active: `planning-state-changes`, `planning-task-completed-legacy`, `wp-review-trigger`
 - Affected pages: system-planning, system-knowledge, guide-using-planning, tool-cli, tool-mcp, pattern-event-bridge, pattern-page-lifecycle
 - Actions: 
@@ -58,12 +58,12 @@ The knowledge component consists of:
 - Agent review: Work-packages entering 'review' state trigger automated review task creation (task-review-{wp_id})
 
 **Configuration:**
-- Main config: `.audiagentic/knowledge/config.yml`
-- Event adapters: `.audiagentic/knowledge/events/adapters.yml`
-- Event handlers: `.audiagentic/knowledge/events/handlers.yml`
-- Registries: `.audiagentic/knowledge/registries/` (actions, importers, execution, llm)
-- Sync hooks: `.audiagentic/knowledge/sync/hooks.yml`
-- Navigation: `.audiagentic/knowledge/navigation/routes.yml`
+- Main config: `.audiagentic/knowledge/config/config.yml`
+- Event adapters: `.audiagentic/knowledge/config/events/adapters.yml`
+- Event handlers: `.audiagentic/knowledge/config/events/handlers.yml`
+- Registries: `.audiagentic/knowledge/config/registries/` (actions, importers, execution, llm)
+- Event handlers: `.audiagentic/knowledge/config/events/handlers.yml`
+- Navigation: `.audiagentic/knowledge/config/navigation/routes.yml`
 - Capability profiles: `deterministic-minimal`, `mcp-stdio`
 - Runtime defaults in `src/audiagentic/knowledge/runtime_data/`
 
@@ -84,48 +84,47 @@ The knowledge component consists of:
 ## How to use
 **CLI Commands:**
 ```bash
-
 ## Validate vault
-audiagentic-knowledge --root . validate
+python -m src.audiagentic.knowledge.cli --root . validate
 
 ## Scan for drift
-audiagentic-knowledge --root . scan-drift
+python -m src.audiagentic.knowledge.cli --root . scan-drift
 
 ## Process events
-audiagentic-knowledge --root . process-events
+python -m src.audiagentic.knowledge.cli --root . process-events
 
 ## Apply sync proposals
-audiagentic-knowledge --root . apply-proposals
+python -m src.audiagentic.knowledge.cli --root . apply-proposals
 
 ## Search pages
-audiagentic-knowledge --root . search --query "planning system"
+python -m src.audiagentic.knowledge.cli --root . search --query "planning system"
 
 ## Scaffold new page
-audiagentic-knowledge --root . scaffold --id my-page --type system --title "My Page"
+python -m src.audiagentic.knowledge.cli --root . scaffold-page my-page system "My Page" "Page summary" --owner core-team
 
 ## Check health
-audiagentic-knowledge --root . doctor
+python -m src.audiagentic.knowledge.cli --root . doctor
 
 ## View status
-audiagentic-knowledge --root . status
+python -m src.audiagentic.knowledge.cli --root . status
 
 ## Maintain index pages
-audiagentic-knowledge --root . maintain-index
+python -m src.audiagentic.knowledge.cli --root . maintain-index
 
 ## Validate index links
-audiagentic-knowledge --root . validate-index
+python -m src.audiagentic.knowledge.cli --root . validate-index
 
 ## Refresh all indexes
-audiagentic-knowledge --root . refresh-index
+python -m src.audiagentic.knowledge.cli --root . refresh-index
 ```
 
 **Event-Driven Sync:**
-1. Configure event adapters in `.audiagentic/knowledge/events/adapters.yml`
-2. Configure event handlers in `.audiagentic/knowledge/events/handlers.yml`
+1. Configure event adapters in `.audiagentic/knowledge/config/events/adapters.yml`
+2. Configure event handlers in `.audiagentic/knowledge/config/events/handlers.yml`
 3. Events are scanned and processed automatically
-4. Sync proposals generated in `docs/knowledge/proposals/`
+4. Sync proposals generated in `docs/knowledge/data/proposals/`
 5. Deterministic proposals auto-applied; review_only proposals require manual review
-6. Applied proposals archived in `docs/knowledge/archive/`
+6. Applied proposals archived in `docs/knowledge/data/archive/`
 7. Index pages are automatically maintained after sync operations
 
 **Page Lifecycle:**
@@ -147,11 +146,11 @@ This page should be refreshed when:
 **Sources:**
 - `src/audiagentic/knowledge/` - Core implementation
 - `src/audiagentic/knowledge/index_maintenance.py` - Index maintenance layer
-- `.audiagentic/knowledge/config.yml` - Main configuration
-- `.audiagentic/knowledge/registries/` - Action and importer registries
-- `.audiagentic/knowledge/events/` - Event adapters and handlers
-- `.audiagentic/knowledge/sync/` - Sync hooks
-- `.audiagentic/knowledge/navigation/` - Navigation routes
+- `.audiagentic/knowledge/config/config.yml` - Main configuration
+- `.audiagentic/knowledge/config/registries/` - Action and importer registries
+- `.audiagentic/knowledge/config/events/` - Event adapters and handlers
+- `.audiagentic/knowledge/config/events/` - Event adapters and handlers
+- `.audiagentic/knowledge/config/navigation/` - Navigation routes
 
 **Sync frequency:** On knowledge component changes
 
@@ -163,4 +162,4 @@ This page should be refreshed when:
 - [Release System](./system-release.md)
 - [CLI Tool](../tools/tool-cli.md)
 - [MCP Server](../tools/tool-mcp.md)
-- Event adapters: `docs/knowledge/events/adapters.yml`
+- Event adapters: `.audiagentic/knowledge/config/events/adapters.yml`

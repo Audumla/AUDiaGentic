@@ -22,20 +22,26 @@ open_questions:
 - Should audience profiles also affect hook/automation rules or event metadata for
   downstream tooling?
 spec_refs:
-- spec-10
+- spec-13
 standard_refs:
 - standard-9
 meta:
   task_refs:
-  - task-236
+  - task-233
   source_refs:
   - docs/planning/requests/request-0008.md
   - .audiagentic/planning/config/profiles.yaml
   - .audiagentic/planning/config/planning.yaml
   - src/audiagentic/planning/app/api.py
   - tools/planning/tm_helper.py
-  superseded_by: request-29
+  superseded_by: request-26
 ---
+
+
+
+
+
+
 
 
 

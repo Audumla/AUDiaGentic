@@ -1,19 +1,19 @@
 {
   "item": {
     "id": "task-223",
-    "label": "Write tests for guidance levels",
+    "label": "Add guidance level selection guide to documentation",
     "state": "done",
-    "summary": "Add tests for guidance_levels config, guidance field validation, CLI parameter, and section enforcement per guidance level",
-    "spec_ref": "spec-10",
+    "summary": "Create guidance selection guide explaining when to use light/standard/deep based on implementor skill, system complexity, and risk",
+    "spec_ref": "spec-16",
     "request_refs": [
-      "request-11"
+      "request-13"
     ],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-223-write-tests-for-guidance-levels.md",
+    "path": "docs/planning/tasks/core/task-223-add-guidance-level-selection-guide-to-documentation.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,8 +22,7 @@
   },
   "effective_standard_refs": [
     "standard-5",
-    "standard-6",
-    "standard-9"
+    "standard-6"
   ],
-  "body": "\n\n\n\n\n\n\n# Description\n\nAdd comprehensive tests for guidance_levels configuration, guidance field validation, CLI parameter, and section enforcement per guidance level.\n\n# Acceptance Criteria\n\n- [ ] Tests for guidance_levels loading from profiles.yaml\n- [ ] Tests for default_guidance loading from planning.yaml\n- [ ] Tests for guidance field validation in schema\n- [ ] Tests for new_request() with guidance parameter\n- [ ] Tests for --guidance CLI parameter\n- [ ] Tests for validation rules per guidance level\n- [ ] Tests for backward compatibility (no guidance)\n- [ ] Tests for profile + guidance combination\n- [ ] All tests pass\n- [ ] Test coverage > 80%\n\n# Notes\n\nThis task ensures all guidance level functionality is tested and working correctly.\n\n# State\n\ndone\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n\n# State\n\ndone\n"
 }

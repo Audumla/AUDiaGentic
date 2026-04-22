@@ -32,6 +32,12 @@ meta:
 
 
 
+
+
+
+
+
+
 # Understanding
 
 This request is the current implementation-focused archive intake. It takes the earlier archive concept from `request-2` and narrows it into a concrete delivery slice for archive state support, state-driven archive/restore behavior, default archive filtering, validation behavior, and archive metadata visibility.

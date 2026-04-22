@@ -1,17 +1,17 @@
 {
   "item": {
     "id": "task-200",
-    "label": "Add lookup.json global index generation to idx_mgr",
+    "label": "Add include_body and write_to_disk controls to extract()",
     "state": "done",
-    "summary": "Extend idx_mgr.py to generate .audiagentic/planning/indexes/lookup.json keyed by id with id, kind, path, label, state, and deleted fields alongside existing per-kind indexes",
-    "spec_ref": "spec-7",
+    "summary": "Add explicit include_body and write_to_disk parameters to extract() so callers can obtain metadata without body content and without writing to .audiagentic/planning/extracts/{id}.json",
+    "spec_ref": "spec-10",
     "request_refs": [],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-200-add-lookup-json-global-index-generation-to-idx-mgr.md",
+    "path": "docs/planning/tasks/core/task-200-add-include-body-and-write-to-disk-controls-to-extract.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,5 +22,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n\n\n# Description\n\nExtend `src/audiagentic/planning/app/idx_mgr.py` to generate a global lookup index at `.audiagentic/planning/indexes/lookup.json` as part of the existing `write_indexes()` call.\n\nThe index must be a flat JSON object keyed by planning item id. Each entry must contain:\n\n```json\n{\n  \"spec-007\": {\n    \"id\": \"spec-007\",\n    \"kind\": \"spec\",\n    \"label\": \"...\",\n    \"state\": \"draft\",\n    \"path\": \"docs/planning/specifications/spec-007-...\",\n    \"deleted\": false\n  }\n}\n```\n\nAll planning kinds must be included: requests, specifications, tasks, plans, work-packages, standards. The `deleted` field should be `false` when absent from the source document. Paths should use forward slashes and be relative to the project root.\n\n# Acceptance Criteria\n\n- Running `tm.py index` produces `.audiagentic/planning/indexes/lookup.json`\n- All planning items across all kinds appear in the index\n- Each entry contains `id`, `kind`, `label`, `state`, `path`, and `deleted`\n- Deleted items are included with `deleted: true` so lookup can surface them without a scan\n- Re-running `index` overwrites the file cleanly with current state\n- Existing per-kind index files are unchanged\n\n# Notes\n\nThe lookup index is an accelerator, not the source of truth. It is always regenerated from the markdown files, never edited directly.\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\nAdd two explicit controls to `ext_mgr.ExtractsMgr.extract()`:\n\n**`include_body: bool = True`** \u2014 when `False`, return only frontmatter metadata without reading or returning the markdown body. Default `True` preserves current behaviour.\n\n**`write_to_disk: bool = True`** \u2014 when `False`, return the extract result without writing to `.audiagentic/planning/extracts/{id}.json`. Default `True` preserves current behaviour.\n\nUpdate the method signature:\n\n```python\ndef extract(self, id_: str, with_related: bool = False, with_resources: bool = False,\n            include_body: bool = True, write_to_disk: bool = True) -> dict:\n```\n\n# Acceptance Criteria\n\n- `extract(id, include_body=False)` returns frontmatter metadata only, no body content\n- `extract(id, write_to_disk=False)` returns the result without writing to the extracts directory\n- Default behaviour (both `True`) is identical to current behaviour\n- All existing callers continue to work without changes\n- Tests cover `include_body=False` and `write_to_disk=False` paths\n\n# Notes\n\nDepends on task-0202 (extract already uses lookup path). The `with_related` and `with_resources` parameters already default to `False` and are not changed by this task.\n"
 }

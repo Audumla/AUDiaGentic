@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-71",
-    "label": "[PKT-JOB-005](task-0071): Approval Handling",
+    "label": "[PKT-JOB-007](task-0073): Job Validation",
     "state": "draft",
-    "summary": "Handle approvals inside jobs",
-    "spec_ref": "spec-11",
+    "summary": "Validate jobs",
+    "spec_ref": "spec-15",
     "kind": "task",
-    "path": "docs/planning/tasks/jobs/task-71-pkt-job-005-task-0071-approval-handling.md",
+    "path": "docs/planning/tasks/jobs/task-71-pkt-job-007-task-0073-job-validation.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
   "effective_standard_refs": [
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-005](task-0061): Approval Handling\n\n## Purpose\n\nHandle approvals inside jobs.\n\n## Scope\n\n- Approval logic\n- State transitions\n- Notifications\n\n## Implementation\n\n1. Implement approval logic\n2. Add state transitions\n3. Add notifications\n\n## Acceptance Criteria\n\n1. Approval logic works\n2. Transitions correct\n3. Notifications sent\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-007](task-0063): Job Validation\n\n## Purpose\n\nValidate jobs.\n\n## Scope\n\n- Validation rules\n- Check logic\n- Error reporting\n\n## Implementation\n\n1. Define rules\n2. Implement checks\n3. Report errors\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Checks work\n3. Errors reported\n"
 }

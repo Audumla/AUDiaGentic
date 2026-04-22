@@ -1,0 +1,37 @@
+{
+  "item": {
+    "id": "request-23",
+    "label": "MCP Test Request",
+    "state": "superseded",
+    "summary": "Request for testing MCP server",
+    "source": "test",
+    "guidance": "standard",
+    "current_understanding": "Initial feature intake captured; the desired capability is understood well enough to refine directly into implementation work.",
+    "open_questions": [
+      "What exact outcome is required?",
+      "What constraints or non-goals apply?",
+      "How will success be verified?"
+    ],
+    "meta": {
+      "request_type": "feature"
+    },
+    "standard_refs": [
+      "standard-1"
+    ],
+    "spec_refs": [
+      "spec-34",
+      "spec-35"
+    ],
+    "kind": "request",
+    "path": "docs/planning/requests/request-23-mcp-test-request.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-1"
+  ],
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n# Understanding\n\nInitial feature intake captured; the desired capability is understood well enough to refine directly into implementation work.\n\n# Open Questions\n\n- What exact outcome is required?\n- What constraints or non-goals apply?\n- How will success be verified?\n\n# Problem\n\n\n\n# Desired Outcome\n\n\n\n# Constraints\n\n\n# Notes\nSuperseded on 2026-04-17 as a planning MCP test artifact rather than substantive project work.\n"
+}

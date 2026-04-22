@@ -1,16 +1,29 @@
 {
   "item": {
     "id": "wp-11",
-    "label": "Implement unified workflow states and cascade archive",
-    "state": "draft",
-    "summary": "Update workflows.yaml and validation rules for unified states",
-    "plan_ref": "plan-9",
-    "task_refs": [],
+    "label": "Implement canonical guidance semantics",
+    "state": "done",
+    "summary": "Create standard-0010 with guidance level definitions and update validation rules",
+    "plan_ref": "plan-12",
+    "task_refs": [
+      {
+        "ref": "task-242",
+        "seq": 1000
+      },
+      {
+        "ref": "task-243",
+        "seq": 2000
+      },
+      {
+        "ref": "task-244",
+        "seq": 3000
+      }
+    ],
     "standard_refs": [
       "standard-6"
     ],
     "kind": "wp",
-    "path": "docs/planning/work-packages/core/wp-11-implement-unified-workflow-states-and-cascade-archive.md",
+    "path": "docs/planning/work-packages/core/wp-11-implement-canonical-guidance-semantics.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -18,7 +31,8 @@
     "restored_by": null
   },
   "effective_standard_refs": [
-    "standard-6"
+    "standard-6",
+    "standard-5"
   ],
-  "body": "\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n\n# Notes\n\nMarked done on 2026-04-17 to align the work package with the already-completed guidance semantics tasks under `request-13`.\n"
 }

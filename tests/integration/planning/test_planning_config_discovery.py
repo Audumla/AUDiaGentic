@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 import sys
 from pathlib import Path
 
@@ -12,19 +11,13 @@ for _p in (str(ROOT), str(ROOT / "src")):
         sys.path.insert(0, _p)
 
 import tools.planning.tm_helper as tm
+from tests.planning_testkit import seed_planning_config
 
-PLANNING_CONFIG_SRC = ROOT / ".audiagentic" / "planning" / "config"
 KNOWN_KINDS = {"request", "spec", "plan", "task", "wp", "standard"}
 
 
 def _seed_root(tmp_path: Path) -> Path:
-    dst = tmp_path / ".audiagentic" / "planning" / "config"
-    dst.mkdir(parents=True, exist_ok=True)
-    for f in PLANNING_CONFIG_SRC.glob("*.yaml"):
-        shutil.copy(f, dst / f.name)
-    pack_src = PLANNING_CONFIG_SRC / "profile-packs"
-    if pack_src.exists():
-        shutil.copytree(pack_src, dst / "profile-packs")
+    seed_planning_config(tmp_path)
     return tmp_path
 
 

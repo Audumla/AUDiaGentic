@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-113",
-    "label": "[PKT-PRV-036](task-0113): Provider Bulkhead",
+    "label": "[PKT-PRV-038](task-0115): Provider Connection Pooling",
     "state": "cancelled",
-    "summary": "Implement provider bulkhead isolation",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider connection pooling",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-113-pkt-prv-036-task-0113-provider-bulkhead.md",
+    "path": "docs/planning/tasks/providers/task-113-pkt-prv-038-task-0115-provider-connection-pooling.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The Continue prompt-trigger line was superseded and archived.\n\n\n# [PKT-PRV-036](task-0103): Provider Bulkhead\n\n## Purpose\n\nImplement provider bulkhead isolation.\n\n## Scope\n\n- Bulkhead design\n- Resource limits\n- Failure isolation\n\n## Implementation\n\n1. Design bulkhead\n2. Add limits\n3. Isolate failures\n\n## Acceptance Criteria\n\n1. Bulkhead designed\n2. Limits work\n3. Failures isolated\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The local-openai prompt-trigger line was superseded and archived.\n\n\n# [PKT-PRV-038](task-0105): Provider Connection Pooling\n\n## Purpose\n\nImplement provider connection pooling.\n\n## Scope\n\n- Pool design\n- Allocation\n- Recycling\n\n## Implementation\n\n1. Design pool\n2. Implement allocation\n3. Add recycling\n\n## Acceptance Criteria\n\n1. Pool designed\n2. Allocation works\n3. Recycling works\n"
 }

@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-90",
-    "label": "[PKT-PRV-013](task-0090): Provider Feature Flags",
+    "label": "[PKT-PRV-015](task-0092): Provider Caching",
     "state": "draft",
-    "summary": "Implement provider feature flags",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider caching",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-90-pkt-prv-013-task-0090-provider-feature-flags.md",
+    "path": "docs/planning/tasks/providers/task-90-pkt-prv-015-task-0092-provider-caching.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-013](task-0080): Provider Feature Flags\n\n## Purpose\n\nImplement provider feature flags.\n\n## Scope\n\n- Flag format\n- Toggle logic\n- Documentation\n\n## Implementation\n\n1. Define format\n2. Implement toggle\n3. Document\n\n## Acceptance Criteria\n\n1. Format defined\n2. Toggle works\n3. Documented\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-015](task-0082): Provider Caching\n\n## Purpose\n\nImplement provider caching.\n\n## Scope\n\n- Cache strategy\n- Invalidation\n- Performance\n\n## Implementation\n\n1. Define strategy\n2. Implement invalidation\n3. Measure performance\n\n## Acceptance Criteria\n\n1. Strategy defined\n2. Invalidation works\n3. Performance improved\n"
 }

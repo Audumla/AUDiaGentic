@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-62",
-    "label": "[PKT-RLS-007](task-0062): Release Please Config Management",
+    "label": "[PKT-RLS-009](task-0064): Audit Trail",
     "state": "draft",
-    "summary": "Manage Release Please configuration",
-    "spec_ref": "spec-10",
+    "summary": "Create audit trail for releases",
+    "spec_ref": "spec-13",
     "kind": "task",
-    "path": "docs/planning/tasks/release/task-62-pkt-rls-007-task-0062-release-please-config-management.md",
+    "path": "docs/planning/tasks/release/task-62-pkt-rls-009-task-0064-audit-trail.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
   "effective_standard_refs": [
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-007](task-0052): Release Please Config Management\n\n## Purpose\n\nManage Release Please configuration.\n\n## Scope\n\n- Config format\n- Management logic\n- Validation\n\n## Implementation\n\n1. Define config format\n2. Implement management\n3. Add validation\n\n## Acceptance Criteria\n\n1. Config format defined\n2. Management works\n3. Validated\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-009](task-0054): Audit Trail\n\n## Purpose\n\nCreate audit trail for releases.\n\n## Scope\n\n- Trail format\n- Logging\n- Retention\n\n## Implementation\n\n1. Define trail format\n2. Implement logging\n3. Set retention\n\n## Acceptance Criteria\n\n1. Trail format defined\n2. Logging works\n3. Retention set\n"
 }

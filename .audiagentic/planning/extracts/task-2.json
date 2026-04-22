@@ -23,5 +23,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\nThe hooks.yml file defines hook eligibility rules that should be removed. Also, the CLI has hooks-related commands (`_print_hooks()` and `_print_evaluate()`) that need to be removed from cli.py. The config.py also references `hook_config_file` which needs to be removed.\n\n# Notes\n\nCancelled on 2026-04-17 as redundant placeholder work under superseded `request-21`. Current knowledge architecture still intentionally uses hook-based sync alongside event-driven behavior.\n"
+  "body": "\n\n\n\n\n\n\n\n\nThe hooks.yml file defines hook eligibility rules that should be removed. Also, the CLI has hooks-related commands (`_print_hooks()` and `_print_evaluate()`) that need to be removed from cli.py. The config.py also references `hook_config_file` which needs to be removed.\n\n# Notes\n\nCancelled on 2026-04-17 as redundant placeholder work under superseded `request-21`. Current knowledge architecture still intentionally uses hook-based sync alongside event-driven behavior.\n"
 }

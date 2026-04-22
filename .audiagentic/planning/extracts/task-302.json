@@ -1,14 +1,14 @@
 {
   "item": {
     "id": "task-302",
-    "label": "req-0038",
+    "label": "req-0041",
     "state": "cancelled",
-    "summary": "Refactor request-38 sync",
+    "summary": "Refactor request-41 standards review",
     "request_refs": [
       "request-19"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-302-req-0038.md",
+    "path": "docs/planning/tasks/core/task-302-req-0041.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n# Description\n\nRefactor request-38 sync\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nRefactor request-19 standards review\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
 }

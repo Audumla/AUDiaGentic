@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-323",
-    "label": "Phase 1-11 Build Books",
+    "label": "Testing and Status Reports",
     "state": "draft",
-    "summary": "Migrate all phase build books",
-    "spec_ref": "spec-20",
+    "summary": "Migrate all testing and status reports",
+    "spec_ref": "spec-24",
     "kind": "task",
-    "path": "docs/planning/tasks/implementation-docs/task-323-phase-1-11-build-books.md",
+    "path": "docs/planning/tasks/implementation-docs/task-323-testing-and-status-reports.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n# Description\n\nImplement this task.\n\n\n# Phase 1-11 Build Books\n\n## Purpose\n\nMigrate all phase build books.\n\n## Scope\n\n- Phase 0-11 build books\n- Cross-references\n- Dependencies\n\n## Implementation\n\n1. Migrate build books\n2. Resolve references\n3. Link objects\n\n## Acceptance Criteria\n\n1. Build books migrated\n2. References resolved\n3. Linked correctly\n"
+  "body": "\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# Testing and Status Reports\n\n## Purpose\n\nMigrate all testing and status reports.\n\n## Scope\n\n- Testing reports\n- Status reports\n- Validation reports\n\n## Implementation\n\n1. Migrate testing reports\n2. Migrate status reports\n3. Migrate validation reports\n\n## Acceptance Criteria\n\n1. Testing reports migrated\n2. Status reports migrated\n3. Validation reports migrated\n"
 }

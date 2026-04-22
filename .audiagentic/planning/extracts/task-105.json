@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-105",
-    "label": "[PKT-PRV-028](task-0105): Provider Queue Management",
+    "label": "[PKT-PRV-030](task-0107): Provider Stream Processing",
     "state": "draft",
-    "summary": "Manage provider message queue",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider stream processing",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-105-pkt-prv-028-task-0105-provider-queue-management.md",
+    "path": "docs/planning/tasks/providers/task-105-pkt-prv-030-task-0107-provider-stream-processing.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-028](task-0095): Provider Queue Management\n\n## Purpose\n\nManage provider message queue.\n\n## Scope\n\n- Queue management\n- Monitoring\n- Scaling\n\n## Implementation\n\n1. Implement management\n2. Add monitoring\n3. Add scaling\n\n## Acceptance Criteria\n\n1. Management works\n2. Monitoring works\n3. Scaling works\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-030](task-0097): Provider Stream Processing\n\n## Purpose\n\nImplement provider stream processing.\n\n## Scope\n\n- Stream format\n- Processing logic\n- Backpressure\n\n## Implementation\n\n1. Define format\n2. Implement processing\n3. Add backpressure\n\n## Acceptance Criteria\n\n1. Format defined\n2. Processing works\n3. Backpressure works\n"
 }

@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-140",
-    "label": "[PKT-PRV-062](task-0140): Provider Data Retention Rules",
+    "label": "[PKT-PRV-065](task-0143): Provider Data Transformation Rules",
     "state": "draft",
-    "summary": "Implement provider data retention rules",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data transformation rules",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-140-pkt-prv-062-task-0140-provider-data-retention-rules.md",
+    "path": "docs/planning/tasks/providers/task-140-pkt-prv-065-task-0143-provider-data-transformation-rules.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-062](task-0129): Provider Data Retention Rules\n\n## Purpose\n\nImplement provider data retention rules.\n\n## Scope\n\n- Retention rules\n- Enforcement\n- Exceptions\n\n## Implementation\n\n1. Define rules\n2. Implement enforcement\n3. Handle exceptions\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Enforcement works\n3. Exceptions handled\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-065](task-0132): Provider Data Transformation Rules\n\n## Purpose\n\nImplement provider data transformation rules.\n\n## Scope\n\n- Transform rules\n- Validation\n- Logging\n\n## Implementation\n\n1. Define rules\n2. Add validation\n3. Add logging\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Validated\n3. Logged\n"
 }

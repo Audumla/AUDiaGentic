@@ -6,6 +6,7 @@ from pathlib import Path
 import yaml
 
 from .api_types import ItemView
+from .standards import effective_references
 
 
 class Extracts:
@@ -27,67 +28,16 @@ class Extracts:
 
     def _effective_standard_refs(self, item: ItemView) -> list[str]:
         api = self._api()
-        cache = {item.data["id"]: item}
+        items_by_id = {entry.data["id"]: entry for entry in api._scan()}
+        items_by_id[item.data["id"]] = item
+        return effective_references(item, "standard_refs", items_by_id, api.config)
 
-        def resolve_refs(item_view: ItemView) -> list[str]:
-            refs = list(item_view.data.get("standard_refs", []) or [])
-
-            if item_view.kind == "task":
-                spec_id = item_view.data.get("spec_ref")
-                if spec_id and spec_id not in cache:
-                    cache[spec_id] = api.lookup(spec_id)
-                spec = cache.get(spec_id)
-                if spec:
-                    refs.extend(spec.data.get("standard_refs", []) or [])
-
-                parent_id = item_view.data.get("parent_task_ref")
-                if parent_id and parent_id not in cache:
-                    cache[parent_id] = api.lookup(parent_id)
-                parent = cache.get(parent_id)
-                if parent:
-                    refs.extend(parent.data.get("standard_refs", []) or [])
-
-            elif item_view.kind == "wp":
-                plan_id = item_view.data.get("plan_ref")
-                if plan_id and plan_id not in cache:
-                    cache[plan_id] = api.lookup(plan_id)
-                plan = cache.get(plan_id)
-                if plan:
-                    refs.extend(plan.data.get("standard_refs", []) or [])
-
-                for rel in item_view.data.get("task_refs", []) or []:
-                    task_id = rel.get("ref")
-                    if task_id and task_id not in cache:
-                        cache[task_id] = api.lookup(task_id)
-                    task = cache.get(task_id)
-                    if task:
-                        refs.extend(task.data.get("standard_refs", []) or [])
-
-                        spec_id = task.data.get("spec_ref")
-                        if spec_id and spec_id not in cache:
-                            cache[spec_id] = api.lookup(spec_id)
-                        spec = cache.get(spec_id)
-                        if spec:
-                            refs.extend(spec.data.get("standard_refs", []) or [])
-
-            return refs
-
-        all_refs = []
-        visited = set()
-        stack = [item]
-
-        while stack:
-            current = stack.pop()
-            if current.data.get("id") in visited:
-                continue
-            visited.add(current.data.get("id"))
-
-            refs = resolve_refs(current)
-            for ref in refs:
-                if ref not in all_refs:
-                    all_refs.append(ref)
-
-        return all_refs
+    def _attachments_root(self) -> Path:
+        api = self._api()
+        attachments = (
+            api.config.planning.get("planning", {}).get("dirs", {}).get("attachments", "docs/planning/attachments")
+        )
+        return self.root / attachments
 
     def show(self, id_: str) -> dict:
         item = self._api().lookup(id_)
@@ -121,20 +71,12 @@ class Extracts:
             out["body"] = item.body
         if with_related:
             rel = {}
-            for field in [
-                "request_refs",
-                "spec_refs",
-                "task_refs",
-                "work_package_refs",
-                "plan_ref",
-                "spec_ref",
-                "parent_task_ref",
-            ]:
+            for field in self._api().config.reference_fields(item.kind):
                 if field in item.data:
                     rel[field] = item.data[field]
             out["related"] = rel
         if with_resources:
-            attach_dir = self.root / "docs/planning/attachments" / id_
+            attach_dir = self._attachments_root() / id_
             if attach_dir.exists():
                 out["attachments"] = [
                     str(p.relative_to(self.root))
@@ -149,7 +91,7 @@ class Extracts:
 
     def owner(self, path_fragment: str) -> list[dict]:
         owners = []
-        attach_root = self.root / "docs/planning/attachments"
+        attach_root = self._attachments_root()
         if not attach_root.exists():
             return owners
         for amap in sorted(attach_root.glob("*/resource-map.yaml")):

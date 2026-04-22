@@ -1,21 +1,18 @@
 {
   "item": {
     "id": "task-155",
-    "label": "[PKT-PRV-077](task-0155): Provider Data Dictionary Monitoring",
-    "state": "draft",
-    "summary": "Implement provider data dictionary monitoring",
-    "spec_ref": "spec-12",
+    "label": "[PKT-DSC-001](task-0158): Event Subscriber",
+    "state": "cancelled",
+    "summary": "Implement Discord event subscriber",
+    "spec_ref": "spec-17",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-155-pkt-prv-077-task-0155-provider-data-dictionary-monitoring.md",
+    "path": "docs/planning/tasks/discord/task-155-pkt-dsc-001-task-0158-event-subscriber.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
-    "standard-6",
-    "standard-5"
-  ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-077](task-0144): Provider Data Dictionary Monitoring\n\n## Purpose\n\nImplement provider data dictionary monitoring.\n\n## Scope\n\n- Monitoring logic\n- Definition checks\n- Alerts\n\n## Implementation\n\n1. Implement monitoring\n2. Add definition checks\n3. Add alerts\n\n## Acceptance Criteria\n\n1. Monitoring works\n2. Definitions checked\n3. Alerts sent\n"
+  "effective_standard_refs": [],
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The Discord overlay line was superseded and archived.\n\n\n# [PKT-DSC-001](task-0147): Event Subscriber\n\n## Purpose\n\nImplement Discord event subscriber.\n\n## Scope\n\n- Event format\n- Subscription logic\n- Processing\n\n## Implementation\n\n1. Define format\n2. Implement subscription\n3. Add processing\n\n## Acceptance Criteria\n\n1. Format defined\n2. Subscription works\n3. Processing works\n"
 }

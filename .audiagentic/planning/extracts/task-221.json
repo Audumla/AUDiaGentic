@@ -1,19 +1,19 @@
 {
   "item": {
     "id": "task-221",
-    "label": "Update validation to enforce guidance-appropriate sections",
+    "label": "Draft standard-0010 with guidance level definitions",
     "state": "done",
-    "summary": "Update val_mgr.py to check guidance field and enforce required/suggested sections per guidance level, warn about excessive/minimal detail",
-    "spec_ref": "spec-10",
+    "summary": "Create standard-0010.md with canonical definitions for light/standard/deep guidance levels including required sections, acceptance criteria depth, and implementation expectations",
+    "spec_ref": "spec-16",
     "request_refs": [
-      "request-11"
+      "request-13"
     ],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-221-update-validation-to-enforce-guidance-appropriate-sections.md",
+    "path": "docs/planning/tasks/core/task-221-draft-standard-0010-with-guidance-level-definitions.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,8 +22,7 @@
   },
   "effective_standard_refs": [
     "standard-5",
-    "standard-6",
-    "standard-9"
+    "standard-6"
   ],
-  "body": "\n\n\n\n\n\n\n# Description\n\nUpdate val_mgr.py to check guidance field and enforce required/suggested sections per guidance level. Warn about excessive detail for light guidance and minimal detail for deep guidance.\n\n# Acceptance Criteria\n\n- [ ] Validation checks guidance field in frontmatter\n- [ ] Guidance defaults to standard if not specified\n- [ ] Spec sections validated against guidance spec_sections\n- [ ] Task sections validated against guidance task_sections\n- [ ] light: warn about excessive detail\n- [ ] standard: standard validation\n- [ ] deep: require all required sections\n- [ ] Acceptance criteria depth validated\n- [ ] Warnings logged for violations\n- [ ] Tests for validation rules\n- [ ] Backward compatible (no guidance = standard)\n\n# Notes\n\nThis task ensures content depth matches guidance level expectations.\n\n# State\n\ndone\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n\n# State\n\ndone\n"
 }

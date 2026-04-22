@@ -23,6 +23,12 @@ meta:
 
 
 
+
+
+
+
+
+
 # Understanding
 
 This request drove a comprehensive hardening pass on the planning API and MCP surface, with all fixes now implemented and verified.

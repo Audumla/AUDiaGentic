@@ -1,12 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
+  "additionalProperties": false,
   "required": [
     "profile_pack"
   ],
   "properties": {
     "profile_pack": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "id"
       ],
@@ -15,7 +17,19 @@
           "type": "string"
         },
         "documentation": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "required_updates": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
         }
       }
     }

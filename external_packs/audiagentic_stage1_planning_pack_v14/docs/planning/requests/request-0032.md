@@ -49,3 +49,7 @@ The missing planning slice is not "another installer." It is a generic installer
 - How much observed state belongs in installed-state versus diagnostics-only outputs?
 - Which artifact forms are mandatory in stage one across Windows, Linux, and macOS?
 - Which backend contracts are required now versus reserved for later?
+
+# Notes
+
+This request supersedes `audiagentic_stage1_planning_pack_v13`. The v13 review findings are captured in `installer-v14-review-findings.md`. The v14 pack addresses v13 findings by adding `standard-11` references, splitting one large work package into four modular packages, and making migration boundaries explicit.

@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-191",
-    "label": "Fix move() for work-packages",
+    "label": "Fix batch meta op",
     "state": "done",
-    "summary": "Fix path resolution inconsistency for wp domain in move() operation",
-    "spec_ref": "spec-3",
+    "summary": "Fix _execute_batch_operations() to write frontmatter for meta operations instead of silently discarding",
+    "spec_ref": "spec-6",
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-191-fix-move-for-work-packages.md",
+    "path": "docs/planning/tasks/core/task-191-fix-batch-meta-op.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -14,5 +14,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n# Description\n\nFix work-package moves so they resolve the correct domain path and behave the same way as task moves.\n\n# Acceptance Criteria\n\n1. Work-packages can move to `contrib`\n2. The returned path points at the moved work-package\n3. Regression coverage proves wp moves no longer fail\n\n# Notes\n\n- Verified by the passing `move()` coverage tests for work-packages\n- Current implementation uses `Paths.kind_dir()` in `PlanningAPI.move()`\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nPersist `meta` batch-update operations into frontmatter instead of silently discarding them during batch execution.\n\n# Acceptance Criteria\n\n1. Batch `meta` operations write the requested field/value\n2. Updated metadata survives a subsequent read/show operation\n3. Regression coverage proves the operation is not ignored\n\n# Notes\n\n- Verified by the passing planning coverage suite and current batch-update behavior\n- This closes the gap where metadata operations were accepted but not persisted\n"
 }

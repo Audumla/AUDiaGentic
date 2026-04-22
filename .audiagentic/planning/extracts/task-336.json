@@ -1,0 +1,26 @@
+{
+  "item": {
+    "id": "task-336",
+    "label": "Integrate relationship validation into managers",
+    "state": "done",
+    "summary": "\"Add RelationshipConfig validation to manager create() methods\"",
+    "spec_ref": "spec-33",
+    "request_refs": [],
+    "standard_refs": [
+      "standard-5",
+      "standard-6"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-336-integrate-relationship-validation-into-managers.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-5",
+    "standard-6"
+  ],
+  "body": "\n\n\n\n\n\n\n\n\n\n## Description\n\nEnable required-ref enforcement in `PlanningAPI._create_item()`. The validation call exists at [api.py:1000](src/audiagentic/planning/app/api.py#L1000) but uses `validate_required=False`, so required refs (e.g. `request_refs` on spec, `spec_refs` on plan) are never enforced.\n\n## Current State\n\n`api.py:1000\u20131004` calls `self.relationship_config.validate_refs(kind, frontmatter, validate_required=False)`.\n\nThe individual manager classes (`spec_mgr.py`, `task_mgr.py` etc.) referenced in the original task description **no longer exist** \u2014 all create logic was consolidated into `PlanningAPI._create_item()`. The original task description was stale.\n\nRelationship rules are in `.audiagentic/planning/config/profiles.yaml` under `planning.relationship_config`. Current `required_for_children`:\n- `spec`: `[request_refs]`\n- `plan`: `[spec_refs]`\n- `request`, `task`, `wp`, `standard`: `[]`\n\n## Required Changes\n\n### 1. Enable validation in api.py\n\nChange [api.py:1001](src/audiagentic/planning/app/api.py#L1001):\n```python\n# Before\nrelationship_errors = self.relationship_config.validate_refs(\n    kind, frontmatter, validate_required=False\n)\n# After\nrelationship_errors = self.relationship_config.validate_refs(\n    kind, frontmatter, validate_required=True\n)\n```\n\n### 2. Audit profiles.yaml required_for_children\n\nVerify each kind's `required_for_children` is correct and complete. Gaps to check:\n- `wp`: should `plan_ref` be required? Currently `[]`\n- `task`: should `spec_ref` be required? Currently `[]`\n- `standard`: nothing expected\n\nUpdate profiles.yaml if any required refs are missing.\n\n### 3. Check all create paths\n\nVerify that `create_with_content()` ([api.py:1141](src/audiagentic/planning/app/api.py#L1141)) and `_create_generic_item()` ([api.py:1019](src/audiagentic/planning/app/api.py#L1019)) also pass through relationship validation. If they bypass `_create_item()`, they need the validation call too.\n\n### 4. Verify existing creation flows still work\n\nAfter enabling, confirm:\n- Creating a spec with valid `request_refs` succeeds\n- Creating a spec with no `request_refs` is rejected with clear error\n- Creating a task without `spec_ref` succeeds (not required per config)\n\n## Acceptance Criteria\n\n1. `validate_required=True` set in `_create_item()` at api.py:1001\n2. profiles.yaml `required_for_children` verified and correct for all kinds\n3. All create paths validate refs or call validation directly\n4. Missing required refs raise `ValueError` with clear message before file is written\n5. Existing tests pass; add regression test for required-ref rejection on spec without request_refs\n\n# Notes\n\n## 2026-04-22 Implementation\n\n- Fixed `profiles.yaml`: wp `required_for_children` changed from `[plan_ref, task_refs]` to `[plan_ref]` \u2014 task_refs added post-creation so cannot be required at create time\n- Changed `api.py:1001` `validate_required=False` \u2192 `validate_required=True`\n- Spec and plan required-ref enforcement now backed by RelationshipConfig in addition to existing `_require_request_refs_for_spec`\n"
+}

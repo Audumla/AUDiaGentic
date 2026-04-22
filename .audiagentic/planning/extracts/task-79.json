@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-79",
-    "label": "[PKT-PRV-002](task-0079): Health Checks",
+    "label": "[PKT-PRV-004](task-0081): Provider Adapters",
     "state": "draft",
-    "summary": "Implement provider health checks",
-    "spec_ref": "spec-12",
+    "summary": "Create provider adapters",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-79-pkt-prv-002-task-0079-health-checks.md",
+    "path": "docs/planning/tasks/providers/task-79-pkt-prv-004-task-0081-provider-adapters.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-002](task-0069): Health Checks\n\n## Purpose\n\nImplement provider health checks.\n\n## Scope\n\n- Health check logic\n- Status reporting\n- Alerts\n\n## Implementation\n\n1. Implement checks\n2. Add status reporting\n3. Add alerts\n\n## Acceptance Criteria\n\n1. Checks work\n2. Status reported\n3. Alerts sent\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-004](task-0071): Provider Adapters\n\n## Purpose\n\nCreate provider adapters.\n\n## Scope\n\n- Adapter interface\n- Implementation\n- Testing\n\n## Implementation\n\n1. Define interface\n2. Implement adapters\n3. Test\n\n## Acceptance Criteria\n\n1. Interface defined\n2. Adapters work\n3. Tested\n"
 }

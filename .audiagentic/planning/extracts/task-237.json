@@ -1,11 +1,11 @@
 {
   "item": {
     "id": "task-237",
-    "label": "Refactor events.py into separate modules",
+    "label": "Consolidate MCP tools",
     "state": "draft",
-    "summary": "Split events.py (413 lines) into scanning.py, normalization.py, dispatch.py, state.py",
-    "spec_ref": "spec-16",
-    "parent_task_ref": "wp-13",
+    "summary": "Consolidate 28 MCP tools into 7-8 top-level tools with backward compatibility",
+    "spec_ref": "spec-20",
+    "parent_task_ref": "wp-14",
     "request_refs": [
       "request-15"
     ],
@@ -14,7 +14,7 @@
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-237-refactor-events-py-into-separate-modules.md",
+    "path": "docs/planning/tasks/core/task-237-consolidate-mcp-tools.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -25,5 +25,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n# Description\nConsolidate the knowledge MCP surface into a smaller set of top-level tools only if that work is still genuinely needed. Current code and docs suggest the consolidation target may already be effectively satisfied, so this task should first verify whether it is still real work or just stale planning noise.\n\n# Acceptance Criteria\n1. Confirm whether a consolidation gap still exists in the current MCP surface.\n2. If a gap exists, group the tools into the agreed top-level surfaces without breaking aliases.\n3. If no gap exists, mark the task and dependent work as redundant or superseded.\n4. Backward compatibility remains intact for any existing tool names that callers still use.\n5. Tests and docs reflect the final decision.\n\n# Notes\n- This task is likely narrower than the summary implies because the current MCP already exposes grouped operations.\n- Validate against the live MCP server before doing implementation work here.\n"
 }

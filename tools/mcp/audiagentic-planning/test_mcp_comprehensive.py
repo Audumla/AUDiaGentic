@@ -76,6 +76,9 @@ def test_operation_validation():
         {"op": "content", "value": "Test", "mode": "replace"},
         {"op": "content", "value": "Test", "mode": "append"},
         {"op": "meta", "field": "tags", "value": "test"},
+        {"op": "field", "field": "spec_refs", "mode": "add", "value": "spec-123"},
+        {"op": "field", "field": "spec_refs", "mode": "remove", "value": "spec-123"},
+        {"op": "field", "field": "spec_ref", "mode": "set", "value": "spec-123"},
     ]
 
     for i, op_dict in enumerate(valid_ops):
@@ -109,6 +112,14 @@ def test_operation_validation():
     except PlanningError as e:
         assert "field" in str(e).lower()
         print(f"[OK] Meta without field rejected")
+
+    # Field without field
+    try:
+        validate_operations([{"op": "field", "mode": "remove", "value": "spec-123"}])
+        print(f"[FAIL] Field without field not rejected")
+    except PlanningError as e:
+        assert "field" in str(e).lower()
+        print(f"[OK] Field without field rejected")
 
     # Invalid mode
     try:
@@ -193,22 +204,32 @@ def test_tm_edit():
         result = tm.update(task_id, operations=ops)
         print(f"[OK] Multiple operations (label + meta)")
 
-        # Test 4: Invalid operation
-        try:
-            ops = [{"op": "invalid_op", "value": "test"}]
-            tm.update(task_id, operations=ops)
-            print(f"[FAIL] Invalid operation not rejected")
-        except ValueError as e:
-            assert "Unknown op" in str(e) or "unknown" in str(e).lower()
-            print(f"[OK] Invalid operation rejected: {e}")
+        # Test 4: Field add/remove on top-level frontmatter lists
+        ops = [{"op": "field", "field": "standard_refs", "mode": "add", "value": "standard-5"}]
+        tm.update(req_result["id"], operations=ops)
+        shown = tm.show(req_result["id"])
+        assert "standard-5" in shown.get("standard_refs", [])
+        print(f"[OK] Field add on standard_refs")
 
-        # Test 5: Non-existent item
+        ops = [{"op": "field", "field": "standard_refs", "mode": "remove", "value": "standard-5"}]
+        tm.update(req_result["id"], operations=ops)
+        shown = tm.show(req_result["id"])
+        assert "standard-5" not in shown.get("standard_refs", [])
+        print(f"[OK] Field remove on standard_refs")
+
+        # Test 5: Invalid operation returns failure payload
+        ops = [{"op": "invalid_op", "value": "test"}]
+        result = tm.update(task_id, operations=ops)
+        assert result.get("success") is False
+        print(f"[OK] Invalid operation returns failure payload")
+
+        # Test 6: Non-existent item rejected
         try:
             ops = [{"op": "state", "value": "done"}]
             tm.update("non-existent-task-9999", operations=ops)
             print(f"[FAIL] Non-existent item not rejected")
-        except ValueError as e:
-            assert "not found" in str(e).lower()
+        except (ValueError, KeyError) as e:
+            assert "non-existent-task-9999" in str(e)
             print(f"[OK] Non-existent item rejected: {e}")
 
     finally:

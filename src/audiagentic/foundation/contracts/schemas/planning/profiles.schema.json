@@ -1,36 +1,38 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
+  "additionalProperties": false,
   "properties": {
     "planning": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "guidance_levels": {
           "type": "object",
-          "properties": {
-            "light": { "$ref": "#/$defs/guidance_level" },
-            "standard": { "$ref": "#/$defs/guidance_level" },
-            "deep": { "$ref": "#/$defs/guidance_level" }
-          }
+          "additionalProperties": { "$ref": "#/$defs/guidance_level" }
         },
         "profiles": {
           "type": "object",
           "additionalProperties": {
             "type": "object",
+            "additionalProperties": false,
             "properties": {
               "description": { "type": "string" },
               "label": { "type": "string" },
+              "on_create": { "type": "array", "items": { "type": "string" } },
               "on_request_create": { "type": "array", "items": { "type": "string" } },
               "allow_plan_overlay": { "type": "boolean" },
               "defaults": { "type": "object" },
               "suggested_sections": { "type": "array", "items": { "type": "string" } }
-            }
+            },
+            "required": ["description", "label"]
           }
         },
         "object_profiles": {
           "type": "object",
           "additionalProperties": {
             "type": "object",
+            "additionalProperties": false,
             "properties": {
               "applies_to": { "type": "string" },
               "required_sections": { "type": "array", "items": { "type": "string" } },
@@ -48,6 +50,23 @@
         },
         "relationship_config": {
           "$ref": "#/$defs/relationship_config"
+        },
+        "required_sections": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "state_section_requirements": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
         }
       }
     }
@@ -56,12 +75,25 @@
   "$defs": {
     "guidance_level": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "description": { "type": "string" },
         "label": { "type": "string" },
         "defaults": { "type": "object" },
+        "sections_by_kind": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "required": { "type": "array", "items": { "type": "string" } },
+              "suggested": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
         "spec_sections": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "required": { "type": "array", "items": { "type": "string" } },
             "suggested": { "type": "array", "items": { "type": "string" } }
@@ -69,6 +101,7 @@
         },
         "task_sections": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "required": { "type": "array", "items": { "type": "string" } },
             "suggested": { "type": "array", "items": { "type": "string" } }
@@ -81,49 +114,47 @@
     },
     "document_templates": {
       "type": "object",
-      "properties": {
-        "spec": { "$ref": "#/$defs/template_config" },
-        "task": { "$ref": "#/$defs/template_config" },
-        "plan": { "$ref": "#/$defs/template_config" },
-        "wp": { "$ref": "#/$defs/template_config" },
-        "standard": { "$ref": "#/$defs/template_config" },
-        "request": { "$ref": "#/$defs/template_config" }
-      }
+      "additionalProperties": { "$ref": "#/$defs/template_config" }
     },
     "template_config": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "default": { "type": "string" },
         "by_guidance": {
           "type": "object",
-          "properties": {
-            "light": { "type": "string" },
-            "standard": { "type": "string" },
-            "deep": { "type": "string" }
-          }
+          "additionalProperties": { "type": "string" }
         }
       },
       "required": ["default"]
     },
     "relationship_config": {
       "type": "object",
-      "properties": {
-        "request": { "$ref": "#/$defs/relationship_rules" },
-        "spec": { "$ref": "#/$defs/relationship_rules" },
-        "task": { "$ref": "#/$defs/relationship_rules" },
-        "plan": { "$ref": "#/$defs/relationship_rules" },
-        "wp": { "$ref": "#/$defs/relationship_rules" },
-        "standard": { "$ref": "#/$defs/relationship_rules" }
-      }
+      "additionalProperties": { "$ref": "#/$defs/relationship_rules" }
     },
     "relationship_rules": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "can_reference": { "type": "array", "items": { "type": "string" } },
         "required_for_children": { "type": "array", "items": { "type": "string" } },
         "referenced_by": {
           "type": "object",
           "additionalProperties": { "type": "string" }
+        },
+        "requires_children": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "states": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            },
+            "required": ["states"]
+          }
         }
       },
       "required": ["can_reference"]

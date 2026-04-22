@@ -27,6 +27,12 @@ meta:
 
 
 
+
+
+
+
+
+
 # Understanding
 
 This request is the original archive-workflow intake for the planning core. It established the first archive-state direction and is now best understood as the historical umbrella behind the newer implementation-focused archive request chain.

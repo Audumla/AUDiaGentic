@@ -4,7 +4,6 @@ from pathlib import Path
 
 import yaml
 
-from ..domain.states import KIND_MAP
 from .util import slugify
 
 
@@ -19,8 +18,12 @@ class Paths:
         self.planning_cfg = yaml.safe_load(
             (self.config_dir / "planning.yaml").read_text(encoding="utf-8")
         )
+        self.kind_aliases = self.planning_cfg["planning"].get("kind_aliases", {})
         self.kinds = self.planning_cfg["planning"].get("kinds", {})
         self.dirs = self.planning_cfg["planning"]["dirs"]
+
+    def normalize_kind(self, kind: str) -> str:
+        return self.kind_aliases.get(kind, kind)
 
     def kind_dir(self, kind: str, domain: str | None = None) -> Path:
         """Get directory for a kind from config - fully config-driven.
@@ -35,7 +38,7 @@ class Paths:
         Raises:
             ValueError: If kind is not defined in config
         """
-        kind = KIND_MAP.get(kind, kind)
+        kind = self.normalize_kind(kind)
         kind_config = self.kinds.get(kind)
 
         if not kind_config:
@@ -94,7 +97,7 @@ class Paths:
         Raises:
             ValueError: If kind is not defined in config
         """
-        kind = KIND_MAP.get(kind, kind)
+        kind = self.normalize_kind(kind)
         kind_config = self.kinds.get(kind)
 
         if not kind_config:

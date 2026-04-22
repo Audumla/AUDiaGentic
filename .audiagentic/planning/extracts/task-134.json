@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-134",
-    "label": "[PKT-PRV-056](task-0134): Provider Data Dictionary",
+    "label": "[PKT-PRV-059](task-0137): Provider Data Profiling",
     "state": "draft",
-    "summary": "Implement provider data dictionary",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data profiling",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-134-pkt-prv-056-task-0134-provider-data-dictionary.md",
+    "path": "docs/planning/tasks/providers/task-134-pkt-prv-059-task-0137-provider-data-profiling.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-056](task-0123): Provider Data Dictionary\n\n## Purpose\n\nImplement provider data dictionary.\n\n## Scope\n\n- Dictionary format\n- Definitions\n- Documentation\n\n## Implementation\n\n1. Define format\n2. Add definitions\n3. Document\n\n## Acceptance Criteria\n\n1. Format defined\n2. Definitions complete\n3. Documented\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-059](task-0126): Provider Data Profiling\n\n## Purpose\n\nImplement provider data profiling.\n\n## Scope\n\n- Profile format\n- Analysis\n- Reporting\n\n## Implementation\n\n1. Define format\n2. Implement analysis\n3. Add reporting\n\n## Acceptance Criteria\n\n1. Format defined\n2. Analysis works\n3. Reports generated\n"
 }

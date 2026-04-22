@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-144",
-    "label": "[PKT-PRV-066](task-0144): Provider Data Validation Rules",
+    "label": "[PKT-PRV-069](task-0147): Provider Data Lineage Rules",
     "state": "draft",
-    "summary": "Implement provider data validation rules",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data lineage rules",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-144-pkt-prv-066-task-0144-provider-data-validation-rules.md",
+    "path": "docs/planning/tasks/providers/task-144-pkt-prv-069-task-0147-provider-data-lineage-rules.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-066](task-0133): Provider Data Validation Rules\n\n## Purpose\n\nImplement provider data validation rules.\n\n## Scope\n\n- Validation rules\n- Enforcement\n- Reporting\n\n## Implementation\n\n1. Define rules\n2. Implement enforcement\n3. Add reporting\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Enforcement works\n3. Reports generated\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-069](task-0136): Provider Data Lineage Rules\n\n## Purpose\n\nImplement provider data lineage rules.\n\n## Scope\n\n- Lineage rules\n- Tracking\n- Visualization\n\n## Implementation\n\n1. Define rules\n2. Implement tracking\n3. Add visualization\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Tracking works\n3. Visualization works\n"
 }

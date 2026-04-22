@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-324",
-    "label": "Provider Plans and Runbooks",
+    "label": "Reference Resolution",
     "state": "draft",
-    "summary": "Migrate all provider plans and runbooks",
-    "spec_ref": "spec-20",
+    "summary": "Resolve all cross-references between planning objects",
+    "spec_ref": "spec-3",
     "kind": "task",
-    "path": "docs/planning/tasks/implementation-docs/task-324-provider-plans-and-runbooks.md",
+    "path": "docs/planning/tasks/implementation-docs/task-324-reference-resolution.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -14,8 +14,8 @@
     "restored_by": null
   },
   "effective_standard_refs": [
-    "standard-5",
-    "standard-6"
+    "standard-0006",
+    "standard-0005"
   ],
-  "body": "\n# Description\n\nImplement this task.\n\n\n# Provider Plans and Runbooks\n\n## Purpose\n\nMigrate all provider plans and runbooks.\n\n## Scope\n\n- Provider plans\n- Provider runbooks\n- Provider implementations\n\n## Implementation\n\n1. Migrate plans\n2. Migrate runbooks\n3. Migrate implementations\n\n## Acceptance Criteria\n\n1. Plans migrated\n2. Runbooks migrated\n3. Implementations migrated\n"
+  "body": "\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# Reference Resolution\n\n## Purpose\n\nResolve all cross-references between planning objects.\n\n## Scope\n\n- Update all references\n- Link objects\n- Validate\n\n## Implementation\n\n1. Update references\n2. Link objects\n3. Validate\n\n## Acceptance Criteria\n\n1. All references updated\n2. Objects linked\n3. Validation passes\n"
 }

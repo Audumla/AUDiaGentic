@@ -4,6 +4,11 @@ IDs are persisted in a consolidated counters file under
 ``.audiagentic/planning/ids/counters.json``.
 Within a process, a threading.Lock prevents races.
 Across processes, an exclusive lock file (O_CREAT|O_EXCL) serializes access.
+
+ID format: ``{kind}-{n}`` where n is a raw integer with no zero-padding.
+Example: task-1, task-42, task-346. Never task-0001 or task-0042.
+This is the single source of truth for ID format — both code paths use
+``_format_id()`` so format cannot diverge.
 """
 
 from __future__ import annotations
@@ -18,6 +23,11 @@ _IDS_DIR = "ids"
 _COUNTERS_FILE = "counters.json"
 _LOCK_TIMEOUT = 10.0
 _LOCK_POLL = 0.05
+
+
+def _format_id(kind: str, n: int) -> str:
+    """Single source of truth for ID format: kind-n, no padding, ever."""
+    return f"{kind}-{n}"
 
 
 def _counters_path(root: Path, test_mode: bool = False) -> Path:
@@ -140,7 +150,7 @@ def next_id(
         finally:
             lock_file.unlink(missing_ok=True)
 
-    return f"{kind}-{n}"
+    return _format_id(kind, n)
 
 
 def _next_id_config_mode(counter_path: Path, id_prefix: str) -> str:
@@ -188,7 +198,7 @@ def _next_id_config_mode(counter_path: Path, id_prefix: str) -> str:
         finally:
             lock_file.unlink(missing_ok=True)
 
-    return f"{id_prefix}-{n:04d}"
+    return _format_id(id_prefix, n)
 
 
 def sync_counter(root: Path, kind: str, test_mode: bool = False) -> None:
@@ -215,9 +225,10 @@ def sync_counter(root: Path, kind: str, test_mode: bool = False) -> None:
                 pass
 
     counters = _load_counters(root, test_mode)
-    current_n = _counter_value(root, kind, counters, test_mode)
 
-    # Always write counter file (create if missing, fix if corrupted)
-    # Never move the counter backwards; IDs stay monotonic even after deletes.
-    counters[kind] = max(max_n, current_n)
+    # Always set counter to scanned max — this is the authoritative value.
+    # A counter higher than scanned max means IDs were deleted or corrupted;
+    # letting it persist causes runaway ID gaps (e.g. task-3000 after task-334).
+    # Monotonicity is preserved because new IDs always increment from here.
+    counters[kind] = max_n
     _save_counters(root, counters, test_mode)

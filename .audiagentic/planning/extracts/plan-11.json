@@ -1,21 +1,21 @@
 {
   "item": {
     "id": "plan-11",
-    "label": "Knowledge Component Improvements Plan",
-    "state": "in_progress",
-    "summary": "Plan for implementing knowledge component improvements from critical review",
+    "label": "Implement guidance levels for planning depth-of-detail",
+    "state": "draft",
+    "summary": "Plan for implementing guidance levels (light/standard/deep) to control spec/task depth independently of work-type profiles",
     "spec_refs": [
-      "spec-16"
+      "spec-13"
     ],
     "request_refs": [
-      "request-15"
+      "request-11"
     ],
     "work_package_refs": [],
     "standard_refs": [
       "standard-6"
     ],
     "kind": "plan",
-    "path": "docs/planning/plans/plan-11-knowledge-component-improvements-plan.md",
+    "path": "docs/planning/plans/plan-11-implement-guidance-levels-for-planning-depth-of-detail.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -25,5 +25,5 @@
   "effective_standard_refs": [
     "standard-6"
   ],
-  "body": "\n\n# Objectives\n\n1. Add comprehensive test coverage for knowledge component (currently zero tests)\n2. Split events.py (792 lines) into focused modules\n3. Enhance search from token-based to fuzzy/BM25 approach\n4. Implement lifecycle tracking for proposals and jobs\n\n# Delivery Approach\n\n1. **Phase 1 (Immediate)**: Unit tests for core modules + events.py refactor\n   - Tests for search, bootstrap, sync, config (separate from LLM)\n   - Extract event handler logic from events.py into dedicated module\n   - Split events.py: handlers, state machine, validation\n\n2. **Phase 2 (Follow-up)**: Search enhancement + lifecycle\n   - Evaluate fuzzy vs BM25, implement winner\n   - Add job/proposal lifecycle tracking (status, history, rollback)\n\n3. **Phase 3 (Polish)**: Integration tests + documentation\n   - End-to-end test flows\n   - Search behavior documentation\n   - Lifecycle API documentation\n\n# Dependencies\n\n- spec-16 (Knowledge Component Improvements Specification) for detailed requirements\n- standard-6 for test structure/coverage expectations\n- No blocking external dependencies\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n# Objectives\n\n1. Add guidance_levels configuration to profiles.yaml\n2. Expose guidance field in request schema and frontmatter\n3. Implement guidance parameter in tm_helper.py and tm.py CLI\n4. Update validation to enforce guidance-appropriate sections\n5. Configure default_guidance in planning.yaml\n6. Write comprehensive tests for guidance levels\n\n# Delivery Approach\n\n1. **Configuration layer** (task-0216, task-0222): Add guidance_levels to profiles.yaml and default_guidance to planning.yaml\n2. **Schema layer** (task-0218): Update request.schema.json with guidance field\n3. **API layer** (task-0217, task-0219): Update Config class and tm_helper.py new_request()\n4. **CLI layer** (task-0220): Add --guidance parameter to tm.py\n5. **Validation layer** (task-0221): Update val_mgr.py to enforce guidance rules\n6. **Tests** (task-0223): Write tests for all layers\n\n# Dependencies\n\n- spec-10: Guidance levels specification\n- standard-5: Config file conventions\n- standard-6: Planning item structure\n- standard-9: Validation rules\n"
 }

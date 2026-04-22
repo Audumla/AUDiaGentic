@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-70",
-    "label": "[PKT-JOB-004](task-0070): Packet Runner",
+    "label": "[PKT-JOB-006](task-0072): Release Bridge",
     "state": "draft",
-    "summary": "Implement packet runner",
-    "spec_ref": "spec-11",
+    "summary": "Create release bridge from jobs to scripts",
+    "spec_ref": "spec-15",
     "kind": "task",
-    "path": "docs/planning/tasks/jobs/task-70-pkt-job-004-task-0070-packet-runner.md",
+    "path": "docs/planning/tasks/jobs/task-70-pkt-job-006-task-0072-release-bridge.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
   "effective_standard_refs": [
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-004](task-0060): Packet Runner\n\n## Purpose\n\nImplement packet runner.\n\n## Scope\n\n- Runner logic\n- Execution\n- Error handling\n\n## Implementation\n\n1. Implement runner\n2. Add execution\n3. Handle errors\n\n## Acceptance Criteria\n\n1. Runner works\n2. Executes packets\n3. Errors handled\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-006](task-0062): Release Bridge\n\n## Purpose\n\nCreate release bridge from jobs to scripts.\n\n## Scope\n\n- Bridge logic\n- Script invocation\n- Error handling\n\n## Implementation\n\n1. Implement bridge\n2. Add script invocation\n3. Handle errors\n\n## Acceptance Criteria\n\n1. Bridge works\n2. Scripts invoked\n3. Errors handled\n"
 }

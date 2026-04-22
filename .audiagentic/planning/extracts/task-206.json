@@ -1,17 +1,17 @@
 {
   "item": {
     "id": "task-206",
-    "label": "Add body content parameters to task creation and enforce non-empty body via validation",
-    "state": "draft",
-    "summary": "Extend tm.py new task to accept --description, --acceptance, and --notes parameters so tasks can be created fully in one command, and add validation checks that reject tasks in draft+ state with empty Description or Acceptance Criteria sections",
-    "spec_ref": "spec-3",
+    "label": "Add summary_only flag to individual operations",
+    "state": "cancelled",
+    "summary": "Add optional summary_only parameter to tm_state, tm_update, tm_batch_update for minimal response payloads",
+    "spec_ref": "spec-11",
     "request_refs": [],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-206-add-body-content-parameters-to-task-creation-and-enforce-non-empty-body-via-validation.md",
+    "path": "docs/planning/tasks/core/task-206-add-summary-only-flag-to-individual-operations.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -20,7 +20,8 @@
   },
   "effective_standard_refs": [
     "standard-5",
-    "standard-6"
+    "standard-6",
+    "standard-9"
   ],
-  "body": "\n\n# Description\n\nTwo changes are required:\n\n**1. Body content parameters for `tm.py new task`**\n\nAdd `--description`, `--acceptance`, and `--notes` optional arguments to the `new task` subcommand in `tools/planning/tm.py`. Pass these through to `task_mgr.create()` which should write them into the corresponding markdown body sections instead of leaving them blank.\n\nThe body template in `task_mgr.py` currently generates:\n\n```text\n# Description\\n\\n\\n# Acceptance Criteria\\n\\n\\n# Notes\\n\\n\n```\n\nWhen the parameters are supplied, replace the empty section bodies with the provided content.\n\n## Validation: non-empty body sections\n\nAdd checks in `val_mgr.py` that a task's markdown body contains non-empty `Description` and `Acceptance Criteria` sections. A task with blank sections must fail validation with a clear message, blocking state transitions via the hook.\n\n# Acceptance Criteria\n\n- `tm.py new task --label \"...\" --summary \"...\" --spec spec-NNNN --description \"...\" --acceptance \"...\" --source claude` creates a task with populated body sections in one command\n- `--description`, `--acceptance`, and `--notes` are all optional; omitting them produces the current blank stub behaviour\n- A task with an empty `Description` or `Acceptance Criteria` section fails validation\n- The validation error message identifies the task id and the missing section\n- All existing tests pass\n- New tests cover: fully-populated creation, blank-section validation failure, and state-transition block on empty body\n\n# Notes\n\nThe `--notes` parameter is optional and not required for validation \u2014 notes are informational only. The validation check should mirror the existing section-presence checks in `val_mgr.py`.\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nCancelled with `spec-008` after the owning request record was removed. Recreate this task under a new request if summary-only response support is resumed.\n\n# Acceptance Criteria\n\nCancelled with parent specification.\n\n# Notes\n\nThis task was never fleshed into implementation-ready detail before the request chain disappeared.\n"
 }

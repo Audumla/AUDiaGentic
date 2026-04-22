@@ -1,9 +1,9 @@
 {
   "item": {
     "id": "task-274",
-    "label": "Add validation for session_input --details-json",
+    "label": "Fix global state access in job_control_tool",
     "state": "completed",
-    "summary": "Validate event data structure in CLI arguments",
+    "summary": "Implement dependency injection for job_control_tool",
     "request_refs": [
       "request-19"
     ],
@@ -12,7 +12,7 @@
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-274-add-validation-for-session-input-details-json.md",
+    "path": "docs/planning/tasks/core/task-274-fix-global-state-access-in-job-control-tool.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -23,5 +23,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n## Completed Work\n\nAdded validation for `session_input --details-json` argument in `channels/cli/main.py`.\n\n### Changes Made:\n\n1. **Replaced direct `json.loads` with `_load_json_argument`**:\n   - Now uses the validated JSON loading function\n   - Consistent error handling with other JSON arguments\n\n2. **Added `_validate_session_input_details` function**:\n   - Validates details is a JSON object\n   - Type validation for known fields:\n     - `kind`: must be string\n     - `label`: must be string\n     - `summary`: must be string\n     - `metadata`: must be object\n     - `attachments`: must be array\n   - Comprehensive docstring with valid structure example\n\n3. **Added validation call in session-input command**:\n   - Validates details before processing\n   - Raises ValueError with specific field error if validation fails\n\n## Standards Compliance\n- **standard-0005**: Schema validation for CLI arguments\n- **standard-0008**: Comprehensive documentation and type hints\n\n## Testing\nValidation now properly handles:\n- Non-object JSON (ValueError: details must be a JSON object)\n- Invalid kind type (ValueError: details.kind must be a string)\n- Invalid label type (ValueError: details.label must be a string)\n- Invalid summary type (ValueError: details.summary must be a string)\n- Invalid metadata type (ValueError: details.metadata must be an object)\n- Invalid attachments type (ValueError: details.attachments must be an array)\n- None/missing details (skipped validation, passes None to tool)\n"
+  "body": "\n\n\n\n\n\n\n\n\n## Completed Work\n\nRefactored `execution/jobs/control.py` to support dependency injection while maintaining backward compatibility.\n\n### Changes Made:\n\n1. **Added dependency injection support**:\n   - Added `JobStoreInterface` type alias for store interface\n   - Changed `store` import to `_default_store` to indicate it's a default\n   - Added optional `store` parameter to `request_job_control()` and `apply_pending_job_control()`\n   - Both functions default to `_default_store` for backward compatibility\n\n2. **Enhanced module documentation**:\n   - Added comprehensive module docstring explaining purpose and DI pattern\n   - Documented key functions and their responsibilities\n   - Added dependency injection usage examples\n\n3. **Added function docstrings**:\n   - `request_job_control()`: Documented state validation logic and DI parameter\n   - `apply_pending_job_control()`: Documented pending request handling and DI parameter\n   - Both include usage examples showing how to inject custom store\n\n4. **Maintained backward compatibility**:\n   - All existing callers continue to work without changes\n   - Default store used when no store parameter provided\n   - No breaking changes to public API\n\n## Standards Compliance\n- **standard-0011**: Dependency injection instead of global state access\n- **standard-0008**: Comprehensive documentation and type hints\n\n## Testing\nFunctions now support:\n- Default behavior: `request_job_control(project_root, payload)` - uses global store\n- Test isolation: `request_job_control(project_root, payload, mock_store)` - uses injected store\n- Backward compatibility: All existing callers work without modification\n"
 }

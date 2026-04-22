@@ -1,18 +1,41 @@
 {
   "item": {
     "id": "spec-11",
-    "label": "Unified workflow states for all planning item types",
-    "state": "draft",
-    "summary": "Specification for aligning request workflow states with spec/plan/task/wp workflows",
+    "label": "Multi-item batch updates and bulk operations for planning MCP",
+    "state": "cancelled",
+    "summary": "Design and implement multi-item batch operations, bulk state transitions, and optional result summarization to reduce token overhead for agent bulk operations",
     "request_refs": [
-      "request-12"
+      "request-11"
     ],
-    "task_refs": [],
+    "task_refs": [
+      {
+        "ref": "task-225",
+        "seq": 1000
+      },
+      {
+        "ref": "task-226",
+        "seq": 1001
+      },
+      {
+        "ref": "task-227",
+        "seq": 1002
+      },
+      {
+        "ref": "task-228",
+        "seq": 1003
+      },
+      {
+        "ref": "task-229",
+        "seq": 1004
+      }
+    ],
     "standard_refs": [
+      "standard-6",
+      "standard-5",
       "standard-9"
     ],
     "kind": "spec",
-    "path": "docs/planning/specifications/spec-11-unified-workflow-states-for-all-planning-item-types.md",
+    "path": "docs/planning/specifications/spec-11-multi-item-batch-updates-and-bulk-operations-for-planning-mcp.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -20,7 +43,9 @@
     "restored_by": null
   },
   "effective_standard_refs": [
+    "standard-6",
+    "standard-5",
     "standard-9"
   ],
-  "body": "\n\n# Purpose\n\nAlign request workflow states with spec/plan/task/wp workflows to provide consistent lifecycle management across all planning item types.\n\n# Scope\n\n## In Scope\n\n- Define unified state machine for requests\n- Update workflows.yaml with request states\n- Update validation rules for new states\n- Update tm_state() transitions\n- Update CLI state commands\n- Migrate existing requests to new states\n\n## Out of Scope (v1)\n\n- Changing state names for spec/plan/task/wp\n- Adding new states beyond current set\n- Complex conditional transitions\n\n# Requirements\n\n## 1. Unified States\n\nAll planning item types use the same states:\n\n```yaml\nplanning:\n  workflows:\n    request:\n      default: unified\n      named:\n        unified:\n          initial: draft\n          values: [draft, captured, distilled, ready, in_progress, done, cancelled, archived]\n          transitions:\n            draft: [captured, distilled, cancelled, archived]\n            captured: [draft, distilled, ready, cancelled, archived]\n            distilled: [draft, captured, ready, in_progress, cancelled, archived]\n            ready: [draft, in_progress, cancelled, archived]\n            in_progress: [ready, done, cancelled, archived]\n            done: [archived]\n            cancelled: [archived]\n            archived: [draft, captured]\n```\n\n## 2. State Semantics\n\n- `draft`: Initial intake, not yet logged\n- `captured`: Logged but not refined\n- `distilled`: Requirements clarified, open questions identified\n- `ready`: Ready for implementation\n- `in_progress`: Being worked on\n- `done`: Complete\n- `cancelled`: Abandoned\n- `archived`: Closed out, preserved for history\n\n## 3. Migration Strategy\n\nFor existing requests:\n- `captured` \u2192 `captured` (no change)\n- `distilled` \u2192 `distilled` (no change)\n- `closed` \u2192 `done`\n- `superseded` \u2192 `cancelled`\n- `archived` \u2192 `archived` (no change)\n\n## 4. Validation Updates\n\nUpdate val_mgr.py to:\n- Check state transitions against workflow config\n- Validate state consistency across linked items\n- Warn about deprecated states\n\n## 5. CLI Updates\n\nUpdate tm.py to:\n- Accept all states for --state parameter\n- Show available states per item type\n- Handle state migration for existing items\n\n# Constraints\n\n- **Backward compatible**: Old states still accepted during migration period\n- **Config-driven**: States defined in workflows.yaml, not hardcoded\n- **Validated**: All transitions checked against config\n- **Documented**: State semantics documented in each item type\n\n# Acceptance Criteria\n\n- [ ] workflows.yaml updated with unified request states\n- [ ] State transitions validated against config\n- [ ] Migration script for existing requests\n- [ ] CLI updated to support all states\n- [ ] Validation rules updated\n- [ ] All planning tests pass\n- [ ] Documentation updated\n\n# Notes\n\nThis is a foundational change that affects all planning operations. The unified states make the system more predictable and easier to learn.\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n# Purpose\n\nReduce token overhead and round-trip calls for agent bulk operations by extending planning MCP to support:\n1. Multi-item batch updates (different operations on multiple items in one call)\n2. Bulk state transitions (multiple items to same state)\n3. Optional result summarization (return counts instead of full payloads)\n4. Future: compound operations (create + link, etc.)\n\n# Scope\n\nThis specification covers:\n- Backward-compatible extension of `tm_batch_update` to accept multi-item operations\n- New `tm_bulk_state` operation for state transitions without full-item responses\n- Optional `summary_only` flag on batch operations to minimize response payload\n- Design for future compound operations (deferred implementation)\n- MCP exposure of all new operations\n\nDoes NOT require:\n- Query-based bulk operations (defer to future request)\n- Transactional guarantees (fail-fast vs best-effort is configurable)\n- Rollback semantics\n- Per-item validation before batch execution\n\n# Requirements\n\n## 1. Multi-Item Batch Update (Extended tm_batch_update)\n\nCurrent behavior (single item, multiple operations):\n```python\ndef tm_batch_update(id: str, operations: list[dict]) -> dict\n```\n\nExtended to support:\n```python\ndef tm_batch_update(\n    items: list[dict] | None = None,  # Multi-item: [{id, operations}, ...]\n    id: str | None = None,             # Legacy: single item\n    operations: list[dict] | None = None,  # Legacy: operations for single item\n    summary_only: bool = False,        # Return counts instead of full results\n) -> dict\n```\n\n**Behavior:**\n- If `items` is provided: process multi-item batch\n- If `id` and `operations` provided: process single-item (backward compatible)\n- If both provided: error\n- If neither: error\n\n**Response with summary_only=False (current behavior):**\n```json\n{\n  \"batch\": true,\n  \"items_count\": 3,\n  \"results\": [\n    {\"id\": \"task-0200\", \"operations_executed\": 2, \"results\": [...]},\n    {\"id\": \"task-0201\", \"operations_executed\": 1, \"results\": [...]},\n    {\"id\": \"task-0202\", \"operations_executed\": 1, \"results\": [...]}\n  ],\n  \"errors\": []\n}\n```\n\n**Response with summary_only=True (new, minimal):**\n```json\n{\n  \"batch\": true,\n  \"items_count\": 3,\n  \"succeeded\": 3,\n  \"failed\": 0,\n  \"errors\": []\n}\n```\n\n## 2. Bulk State Transition (New tm_bulk_state)\n\n```python\ndef tm_bulk_state(\n    ids: list[str],\n    new_state: str,\n    summary_only: bool = True,  # Default to summary for state ops\n) -> dict\n```\n\n**Behavior:**\n- Transition multiple items to `new_state` in one call\n- Validate state transition is legal for each item's workflow\n- Return success/failure counts\n- Default to summary_only=True (most agents don't need full item data)\n\n**Response:**\n```json\n{\n  \"bulk_state\": true,\n  \"ids_count\": 6,\n  \"new_state\": \"done\",\n  \"succeeded\": 6,\n  \"failed\": 0,\n  \"transitioned_ids\": [\"task-0200\", \"task-0201\", ...],\n  \"errors\": []\n}\n```\n\n## 3. Result Summarization Flag\n\nAdd optional `summary_only: bool = False` parameter to:\n- `tm_batch_update()`\n- `tm_state()` (return just state change, no full item)\n- `tm_update()` (return just confirmation, no full item)\n\nMinimal response shape:\n```json\n{\n  \"id\": \"item-id\",\n  \"operation\": \"state\",\n  \"new_value\": \"done\",\n  \"success\": true\n}\n```\n\n## 4. Compound Operations (Design Only, Deferred Implementation)\n\nFuture pattern for common workflows:\n```python\ndef tm_create_and_link(\n    kind: str, label: str, summary: str, ...,\n    link_to: str, link_field: str\n) -> dict\n```\n\nEnables: create spec and auto-link to request in one call instead of create + relink.\n\nFuture pattern for state + other changes:\n```python\ndef tm_batch_compound(\n    items: list[{id, state, label, summary, ...}]\n) -> dict\n```\n\nThese are design-forward but deferred; implement multi-item batch first.\n\n# Constraints\n\n1. Backward compatibility: Existing single-item `tm_batch_update(id, operations)` must work unchanged\n2. Per-item validation: Each item's transition/operation must be validated\n3. Fail-fast vs best-effort: Implementation may choose either strategy, document clearly\n4. Maximum batch size: Set reasonable limit (e.g., 50 items) to prevent abuse\n5. Response payload: summary_only=True should produce responses < 500 bytes for typical batches\n\n# Acceptance Criteria\n\n- [x] Design complete\n- [ ] `tm_batch_update` extended to accept multi-item `items` parameter\n- [ ] `tm_batch_update` backward-compatible with single-item signature\n- [ ] `tm_batch_update` supports `summary_only` flag\n- [ ] `tm_bulk_state(ids, new_state, summary_only)` implemented in MCP\n- [ ] `tm_bulk_state` returns minimal response when summary_only=True\n- [ ] Bulk state transition can move a representative task set for this work item in one `tm_bulk_state` call\n- [ ] Agent calling pattern reduced from N individual calls to 1-2 batch calls\n- [ ] Tests cover multi-item batches, state transitions, summary_only flag, backward compat\n- [ ] Existing single-item `tm_batch_update` tests still pass\n- [ ] Design doc includes future compound operations pattern\n\n# Token Efficiency Impact\n\n**Before:** Marking 6 tasks done\n- 6 \u00d7 `tm_state(id, \"done\")` calls\n- 6 response payloads with full item data\n- ~2KB total MCP traffic per operation\n\n**After:** `tm_bulk_state(ids=[\"task-0200\"...], new_state=\"done\", summary_only=True)`\n- 1 call\n- 1 response payload with counts\n- ~200 bytes total MCP traffic\n\n**Savings:** 10\u00d7 reduction in calls, 10\u00d7 reduction in response payload for bulk operations.\n\n# Notes\n\nMulti-item batch is the highest-priority extension. Bulk state transitions are a common pattern that deserves its own optimized tool. Result summarization applies broadly and should become the default for operations where agents don't need full item data.\n\nCompound operations (create_and_link) are valuable but can be deferred \u2014 start with multi-item batch + bulk state + summarization.\n\nThis specification is currently cancelled because the originating request record is no longer present and the linked task slice was never fleshed into implementation-ready work. If this capability is revived, it should be reintroduced under a new active request with explicit request linkage and refreshed task content.\n"
 }

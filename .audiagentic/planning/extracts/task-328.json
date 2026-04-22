@@ -1,12 +1,17 @@
 {
   "item": {
     "id": "task-328",
-    "label": "Final Validation and Cleanup",
-    "state": "draft",
-    "summary": "Validate migration and clean up old files",
-    "spec_ref": "spec-0002",
+    "label": "Create RelationshipConfig class",
+    "state": "done",
+    "summary": "Create relationship config loader and validator",
+    "spec_ref": "spec-33",
+    "request_refs": [],
+    "standard_refs": [
+      "standard-5",
+      "standard-6"
+    ],
     "kind": "task",
-    "path": "docs/planning/tasks/implementation-docs/task-328-final-validation-and-cleanup.md",
+    "path": "docs/planning/tasks/core/task-328-create-relationshipconfig-class.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -14,8 +19,8 @@
     "restored_by": null
   },
   "effective_standard_refs": [
-    "standard-0006",
-    "standard-0005"
+    "standard-5",
+    "standard-6"
   ],
-  "body": "\n# Description\n\nImplement this task.\n\n\n# Final Validation and Cleanup\n\n## Purpose\n\nValidate migration and clean up old files.\n\n## Scope\n\n- Run validation\n- Verify references\n- Backup and remove old files\n\n## Implementation\n\n1. Run validation\n2. Verify references\n3. Backup and remove\n\n## Acceptance Criteria\n\n1. Validation passes\n2. References verified\n3. Old files removed\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\nAssessment on 2026-04-17: `RelationshipConfig` already exists in `src/audiagentic/planning/app/rel_config.py`. Marking stale task record complete.\n"
 }

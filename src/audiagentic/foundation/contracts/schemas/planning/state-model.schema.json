@@ -1,14 +1,18 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
+  "additionalProperties": false,
   "properties": {
     "planning": {
       "type": "object",
+      "additionalProperties": false,
+      "required": ["workflows"],
       "properties": {
         "workflows": {
           "type": "object",
           "additionalProperties": {
             "type": "object",
+            "additionalProperties": false,
             "required": [
               "default",
               "named"
@@ -21,6 +25,7 @@
                 "type": "object",
                 "additionalProperties": {
                   "type": "object",
+                  "additionalProperties": false,
                   "required": [
                     "initial",
                     "values",

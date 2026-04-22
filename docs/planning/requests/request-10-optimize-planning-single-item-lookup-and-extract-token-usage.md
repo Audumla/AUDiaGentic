@@ -24,7 +24,7 @@ context: 'Derived from review of planning API and MCP read paths. Key concerns: 
   scan_items() usage in single-item operations, extract() always including body and
   persisting extracts, and need for lean single-item MCP/read surfaces.'
 spec_refs:
-- spec-7
+- spec-10
 standard_refs:
 - standard-1
 meta:
@@ -34,6 +34,12 @@ meta:
     scans, extract() controls (include_body, write_to_disk) fully exposed in API/MCP/helper,
     all 15 test cases passing.'
 ---
+
+
+
+
+
+
 
 
 

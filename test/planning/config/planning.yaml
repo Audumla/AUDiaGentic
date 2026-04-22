@@ -2,13 +2,14 @@ planning:
   convention_version: 1
   default_profile: feature
   default_guidance: standard
+  naming:
+    numeric_format: preserve_id
+    slug_policy: always
+    default_pattern: "{id}-{slug}.md"
+  kind_aliases: {}
+  kinds: {}
   dirs:
-    requests: docs/planning/requests
-    specifications: docs/planning/specifications
-    plans: docs/planning/plans
-    tasks: docs/planning/tasks
-    work_packages: docs/planning/work-packages
-    standards: docs/planning/standards
+    base: docs/planning
     attachments: docs/planning/attachments
     indexes: .audiagentic/planning/indexes
     meta: .audiagentic/planning/meta
@@ -16,5 +17,4 @@ planning:
     events: .audiagentic/planning/events
     claims: .audiagentic/planning/claims
     cache: .audiagentic/planning/cache
-  task_domains: [core, provider, architecture, infra, docs, ui]
-  work_package_domains: [core, provider, architecture, infra, docs, ui]
+  reference_field_shapes: {}

@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-143",
-    "label": "[PKT-PRV-065](task-0143): Provider Data Transformation Rules",
+    "label": "[PKT-PRV-068](task-0146): Provider Data Governance Rules",
     "state": "draft",
-    "summary": "Implement provider data transformation rules",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data governance rules",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-143-pkt-prv-065-task-0143-provider-data-transformation-rules.md",
+    "path": "docs/planning/tasks/providers/task-143-pkt-prv-068-task-0146-provider-data-governance-rules.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-065](task-0132): Provider Data Transformation Rules\n\n## Purpose\n\nImplement provider data transformation rules.\n\n## Scope\n\n- Transform rules\n- Validation\n- Logging\n\n## Implementation\n\n1. Define rules\n2. Add validation\n3. Add logging\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Validated\n3. Logged\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-068](task-0135): Provider Data Governance Rules\n\n## Purpose\n\nImplement provider data governance rules.\n\n## Scope\n\n- Governance rules\n- Compliance\n- Auditing\n\n## Implementation\n\n1. Define rules\n2. Ensure compliance\n3. Add auditing\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Compliant\n3. Audited\n"
 }

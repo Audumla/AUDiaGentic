@@ -1,14 +1,14 @@
 {
   "item": {
     "id": "task-282",
-    "label": "std-0010",
+    "label": "plan-18",
     "state": "cancelled",
-    "summary": "Refactor standard-0010 MCP server",
+    "summary": "Refactor plan-0018 sync operations",
     "request_refs": [
       "request-19"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-282-std-0010.md",
+    "path": "docs/planning/tasks/core/task-282-plan-18.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n# Description\n\nRefactor standard-0010 MCP server\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n\n# Cancellation Reason\n\nTask cancelled: Vague placeholder without actionable content. Standard-0010 compliance work should be done through specific file reviews, not generic refactoring tasks.\n"
+  "body": "\n\n\n\n\n\n\n\n\n# Description\n\nRefactor plan-011 sync operations\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
 }

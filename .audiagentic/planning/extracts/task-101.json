@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-101",
-    "label": "[PKT-PRV-024](task-0101): Provider API Gateway",
+    "label": "[PKT-PRV-026](task-0103): Provider Event Bus",
     "state": "draft",
-    "summary": "Create provider API gateway",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider event bus",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-101-pkt-prv-024-task-0101-provider-api-gateway.md",
+    "path": "docs/planning/tasks/providers/task-101-pkt-prv-026-task-0103-provider-event-bus.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-024](task-0091): Provider API Gateway\n\n## Purpose\n\nCreate provider API gateway.\n\n## Scope\n\n- Gateway interface\n- Routing\n- Security\n\n## Implementation\n\n1. Define interface\n2. Implement routing\n3. Add security\n\n## Acceptance Criteria\n\n1. Interface defined\n2. Routing works\n3. Secure\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-026](task-0093): Provider Event Bus\n\n## Purpose\n\nImplement provider event bus.\n\n## Scope\n\n- Event format\n- Publishing\n- Subscribing\n\n## Implementation\n\n1. Define format\n2. Implement publishing\n3. Add subscribing\n\n## Acceptance Criteria\n\n1. Format defined\n2. Publishing works\n3. Subscribing works\n"
 }

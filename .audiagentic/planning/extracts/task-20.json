@@ -1,18 +1,26 @@
 {
   "item": {
     "id": "task-20",
-    "label": "Update tm_show to include archive metadata",
+    "label": "Generate patch actions for high-confidence proposals",
     "state": "draft",
-    "summary": "Add archive_metadata field to tm_show output showing is_archived, archived_at, archived_by, archive_reason",
-    "spec_ref": "spec-4",
+    "summary": "For actionable_high_confidence proposals, synthesize and generate replace_section or append_section actions",
+    "domain": "core",
+    "spec_ref": "spec-14",
+    "standard_refs": [
+      "standard-0005",
+      "standard-0006"
+    ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-20-update-tm-show-to-include-archive-metadata.md",
+    "path": "docs/planning/tasks/core/task-20-generate-patch-actions-for-high-confidence-proposals.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
-  "body": "\n\n\n# Description\n\nUpdate `tm_show` to display archive metadata for archived objects.\n\n## Current tm_show Output\n\n```json\n{\n  \"id\": \"task-0001\",\n  \"kind\": \"task\",\n  \"label\": \"Analyze existing docs structure\",\n  \"state\": \"done\",\n  \"summary\": \"Analyze existing docs structure\",\n  \"path\": \"docs/planning/tasks/task-0001.md\"\n}\n```\n\n## Updated tm_show Output (Active Object)\n\nNo change for active objects:\n\n```json\n{\n  \"id\": \"task-0001\",\n  \"kind\": \"task\",\n  \"label\": \"Analyze existing docs structure\",\n  \"state\": \"done\",\n  \"summary\": \"Analyze existing docs structure\",\n  \"path\": \"docs/planning/tasks/task-0001.md\"\n}\n```\n\n## Updated tm_show Output (Archived Object)\n\nAdd archive_metadata field:\n\n```json\n{\n  \"id\": \"plan-0001\",\n  \"kind\": \"plan\",\n  \"label\": \"Pilot migration plan - implementation docs\",\n  \"state\": \"done\",\n  \"summary\": \"Migrate docs/implementation folder to new planning structure as proof of concept\",\n  \"path\": \"docs/planning/plans/plan-0001.md\",\n  \"archive_metadata\": {\n    \"is_archived\": true,\n    \"archived_at\": \"2026-04-07T12:00:00Z\",\n    \"archived_by\": \"user@example.com\",\n    \"archive_reason\": \"Replaced by plan-0004 - Pilot migration test, do not use\",\n    \"restored_at\": null,\n    \"restored_to_state\": null,\n    \"restored_by\": null\n  }\n}\n```\n\n## Implementation\n\n**tm_show Function:**\n```python\ndef tm_show(id: str):\n    obj = get_object_by_id(id)\n    result = {\n        \"id\": obj.id,\n        \"kind\": obj.kind,\n        \"label\": obj.label,\n        \"state\": obj.state,\n        \"summary\": obj.summary,\n        \"path\": obj.path\n    }\n    \n    # Add archive_metadata if object is archived\n    if obj.archive_metadata and obj.archive_metadata.is_archived:\n        result[\"archive_metadata\"] = {\n            \"is_archived\": True,\n            \"archived_at\": obj.archive_metadata.archived_at,\n            \"archived_by\": obj.archive_metadata.archived_by,\n            \"archive_reason\": obj.archive_metadata.archive_reason,\n            \"restored_at\": obj.archive_metadata.restored_at,\n            \"restored_to_state\": obj.archive_metadata.restored_to_state,\n            \"restored_by\": obj.archive_metadata.restored_by\n        }\n    \n    return result\n```\n\n## Display Considerations\n\n### CLI Output\nWhen displaying archived objects in CLI, add visual indicator:\n\n```\n[ARCHIVED] plan-0001: Pilot migration plan - implementation docs\n  Archived: 2026-04-07 by user@example.com\n  Reason: Replaced by plan-0004\n```\n\n### API Response\nInclude archive_metadata in all responses for archived objects.\n\n# Acceptance Criteria\n\n1. `tm_show` includes archive_metadata for archived objects\n2. `tm_show` excludes archive_metadata for active objects\n3. All archive metadata fields present when archived\n4. Null values handled correctly for restoration fields\n5. Timestamps in ISO 8601 format\n6. Backward compatible (active objects unchanged)\n\n# Notes\n\n- Consider adding `show_archive_metadata` parameter for explicit control\n- CLI should provide clear visual distinction for archived objects\n- API documentation should explain archive_metadata field\n"
+  "effective_standard_refs": [
+    "standard-0005",
+    "standard-0006"
+  ],
+  "body": "\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
 }

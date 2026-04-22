@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-58",
-    "label": "[PKT-RLS-003](task-0058): Current Release Summary",
+    "label": "[PKT-RLS-005](task-0060): Finalization with Exactly-Once Historical Append",
     "state": "draft",
-    "summary": "Generate current release summary",
-    "spec_ref": "spec-10",
+    "summary": "Finalize with exactly-once historical append",
+    "spec_ref": "spec-13",
     "kind": "task",
-    "path": "docs/planning/tasks/release/task-58-pkt-rls-003-task-0058-current-release-summary.md",
+    "path": "docs/planning/tasks/release/task-58-pkt-rls-005-task-0060-finalization-with-exactly-once-historical-append.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
   "effective_standard_refs": [
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-003](task-0048): Current Release Summary\n\n## Purpose\n\nGenerate current release summary.\n\n## Scope\n\n- Summary generation\n- Data collection\n- Formatting\n\n## Implementation\n\n1. Collect data\n2. Generate summary\n3. Format output\n\n## Acceptance Criteria\n\n1. Data collected\n2. Summary generated\n3. Formatted\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-005](task-0050): Finalization with Exactly-Once Historical Append\n\n## Purpose\n\nFinalize with exactly-once historical append.\n\n## Scope\n\n- Finalization logic\n- Historical append\n- Exactly-once guarantee\n\n## Implementation\n\n1. Implement finalization\n2. Add historical append\n3. Ensure exactly-once\n\n## Acceptance Criteria\n\n1. Finalization works\n2. Historical appended\n3. Exactly-once verified\n"
 }

@@ -13,6 +13,12 @@ standard_refs:
 
 
 
+
+
+
+
+
+
 Remove the legacy hooks.py file from the knowledge component. This file contains hooks evaluation logic that filters events based on path and content patterns. This logic should be replaced with event-based filtering in the event adapters. The hooks system is legacy code that should have been migrated to events (similar to task-0263 for planning).
 
 # Notes

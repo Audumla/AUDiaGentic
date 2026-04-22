@@ -1,14 +1,14 @@
 {
   "item": {
     "id": "task-294",
-    "label": "wp-24",
+    "label": "req-0033",
     "state": "cancelled",
-    "summary": "Refactor wp-0024 sync",
+    "summary": "Refactor request-33 importers",
     "request_refs": [
       "request-19"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-294-wp-24.md",
+    "path": "docs/planning/tasks/core/task-294-req-0033.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n# Description\n\nRefactor wp-0024 sync\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nRefactor request-15 importers\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
 }

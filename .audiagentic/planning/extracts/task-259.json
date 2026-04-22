@@ -1,10 +1,10 @@
 {
   "item": {
     "id": "task-259",
-    "label": "Add CLI commands and diagnostics for event layer",
-    "state": "cancelled",
-    "summary": "Implement CLI commands for event layer diagnostics \u2014 blocked: deferred until core is stable and operational need confirmed in practice",
-    "spec_ref": "spec-19",
+    "label": "Inventory planning hooks and create migration plan",
+    "state": "done",
+    "summary": "Inventory planning hooks and plan phased migration to canonical events \u2014 complete, hooks removed in task-0291",
+    "spec_ref": "spec-23",
     "request_refs": [
       "request-17"
     ],
@@ -13,7 +13,7 @@
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-259-add-cli-commands-and-diagnostics-for-event-layer.md",
+    "path": "docs/planning/tasks/core/task-259-inventory-planning-hooks-and-create-migration-plan.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -23,7 +23,7 @@
   "effective_standard_refs": [
     "standard-5",
     "standard-6",
-    "standard-11"
+    "standard-10"
   ],
-  "body": "\n\n\n\n\n\n\n\n\n\n# Description\n\nImplement CLI commands for event layer diagnostics and management. This task adds CLI surface for event inspection, replay, and cleanup.\n\n**Commands:**\n```bash\naudiagentic events list [--from TIMESTAMP] [--to TIMESTAMP] [--type PATTERN]\n  # List persisted events\n  \naudiagentic events replay [--from TIMESTAMP] [--to TIMESTAMP] [--type PATTERN]\n  # Replay events\n  \naudiagentic events debug EVENT_ID\n  # Show event details\n  \naudiagentic events cleanup [--older-than DAYS]\n  # Remove old event files\n```\n\n**Note:** Deferred until core is stable and operational need confirmed.\n\n# Acceptance Criteria\n\n- `events list` shows persisted events with filtering\n- `events replay` triggers replay with filtering\n- `events debug` shows full event envelope for given ID\n- `events cleanup` removes old event files safely\n- CLI commands integrated into existing audiagentic CLI\n- Unit tests cover: command parsing, filtering, cleanup safety\n- Smoke test proves CLI commands execute without errors\n\n# Notes\nDeferred until core is stable and operational need confirmed. Depends on: task-249 (persistence), task-0250 (replay).\n\nCancelled on 2026-04-17 during request assessment. Diagnostic event CLI work was explicitly deferred in the task notes and is no longer required to treat core propagation behavior as the active remaining scope.\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\nInventory all planning hooks and create migration plan. This task documents existing hooks in `hooks.yaml`, classifies by event compatibility, and plans phased migration to events.\n\n**Inventory format:**\n```yaml\nhooks:\n  - name: task.after_state_change\n    file: .audiagentic/planning/config/hooks.yaml\n    line: 42\n    compatible_with_events: true\n    replacement_event: planning.item.state.changed\n    migration_priority: high\n  - name: spec.before_create\n    file: .audiagentic/planning/config/hooks.yaml\n    line: 15\n    compatible_with_events: false\n    reason: needs pre-commit access\n    migration_priority: defer\n```\n\n**Migration phases:**\n1. High priority: hooks that map cleanly to events\n2. Medium priority: hooks needing minor adaptation\n3. Defer: hooks that can't use events (pre-commit, etc.)\n\n# Acceptance Criteria\n\n- All hooks in `.audiagentic/planning/config/hooks.yaml` inventoried\n- Each hook classified: compatible_with_events (true/false)\n- Replacement event identified for compatible hooks\n- Migration priority assigned: high, medium, defer\n- Migration plan document created with phased approach\n- Documentation proves inventory is complete and accurate\n\n# Notes\n\nThis task is documentation/planning only. Actual migration is task-0255.\n\n# Inventory\n\n**Current hooks in hooks.yaml:**\n\n| Hook Name | Kind | Compatible | Event | Priority |\n|-----------|------|------------|-------|----------|\n| after_create | planning | \u2705 Yes | planning.item.created | high |\n| after_update | planning | \u2705 Yes | planning.item.updated | high |\n| before_state_change | planning | \u26a0\ufe0f Partial | planning.item.state.will-change | medium |\n| after_state_change | planning | \u2705 Yes | planning.item.state.changed | high |\n| after_delete | planning | \u2705 Yes | planning.item.deleted | high |\n| after_reconcile | planning | \u2705 Yes | planning.reconciled | high |\n\n**Migration approach:**\n1. For each high-priority hook from task-0262:\n   - Create event subscription that replicates hook behavior\n   - Keep hook functional via compatibility bridge\n   - Test both paths work identically\n2. Update documentation to mark hooks as deprecated\n3. Verify no user-visible behavior changes\n\n**Example migration:**\n```python\n# Old: hook in hooks.yaml\n# task.after_state_change \u2192 some_action()\n\n# New: event subscription\nbus.subscribe(\"planning.item.state.changed\", lambda e: some_action(e))\n```\n\n# Implementation Status\n\n- \u2705 EventBus integration added to `state()` method (task-0253)\n- \u2705 Hook bridge to events (task-0255) - complete\n- \u2705 Knowledge component subscription (task-0254) - complete\n- \ud83d\udfe1 Audit CLI command (task-0265) - needs implementation\n"
 }

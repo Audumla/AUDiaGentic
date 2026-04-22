@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-72",
-    "label": "[PKT-JOB-006](task-0072): Release Bridge",
+    "label": "[PKT-JOB-008](task-0074): Job Monitoring",
     "state": "draft",
-    "summary": "Create release bridge from jobs to scripts",
-    "spec_ref": "spec-11",
+    "summary": "Monitor job execution",
+    "spec_ref": "spec-15",
     "kind": "task",
-    "path": "docs/planning/tasks/jobs/task-72-pkt-job-006-task-0072-release-bridge.md",
+    "path": "docs/planning/tasks/jobs/task-72-pkt-job-008-task-0074-job-monitoring.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
   "effective_standard_refs": [
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-006](task-0062): Release Bridge\n\n## Purpose\n\nCreate release bridge from jobs to scripts.\n\n## Scope\n\n- Bridge logic\n- Script invocation\n- Error handling\n\n## Implementation\n\n1. Implement bridge\n2. Add script invocation\n3. Handle errors\n\n## Acceptance Criteria\n\n1. Bridge works\n2. Scripts invoked\n3. Errors handled\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-008](task-0064): Job Monitoring\n\n## Purpose\n\nMonitor job execution.\n\n## Scope\n\n- Monitoring logic\n- Metrics\n- Alerts\n\n## Implementation\n\n1. Implement monitoring\n2. Add metrics\n3. Add alerts\n\n## Acceptance Criteria\n\n1. Monitoring works\n2. Metrics collected\n3. Alerts sent\n"
 }

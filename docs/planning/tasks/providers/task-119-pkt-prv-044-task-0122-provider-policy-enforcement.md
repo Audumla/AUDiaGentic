@@ -1,0 +1,43 @@
+---
+id: task-119
+label: '[PKT-PRV-044](task-0122): Provider Policy Enforcement'
+state: cancelled
+summary: Implement provider policy enforcement
+spec_ref: spec-16
+---
+
+
+
+
+
+
+
+
+# Description
+
+Cancelled by the 2026-04 pre-ACP archive pass. The Continue auto-install line was superseded and archived.
+
+
+# [PKT-PRV-044](task-0111): Provider Policy Enforcement
+
+## Purpose
+
+Implement provider policy enforcement.
+
+## Scope
+
+- Policy format
+- Enforcement logic
+- Exceptions
+
+## Implementation
+
+1. Define format
+2. Implement enforcement
+3. Add exceptions
+
+## Acceptance Criteria
+
+1. Format defined
+2. Enforcement works
+3. Exceptions handled

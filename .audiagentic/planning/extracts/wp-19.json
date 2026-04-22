@@ -1,21 +1,29 @@
 {
   "item": {
     "id": "wp-19",
-    "label": "Phase 4: Config Migration",
+    "label": "Phase 3: Manager Refactoring",
     "state": "done",
-    "summary": "Migrate hardcoded values to config files",
-    "plan_ref": "plan-14",
+    "summary": "Refactor all managers to use config-driven approach",
+    "plan_ref": "plan-18",
     "task_refs": [
       {
-        "ref": "task-333",
+        "ref": "task-329",
         "seq": 1000
+      },
+      {
+        "ref": "task-334",
+        "seq": 1001
+      },
+      {
+        "ref": "task-335",
+        "seq": 1002
       }
     ],
     "standard_refs": [
       "standard-6"
     ],
     "kind": "wp",
-    "path": "docs/planning/work-packages/core/wp-19-phase-4-config-migration.md",
+    "path": "docs/planning/work-packages/core/wp-19-phase-3-manager-refactoring.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -26,5 +34,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n\n\n\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n## Completed Work\n\n1. **Analyzed remaining hardcoded references**:\n   - `api.py`: Kind-based routing is necessary for API design - ACCEPT AS-IS\n   - `ext_mgr.py`: Transitive standard ref computation is business logic - ACCEPT AS-IS\n   - `states.py`: CANONICAL_KINDS is a constant, not logic - ACCEPT AS-IS\n   - `val_mgr.py`: REQ_SECTIONS migrated to config\n\n2. **Migrated REQ_SECTIONS to config**:\n   - Added `required_sections` to `.audiagentic/planning/config/profiles.yaml`\n   - Added `required_sections()` method to `Config` class\n   - Updated `val_mgr.py` to load required sections from config\n   - Removed hardcoded `REQ_SECTIONS` dict\n\n3. **Created comprehensive README**:\n   - Documented config-driven approach overview\n   - Explained all config-driven components (templates, guidance, profiles, relationships, sections, state propagation, workflows)\n   - Provided examples for extending guidance levels, profiles, templates\n   - Listed best practices and testing procedures\n   - Added references to planning documents\n\n4. **Fixed indentation issues**:\n   - `plan_mgr.py`: Fixed indentation in create() method\n   - `req_mgr.py`: Fixed indentation in _build_body() and create() methods\n   - `wp_mgr.py`: Fixed indentation in create() method\n\n## Verification\n\n```bash\n# Test config method\npython -c \"from src.audiagentic.planning.app.config import Config; c = Config(Path('.')); print(c.required_sections('spec'))\"\n# Output: ['Purpose', 'Scope', 'Requirements', 'Constraints', 'Acceptance Criteria']\n\n# Test validator method\npython -c \"from src.audiagentic.planning.app.val_mgr import Validator; v = Validator(Path('.')); print(v._get_required_sections('task'))\"\n# Output: ['Description']\n```\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n"
 }

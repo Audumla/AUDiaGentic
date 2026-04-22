@@ -1,0 +1,43 @@
+---
+id: task-160
+label: '[PKT-MIG-002](task-0163): Provider Migration Rules'
+state: draft
+summary: Define provider migration rules
+spec_ref: spec-18
+---
+
+
+
+
+
+
+
+
+# Description
+
+Implement this task.
+
+
+# [PKT-MIG-002](task-0152): Provider Migration Rules
+
+## Purpose
+
+Define provider migration rules.
+
+## Scope
+
+- Rule format
+- Migration logic
+- Validation
+
+## Implementation
+
+1. Define format
+2. Implement migration
+3. Add validation
+
+## Acceptance Criteria
+
+1. Format defined
+2. Migration works
+3. Validated

@@ -6,8 +6,8 @@ The v13 pack improves architecture direction, but it is not yet clean enough to 
 
 ## Findings
 
-1. `spec-0049` through `spec-0064` introduce new installer platform concepts but do not reference `standard-0011`.
-   - This misses an explicit repo requirement from `standard-0006` for component-level architectural change.
+1. `spec-0049` through `spec-0064` introduce new installer platform concepts but do not reference `standard-11`.
+    - This misses an explicit repo requirement from `standard-06` for component-level architectural change.
    - Impact: modularity, layering, config-loading seams, and extension-point rules are implied rather than governed.
 
 2. `wp-0020` is still too broad for safe packetization.
@@ -27,7 +27,7 @@ The v13 pack improves architecture direction, but it is not yet clean enough to 
 
 ## Recut goals
 
-- add `standard-0011` where installer platform architecture is introduced
+- add `standard-11` where installer platform architecture is introduced
 - split one large work package into four modular packages
 - make migration boundaries explicit
 - keep request and top-level plan aligned to current repo structure

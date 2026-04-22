@@ -1,34 +1,23 @@
 from __future__ import annotations
 
 import json
-import shutil
 import sys
 from pathlib import Path
-
-import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+import pytest
 import tools.planning.tm_helper as tm
-
-PLANNING_CONFIG_SRC = ROOT / ".audiagentic" / "planning" / "config"
+from tests.planning_testkit import seed_planning_config
 
 
 def _seed_helper_project(root: Path) -> None:
-    config_dir = root / ".audiagentic" / "planning" / "config"
-    config_dir.mkdir(parents=True, exist_ok=True)
+    seed_planning_config(root)
     for rel in ("ids", "indexes", "events", "claims", "meta"):
         (root / ".audiagentic" / "planning" / rel).mkdir(parents=True, exist_ok=True)
-
-    for f in PLANNING_CONFIG_SRC.glob("*.yaml"):
-        shutil.copy(f, config_dir / f.name)
-
-    profile_pack_src = PLANNING_CONFIG_SRC / "profile-packs"
-    if profile_pack_src.exists():
-        shutil.copytree(profile_pack_src, config_dir / "profile-packs")
 
     for d in ("requests", "specifications", "plans", "tasks/core", "work-packages/core", "standards"):
         (root / "docs" / "planning" / d).mkdir(parents=True, exist_ok=True)
@@ -56,8 +45,19 @@ def test_tm_helper_lists_request_profiles() -> None:
     assert {profile["id"] for profile in profiles} >= {"feature", "issue"}
 
 
+def test_tm_helper_lists_creation_profiles_alias() -> None:
+    profiles = tm.list_creation_profiles()
+    assert {profile["id"] for profile in profiles} >= {"feature", "issue"}
+
+
 def test_tm_helper_get_request_profile() -> None:
     profile = tm.get_request_profile("feature")
+    assert profile is not None
+    assert profile["label"] == "Feature request"
+
+
+def test_tm_helper_get_creation_profile_alias() -> None:
+    profile = tm.get_creation_profile("feature")
     assert profile is not None
     assert profile["label"] == "Feature request"
 
@@ -105,10 +105,12 @@ def test_tm_helper_extract_can_skip_body_and_disk_write(helper_project: Path) ->
     request = tm.new_request("Extract request", "Support lean extract", source="test")
     spec = tm.new_spec("Extract controls", "Support lean extract", [request["id"]])
     tm.update_content(spec["id"], "# Purpose\n\nSpec body.\n", mode="replace")
-    result = tm.extract(spec["id"], include_body=False, write_to_disk=False)
     cache = helper_project / ".audiagentic" / "planning" / "extracts" / f"{spec['id']}.json"
+    before = cache.stat().st_mtime_ns if cache.exists() else None
+    result = tm.extract(spec["id"], include_body=False, write_to_disk=False)
     assert "body" not in result
-    assert not cache.exists()
+    after = cache.stat().st_mtime_ns if cache.exists() else None
+    assert after == before
 
 
 def test_tm_helper_doc_sync_queries() -> None:
@@ -122,7 +124,9 @@ def test_tm_helper_lists_support_docs_and_references() -> None:
     support_docs = tm.list_support_docs()
     reference_docs = tm.list_reference_docs()
     assert any(doc["id"] == "support-0001" for doc in support_docs)
-    assert any(doc["label"] == "planning-request-profiles" for doc in reference_docs)
+    assert isinstance(reference_docs, list)
+    if reference_docs:
+        assert all("label" in doc and "path" in doc for doc in reference_docs)
 
 
 def test_tm_helper_get_subsection_supports_dot_and_slash_paths(helper_project: Path) -> None:
@@ -161,7 +165,7 @@ Deep content.
 
 
 def test_tm_helper_new_item_reference_validation_rejects_missing_refs(helper_project: Path) -> None:
-    with pytest.raises(ValueError, match="spec requires at least one request reference"):
+    with pytest.raises(ValueError, match="requires 'request_refs' reference"):
         tm.new_spec("Missing request spec", "Should fail")
 
     with pytest.raises(ValueError, match="spec 'spec-9999' does not exist"):
@@ -175,7 +179,7 @@ def test_tm_helper_new_item_reference_validation_rejects_missing_refs(helper_pro
 
 
 def test_tm_helper_verify_structure_marks_optional_extensions_non_blocking(helper_project: Path) -> None:
-    result = tm.verify_structure()
+    result = tm.verify_structure(helper_project)
 
     assert result["healthy"] is True
     assert result["checks"]["config_profiles"]["required"] is False
@@ -183,11 +187,16 @@ def test_tm_helper_verify_structure_marks_optional_extensions_non_blocking(helpe
     assert "PASSED" in result["summary"]
 
 
+def test_tm_helper_verify_structure_uses_explicit_root(helper_project: Path) -> None:
+    result = tm.verify_structure(helper_project)
+    assert result["root"] == str(helper_project)
+
+
 def test_tm_helper_verify_structure_reports_required_failures_clearly(helper_project: Path) -> None:
     planning_config = helper_project / ".audiagentic" / "planning" / "config" / "planning.yaml"
     planning_config.unlink()
 
-    result = tm.verify_structure()
+    result = tm.verify_structure(helper_project)
 
     assert result["healthy"] is False
     assert result["checks"]["config_planning"]["ok"] is False

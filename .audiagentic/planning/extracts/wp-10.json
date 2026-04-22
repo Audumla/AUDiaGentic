@@ -1,29 +1,16 @@
 {
   "item": {
     "id": "wp-10",
-    "label": "Implement canonical guidance semantics",
-    "state": "done",
-    "summary": "Create standard-0010 with guidance level definitions and update validation rules",
-    "plan_ref": "plan-8",
-    "task_refs": [
-      {
-        "ref": "task-245",
-        "seq": 1000
-      },
-      {
-        "ref": "task-246",
-        "seq": 2000
-      },
-      {
-        "ref": "task-247",
-        "seq": 3000
-      }
-    ],
+    "label": "Define guidance level semantics in standard",
+    "state": "draft",
+    "summary": "Create standard-0010 with canonical definitions for light/standard/deep guidance levels",
+    "plan_ref": "plan-11",
+    "task_refs": [],
     "standard_refs": [
       "standard-6"
     ],
     "kind": "wp",
-    "path": "docs/planning/work-packages/core/wp-10-implement-canonical-guidance-semantics.md",
+    "path": "docs/planning/work-packages/core/wp-10-define-guidance-level-semantics-in-standard.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -31,8 +18,7 @@
     "restored_by": null
   },
   "effective_standard_refs": [
-    "standard-6",
-    "standard-5"
+    "standard-6"
   ],
-  "body": "\n\n\n\n\n\n\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n\n# Notes\n\nMarked done on 2026-04-17 to align the work package with the already-completed guidance semantics tasks under `request-13`.\n"
+  "body": "\n\n\n\n\n\n\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n"
 }

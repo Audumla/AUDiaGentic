@@ -1,10 +1,10 @@
 {
   "item": {
     "id": "task-244",
-    "label": "Fix val_mgr.py duplicated validation",
+    "label": "Consolidate new() and create_with_content() logic",
     "state": "done",
-    "summary": "Consolidate validation logic in val_mgr.py to single scan and single pass",
-    "spec_ref": "spec-18",
+    "summary": "Extract shared _create_item() method to eliminate duplication between new() and create_with_content()",
+    "spec_ref": "spec-22",
     "request_refs": [
       "request-16"
     ],
@@ -13,7 +13,7 @@
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-244-fix-val-mgr-py-duplicated-validation.md",
+    "path": "docs/planning/tasks/core/task-244-consolidate-new-and-create-with-content-logic.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -24,5 +24,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
 }

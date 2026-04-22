@@ -1,14 +1,14 @@
 {
   "item": {
     "id": "task-306",
-    "label": "req-0042",
-    "state": "cancelled",
-    "summary": "Refactor request-42 cleanup",
+    "label": "knowledge",
+    "state": "closed",
+    "summary": "Clean up .audiagentic/knowledge/",
     "request_refs": [
       "request-19"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-306-req-0042.md",
+    "path": "docs/planning/tasks/core/task-306-knowledge.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n# Description\n\nRefactor request-20 cleanup\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nClean up .audiagentic/knowledge/\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n\n# Completion Notes\n\nDirectory already clean and well-organized:\n- config.yml: Knowledge vault configuration\n- events/adapters.yml: Event adapter configuration\n- events/handlers.yml: Event handler configuration\n- profiles/selected.yml: Profile selection\n"
 }

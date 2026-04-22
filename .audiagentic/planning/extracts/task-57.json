@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-57",
-    "label": "[PKT-RLS-002](task-0057): Sync with Locking and Idempotency",
+    "label": "[PKT-RLS-004](task-0059): Audit/Check-in Summary Generation",
     "state": "draft",
-    "summary": "Implement sync with locking and idempotency",
-    "spec_ref": "spec-10",
+    "summary": "Generate audit/check-in summary",
+    "spec_ref": "spec-13",
     "kind": "task",
-    "path": "docs/planning/tasks/release/task-57-pkt-rls-002-task-0057-sync-with-locking-and-idempotency.md",
+    "path": "docs/planning/tasks/release/task-57-pkt-rls-004-task-0059-audit-check-in-summary-generation.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
   "effective_standard_refs": [
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-002](task-0047): Sync with Locking and Idempotency\n\n## Purpose\n\nImplement sync with locking and idempotency.\n\n## Scope\n\n- Locking mechanism\n- Sync logic\n- Idempotency\n\n## Implementation\n\n1. Implement locking\n2. Add sync\n3. Ensure idempotency\n\n## Acceptance Criteria\n\n1. Locking works\n2. Sync functional\n3. Idempotent\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-004](task-0049): Audit/Check-in Summary Generation\n\n## Purpose\n\nGenerate audit/check-in summary.\n\n## Scope\n\n- Audit data collection\n- Summary generation\n- Check-in tracking\n\n## Implementation\n\n1. Collect audit data\n2. Generate summary\n3. Track check-ins\n\n## Acceptance Criteria\n\n1. Audit data collected\n2. Summary generated\n3. Check-ins tracked\n"
 }

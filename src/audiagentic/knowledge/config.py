@@ -62,16 +62,6 @@ class KnowledgeConfig:
         return self.state_root / str(self.raw.get("llm_job_state_file", "llm-jobs.yml"))
 
     @property
-    def hook_config_file(self) -> Path:
-        rel = self.raw.get("hook_config_file", "config/sync/hooks.yml")
-        path = Path(str(rel))
-        return (
-            self.root / path
-            if path.is_absolute() or str(path).startswith(".")
-            else self.knowledge_root / path
-        )
-
-    @property
     def event_adapter_file(self) -> Path:
         rel = self.raw.get("events", {}).get("adapters_file", "config/events/adapters.yml")
         path = Path(str(rel))
@@ -201,13 +191,6 @@ class KnowledgeConfig:
         return [str(x) for x in values]
 
     @property
-    def auto_hook_allowed_states(self) -> list[str]:
-        values = self.raw.get("sync", {}).get(
-            "auto_hook_allowed_states", ["implemented", "verified", "active", "current"]
-        )
-        return [str(x) for x in values]
-
-    @property
     def diff_context_lines(self) -> int:
         return int(self.raw.get("sync", {}).get("diff_context_lines", 2))
 
@@ -293,7 +276,6 @@ class KnowledgeConfig:
             str(self.execution_registry_file.relative_to(self.root)),
             str(self.llm_registry_file.relative_to(self.root)),
             str(self.navigation_config_file.relative_to(self.root)),
-            str(self.hook_config_file.relative_to(self.root)),
             str(self.event_adapter_file.relative_to(self.root)),
             str(self.handlers_file.relative_to(self.root)),
         ]

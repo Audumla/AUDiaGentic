@@ -6,13 +6,13 @@ summary: Implement automatic state transitions that propagate up planning hierar
   using interoperability layer events
 source: follow-up to request-35
 guidance: standard
-current_understanding: 'Building on request-35 (event mechanism), need automatic
-  state propagation rules: WP→in_progress when any task→in_progress, WP→done when
-  all tasks→done, Plan→in_progress when any WP→in_progress, Plan→done when all WPs→done,
-  Spec→in_progress when any plan→in_progress, Spec→done when all plans→done. Rules
-  should be configurable per workflow and respect blocking states (e.g., can''t go
-  to done if any child is blocked). Need to handle edge cases: manual state overrides,
-  conflicting transitions, and state rollback scenarios. '
+current_understanding: 'Building on request-35 (event mechanism), need automatic state
+  propagation rules: WP→in_progress when any task→in_progress, WP→done when all tasks→done,
+  Plan→in_progress when any WP→in_progress, Plan→done when all WPs→done, Spec→in_progress
+  when any plan→in_progress, Spec→done when all plans→done. Rules should be configurable
+  per workflow and respect blocking states (e.g., can''t go to done if any child is
+  blocked). Need to handle edge cases: manual state overrides, conflicting transitions,
+  and state rollback scenarios. '
 open_questions:
 - Should state propagation be immediate or batched?
 - How to handle manual state overrides vs automatic propagation?
@@ -23,8 +23,14 @@ meta:
 standard_refs:
 - standard-1
 spec_refs:
-- spec-20
+- spec-24
 ---
+
+
+
+
+
+
 
 
 

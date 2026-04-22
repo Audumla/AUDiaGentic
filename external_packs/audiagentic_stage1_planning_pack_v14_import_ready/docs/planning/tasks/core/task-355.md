@@ -1,0 +1,82 @@
+---
+id: task-355
+label: Freeze external-target apply boundaries
+state: draft
+summary: Decide which target kinds support apply in stage one and which stay plan or doctor only until later phases.
+spec_ref: spec-83
+request_refs:
+- request-32
+standard_refs:
+- standard-4
+- standard-6
+---
+
+# Description
+
+Limit stage-one mutation scope deliberately so genericity does not become unsafe overreach.
+
+# Inputs
+
+Read before starting:
+- `docs/installer/backend-overlay-artifact-contracts.md` (output from task-354)
+- `spec-83` — target/backend model spec
+- `src/audiagentic/targets/` — existing target modules
+- `standard-4` — review findings and evidence standard
+- `standard-6` — planning structure and record quality standard
+
+# Output
+
+Produce `docs/installer/apply-boundaries.md` with these sections:
+
+## Stage-one apply-eligible target kinds
+
+For each target kind that supports apply in stage one:
+- Target kind name
+- Backend kind it uses
+- What mutations it supports (create, update, delete, or specific subset)
+- Risk level (low/medium/high)
+- Verification requirements (what tests must pass before apply)
+
+## Plan-only target kinds
+
+For each target kind that is plan-only in stage one:
+- Target kind name
+- Why it is plan-only (risk, complexity, missing backend, etc.)
+- What plan output it produces (difference summary, proposed actions)
+- Estimated effort to enable apply in later phases
+
+## Doctor-only or validate-only target kinds
+
+For each target kind that is doctor-only or validate-only:
+- Target kind name
+- Mode (doctor-only or validate-only)
+- What checks it performs
+- What output it produces (issues, findings, or validation results)
+
+## Deferred targets
+
+For each target kind deferred to later phases:
+- Target kind name
+- Phase it is targeted for (phase two, phase three, etc.)
+- Prerequisites for enabling apply in that phase
+- Current blockers (what must be resolved before apply can be enabled)
+
+# What not to change
+
+- do not enable apply for target kinds not explicitly listed as apply-eligible
+- do not change existing target module signatures in `src/audiagentic/targets/`
+- do not add target kinds beyond those listed in spec-83 for stage one
+- do not change the four-category classification (apply-eligible, plan-only, doctor-only, deferred)
+- do not enable deferred targets without meeting all prerequisites
+- do not reduce mutation scope below what is listed as apply-eligible
+- do not change risk levels without justification
+
+# Acceptance criteria
+
+- [ ] all target kinds are categorized as apply-eligible, plan-only, doctor-only, or deferred
+- [ ] each apply-eligible target specifies backend kind, mutation types, risk level, and verification requirements
+- [ ] each plan-only target specifies why it is plan-only and what plan output it produces
+- [ ] each deferred target specifies target phase, prerequisites, and current blockers
+- [ ] mutating scope is explicit (no target kind is ambiguously classified)
+- [ ] regression impact is explicit for each apply-eligible target (what existing behavior could be affected)
+- [ ] reviewer can verify by checking that each target kind appears in exactly one category

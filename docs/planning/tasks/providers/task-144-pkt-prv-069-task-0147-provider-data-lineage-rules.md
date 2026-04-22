@@ -1,0 +1,43 @@
+---
+id: task-144
+label: '[PKT-PRV-069](task-0147): Provider Data Lineage Rules'
+state: draft
+summary: Implement provider data lineage rules
+spec_ref: spec-16
+---
+
+
+
+
+
+
+
+
+# Description
+
+Implement this task.
+
+
+# [PKT-PRV-069](task-0136): Provider Data Lineage Rules
+
+## Purpose
+
+Implement provider data lineage rules.
+
+## Scope
+
+- Lineage rules
+- Tracking
+- Visualization
+
+## Implementation
+
+1. Define rules
+2. Implement tracking
+3. Add visualization
+
+## Acceptance Criteria
+
+1. Rules defined
+2. Tracking works
+3. Visualization works

@@ -1,18 +1,21 @@
 {
   "item": {
     "id": "task-166",
-    "label": "[PKT-NOD-002](task-0166): Node-Local Status Persistence",
+    "label": "[PKT-DIS-002](task-0169): Static Registry Provider",
     "state": "draft",
-    "summary": "Implement node-local status persistence",
-    "spec_ref": "spec-15",
+    "summary": "Implement static registry provider",
+    "spec_ref": "spec-20",
     "kind": "task",
-    "path": "docs/planning/tasks/node-execution/task-166-pkt-nod-002-task-0166-node-local-status-persistence.md",
+    "path": "docs/planning/tasks/discovery/task-166-pkt-dis-002-task-0169-static-registry-provider.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-NOD-002](task-0155): Node-Local Status Persistence\n\n## Purpose\n\nImplement node-local status persistence.\n\n## Scope\n\n- Persistence format\n- Storage logic\n- Recovery\n\n## Implementation\n\n1. Define format\n2. Implement storage\n3. Add recovery\n\n## Acceptance Criteria\n\n1. Format defined\n2. Storage works\n3. Recovery works\n"
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-DIS-002](task-0158): Static Registry Provider\n\n## Purpose\n\nImplement static registry provider.\n\n## Scope\n\n- Registry format\n- Static registration\n- Lookup\n\n## Implementation\n\n1. Define format\n2. Implement registration\n3. Add lookup\n\n## Acceptance Criteria\n\n1. Format defined\n2. Registration works\n3. Lookup works\n"
 }

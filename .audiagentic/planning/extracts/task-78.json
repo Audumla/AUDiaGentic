@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-78",
-    "label": "[PKT-PRV-001](task-0078): Provider Registry",
-    "state": "draft",
-    "summary": "Create provider registry",
-    "spec_ref": "spec-12",
+    "label": "[PKT-PRV-003](task-0080): Provider Selection",
+    "state": "cancelled",
+    "summary": "Implement deterministic provider selection",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-78-pkt-prv-001-task-0078-provider-registry.md",
+    "path": "docs/planning/tasks/providers/task-78-pkt-prv-003-task-0080-provider-selection.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-001](task-0068): Provider Registry\n\n## Purpose\n\nCreate provider registry.\n\n## Scope\n\n- Registry format\n- Registration logic\n- Discovery\n\n## Implementation\n\n1. Define format\n2. Implement registration\n3. Add discovery\n\n## Acceptance Criteria\n\n1. Format defined\n2. Registration works\n3. Discovery works\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The local-openai provider line was superseded and archived.\n\n\n# [PKT-PRV-003](task-0070): Provider Selection\n\n## Purpose\n\nImplement deterministic provider selection.\n\n## Scope\n\n- Selection logic\n- Rules\n- Fallback\n\n## Implementation\n\n1. Implement selection\n2. Define rules\n3. Add fallback\n\n## Acceptance Criteria\n\nCancelled with superseded provider line.\n"
 }

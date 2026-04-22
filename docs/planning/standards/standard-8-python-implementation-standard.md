@@ -6,6 +6,12 @@ summary: Default standard for Python implementation work in AUDiaGentic-based pr
   covering code quality, tests, change boundaries, and MCP server development.
 ---
 
+
+
+
+
+
+
 # Standard
 
 Default standard for Python implementation work in AUDiaGentic-based projects. Covers code quality, module boundaries, test expectations, change scope, and MCP server structure and deployment.

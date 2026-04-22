@@ -3,9 +3,15 @@ id: standard-9
 label: Planning layer enhancement impact standard
 state: ready
 summary: Default standard for changes to the planning layer that affect workflows,
-  state semantics, MCP surfaces, indexing, validation, extracts, or other shared
-  planning behavior.
+  state semantics, MCP surfaces, indexing, validation, extracts, or other shared planning
+  behavior.
 ---
+
+
+
+
+
+
 
 # Standard
 

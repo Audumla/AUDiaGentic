@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-102",
-    "label": "[PKT-PRV-025](task-0102): Provider Webhook Support",
-    "state": "draft",
-    "summary": "Implement provider webhook support",
-    "spec_ref": "spec-12",
+    "label": "[PKT-PRV-027](task-0104): Provider Message Queue",
+    "state": "cancelled",
+    "summary": "Implement provider message queue",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-102-pkt-prv-025-task-0102-provider-webhook-support.md",
+    "path": "docs/planning/tasks/providers/task-102-pkt-prv-027-task-0104-provider-message-queue.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-025](task-0092): Provider Webhook Support\n\n## Purpose\n\nImplement provider webhook support.\n\n## Scope\n\n- Webhook format\n- Delivery\n- Retry\n\n## Implementation\n\n1. Define format\n2. Implement delivery\n3. Add retry\n\n## Acceptance Criteria\n\n1. Format defined\n2. Delivery works\n3. Retry works\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The Continue execution line was superseded and archived.\n\n\n# [PKT-PRV-027](task-0094): Provider Message Queue\n\n## Purpose\n\nImplement provider message queue.\n\n## Scope\n\n- Queue format\n- Messages\n- Processing\n\n## Implementation\n\n1. Define format\n2. Add messages\n3. Implement processing\n\n## Acceptance Criteria\n\n1. Format defined\n2. Messages work\n3. Processing works\n"
 }

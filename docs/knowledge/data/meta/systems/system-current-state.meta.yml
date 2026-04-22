@@ -1,0 +1,18 @@
+id: system-current-state
+title: Current Operational State
+type: system
+status: current
+summary: Current operational state of the AUDiaGentic project, including completed work, active work,
+  and next legal starting points for new contributors
+owners:
+- core-team
+updated_at: '2026-04-17'
+tags:
+- current-state
+- operational
+- onboarding
+- planning
+related:
+- system-planning
+- guide-getting-started
+- guide-using-planning

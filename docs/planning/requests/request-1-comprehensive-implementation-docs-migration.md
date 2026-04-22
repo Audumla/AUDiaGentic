@@ -19,8 +19,8 @@ meta:
   open_questions: []
 spec_refs:
 - spec-77
-- spec-0001
-- spec-0002
+- spec-1
+- spec-3
 ---
 
 

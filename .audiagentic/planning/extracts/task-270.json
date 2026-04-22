@@ -1,9 +1,9 @@
 {
   "item": {
     "id": "task-270",
-    "label": "Add class and method docstrings to base_mgr.py",
+    "label": "Add JSON schema validation to _load_json_argument",
     "state": "completed",
-    "summary": "Document BaseManager class and methods",
+    "summary": "Implement comprehensive JSON validation",
     "request_refs": [
       "request-19"
     ],
@@ -12,7 +12,7 @@
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-270-add-class-and-method-docstrings-to-base-mgr-py.md",
+    "path": "docs/planning/tasks/core/task-270-add-json-schema-validation-to-load-json-argument.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -23,5 +23,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\nAdded comprehensive class and method docstrings to planning/app/base_mgr.py.\n\n## Completed Work\n\n1. **Added class docstring** for BaseMgr covering:\n   - Class purpose: Base manager for planning object CRUD operations\n   - Common functionality: Path resolution, domain-aware organization, slug-based filenames\n   - Attributes: root, paths\n   - Usage example with expected output\n\n2. **Added method docstrings**:\n   - `__init__`: Parameters (root, paths) with descriptions\n   - `path_for`: Full documentation including:\n     - Purpose: Generate file path for planning objects\n     - Behavior: ID-only for requests/tasks, ID-label for others\n     - Parameters: kind, id_, label, domain with examples\n     - Returns: Path to markdown file\n     - Examples showing different object kinds\n\n## Standards Compliance\n- **standard-0008**: Comprehensive class and method documentation\n- **standard-0001**: Planning documentation maintenance\n\n## Testing\nClass and method docstrings are accessible via `help(BaseMgr)` and `help(BaseMgr.path_for)`.\n"
+  "body": "\n\n\n\n\n\n\n\n\n## Completed Work\n\nAdded JSON schema validation to `channels/cli/main.py:_load_json_argument` function.\n\n### Changes Made:\n\n1. **Enhanced `_load_json_argument` function**:\n   - Added comprehensive docstring with purpose, args, returns, raises, and examples\n   - Added explicit JSONDecodeError handling with context preservation\n   - Changed return type from `dict[str, object]` to `dict[str, Any]` for flexibility\n   - Added import for `Any` from typing\n\n2. **Added `_validate_json_schema` helper function**:\n   - Validates required keys presence\n   - Supports type validation for known fields\n   - Provides structured error messages with missing field details\n   - Includes comprehensive docstring with examples\n\n3. **Improved error handling**:\n   - JSONDecodeError now provides specific parsing error details\n   - Type validation errors include context about expected vs actual types\n   - All errors use ValueError for consistency with CLI error handling\n\n## Standards Compliance\n- **standard-0005**: Schema validation with required keys support\n- **standard-0008**: Comprehensive documentation and type hints\n\n## Testing\nFunctions now properly handle:\n- Invalid JSON syntax (JSONDecodeError with details)\n- Non-object JSON types (ValueError with message)\n- Missing required keys (ValueError with key name)\n- None input (returns None as expected)\n"
 }

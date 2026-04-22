@@ -12,6 +12,12 @@ standard_refs:
 
 
 
+
+
+
+
+
+
 The hook_config_file property in KnowledgeConfig should be removed. This property points to 'sync/hooks.yml' which is part of the legacy hooks system. All references to this property in config.py need to be removed.
 
 # Notes

@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-168",
-    "label": "[PKT-DIS-001](task-0168): Locator Provider Contract",
-    "state": "draft",
-    "summary": "Define locator provider contract",
-    "spec_ref": "spec-16",
+    "label": "Define reference docs and project-facing documentation surfaces",
+    "state": "done",
+    "summary": "Review reference docs as a planning-managed documentation family and define where they fit in installed projects",
+    "spec_ref": "spec-8",
     "kind": "task",
-    "path": "docs/planning/tasks/discovery/task-168-pkt-dis-001-task-0168-locator-provider-contract.md",
+    "path": "docs/planning/tasks/core/task-168-define-reference-docs-and-project-facing-documentation-surfaces.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-DIS-001](task-0157): Locator Provider Contract\n\n## Purpose\n\nDefine locator provider contract.\n\n## Scope\n\n- Contract format\n- Interface definition\n- Validation\n\n## Implementation\n\n1. Define format\n2. Define interface\n3. Add validation\n\n## Acceptance Criteria\n\n1. Format defined\n2. Interface defined\n3. Validated\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\nReview the proposed `docs/references/` surface, example files, and documentation guidance so the feature fits the template model and does not duplicate existing project docs.\n\n**Status: IMPLEMENTED**\n\nAll implementation work for task-0171 is complete:\n- `docs/references/README.md` exists as entrypoint for reference-doc family\n- `docs/references/planning/` contains 7 planning reference docs\n- ReferencesManager lists all markdown files under docs/references/\n- Helper function: list_reference_docs() returns path and label for each\n- Reference docs are separate from docs/specifications/ and release docs\n- Ownership documented: human-editable, agent-readable reference material\n- Tests verify reference listing includes planning-request-profiles\n- No implication that all installed projects must adopt full reference surface\n\n# Acceptance Criteria\n\n1. The task defines which reference docs are seed-on-install starter docs versus managed or hybrid assets.\n2. The task explains how reference docs relate to existing `docs/specifications`, release docs, and other project docs.\n3. The task lists the minimum documentation examples needed for a believable smoke test.\n4. The task records whether `docs/references/README.md` is required in every installed project.\n\n# Notes\n\n- Suitable with revision.\n- The current pack includes minimal sample docs, but their ownership and lifecycle in installed projects is still underspecified.\n- This activity should prevent duplicate documentation families from emerging later.\n\n# Implementation Notes\n\n- Align terminology with the managed-surface contract.\n- Record the minimum examples and indexing/listing expectations.\n- Avoid implying that all installed projects must adopt the full reference-doc surface.\n\n\n# Execution Checklist\n\nImplementation type: references docs + listing behavior + tests.\n\nFiles to change:\n- `docs/references/README.md`\n- `docs/references/planning/planning-doc-surfaces.md`\n- `docs/references/planning/planning-how-to.md`\n- `docs/references/planning/planning-request-profiles.md`\n- `docs/references/planning/planning-supporting-docs.md`\n- `src/audiagentic/planning/app/refs_mgr.py`\n- `tests/integration/planning/test_tm_helper_extensions.py`\n\nSteps:\n1. Decide which reference docs are starter content for installed projects and which are AUDiaGentic-owned docs.\n2. Keep `docs/references/README.md` as the entrypoint for the reference-doc family.\n3. Ensure `ReferencesManager` lists markdown files under `docs/references/` only.\n4. Keep reference docs separate from `docs/specifications/` and release-doc surfaces.\n5. Add or keep enough sample docs so the listing behavior is believable in tests.\n\nDo not change:\n- architecture/specification docs outside the reference-doc surface unless required for cross-links\n- release ledger behavior\n- planning object scanning rules\n\nVerification:\n- `pytest -q tests/integration/planning/test_tm_helper_extensions.py`\n- manually confirm reference listing includes `planning-request-profiles`\n\nDone means:\n- the repo has a clear reference-doc entrypoint\n- reference docs can be listed via helper/MCP\n- ownership expectations are described for installed projects\n"
 }

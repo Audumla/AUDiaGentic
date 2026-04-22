@@ -4,11 +4,17 @@ label: Enhance search with fuzzy matching or BM25
 state: done
 summary: Replace token-based search with fuzzy matching or BM25 for better relevance
 domain: core
-spec_ref: wp-13
+spec_ref: wp-14
 standard_refs:
 - standard-5
 - standard-6
 ---
+
+
+
+
+
+
 
 
 

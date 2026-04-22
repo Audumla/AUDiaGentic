@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-120",
-    "label": "[PKT-PRV-042](task-0120): Provider Audit Logging",
+    "label": "[PKT-PRV-045](task-0123): Provider Data Encryption",
     "state": "draft",
-    "summary": "Implement provider audit logging",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data encryption",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-120-pkt-prv-042-task-0120-provider-audit-logging.md",
+    "path": "docs/planning/tasks/providers/task-120-pkt-prv-045-task-0123-provider-data-encryption.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-042](task-0109): Provider Audit Logging\n\n## Purpose\n\nImplement provider audit logging.\n\n## Scope\n\n- Audit format\n- Logging\n- Retention\n\n## Implementation\n\n1. Define format\n2. Implement logging\n3. Set retention\n\n## Acceptance Criteria\n\n1. Format defined\n2. Logging works\n3. Retention set\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-045](task-0112): Provider Data Encryption\n\n## Purpose\n\nImplement provider data encryption.\n\n## Scope\n\n- Encryption algorithm\n- Key management\n- Data protection\n\n## Implementation\n\n1. Define algorithm\n2. Manage keys\n3. Protect data\n\n## Acceptance Criteria\n\n1. Algorithm defined\n2. Keys managed\n3. Data protected\n"
 }

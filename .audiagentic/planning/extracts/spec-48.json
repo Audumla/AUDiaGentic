@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "spec-48",
+    "label": "Comprehensive implementation migration \u2014 Master specification",
+    "state": "draft",
+    "summary": "Umbrella specification for complete migration of docs/implementation content to planning structure. Includes all 12 phases: Contracts & Scaffolding through Remaining Implementation Docs.",
+    "request_refs": [
+      "request-1"
+    ],
+    "task_refs": [],
+    "kind": "spec",
+    "path": "docs/planning/specifications/spec-48-comprehensive-implementation-migration-master-specification.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n\n\n\n\n\n\n# Purpose\n\n\n# Scope\n\n\n# Requirements\n\n\n# Constraints\n\n\n# Acceptance Criteria\n"
+}

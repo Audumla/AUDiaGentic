@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-69",
-    "label": "[PKT-JOB-003](task-0069): Workflow Profiles",
+    "label": "[PKT-JOB-005](task-0071): Approval Handling",
     "state": "draft",
-    "summary": "Create workflow profiles",
-    "spec_ref": "spec-11",
+    "summary": "Handle approvals inside jobs",
+    "spec_ref": "spec-15",
     "kind": "task",
-    "path": "docs/planning/tasks/jobs/task-69-pkt-job-003-task-0069-workflow-profiles.md",
+    "path": "docs/planning/tasks/jobs/task-69-pkt-job-005-task-0071-approval-handling.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
   "effective_standard_refs": [
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-003](task-0059): Workflow Profiles\n\n## Purpose\n\nCreate workflow profiles.\n\n## Scope\n\n- Profile format\n- Profile loading\n- Validation\n\n## Implementation\n\n1. Define format\n2. Implement loading\n3. Add validation\n\n## Acceptance Criteria\n\n1. Format defined\n2. Loading works\n3. Validated\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-005](task-0061): Approval Handling\n\n## Purpose\n\nHandle approvals inside jobs.\n\n## Scope\n\n- Approval logic\n- State transitions\n- Notifications\n\n## Implementation\n\n1. Implement approval logic\n2. Add state transitions\n3. Add notifications\n\n## Acceptance Criteria\n\n1. Approval logic works\n2. Transitions correct\n3. Notifications sent\n"
 }

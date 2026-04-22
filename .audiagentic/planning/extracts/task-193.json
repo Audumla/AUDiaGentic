@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-193",
-    "label": "Fix hook event payloads",
+    "label": "Fix FastMCP empty-list serialization",
     "state": "done",
-    "summary": "Fix review_stub, report_stub, note_stub hook payloads to have correct structure",
-    "spec_ref": "spec-3",
+    "summary": "Patch FastMCP response serialization to emit single content block for empty lists and None",
+    "spec_ref": "spec-6",
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-193-fix-hook-event-payloads.md",
+    "path": "docs/planning/tasks/core/task-193-fix-fastmcp-empty-list-serialization.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -14,5 +14,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n# Description\n\nAlign hook stub payloads for review/report/note actions with the event shape expected by the coverage tests.\n\n# Acceptance Criteria\n\n1. `review_stub` emits the expected event payload\n2. `report_stub` emits the expected event payload\n3. `note_stub` includes the note content in payload\n\n# Notes\n\n- Implemented in `src/audiagentic/planning/app/hook_mgr.py`\n- Verified by the `review_stub`, `report_stub`, and `note_stub` coverage tests\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nEnsure MCP tools returning empty lists or `None` still emit a usable response payload instead of disappearing into zero content blocks.\n\n# Acceptance Criteria\n\n1. Empty-list MCP tools return a stable wrapped payload\n2. `None` results are distinguishable from void/error responses\n3. Affected planning MCP tools are protected by a consistent wrapper\n\n# Notes\n\n- Implemented via the `tool_with_empty_list_fix` wrapper in `tools/mcp/audiagentic-planning/audiagentic-planning_mcp.py`\n- Covered by the passing MCP tool-call suite\n"
 }

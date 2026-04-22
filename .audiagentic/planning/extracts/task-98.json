@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-98",
-    "label": "[PKT-PRV-021](task-0098): Provider Discovery",
-    "state": "cancelled",
-    "summary": "Implement provider discovery",
-    "spec_ref": "spec-12",
+    "label": "[PKT-PRV-023](task-0100): Provider Plugin System",
+    "state": "draft",
+    "summary": "Create provider plugin system",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-98-pkt-prv-021-task-0098-provider-discovery.md",
+    "path": "docs/planning/tasks/providers/task-98-pkt-prv-023-task-0100-provider-plugin-system.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The local-openai bridge-wrapper prompt-tag line was superseded and archived.\n\n\n# [PKT-PRV-021](task-0088): Provider Discovery\n\n## Purpose\n\nImplement provider discovery.\n\n## Scope\n\n- Discovery mechanism\n- Registration\n- Updates\n\n## Implementation\n\n1. Define mechanism\n2. Implement registration\n3. Add updates\n\n## Acceptance Criteria\n\n1. Mechanism defined\n2. Registration works\n3. Updates work\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-023](task-0090): Provider Plugin System\n\n## Purpose\n\nCreate provider plugin system.\n\n## Scope\n\n- Plugin interface\n- Loading\n- Isolation\n\n## Implementation\n\n1. Define interface\n2. Implement loading\n3. Add isolation\n\n## Acceptance Criteria\n\n1. Interface defined\n2. Loading works\n3. Isolated\n"
 }

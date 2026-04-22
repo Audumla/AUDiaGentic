@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-123",
-    "label": "[PKT-PRV-045](task-0123): Provider Data Encryption",
+    "label": "[PKT-PRV-048](task-0126): Provider Data Export",
     "state": "draft",
-    "summary": "Implement provider data encryption",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data export",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-123-pkt-prv-045-task-0123-provider-data-encryption.md",
+    "path": "docs/planning/tasks/providers/task-123-pkt-prv-048-task-0126-provider-data-export.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-045](task-0112): Provider Data Encryption\n\n## Purpose\n\nImplement provider data encryption.\n\n## Scope\n\n- Encryption algorithm\n- Key management\n- Data protection\n\n## Implementation\n\n1. Define algorithm\n2. Manage keys\n3. Protect data\n\n## Acceptance Criteria\n\n1. Algorithm defined\n2. Keys managed\n3. Data protected\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-048](task-0115): Provider Data Export\n\n## Purpose\n\nImplement provider data export.\n\n## Scope\n\n- Export format\n- Export logic\n- Validation\n\n## Implementation\n\n1. Define format\n2. Implement export\n3. Add validation\n\n## Acceptance Criteria\n\n1. Format defined\n2. Export works\n3. Validated\n"
 }

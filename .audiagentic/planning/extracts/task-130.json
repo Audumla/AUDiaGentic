@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-130",
-    "label": "[PKT-PRV-052](task-0130): Provider Data Quality",
+    "label": "[PKT-PRV-055](task-0133): Provider Data Catalog",
     "state": "draft",
-    "summary": "Implement provider data quality checks",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data catalog",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-130-pkt-prv-052-task-0130-provider-data-quality.md",
+    "path": "docs/planning/tasks/providers/task-130-pkt-prv-055-task-0133-provider-data-catalog.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-052](task-0119): Provider Data Quality\n\n## Purpose\n\nImplement provider data quality checks.\n\n## Scope\n\n- Quality metrics\n- Monitoring\n- Alerts\n\n## Implementation\n\n1. Define metrics\n2. Add monitoring\n3. Add alerts\n\n## Acceptance Criteria\n\n1. Metrics defined\n2. Monitoring works\n3. Alerts sent\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-055](task-0122): Provider Data Catalog\n\n## Purpose\n\nImplement provider data catalog.\n\n## Scope\n\n- Catalog format\n- Indexing\n- Search\n\n## Implementation\n\n1. Define format\n2. Add indexing\n3. Add search\n\n## Acceptance Criteria\n\n1. Format defined\n2. Indexed\n3. Searchable\n"
 }

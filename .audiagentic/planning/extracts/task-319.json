@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-319",
-    "label": "[PKT-DIS-003](task-0170): Optional Provider Seams",
+    "label": "[PKT-EXT-001](task-0174): External Connector Contract and Mock",
     "state": "draft",
-    "summary": "Implement optional zeroconf and external registry provider seams",
-    "spec_ref": "spec-16",
+    "summary": "Define external connector contract and create mock connector",
+    "spec_ref": "spec-23",
     "kind": "task",
-    "path": "docs/planning/tasks/discovery/task-319-pkt-dis-003-task-0170-optional-provider-seams.md",
+    "path": "docs/planning/tasks/external-tools/task-319-pkt-ext-001-task-0174-external-connector-contract-and-mock.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -14,8 +14,9 @@
     "restored_by": null
   },
   "effective_standard_refs": [
+    "standard-5",
     "standard-6",
-    "standard-5"
+    "standard-10"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-DIS-003](task-0159): Optional Provider Seams\n\n## Purpose\n\nImplement optional zeroconf and external registry provider seams.\n\n## Scope\n\n- Zeroconf seam\n- External registry seam\n- Configuration\n\n## Implementation\n\n1. Define seams\n2. Implement zeroconf\n3. Implement external\n\n## Acceptance Criteria\n\n1. Seams defined\n2. Zeroconf works\n3. External works\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-EXT-001](task-0163): External Connector Contract and Mock\n\n## Purpose\n\nDefine external connector contract and create mock connector.\n\n## Scope\n\n- Connector contract\n- Mock implementation\n- Test cases\n\n## Implementation\n\n1. Define contract\n2. Implement mock\n3. Add tests\n\n## Acceptance Criteria\n\n1. Contract defined\n2. Mock works\n3. Tests pass\n"
 }

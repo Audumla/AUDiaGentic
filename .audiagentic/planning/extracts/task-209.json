@@ -1,17 +1,17 @@
 {
   "item": {
     "id": "task-209",
-    "label": "Add summary_only flag to individual operations",
-    "state": "cancelled",
-    "summary": "Add optional summary_only parameter to tm_state, tm_update, tm_batch_update for minimal response payloads",
-    "spec_ref": "spec-8",
+    "label": "Implement detect_sensitive_patterns function with regex patterns",
+    "state": "done",
+    "summary": "Add detect_sensitive_patterns(body) with regex for AWS keys, API keys, passwords, bearer tokens; return warning messages",
+    "spec_ref": "spec-12",
     "request_refs": [],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-209-add-summary-only-flag-to-individual-operations.md",
+    "path": "docs/planning/tasks/core/task-209-implement-detect-sensitive-patterns-function-with-regex-patterns.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -20,8 +20,7 @@
   },
   "effective_standard_refs": [
     "standard-5",
-    "standard-6",
-    "standard-9"
+    "standard-6"
   ],
-  "body": "\n\n# Description\n\nCancelled with `spec-008` after the owning request record was removed. Recreate this task under a new request if summary-only response support is resumed.\n\n# Acceptance Criteria\n\nCancelled with parent specification.\n\n# Notes\n\nThis task was never fleshed into implementation-ready detail before the request chain disappeared.\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n---\nid: task-212\nlabel: Implement check_sensitive_data function with regex patterns\nstate: draft\nsummary: Add check_sensitive_data(id) function to tm_helper with regex for AWS keys, API keys, passwords, bearer tokens; return structured dict with warnings\nspec_ref: spec-9\n---\n\n# Implementation\n\nAdd `check_sensitive_data(id_: str, root: Path | None = None)` function to `tools/planning/tm_helper.py`:\n\n## Regex Patterns\n```python\nPATTERNS = {\n    'aws_key': r'AKIA[0-9A-Z]{16}',\n    'api_key': r'(?:api[_-]?key|apikey)[\\s]*[=:]\\s*[\"\\']?[a-zA-Z0-9]{20,}[\"\\']?',\n    'password': r'(?:password|passwd|pwd)[\\s]*[=:]\\s*[\"\\']?[^\"\\'\\s]+[\"\\']?',\n    'bearer_token': r'Bearer\\s+[a-zA-Z0-9\\-._~+/]+=*',\n}\n```\n\n## Function Signature\n```python\ndef check_sensitive_data(\n    id_: str, \n    root: Path | None = None\n) -> dict[str, Any]:\n    \"\"\"Check planning item for sensitive data patterns.\n    \n    Args:\n        id_: Planning item ID\n        root: Optional project root\n        \n    Returns:\n        {\n            \"id\": \"task-0112\",\n            \"has_sensitive_data\": bool,\n            \"warnings\": list[str],\n            \"patterns_checked\": list[str]\n        }\n    \"\"\"\n```\n\n## Return Shape\n- `id`: The item being checked\n- `has_sensitive_data`: True if any patterns matched\n- `warnings`: List of detected pattern types\n- `patterns_checked`: List of pattern names checked\n\n## Notes\n- Body-only scanning (not frontmatter, attachments)\n- Returns structured dict for easy MCP serialization\n- Simple, no dependencies beyond re module\n\n# Description\n\nImplement the core detection function for sensitive data patterns. Add regex patterns for AWS keys, API keys, passwords, and bearer tokens. Function scans markdown body only and returns a structured dict indicating what was found.\n"
 }

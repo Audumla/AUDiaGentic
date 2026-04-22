@@ -1,10 +1,10 @@
 {
   "item": {
     "id": "task-217",
-    "label": "Update config.py to load guidance levels",
+    "label": "Add --guidance CLI parameter to tm.py",
     "state": "done",
-    "summary": "Add guidance_levels accessor to Config class, update profile_for() to merge work-type profile with guidance level",
-    "spec_ref": "spec-10",
+    "summary": "Add --guidance argument to tm request command, validate against available guidance levels, pass to new_request()",
+    "spec_ref": "spec-13",
     "request_refs": [
       "request-11"
     ],
@@ -13,7 +13,7 @@
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-217-update-config-py-to-load-guidance-levels.md",
+    "path": "docs/planning/tasks/core/task-217-add-guidance-cli-parameter-to-tm-py.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -25,5 +25,5 @@
     "standard-6",
     "standard-9"
   ],
-  "body": "\n\n\n\n\n\n\n# Description\n\nAdd guidance_levels accessor to Config class and update profile_for() to merge work-type profile with guidance level. The Config class should load guidance_levels from profiles.yaml and provide methods to retrieve guidance configuration.\n\n# Acceptance Criteria\n\n- [ ] Config class loads guidance_levels from profiles.yaml\n- [ ] Config class loads default_guidance from planning.yaml\n- [ ] guidance_levels() method returns all guidance levels\n- [ ] guidance_for() method returns specific guidance level config\n- [ ] profile_for() merges work-type profile with guidance level\n- [ ] Default guidance used when not specified\n- [ ] Tests for Config class methods\n- [ ] Backward compatible (no guidance = standard)\n\n# Notes\n\nThis task ensures the Config class can access guidance configuration and merge it with work-type profiles for complete profile context.\n\n# State\n\ndone\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\nAdd --guidance argument to tm.py request command. Validate against available guidance levels from config and pass to new_request() function.\n\n# Acceptance Criteria\n\n- [ ] --guidance argument added to argparse\n- [ ] Choices: [light, standard, deep]\n- [ ] Help text explains guidance levels\n- [ ] Validation against config guidance_levels\n- [ ] Error message for invalid value\n- [ ] Passed to new_request() as guidance parameter\n- [ ] CLI tested with all three values\n- [ ] CLI tested with invalid value\n- [ ] Backward compatible (no --guidance = standard)\n\n# Notes\n\nThis task exposes guidance levels to users via the CLI.\n\n# State\n\ndone\n"
 }

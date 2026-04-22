@@ -9,7 +9,6 @@ snapshots_dir: snapshots
 event_state_file: event-state.yml
 event_journal_file: event-journal.ndjson
 llm_job_state_file: llm-jobs.yml
-hook_config_file: .audiagentic/knowledge/config/sync/hooks.yml
 import_manifest_dir: data/import/manifests
 importer_registry_file: .audiagentic/knowledge/config/registries/importers.yml
 action_registry_file: .audiagentic/knowledge/config/registries/actions.yml
@@ -70,11 +69,6 @@ sync:
   - missing
   - untracked
   - manual_stale
-  auto_hook_allowed_states:
-  - implemented
-  - verified
-  - active
-  - current
   diff_context_lines: 2
   diff_max_lines: 80
   diff_excerpt_lines: 12
@@ -126,7 +120,6 @@ runtime_contract:
   - knowledge vault pages
   - sidecar metadata and state
   - manifests
-  - hooks
   - event adapters
   - execution overrides
   - proposals

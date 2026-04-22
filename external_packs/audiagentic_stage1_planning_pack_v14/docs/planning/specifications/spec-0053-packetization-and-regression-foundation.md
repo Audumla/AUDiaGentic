@@ -6,14 +6,25 @@ summary: Define modular work-package outputs, implementation packet boundaries, 
 request_refs:
 - request-0032
 standard_refs:
-- standard-0004
-- standard-0005
-- standard-0006
+- standard-04
+- standard-05
+- standard-06
 ---
 
 # Purpose
 
 Make the planning slice importable and implementation-ready without one oversized work package.
+
+# Scope
+
+This spec defines modular work-package outputs, implementation packet boundaries, fixture coverage, and regression expectations for the stage-one installer platform. It covers packetization seams, minimum fixture set, verification tiers, and likely implementation surfaces.
+
+# Constraints
+
+- Must not create one giant implementation packet that mixes architecture, CLI, target modeling, and full regression at once.
+- Must not require live network services for default regression acceptance.
+- Must not let fixtures depend on current product-only names when a generic example can express the same rule.
+- Packetization must follow execution seams, not just document boundaries.
 
 # Requirements
 
