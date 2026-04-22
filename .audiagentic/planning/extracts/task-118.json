@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-118",
-    "label": "[PKT-PRV-040](task-0118): Provider Authentication",
+    "label": "[PKT-PRV-043](task-0121): Provider Compliance Checks",
     "state": "draft",
-    "summary": "Implement provider authentication",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider compliance checks",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-118-pkt-prv-040-task-0118-provider-authentication.md",
+    "path": "docs/planning/tasks/providers/task-118-pkt-prv-043-task-0121-provider-compliance-checks.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-040](task-0107): Provider Authentication\n\n## Purpose\n\nImplement provider authentication.\n\n## Scope\n\n- Auth methods\n- Token handling\n- Session management\n\n## Implementation\n\n1. Define methods\n2. Handle tokens\n3. Manage sessions\n\n## Acceptance Criteria\n\n1. Methods defined\n2. Tokens handled\n3. Sessions managed\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-043](task-0110): Provider Compliance Checks\n\n## Purpose\n\nImplement provider compliance checks.\n\n## Scope\n\n- Compliance rules\n- Validation\n- Reporting\n\n## Implementation\n\n1. Define rules\n2. Implement validation\n3. Add reporting\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Validation works\n3. Reports generated\n"
 }

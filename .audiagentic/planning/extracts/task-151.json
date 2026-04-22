@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-151",
-    "label": "[PKT-PRV-073](task-0151): Provider Data Quality Monitoring",
+    "label": "[PKT-PRV-076](task-0154): Provider Data Catalog Monitoring",
     "state": "draft",
-    "summary": "Implement provider data quality monitoring",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data catalog monitoring",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-151-pkt-prv-073-task-0151-provider-data-quality-monitoring.md",
+    "path": "docs/planning/tasks/providers/task-151-pkt-prv-076-task-0154-provider-data-catalog-monitoring.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-073](task-0140): Provider Data Quality Monitoring\n\n## Purpose\n\nImplement provider data quality monitoring.\n\n## Scope\n\n- Monitoring logic\n- Metrics\n- Alerts\n\n## Implementation\n\n1. Implement monitoring\n2. Add metrics\n3. Add alerts\n\n## Acceptance Criteria\n\n1. Monitoring works\n2. Metrics collected\n3. Alerts sent\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-076](task-0143): Provider Data Catalog Monitoring\n\n## Purpose\n\nImplement provider data catalog monitoring.\n\n## Scope\n\n- Monitoring logic\n- Indexing checks\n- Alerts\n\n## Implementation\n\n1. Implement monitoring\n2. Add indexing checks\n3. Add alerts\n\n## Acceptance Criteria\n\n1. Monitoring works\n2. Indexing checked\n3. Alerts sent\n"
 }

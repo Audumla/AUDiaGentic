@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-124",
-    "label": "[PKT-PRV-046](task-0124): Provider Data Masking",
-    "state": "cancelled",
-    "summary": "Implement provider data masking",
-    "spec_ref": "spec-12",
+    "label": "[PKT-PRV-049](task-0127): Provider Data Import",
+    "state": "draft",
+    "summary": "Implement provider data import",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-124-pkt-prv-046-task-0124-provider-data-masking.md",
+    "path": "docs/planning/tasks/providers/task-124-pkt-prv-049-task-0127-provider-data-import.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The local-openai availability/bootstrap line was superseded and archived.\n\n\n# [PKT-PRV-046](task-0113): Provider Data Masking\n\n## Purpose\n\nImplement provider data masking.\n\n## Scope\n\n- Masking rules\n- Application\n- Unmasking\n\n## Implementation\n\n1. Define rules\n2. Apply masking\n3. Handle unmasking\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Masking applied\n3. Unmasking works\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-049](task-0116): Provider Data Import\n\n## Purpose\n\nImplement provider data import.\n\n## Scope\n\n- Import format\n- Import logic\n- Validation\n\n## Implementation\n\n1. Define format\n2. Implement import\n3. Add validation\n\n## Acceptance Criteria\n\n1. Format defined\n2. Import works\n3. Validated\n"
 }

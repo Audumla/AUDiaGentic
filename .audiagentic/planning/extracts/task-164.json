@@ -1,21 +1,18 @@
 {
   "item": {
     "id": "task-164",
-    "label": "[PKT-MIG-003](task-0164): Cutover Runbooks",
+    "label": "[PKT-NOD-003](task-0167): Node Runtime Module Skeleton",
     "state": "draft",
-    "summary": "Create cutover runbooks",
-    "spec_ref": "spec-14",
+    "summary": "Create node runtime module skeleton",
+    "spec_ref": "spec-19",
     "kind": "task",
-    "path": "docs/planning/tasks/migration/task-164-pkt-mig-003-task-0164-cutover-runbooks.md",
+    "path": "docs/planning/tasks/node-execution/task-164-pkt-nod-003-task-0167-node-runtime-module-skeleton.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
-    "standard-6",
-    "standard-5"
-  ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-MIG-003](task-0153): Cutover Runbooks\n\n## Purpose\n\nCreate cutover runbooks.\n\n## Scope\n\n- Runbook format\n- Steps\n- Validation\n\n## Implementation\n\n1. Define format\n2. Document steps\n3. Add validation\n\n## Acceptance Criteria\n\n1. Format defined\n2. Steps documented\n3. Validated\n"
+  "effective_standard_refs": [],
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-NOD-003](task-0156): Node Runtime Module Skeleton\n\n## Purpose\n\nCreate node runtime module skeleton.\n\n## Scope\n\n- Module structure\n- Interface definition\n- Implementation hooks\n\n## Implementation\n\n1. Define structure\n2. Define interface\n3. Add hooks\n\n## Acceptance Criteria\n\n1. Structure defined\n2. Interface defined\n3. Hooks added\n"
 }

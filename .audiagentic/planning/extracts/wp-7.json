@@ -1,50 +1,42 @@
 {
   "item": {
     "id": "wp-7",
-    "label": "Fix PlanningAPI and MCP gaps",
-    "state": "in_progress",
-    "summary": "Implement 9 fixes: section-mode regex, wp move, claims TTL, hook payloads, batch meta, status shape, empty-list serialization, and root isolation",
-    "plan_ref": "plan-11",
+    "label": "Critical fixes: schema, delete, traceability, and hardening",
+    "state": "done",
+    "summary": "Verify relation-schema assumptions, implement soft delete and hard-delete counter safety, add bidirectional request traceability, prevent duplicates, improve validation feedback, and add integration coverage",
+    "plan_ref": "plan-14",
     "task_refs": [
       {
-        "ref": "task-202",
+        "ref": "task-192",
         "seq": 1000
       },
       {
-        "ref": "task-203",
-        "seq": 2000
+        "ref": "task-193",
+        "seq": 1001
       },
       {
-        "ref": "task-204",
-        "seq": 3000
+        "ref": "task-194",
+        "seq": 1002
       },
       {
-        "ref": "task-205",
-        "seq": 4000
+        "ref": "task-195",
+        "seq": 1003
       },
       {
-        "ref": "task-206",
-        "seq": 5000
+        "ref": "task-196",
+        "seq": 1004
       },
       {
-        "ref": "task-207",
-        "seq": 6000
+        "ref": "task-197",
+        "seq": 1005
       },
       {
-        "ref": "task-208",
-        "seq": 7000
-      },
-      {
-        "ref": "task-209",
-        "seq": 8000
-      },
-      {
-        "ref": "task-210",
-        "seq": 9000
+        "ref": "task-198",
+        "seq": 1006
       }
     ],
     "kind": "wp",
-    "path": "docs/planning/work-packages/core/wp-7-fix-planningapi-and-mcp-gaps.md",
+    "path": "docs/planning/work-packages/core/wp-7-critical-fixes-schema-delete-traceability-and-hardening.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -53,8 +45,7 @@
   },
   "effective_standard_refs": [
     "standard-6",
-    "standard-5",
-    "standard-9"
+    "standard-5"
   ],
-  "body": "\n\n\n# Objective\n\nBring the planning hardening work tracked under `spec-003` into a consistent state by recording completed fixes and isolating the remaining MCP root-selection gap.\n\n# Scope of This Package\n\n- Mark completed API/MCP fixes as done where code and tests prove delivery\n- Leave root-isolation work active until isolated MCP mutation tests are no longer xfailed\n- Update task notes so future implementers can see why a task is done or still open\n\n# Inputs\n\n- `request-7`\n- `spec-003`\n- `tests/integration/planning/test_planning_api_coverage.py`\n- `tests/integration/planning/test_mcp_tool_calls.py`\n- current planning code in `src/audiagentic/planning/` and `tools/mcp/audiagentic-planning/`\n\n# Instructions\n\n- Use passing tests as the standard for completed tasks.\n- Do not mark the root-isolation tasks done until the xfailed isolation class is genuinely implemented.\n- Keep the documentation trail concise but specific enough to explain the state decisions.\n\n# Required Outputs\n\n- Updated task states for the implemented fixes\n- Request/spec/plan/wp states that no longer imply either \u201cnothing started\u201d or \u201ceverything finished\u201d\n- Notes tying the remaining open work to MCP isolation\n\n# Acceptance Checks\n\n- Completed fixes are marked `done` only where current code and tests support that claim\n- Remaining MCP isolation work is still visible in active tasks\n- Planning validation passes after the documentation updates\n\n# Non-Goals\n\n- Implementing the remaining root-isolation feature in this documentation pass\n- Reworking unrelated planning requests/specifications\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n# Objective\n\nDeliver the focused planning-core hardening slice defined by `request-6` and `spec-002`: relation-schema verification, delete safety, correct counter behavior, traceability, duplicate prevention, clearer validation feedback, and integration coverage.\n\n# Scope of This Package\n\n- task-183: Verify real relation schema contract and remove stale meta.task_refs assumption\n- task-184: Automatic counter sync after hard deletions\n- task-185: Soft delete functionality (tm_delete)\n- task-186: Auto-reference updates for plans and tasks\n- task-187: Duplicate detection for requests and specs\n- task-188: Improved schema validation error messages\n- task-189: Integration tests for all critical fixes\n\n# Inputs\n\n- spec-2 (implementation specification)\n- plan-5 (execution plan)\n- Existing codebase: `api.py`, `tm_helper.py`, `id_gen.py`, `val_mgr.py`\n\n# Instructions\n\n1. **task-0183**: Verify schema-compliant relation placement and remove stale planning assumptions\n2. **task-0185**: Implement tm_delete() with soft/hard modes\n3. **task-0184**: Integrate sync_counter() into hard delete operations\n4. **task-0186**: Extend auto-reference updates to plans/tasks\n5. **task-0187**: Add duplicate detection to prevent duplicate creation\n6. **task-0188**: Improve validation error messages for better UX\n7. **task-0189**: Add integration tests to verify all fixes work together\n\nExecute in order: 0195 \u2192 0197 \u2192 0196 \u2192 0198 \u2192 0199 \u2192 0200 \u2192 0201\n\n# Required Outputs\n- Verified schema-compliant relation handling\n- tm_delete() function with soft delete default\n- Automatic counter sync after hard deletions\n- Bidirectional traceability (request \u2194 spec/plan/task)\n- Cleaned planning guidance for relation placement\n- Duplicate detection for requests and specs\n- Clear validation error messages with examples\n- Integration test suite for all critical fixes\n- Updated validation that passes\n\nExecution result: the planning-core hardening slice has been implemented. The repo now supports soft delete and hard delete with safe counter behavior, plan/task request traceability, exact-label duplicate guards for requests/specs, clearer validation messages, and focused regression coverage. The stale `meta.task_refs` assumption was removed from this slice so the implementation matches the live schemas.\n# Acceptance Checks\n\n1. `tm_validate()` returns no errors\n2. Relation fields remain aligned with the live schemas\n3. `tm_delete(\"task-XXXX\")` soft deletes by default\n4. Counter syncs automatically after hard delete (not soft delete)\n5. Creating spec/plan/task with request_refs preserves reverse traceability through the planning graph/indexes\n6. No ID gaps are filled (auditability preserved)\n7. Duplicate detection prevents creating requests/specs with same label\n8. Validation errors include expected format examples\n9. Integration tests pass for all scenarios\n\n# Non-Goals\n\n- Duplicate detection caching beyond the first-pass duplicate guard\n- Undo/rollback\n- Audit trail\n- Performance optimizations\n- Bulk operations\n"
 }

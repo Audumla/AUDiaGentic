@@ -16,6 +16,12 @@ open_questions:
 
 
 
+
+
+
+
+
+
 # Understanding
 
 Initial intake captured; requirements are understood well enough to proceed.

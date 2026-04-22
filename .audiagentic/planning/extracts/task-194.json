@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-194",
-    "label": "Fix batch meta op",
+    "label": "Add AUDIAGENTIC_ROOT env var support",
     "state": "done",
-    "summary": "Fix _execute_batch_operations() to write frontmatter for meta operations instead of silently discarding",
-    "spec_ref": "spec-3",
+    "summary": "Add AUDIAGENTIC_ROOT env var support to MCP server _bootstrap_repo_root()",
+    "spec_ref": "spec-6",
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-194-fix-batch-meta-op.md",
+    "path": "docs/planning/tasks/core/task-194-add-audiagentic-root-env-var-support.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -14,5 +14,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n# Description\n\nPersist `meta` batch-update operations into frontmatter instead of silently discarding them during batch execution.\n\n# Acceptance Criteria\n\n1. Batch `meta` operations write the requested field/value\n2. Updated metadata survives a subsequent read/show operation\n3. Regression coverage proves the operation is not ignored\n\n# Notes\n\n- Verified by the passing planning coverage suite and current batch-update behavior\n- This closes the gap where metadata operations were accepted but not persisted\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n# Description\n\nAdd explicit `AUDIAGENTIC_ROOT` support to the planning MCP bootstrap path so isolated mutation tests can target a seeded temp project instead of the real repository.\n\n# Acceptance Criteria\n\n1. MCP bootstrap honors `AUDIAGENTIC_ROOT` when present\n2. Isolated MCP mutation tests can run against a temp project root\n3. Normal repo auto-detection still works when the env var is absent\n\n# Notes\n\n- Still open: the xfailed isolation class in `tests/integration/planning/test_mcp_tool_calls.py` documents this gap directly\n\n# State\n\ndone\n"
 }

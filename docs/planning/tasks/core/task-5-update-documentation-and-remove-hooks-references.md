@@ -12,6 +12,12 @@ standard_refs:
 
 
 
+
+
+
+
+
+
 Remove all documentation references to the hooks system from: README.md, comment strings, and any other documentation. Update any examples or guides that mention hooks to reflect the new event-driven architecture.
 
 # Notes

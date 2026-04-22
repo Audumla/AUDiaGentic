@@ -1,0 +1,57 @@
+---
+id: task-253
+label: Add integration tests for event layer and state propagation
+state: done
+summary: Create comprehensive tests for EventBus, FileEventStore, replay, and state
+  propagation — complete
+spec_ref: spec-23
+request_refs:
+- request-17
+- request-18
+standard_refs:
+- standard-5
+- standard-6
+---
+
+
+
+
+
+
+
+
+
+# Description
+
+Add end-to-end integration tests for event layer and state propagation. This task owns cross-cutting tests that prove the bus, persistence, replay, planning emission, and propagation work together.
+
+**Test scenarios:**
+1. Full propagation chain: task done → wp done → plan done → spec done
+2. Rollback: task done→ready → wp done→in_progress
+3. Conflict: task1 blocked, task2 done → wp blocked (not done)
+4. Replay safety: persist events, replay, verify no duplicate state changes
+5. Cross-component: planning task done → knowledge page marked stale
+
+# Acceptance Criteria
+
+- Integration test: full propagation chain (task→wp→plan→spec) ✅
+- Integration test: rollback propagation ✅
+- Integration test: conflict resolution (blocked priority) ✅
+- Integration test: replay doesn't cause duplicate state changes ✅
+- Integration test: planning→knowledge cross-component trigger ✅
+- Tests use realistic planning/knowledge fixtures ✅
+- Test results clearly distinguish automated vs smoke-tested ✅
+- Smoke test proves integration suites execute without breaking test structure ✅
+
+# Notes
+
+Unit tests are with each implementation task. This task is end-to-end integration only.
+
+# Implementation
+
+Created `tests/integration/test_event_layer.py` with:
+- `TestFullPropagationChain` - task→wp→plan→spec propagation
+- `TestRollbackPropagation` - rollback propagation
+- `TestConflictResolution` - blocked priority over done
+- `TestReplaySafety` - replay without duplicate changes
+- `TestCrossComponentTrigger` - planning→knowledge trigger

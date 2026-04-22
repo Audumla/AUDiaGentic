@@ -6,6 +6,12 @@ summary: Default standard for documenting migrations, cutovers, compatibility im
   and controlled change rollout.
 ---
 
+
+
+
+
+
+
 # Standard
 
 Default standard for documenting migrations, compatibility-sensitive changes, cutovers, and controlled rollout in AUDiaGentic-based projects.

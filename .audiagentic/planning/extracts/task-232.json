@@ -1,17 +1,17 @@
 {
   "item": {
     "id": "task-232",
-    "label": "Bootstrap knowledge component configuration",
-    "state": "done",
-    "summary": "Bootstrap the knowledge component configuration files and registries using the bootstrap module.",
-    "spec_ref": "spec-14",
+    "label": "Validate documentation",
+    "state": "cancelled",
+    "summary": "Review and validate that the knowledge component documentation is well-written and accurate.",
+    "spec_ref": "spec-18",
     "request_refs": [],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-232-bootstrap-knowledge-component-configuration.md",
+    "path": "docs/planning/tasks/core/task-232-validate-documentation.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,5 +22,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n\n### Critical Review Findings (2026-04-14)\n\n**Issues Found and Fixed:**\n\n1. **Event adapter configuration was incorrect**:\n   - Used `source_kind: file_change` instead of `source_kind: event_stream`\n   - Used wrong field names (`watch_paths` instead of `path_globs`)\n   - Had non-existent `transform` section\n   - Fixed to match the expected schema from sample_vault\n\n2. **Actions registry had wrong module names**:\n   - Referenced `audiagentic_knowledge.events` instead of `audiagentic.knowledge.events`\n   - Referenced `audiagentic_knowledge.actions` instead of `audiagentic.knowledge.actions`\n   - Fixed all handler references in `knowledge/registries/actions.yml`\n\n3. **No knowledge pages exist**:\n   - `affects_pages` field is empty (correctly set to `[]`)\n   - Action set to `ignore` until current-state pages are created\n   - This is expected - knowledge vault is newly bootstrapped\n\n4. **Event format mapping**:\n   - Planning events use: `{\"ts\": \"...\", \"event\": \"task.after_state_change\", \"id\": \"...\", \"new_state\": \"done\"}`\n   - Knowledge adapter expects: `event_name` or `type` field, but planning uses `event` field\n   - Adapter handles this via fallback: `event_name: planning.task.completed` in config\n   - Event filtering works correctly: 2132 events processed from events.jsonl\n\n**Verification:**\n- `record-event-baseline`: Successfully recorded 2132 events from planning events file\n- `scan-events`: Working correctly\n- `process-events`: Working correctly (action set to `ignore` until pages exist)\n- `doctor`: No issues found\n\n**Files Modified:**\n- `knowledge/registries/actions.yml`: Fixed module names from `audiagentic_knowledge.*` to `audiagentic.knowledge.*`\n- `knowledge/events/adapters.yml`: Corrected adapter schema to use `source_kind: event_stream` with proper fields\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\nCancelled on 2026-04-17 as a stale empty placeholder. The task contained no actionable acceptance criteria, and request closure was based on the implemented integration work rather than this shell record.\n"
 }

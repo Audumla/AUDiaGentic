@@ -6,6 +6,12 @@ summary: Default standard for how implementation and planning work should record
   scope, evidence, and gaps.
 ---
 
+
+
+
+
+
+
 # Standard
 
 Default standard for how implementation and planning work should record verification scope, evidence, and known gaps.

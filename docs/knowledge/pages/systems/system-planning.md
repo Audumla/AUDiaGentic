@@ -24,6 +24,7 @@ The planning system consists of:
 - Standards (`src/audiagentic/planning/app/standards.py`): Standards management
 - Filesystem (`src/audiagentic/planning/fs/`): Read/write/scan operations
 - Domain (`src/audiagentic/planning/domain/`): Models and states
+- Planning MCP (`tools/mcp/audiagentic-planning/audiagentic-planning_mcp.py`): Agent-facing mutation/query surface
 
 **Integration Points:**
 - Knowledge component syncs from planning events
@@ -33,30 +34,35 @@ The planning system consists of:
 
 ## How to use
 **Create artifacts:**
-```bash
-
+```python
 ## Create a new request
-audiagentic planning new-request --label "My Request" --summary "Brief description"
+tm_create(kind="request", label="My Request", summary="Brief description")
 
 ## Create a specification
-audiagentic planning new-spec --label "My Spec" --summary "What this specifies"
+tm_create(kind="spec", label="My Spec", summary="What this specifies", request_refs=["request-XXXX"])
 
 ## Create a plan
-audiagentic planning new-plan --label "My Plan" --spec spec-XXXX
+tm_create(kind="plan", label="My Plan", summary="Implementation plan", spec="spec-XXXX")
 ```
 
 **Manage tasks:**
-```bash
-
+```python
 ## List ready tasks
-audiagentic planning next-tasks --state ready
+tm_list(kind="task", state="ready")
 
 ## Change task state
-audiagentic planning state --id task-XXXX --new-state in_progress
+tm_edit(id="task-XXXX", operations=[{"op": "state", "value": "in_progress"}])
 
 ## View task status
-audiagentic planning show --id task-XXXX
+tm_get(id="task-XXXX")
 ```
+
+**Agent mutation guidance:**
+- Prefer `tm_edit` for single-item mutations
+- Use `field` operations in `tm_edit` for top-level frontmatter refs/lists such as `spec_refs`, `request_refs`, `task_refs`, `work_package_refs`, and scalar refs like `spec_ref`
+- Use `meta` operations only for nested `meta.*` values
+- Use `tm_docs op=config` before `tm_create` so agents learn the live create contract without trial and error
+- State-based section requirements are config-owned. Validator reads `profiles.yaml` `state_section_requirements`; do not hardcode section names or workflow-specific doc rules into agent logic
 
 **Workflow:**
 1. Capture work as a request

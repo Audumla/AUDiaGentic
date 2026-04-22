@@ -5,22 +5,23 @@ Tests the full propagation chain from task to spec through events.
 
 from __future__ import annotations
 
-import shutil
+import sys
 import tempfile
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-PLANNING_CONFIG_SRC = ROOT / ".audiagentic" / "planning" / "config"
+for _p in (str(ROOT), str(ROOT / "src")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+from tests.planning_testkit import seed_planning_config
 
 
 def _seed_planning_project(root: Path) -> None:
     """Seed the minimum planning config needed for PlanningAPI."""
-    config_dir = root / ".audiagentic" / "planning" / "config"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    for f in PLANNING_CONFIG_SRC.glob("*.yaml"):
-        shutil.copy(f, config_dir / f.name)
+    seed_planning_config(root)
     for d in (
         "requests",
         "specifications",
@@ -79,8 +80,8 @@ class TestReplaySafety:
         spec = planning_api.new(
             "spec", "Test Spec", "Test specification", request_refs=[request.data["id"]]
         )
-        plan = planning_api.new("plan", "Test Plan", "Test plan", spec=spec.data["id"])
-        task = planning_api.new("task", "Test Task", "Test task", plan=plan.data["id"])
+        planning_api.new("plan", "Test Plan", "Test plan", spec=spec.data["id"])
+        task = planning_api.new("task", "Test Task", "Test task", spec=spec.data["id"])
 
         # Set task to ready, in_progress, then done
         planning_api.state(task.data["id"], "ready")

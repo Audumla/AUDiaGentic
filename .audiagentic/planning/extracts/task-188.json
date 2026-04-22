@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-188",
-    "label": "Improve schema validation error messages",
+    "label": "Fix move() for work-packages",
     "state": "done",
-    "summary": "Provide clear error messages indicating expected field formats (e.g., work_package_refs requires objects with ref/seq)",
-    "spec_ref": "spec-2",
+    "summary": "Fix path resolution inconsistency for wp domain in move() operation",
+    "spec_ref": "spec-6",
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-188-improve-schema-validation-error-messages.md",
+    "path": "docs/planning/tasks/core/task-188-fix-move-for-work-packages.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -14,5 +14,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n\n# Description\n\nImprove schema validation error messages to be actionable and clear. Current errors like `'wp-006' is not of type 'object'` don't indicate what format is expected.\n\n**Current behavior:**\n```\n'wp-006' is not of type 'object'\n```\n\n**Required behavior:**\n```\nwork_package_refs must be a list of objects with 'ref' (string) and 'seq' (integer) fields.\nExpected: - ref: wp-6\\n  seq: 1000\nGot: wp-6\n```\n\n# Acceptance Criteria\n\n1. Validation errors include expected format examples\n2. Validation errors indicate which field has the issue\n3. Validation errors suggest correct format for reference fields (ref/seq objects)\n4. Common high-friction mistakes get clearer messages without replacing the whole validator\n5. `tm_validate()` output is human-readable and actionable\n\n# Notes\n\n- Update JSON schema files in `src/audiagentic/contracts/schemas/planning/`\n- Improve formatting in `src/audiagentic/planning/app/val_mgr.py`\n- Use `jsonschema` with custom error formatting\n- Focus on the common relation-shape errors first instead of trying to prettify every schema error\n- Implementation result: improved planning validation output so common relation-shape mistakes now explain the expected `{ref, seq}` object form instead of only surfacing raw jsonschema type errors.\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nFix work-package moves so they resolve the correct domain path and behave the same way as task moves.\n\n# Acceptance Criteria\n\n1. Work-packages can move to `contrib`\n2. The returned path points at the moved work-package\n3. Regression coverage proves wp moves no longer fail\n\n# Notes\n\n- Verified by the passing `move()` coverage tests for work-packages\n- Current implementation uses `Paths.kind_dir()` in `PlanningAPI.move()`\n"
 }

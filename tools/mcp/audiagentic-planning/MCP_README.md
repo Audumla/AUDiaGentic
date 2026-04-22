@@ -51,7 +51,7 @@ With explicit root:
 
 ### Edit first
 
-**Use `tm_edit` for all mutations.** It accepts a list of operations executed atomically — state, label, summary, section writes, content, and metadata in one call. Prefer one `tm_edit` over multiple separate calls.
+**Use `tm_edit` for all mutations.** It accepts a list of operations executed atomically — state, label, summary, section writes, content, nested `meta.*`, and top-level frontmatter field updates in one call. Prefer one `tm_edit` over multiple separate calls.
 
 ```json
 {
@@ -70,6 +70,16 @@ With explicit root:
 - `section`: `{"op": "section", "name": "Notes", "content": "...", "mode": "set"|"append"}`
 - `content`: `{"op": "content", "value": "...", "mode": "replace"|"append"}`
 - `meta`: `{"op": "meta", "field": "tags", "value": "..."}`
+- `field`: `{"op": "field", "field": "spec_refs", "mode": "add"|"remove"|"replace"|"set", "value": "spec-123"}`
+
+**When to use which:**
+- Use `field` for top-level frontmatter like `spec_ref`, `spec_refs`, `request_refs`, `task_refs`, `work_package_refs`, `standard_refs`, `plan_ref`
+- Use `meta` only for nested `meta.*` values
+
+Examples:
+- Remove stale ref: `{"op": "field", "field": "spec_refs", "mode": "remove", "value": "spec-12"}`
+- Add plan WP link: `{"op": "field", "field": "work_package_refs", "mode": "add", "value": {"ref": "wp-15", "seq": 1000}}`
+- Replace list fully: `{"op": "field", "field": "task_refs", "mode": "replace", "value": [{"ref": "task-251"}]}`
 
 Operations are validated by Pydantic schema — invalid operations return structured errors with suggestions.
 
@@ -125,7 +135,7 @@ All errors include a `suggestion` field to help agents recover:
 {
   "error": {
     "message": "Invalid operation 'update_state'",
-    "suggestion": "Supported operations: state, label, summary, section, content, meta"
+    "suggestion": "Supported operations: state, label, summary, section, content, meta, field"
   }
 }
 ```
@@ -139,7 +149,7 @@ Common error patterns:
 
 ### `tm_edit(id, operations)` — mutate
 
-Execute one or more operations on a planning item atomically. Operations validated by Pydantic schema.
+Execute one or more operations on a planning item atomically. Use `field` ops for top-level frontmatter add/remove/replace/set and `meta` ops for nested `meta.*`.
 
 **Returns:** `{"id": "...", "operations_executed": N, "result": {...}}`
 
@@ -172,9 +182,9 @@ Move a task or wp to a different domain (e.g. `core → provider`).
 
 Delete an item. `hard=False` (default) soft-deletes; `hard=True` removes the file.
 
-### `tm_relink(src, field, dst, seq, display)` — update references
+### `tm_relink(src, field, dst, seq, display)` — add or set references
 
-Update a reference/link field (e.g. `spec`, `parent`, `request_refs`).
+Convenience helper for adding or setting references. Prefer `tm_edit` with `field` ops when you need to remove stale refs, replace a whole ref list, or batch reference surgery with other mutations.
 
 ### `tm_package(plan, tasks, label, summary, domain)` — group tasks
 

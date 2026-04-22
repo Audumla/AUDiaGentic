@@ -6,6 +6,12 @@ summary: Default standard for maintaining planning records and adjacent document
   as first-class, reviewable project assets.
 ---
 
+
+
+
+
+
+
 # Standard
 
 Default standard for how planning records and adjacent documentation should be written, maintained, and kept current in AUDiaGentic-based projects.

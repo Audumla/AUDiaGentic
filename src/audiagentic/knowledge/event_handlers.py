@@ -24,7 +24,6 @@ from .event_state import (
     load_event_state,
     save_event_state,
 )
-from .hooks import evaluate_source
 from .models import EventRecord
 from .registry import load_event_action_registry, resolve_registry_handler
 from .sync import mark_pages_stale
@@ -76,24 +75,15 @@ def process_events(
         adapter = _adapter_by_id(config, event.adapter_id)
         if not adapter:
             continue
-        path_evals = evaluate_source(config, event.source_path)
-        if path_evals and not any(item.get("eligible") for item in path_evals):
-            continue
         handler_config = _match_event_handler(event, handlers_config)
         action_name = str(
             handler_config.get("action", adapter.get("action", "generate_sync_proposal"))
         )
         handler, defaults = resolve_registry_handler(action_registry, action_name)
-        hook_action_args = {}
-        if path_evals:
-            for eval_result in path_evals:
-                if eval_result.get("eligible") and eval_result.get("action_args"):
-                    hook_action_args = {**hook_action_args, **eval_result.get("action_args", {})}
         runtime_action = {
             **defaults,
             **handler_config.get("action_args", {}),
             **adapter.get("action_args", {}),
-            **hook_action_args,
         }
         handler(
             config=config,
@@ -239,7 +229,12 @@ def on_planning_state_change(
         payload: Event payload with old_state, new_state, subject
         metadata: Event metadata with is_replay flag
     """
-    root = Path.cwd()
+    # Use project_root from metadata when available (set by PlanningAPI.state()).
+    # Falls back to cwd() only for events from older callers that don't set it.
+    # This ensures the handler writes to the correct project even in multi-project
+    # or template-install scenarios where cwd may not be the planning project root.
+    root_str = metadata.get("project_root")
+    root = Path(root_str) if root_str else Path.cwd()
     from .config import load_config
 
     config = load_config(root)

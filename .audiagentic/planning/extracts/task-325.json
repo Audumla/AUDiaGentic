@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-325",
-    "label": "Refactor Docs",
+    "label": "Final Validation and Cleanup",
     "state": "draft",
-    "summary": "Migrate all refactor documentation",
-    "spec_ref": "spec-20",
+    "summary": "Validate migration and clean up old files",
+    "spec_ref": "spec-3",
     "kind": "task",
-    "path": "docs/planning/tasks/implementation-docs/task-325-refactor-docs.md",
+    "path": "docs/planning/tasks/implementation-docs/task-325-final-validation-and-cleanup.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -14,8 +14,8 @@
     "restored_by": null
   },
   "effective_standard_refs": [
-    "standard-5",
-    "standard-6"
+    "standard-0006",
+    "standard-0005"
   ],
-  "body": "\n# Description\n\nImplement this task.\n\n\n# Refactor Docs\n\n## Purpose\n\nMigrate all refactor documentation.\n\n## Scope\n\n- Phase 0.3 refactor docs\n- Migration maps\n- Repository inventory\n\n## Implementation\n\n1. Migrate refactor docs\n2. Resolve references\n3. Link objects\n\n## Acceptance Criteria\n\n1. Refactor docs migrated\n2. References resolved\n3. Linked correctly\n"
+  "body": "\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# Final Validation and Cleanup\n\n## Purpose\n\nValidate migration and clean up old files.\n\n## Scope\n\n- Run validation\n- Verify references\n- Backup and remove old files\n\n## Implementation\n\n1. Run validation\n2. Verify references\n3. Backup and remove\n\n## Acceptance Criteria\n\n1. Validation passes\n2. References verified\n3. Old files removed\n"
 }

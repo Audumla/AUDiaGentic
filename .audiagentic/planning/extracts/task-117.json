@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-117",
-    "label": "[PKT-PRV-039](task-0117): Provider SSL/TLS Support",
+    "label": "[PKT-PRV-042](task-0120): Provider Audit Logging",
     "state": "draft",
-    "summary": "Implement provider SSL/TLS support",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider audit logging",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-117-pkt-prv-039-task-0117-provider-ssl-tls-support.md",
+    "path": "docs/planning/tasks/providers/task-117-pkt-prv-042-task-0120-provider-audit-logging.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-039](task-0106): Provider SSL/TLS Support\n\n## Purpose\n\nImplement provider SSL/TLS support.\n\n## Scope\n\n- SSL configuration\n- Certificate handling\n- Validation\n\n## Implementation\n\n1. Configure SSL\n2. Handle certs\n3. Add validation\n\n## Acceptance Criteria\n\n1. SSL configured\n2. Certs handled\n3. Validated\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-042](task-0109): Provider Audit Logging\n\n## Purpose\n\nImplement provider audit logging.\n\n## Scope\n\n- Audit format\n- Logging\n- Retention\n\n## Implementation\n\n1. Define format\n2. Implement logging\n3. Set retention\n\n## Acceptance Criteria\n\n1. Format defined\n2. Logging works\n3. Retention set\n"
 }

@@ -12,7 +12,6 @@ capability_contract:
     - knowledge vault pages
     - sidecar metadata and state
     - manifests
-    - hooks
     - event adapters
     - execution overrides
     - proposals

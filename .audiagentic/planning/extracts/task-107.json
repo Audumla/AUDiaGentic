@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-107",
-    "label": "[PKT-PRV-030](task-0107): Provider Stream Processing",
+    "label": "[PKT-PRV-032](task-0109): Provider Sync Support",
     "state": "draft",
-    "summary": "Implement provider stream processing",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider sync support",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-107-pkt-prv-030-task-0107-provider-stream-processing.md",
+    "path": "docs/planning/tasks/providers/task-107-pkt-prv-032-task-0109-provider-sync-support.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-030](task-0097): Provider Stream Processing\n\n## Purpose\n\nImplement provider stream processing.\n\n## Scope\n\n- Stream format\n- Processing logic\n- Backpressure\n\n## Implementation\n\n1. Define format\n2. Implement processing\n3. Add backpressure\n\n## Acceptance Criteria\n\n1. Format defined\n2. Processing works\n3. Backpressure works\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-032](task-0099): Provider Sync Support\n\n## Purpose\n\nImplement provider sync support.\n\n## Scope\n\n- Sync interface\n- Blocking\n- Completion\n\n## Implementation\n\n1. Define interface\n2. Implement blocking\n3. Add completion\n\n## Acceptance Criteria\n\n1. Interface defined\n2. Blocking works\n3. Completion works\n"
 }

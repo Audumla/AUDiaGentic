@@ -1,29 +1,25 @@
 {
   "item": {
     "id": "request-27",
-    "label": "Get Test Request",
-    "state": "superseded",
-    "summary": "Request for tm_get testing",
-    "source": "test",
+    "label": "Expose planning config for agents",
+    "state": "closed",
+    "summary": "Add read-only Planning API and MCP surface that exposes effective live creation/config requirements so agents know what kinds they can create and what each kind requires",
+    "source": "codex",
     "guidance": "standard",
-    "current_understanding": "Initial feature intake captured; the desired capability is understood well enough to refine directly into implementation work.",
+    "current_understanding": "Initial intake captured; requirements are understood well enough to proceed.",
     "open_questions": [
       "What exact outcome is required?",
       "What constraints or non-goals apply?",
       "How will success be verified?"
     ],
-    "meta": {
-      "request_type": "feature"
-    },
     "standard_refs": [
       "standard-1"
     ],
     "spec_refs": [
-      "spec-71",
-      "spec-72"
+      "spec-7"
     ],
     "kind": "request",
-    "path": "docs/planning/requests/request-27-get-test-request.md",
+    "path": "docs/planning/requests/request-27-expose-planning-config-for-agents.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -33,5 +29,5 @@
   "effective_standard_refs": [
     "standard-1"
   ],
-  "body": "\n\n\n\n\n# Understanding\n\nInitial feature intake captured; the desired capability is understood well enough to refine directly into implementation work.\n\n# Open Questions\n\n- What exact outcome is required?\n- What constraints or non-goals apply?\n- How will success be verified?\n\n# Problem\n\n\n\n# Desired Outcome\n\n\n\n# Constraints\n\n\n# Notes\nSuperseded on 2026-04-17 as a planning MCP test/get artifact rather than substantive project work.\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n# Understanding\n\nPlanning API and planning MCP already enforce creation rules from config, but agents do not have one cheap read path that explains current creation contract.\n\nToday an agent can discover some behavior indirectly from docs, schemas, or trial/error through `tm_create` validation. That is weak for autonomous use because agent needs to know, before creating or editing items:\n- what kinds exist\n- which kinds support domains\n- what refs are required per kind\n- what optional fields are allowed\n- what profiles and guidance levels exist\n- what document templates / required sections apply\n- what relationship rules and workflow defaults are active\n\n# Problem\n\nPlanning system lacks a dedicated read method that exposes effective live configuration in agent-friendly form.\n\nCurrent shortcomings:\n1. Agents must infer creation contract from multiple files or errors.\n2. `tm_create` validates inputs, but does not help enough before mutation.\n3. Config-driven planning is harder to use safely without a discovery endpoint.\n4. Different kinds have different required refs and workflow semantics, but there is no single read surface for that.\n5. This increases invalid create attempts and weakens agent autonomy.\n\n# Desired Outcome\n\nAdd a read-only Planning API / MCP method that exposes current effective configuration for agent consumption.\n\nObservable outcomes:\n1. Agent can query supported kinds and creation requirements before calling `tm_create`.\n2. Response includes per-kind fields such as dir, id prefix, domain support, required refs, optional fields, required sections, and relationship rules.\n3. Response includes available profiles, guidance levels, default profile, default guidance, and workflow names/defaults.\n4. Response is cheap, structured, and safe to call often.\n5. MCP guidance can point agents to this method before mutation, reducing trial-and-error.\n\n# Constraints\n\n- Read-only surface only.\n- Must reflect live config from project root, not hardcoded defaults.\n- Keep output compact enough for agent use.\n- Prefer one coherent API/MCP surface over forcing agents to read raw YAML files.\n- Stay aligned with existing config-driven planning design.\n\n# Verification Expectations\n\n1. Agent can query creation requirements for each planning kind without mutation.\n2. Output matches live project config.\n3. Output is structured enough to drive creation prompts/tooling.\n4. Docs/MCP guidance updated to reference new read method.\n5. Tests cover shape and correctness of returned config summary.\n\n# Notes\nCompletion update on 2026-04-19: compact/full config discovery is implemented and request is considered complete. Further optimization is only warranted if real agent usage shows confusion, invalid create attempts, or unnecessary token cost. Legacy duplicate `spec-4` bookkeeping remains an administrative cleanup item under request-31, not a blocker for considering this request done.\n# Open Questions\nNone. Required discovery surface is implemented through `tm_docs op=config`, backed by live planning config.\n"
 }

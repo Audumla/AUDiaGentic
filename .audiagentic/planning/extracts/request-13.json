@@ -16,12 +16,12 @@
       "standard-9"
     ],
     "spec_refs": [
-      "spec-12"
+      "spec-16"
     ],
     "meta": {
       "related_requests": [
         "request-0009",
-        "request-29"
+        "request-26"
       ]
     },
     "kind": "request",
@@ -36,5 +36,5 @@
     "standard-1",
     "standard-9"
   ],
-  "body": "\n\n\n\n\n\n# Understanding\n\nThe planning system needs more than the ability to store a guidance level. It also needs a canonical definition of what `light`, `standard`, and `deep` require. Those definitions should be normative so that requests, specs, tasks, validation rules, documentation guidance, and future automation all interpret the levels the same way.\n\nThe preferred output is a standard, not just a request-local note. A supporting or reference document may still be useful later for examples, but the primary source of truth should be a standard that defines the semantics clearly enough to govern implementation and review.\n\n# Open Questions\n\n- Which expectations should be mandatory at each guidance level versus merely suggested?\n- Should guidance semantics vary by planning item kind, or should the levels have one core meaning with kind-specific overlays?\n- Should examples and selection advice live in the same standard or in a separate supporting/reference document?\n\n# Notes\nThis request is intentionally separate from `request-11`. `request-11` is about introducing the guidance-level capability into the planning layer. This request is about defining the durable meaning of those levels so the feature has a canonical governance source.\n\nClosed on 2026-04-17 after assessment. Canonical guidance semantics were delivered through the guidance-level standard, config semantics, validation rules, and documentation. Remaining stale planning records were updated to match implemented reality.\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n# Understanding\n\nThe planning system needs more than the ability to store a guidance level. It also needs a canonical definition of what `light`, `standard`, and `deep` require. Those definitions should be normative so that requests, specs, tasks, validation rules, documentation guidance, and future automation all interpret the levels the same way.\n\nThe preferred output is a standard, not just a request-local note. A supporting or reference document may still be useful later for examples, but the primary source of truth should be a standard that defines the semantics clearly enough to govern implementation and review.\n\n# Open Questions\n\n- Which expectations should be mandatory at each guidance level versus merely suggested?\n- Should guidance semantics vary by planning item kind, or should the levels have one core meaning with kind-specific overlays?\n- Should examples and selection advice live in the same standard or in a separate supporting/reference document?\n\n# Notes\nThis request is intentionally separate from `request-11`. `request-11` is about introducing the guidance-level capability into the planning layer. This request is about defining the durable meaning of those levels so the feature has a canonical governance source.\n\nClosed on 2026-04-17 after assessment. Canonical guidance semantics were delivered through the guidance-level standard, config semantics, validation rules, and documentation. Remaining stale planning records were updated to match implemented reality.\n"
 }

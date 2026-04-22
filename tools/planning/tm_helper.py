@@ -736,6 +736,7 @@ def _execute_batch_operations(
     - section: {"op": "section", "name": "section_name", "content": "...", "mode": "set|append"}
     - content: {"op": "content", "value": "...", "mode": "replace|append"}
     - meta: {"op": "meta", "field": "key", "value": "val"}
+    - field: {"op": "field", "field": "spec_refs", "mode": "add|remove|replace|set", "value": "spec-123"}
     """
     _validate_id(id_)
     item = api._find(id_)
@@ -810,6 +811,25 @@ def _execute_batch_operations(
                         }
                     )
 
+                elif op_type == "field":
+                    field = op["field"]
+                    value = op.get("value")
+                    mode = op.get("mode", "set")
+                    item_curr = api._find(id_)
+                    data, body = parse_markdown(item_curr.path)
+                    _apply_frontmatter_field_op(data, field, mode, value)
+                    dump_markdown(item_curr.path, data, body)
+                    results.append(
+                        {
+                            "index": i,
+                            "op": "field",
+                            "field": field,
+                            "mode": mode,
+                            "success": True,
+                            "value": value,
+                        }
+                    )
+
                 else:
                     raise ValueError(f"Unknown operation type: {op_type}")
 
@@ -848,23 +868,104 @@ def _execute_batch_operations(
             "errors": errors,
         }
 
-        return {
-            "id": id_,
-            "batch": True,
-            "operations_executed": len(results),
-            "results": results,
-            "errors": [],
-        }
 
-    except Exception as e:
-        return {
-            "id": id_,
-            "batch": True,
-            "success": False,
-            "error": str(e),
-            "results": results,
-            "errors": errors,
-        }
+def _apply_frontmatter_field_op(
+    data: dict[str, Any],
+    field: str,
+    mode: str,
+    value: Any,
+) -> None:
+    """Apply add/remove/replace/set to a top-level frontmatter field.
+
+    Supported shapes:
+    - scalar fields (`spec_ref`, `plan_ref`, `parent_task_ref`, etc.)
+    - list[str] fields (`spec_refs`, `request_refs`, `standard_refs`)
+    - list[dict] relationship fields (`task_refs`, `work_package_refs`) where each entry
+      contains at minimum `ref`
+    """
+    relationship_list_fields = {"task_refs", "work_package_refs"}
+
+    if mode in {"set", "replace"}:
+        data[field] = value
+        return
+
+    current = data.get(field)
+
+    if current is None:
+        if mode == "add":
+            if field in relationship_list_fields:
+                current = []
+            else:
+                current = []
+            data[field] = current
+        elif mode == "remove":
+            return
+
+    if not isinstance(data.get(field), list):
+        raise ValueError(f"field '{field}' is not a list; use mode='set' for scalar fields")
+
+    if field in relationship_list_fields:
+        _apply_relationship_list_op(data, field, mode, value)
+    else:
+        _apply_scalar_list_op(data, field, mode, value)
+
+
+def _normalize_values(value: Any) -> list[Any]:
+    """Normalize operation value to list for add/remove on list-shaped fields."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def _apply_scalar_list_op(data: dict[str, Any], field: str, mode: str, value: Any) -> None:
+    """Apply add/remove to list[str] style frontmatter fields."""
+    vals = list(data.get(field, []) or [])
+    targets = _normalize_values(value)
+
+    if mode == "add":
+        for target in targets:
+            if target not in vals:
+                vals.append(target)
+    elif mode == "remove":
+        vals = [existing for existing in vals if existing not in targets]
+    else:
+        raise ValueError(f"unsupported mode '{mode}' for list field '{field}'")
+
+    data[field] = vals
+
+
+def _ref_key(value: Any) -> Any:
+    """Return comparable key for relationship entries."""
+    if isinstance(value, dict):
+        return value.get("ref")
+    return value
+
+
+def _apply_relationship_list_op(data: dict[str, Any], field: str, mode: str, value: Any) -> None:
+    """Apply add/remove to list[dict(ref=...)] relationship fields."""
+    vals = list(data.get(field, []) or [])
+    targets = _normalize_values(value)
+    target_keys = {_ref_key(target) for target in targets}
+
+    if mode == "add":
+        existing_keys = {_ref_key(existing) for existing in vals}
+        for target in targets:
+            key = _ref_key(target)
+            if key in existing_keys:
+                continue
+            if isinstance(target, dict):
+                vals.append(target)
+            else:
+                vals.append({"ref": target})
+            existing_keys.add(key)
+    elif mode == "remove":
+        vals = [existing for existing in vals if _ref_key(existing) not in target_keys]
+    else:
+        raise ValueError(f"unsupported mode '{mode}' for relationship field '{field}'")
+
+    data[field] = vals
 
 
 def get_content(id_: str, root: Path | None = None) -> str:
@@ -1163,6 +1264,26 @@ def clean_indexes(root: Path | None = None) -> dict[str, Any]:
     project_root = root or _get_root()
     api = PlanningAPI(project_root)
     return api.clean_indexes()
+
+
+def compact(root: Path | None = None) -> dict[str, Any]:
+    """Compact all planning item IDs to remove sequence gaps.
+
+    Deterministic, non-AI operation. Renumbers all items sequentially (kind-1, kind-2, ...)
+    per kind, rewrites all cross-references, renames files, and updates counters.
+
+    After compaction, runs full validate. Items that cannot be auto-repaired are returned
+    in the ``cannot_repair`` list for human or AI review.
+
+    Args:
+        root: Optional project root. If None, uses current root.
+
+    Returns:
+        Report with remap table, rename log, updated counters, and cannot_repair list.
+    """
+    project_root = root or _get_root()
+    api = PlanningAPI(project_root)
+    return api.compact()
 
 
 def show(id_: str, root: Path | None = None) -> dict[str, Any]:
@@ -1554,7 +1675,7 @@ def list_reference_docs(root: Path | None = None) -> list[dict[str, str]]:
 
 
 def list_request_profiles(root: Path | None = None) -> list[dict[str, Any]]:
-    """List all request profile templates.
+    """List all creation profiles.
 
     Args:
         root: Optional project root. If None, uses current root.
@@ -1575,7 +1696,7 @@ def list_request_profiles(root: Path | None = None) -> list[dict[str, Any]]:
 
 
 def get_request_profile(profile_id: str, root: Path | None = None) -> dict[str, Any] | None:
-    """Get a request profile by ID.
+    """Get a creation profile by ID.
 
     Args:
         profile_id: The profile ID to retrieve (e.g., 'feature', 'issue')
@@ -1593,6 +1714,16 @@ def get_request_profile(profile_id: str, root: Path | None = None) -> dict[str, 
     if isinstance(data, dict):
         row.update(data)
     return row
+
+
+def list_creation_profiles(root: Path | None = None) -> list[dict[str, Any]]:
+    """Generic alias for list_request_profiles()."""
+    return list_request_profiles(root=root)
+
+
+def get_creation_profile(profile_id: str, root: Path | None = None) -> dict[str, Any] | None:
+    """Generic alias for get_request_profile()."""
+    return get_request_profile(profile_id, root=root)
 
 
 def list_support_docs(
@@ -1861,6 +1992,76 @@ def verify_structure(root: Path | None = None) -> dict[str, Any]:
             "summary": str
         }
     """
+    return _verify_structure_impl(root)
+
+    return {"id": id_, "section_path": section_path, "content": text, "found": True}
+
+
+def get_doc_sync_requirements(
+    kind: str, profile_pack: str = "standard", root: Path | None = None
+) -> dict[str, Any]:
+    """Get documentation sync requirements for a kind and profile pack.
+
+    Args:
+        kind: Work kind (task, wp, etc.)
+        profile_pack: Profile pack name (default: standard)
+        root: Optional project root. If None, uses current root.
+
+    Returns:
+        Dict with profile_pack, kind, required_updates, and all_required_updates
+    """
+    project_root = root or _get_root()
+    _validate_profile_pack(profile_pack, project_root)
+    cfg = _load_yaml(
+        project_root, f".audiagentic/planning/config/profile-packs/{profile_pack}.yaml"
+    )
+    pp = cfg.get("profile_pack", {})
+    return {
+        "profile_pack": profile_pack,
+        "kind": kind,
+        "required_updates": _docs_manager(project_root).pending_updates_for_kind(kind, pp),
+        "all_required_updates": _docs_manager(project_root).profile_pack_required_updates(pp),
+    }
+
+
+def pending_doc_updates(
+    kind: str, profile_pack: str = "standard", root: Path | None = None
+) -> list[str]:
+    """List pending documentation updates for a kind and profile pack.
+
+    Args:
+        kind: Work kind (task, wp, etc.)
+        profile_pack: Profile pack name (default: standard)
+        root: Optional project root. If None, uses current root.
+
+    Returns:
+        List of required documentation updates
+    """
+    project_root = root or _get_root()
+    _validate_profile_pack(profile_pack, project_root)
+    cfg = _load_yaml(
+        project_root, f".audiagentic/planning/config/profile-packs/{profile_pack}.yaml"
+    )
+    return _docs_manager(project_root).pending_updates_for_kind(kind, cfg.get("profile_pack", {}))
+
+
+def _verify_structure_impl(root: Path | None = None) -> dict[str, Any]:
+    """Verify the planning module structure is sound.
+
+    Performs a basic health check on:
+    - Required directories (created on init)
+    - Required config files (core planning configs)
+    - Optional extension configs (request profiles, documentation surfaces)
+    - API accessibility and document scanning
+
+    Returns:
+        {
+            "root": str,
+            "healthy": bool,
+            "checks": {check_name: {"ok": bool, "required": bool, "message": str}},
+            "summary": str
+        }
+    """
     project_root = root or _get_root()
     checks = {}
 
@@ -1889,7 +2090,6 @@ def verify_structure(root: Path | None = None) -> dict[str, Any]:
         ".audiagentic/planning/config/planning.yaml",
         ".audiagentic/planning/config/workflows.yaml",
         ".audiagentic/planning/config/automations.yaml",
-        ".audiagentic/planning/config/hooks.yaml",
     ]
     for cfg_rel in required_configs:
         cfg_path = project_root / cfg_rel
@@ -1960,182 +2160,6 @@ def verify_structure(root: Path | None = None) -> dict[str, Any]:
 
     return {
         "root": str(project_root),
-        "healthy": healthy,
-        "checks": checks,
-        "summary": summary,
-    }
-
-    return {"id": id_, "section_path": section_path, "content": text, "found": True}
-
-
-def get_doc_sync_requirements(
-    kind: str, profile_pack: str = "standard", root: Path | None = None
-) -> dict[str, Any]:
-    """Get documentation sync requirements for a kind and profile pack.
-
-    Args:
-        kind: Work kind (task, wp, etc.)
-        profile_pack: Profile pack name (default: standard)
-        root: Optional project root. If None, uses current root.
-
-    Returns:
-        Dict with profile_pack, kind, required_updates, and all_required_updates
-    """
-    project_root = root or _get_root()
-    _validate_profile_pack(profile_pack, project_root)
-    cfg = _load_yaml(
-        project_root, f".audiagentic/planning/config/profile-packs/{profile_pack}.yaml"
-    )
-    pp = cfg.get("profile_pack", {})
-    return {
-        "profile_pack": profile_pack,
-        "kind": kind,
-        "required_updates": _docs_manager(project_root).pending_updates_for_kind(kind, pp),
-        "all_required_updates": _docs_manager(project_root).profile_pack_required_updates(pp),
-    }
-
-
-def pending_doc_updates(
-    kind: str, profile_pack: str = "standard", root: Path | None = None
-) -> list[str]:
-    """List pending documentation updates for a kind and profile pack.
-
-    Args:
-        kind: Work kind (task, wp, etc.)
-        profile_pack: Profile pack name (default: standard)
-        root: Optional project root. If None, uses current root.
-
-    Returns:
-        List of required documentation updates
-    """
-    project_root = root or _get_root()
-    _validate_profile_pack(profile_pack, project_root)
-    cfg = _load_yaml(
-        project_root, f".audiagentic/planning/config/profile-packs/{profile_pack}.yaml"
-    )
-    return _docs_manager(project_root).pending_updates_for_kind(kind, cfg.get("profile_pack", {}))
-
-
-def verify_structure() -> dict[str, Any]:
-    """Verify the planning module structure is sound.
-
-    Performs a basic health check on:
-    - Required directories (created on init)
-    - Required config files (core planning configs)
-    - Optional extension configs (request profiles, documentation surfaces)
-    - API accessibility and document scanning
-
-    Returns:
-        {
-            "root": str,
-            "healthy": bool,
-            "checks": {check_name: {"ok": bool, "required": bool, "message": str}},
-            "summary": str
-        }
-    """
-    checks = {}
-
-    # Check root directory
-    checks["root_exists"] = {
-        "ok": _ROOT.exists(),
-        "required": True,
-        "message": f"Root directory exists: {_ROOT}",
-    }
-
-    # Check required directories (created on baseline_sync)
-    required_dirs = [
-        ".audiagentic/planning",
-        ".audiagentic/planning/config",
-        ".audiagentic/planning/ids",
-        ".audiagentic/planning/indexes",
-        ".audiagentic/planning/events",
-    ]
-    for dir_rel in required_dirs:
-        dir_path = _ROOT / dir_rel
-        checks[f"dir_{dir_rel.replace('/', '_')}"] = {
-            "ok": dir_path.is_dir(),
-            "required": True,
-            "message": f"Directory exists: {dir_rel}",
-        }
-
-    # Check required config files (core planning)
-    required_configs = [
-        ".audiagentic/planning/config/planning.yaml",
-        ".audiagentic/planning/config/workflows.yaml",
-        ".audiagentic/planning/config/automations.yaml",
-        ".audiagentic/planning/config/hooks.yaml",
-    ]
-    for cfg_rel in required_configs:
-        cfg_path = _ROOT / cfg_rel
-        checks[f"config_{cfg_rel.split('/')[-1].replace('.yaml', '')}"] = {
-            "ok": cfg_path.is_file(),
-            "required": True,
-            "message": f"Config file exists: {cfg_rel}",
-        }
-
-    # Check optional extension configs (Phase 2 doc surfaces)
-    optional_configs = [
-        ".audiagentic/planning/config/profiles.yaml",
-        ".audiagentic/planning/config/documentation.yaml",
-    ]
-    for cfg_rel in optional_configs:
-        cfg_path = _ROOT / cfg_rel
-        checks[f"config_{cfg_rel.split('/')[-1].replace('.yaml', '')}"] = {
-            "ok": cfg_path.is_file(),
-            "required": False,
-            "message": f"Config file exists (optional): {cfg_rel}",
-        }
-
-    # Check API initialization (required for planning functionality)
-    try:
-        _api.validate()
-        checks["api_accessible"] = {
-            "ok": True,
-            "required": True,
-            "message": "PlanningAPI is accessible and docs are valid",
-        }
-    except Exception as e:
-        checks["api_accessible"] = {
-            "ok": False,
-            "required": True,
-            "message": f"PlanningAPI error: {e}",
-        }
-
-    # Count existing items (informational only)
-    try:
-        items = _api._scan()
-        checks["items_scannable"] = {
-            "ok": True,
-            "required": False,
-            "message": f"Found {len(items)} planning items",
-        }
-    except Exception as e:
-        checks["items_scannable"] = {
-            "ok": False,
-            "required": False,
-            "message": f"Scan error: {e}",
-        }
-
-    # Overall health: only required checks determine healthiness
-    required_failures = [
-        k for k, v in checks.items() if v.get("required", False) and not v.get("ok", False)
-    ]
-    optional_failures = [
-        k for k, v in checks.items() if not v.get("required", False) and not v.get("ok", False)
-    ]
-    healthy = len(required_failures) == 0
-
-    if required_failures:
-        summary = f"Structure check FAILED: {len(required_failures)} required check(s) failed - {', '.join(required_failures)}."
-        if optional_failures:
-            summary += f" ({len(optional_failures)} optional checks also missing)"
-    elif optional_failures:
-        summary = f"Structure check OK: {len(optional_failures)} optional extension(s) not installed - {', '.join(optional_failures)}"
-    else:
-        summary = "Structure check PASSED: planning module is healthy and fully equipped"
-
-    return {
-        "root": str(_ROOT),
         "healthy": healthy,
         "checks": checks,
         "summary": summary,

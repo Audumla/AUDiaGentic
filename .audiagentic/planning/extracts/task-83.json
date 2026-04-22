@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-83",
-    "label": "[PKT-PRV-006](task-0083): Provider Implementation Template",
-    "state": "draft",
-    "summary": "Create provider implementation template",
-    "spec_ref": "spec-12",
+    "label": "[PKT-PRV-008](task-0085): Provider Documentation",
+    "state": "cancelled",
+    "summary": "Document provider system",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-83-pkt-prv-006-task-0083-provider-implementation-template.md",
+    "path": "docs/planning/tasks/providers/task-83-pkt-prv-008-task-0085-provider-documentation.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-006](task-0073): Provider Implementation Template\n\n## Purpose\n\nCreate provider implementation template.\n\n## Scope\n\n- Template structure\n- Required methods\n- Examples\n\n## Implementation\n\n1. Define template\n2. Add methods\n3. Add examples\n\n## Acceptance Criteria\n\n1. Template defined\n2. Methods complete\n3. Examples work\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The Continue provider line was superseded and archived.\n\n\n# [PKT-PRV-008](task-0075): Provider Documentation\n\n## Purpose\n\nDocument provider system.\n\n## Scope\n\n- User docs\n- Developer docs\n- API docs\n\n## Implementation\n\n1. Write user docs\n2. Write developer docs\n3. Document API\n\n## Acceptance Criteria\n\nCancelled with superseded provider line.\n"
 }

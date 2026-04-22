@@ -5,21 +5,22 @@ Tests validation and auto-healing of state inconsistencies.
 
 from __future__ import annotations
 
-import shutil
+import sys
 from pathlib import Path
 
-from audiagentic.planning.app.api import PlanningAPI
-
 ROOT = Path(__file__).resolve().parents[2]
-PLANNING_CONFIG_SRC = ROOT / ".audiagentic" / "planning" / "config"
+for _p in (str(ROOT), str(ROOT / "src")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+from tests.planning_testkit import seed_planning_config
+
+from audiagentic.planning.app.api import PlanningAPI
 
 
 def _seed_planning_project(root: Path) -> None:
     """Seed the minimum planning config needed for PlanningAPI."""
-    config_dir = root / ".audiagentic" / "planning" / "config"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    for f in PLANNING_CONFIG_SRC.glob("*.yaml"):
-        shutil.copy(f, config_dir / f.name)
+    seed_planning_config(root)
     for d in (
         "requests",
         "specifications",

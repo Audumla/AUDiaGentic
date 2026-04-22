@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-56",
-    "label": "[PKT-RLS-001](task-0056): Fragment Capture",
+    "label": "[PKT-RLS-003](task-0058): Current Release Summary",
     "state": "draft",
-    "summary": "Capture release fragments",
-    "spec_ref": "spec-10",
+    "summary": "Generate current release summary",
+    "spec_ref": "spec-13",
     "kind": "task",
-    "path": "docs/planning/tasks/release/task-56-pkt-rls-001-task-0056-fragment-capture.md",
+    "path": "docs/planning/tasks/release/task-56-pkt-rls-003-task-0058-current-release-summary.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
   "effective_standard_refs": [
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-001](task-0046): Fragment Capture\n\n## Purpose\n\nCapture release fragments.\n\n## Scope\n\n- Fragment detection\n- Capture logic\n- Storage\n\n## Implementation\n\n1. Detect fragments\n2. Implement capture\n3. Store\n\n## Acceptance Criteria\n\n1. Fragments detected\n2. Captured correctly\n3. Stored\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-003](task-0048): Current Release Summary\n\n## Purpose\n\nGenerate current release summary.\n\n## Scope\n\n- Summary generation\n- Data collection\n- Formatting\n\n## Implementation\n\n1. Collect data\n2. Generate summary\n3. Format output\n\n## Acceptance Criteria\n\n1. Data collected\n2. Summary generated\n3. Formatted\n"
 }

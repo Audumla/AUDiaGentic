@@ -6,6 +6,12 @@ summary: Default standard for version numbering and changelog maintenance across
   planning-enabled projects.
 ---
 
+
+
+
+
+
+
 # Standard
 
 Default standard for version numbering and changelog maintenance in AUDiaGentic-based projects.

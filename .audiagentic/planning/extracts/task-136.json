@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-136",
-    "label": "[PKT-PRV-058](task-0136): Provider Data Quality Rules",
+    "label": "[PKT-PRV-061](task-0139): Provider Data Masking Rules",
     "state": "draft",
-    "summary": "Implement provider data quality rules",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data masking rules",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-136-pkt-prv-058-task-0136-provider-data-quality-rules.md",
+    "path": "docs/planning/tasks/providers/task-136-pkt-prv-061-task-0139-provider-data-masking-rules.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-058](task-0125): Provider Data Quality Rules\n\n## Purpose\n\nImplement provider data quality rules.\n\n## Scope\n\n- Rule format\n- Evaluation\n- Reporting\n\n## Implementation\n\n1. Define format\n2. Implement evaluation\n3. Add reporting\n\n## Acceptance Criteria\n\n1. Format defined\n2. Evaluation works\n3. Reports generated\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-061](task-0128): Provider Data Masking Rules\n\n## Purpose\n\nImplement provider data masking rules.\n\n## Scope\n\n- Masking rules\n- Application\n- Exceptions\n\n## Implementation\n\n1. Define rules\n2. Apply masking\n3. Handle exceptions\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Masking applied\n3. Exceptions handled\n"
 }

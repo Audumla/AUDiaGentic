@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-126",
-    "label": "[PKT-PRV-048](task-0126): Provider Data Export",
+    "label": "[PKT-PRV-051](task-0129): Provider Data Validation",
     "state": "draft",
-    "summary": "Implement provider data export",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data validation",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-126-pkt-prv-048-task-0126-provider-data-export.md",
+    "path": "docs/planning/tasks/providers/task-126-pkt-prv-051-task-0129-provider-data-validation.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-048](task-0115): Provider Data Export\n\n## Purpose\n\nImplement provider data export.\n\n## Scope\n\n- Export format\n- Export logic\n- Validation\n\n## Implementation\n\n1. Define format\n2. Implement export\n3. Add validation\n\n## Acceptance Criteria\n\n1. Format defined\n2. Export works\n3. Validated\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-051](task-0118): Provider Data Validation\n\n## Purpose\n\nImplement provider data validation.\n\n## Scope\n\n- Validation rules\n- Schema checking\n- Error reporting\n\n## Implementation\n\n1. Define rules\n2. Add schema checking\n3. Report errors\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Schema checked\n3. Errors reported\n"
 }

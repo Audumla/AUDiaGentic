@@ -1,10 +1,10 @@
 {
   "item": {
     "id": "task-254",
-    "label": "Integrate interoperability layer with knowledge component",
+    "label": "Create interoperability package structure with transport protocol abstraction",
     "state": "done",
-    "summary": "Wire EventBus into knowledge component \u2014 blocked on task-0281 (planning integration) and core event bus being stable in practice",
-    "spec_ref": "spec-19",
+    "summary": "Scaffold src/audiagentic/interoperability/ package: protocol.py (EventBusProtocol, SubscriptionHandle, DeliveryMode), envelope.py, exceptions.py, config.py, adapters/__init__.py, and __init__.py with init_bus()/get_bus() factory \u2014 no singleton",
+    "spec_ref": "spec-23",
     "request_refs": [
       "request-17"
     ],
@@ -13,7 +13,7 @@
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-254-integrate-interoperability-layer-with-knowledge-component.md",
+    "path": "docs/planning/tasks/core/task-254-create-interoperability-package-structure-with-transport-protocol-abstraction.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -23,7 +23,7 @@
   "effective_standard_refs": [
     "standard-5",
     "standard-6",
-    "standard-11"
+    "standard-10"
   ],
-  "body": "\n\n\n\n\n\n\n\n\n\n# Description\n\nIntegrate interoperability event layer with knowledge component. This task owns knowledge-side subscription wiring to consume canonical planning state-change events.\n\n**Subscription setup:**\n```python\nfrom audiagentic.interoperability import get_bus\nbus = get_bus()\nbus.subscribe(\"planning.item.state.changed\", knowledge_event_handler)\n```\n\n**Key behaviors:**\n- Subscribe at knowledge component startup\n- Use canonical event shape from spec-019\n- Keep legacy file-scan path compatible during transition\n- Don't break existing knowledge workflows\n- Optional integration: use try/except to avoid breaking if EventBus not available\n- Handler implementation is task-0261\n\n# Acceptance Criteria\n\n- Knowledge subscribes to `planning.item.state.changed` via EventBus\n- Subscription registered at knowledge component startup\n- Event handler receives canonical envelope shape\n- Legacy file-scan path still works during transition\n- Unit tests cover: subscription registration, event receipt\n- Smoke test proves knowledge loads and subscribes without breaking startup\n\n# Notes\nDepends on: task-248 (EventBus), task-0253 (planning emits). Handler implementation is task-0261.\n\nMarked done on 2026-04-17 after review. Planning now explicitly calls `audiagentic.knowledge.setup_event_subscriptions()` during bootstrap in `src/audiagentic/planning/app/api.py`, and knowledge subscribes to `planning.item.state.changed` in `src/audiagentic/knowledge/__init__.py`. Remaining knowledge-side follow-up is tracked separately under `task-0261`.\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\nScaffold the `src/audiagentic/interoperability/` package structure and bootstrap wiring for the event layer. This task creates the foundational package layout, EventBus singleton/service registration, and component subscriber auto-discovery mechanism.\n\n**Files to create:**\n- `src/audiagentic/interoperability/__init__.py` - Package exports, EventBus singleton (convenience)\n- `src/audiagentic/interoperability/bus.py` - EventBus class with explicit injection (preferred) + singleton (convenience)\n- `src/audiagentic/interoperability/store.py` - EventStore interface placeholder\n- `src/audiagentic/interoperability/replay.py` - ReplayService placeholder\n- `src/audiagentic/interoperability/envelope.py` - EventEnvelope dataclass\n- `src/audiagentic/interoperability/exceptions.py` - Custom exceptions\n- `.audiagentic/interoperability/config.yaml` - Default configuration\n\n**Bootstrap wiring:**\n- EventBus singleton registration in `src/audiagentic/__init__.py`\n- Component subscriber auto-discovery mechanism\n- Startup sequence: bus initializes before components\n- **Transport abstraction:** Define EventBusProtocol interface for future MQ migration\n\n**MQ Migration Simplicity:**\n- EventBusProtocol defines abstract interface (publish, subscribe, unsubscribe)\n- InProcessEventBus implements protocol\n- Future: ExternalMQBus implements same protocol\n- Components depend on protocol, not concrete implementation\n\n# Acceptance Criteria\n\n- Package structure created at `src/audiagentic/interoperability/`\n- EventBus singleton accessible via `from audiagentic.interoperability import EventBus`\n- Default configuration file exists at `.audiagentic/interoperability/config.yaml`\n- Bootstrap wiring allows components to register subscribers at startup\n- Package imports cleanly without circular dependencies\n- Smoke test proves `import audiagentic.interoperability` succeeds\n\n# Notes\n\nThis task is scaffolding only. No functional implementation beyond package structure and bootstrap wiring.\n"
 }

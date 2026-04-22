@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-135",
-    "label": "[PKT-PRV-057](task-0135): Provider Data Standards",
+    "label": "[PKT-PRV-060](task-0138): Provider Data Anomaly Detection",
     "state": "draft",
-    "summary": "Implement provider data standards",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data anomaly detection",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-135-pkt-prv-057-task-0135-provider-data-standards.md",
+    "path": "docs/planning/tasks/providers/task-135-pkt-prv-060-task-0138-provider-data-anomaly-detection.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-057](task-0124): Provider Data Standards\n\n## Purpose\n\nImplement provider data standards.\n\n## Scope\n\n- Standard format\n- Enforcement\n- Compliance\n\n## Implementation\n\n1. Define format\n2. Implement enforcement\n3. Check compliance\n\n## Acceptance Criteria\n\n1. Format defined\n2. Enforcement works\n3. Compliant\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-060](task-0127): Provider Data Anomaly Detection\n\n## Purpose\n\nImplement provider data anomaly detection.\n\n## Scope\n\n- Detection logic\n- Alerts\n- Response\n\n## Implementation\n\n1. Implement detection\n2. Add alerts\n3. Define response\n\n## Acceptance Criteria\n\n1. Detection works\n2. Alerts sent\n3. Response defined\n"
 }

@@ -59,8 +59,8 @@ def _bootstrap_repo_root() -> Path:
 # Operation validation and error handling
 # ---------------------------------------------------------------------------
 
-VALID_OPS = {"state", "label", "summary", "section", "content", "meta"}
-VALID_MODES = {"set", "append", "replace"}
+VALID_OPS = {"state", "label", "summary", "section", "content", "meta", "field"}
+VALID_MODES = {"set", "append", "replace", "add", "remove"}
 
 
 def validate_operations(operations: list[dict[str, Any]]) -> None:
@@ -86,13 +86,6 @@ def validate_operations(operations: list[dict[str, Any]]) -> None:
                 suggestion=f"Supported operations: {', '.join(sorted(VALID_OPS))}",
             )
 
-        # Validate mode if present
-        if "mode" in op and op["mode"] not in VALID_MODES:
-            raise PlanningError(
-                f"Operation {i}: invalid mode '{op['mode']}'",
-                suggestion=f"Valid modes: {', '.join(sorted(VALID_MODES))}",
-            )
-
         # Validate required fields per operation type
         if op_type == "section" and "name" not in op:
             raise PlanningError(
@@ -100,11 +93,40 @@ def validate_operations(operations: list[dict[str, Any]]) -> None:
                 suggestion="Example: {{op: 'section', name: 'Notes', content: '...', mode: 'set'}}",
             )
 
+        if op_type == "section" and "mode" in op and op["mode"] not in {"set", "append"}:
+            raise PlanningError(
+                f"Operation {i}: invalid section mode '{op['mode']}'",
+                suggestion="Section mode must be 'set' or 'append'",
+            )
+
+        if op_type == "content" and "mode" in op and op["mode"] not in {"replace", "append"}:
+            raise PlanningError(
+                f"Operation {i}: invalid content mode '{op['mode']}'",
+                suggestion="Content mode must be 'replace' or 'append'",
+            )
+
         if op_type == "meta" and "field" not in op:
             raise PlanningError(
                 f"Operation {i}: meta requires 'field' field",
                 suggestion="Example: {{op: 'meta', field: 'tags', value: '...'}}",
             )
+
+        if op_type == "field":
+            if "field" not in op:
+                raise PlanningError(
+                    f"Operation {i}: field requires 'field' field",
+                    suggestion="Example: {{op: 'field', field: 'spec_refs', mode: 'remove', value: 'spec-12'}}",
+                )
+            if "mode" in op and op["mode"] not in {"set", "replace", "add", "remove"}:
+                raise PlanningError(
+                    f"Operation {i}: invalid field mode '{op['mode']}'",
+                    suggestion="Field mode must be 'set', 'replace', 'add', or 'remove'",
+                )
+            if op.get("mode", "set") in {"set", "replace", "add"} and "value" not in op:
+                raise PlanningError(
+                    f"Operation {i}: field op with mode '{op.get('mode', 'set')}' requires 'value'",
+                    suggestion="Example: {{op: 'field', field: 'request_refs', mode: 'add', value: 'request-30'}}",
+                )
 
 
 class PlanningError(Exception):
@@ -120,9 +142,10 @@ class PlanningError(Exception):
 # Bootstrap and imports
 # ---------------------------------------------------------------------------
 
-# Bootstrap root discovery FIRST (before tm import)
-_BOOTSTRAP_ROOT = _bootstrap_repo_root()
-for _p in (str(_BOOTSTRAP_ROOT), str(_BOOTSTRAP_ROOT / "src")):
+# Bootstrap code root FIRST so imports still work when AUDIAGENTIC_ROOT points
+# at an isolated temp project rather than this repository.
+_CODE_ROOT = Path(__file__).resolve().parents[3]
+for _p in (str(_CODE_ROOT), str(_CODE_ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
@@ -131,9 +154,6 @@ import tools.planning.tm_helper as tm
 
 _ROOT = _bootstrap_repo_root()
 tm.set_root(_ROOT)
-for _p in (str(_ROOT), str(_ROOT / "src")):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 
 # ---------------------------------------------------------------------------
@@ -144,8 +164,9 @@ mcp = FastMCP(
     "audiagentic-planning",
     instructions="""
 EDIT FIRST: Use tm_edit for all mutations to a single item. It accepts a list of operations
-executed atomically: state, label, summary, section (set/append), content (replace/append), meta.
-Prefer one tm_edit call over multiple separate calls.
+executed atomically: state, label, summary, section (set/append), content (replace/append),
+meta, and field ops for top-level frontmatter add/remove/replace/set. Prefer one tm_edit call
+over multiple separate calls. Use field ops for refs like spec_refs/request_refs/task_refs.
 
 READ COST LADDER (cheapest to most tokens):
   tm_get depth=head < depth=meta < depth=full < depth=body
@@ -184,7 +205,9 @@ required fields. Cache the result for the session. This avoids invalid tm_create
         "  section: {{op:'section', name:'Notes', content:'...', mode:'set'|'append'}} "
         "  content: {{op:'content', value:'...', mode:'replace'|'append'}} "
         "  meta: {{op:'meta', field:'tags', value:'...'}} "
-        "Example: [{{op:'state',value:'done'}},{{op:'section',name:'Notes',content:'...',mode:'set'}}]"
+        "  field: {{op:'field', field:'spec_refs', mode:'add'|'remove'|'replace'|'set', value:'spec-123'}} "
+        "Use field for top-level frontmatter refs and lists; use meta only for nested meta.* values. "
+        "Example: [{{op:'field',field:'spec_refs',mode:'remove',value:'spec-12'}},{{op:'section',name:'Notes',content:'...',mode:'set'}}]"
     )
 )
 def tm_edit(id: str, operations: list[dict[str, Any]]) -> dict[str, Any]:
@@ -658,6 +681,7 @@ def tm_docs(
         "clean_indexes (clear and rebuild indexes only — cheaper than maintain, no filename reconcile) | "
         "reconcile (fix filesystem/state inconsistencies, returns renames+orphans) | "
         "maintain (canonical reconcile + rebuild of derived planning state) | "
+        "compact (deterministic ID compaction: remove gaps, rewrite refs, rename files, update counters, validate — returns remap table and cannot_repair list) | "
         "events (recent event log, optional tail count, default 20) | "
         "verify (health check — dirs, configs, API) | "
         "check_sensitive (scan item body for API keys/tokens, requires id)."
@@ -668,7 +692,7 @@ def tm_admin(
     id: str | None = None,
     tail: int = 20,
 ) -> Any:
-    valid_ops = {"validate", "index", "clean_indexes", "reconcile", "maintain", "events", "verify", "check_sensitive"}
+    valid_ops = {"validate", "index", "clean_indexes", "reconcile", "maintain", "compact", "events", "verify", "check_sensitive"}
     if op not in valid_ops:
         raise PlanningError(
             f"Unknown op: {op!r}", suggestion=f"Valid ops: {', '.join(sorted(valid_ops))}"
@@ -685,6 +709,8 @@ def tm_admin(
         return tm.reconcile()
     elif op == "maintain":
         return tm._get_api().maintain()
+    elif op == "compact":
+        return tm.compact()
     elif op == "events":
         return tm.events(tail)
     elif op == "verify":

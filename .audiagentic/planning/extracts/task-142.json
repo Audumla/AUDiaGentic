@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-142",
-    "label": "[PKT-PRV-064](task-0142): Provider Data Import Rules",
+    "label": "[PKT-PRV-067](task-0145): Provider Data Quality Rules",
     "state": "draft",
-    "summary": "Implement provider data import rules",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data quality rules",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-142-pkt-prv-064-task-0142-provider-data-import-rules.md",
+    "path": "docs/planning/tasks/providers/task-142-pkt-prv-067-task-0145-provider-data-quality-rules.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-064](task-0131): Provider Data Import Rules\n\n## Purpose\n\nImplement provider data import rules.\n\n## Scope\n\n- Import rules\n- Validation\n- Logging\n\n## Implementation\n\n1. Define rules\n2. Add validation\n3. Add logging\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Validated\n3. Logged\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-067](task-0134): Provider Data Quality Rules\n\n## Purpose\n\nImplement provider data quality rules.\n\n## Scope\n\n- Quality rules\n- Evaluation\n- Reporting\n\n## Implementation\n\n1. Define rules\n2. Implement evaluation\n3. Add reporting\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Evaluation works\n3. Reports generated\n"
 }

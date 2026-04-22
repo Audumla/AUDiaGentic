@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-85",
-    "label": "[PKT-PRV-008](task-0085): Provider Documentation",
-    "state": "cancelled",
-    "summary": "Document provider system",
-    "spec_ref": "spec-12",
+    "label": "[PKT-PRV-010](task-0087): Provider Performance Benchmarks",
+    "state": "draft",
+    "summary": "Create provider performance benchmarks",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-85-pkt-prv-008-task-0085-provider-documentation.md",
+    "path": "docs/planning/tasks/providers/task-85-pkt-prv-010-task-0087-provider-performance-benchmarks.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The Continue provider line was superseded and archived.\n\n\n# [PKT-PRV-008](task-0075): Provider Documentation\n\n## Purpose\n\nDocument provider system.\n\n## Scope\n\n- User docs\n- Developer docs\n- API docs\n\n## Implementation\n\n1. Write user docs\n2. Write developer docs\n3. Document API\n\n## Acceptance Criteria\n\nCancelled with superseded provider line.\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-010](task-0077): Provider Performance Benchmarks\n\n## Purpose\n\nCreate provider performance benchmarks.\n\n## Scope\n\n- Benchmark suite\n- Metrics\n- Reporting\n\n## Implementation\n\n1. Define suite\n2. Add metrics\n3. Add reporting\n\n## Acceptance Criteria\n\n1. Suite defined\n2. Metrics collected\n3. Reports generated\n"
 }

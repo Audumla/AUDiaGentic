@@ -27,7 +27,7 @@ The Model Context Protocol (MCP) server provides an interface for AI agents to i
 
 **Configuration:**
 - Host profile: `mcp-stdio` (standard I/O transport)
-- Configurable via `.audiagentic/knowledge/config.yml`
+- Configurable via `.audiagentic/knowledge/config/config.yml`
 - Runtime settings in `runtime_contract` section
 
 **Integration Points:**
@@ -270,7 +270,7 @@ result = mcp_client.call_tool(
 result = mcp_client.call_tool(
     name="knowledge_seed_from_manifest",
     arguments={
-        "manifest_path": "docs/knowledge/manifests/initial.yml",
+        "manifest_path": "docs/knowledge/data/import/manifests/seed.yml",
         "record_sync": true,
         "update_existing": false
     }
@@ -280,7 +280,7 @@ result = mcp_client.call_tool(
 result = mcp_client.call_tool(
     name="knowledge_bootstrap_project_knowledge",
     arguments={
-        "manifest": "docs/knowledge/manifests/initial.yml",
+        "manifest": "docs/knowledge/data/import/manifests/seed.yml",
         "allow_llm": false,
         "mode": "deterministic"
     }
@@ -342,7 +342,7 @@ This page should be refreshed when:
 **Sources:**
 - `tools/mcp/audiagentic-knowledge/mcp_server.py` - Server implementation
 - `tools/mcp/audiagentic-knowledge/launch_audiagentic_knowledge_mcp.py` - Launcher
-- `.audiagentic/knowledge/config.yml` - Configuration
+- `.audiagentic/knowledge/config/config.yml` - Configuration
 - MCP protocol specification
 
 **Sync frequency:** On MCP server changes

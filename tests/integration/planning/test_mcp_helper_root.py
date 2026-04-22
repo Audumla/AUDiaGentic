@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 import sys
 from pathlib import Path
 
@@ -11,20 +10,12 @@ for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+from tests.planning_testkit import seed_planning_config
+
 
 def _seed_test_project(tmp_path: Path) -> Path:
     """Seed a test project with minimal planning config."""
-    config_dir = tmp_path / ".audiagentic" / "planning" / "config"
-    config_dir.mkdir(parents=True, exist_ok=True)
-
-    src_config = ROOT / ".audiagentic" / "planning" / "config"
-    for name in (
-        "planning.yaml",
-        "profiles.yaml",
-        "workflows.yaml",
-        "automations.yaml",
-    ):
-        shutil.copy(src_config / name, config_dir / name)
+    seed_planning_config(tmp_path, include_optional=False, include_profile_packs=False)
 
     for rel in ("ids", "indexes", "events", "claims", "meta"):
         (tmp_path / ".audiagentic" / "planning" / rel).mkdir(parents=True, exist_ok=True)
@@ -40,8 +31,8 @@ def _seed_test_project(tmp_path: Path) -> Path:
     ):
         (docs_dir / d).mkdir(parents=True, exist_ok=True)
 
-    (docs_dir / "specifications" / "spec-0001.md").write_text(
-        "---\nid: spec-0001\nlabel: Default spec\nstate: draft\n---\n"
+    (docs_dir / "specifications" / "spec-1-default-spec.md").write_text(
+        "---\nid: spec-1\nlabel: Default spec\nstate: draft\n---\n"
     )
 
     return tmp_path
@@ -60,9 +51,9 @@ class TestMCPHelperRootConfigurability:
         try:
             tm.set_root(tmp_path)
 
-            task = tm.new_task(label="Test", summary="Test", spec="spec-0001")
+            task = tm.new_task(label="Test", summary="Test", spec="spec-1")
 
-            isolated_file = tmp_path / "docs" / "planning" / "tasks" / "core" / f"{task['id']}.md"
+            isolated_file = tmp_path / Path(task["path"])
             assert isolated_file.exists()
 
         finally:
@@ -75,9 +66,9 @@ class TestMCPHelperRootConfigurability:
 
         _seed_test_project(tmp_path)
 
-        task = tm.new_task(label="Test", summary="Test", spec="spec-0001", root=tmp_path)
+        task = tm.new_task(label="Test", summary="Test", spec="spec-1", root=tmp_path)
 
-        isolated_file = tmp_path / "docs" / "planning" / "tasks" / "core" / f"{task['id']}.md"
+        isolated_file = tmp_path / Path(task["path"])
         assert isolated_file.exists()
 
     def test_validate_with_custom_root(self, tmp_path: Path) -> None:
@@ -96,4 +87,4 @@ class TestMCPHelperRootConfigurability:
         _seed_test_project(tmp_path)
 
         items = tm.list_kind(root=tmp_path)
-        assert any(item["id"] == "spec-0001" for item in items)
+        assert any(item["id"] == "spec-1" for item in items)

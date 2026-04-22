@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-73",
-    "label": "[PKT-JOB-007](task-0073): Job Validation",
+    "label": "[PKT-JOB-009](task-0075): Job Cancellation",
     "state": "draft",
-    "summary": "Validate jobs",
-    "spec_ref": "spec-11",
+    "summary": "Handle job cancellation",
+    "spec_ref": "spec-15",
     "kind": "task",
-    "path": "docs/planning/tasks/jobs/task-73-pkt-job-007-task-0073-job-validation.md",
+    "path": "docs/planning/tasks/jobs/task-73-pkt-job-009-task-0075-job-cancellation.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
   "effective_standard_refs": [
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-007](task-0063): Job Validation\n\n## Purpose\n\nValidate jobs.\n\n## Scope\n\n- Validation rules\n- Check logic\n- Error reporting\n\n## Implementation\n\n1. Define rules\n2. Implement checks\n3. Report errors\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Checks work\n3. Errors reported\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-009](task-0065): Job Cancellation\n\n## Purpose\n\nHandle job cancellation.\n\n## Scope\n\n- Cancellation logic\n- Cleanup\n- State updates\n\n## Implementation\n\n1. Implement cancellation\n2. Add cleanup\n3. Update state\n\n## Acceptance Criteria\n\n1. Cancellation works\n2. Cleanup complete\n3. State updated\n"
 }

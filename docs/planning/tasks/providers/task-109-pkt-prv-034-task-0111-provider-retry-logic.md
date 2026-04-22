@@ -1,0 +1,43 @@
+---
+id: task-109
+label: '[PKT-PRV-034](task-0111): Provider Retry Logic'
+state: draft
+summary: Implement provider retry logic
+spec_ref: spec-16
+---
+
+
+
+
+
+
+
+
+# Description
+
+Implement this task.
+
+
+# [PKT-PRV-034](task-0101): Provider Retry Logic
+
+## Purpose
+
+Implement provider retry logic.
+
+## Scope
+
+- Retry strategy
+- Backoff
+- Limits
+
+## Implementation
+
+1. Define strategy
+2. Implement backoff
+3. Add limits
+
+## Acceptance Criteria
+
+1. Strategy defined
+2. Backoff works
+3. Limits work

@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-138",
-    "label": "[PKT-PRV-060](task-0138): Provider Data Anomaly Detection",
+    "label": "[PKT-PRV-063](task-0141): Provider Data Export Rules",
     "state": "draft",
-    "summary": "Implement provider data anomaly detection",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data export rules",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-138-pkt-prv-060-task-0138-provider-data-anomaly-detection.md",
+    "path": "docs/planning/tasks/providers/task-138-pkt-prv-063-task-0141-provider-data-export-rules.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-060](task-0127): Provider Data Anomaly Detection\n\n## Purpose\n\nImplement provider data anomaly detection.\n\n## Scope\n\n- Detection logic\n- Alerts\n- Response\n\n## Implementation\n\n1. Implement detection\n2. Add alerts\n3. Define response\n\n## Acceptance Criteria\n\n1. Detection works\n2. Alerts sent\n3. Response defined\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-063](task-0130): Provider Data Export Rules\n\n## Purpose\n\nImplement provider data export rules.\n\n## Scope\n\n- Export rules\n- Validation\n- Logging\n\n## Implementation\n\n1. Define rules\n2. Add validation\n3. Add logging\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Validated\n3. Logged\n"
 }

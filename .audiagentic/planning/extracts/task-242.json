@@ -1,10 +1,10 @@
 {
   "item": {
     "id": "task-242",
-    "label": "Remove dead code in update_content() section mode",
-    "state": "done",
-    "summary": "Remove duplicated regex block in update_content() section mode, ensure consistent formatting",
-    "spec_ref": "spec-18",
+    "label": "Add cycle detection to standards cascade",
+    "state": "cancelled",
+    "summary": "Add _visited parameter to effective_standard_refs() to prevent infinite loops on circular hierarchies",
+    "spec_ref": "spec-22",
     "request_refs": [
       "request-16"
     ],
@@ -13,7 +13,7 @@
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-242-remove-dead-code-in-update-content-section-mode.md",
+    "path": "docs/planning/tasks/core/task-242-add-cycle-detection-to-standards-cascade.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -24,5 +24,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
 }

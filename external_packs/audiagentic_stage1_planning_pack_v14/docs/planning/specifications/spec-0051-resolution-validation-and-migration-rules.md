@@ -6,15 +6,37 @@ summary: Define desired-state resolution order, registry-discovered validation, 
 request_refs:
 - request-0032
 standard_refs:
-- standard-0005
-- standard-0006
-- standard-0007
-- standard-0011
+- standard-05
+- standard-06
+- standard-07
+- standard-11
 ---
 
 # Purpose
 
 Make generic installer behavior safe without tying validation to fixed installer object sets.
+
+# Discovery requirement
+
+Before freezing resolution and validation rules, survey the current lifecycle and validation surfaces to determine:
+- where current config normalization happens
+- where current validation happens
+- what current installed-state semantics exist
+- what backward-compatibility assumptions the live repo already depends on
+
+If live behavior conflicts with this spec, document the conflict explicitly instead of inventing a silent merge.
+
+# Scope
+
+This spec defines desired-state resolution order, registry-discovered validation, compatibility categories, preservation defaults, and backward-compatible migration rules for installer-facing config. It covers the shared contract used by `install`, `update`, `status`, `doctor`, and `validate` commands.
+
+# Constraints
+
+- Must not collapse all validation failures into generic `invalid-config` errors.
+- Must not require fully migrated config before `plan` or `doctor` can run.
+- Must not make compatibility checks backend-blind or OS-blind.
+- Must not store every observed fact in installed-state by default.
+- Current `.audiagentic/project.yaml`, `.audiagentic/components.yaml`, `.audiagentic/providers.yaml`, and installed-state remain readable during stage one.
 
 # Requirements
 

@@ -6,14 +6,36 @@ summary: Define how internal components, external targets, overlays, installer b
 request_refs:
 - request-0032
 standard_refs:
-- standard-0006
-- standard-0008
-- standard-0011
+- standard-06
+- standard-08
+- standard-11
 ---
 
 # Purpose
 
 Keep extensibility real by separating target classes and execution backends from current AUDiaGentic-only components.
+
+# Discovery requirement
+
+Before freezing the target/backend model, survey the current repo to determine:
+- which backend-like behaviors already exist
+- which release or lifecycle modules already move artifacts
+- which current overlays or target-like concepts already exist
+- which assumed module paths do not exist yet and would need to be created
+
+If a presumed backend, target, or overlay surface is absent, record that as a blocker or as a planned new path. Do not pretend it already exists.
+
+# Scope
+
+This spec defines how internal components, external targets, overlays, installer backends, dependency scope, and release artifacts are modeled without collapsing them into one namespace or one execution path. It covers target kinds, backend kinds, overlay rules, artifact forms, and compatibility matrix inputs.
+
+# Constraints
+
+- Must not force VS Code or any single current overlay to define target model semantics.
+- Must not blur dependency validation with target realization.
+- Must not assume one backend can satisfy all target kinds.
+- Must not treat artifact packaging as an afterthought outside installer planning.
+- Internal component ids must remain product-owned and must not double as external target ids.
 
 # Requirements
 
