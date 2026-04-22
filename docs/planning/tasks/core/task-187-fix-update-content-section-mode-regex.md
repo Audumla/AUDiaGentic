@@ -1,0 +1,30 @@
+---
+id: task-187
+label: Fix update_content() section-mode regex
+state: done
+summary: Fix regex to correctly bound section end and prevent corruption of sibling
+  sections
+spec_ref: spec-6
+---
+
+
+
+
+
+
+
+
+# Description
+
+Fix section-mode updates so replacing a named section does not corrupt neighboring sections and appends cleanly when the section is missing.
+
+# Acceptance Criteria
+
+1. Replacing a section updates only the targeted section body
+2. Missing sections are appended in a stable format
+3. Regression coverage proves sibling sections remain intact
+
+# Notes
+
+- Verified by the passing section-mode coverage tests in `tests/integration/planning/test_planning_api_coverage.py`
+- Current implementation lives in `PlanningAPI.update_content()`

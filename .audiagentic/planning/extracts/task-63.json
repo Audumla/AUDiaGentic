@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-63",
-    "label": "[PKT-RLS-008](task-0063): Ledger Integration",
+    "label": "[PKT-RLS-010](task-0065): Release Validation",
     "state": "draft",
-    "summary": "Integrate ledger with release system",
-    "spec_ref": "spec-10",
+    "summary": "Validate releases",
+    "spec_ref": "spec-13",
     "kind": "task",
-    "path": "docs/planning/tasks/release/task-63-pkt-rls-008-task-0063-ledger-integration.md",
+    "path": "docs/planning/tasks/release/task-63-pkt-rls-010-task-0065-release-validation.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
   "effective_standard_refs": [
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-008](task-0053): Ledger Integration\n\n## Purpose\n\nIntegrate ledger with release system.\n\n## Scope\n\n- Ledger format\n- Integration logic\n- Data flow\n\n## Implementation\n\n1. Define ledger format\n2. Implement integration\n3. Ensure data flow\n\n## Acceptance Criteria\n\n1. Ledger format defined\n2. Integrated\n3. Data flows\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-010](task-0055): Release Validation\n\n## Purpose\n\nValidate releases.\n\n## Scope\n\n- Validation rules\n- Check logic\n- Error reporting\n\n## Implementation\n\n1. Define rules\n2. Implement checks\n3. Report errors\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Checks work\n3. Errors reported\n"
 }

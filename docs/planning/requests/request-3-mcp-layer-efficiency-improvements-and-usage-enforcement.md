@@ -24,6 +24,12 @@ meta:
 
 
 
+
+
+
+
+
+
 # Understanding
 
 This request drives the planning MCP and helper ergonomics work: improve read and update flows, reduce unnecessary direct edits, and make the planning surface efficient enough that agents can prefer it without losing auditability or validation safety.

@@ -1,10 +1,10 @@
 {
   "item": {
     "id": "task-261",
-    "label": "Implement knowledge event handler for planning state changes",
+    "label": "Implement async event queue for background processing",
     "state": "done",
-    "summary": "Implement knowledge event handler for planning state changes with runtime adapter/handler execution and replay-safe filtering",
-    "spec_ref": "spec-19",
+    "summary": "Create background worker queue for ASYNC mode event processing",
+    "spec_ref": "spec-23",
     "request_refs": [
       "request-17"
     ],
@@ -13,7 +13,7 @@
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-261-implement-knowledge-event-handler-for-planning-state-changes.md",
+    "path": "docs/planning/tasks/core/task-261-implement-async-event-queue-for-background-processing.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -23,7 +23,7 @@
   "effective_standard_refs": [
     "standard-5",
     "standard-6",
-    "standard-11"
+    "standard-10"
   ],
-  "body": "\n\n\n\n\n\n\n\n\n\n\n# Description\n\nImplement knowledge event handler for planning state changes. This task owns filtering events by `subject.kind` and `payload.new_state`, then triggering appropriate knowledge sync actions.\n\n**Handler logic:**\n```python\ndef knowledge_event_handler(event_type, payload, metadata):\n    if metadata.get(\"is_replay\"):\n        return  # Skip replayed events\n    \n    kind = payload.get(\"subject\", {}).get(\"kind\")\n    new_state = payload.get(\"new_state\")\n    \n    if kind == \"task\" and new_state in (\"done\", \"verified\"):\n        mark_related_pages_stale(kind, payload.get(\"subject\", {}).get(\"id\"))\n    elif kind == \"wp\" and new_state == \"done\":\n        generate_sync_proposal_for_plan(kind, payload)\n    # ... etc\n```\n\n**Actions:**\n- `task` done/verified \u2192 mark related work-package/implementation pages stale\n- `wp` done \u2192 generate sync proposal for plan/current-state pages\n- `plan` done \u2192 review spec/overview pages\n- `blocked` \u2192 mark operational pages stale (don't rewrite)\n- Skip `is_replay: true` events\n- Optional opt-in via config: `config.replay.dispatch_on_replay: true`\n\n# Acceptance Criteria\n\n- Handler filters by `subject.kind` (task, wp, plan, spec)\n- Handler filters by `payload.new_state` (done, verified, in_progress, blocked)\n- **Opt-in replay:** Handler skips replayed events unless `config.replay.dispatch_on_replay: true`\n- Appropriate knowledge actions triggered per event type/state\n- Unit tests cover: filtering, replay skip, action triggering, opt-in behavior\n- Integration test covers: planning state change \u2192 knowledge action\n- Smoke test proves handler executes without errors\n\n# Notes\nDepends on: task-254 (knowledge subscription). Uses existing knowledge sync/stale marking APIs.\n\nImplemented on 2026-04-17: fixed runtime planning-event handling in `src/audiagentic/knowledge/events.py` so it reads `subject` from event metadata, honors replay opt-in from `.audiagentic/interoperability/config.yaml`, resolves affected pages from knowledge adapter config, and executes configured knowledge actions without calling stale-marking APIs with the wrong signature. Added integration coverage in `tests/integration/test_knowledge_event_handler.py` for done, blocked, replay-skip, and replay-opt-in scenarios. Verified with `pytest tests/integration/test_knowledge_event_handler.py -q` -> 4 passed.\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\nImplement background worker queue for ASYNC mode event processing. This task owns queuing async events, background processing thread, and ensuring events are not lost during normal operation.\n\n**API:**\n```python\n# EventBus automatically uses AsyncQueue for ASYNC mode\nbus.publish(\"planning.task.done\", {...}, mode=ASYNC)  # returns immediately\n\n# AsyncQueue processes events in background\nasync_queue.start()  # start background worker\nasync_queue.stop()   # graceful shutdown\n```\n\n**Key behaviors:**\n- ASYNC events queued immediately, `publish()` returns in <5ms\n- Background worker processes queue continuously (threading-based, not asyncio)\n- **V1 crash recovery:** Events in queue lost on crash if `persist_on_checkpoint: false`\n- **V2 durability:** Optional disk persistence on checkpoint (configurable)\n- Queue drains on shutdown (configurable timeout, default: 30s)\n- Thread-safe using `queue.Queue`\n- Max queue size with backpressure\n\n# Acceptance Criteria\n\n- ASYNC `publish()` returns in <5ms (queue only, no processing)\n- Background worker processes queued events in order (threading-based)\n- Queue doesn't lose events during normal operation\n- **V1 crash recovery:** Events in queue lost on crash if `persist_on_checkpoint: false` (documented)\n- **V2 durability:** Optional disk persistence on checkpoint (configurable)\n- Graceful shutdown drains queue (configurable timeout, default: 30s)\n- Unit tests cover: queueing, background processing, shutdown behavior\n- Smoke test proves ASYNC events are processed correctly\n\n# Notes\n\nDepends on: task-248 (EventBus). This task is async queue only, not the EventBus itself.\n"
 }

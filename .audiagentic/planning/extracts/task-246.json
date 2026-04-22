@@ -1,19 +1,19 @@
 {
   "item": {
     "id": "task-246",
-    "label": "Improve validation error messages",
+    "label": "Implement FileEventStore for optional persistence",
     "state": "done",
-    "summary": "Fix _format_error() to produce clear messages for nested validation failures",
-    "spec_ref": "spec-18",
+    "summary": "Create FileEventStore with atomic writes, JSON file format, and best-effort persistence",
+    "spec_ref": "spec-23",
     "request_refs": [
-      "request-16"
+      "request-17"
     ],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-246-improve-validation-error-messages.md",
+    "path": "docs/planning/tasks/core/task-246-implement-fileeventstore-for-optional-persistence.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,7 +22,8 @@
   },
   "effective_standard_refs": [
     "standard-5",
-    "standard-6"
+    "standard-6",
+    "standard-10"
   ],
-  "body": "\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\nImplement optional file-backed event persistence. This task owns storing canonical event envelopes durably with atomic writes, using configured runtime location and file naming rules, keeping persistence failures non-fatal to publish.\n\n**File format:**\n```\nruntime/interoperability/events/\n  2026-04-14T12-34-56-123Z_planning.item.state.changed_evt_abc123.json\n```\n\n**Key behaviors:**\n- Atomic writes: temp file + rename to prevent corruption\n- Best-effort: persistence failures logged but don't block publish\n- Configurable: enable/disable via `.audiagentic/interoperability/config.yaml`\n- Envelope stored: full canonical envelope from task-0248\n- Filename format: `{timestamp_utc}_{sanitized_type}_{event_id}.json`\n- Query support: filter by timestamp range and event type pattern\n- Cleanup: remove old events based on retention_days config\n\n# Acceptance Criteria\n\n- `FileEventStore` persists events to configured runtime location\n- Filenames follow: `{timestamp_utc}_{sanitized_type}_{event_id}.json`\n- Atomic writes use temp file + rename pattern\n- Persistence can be enabled/disabled via config\n- Persistence failures logged but don't fail `publish()` call\n- Persisted files contain full canonical envelope\n- Unit tests cover: successful persistence, disabled mode, write-failure handling\n- Smoke test proves FileEventStore imports and basic write path works\n\n# Notes\n\nReplay logic is task-0250. This task is persistence only.\n"
 }

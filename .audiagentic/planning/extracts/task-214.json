@@ -1,17 +1,19 @@
 {
   "item": {
     "id": "task-214",
-    "label": "Write tests for sensitive data detection",
+    "label": "Update config.py to load guidance levels",
     "state": "done",
-    "summary": "Add tests for AWS key, API key, password detection; confirm non-blocking behavior; test false positive edge cases",
-    "spec_ref": "spec-9",
-    "request_refs": [],
+    "summary": "Add guidance_levels accessor to Config class, update profile_for() to merge work-type profile with guidance level",
+    "spec_ref": "spec-13",
+    "request_refs": [
+      "request-11"
+    ],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-214-write-tests-for-sensitive-data-detection.md",
+    "path": "docs/planning/tasks/core/task-214-update-config-py-to-load-guidance-levels.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -20,7 +22,8 @@
   },
   "effective_standard_refs": [
     "standard-5",
-    "standard-6"
+    "standard-6",
+    "standard-9"
   ],
-  "body": "\n\n\n\n\n\n\n---\nid: task-214\nlabel: Write tests for sensitive data detection\nstate: draft\nsummary: Add tests for detection function, MCP tool, warning structure, and edge cases\nspec_ref: spec-9\n---\n\n# Test Coverage\n\n## Unit Tests: check_sensitive_data()\n- Detects AWS key pattern in body\n- Detects API key pattern\n- Detects password pattern\n- Detects bearer token pattern\n- Returns has_sensitive_data=true when patterns found\n- Returns has_sensitive_data=false when clean\n- Returns empty warnings list when clean\n- Returns populated warnings list when issues found\n- Handles items with None/empty body gracefully\n- Returns correct pattern names in warnings list\n\n## Integration Tests: tm_check_sensitive_data MCP Tool\n- Tool callable via MCP JSON-RPC\n- Returns dict with correct structure\n- `id` field matches input\n- `has_sensitive_data` is boolean\n- `warnings` is list\n- `patterns_checked` contains all pattern names\n\n## Edge Cases\n- Item with no body returns no warnings\n- Item with mixed content (clean + suspicious) returns only suspicious warnings\n- False positives (normal text with \"password\" word) logged for awareness\n- Very large bodies process without timeout\n- Non-existent item ID handled gracefully\n\n## Notes\n- Tests should NOT modify planning items\n- Tests are non-blocking (detection is advisory)\n- Include examples of each pattern type in test fixtures\n\n# Description\n\nWrite comprehensive tests for the detection function and MCP tool. Cover pattern detection, return structure, edge cases, and false positives.\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\nAdd guidance_levels accessor to Config class and update profile_for() to merge work-type profile with guidance level. The Config class should load guidance_levels from profiles.yaml and provide methods to retrieve guidance configuration.\n\n# Acceptance Criteria\n\n- [ ] Config class loads guidance_levels from profiles.yaml\n- [ ] Config class loads default_guidance from planning.yaml\n- [ ] guidance_levels() method returns all guidance levels\n- [ ] guidance_for() method returns specific guidance level config\n- [ ] profile_for() merges work-type profile with guidance level\n- [ ] Default guidance used when not specified\n- [ ] Tests for Config class methods\n- [ ] Backward compatible (no guidance = standard)\n\n# Notes\n\nThis task ensures the Config class can access guidance configuration and merge it with work-type profiles for complete profile context.\n\n# State\n\ndone\n"
 }

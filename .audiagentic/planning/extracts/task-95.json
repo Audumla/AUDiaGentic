@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-95",
-    "label": "[PKT-PRV-018](task-0095): Provider Metrics",
+    "label": "[PKT-PRV-020](task-0097): Provider Configuration Management",
     "state": "draft",
-    "summary": "Implement provider metrics",
-    "spec_ref": "spec-12",
+    "summary": "Manage provider configuration",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-95-pkt-prv-018-task-0095-provider-metrics.md",
+    "path": "docs/planning/tasks/providers/task-95-pkt-prv-020-task-0097-provider-configuration-management.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-018](task-0085): Provider Metrics\n\n## Purpose\n\nImplement provider metrics.\n\n## Scope\n\n- Metrics collection\n- Export\n- Dashboard\n\n## Implementation\n\n1. Collect metrics\n2. Add export\n3. Build dashboard\n\n## Acceptance Criteria\n\n1. Metrics collected\n2. Export works\n3. Dashboard works\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-020](task-0087): Provider Configuration Management\n\n## Purpose\n\nManage provider configuration.\n\n## Scope\n\n- Config format\n- Loading\n- Validation\n\n## Implementation\n\n1. Define format\n2. Implement loading\n3. Add validation\n\n## Acceptance Criteria\n\n1. Format defined\n2. Loading works\n3. Validated\n"
 }

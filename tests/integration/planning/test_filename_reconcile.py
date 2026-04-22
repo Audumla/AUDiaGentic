@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 import sys
 from pathlib import Path
 
@@ -13,30 +12,26 @@ for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+from tests.planning_testkit import seed_planning_config
+
 from audiagentic.planning.app.api import PlanningAPI
 from audiagentic.planning.app.paths import Paths
 from audiagentic.planning.app.rec_mgr import Reconcile
 from audiagentic.planning.fs.scan import scan_items
 
-PLANNING_CONFIG_SRC = ROOT / ".audiagentic" / "planning" / "config"
 DOCS_SRC = ROOT / "docs" / "planning"
 
 
 def _seed_root(tmp_path: Path) -> Path:
     """Seed a minimal planning root with config and a couple of planning docs."""
-    cfg_dst = tmp_path / ".audiagentic" / "planning" / "config"
-    cfg_dst.mkdir(parents=True, exist_ok=True)
-    for f in PLANNING_CONFIG_SRC.glob("*.yaml"):
-        shutil.copy(f, cfg_dst / f.name)
-    pack_src = PLANNING_CONFIG_SRC / "profile-packs"
-    if pack_src.exists():
-        shutil.copytree(pack_src, cfg_dst / "profile-packs")
+    seed_planning_config(tmp_path)
 
     # Copy a small subset of real planning docs for integration coverage
     for kind_dir in ["requests", "specifications"]:
         src = DOCS_SRC / kind_dir
         if src.exists():
             dst = tmp_path / "docs" / "planning" / kind_dir
+            import shutil
             shutil.copytree(src, dst)
 
     return tmp_path

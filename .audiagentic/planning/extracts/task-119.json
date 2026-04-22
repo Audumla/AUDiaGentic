@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-119",
-    "label": "[PKT-PRV-041](task-0119): Provider Authorization",
-    "state": "draft",
-    "summary": "Implement provider authorization",
-    "spec_ref": "spec-12",
+    "label": "[PKT-PRV-044](task-0122): Provider Policy Enforcement",
+    "state": "cancelled",
+    "summary": "Implement provider policy enforcement",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-119-pkt-prv-041-task-0119-provider-authorization.md",
+    "path": "docs/planning/tasks/providers/task-119-pkt-prv-044-task-0122-provider-policy-enforcement.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-041](task-0108): Provider Authorization\n\n## Purpose\n\nImplement provider authorization.\n\n## Scope\n\n- Authz rules\n- Permissions\n- Access control\n\n## Implementation\n\n1. Define rules\n2. Add permissions\n3. Implement access control\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Permissions work\n3. Access controlled\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The Continue auto-install line was superseded and archived.\n\n\n# [PKT-PRV-044](task-0111): Provider Policy Enforcement\n\n## Purpose\n\nImplement provider policy enforcement.\n\n## Scope\n\n- Policy format\n- Enforcement logic\n- Exceptions\n\n## Implementation\n\n1. Define format\n2. Implement enforcement\n3. Add exceptions\n\n## Acceptance Criteria\n\n1. Format defined\n2. Enforcement works\n3. Exceptions handled\n"
 }

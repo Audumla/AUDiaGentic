@@ -1,17 +1,17 @@
 {
   "item": {
     "id": "task-203",
-    "label": "Add include_body and write_to_disk controls to extract()",
-    "state": "done",
-    "summary": "Add explicit include_body and write_to_disk parameters to extract() so callers can obtain metadata without body content and without writing to .audiagentic/planning/extracts/{id}.json",
-    "spec_ref": "spec-7",
+    "label": "Add body content parameters to task creation and enforce non-empty body via validation",
+    "state": "draft",
+    "summary": "Extend tm.py new task to accept --description, --acceptance, and --notes parameters so tasks can be created fully in one command, and add validation checks that reject tasks in draft+ state with empty Description or Acceptance Criteria sections",
+    "spec_ref": "spec-6",
     "request_refs": [],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-203-add-include-body-and-write-to-disk-controls-to-extract.md",
+    "path": "docs/planning/tasks/core/task-203-add-body-content-parameters-to-task-creation-and-enforce-non-empty-body-via-validation.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,5 +22,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n\n\n\n# Description\n\nAdd two explicit controls to `ext_mgr.ExtractsMgr.extract()`:\n\n**`include_body: bool = True`** \u2014 when `False`, return only frontmatter metadata without reading or returning the markdown body. Default `True` preserves current behaviour.\n\n**`write_to_disk: bool = True`** \u2014 when `False`, return the extract result without writing to `.audiagentic/planning/extracts/{id}.json`. Default `True` preserves current behaviour.\n\nUpdate the method signature:\n\n```python\ndef extract(self, id_: str, with_related: bool = False, with_resources: bool = False,\n            include_body: bool = True, write_to_disk: bool = True) -> dict:\n```\n\n# Acceptance Criteria\n\n- `extract(id, include_body=False)` returns frontmatter metadata only, no body content\n- `extract(id, write_to_disk=False)` returns the result without writing to the extracts directory\n- Default behaviour (both `True`) is identical to current behaviour\n- All existing callers continue to work without changes\n- Tests cover `include_body=False` and `write_to_disk=False` paths\n\n# Notes\n\nDepends on task-0202 (extract already uses lookup path). The `with_related` and `with_resources` parameters already default to `False` and are not changed by this task.\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nTwo changes are required:\n\n**1. Body content parameters for `tm.py new task`**\n\nAdd `--description`, `--acceptance`, and `--notes` optional arguments to the `new task` subcommand in `tools/planning/tm.py`. Pass these through to `task_mgr.create()` which should write them into the corresponding markdown body sections instead of leaving them blank.\n\nThe body template in `task_mgr.py` currently generates:\n\n```text\n# Description\\n\\n\\n# Acceptance Criteria\\n\\n\\n# Notes\\n\\n\n```\n\nWhen the parameters are supplied, replace the empty section bodies with the provided content.\n\n## Validation: non-empty body sections\n\nAdd checks in `val_mgr.py` that a task's markdown body contains non-empty `Description` and `Acceptance Criteria` sections. A task with blank sections must fail validation with a clear message, blocking state transitions via the hook.\n\n# Acceptance Criteria\n\n- `tm.py new task --label \"...\" --summary \"...\" --spec spec-NNNN --description \"...\" --acceptance \"...\" --source claude` creates a task with populated body sections in one command\n- `--description`, `--acceptance`, and `--notes` are all optional; omitting them produces the current blank stub behaviour\n- A task with an empty `Description` or `Acceptance Criteria` section fails validation\n- The validation error message identifies the task id and the missing section\n- All existing tests pass\n- New tests cover: fully-populated creation, blank-section validation failure, and state-transition block on empty body\n\n# Notes\n\nThe `--notes` parameter is optional and not required for validation \u2014 notes are informational only. The validation check should mirror the existing section-presence checks in `val_mgr.py`.\n"
 }

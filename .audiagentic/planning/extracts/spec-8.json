@@ -1,41 +1,19 @@
 {
   "item": {
     "id": "spec-8",
-    "label": "Multi-item batch updates and bulk operations for planning MCP",
-    "state": "cancelled",
-    "summary": "Design and implement multi-item batch operations, bulk state transitions, and optional result summarization to reduce token overhead for agent bulk operations",
+    "label": "Canonical planning filename and maintenance reconciliation",
+    "state": "draft",
+    "summary": "Define config-driven canonical planning filenames, reference repair, and one maintenance path for reconcile plus rebuild of derived planning state",
     "request_refs": [
-      "request-11"
+      "request-28"
     ],
-    "task_refs": [
-      {
-        "ref": "task-228",
-        "seq": 1000
-      },
-      {
-        "ref": "task-229",
-        "seq": 1001
-      },
-      {
-        "ref": "task-230",
-        "seq": 1002
-      },
-      {
-        "ref": "task-231",
-        "seq": 1003
-      },
-      {
-        "ref": "task-232",
-        "seq": 1004
-      }
-    ],
+    "task_refs": [],
     "standard_refs": [
       "standard-6",
-      "standard-5",
-      "standard-9"
+      "standard-5"
     ],
     "kind": "spec",
-    "path": "docs/planning/specifications/spec-8-multi-item-batch-updates-and-bulk-operations-for-planning-mcp.md",
+    "path": "docs/planning/specifications/spec-8-canonical-planning-filename-and-maintenance-reconciliation.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -44,8 +22,7 @@
   },
   "effective_standard_refs": [
     "standard-6",
-    "standard-5",
-    "standard-9"
+    "standard-5"
   ],
-  "body": "\n\n\n\n\n\n\n\n\n# Purpose\n\nReduce token overhead and round-trip calls for agent bulk operations by extending planning MCP to support:\n1. Multi-item batch updates (different operations on multiple items in one call)\n2. Bulk state transitions (multiple items to same state)\n3. Optional result summarization (return counts instead of full payloads)\n4. Future: compound operations (create + link, etc.)\n\n# Scope\n\nThis specification covers:\n- Backward-compatible extension of `tm_batch_update` to accept multi-item operations\n- New `tm_bulk_state` operation for state transitions without full-item responses\n- Optional `summary_only` flag on batch operations to minimize response payload\n- Design for future compound operations (deferred implementation)\n- MCP exposure of all new operations\n\nDoes NOT require:\n- Query-based bulk operations (defer to future request)\n- Transactional guarantees (fail-fast vs best-effort is configurable)\n- Rollback semantics\n- Per-item validation before batch execution\n\n# Requirements\n\n## 1. Multi-Item Batch Update (Extended tm_batch_update)\n\nCurrent behavior (single item, multiple operations):\n```python\ndef tm_batch_update(id: str, operations: list[dict]) -> dict\n```\n\nExtended to support:\n```python\ndef tm_batch_update(\n    items: list[dict] | None = None,  # Multi-item: [{id, operations}, ...]\n    id: str | None = None,             # Legacy: single item\n    operations: list[dict] | None = None,  # Legacy: operations for single item\n    summary_only: bool = False,        # Return counts instead of full results\n) -> dict\n```\n\n**Behavior:**\n- If `items` is provided: process multi-item batch\n- If `id` and `operations` provided: process single-item (backward compatible)\n- If both provided: error\n- If neither: error\n\n**Response with summary_only=False (current behavior):**\n```json\n{\n  \"batch\": true,\n  \"items_count\": 3,\n  \"results\": [\n    {\"id\": \"task-0200\", \"operations_executed\": 2, \"results\": [...]},\n    {\"id\": \"task-0201\", \"operations_executed\": 1, \"results\": [...]},\n    {\"id\": \"task-0202\", \"operations_executed\": 1, \"results\": [...]}\n  ],\n  \"errors\": []\n}\n```\n\n**Response with summary_only=True (new, minimal):**\n```json\n{\n  \"batch\": true,\n  \"items_count\": 3,\n  \"succeeded\": 3,\n  \"failed\": 0,\n  \"errors\": []\n}\n```\n\n## 2. Bulk State Transition (New tm_bulk_state)\n\n```python\ndef tm_bulk_state(\n    ids: list[str],\n    new_state: str,\n    summary_only: bool = True,  # Default to summary for state ops\n) -> dict\n```\n\n**Behavior:**\n- Transition multiple items to `new_state` in one call\n- Validate state transition is legal for each item's workflow\n- Return success/failure counts\n- Default to summary_only=True (most agents don't need full item data)\n\n**Response:**\n```json\n{\n  \"bulk_state\": true,\n  \"ids_count\": 6,\n  \"new_state\": \"done\",\n  \"succeeded\": 6,\n  \"failed\": 0,\n  \"transitioned_ids\": [\"task-0200\", \"task-0201\", ...],\n  \"errors\": []\n}\n```\n\n## 3. Result Summarization Flag\n\nAdd optional `summary_only: bool = False` parameter to:\n- `tm_batch_update()`\n- `tm_state()` (return just state change, no full item)\n- `tm_update()` (return just confirmation, no full item)\n\nMinimal response shape:\n```json\n{\n  \"id\": \"item-id\",\n  \"operation\": \"state\",\n  \"new_value\": \"done\",\n  \"success\": true\n}\n```\n\n## 4. Compound Operations (Design Only, Deferred Implementation)\n\nFuture pattern for common workflows:\n```python\ndef tm_create_and_link(\n    kind: str, label: str, summary: str, ...,\n    link_to: str, link_field: str\n) -> dict\n```\n\nEnables: create spec and auto-link to request in one call instead of create + relink.\n\nFuture pattern for state + other changes:\n```python\ndef tm_batch_compound(\n    items: list[{id, state, label, summary, ...}]\n) -> dict\n```\n\nThese are design-forward but deferred; implement multi-item batch first.\n\n# Constraints\n\n1. Backward compatibility: Existing single-item `tm_batch_update(id, operations)` must work unchanged\n2. Per-item validation: Each item's transition/operation must be validated\n3. Fail-fast vs best-effort: Implementation may choose either strategy, document clearly\n4. Maximum batch size: Set reasonable limit (e.g., 50 items) to prevent abuse\n5. Response payload: summary_only=True should produce responses < 500 bytes for typical batches\n\n# Acceptance Criteria\n\n- [x] Design complete\n- [ ] `tm_batch_update` extended to accept multi-item `items` parameter\n- [ ] `tm_batch_update` backward-compatible with single-item signature\n- [ ] `tm_batch_update` supports `summary_only` flag\n- [ ] `tm_bulk_state(ids, new_state, summary_only)` implemented in MCP\n- [ ] `tm_bulk_state` returns minimal response when summary_only=True\n- [ ] Bulk state transition can move a representative task set for this work item in one `tm_bulk_state` call\n- [ ] Agent calling pattern reduced from N individual calls to 1-2 batch calls\n- [ ] Tests cover multi-item batches, state transitions, summary_only flag, backward compat\n- [ ] Existing single-item `tm_batch_update` tests still pass\n- [ ] Design doc includes future compound operations pattern\n\n# Token Efficiency Impact\n\n**Before:** Marking 6 tasks done\n- 6 \u00d7 `tm_state(id, \"done\")` calls\n- 6 response payloads with full item data\n- ~2KB total MCP traffic per operation\n\n**After:** `tm_bulk_state(ids=[\"task-0200\"...], new_state=\"done\", summary_only=True)`\n- 1 call\n- 1 response payload with counts\n- ~200 bytes total MCP traffic\n\n**Savings:** 10\u00d7 reduction in calls, 10\u00d7 reduction in response payload for bulk operations.\n\n# Notes\n\nMulti-item batch is the highest-priority extension. Bulk state transitions are a common pattern that deserves its own optimized tool. Result summarization applies broadly and should become the default for operations where agents don't need full item data.\n\nCompound operations (create_and_link) are valuable but can be deferred \u2014 start with multi-item batch + bulk state + summarization.\n\nThis specification is currently cancelled because the originating request record is no longer present and the linked task slice was never fleshed into implementation-ready work. If this capability is revived, it should be reintroduced under a new active request with explicit request linkage and refreshed task content.\n"
+  "body": "\n\n\n\n\n\n\n\n\n# Purpose\n\nDefine one canonical, config-driven filename convention for planning objects and one canonical maintenance path that reconciles filenames, repairs references, and rebuilds derived planning state.\n\n# Scope\n\n- Define canonical filename convention for planning objects\n- Store naming convention in planning config\n- Apply same convention to create and reconcile flows\n- Repair references when filenames are reconciled\n- Expose one canonical maintenance/rebuild path in planning API/MCP\n- Rebuild indexes/extracts/derived planning state after repair\n\nOut of scope:\n- introducing new planning object kinds\n- changing planning semantic relationships unrelated to naming/references\n\n# Requirements\n## Canonical Naming\n\n- Naming convention must be defined in planning config, not only in code.\n- Config should clearly capture:\n  - numeric formatting policy\n  - slug inclusion policy\n  - canonical filename pattern shape\n  - any narrow legacy exceptions, if they must exist\n- Canonical pattern should be sortable and human-readable.\n- Create and reconcile flows must read the same config-owned naming rule.\n\n## Reference Repair\n\nReconciliation must update or preserve resolution for:\n- planning frontmatter refs such as `request_refs`, `spec_ref`, `plan_ref`, `task_refs`, `parent_task_ref`, `standard_refs`\n- indexes and lookup artifacts\n- generated artifacts or docs that depend on planning file paths where applicable\n- any maintenance outputs that would otherwise keep stale file paths\n\n## Maintenance Path\n\nThere should be one canonical planning maintenance entry point that orchestrates:\n- filename reconciliation\n- reference repair\n- derived index rebuild\n- extract/cache cleanup or rebuild\n- final validation/verification\n\nOther maintenance flows should delegate to this path rather than duplicating rebuild logic.\n\n## API / MCP Surface\n\nPlanning API should expose one canonical maintenance method.\nPlanning MCP/admin should expose one corresponding operation rather than relying on manual fs cleanup.\nIf existing reindex or reconcile operations remain, their behavior should delegate to or align with the canonical maintenance path.\n\n## Migration Semantics\n\nThe system must support safe reconciliation of already-mixed planning artifacts in repo.\nMigration should not leave stale lookup state or unresolved references after renames.\n# Constraints\n\n- Preserve planning IDs and object semantics safely\n- Do not leave stale derived state after reconciliation\n- Keep naming convention centralized in config, not scattered across code\n- Avoid multiple competing cleanup/rebuild code paths\n\n# Acceptance Criteria\n1. Naming convention is documented clearly and stored in config.\n2. New planning objects use canonical filenames automatically.\n3. Reconcile/repair path applies canonical naming consistently to legacy mixed-format files.\n4. Reference repair is part of reconciliation, not a manual follow-up.\n5. One canonical maintenance API/MCP path rebuilds derived planning state.\n6. Existing reindex/reconcile behaviors either delegate to or remain consistent with the canonical maintenance path.\n7. Indexes/lookups/extracts validate cleanly after repair.\n8. Tests cover filename generation, migration/reconciliation, reference repair, and rebuild behavior.\n"
 }

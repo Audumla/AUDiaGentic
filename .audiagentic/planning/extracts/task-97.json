@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-97",
-    "label": "[PKT-PRV-020](task-0097): Provider Configuration Management",
+    "label": "[PKT-PRV-022](task-0099): Provider Lifecycle",
     "state": "draft",
-    "summary": "Manage provider configuration",
-    "spec_ref": "spec-12",
+    "summary": "Manage provider lifecycle",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-97-pkt-prv-020-task-0097-provider-configuration-management.md",
+    "path": "docs/planning/tasks/providers/task-97-pkt-prv-022-task-0099-provider-lifecycle.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-020](task-0087): Provider Configuration Management\n\n## Purpose\n\nManage provider configuration.\n\n## Scope\n\n- Config format\n- Loading\n- Validation\n\n## Implementation\n\n1. Define format\n2. Implement loading\n3. Add validation\n\n## Acceptance Criteria\n\n1. Format defined\n2. Loading works\n3. Validated\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-022](task-0089): Provider Lifecycle\n\n## Purpose\n\nManage provider lifecycle.\n\n## Scope\n\n- Lifecycle states\n- Transitions\n- Cleanup\n\n## Implementation\n\n1. Define states\n2. Implement transitions\n3. Add cleanup\n\n## Acceptance Criteria\n\n1. States defined\n2. Transitions work\n3. Cleanup works\n"
 }

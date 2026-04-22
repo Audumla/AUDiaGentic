@@ -1,26 +1,30 @@
 {
   "item": {
     "id": "task-177",
-    "label": "Implement MCP helper root configurability",
+    "label": "Update tm_list with archive filter parameter",
     "state": "done",
-    "summary": "Add root parameter to all helper functions and set_root/reset_root for isolated operations",
-    "spec_ref": "spec-5",
+    "summary": "Add include_archived parameter to tm_list() to filter archived items",
+    "spec_ref": "spec-2",
     "meta": {
       "task_refs": [
         {
-          "ref": "wp-0008",
-          "seq": 1000
+          "ref": "wp-0009",
+          "seq": 1002
         }
       ]
     },
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-177-implement-mcp-helper-root-configurability.md",
+    "path": "docs/planning/tasks/core/task-177-update-tm-list-with-archive-filter-parameter.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
-  "body": "\n\n\n\n\n\n# Description\n\nAdd root parameter to all MCP helper functions and implement set_root/reset_root for isolated operations.\n\n**Status: IMPLEMENTED**\n\nAll implementation work for task-0177 is complete:\n- Added set_root(root) and reset_root() functions to tm_helper.py\n- Added _get_root() helper to get current root (auto-detected or explicitly set)\n- Added root: Path | None = None parameter to all helper functions\n- All 40+ helper functions now support explicit root parameter\n- Backward compatible - existing code works without changes\n- Tests verify isolated operations work correctly\n- 49/49 planning tests pass\n\nFiles modified:\n- tools/planning/tm_helper.py - Added root configurability to all functions\n- tests/integration/planning/test_mcp_helper_root.py - New tests for root configurability\n\nUsage examples:\n- tm.set_root(Path(\"/path/to/project\")) - Set custom root\n- tm.reset_root() - Reset to auto-detected root\n- tm.new_task(\"Label\", \"Summary\", \"spec-0001\", root=Path(\"/path\")) - Use explicit root\n"
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5",
+    "standard-9"
+  ],
+  "body": "\n\n\n\n\n\n\n\n\n# Description\n\nAdd include_archived parameter to tm_list() to filter archived items.\n\n## Requirements\n\n```python\ndef tm_list(\n    kind: str | None = None,\n    include_archived: bool = False,\n    root: Path | None = None,\n) -> list[dict[str, Any]]:\n    \"\"\"List planning items with archive filtering.\n    \n    Args:\n        kind: Optional kind filter\n        include_archived: Include archived items (default: False)\n        root: Optional project root\n    \n    Returns:\n        List of item summaries\n    \"\"\"\n```\n\n## Implementation\n\n- Update `tools/planning/tm_helper.py` list surface\n- Update `src/audiagentic/planning/app/api.py` list/scan surface as needed\n- Filter by state when include_archived=False\n- Default behavior: exclude archived items\n- Keep query behavior aligned with the canonical state model\n\n## Acceptance Criteria\n\n1. tm_list() excludes archived items by default\n2. tm_list(include_archived=True) includes archived items\n3. Archive state is included in item metadata\n4. Performance is not significantly impacted\n\n# Notes\n\n- Implemented in `tools/planning/tm_helper.py` and exposed through both MCP server entrypoints.\n- List results now include archive awareness and exclude archived items unless explicitly requested.\n"
 }

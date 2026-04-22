@@ -1,11 +1,11 @@
 {
   "item": {
     "id": "task-236",
-    "label": "Add unit tests for knowledge component",
+    "label": "Add lifecycle management for jobs and proposals",
     "state": "draft",
-    "summary": "Add unit tests for events.py, sync.py, validation.py with 70%+ coverage target",
-    "spec_ref": "spec-16",
-    "parent_task_ref": "wp-13",
+    "summary": "Add expiry, cleanup, status tracking for LLM jobs and sync proposals",
+    "spec_ref": "spec-20",
+    "parent_task_ref": "wp-14",
     "request_refs": [
       "request-15"
     ],
@@ -14,7 +14,7 @@
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-236-add-unit-tests-for-knowledge-component.md",
+    "path": "docs/planning/tasks/core/task-236-add-lifecycle-management-for-jobs-and-proposals.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -25,5 +25,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n# Description\nAdd lifecycle management so knowledge jobs and sync proposals do not accumulate forever. This should cover timestamps, expiry/retention, safe cleanup, status transitions, and recovery from partially written or stale records.\n\n# Acceptance Criteria\n1. Jobs track creation, update, and expiry timestamps.\n2. Stale jobs are cleaned up safely without corrupting active state.\n3. Sync proposals track status transitions such as pending, accepted, rejected, and merged.\n4. Proposal cleanup removes or archives stale records according to retention policy.\n5. Job and proposal writes remain atomic and recoverable on load.\n6. Tests verify expiry, cleanup, and recovery behavior.\n\n# Notes\n- Keep deterministic behavior first; lifecycle should not introduce hidden background side effects.\n- Use config-driven retention values so operators can tune cleanup without code changes.\n"
 }

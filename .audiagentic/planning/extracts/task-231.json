@@ -1,17 +1,17 @@
 {
   "item": {
     "id": "task-231",
-    "label": "Integrate knowledge component source code",
+    "label": "Test knowledge component integration",
     "state": "done",
-    "summary": "Copy and integrate knowledge component source files into the project structure at src/audiagentic/knowledge/.",
-    "spec_ref": "spec-14",
+    "summary": "Run comprehensive tests to validate the knowledge component integration, including event scanning, processing, and sync operations.",
+    "spec_ref": "spec-18",
     "request_refs": [],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-231-integrate-knowledge-component-source-code.md",
+    "path": "docs/planning/tasks/core/task-231-test-knowledge-component-integration.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,5 +22,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
 }

@@ -1,21 +1,21 @@
 {
   "item": {
     "id": "plan-12",
-    "label": "Planning Module Critical Fixes Plan",
+    "label": "Implement canonical guidance semantics standard",
     "state": "done",
-    "summary": "Plan for implementing critical bug fixes and improvements to planning module",
+    "summary": "Create standard-0010 defining canonical semantics for light/standard/deep guidance levels",
     "spec_refs": [
-      "spec-18"
+      "spec-16"
     ],
     "request_refs": [
-      "request-16"
+      "request-13"
     ],
     "work_package_refs": [],
     "standard_refs": [
       "standard-6"
     ],
     "kind": "plan",
-    "path": "docs/planning/plans/plan-12-planning-module-critical-fixes-plan.md",
+    "path": "docs/planning/plans/plan-12-implement-canonical-guidance-semantics-standard.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -25,5 +25,5 @@
   "effective_standard_refs": [
     "standard-6"
   ],
-  "body": "\n\n\n\n\n\n\n# Objectives\n\n\n# Delivery Approach\n\n\n# Dependencies\n\n# Notes\n\nMarked done on 2026-04-17 to align the plan record with the already-completed implementation slice for `request-16`.\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n# Objectives\n\n\n# Delivery Approach\n\n\n# Dependencies\n\n# Notes\n\nMarked done on 2026-04-17 after confirming linked guidance-semantics tasks were already completed and the plan outcome exists in the repository.\n"
 }

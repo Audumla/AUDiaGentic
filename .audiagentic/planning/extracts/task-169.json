@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-169",
-    "label": "[PKT-DIS-002](task-0169): Static Registry Provider",
-    "state": "draft",
-    "summary": "Implement static registry provider",
-    "spec_ref": "spec-16",
+    "label": "Scope manifest and migration-registry scaffolding",
+    "state": "done",
+    "summary": "Define manifest and migration-registry scaffolding without drifting into installer implementation",
+    "spec_ref": "spec-8",
     "kind": "task",
-    "path": "docs/planning/tasks/discovery/task-169-pkt-dis-002-task-0169-static-registry-provider.md",
+    "path": "docs/planning/tasks/core/task-169-scope-manifest-and-migration-registry-scaffolding.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-DIS-002](task-0158): Static Registry Provider\n\n## Purpose\n\nImplement static registry provider.\n\n## Scope\n\n- Registry format\n- Static registration\n- Lookup\n\n## Implementation\n\n1. Define format\n2. Implement registration\n3. Add lookup\n\n## Acceptance Criteria\n\n1. Format defined\n2. Registration works\n3. Lookup works\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\nReview the manifest and migration-registry proposal and keep it narrowly scoped as planning/config scaffolding for future installation and upgrade flows.\n\n**Status: IMPLEMENTED**\n\nAll implementation work for task-0172 is complete:\n- Task scoped as documentation and scope control only (no runtime behavior)\n- Cross-references existing lifecycle architecture docs (05_Installation_Update_Cutover_and_Uninstall.md, 06_Component_and_Package_Manifest.md)\n- No duplicate manifest system introduced\n- Planning profile packs remain separate from runtime lifecycle manifests\n- Migration scaffolding documented as future work, not implemented\n- Boundaries clearly recorded: installer scripts, state transitions, and lifecycle code are out of scope\n- Verification confirms no duplicate installation story created\n- Junior implementer can identify which lifecycle files are out of scope\n\n# Acceptance Criteria\n\n1. The task identifies what metadata is needed now versus what must wait for lifecycle/install work.\n2. The task lists any schema, config, or docs locations that will own manifest data.\n3. The task defines how migration-registry scaffolding avoids becoming a hidden installer implementation.\n4. The task records template-installation assumptions explicitly.\n\n# Notes\n\n- Suitable with revision.\n- The current pack mentions manifest and migration scaffolding, but the repository already has lifecycle/install concepts elsewhere, so duplication risk is real.\n- This activity must connect to existing lifecycle and managed-baseline docs rather than inventing a second installation story.\n\n# Implementation Notes\n\n- Cross-reference lifecycle architecture docs and keep fields additive.\n- Limit this phase to documented scaffolding, sample structure, and validation notes.\n- Defer scripts and state transitions to later lifecycle work.\n\n\n# Execution Checklist\n\nImplementation type: documentation and scope control only. This task should avoid new runtime behavior.\n\nFiles to review before making changes:\n- `docs/specifications/architecture/05_Installation_Update_Cutover_and_Uninstall.md`\n- `docs/specifications/architecture/06_Component_and_Package_Manifest.md`\n- `src/audiagentic/runtime/lifecycle/manifest.py`\n- `src/audiagentic/runtime/lifecycle/fresh_install.py`\n- `src/audiagentic/runtime/lifecycle/cutover.py`\n- `docs/references/planning/planning-doc-surfaces.md`\n- `docs/references/planning/planning-verification-matrix.md`\n\nSteps:\n1. Confirm what manifest and migration concepts already exist in lifecycle/runtime code.\n2. Limit this task to planning-facing scaffolding notes and placeholders only.\n3. If a proposed change duplicates installed-state manifest logic, stop and redirect it to lifecycle work.\n4. Record where future planning metadata would live without introducing a second installation system.\n5. Document the boundaries clearly in the task/spec/reference docs.\n\nDo not change:\n- runtime manifest schemas or lifecycle code unless a separate lifecycle task explicitly requires it\n- installer scripts\n- state transitions for install/update/cutover\n\nVerification:\n- `python tools/planning/tm.py validate`\n- manual review that no duplicate manifest system has been introduced\n\nDone means:\n- this task leaves behind clear scaffolding notes\n- no duplicate installation story is created\n- a junior implementer can tell which lifecycle files are out of scope\n"
 }

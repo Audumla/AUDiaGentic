@@ -1,17 +1,17 @@
 {
   "item": {
     "id": "task-201",
-    "label": "Add internal lookup(id) and head(id) helpers to api.py",
+    "label": "Expose head(id) and refined extract controls in MCP and tm_helper",
     "state": "done",
-    "summary": "Add lookup(id) that reads lookup.json and parses only the target markdown file, and head(id) that returns index-only metadata without parsing any planning doc",
-    "spec_ref": "spec-7",
+    "summary": "Add tm_head MCP tool and tm_helper.head() function; update tm_extract to expose include_body and write_to_disk options so AI consumers have a clear low-token read path",
+    "spec_ref": "spec-10",
     "request_refs": [],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-201-add-internal-lookup-id-and-head-id-helpers-to-api-py.md",
+    "path": "docs/planning/tasks/core/task-201-expose-head-id-and-refined-extract-controls-in-mcp-and-tm-helper.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,5 +22,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n\n\n\n# Description\n\nAdd two internal helper methods to `src/audiagentic/planning/app/api.py`:\n\n**`lookup(id_: str) -> ItemView`**\n\n- Read `.audiagentic/planning/indexes/lookup.json`\n- Resolve the item's path from the index entry\n- Call `parse_markdown(path)` on that single file\n- Return an `ItemView` equivalent to what `_find()` returns today\n- Raise `KeyError` (or a clear `ValueError`) if the id is not in the index\n\n**`head(id_: str) -> dict`**\n\n- Read `.audiagentic/planning/indexes/lookup.json`\n- Return the index entry directly: `{id, kind, label, state, path, deleted}`\n- No markdown file parse \u2014 index data only\n\nBoth methods must be available internally for use by `_find()`, `show()`, `extract()`, and any other single-item read path.\n\n# Acceptance Criteria\n\n- `lookup(id)` returns a fully parsed item for a known id without calling `scan_items()`\n- `head(id)` returns the index entry dict without opening any markdown file\n- Both raise a clear error for an unknown id\n- Both are covered by unit tests using a fixture lookup.json\n\n# Notes\n\nDepends on task-0200 (lookup.json must exist before these helpers can be used). These helpers are internal \u2014 not part of the public tm_helper or MCP surface yet (that is task-0204).\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\nExpose the new `head(id)` capability and the refined `extract()` controls at the helper and MCP layers.\n\n**`tm_helper.py`**\n\nAdd `head(root, id_)` function that calls `api.head(id_)` and returns the index entry dict. Keep it consistent with the existing `show()` pattern.\n\n**`tools/mcp/audiagentic-planning/audiagentic-planning_mcp.py`**\n\nAdd a `tm_head` MCP tool:\n\n```python\n@mcp.tool()\ndef tm_head(id: str) -> dict:\n    \"\"\"Return lean index-only metadata for a planning item. No markdown parse. Lowest token cost.\"\"\"\n    return _wrap_tool_result(tm_helper.head(root, id))\n```\n\nUpdate `tm_extract` to expose `include_body` and `write_to_disk` parameters:\n\n```python\n@mcp.tool()\ndef tm_extract(id: str, with_related: bool = False, with_resources: bool = False,\n               include_body: bool = True, write_to_disk: bool = True) -> dict:\n```\n\nUpdate tool docstrings to make the cost hierarchy clear to AI consumers:\n\n- `tm_head` \u2014 index only, no file parse, minimum tokens\n- `tm_show` \u2014 full frontmatter, single file parse, no body\n- `tm_extract` \u2014 body-inclusive, use `include_body=False` to get frontmatter without body\n\n# Acceptance Criteria\n\n- `tm_head` MCP tool exists and returns `{id, kind, label, state, path, deleted}`\n- `tm_helper.head()` function exists and is callable from outside MCP\n- `tm_extract` MCP tool accepts `include_body` and `write_to_disk` parameters\n- Tool descriptions distinguish the three read tiers clearly\n- Tests cover `tm_head` returning index data and `tm_extract` with `include_body=False`\n\n# Notes\n\nDepends on task-0201 (head helper) and task-0203 (extract controls). This is the final surface-exposure step \u2014 no new logic, only wiring.\n"
 }

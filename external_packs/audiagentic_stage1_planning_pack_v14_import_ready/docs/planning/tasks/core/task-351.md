@@ -1,0 +1,105 @@
+---
+id: task-351
+label: Freeze desired-state resolution and reconcile flow
+state: draft
+summary: Define how defaults, project config, target config, flags, preservation policy, and compatibility rules resolve into plan and apply behavior.
+spec_ref: spec-82
+request_refs:
+- request-32
+standard_refs:
+- standard-5
+- standard-6
+- standard-11
+---
+
+# Description
+
+Freeze one generic resolve and reconcile contract shared by install, update, validate, status, and doctor.
+
+# Inputs
+
+Read before starting:
+- `docs/installer/registry-ownership-matrix.md` (output from task-349)
+- `spec-82` — resolution/validation spec
+- `src/audiagentic/runtime/lifecycle/` — existing lifecycle modules
+- `src/audiagentic/foundation/contracts/` — existing contract definitions
+- `standard-8` — Python implementation standard
+
+# Blocker handling
+
+- if current lifecycle modules do not expose the assumed resolution flow, record the discrepancy and identify the nearest live equivalent
+- if `spec-82` conflicts with current backward-compatibility behavior discovered in task-347 or task-349, record the conflict and do not silently reorder precedence
+- coordinate with `task-352`: this task defines the shared resolution flow, while `task-352` defines validation categories that plug into that flow
+
+# Output
+
+Produce `docs/installer/resolution-reconcile-contract.md` with these sections:
+
+## Input precedence order
+
+Document the exact precedence order for resolving configuration values (highest to lowest):
+1. Command-line flags (highest priority)
+2. Target-specific config
+3. Profile config
+4. Project config
+5. Installer defaults (lowest priority)
+
+For each precedence level, document:
+- Source (file path or config key)
+- What it can override
+- What it cannot override (immutable constraints)
+
+## Observed-state inputs
+
+Document what constitutes observed state:
+- Installed package list (source: which file/command)
+- Current config state (source: which files)
+- Existing registry contents (source: which registry groups)
+- How observed state is captured (function/module path)
+
+## Plan-step derivation rule
+
+Document how plan steps are derived from resolved state:
+- Input: resolved desired state + observed state
+- Output: list of plan steps (create/update/delete/no-op)
+- Decision logic for each step type (when to create, when to update, when to delete)
+- Step object structure (fields: action, target, current_value, desired_value, backend)
+
+## Mode differences
+
+Document how each mode uses the resolution contract:
+- `plan`: resolves state, produces plan steps, outputs without mutation
+- `apply`: resolves state, produces plan steps, executes steps via backends
+- `validate`: resolves state, runs compatibility checks, outputs findings without mutation or plan steps
+- `status`: reads observed state, compares to desired state, outputs difference summary
+- `doctor`: reads observed state, runs health checks, outputs issues and remediation hints
+
+## Shared contract enforcement
+
+Document how the single contract is enforced:
+- Entry point function (exact name and module path)
+- How command handlers call the shared contract
+- How mode parameter is passed
+- What is NOT done per mode (e.g., apply does not create separate resolution logic)
+
+# What not to change
+
+- do not create separate resolve logic per command (single shared contract)
+- do not make apply-only logic the source of truth for doctor or validate
+- do not conflate desired-state, observed-state, and realized-capability
+- do not modify existing lifecycle module signatures in `src/audiagentic/runtime/lifecycle/`
+- do not modify existing contract definitions in `src/audiagentic/foundation/contracts/`
+- do not change the 5-level precedence order (flags > target > profile > project > defaults)
+- do not add new precedence levels beyond the five listed
+
+# Acceptance criteria
+
+- [ ] input precedence order has exactly 5 levels matching the list above
+- [ ] each precedence level specifies source, override scope, and immutability constraints
+- [ ] observed-state inputs specify exact source files/commands for each state type
+- [ ] plan-step derivation rule specifies input, output, and decision logic for each step type
+- [ ] mode differences are documented for all five commands (install, update, uninstall, status, doctor)
+- [ ] no command has its own separate resolution logic (single entry point function)
+- [ ] desired-state, observed-state, and realized-capability are kept as distinct concepts (no conflation)
+- [ ] interaction boundary with task-352 is explicit: flow here, categories there
+- [ ] reviewer can verify by checking that the entry point function exists or is a valid new path

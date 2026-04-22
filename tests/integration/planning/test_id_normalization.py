@@ -1,159 +1,164 @@
-"""Test ID normalization and lookup with various formats.
+"""Integration tests for current planning ID lookup behavior.
 
-Verifies that PlanningAPI.lookup() handles different ID formats correctly:
-- request-0020 (standard padded)
-- request-20 (unpadded)
-- request-020 (partial padding)
+IDs now use raw integers as their canonical stored form. Lookup should resolve
+exact raw IDs and reject legacy padded aliases.
 """
+
+from __future__ import annotations
 
 import sys
 from pathlib import Path
-
-import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from src.audiagentic.planning.app.api import PlanningAPI
+import pytest
+from tests.planning_testkit import seed_planning_config
 
 
-@pytest.fixture
-def api():
-    return PlanningAPI(ROOT)
+def _seed(root: Path) -> None:
+    seed_planning_config(root)
+    for d in (
+        "requests",
+        "specifications",
+        "plans",
+        "tasks/core",
+        "tasks/contrib",
+        "work-packages/core",
+        "work-packages/contrib",
+        "standards",
+    ):
+        (root / "docs" / "planning" / d).mkdir(parents=True, exist_ok=True)
+    for sub in ("ids", "indexes", "events", "claims", "meta", "extracts"):
+        (root / ".audiagentic" / "planning" / sub).mkdir(parents=True, exist_ok=True)
+
+
+@pytest.fixture()
+def pr(tmp_path: Path):
+    _seed(tmp_path)
+    from audiagentic.planning.app.api import PlanningAPI
+
+    return tmp_path, PlanningAPI(tmp_path)
+
+
+def _new_request(api, label: str) -> object:
+    return api.new("request", label=label, summary=f"{label} summary", source="test")
+
+
+def _request_20(api):
+    req = None
+    for n in range(1, 21):
+        req = _new_request(api, f"Request {n}")
+    return req
+
+
+def _full_hierarchy(api):
+    req = _new_request(api, "Request 1")
+    spec = api.new("spec", label="Spec 1", summary="Spec summary", request_refs=[req.data["id"]])
+    plan = api.new("plan", label="Plan 1", summary="Plan summary", spec=spec.data["id"])
+    task = api.new("task", label="Task 1", summary="Task summary", spec=spec.data["id"])
+    wp = api.new("wp", label="WP 1", summary="WP summary", plan=plan.data["id"])
+    return req, spec, plan, task, wp
 
 
 class TestRequestLookup:
-    """Test request lookup with various ID formats."""
+    def test_lookup_exact_raw_request_id(self, pr):
+        _, api = pr
+        req = _request_20(api)
 
-    def test_lookup_standard_padded(self, api):
-        """Test lookup with standard padded ID (request-020)."""
-        item = api.lookup("request-020")
-        assert item.kind == "request"
-        assert item.data["id"] == "request-020"
-
-    def test_lookup_unpadded(self, api):
-        """Test lookup with unpadded ID (request-20)."""
         item = api.lookup("request-20")
-        assert item.kind == "request"
-        assert item.data["id"] == "request-020"
 
-    def test_lookup_partial_padding(self, api):
-        """Test lookup with partial padding (request-020)."""
-        item = api.lookup("request-020")
         assert item.kind == "request"
-        assert item.data["id"] == "request-020"
+        assert item.data["id"] == req.data["id"] == "request-20"
 
-    def test_lookup_single_digit_unpadded(self, api):
-        """Test lookup with single digit unpadded (request-1)."""
-        item = api.lookup("request-1")
-        assert item.kind == "request"
-        assert item.data["id"] == "request-001"
+    def test_lookup_legacy_padded_request_id_fails(self, pr):
+        _, api = pr
+        _request_20(api)
 
-    def test_lookup_single_digit_padded(self, api):
-        """Test lookup with single digit padded (request-001)."""
-        item = api.lookup("request-001")
-        assert item.kind == "request"
-        assert item.data["id"] == "request-001"
-
-    def test_lookup_nonexistent_shows_closest(self, api):
-        """Test that nonexistent ID shows closest match."""
         with pytest.raises(ValueError) as exc_info:
-            api.lookup("request-999")
+            api.lookup("request-020")
 
         error_msg = str(exc_info.value)
-        assert "request-999 not found" in error_msg
-        assert "Closest:" in error_msg
-        assert "request-020" in error_msg  # Should suggest highest existing
+        assert "request-020 not found" in error_msg
+        assert "tried exact match" in error_msg
+        assert "Closest: request-20" in error_msg
+
+    def test_lookup_single_digit_request_uses_raw_id(self, pr):
+        _, api = pr
+        req = _new_request(api, "Request 1")
+
+        item = api.lookup("request-1")
+
+        assert item.kind == "request"
+        assert item.data["id"] == req.data["id"] == "request-1"
+
+    def test_lookup_legacy_single_digit_padded_request_id_fails(self, pr):
+        _, api = pr
+        _new_request(api, "Request 1")
+
+        with pytest.raises(ValueError) as exc_info:
+            api.lookup("request-001")
+
+        error_msg = str(exc_info.value)
+        assert "request-001 not found" in error_msg
+        assert "Closest: request-1" in error_msg
 
 
-class TestTaskLookup:
-    """Test task lookup with various ID formats."""
+class TestOtherKindsLookup:
+    def test_lookup_exact_raw_ids_across_item_kinds(self, pr):
+        _, api = pr
+        req, spec, plan, task, wp = _full_hierarchy(api)
 
-    def test_lookup_task_standard_padded(self, api):
-        """Test task lookup with standard padded ID (task-0001)."""
-        item = api.lookup("task-0001")
-        assert item.kind == "task"
-        assert item.data["id"] == "task-0001"
+        assert api.lookup(req.data["id"]).data["id"] == "request-1"
+        assert api.lookup(spec.data["id"]).data["id"] == "spec-1"
+        assert api.lookup(plan.data["id"]).data["id"] == "plan-1"
+        assert api.lookup(task.data["id"]).data["id"] == "task-1"
+        assert api.lookup(wp.data["id"]).data["id"] == "wp-1"
 
-    def test_lookup_task_unpadded(self, api):
-        """Test task lookup with unpadded ID (task-1)."""
-        item = api.lookup("task-1")
-        assert item.kind == "task"
-        assert item.data["id"] == "task-0001"
+    @pytest.mark.parametrize(
+        ("legacy_id", "closest"),
+        [
+            ("spec-001", "spec-1"),
+            ("plan-001", "plan-1"),
+            ("task-0001", "task-1"),
+            ("wp-001", "wp-1"),
+        ],
+    )
+    def test_lookup_legacy_padded_ids_fail_for_other_kinds(self, pr, legacy_id: str, closest: str):
+        _, api = pr
+        _full_hierarchy(api)
 
-    def test_lookup_task_partial_padding(self, api):
-        """Test task lookup with partial padding (task-001)."""
-        item = api.lookup("task-001")
-        assert item.kind == "task"
-        assert item.data["id"] == "task-0001"
+        with pytest.raises(ValueError) as exc_info:
+            api.lookup(legacy_id)
 
-
-class TestSpecLookup:
-    """Test spec lookup with various ID formats."""
-
-    def test_lookup_spec_standard_padded(self, api):
-        """Test spec lookup with standard padded ID (spec-001)."""
-        item = api.lookup("spec-001")
-        assert item.kind == "spec"
-        assert item.data["id"] == "spec-001"
-
-    def test_lookup_spec_unpadded(self, api):
-        """Test spec lookup with unpadded ID (spec-1)."""
-        item = api.lookup("spec-1")
-        assert item.kind == "spec"
-        assert item.data["id"] == "spec-001"
-
-
-class TestPlanLookup:
-    """Test plan lookup with various ID formats."""
-
-    def test_lookup_plan_standard_padded(self, api):
-        """Test plan lookup with standard padded ID (plan-001)."""
-        item = api.lookup("plan-001")
-        assert item.kind == "plan"
-        assert item.data["id"] == "plan-001"
-
-    def test_lookup_plan_unpadded(self, api):
-        """Test plan lookup with unpadded ID (plan-1)."""
-        item = api.lookup("plan-1")
-        assert item.kind == "plan"
-        assert item.data["id"] == "plan-001"
-
-
-class TestWPlookup:
-    """Test work package lookup with various ID formats."""
-
-    def test_lookup_wp_standard_padded(self, api):
-        """Test WP lookup with standard padded ID (wp-001)."""
-        item = api.lookup("wp-001")
-        assert item.kind == "wp"
-        assert item.data["id"] == "wp-001"
-
-    def test_lookup_wp_unpadded(self, api):
-        """Test WP lookup with unpadded ID (wp-1)."""
-        item = api.lookup("wp-1")
-        assert item.kind == "wp"
-        assert item.data["id"] == "wp-001"
+        error_msg = str(exc_info.value)
+        assert f"{legacy_id} not found" in error_msg
+        assert "tried exact match" in error_msg
+        assert f"Closest: {closest}" in error_msg
 
 
 class TestErrorMessages:
-    """Test that error messages are helpful."""
+    def test_error_shows_available_items_for_current_ids(self, pr):
+        _, api = pr
+        _request_20(api)
 
-    def test_error_shows_available_items(self, api):
-        """Test error message shows available items."""
         with pytest.raises(ValueError) as exc_info:
             api.lookup("request-999")
 
         error_msg = str(exc_info.value)
         assert "Available" in error_msg
-        assert "tm_list" in error_msg
+        assert "tm_list kind=request" in error_msg
+        assert "request-20" in error_msg
 
-    def test_error_shows_normalization_attempt(self, api):
-        """Test error message shows normalization was attempted."""
+    def test_error_no_longer_reports_normalized_id_attempt(self, pr):
+        _, api = pr
+        _request_20(api)
+
         with pytest.raises(ValueError) as exc_info:
-            api.lookup("request-99")
+            api.lookup("request-099")
 
         error_msg = str(exc_info.value)
-        assert "tried request-099" in error_msg
+        assert "tried exact match" in error_msg
+        assert "request-99" not in error_msg

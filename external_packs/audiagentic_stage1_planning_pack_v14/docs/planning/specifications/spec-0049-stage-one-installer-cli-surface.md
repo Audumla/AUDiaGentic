@@ -6,14 +6,37 @@ summary: Define the operator-facing CLI contract as a thin extension of the exis
 request_refs:
 - request-0032
 standard_refs:
-- standard-0006
-- standard-0008
-- standard-0011
+- standard-06
+- standard-08
+- standard-11
 ---
 
 # Purpose
 
 Freeze the CLI contract without turning CLI handlers into the installer source of truth.
+
+# Discovery requirement
+
+Before freezing the CLI contract, survey the current CLI implementation in `src/audiagentic/channels/cli/main.py` and document:
+- current entrypoint function
+- current dispatch pattern
+- current output handling
+- which parts can be extended without replacing the existing CLI
+
+If the current CLI shape differs materially from this spec, record that as a blocker rather than silently redefining the live behavior.
+
+# Scope
+
+This spec covers the operator-facing CLI command set, flags, execution semantics, and output envelopes for the stage-one installer surface. It extends the existing `audiagentic` CLI entrypoint; it does not define a parallel installer CLI.
+
+# Constraints
+
+- Must extend `src/audiagentic/channels/cli/main.py`; must not create a second installer entrypoint.
+- JSON output must never include banners or decorative text.
+- Command handlers must resolve installer definitions through registry and resolution layers, not hardcoded target logic.
+- Must not replace the existing `audiagentic` entrypoint.
+- Must not embed registry contents in CLI command handlers.
+- Must not make target selection mandatory for current project-only behavior.
 
 # Requirements
 

@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-112",
-    "label": "[PKT-PRV-035](task-0112): Provider Circuit Breaker",
+    "label": "[PKT-PRV-037](task-0114): Provider Load Balancing",
     "state": "draft",
-    "summary": "Implement provider circuit breaker",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider load balancing",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-112-pkt-prv-035-task-0112-provider-circuit-breaker.md",
+    "path": "docs/planning/tasks/providers/task-112-pkt-prv-037-task-0114-provider-load-balancing.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-035](task-0102): Provider Circuit Breaker\n\n## Purpose\n\nImplement provider circuit breaker.\n\n## Scope\n\n- Circuit logic\n- State transitions\n- Recovery\n\n## Implementation\n\n1. Implement circuit\n2. Add transitions\n3. Add recovery\n\n## Acceptance Criteria\n\n1. Circuit works\n2. Transitions work\n3. Recovery works\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-037](task-0104): Provider Load Balancing\n\n## Purpose\n\nImplement provider load balancing.\n\n## Scope\n\n- LB algorithm\n- Health checks\n- Distribution\n\n## Implementation\n\n1. Define algorithm\n2. Add health checks\n3. Implement distribution\n\n## Acceptance Criteria\n\n1. Algorithm defined\n2. Health checks work\n3. Distribution works\n"
 }

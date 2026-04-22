@@ -24,12 +24,9 @@ All state changes and creations are logged to `.audiagentic/planning/events/even
 **Creating Artifacts:**
 
 1. **Create a Request** (capture work):
-```bash
-
-## Via CLI
-audiagentic planning new-request \
-  --label "Add Feature X" \
-  --summary "Implement feature X to solve problem Y"
+```python
+## Via MCP tool
+tm_create(kind="request", label="Add Feature X", summary="Implement feature X to solve problem Y")
 
 ## Output: request-XXXX created in docs/planning/requests/
 ```
@@ -51,36 +48,25 @@ audiagentic planning new-plan \
 ```
 
 4. **Create Tasks** (actionable items):
-```bash
-
+```python
 ## Tasks can be created individually or packaged
-audiagentic planning new-task \
-  --label "Implement component A" \
-  --summary "Build component A as specified" \
-  --spec spec-XXXX
+tm_create(kind="task", label="Implement component A", summary="Build component A as specified", spec="spec-XXXX")
 ```
 
 **Managing Tasks:**
 
-```bash
-
+```python
 ## View ready tasks
-audiagentic planning next-tasks --state ready
+tm_list(kind="task", state="ready")
 
 ## Claim a task (mark as in_progress)
-audiagentic planning state \
-  --id task-XXXX \
-  --new-state in_progress \
-  --reason "Starting work on this task"
+tm_edit(id="task-XXXX", operations=[{"op": "state", "value": "in_progress"}])
 
 ## Complete a task
-audiagentic planning state \
-  --id task-XXXX \
-  --new-state done \
-  --reason "Implementation complete, tests passing"
+tm_edit(id="task-XXXX", operations=[{"op": "state", "value": "done"}])
 
 ## View task details
-audiagentic planning show --id task-XXXX
+tm_get(id="task-XXXX")
 ```
 
 **Work Packages:**

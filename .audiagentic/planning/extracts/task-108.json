@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-108",
-    "label": "[PKT-PRV-031](task-0108): Provider Async Support",
+    "label": "[PKT-PRV-033](task-0110): Provider Timeout Handling",
     "state": "draft",
-    "summary": "Implement provider async support",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider timeout handling",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-108-pkt-prv-031-task-0108-provider-async-support.md",
+    "path": "docs/planning/tasks/providers/task-108-pkt-prv-033-task-0110-provider-timeout-handling.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-031](task-0098): Provider Async Support\n\n## Purpose\n\nImplement provider async support.\n\n## Scope\n\n- Async interface\n- Concurrency\n- Coordination\n\n## Implementation\n\n1. Define interface\n2. Implement concurrency\n3. Add coordination\n\n## Acceptance Criteria\n\n1. Interface defined\n2. Concurrency works\n3. Coordination works\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-033](task-0100): Provider Timeout Handling\n\n## Purpose\n\nImplement provider timeout handling.\n\n## Scope\n\n- Timeout logic\n- Cancellation\n- Recovery\n\n## Implementation\n\n1. Implement timeout\n2. Add cancellation\n3. Add recovery\n\n## Acceptance Criteria\n\n1. Timeout works\n2. Cancellation works\n3. Recovery works\n"
 }

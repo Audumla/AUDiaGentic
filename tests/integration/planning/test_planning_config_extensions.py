@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import sys
 from pathlib import Path
 
@@ -9,22 +8,13 @@ for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from audiagentic.planning.app.config import Config
+from tests.planning_testkit import seed_planning_config
 
-PLANNING_CONFIG_SRC = ROOT / ".audiagentic" / "planning" / "config"
+from audiagentic.planning.app.config import Config
 
 
 def _seed_config(tmp_path: Path) -> Path:
-    dst = tmp_path / ".audiagentic" / "planning" / "config"
-    dst.mkdir(parents=True, exist_ok=True)
-
-    for f in PLANNING_CONFIG_SRC.glob("*.yaml"):
-        shutil.copy(f, dst / f.name)
-
-    profile_pack_src = PLANNING_CONFIG_SRC / "profile-packs"
-    if profile_pack_src.exists():
-        shutil.copytree(profile_pack_src, dst / "profile-packs")
-
+    seed_planning_config(tmp_path)
     return tmp_path
 
 

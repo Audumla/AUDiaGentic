@@ -1,19 +1,19 @@
 {
   "item": {
     "id": "task-252",
-    "label": "Create state propagation config system",
+    "label": "Bridge planning hooks onto canonical events without removing legacy hooks",
     "state": "done",
-    "summary": "Implement state_propagation.yaml config with default rules and workflow overrides",
-    "spec_ref": "spec-20",
+    "summary": "Preserve current planning hook behavior while routing compatible post-commit behavior through canonical events during transition \u2014 complete",
+    "spec_ref": "spec-23",
     "request_refs": [
-      "request-18"
+      "request-17"
     ],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-252-create-state-propagation-config-system.md",
+    "path": "docs/planning/tasks/core/task-252-bridge-planning-hooks-onto-canonical-events-without-removing-legacy-hooks.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,7 +22,8 @@
   },
   "effective_standard_refs": [
     "standard-5",
-    "standard-6"
+    "standard-6",
+    "standard-10"
   ],
-  "body": "\n\n\n\n\n\n# Description\n\nCreate configuration surface for planning state propagation. This task owns loading default propagation behavior, supporting workflow-specific overrides, and exposing on/off control for rollout and debugging.\n\n**Config file:** `.audiagentic/planning/config/state_propagation.yaml`\n\n**Default rules:**\n```yaml\nenabled: true\nmode: ASYNC  # SYNC or ASYNC\nmax_depth: 10\nlog_file: planning/meta/propagation_log.json\ndefaults:\n  task:\n    to_in_progress: trigger_wp_in_progress\n    to_done: check_all_tasks_done_for_wp\n    to_blocked: trigger_wp_blocked\n  wp:\n    to_in_progress: trigger_plan_in_progress\n    to_done: check_all_wps_done_for_plan\n    to_blocked: trigger_plan_blocked\n  plan:\n    to_in_progress: trigger_spec_in_progress\n    to_done: check_all_plans_done_for_spec\n    to_blocked: trigger_spec_blocked\nworkflows:\n  custom_workflow:\n    overrides:\n      # workflow-specific rules\n```\n\n**Key behaviors:**\n- Default rules applied if config file missing\n- `enabled: false` disables all propagation globally\n- `mode: ASYNC` recommended for eventual consistency\n- `max_depth: 10` prevents infinite loops\n- Workflow-specific overrides supported\n- Invalid config fails with clear error message\n\n# Acceptance Criteria\n\n- Default propagation works without explicit config file\n- Config file loaded from `.audiagentic/planning/config/state_propagation.yaml`\n- `enabled: false` disables all propagation globally\n- Workflow-specific overrides loaded and applied\n- Invalid config fails with clear error message\n- Unit tests cover: defaults, overrides, disablement, invalid config\n- Smoke test proves planning config loads with/without propagation settings\n\n# Notes\n\nPropagation engine (task-0251) consumes this config. This task is config loading only.\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n# Description\n\nMigrate planning hooks to events per inventory from task-0262. This task wires hook-driven flows through canonical events while preserving current behavior during transition.\n\n**Migration approach:**\n1. For each high-priority hook from task-0262:\n   - Create event subscription that replicates hook behavior\n   - Keep hook functional via compatibility bridge\n   - Test both paths work identically\n2. Update documentation to mark hooks as deprecated\n3. Verify no user-visible behavior changes\n\n**Example migration:**\n```python\n# Old: hook in hooks.yaml\n# task.after_state_change \u2192 some_action()\n\n# New: event subscription\nbus.subscribe(\"planning.item.state.changed\", lambda e: some_action(e))\n```\n\n# Acceptance Criteria\n\n- High-priority hooks from task-0262 migrated to events\n- Hook behavior preserved via compatibility bridge\n- No user-visible behavior changes\n- Hooks marked deprecated in documentation\n- Unit tests cover: compatibility path, event path equivalence\n- Smoke test proves planning workflows function after migration\n\n# Implementation\n\n**Event Publishing** (`src/audiagentic/planning/app/api.py`):\n- `_publish_event()` method publishes events to EventBus with optional integration (try/except)\n- All planning API operations now publish events after successful completion\n- EventBus integration is optional - API works without it\n\n**Migrated hooks:**\n- \u2705 `after_create` \u2192 `planning.item.created.{kind}`\n- \u2705 `after_update` \u2192 `planning.item.updated.{kind}`\n- \u2705 `before_state_change` \u2192 `planning.item.state.will-change.{kind}`\n- \u2705 `after_state_change` \u2192 `planning.item.state.changed.{kind}`\n- \u2705 `after_delete` \u2192 `planning.item.deleted.{kind}`\n- \u2705 `after_reconcile` \u2192 `planning.reconciled.planning`\n\n**Integration points:**\n- `PlanningAPI.new()` - after_create\n- `PlanningAPI.create_with_content()` - after_create\n- `PlanningAPI.update()` - after_update\n- `PlanningAPI.update_content()` - after_update\n- `PlanningAPI.state()` - after_state_change\n- `PlanningAPI.delete()` - after_delete\n- `PlanningAPI.reconcile()` - after_reconcile\n\n**State Propagation Engine Integration:**\nThe `StatePropagationEngine` is automatically initialized in `PlanningAPI.__init__()` when the EventBus is available. It subscribes to `planning.item.state.changed` events and handles automatic state propagation across planning hierarchies (task\u2192wp\u2192plan\u2192spec).\n\n# Notes\n\nDepends on: task-262 (inventory). Legacy hook removal is task-0263.\n\n## Implementation Status: Complete \u2705 (2026-04-15)\n\nAll hooks have been migrated to canonical events. The hook system files (`hooks.py`, `hook_bridge.py`) have been removed (task-0263). Event publishing is integrated into all planning API operations with optional EventBus integration. The StatePropagationEngine is automatically initialized and handles state propagation across planning hierarchies.\n"
 }

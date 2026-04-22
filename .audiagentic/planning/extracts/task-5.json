@@ -23,5 +23,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\nRemove all documentation references to the hooks system from: README.md, comment strings, and any other documentation. Update any examples or guides that mention hooks to reflect the new event-driven architecture.\n\n# Notes\n\nCancelled on 2026-04-17 as redundant placeholder work under superseded `request-21`. Current knowledge architecture still intentionally uses hook-based sync alongside event-driven behavior.\n"
+  "body": "\n\n\n\n\n\n\n\n\nRemove all documentation references to the hooks system from: README.md, comment strings, and any other documentation. Update any examples or guides that mention hooks to reflect the new event-driven architecture.\n\n# Notes\n\nCancelled on 2026-04-17 as redundant placeholder work under superseded `request-21`. Current knowledge architecture still intentionally uses hook-based sync alongside event-driven behavior.\n"
 }

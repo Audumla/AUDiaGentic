@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-153",
-    "label": "[PKT-PRV-075](task-0153): Provider Data Lineage Monitoring",
+    "label": "[PKT-PRV-078](task-0156): Provider Data Standards Monitoring",
     "state": "draft",
-    "summary": "Implement provider data lineage monitoring",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data standards monitoring",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-153-pkt-prv-075-task-0153-provider-data-lineage-monitoring.md",
+    "path": "docs/planning/tasks/providers/task-153-pkt-prv-078-task-0156-provider-data-standards-monitoring.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-075](task-0142): Provider Data Lineage Monitoring\n\n## Purpose\n\nImplement provider data lineage monitoring.\n\n## Scope\n\n- Monitoring logic\n- Tracking\n- Alerts\n\n## Implementation\n\n1. Implement monitoring\n2. Add tracking\n3. Add alerts\n\n## Acceptance Criteria\n\n1. Monitoring works\n2. Tracking works\n3. Alerts sent\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-078](task-0145): Provider Data Standards Monitoring\n\n## Purpose\n\nImplement provider data standards monitoring.\n\n## Scope\n\n- Monitoring logic\n- Compliance checks\n- Alerts\n\n## Implementation\n\n1. Implement monitoring\n2. Add compliance checks\n3. Add alerts\n\n## Acceptance Criteria\n\n1. Monitoring works\n2. Compliance checked\n3. Alerts sent\n"
 }

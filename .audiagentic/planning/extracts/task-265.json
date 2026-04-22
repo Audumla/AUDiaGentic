@@ -1,19 +1,18 @@
 {
   "item": {
     "id": "task-265",
-    "label": "Implement planning audit and repair CLI command",
-    "state": "done",
-    "summary": "Create planning audit CLI command to detect and repair inconsistent hierarchies with fix logging",
-    "spec_ref": "spec-20",
+    "label": "Fix empty planning/app/__init__.py",
+    "state": "completed",
+    "summary": "Add module docstring and proper exports",
     "request_refs": [
-      "request-18"
+      "request-19"
     ],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-265-implement-planning-audit-and-repair-cli-command.md",
+    "path": "docs/planning/tasks/core/task-265-fix-empty-planning-app-init-py.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -24,5 +23,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n\n\n\n\n\n\n\n# Description\n\nImplement `audiagentic planning audit` CLI command to detect and repair inconsistent planning hierarchies. This task owns scanning for state inconsistencies, reporting findings, and optionally auto-fixing by re-running propagation logic.\n\n**Commands:**\n```bash\naudiagentic planning audit\n  # Scan and report inconsistent hierarchies\n  \naudiagentic planning audit --fix\n  # Scan, report, and auto-fix inconsistencies\n  \naudiagentic planning audit --verbose\n  # Show detailed propagation log analysis\n```\n\n**Inconsistency detection:**\n- WP state doesn't match children (e.g., WP=ready but task=in_progress)\n- Plan state doesn't match WPs\n- Spec state doesn't match plans\n- Missing propagation log entries\n\n**Auto-fix:**\n- Re-run propagation logic for inconsistent items\n- Log all fixes applied\n- Idempotent: safe to run multiple times\n\n# Acceptance Criteria\n\n- `audit` command scans all planning items for inconsistent hierarchies\n- `audit` reports items where parent state doesn't match children\n- `audit --fix` automatically repairs inconsistencies by re-running propagation\n- `audit --verbose` shows detailed propagation log analysis\n- All fixes logged to `propagation_log.json` with `fixed_by_audit: true` flag\n- Command is idempotent (safe to run multiple times)\n- Unit tests cover: inconsistency detection, auto-fix, idempotency\n- Integration test covers: crash simulation \u2192 audit \u2192 repair\n- Smoke test proves audit command executes without errors\n\n# Notes\nDepends on: task-251 (propagation engine), task-0252 (config). This task is CLI and audit logic only.\n\nAssessment on 2026-04-17: audit/repair remains useful but does not replace fixing the root propagation defect tracked in `task-0006`. The observed `draft -> done` failure came from live propagation during state changes, not only from stale persisted hierarchies.\n\nImplemented on 2026-04-17: added `tm audit` / `tm audit --fix` in `tools/planning/tm.py`, backed by existing propagation validation/healing logic and audit log writes to `.audiagentic/planning/meta/propagation_log.json` with `fixed_by_audit: true`. Added integration coverage in `tests/integration/planning/test_tm_audit.py` for report and repair flows. Verified with `pytest tests/integration/planning/test_tm_audit.py -q` -> 2 passed.\n"
+  "body": "\n\n\n\n\n\n\n\n\nAdded comprehensive module docstring and exports to planning/app/__init__.py.\n\n## Completed Work\n\n1. **Added module docstring** covering:\n   - Module purpose: Planning application layer for managers, API, and utilities\n   - Key components: BaseMgr, TaskMgr, WPMgr, PlanMgr, ReqMgr, SpecMgr, PlanningAPI\n   - Supporting modules: Config, Paths, Events, Claims, Indexer, Validator, Relationships\n   - Cross-references to related modules\n\n2. **Added exports** in `__all__`:\n   - PlanningAPI: Main API class\n   - BaseMgr: Base manager class\n   - Config: Configuration management\n   - Paths: Path resolution utilities\n\n## Standards Compliance\n- **standard-0008**: Comprehensive module-level documentation\n- **standard-0001**: Planning documentation maintenance\n\n## Testing\nModule docstring is accessible via `help(planning.app)` and contains all required sections.\n"
 }

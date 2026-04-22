@@ -20,8 +20,8 @@
       "standard-1"
     ],
     "spec_refs": [
-      "spec-13",
-      "spec-14"
+      "spec-17",
+      "spec-18"
     ],
     "kind": "request",
     "path": "docs/planning/requests/request-14-integrate-knowledge-component-v7-4.md",
@@ -34,5 +34,5 @@
   "effective_standard_refs": [
     "standard-1"
   ],
-  "body": "\n\n\n\n\n\n# Understanding\n\nInitial feature intake captured; the desired capability is understood well enough to refine directly into implementation work.\n\n# Open Questions\n\n- What exact outcome is required?\n- What constraints or non-goals apply?\n- How will success be verified?\n\n# Problem\n\n\n\n# Desired Outcome\n\n\n\n# Constraints\n\n\n# Notes\nClosed on 2026-04-17 after assessment. Knowledge component integration work is present in the repository and linked implementation tasks are complete. The remaining open placeholder task was cancelled as stale planning residue.\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n# Understanding\n\nInitial feature intake captured; the desired capability is understood well enough to refine directly into implementation work.\n\n# Open Questions\n\n- What exact outcome is required?\n- What constraints or non-goals apply?\n- How will success be verified?\n\n# Problem\n\n\n\n# Desired Outcome\n\n\n\n# Constraints\n\n\n# Notes\nClosed on 2026-04-17 after assessment. Knowledge component integration work is present in the repository and linked implementation tasks are complete. The remaining open placeholder task was cancelled as stale planning residue.\n"
 }

@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-149",
-    "label": "[PKT-PRV-071](task-0149): Provider Data Dictionary Rules",
+    "label": "[PKT-PRV-074](task-0152): Provider Data Governance Monitoring",
     "state": "draft",
-    "summary": "Implement provider data dictionary rules",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data governance monitoring",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-149-pkt-prv-071-task-0149-provider-data-dictionary-rules.md",
+    "path": "docs/planning/tasks/providers/task-149-pkt-prv-074-task-0152-provider-data-governance-monitoring.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-071](task-0138): Provider Data Dictionary Rules\n\n## Purpose\n\nImplement provider data dictionary rules.\n\n## Scope\n\n- Dictionary rules\n- Definitions\n- Documentation\n\n## Implementation\n\n1. Define rules\n2. Add definitions\n3. Document\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Definitions complete\n3. Documented\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-074](task-0141): Provider Data Governance Monitoring\n\n## Purpose\n\nImplement provider data governance monitoring.\n\n## Scope\n\n- Monitoring logic\n- Compliance checks\n- Alerts\n\n## Implementation\n\n1. Implement monitoring\n2. Add compliance checks\n3. Add alerts\n\n## Acceptance Criteria\n\n1. Monitoring works\n2. Compliance checked\n3. Alerts sent\n"
 }

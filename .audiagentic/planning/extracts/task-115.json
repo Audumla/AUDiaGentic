@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-115",
-    "label": "[PKT-PRV-038](task-0115): Provider Connection Pooling",
-    "state": "cancelled",
-    "summary": "Implement provider connection pooling",
-    "spec_ref": "spec-12",
+    "label": "[PKT-PRV-040](task-0118): Provider Authentication",
+    "state": "draft",
+    "summary": "Implement provider authentication",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-115-pkt-prv-038-task-0115-provider-connection-pooling.md",
+    "path": "docs/planning/tasks/providers/task-115-pkt-prv-040-task-0118-provider-authentication.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The local-openai prompt-trigger line was superseded and archived.\n\n\n# [PKT-PRV-038](task-0105): Provider Connection Pooling\n\n## Purpose\n\nImplement provider connection pooling.\n\n## Scope\n\n- Pool design\n- Allocation\n- Recycling\n\n## Implementation\n\n1. Design pool\n2. Implement allocation\n3. Add recycling\n\n## Acceptance Criteria\n\n1. Pool designed\n2. Allocation works\n3. Recycling works\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-040](task-0107): Provider Authentication\n\n## Purpose\n\nImplement provider authentication.\n\n## Scope\n\n- Auth methods\n- Token handling\n- Session management\n\n## Implementation\n\n1. Define methods\n2. Handle tokens\n3. Manage sessions\n\n## Acceptance Criteria\n\n1. Methods defined\n2. Tokens handled\n3. Sessions managed\n"
 }

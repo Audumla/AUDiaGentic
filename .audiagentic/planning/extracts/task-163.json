@@ -1,21 +1,18 @@
 {
   "item": {
     "id": "task-163",
-    "label": "[PKT-MIG-002](task-0163): Provider Migration Rules",
+    "label": "[PKT-NOD-002](task-0166): Node-Local Status Persistence",
     "state": "draft",
-    "summary": "Define provider migration rules",
-    "spec_ref": "spec-14",
+    "summary": "Implement node-local status persistence",
+    "spec_ref": "spec-19",
     "kind": "task",
-    "path": "docs/planning/tasks/migration/task-163-pkt-mig-002-task-0163-provider-migration-rules.md",
+    "path": "docs/planning/tasks/node-execution/task-163-pkt-nod-002-task-0166-node-local-status-persistence.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
-    "standard-6",
-    "standard-5"
-  ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-MIG-002](task-0152): Provider Migration Rules\n\n## Purpose\n\nDefine provider migration rules.\n\n## Scope\n\n- Rule format\n- Migration logic\n- Validation\n\n## Implementation\n\n1. Define format\n2. Implement migration\n3. Add validation\n\n## Acceptance Criteria\n\n1. Format defined\n2. Migration works\n3. Validated\n"
+  "effective_standard_refs": [],
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-NOD-002](task-0155): Node-Local Status Persistence\n\n## Purpose\n\nImplement node-local status persistence.\n\n## Scope\n\n- Persistence format\n- Storage logic\n- Recovery\n\n## Implementation\n\n1. Define format\n2. Implement storage\n3. Add recovery\n\n## Acceptance Criteria\n\n1. Format defined\n2. Storage works\n3. Recovery works\n"
 }
