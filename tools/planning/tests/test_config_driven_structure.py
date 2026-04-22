@@ -85,6 +85,16 @@ class TestConfigRequiredSections:
         # Standards may have empty required sections
         assert sections is not None
 
+    def test_state_required_sections_task_done(self):
+        """Test state-based required sections for task completion."""
+        sections = self.config.state_required_sections("task", "done")
+        assert "Implementation Notes" in sections
+
+    def test_state_required_sections_missing_state(self):
+        """Unknown or empty state should not require extra sections."""
+        assert self.config.state_required_sections("task", "draft") == []
+        assert self.config.state_required_sections("task", None) == []
+
 
 class TestConfigDocumentTemplates:
     """Test Config.document_template() method for guidance level variations."""
@@ -382,13 +392,14 @@ class TestManagerIntegration:
         """Test spec creation uses config template."""
         # Get template from config
         template = self.config.document_template("spec", "standard")
+        request = self.api.new("request", "Test Request", "Test summary", source="test")
 
         # Create a spec (use test_mode to avoid validation errors)
         spec = self.api.new(
             "spec",
             "Test Spec",
             "Test summary",
-            request_refs=["request-0001"],
+            request_refs=[request.data["id"]],
             check_duplicates=False,
         )
 

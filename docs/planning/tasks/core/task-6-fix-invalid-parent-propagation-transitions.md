@@ -5,13 +5,19 @@ state: done
 summary: Prevent automatic propagation from attempting invalid parent state transitions
   such as draft -> done during event-driven cascades
 domain: core
-spec_ref: spec-20
+spec_ref: spec-24
 request_refs:
 - request-18
 standard_refs:
 - standard-5
 - standard-6
 ---
+
+
+
+
+
+
 
 
 

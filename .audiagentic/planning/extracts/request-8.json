@@ -13,14 +13,14 @@
       "Should audience profiles also affect hook/automation rules or event metadata for downstream tooling?"
     ],
     "spec_refs": [
-      "spec-10"
+      "spec-13"
     ],
     "standard_refs": [
       "standard-9"
     ],
     "meta": {
       "task_refs": [
-        "task-236"
+        "task-233"
       ],
       "source_refs": [
         "docs/planning/requests/request-0008.md",
@@ -29,7 +29,7 @@
         "src/audiagentic/planning/app/api.py",
         "tools/planning/tm_helper.py"
       ],
-      "superseded_by": "request-29"
+      "superseded_by": "request-26"
     },
     "kind": "request",
     "path": "docs/planning/requests/request-8-add-audience-level-profile-system-to-control-planning-depth-of-detail.md",
@@ -42,5 +42,5 @@
   "effective_standard_refs": [
     "standard-9"
   ],
-  "body": "\n\n\n\n\n\n\n\n# Understanding\n\nIntroduce orthogonal audience profiles (junior/mid/senior) that control spec and task required sections, detail verbosity, and acceptance criteria depth independently of the shipped work-type profiles (`enhancement`, `feature`, `issue`, `fix`).\n\nThis is distinct from `request-9`, which closed the unified work-type profile and downstream-topology changes. That request controls execution topology and request defaults; this request is about whether planning records should also support a separate audience/content-depth dimension.\n\n# Open Questions\n\n- Should audience profile be a top-level frontmatter field (like workflow) or stored in meta?\n- Should the default audience be configurable per-project in planning.yaml, or always 'standard'?\n- Which required or suggested sections should differ between junior/mid/senior, and by how much?\n- Should audience profiles also affect hook/automation rules or event metadata for downstream tooling?\n\n# Notes\n\n`request-9` handles the now-shipped unified work-type profile system and downstream creation behavior. This request intentionally remains separate because it would affect planning-layer content expectations rather than object topology.\n\nThis request should only proceed with a planning-layer impact review across workflow/config, helper/API behavior, MCP exposure, validation, generated surfaces, and automation assumptions, consistent with `standard-0009`.\n\nExample: `profile: feature` + `audience: senior` would create a request\u2192specification flow with more rigorous required sections and acceptance detail, while `profile: fix` + `audience: junior` would keep a request\u2192task flow but allow lighter explanatory content.\n\nSuperseded by request-11 (refined with \"guidance levels\" terminology: light/standard/deep)\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n# Understanding\n\nIntroduce orthogonal audience profiles (junior/mid/senior) that control spec and task required sections, detail verbosity, and acceptance criteria depth independently of the shipped work-type profiles (`enhancement`, `feature`, `issue`, `fix`).\n\nThis is distinct from `request-9`, which closed the unified work-type profile and downstream-topology changes. That request controls execution topology and request defaults; this request is about whether planning records should also support a separate audience/content-depth dimension.\n\n# Open Questions\n\n- Should audience profile be a top-level frontmatter field (like workflow) or stored in meta?\n- Should the default audience be configurable per-project in planning.yaml, or always 'standard'?\n- Which required or suggested sections should differ between junior/mid/senior, and by how much?\n- Should audience profiles also affect hook/automation rules or event metadata for downstream tooling?\n\n# Notes\n\n`request-9` handles the now-shipped unified work-type profile system and downstream creation behavior. This request intentionally remains separate because it would affect planning-layer content expectations rather than object topology.\n\nThis request should only proceed with a planning-layer impact review across workflow/config, helper/API behavior, MCP exposure, validation, generated surfaces, and automation assumptions, consistent with `standard-0009`.\n\nExample: `profile: feature` + `audience: senior` would create a request\u2192specification flow with more rigorous required sections and acceptance detail, while `profile: fix` + `audience: junior` would keep a request\u2192task flow but allow lighter explanatory content.\n\nSuperseded by request-11 (refined with \"guidance levels\" terminology: light/standard/deep)\n"
 }

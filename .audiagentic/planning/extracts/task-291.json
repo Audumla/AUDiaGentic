@@ -1,14 +1,14 @@
 {
   "item": {
     "id": "task-291",
-    "label": "wp-21",
+    "label": "wp-24",
     "state": "cancelled",
-    "summary": "Refactor wp-0021 bootstrap",
+    "summary": "Refactor wp-0024 sync",
     "request_refs": [
       "request-19"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-291-wp-21.md",
+    "path": "docs/planning/tasks/core/task-291-wp-24.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n\n# Description\n\nRefactor wp-013 bootstrap\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nRefactor wp-0024 sync\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
 }

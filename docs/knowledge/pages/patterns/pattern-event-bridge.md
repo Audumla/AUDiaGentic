@@ -21,7 +21,7 @@ Event Source → Event Stream → Adapter → Filter → Transform → Action �
    - Example: `{"ts": "...", "event": "task.after_state_change", "id": "task-0258", "new_state": "done"}`
 
 3. **Adapter**: Configuration bridging source to knowledge
-   - Defined in `docs/knowledge/events/adapters.yml`
+   - Defined in `.audiagentic/knowledge/config/events/adapters.yml`
    - Specifies source kind, paths, filters, actions
 
 4. **Filter**: Select relevant events
@@ -94,13 +94,13 @@ adapters:
 3. **Test the Adapter**:
    ```bash
    # Scan for events
-   audiagentic-knowledge --root . scan-events
-   
-   # Process events
-   audiagentic-knowledge --root . process-events
-   
-   # Check proposals
-   ls -la docs/knowledge/proposals/
+    python -m src.audiagentic.knowledge.cli --root . scan-events
+    
+    # Process events
+    python -m src.audiagentic.knowledge.cli --root . process-events
+    
+    # Check proposals
+    ls -la docs/knowledge/data/proposals/
    ```
 
 4. **Monitor and Maintain**:
@@ -154,7 +154,7 @@ This page documents the event bridge pattern. It should be refreshed when:
 
 **Sources:**
 - `src/audiagentic/knowledge/events.py` - Event processing
-- `docs/knowledge/events/adapters.yml` - Current adapters
+- `.audiagentic/knowledge/config/events/adapters.yml` - Current adapters
 - Event adapter schema
 
 **Sync frequency:** On event system changes
@@ -163,4 +163,4 @@ This page documents the event bridge pattern. It should be refreshed when:
 - [Knowledge System](../systems/system-knowledge.md)
 - [Glossary: Event Adapter](../glossary/glossary-event-adapter.md)
 - [Decision: Event-Driven Sync](../decisions/decision-event-driven-sync.md)
-- Event adapters: `docs/knowledge/events/adapters.yml`
+- Event adapters: `.audiagentic/knowledge/config/events/adapters.yml`

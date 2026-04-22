@@ -1,0 +1,91 @@
+---
+id: task-353
+label: Freeze target and dependency definitions
+state: draft
+summary: Define how internal components, external targets, dependencies, and realized capabilities remain separate namespaces.
+spec_ref: spec-83
+request_refs:
+- request-32
+standard_refs:
+- standard-6
+- standard-11
+---
+
+# Description
+
+Prevent future target kinds from being forced into current internal component ids.
+
+# Inputs
+
+Read before starting:
+- `docs/installer/noun-layer-assignment.md` (output from task-348)
+- `docs/installer/registry-ownership-matrix.md` (output from task-349)
+- `spec-83` — target/backend model spec
+
+# Blocker handling
+
+- if current repo surfaces blur namespaces already, document the live overlap and the proposed installer-side separation instead of pretending the live repo is already clean
+- `src/audiagentic/foundation/contracts/canonical_ids.py` — current canonical-id definitions (read to understand existing namespace)
+- `standard-11` — component architecture standard (namespace separation rules)
+
+# Output
+
+Produce `docs/installer/namespace-separation.md` with these sections:
+
+## Internal component namespace
+
+Document the internal component namespace:
+- Namespace prefix or naming convention (e.g., `component:` or no prefix)
+- Which nouns live here (internal components only, not targets)
+- Registry group that owns internal components
+- How internal components are referenced in config files
+
+## External target namespace
+
+Document the external target namespace:
+- Namespace prefix or naming convention (e.g., `target:` or distinct prefix)
+- Which nouns live here (external targets, not internal components)
+- Registry group that owns external targets
+- How external targets are referenced in config files
+
+## Dependency namespace
+
+Document the dependency namespace:
+- How dependencies are named (independent from component/target names)
+- Dependency reference format (e.g., `dep:<component-id>` or `dep:<target-id>`)
+- Whether dependencies share namespaces with components or targets (they must not)
+- Circular dependency detection rules
+
+## Realized-capability namespace
+
+Document the realized-capability namespace:
+- How realized capabilities are named (independent from requested definitions)
+- Registry group that stores realized capabilities
+- How realized capabilities are recorded (function/module path)
+- How realized capabilities differ from requested definitions (outcomes vs requests)
+
+## Namespace validation rules
+
+Document rules for namespace separation:
+- Rule 1: Internal component IDs must never be used as target IDs
+- Rule 2: Dependency IDs must not collide with component or target IDs
+- Rule 3: Realized capability IDs must not be used as requested definition IDs
+- Rule 4: Namespace prefixes (if used) must be validated at parse time
+
+# What not to change
+
+- do not reuse internal component ids as target ids
+- do not model outcomes as if they were requested definitions
+- do not modify `src/audiagentic/foundation/contracts/canonical_ids.py`
+- do not add namespaces beyond the four listed (internal component, external target, dependency, realized-capability)
+- do not allow namespace collisions between any of the four namespaces
+- do not change existing canonical-id format without spec-81 approval
+
+# Acceptance criteria
+
+- [ ] all four namespaces are documented with exact naming conventions
+- [ ] internal component namespace is clearly distinct from external target namespace (no overlap in examples)
+- [ ] dependency namespace is independent from both component and target namespaces
+- [ ] realized-capability namespace is independent from requested definition namespaces
+- [ ] namespace validation rules are explicit and testable (not vague statements)
+- [ ] reviewer can verify by checking that each namespace has a unique prefix or naming convention

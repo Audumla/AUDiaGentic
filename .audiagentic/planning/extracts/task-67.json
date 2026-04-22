@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-67",
-    "label": "[PKT-JOB-001](task-0067): Job Records and Store",
+    "label": "[PKT-JOB-003](task-0069): Workflow Profiles",
     "state": "draft",
-    "summary": "Create job records and store",
-    "spec_ref": "spec-11",
+    "summary": "Create workflow profiles",
+    "spec_ref": "spec-15",
     "kind": "task",
-    "path": "docs/planning/tasks/jobs/task-67-pkt-job-001-task-0067-job-records-and-store.md",
+    "path": "docs/planning/tasks/jobs/task-67-pkt-job-003-task-0069-workflow-profiles.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
   "effective_standard_refs": [
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-001](task-0057): Job Records and Store\n\n## Purpose\n\nCreate job records and store.\n\n## Scope\n\n- Record format\n- Store implementation\n- CRUD operations\n\n## Implementation\n\n1. Define record format\n2. Implement store\n3. Add CRUD\n\n## Acceptance Criteria\n\n1. Record format defined\n2. Store works\n3. CRUD functional\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-003](task-0059): Workflow Profiles\n\n## Purpose\n\nCreate workflow profiles.\n\n## Scope\n\n- Profile format\n- Profile loading\n- Validation\n\n## Implementation\n\n1. Define format\n2. Implement loading\n3. Add validation\n\n## Acceptance Criteria\n\n1. Format defined\n2. Loading works\n3. Validated\n"
 }

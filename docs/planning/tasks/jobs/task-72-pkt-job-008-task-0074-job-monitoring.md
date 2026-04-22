@@ -1,0 +1,43 @@
+---
+id: task-72
+label: '[PKT-JOB-008](task-0074): Job Monitoring'
+state: draft
+summary: Monitor job execution
+spec_ref: spec-15
+---
+
+
+
+
+
+
+
+
+# Description
+
+Implement this task.
+
+
+# [PKT-JOB-008](task-0064): Job Monitoring
+
+## Purpose
+
+Monitor job execution.
+
+## Scope
+
+- Monitoring logic
+- Metrics
+- Alerts
+
+## Implementation
+
+1. Implement monitoring
+2. Add metrics
+3. Add alerts
+
+## Acceptance Criteria
+
+1. Monitoring works
+2. Metrics collected
+3. Alerts sent

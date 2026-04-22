@@ -5,11 +5,17 @@ state: done
 summary: Add lifecycle.py with Job/Proposal status tracking, history, and rollback
   capability
 domain: core
-spec_ref: wp-13
+spec_ref: wp-14
 standard_refs:
 - standard-5
 - standard-6
 ---
+
+
+
+
+
+
 
 
 

@@ -1,25 +1,21 @@
 {
   "item": {
     "id": "wp-17",
-    "label": "Phase 2: Core Infrastructure",
+    "label": "Phase 1: Config Schema",
     "state": "done",
-    "summary": "Create TemplateEngine and RelationshipConfig classes",
-    "plan_ref": "plan-14",
+    "summary": "Extend config schemas for document structure",
+    "plan_ref": "plan-18",
     "task_refs": [
       {
-        "ref": "task-330",
+        "ref": "task-326",
         "seq": 1000
-      },
-      {
-        "ref": "task-331",
-        "seq": 2000
       }
     ],
     "standard_refs": [
       "standard-6"
     ],
     "kind": "wp",
-    "path": "docs/planning/work-packages/core/wp-17-phase-2-core-infrastructure.md",
+    "path": "docs/planning/work-packages/core/wp-17-phase-1-config-schema.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -30,5 +26,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n\n\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n"
 }

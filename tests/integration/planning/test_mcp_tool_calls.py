@@ -9,17 +9,17 @@ Mutation tools use an isolated tmp project seeded as cwd for the subprocess.
 from __future__ import annotations
 
 import json
-import shutil
+import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
+from tests.planning_testkit import seed_planning_config
 
 ROOT = Path(__file__).resolve().parents[3]
 SERVER = ROOT / "tools" / "mcp" / "audiagentic-planning" / "audiagentic-planning_mcp.py"
-PLANNING_CONFIG_SRC = ROOT / ".audiagentic" / "planning" / "config"
 
 for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:
@@ -49,14 +49,25 @@ _INITIALIZED_MSG = {
 _MUTATION_TIMEOUT = 30  # seconds — absorbs Windows FS latency in full-suite runs
 
 
+def _as_list(result: Any) -> list[Any]:
+    """Normalize singleton/empty MCP payloads into list form for assertions."""
+    if result is None:
+        return []
+    if isinstance(result, list):
+        return result
+    return [result]
+
+
 def _exchange(
     *messages: dict, cwd: Path | None = None, timeout: int = 10
 ) -> tuple[list[dict], str]:
     """Send messages to MCP server stdio, return (responses, stderr)."""
     payload = "\n".join(json.dumps(m) for m in messages) + "\n"
-    env = None
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(
+        p for p in (str(ROOT), str(ROOT / "src"), env.get("PYTHONPATH", "")) if p
+    )
     if cwd is not None:
-        env = dict(**__import__("os").environ)
         env["AUDIAGENTIC_ROOT"] = str(cwd)
     proc = subprocess.run(
         [sys.executable, str(SERVER)],
@@ -151,13 +162,7 @@ def _mcall_raw(
 @pytest.fixture()
 def isolated_project(tmp_path: Path) -> Path:
     """Seed a minimal planning project that the MCP server subprocess will find."""
-    config_dir = tmp_path / ".audiagentic" / "planning" / "config"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    for f in PLANNING_CONFIG_SRC.glob("*.yaml"):
-        shutil.copy(f, config_dir / f.name)
-    pp_src = PLANNING_CONFIG_SRC / "profile-packs"
-    if pp_src.exists():
-        shutil.copytree(pp_src, config_dir / "profile-packs")
+    seed_planning_config(tmp_path)
     for sub in ("ids", "indexes", "events", "claims", "meta", "extracts"):
         (tmp_path / ".audiagentic" / "planning" / sub).mkdir(parents=True, exist_ok=True)
     for d in (
@@ -260,29 +265,29 @@ class TestReadOnlyTools:
             assert kind in result, f"tm_list count missing key: {kind}"
 
     def test_tm_list_mode_list(self):
-        result = _call_tool("tm_list")
+        result = _as_list(_call_tool("tm_list"))
         assert isinstance(result, list)
 
     def test_tm_list_filtered_by_kind(self):
-        result = _call_tool("tm_list", {"kind": "request"})
+        result = _as_list(_call_tool("tm_list", {"kind": "request"}))
         assert isinstance(result, list)
         assert all(i.get("kind") == "request" for i in result if "kind" in i)
 
     def test_tm_list_filtered_by_state(self):
-        result = _call_tool("tm_list", {"kind": "request", "state": "distilled"})
+        result = _as_list(_call_tool("tm_list", {"kind": "request", "state": "distilled"}))
         assert isinstance(result, list)
         assert all(i.get("state") == "distilled" for i in result)
 
     def test_tm_list_mode_next(self):
-        result = _call_tool("tm_list", {"kind": "task", "mode": "next"})
+        result = _as_list(_call_tool("tm_list", {"kind": "task", "mode": "next"}))
         assert isinstance(result, list)
 
     def test_tm_list_include_deleted(self):
-        result = _call_tool("tm_list", {"include_deleted": True})
+        result = _as_list(_call_tool("tm_list", {"include_deleted": True}))
         assert isinstance(result, list)
 
     def test_tm_get_depth_head(self):
-        items = _call_tool("tm_list", {"kind": "request"})
+        items = _as_list(_call_tool("tm_list", {"kind": "request"}))
         if not items:
             pytest.skip("No requests in real repo")
         result = _call_tool("tm_get", {"id": items[0]["id"], "depth": "head"})
@@ -292,7 +297,7 @@ class TestReadOnlyTools:
         assert "body" not in result
 
     def test_tm_get_depth_meta(self):
-        items = _call_tool("tm_list", {"kind": "request"})
+        items = _as_list(_call_tool("tm_list", {"kind": "request"}))
         if not items:
             pytest.skip("No requests in real repo")
         result = _call_tool("tm_get", {"id": items[0]["id"], "depth": "meta"})
@@ -301,7 +306,7 @@ class TestReadOnlyTools:
         assert "state" in result
 
     def test_tm_get_depth_full(self):
-        items = _call_tool("tm_list", {"kind": "request"})
+        items = _as_list(_call_tool("tm_list", {"kind": "request"}))
         if not items:
             pytest.skip("No requests in real repo")
         result = _call_tool("tm_get", {"id": items[0]["id"], "depth": "full"})
@@ -309,14 +314,14 @@ class TestReadOnlyTools:
         assert "body" in result
 
     def test_tm_get_depth_body(self):
-        items = _call_tool("tm_list", {"kind": "request"})
+        items = _as_list(_call_tool("tm_list", {"kind": "request"}))
         if not items:
             pytest.skip("No requests in real repo")
         result = _call_tool("tm_get", {"id": items[0]["id"], "depth": "body"})
         assert isinstance(result, str)
 
     def test_tm_get_with_related(self):
-        items = _call_tool("tm_list", {"kind": "spec"})
+        items = _as_list(_call_tool("tm_list", {"kind": "spec"}))
         if not items:
             pytest.skip("No specs in real repo")
         result = _call_tool("tm_get", {"id": items[0]["id"], "depth": "full", "with_related": True})
@@ -328,7 +333,7 @@ class TestReadOnlyTools:
         assert has_error
 
     def test_tm_section_get(self):
-        items = _call_tool("tm_list", {"kind": "task"})
+        items = _as_list(_call_tool("tm_list", {"kind": "task"}))
         if not items:
             pytest.skip("No tasks in real repo")
         result = _call_tool("tm_section", {"id": items[0]["id"], "op": "get", "section": "Description"})
@@ -336,7 +341,7 @@ class TestReadOnlyTools:
         assert "found" in result
 
     def test_tm_section_get_sub(self):
-        items = _call_tool("tm_list", {"kind": "task"})
+        items = _as_list(_call_tool("tm_list", {"kind": "task"}))
         if not items:
             pytest.skip("No tasks in real repo")
         result = _call_tool("tm_section", {"id": items[0]["id"], "op": "get_sub", "section": "description"})
@@ -366,11 +371,11 @@ class TestReadOnlyTools:
         assert len(result) <= 20
 
     def test_tm_claim_list(self):
-        result = _call_tool("tm_claim", {"op": "list"})
+        result = _as_list(_call_tool("tm_claim", {"op": "list"}))
         assert isinstance(result, list)
 
     def test_tm_claim_list_filtered_by_kind(self):
-        result = _call_tool("tm_claim", {"op": "list", "kind": "task"})
+        result = _as_list(_call_tool("tm_claim", {"op": "list", "kind": "task"}))
         assert isinstance(result, list)
         assert all(c.get("kind") == "task" for c in result)
 
@@ -388,10 +393,10 @@ class TestReadOnlyTools:
         assert "body" in result
 
     def test_tm_standards_applicable_for_item(self):
-        items = _call_tool("tm_list", {"kind": "task"})
+        items = _as_list(_call_tool("tm_list", {"kind": "task"}))
         if not items:
             pytest.skip("No tasks in real repo")
-        result = _call_tool("tm_standards", {"id": items[0]["id"]})
+        result = _as_list(_call_tool("tm_standards", {"id": items[0]["id"]}))
         assert isinstance(result, list)
 
     def test_tm_docs_surfaces(self):
@@ -407,7 +412,8 @@ class TestReadOnlyTools:
     def test_tm_docs_surface_unknown(self):
         resp = _call_tool_raw("tm_docs", {"op": "surface", "id": "nonexistent-surface"})
         result = resp.get("result", {})
-        content_text = result.get("content", [{}])[0].get("text", "null")
+        content = result.get("content", [])
+        content_text = content[0].get("text", "null") if content else "null"
         if '"_result": null' in content_text or '"_result": None' in content_text:
             content_text = "null"
         assert content_text in ("null", "None", "") or "error" in resp
@@ -423,7 +429,7 @@ class TestReadOnlyTools:
         assert result.get("id") == "feature"
 
     def test_tm_docs_refs(self):
-        result = _call_tool("tm_docs", {"op": "refs"})
+        result = _as_list(_call_tool("tm_docs", {"op": "refs"}))
         assert isinstance(result, list)
 
     def test_tm_docs_support(self):
@@ -436,7 +442,7 @@ class TestReadOnlyTools:
         assert "required_updates" in result
 
     def test_tm_docs_pending(self):
-        result = _call_tool("tm_docs", {"op": "pending", "kind": "task"})
+        result = _as_list(_call_tool("tm_docs", {"op": "pending", "kind": "task"}))
         assert isinstance(result, list)
 
 
@@ -466,7 +472,7 @@ class TestMCPMutationIsolated:
             {"kind": "request", "label": "Traceable", "summary": "S", "source": "mcp", "context": "integration test"},
             cwd=isolated_project,
         )
-        shown = _mcall("tm_get", {"id": "request-0001", "depth": "meta"}, cwd=isolated_project)
+        shown = _mcall("tm_get", {"id": "request-1", "depth": "meta"}, cwd=isolated_project)
         assert shown["source"] == "mcp"
         assert shown["context"] == "integration test"
 
@@ -474,7 +480,7 @@ class TestMCPMutationIsolated:
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
         result = _mcall(
             "tm_create",
-            {"kind": "spec", "label": "Isolated Spec", "summary": "MCP spec test", "request_refs": ["request-0001"]},
+            {"kind": "spec", "label": "Isolated Spec", "summary": "MCP spec test", "request_refs": ["request-1"]},
             cwd=isolated_project,
         )
         assert result["id"].startswith("spec-")
@@ -490,20 +496,20 @@ class TestMCPMutationIsolated:
 
     def test_tm_create_plan(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-0001"]}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-1"]}, cwd=isolated_project)
         result = _mcall(
             "tm_create",
-            {"kind": "plan", "label": "Isolated Plan", "summary": "MCP plan test", "spec": "spec-0001"},
+            {"kind": "plan", "label": "Isolated Plan", "summary": "MCP plan test", "spec": "spec-1"},
             cwd=isolated_project,
         )
         assert result["id"].startswith("plan-")
 
     def test_tm_create_task(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-0001"]}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-1"]}, cwd=isolated_project)
         result = _mcall(
             "tm_create",
-            {"kind": "task", "label": "Isolated Task", "summary": "MCP task test", "spec": "spec-0001"},
+            {"kind": "task", "label": "Isolated Task", "summary": "MCP task test", "spec": "spec-1"},
             cwd=isolated_project,
         )
         assert result["id"].startswith("task-")
@@ -515,11 +521,11 @@ class TestMCPMutationIsolated:
 
     def test_tm_create_wp(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-0001"]}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "plan", "label": "PL", "summary": "P", "spec": "spec-0001"}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-1"]}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "plan", "label": "PL", "summary": "P", "spec": "spec-1"}, cwd=isolated_project)
         result = _mcall(
             "tm_create",
-            {"kind": "wp", "label": "Isolated WP", "summary": "MCP wp test", "plan": "plan-0001"},
+            {"kind": "wp", "label": "Isolated WP", "summary": "MCP wp test", "plan": "plan-1"},
             cwd=isolated_project,
         )
         assert result["id"].startswith("wp-")
@@ -556,15 +562,15 @@ class TestMCPMutationIsolated:
 
     def test_tm_get_all_depths(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        head = _mcall("tm_get", {"id": "request-0001", "depth": "head"}, cwd=isolated_project)
+        head = _mcall("tm_get", {"id": "request-1", "depth": "head"}, cwd=isolated_project)
         assert "path" in head
         assert "body" not in head
-        meta = _mcall("tm_get", {"id": "request-0001", "depth": "meta"}, cwd=isolated_project)
+        meta = _mcall("tm_get", {"id": "request-1", "depth": "meta"}, cwd=isolated_project)
         assert "state" in meta
-        full = _mcall("tm_get", {"id": "request-0001", "depth": "full"}, cwd=isolated_project)
+        full = _mcall("tm_get", {"id": "request-1", "depth": "full"}, cwd=isolated_project)
         assert "item" in full
         assert "body" in full
-        body = _mcall("tm_get", {"id": "request-0001", "depth": "body"}, cwd=isolated_project)
+        body = _mcall("tm_get", {"id": "request-1", "depth": "body"}, cwd=isolated_project)
         assert isinstance(body, str)
 
     def test_tm_get_unknown_returns_error(self, isolated_project):
@@ -575,7 +581,7 @@ class TestMCPMutationIsolated:
     def test_tm_list_mode_list(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R1", "summary": "S", "source": "test"}, cwd=isolated_project)
         _mcall("tm_create", {"kind": "request", "label": "R2", "summary": "S", "source": "test"}, cwd=isolated_project)
-        result = _mcall("tm_list", {"kind": "request"}, cwd=isolated_project)
+        result = _as_list(_mcall("tm_list", {"kind": "request"}, cwd=isolated_project))
         assert len(result) >= 2
 
     def test_tm_list_mode_count(self, isolated_project):
@@ -585,34 +591,35 @@ class TestMCPMutationIsolated:
         assert result.get("request", {}).get("captured", 0) >= 1
 
     def test_tm_list_mode_next(self, isolated_project):
-        result = _mcall("tm_list", {"kind": "task", "mode": "next"}, cwd=isolated_project)
+        result = _as_list(_mcall("tm_list", {"kind": "task", "mode": "next"}, cwd=isolated_project))
         assert isinstance(result, list)
 
     def test_tm_list_state_filter(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        result = _mcall("tm_list", {"kind": "request", "state": "captured"}, cwd=isolated_project)
+        result = _as_list(_mcall("tm_list", {"kind": "request", "state": "captured"}, cwd=isolated_project))
         assert isinstance(result, list)
         assert all(i.get("state") == "captured" for i in result)
 
     def test_tm_edit_single_op(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-0001"]}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-1"]}, cwd=isolated_project)
         result = _mcall(
             "tm_edit",
-            {"id": "spec-0001", "operations": [{"op": "state", "value": "ready"}]},
+            {"id": "spec-1", "operations": [{"op": "state", "value": "ready"}]},
             cwd=isolated_project,
         )
-        assert "results" in result
+        assert "result" in result
+        assert "results" in result["result"]
 
     def test_tm_edit_multi_op(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-0001"]}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "task", "label": "T", "summary": "Old", "spec": "spec-0001"}, cwd=isolated_project)
-        _mcall("tm_edit", {"id": "task-0001", "operations": [{"op": "state", "value": "ready"}]}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-1"]}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "task", "label": "T", "summary": "Old", "spec": "spec-1"}, cwd=isolated_project)
+        _mcall("tm_edit", {"id": "task-1", "operations": [{"op": "state", "value": "ready"}]}, cwd=isolated_project)
         result = _mcall(
             "tm_edit",
             {
-                "id": "task-0001",
+                "id": "task-1",
                 "operations": [
                     {"op": "state", "value": "in_progress"},
                     {"op": "summary", "value": "New summary"},
@@ -621,19 +628,20 @@ class TestMCPMutationIsolated:
             },
             cwd=isolated_project,
         )
-        assert "results" in result
+        assert "result" in result
+        assert "results" in result["result"]
 
     def test_tm_edit_invalid_transition_returns_error(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-0001"]}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-1"]}, cwd=isolated_project)
         # _execute_batch_operations catches exceptions and returns {success: False} rather than
         # raising — FastMCP returns this as a normal response, not isError=true.
         result = _mcall(
             "tm_edit",
-            {"id": "spec-0001", "operations": [{"op": "state", "value": "done"}]},
+            {"id": "spec-1", "operations": [{"op": "state", "value": "done"}]},
             cwd=isolated_project,
         )
-        assert result.get("success") is False, (
+        assert result.get("result", {}).get("success") is False, (
             f"Expected batch failure for invalid state transition (draft→done), got: {result}"
         )
 
@@ -641,130 +649,131 @@ class TestMCPMutationIsolated:
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
         _mcall(
             "tm_edit",
-            {"id": "request-0001", "operations": [{"op": "content", "value": "# Notes\n\nReplaced.\n", "mode": "replace"}]},
+            {"id": "request-1", "operations": [{"op": "content", "value": "# Notes\n\nReplaced.\n", "mode": "replace"}]},
             cwd=isolated_project,
         )
-        body = _mcall("tm_get", {"id": "request-0001", "depth": "body"}, cwd=isolated_project)
+        body = _mcall("tm_get", {"id": "request-1", "depth": "body"}, cwd=isolated_project)
         assert "Replaced." in body
 
     def test_tm_edit_label_and_summary(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "Original", "summary": "S", "source": "test"}, cwd=isolated_project)
         result = _mcall(
             "tm_edit",
-            {"id": "request-0001", "operations": [{"op": "label", "value": "Updated"}, {"op": "summary", "value": "New summary"}]},
+            {"id": "request-1", "operations": [{"op": "label", "value": "Updated"}, {"op": "summary", "value": "New summary"}]},
             cwd=isolated_project,
         )
-        assert "results" in result
+        assert "result" in result
+        assert "results" in result["result"]
 
     def test_tm_section_set_and_get(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-0001"]}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-1"]}, cwd=isolated_project)
         _mcall(
             "tm_edit",
-            {"id": "spec-0001", "operations": [{"op": "content", "value": "# Purpose\n\nOld.\n\n# Scope\n\nScope.\n", "mode": "replace"}]},
+            {"id": "spec-1", "operations": [{"op": "content", "value": "# Purpose\n\nOld.\n\n# Scope\n\nScope.\n", "mode": "replace"}]},
             cwd=isolated_project,
         )
-        _mcall("tm_section", {"id": "spec-0001", "op": "set", "section": "Purpose", "content": "New purpose."}, cwd=isolated_project)
-        body = _mcall("tm_get", {"id": "spec-0001", "depth": "body"}, cwd=isolated_project)
+        _mcall("tm_section", {"id": "spec-1", "op": "set", "section": "Purpose", "content": "New purpose."}, cwd=isolated_project)
+        body = _mcall("tm_get", {"id": "spec-1", "depth": "body"}, cwd=isolated_project)
         assert "New purpose." in body
 
     def test_tm_section_append(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-0001"]}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-1"]}, cwd=isolated_project)
         _mcall(
             "tm_edit",
-            {"id": "spec-0001", "operations": [{"op": "content", "value": "# Notes\n\nBase.\n", "mode": "replace"}]},
+            {"id": "spec-1", "operations": [{"op": "content", "value": "# Notes\n\nBase.\n", "mode": "replace"}]},
             cwd=isolated_project,
         )
-        _mcall("tm_section", {"id": "spec-0001", "op": "append", "section": "Notes", "content": "Appended note."}, cwd=isolated_project)
-        body = _mcall("tm_get", {"id": "spec-0001", "depth": "body"}, cwd=isolated_project)
+        _mcall("tm_section", {"id": "spec-1", "op": "append", "section": "Notes", "content": "Appended note."}, cwd=isolated_project)
+        body = _mcall("tm_get", {"id": "spec-1", "depth": "body"}, cwd=isolated_project)
         assert "Appended note." in body
 
     def test_tm_section_set_requires_content(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        resp = _mcall_raw("tm_section", {"id": "request-0001", "op": "set", "section": "Notes"}, cwd=isolated_project)
+        resp = _mcall_raw("tm_section", {"id": "request-1", "op": "set", "section": "Notes"}, cwd=isolated_project)
         has_error = "error" in resp or resp.get("result", {}).get("isError")
         assert has_error
 
     def test_tm_move_task(self, isolated_project):
         (isolated_project / "docs" / "planning" / "tasks" / "contrib").mkdir(parents=True, exist_ok=True)
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-0001"]}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "task", "label": "T", "summary": "S", "spec": "spec-0001"}, cwd=isolated_project)
-        result = _mcall("tm_move", {"id": "task-0001", "domain": "contrib"}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-1"]}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "task", "label": "T", "summary": "S", "spec": "spec-1"}, cwd=isolated_project)
+        result = _mcall("tm_move", {"id": "task-1", "domain": "contrib"}, cwd=isolated_project)
         assert "contrib" in result.get("path", "")
 
     def test_tm_delete_soft(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "ToDelete", "summary": "S", "source": "test"}, cwd=isolated_project)
-        result = _mcall("tm_delete", {"id": "request-0001", "reason": "test cleanup"}, cwd=isolated_project)
+        result = _mcall("tm_delete", {"id": "request-1", "reason": "test cleanup"}, cwd=isolated_project)
         assert result["hard_delete"] is False
 
     def test_tm_delete_hard(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "ToHardDelete", "summary": "S", "source": "test"}, cwd=isolated_project)
-        result = _mcall("tm_delete", {"id": "request-0001", "hard": True, "reason": "test"}, cwd=isolated_project)
+        result = _mcall("tm_delete", {"id": "request-1", "hard": True, "reason": "test"}, cwd=isolated_project)
         assert result["hard_delete"] is True
 
     def test_tm_relink(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-0001"]}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-1"]}, cwd=isolated_project)
         result = _mcall(
             "tm_relink",
-            {"src": "spec-0001", "field": "request_refs", "dst": "request-0001"},
+            {"src": "spec-1", "field": "request_refs", "dst": "request-1"},
             cwd=isolated_project,
         )
         assert "id" in result
 
     def test_tm_package(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-0001"]}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "plan", "label": "PL", "summary": "P", "spec": "spec-0001"}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "task", "label": "T1", "summary": "S", "spec": "spec-0001"}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "task", "label": "T2", "summary": "S", "spec": "spec-0001"}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-1"]}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "plan", "label": "PL", "summary": "P", "spec": "spec-1"}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "task", "label": "T1", "summary": "S", "spec": "spec-1"}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "task", "label": "T2", "summary": "S", "spec": "spec-1"}, cwd=isolated_project)
         result = _mcall(
             "tm_package",
-            {"plan": "plan-0001", "tasks": ["task-0001", "task-0002"], "label": "WP", "summary": "S"},
+            {"plan": "plan-1", "tasks": ["task-1", "task-2"], "label": "WP", "summary": "S"},
             cwd=isolated_project,
         )
         assert result["id"].startswith("wp-")
 
     def test_tm_standards_list_all(self, isolated_project):
         _mcall("tm_create", {"kind": "standard", "label": "Code Style", "summary": "Use consistent formatting"}, cwd=isolated_project)
-        result = _mcall("tm_standards", cwd=isolated_project)
+        result = _as_list(_mcall("tm_standards", cwd=isolated_project))
         assert isinstance(result, list)
-        assert any(s["id"] == "standard-0001" for s in result)
+        assert any(s["id"] == "standard-1" for s in result)
 
     def test_tm_standards_get_one(self, isolated_project):
         _mcall("tm_create", {"kind": "standard", "label": "Code Style", "summary": "S"}, cwd=isolated_project)
-        result = _mcall("tm_standards", {"id": "standard-0001"}, cwd=isolated_project)
+        result = _mcall("tm_standards", {"id": "standard-1"}, cwd=isolated_project)
         assert "item" in result
         assert result["item"]["kind"] == "standard"
 
     def test_tm_standards_applicable_for_item(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-0001"]}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "task", "label": "T", "summary": "S", "spec": "spec-0001"}, cwd=isolated_project)
-        result = _mcall("tm_standards", {"id": "task-0001"}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-1"]}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "task", "label": "T", "summary": "S", "spec": "spec-1"}, cwd=isolated_project)
+        result = _as_list(_mcall("tm_standards", {"id": "task-1"}, cwd=isolated_project))
         assert isinstance(result, list)
 
     def test_tm_claim_and_unclaim(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-0001"]}, cwd=isolated_project)
-        claim = _mcall("tm_claim", {"op": "claim", "kind": "spec", "id": "spec-0001", "holder": "agent-test", "ttl": 300}, cwd=isolated_project)
+        _mcall("tm_create", {"kind": "spec", "label": "SP", "summary": "S", "request_refs": ["request-1"]}, cwd=isolated_project)
+        claim = _mcall("tm_claim", {"op": "claim", "kind": "spec", "id": "spec-1", "holder": "agent-test", "ttl": 300}, cwd=isolated_project)
         assert claim["holder"] == "agent-test"
-        active = _mcall("tm_claim", {"op": "list", "kind": "spec"}, cwd=isolated_project)
-        assert any(c["id"] == "spec-0001" for c in active)
-        _mcall("tm_claim", {"op": "unclaim", "id": "spec-0001"}, cwd=isolated_project)
-        after = _mcall("tm_claim", {"op": "list", "kind": "spec"}, cwd=isolated_project)
-        assert not any(c["id"] == "spec-0001" for c in after)
+        active = _as_list(_mcall("tm_claim", {"op": "list", "kind": "spec"}, cwd=isolated_project))
+        assert any(c["id"] == "spec-1" for c in active)
+        _mcall("tm_claim", {"op": "unclaim", "id": "spec-1"}, cwd=isolated_project)
+        after = _as_list(_mcall("tm_claim", {"op": "list", "kind": "spec"}, cwd=isolated_project))
+        assert not any(c["id"] == "spec-1" for c in after)
 
     def test_tm_claim_missing_args_returns_error(self, isolated_project):
-        resp = _mcall_raw("tm_claim", {"op": "claim", "id": "task-0001"}, cwd=isolated_project)
+        resp = _mcall_raw("tm_claim", {"op": "claim", "id": "task-1"}, cwd=isolated_project)
         has_error = "error" in resp or resp.get("result", {}).get("isError")
         assert has_error
 
     def test_tm_admin_validate(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        result = _mcall("tm_admin", {"op": "validate"}, cwd=isolated_project)
+        result = _as_list(_mcall("tm_admin", {"op": "validate"}, cwd=isolated_project))
         assert isinstance(result, list)
 
     def test_tm_admin_index(self, isolated_project):
@@ -779,7 +788,7 @@ class TestMCPMutationIsolated:
 
     def test_tm_admin_events(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        result = _mcall("tm_admin", {"op": "events", "tail": 5}, cwd=isolated_project)
+        result = _as_list(_mcall("tm_admin", {"op": "events", "tail": 5}, cwd=isolated_project))
         assert isinstance(result, list)
         assert len(result) >= 1
 
@@ -790,7 +799,7 @@ class TestMCPMutationIsolated:
 
     def test_tm_admin_check_sensitive_clean(self, isolated_project):
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
-        result = _mcall("tm_admin", {"op": "check_sensitive", "id": "request-0001"}, cwd=isolated_project)
+        result = _mcall("tm_admin", {"op": "check_sensitive", "id": "request-1"}, cwd=isolated_project)
         assert isinstance(result, dict)
         assert "has_sensitive_data" in result
         assert result["has_sensitive_data"] is False
@@ -799,12 +808,12 @@ class TestMCPMutationIsolated:
         _mcall("tm_create", {"kind": "request", "label": "R", "summary": "S", "source": "test"}, cwd=isolated_project)
         _mcall(
             "tm_edit",
-            {"id": "request-0001", "operations": [
+            {"id": "request-1", "operations": [
                 {"op": "content", "value": "# Notes\n\nAuthorization: Bearer eyJhbGciOiJIUzI1NiJ9.secret\n", "mode": "replace"}
             ]},
             cwd=isolated_project,
         )
-        result = _mcall("tm_admin", {"op": "check_sensitive", "id": "request-0001"}, cwd=isolated_project)
+        result = _mcall("tm_admin", {"op": "check_sensitive", "id": "request-1"}, cwd=isolated_project)
         assert result["has_sensitive_data"] is True
 
     def test_tm_admin_check_sensitive_requires_id(self, isolated_project):
@@ -813,7 +822,7 @@ class TestMCPMutationIsolated:
         assert has_error
 
     def test_tm_docs_surfaces(self, isolated_project):
-        result = _mcall("tm_docs", {"op": "surfaces"}, cwd=isolated_project)
+        result = _as_list(_mcall("tm_docs", {"op": "surfaces"}, cwd=isolated_project))
         assert isinstance(result, list)
 
     def test_tm_docs_sync_req(self, isolated_project):
@@ -821,5 +830,5 @@ class TestMCPMutationIsolated:
         assert isinstance(result, dict)
 
     def test_tm_docs_pending(self, isolated_project):
-        result = _mcall("tm_docs", {"op": "pending", "kind": "task"}, cwd=isolated_project)
+        result = _as_list(_mcall("tm_docs", {"op": "pending", "kind": "task"}, cwd=isolated_project))
         assert isinstance(result, list)

@@ -1,0 +1,91 @@
+---
+id: task-354
+label: Freeze backend, overlay, and artifact contracts
+state: draft
+summary: Define backend kinds, overlay rules, artifact forms, and compatibility inputs across target kinds and OS families.
+spec_ref: spec-83
+request_refs:
+- request-32
+standard_refs:
+- standard-6
+- standard-8
+- standard-11
+---
+
+# Description
+
+Keep target kind, backend kind, overlay, and artifact form as separate planning axes.
+
+# Inputs
+
+Read before starting:
+- `docs/installer/namespace-separation.md` (output from task-353)
+- `spec-83` — target/backend model spec
+- current repo target-like, backend-like, release, and lifecycle surfaces discovered during implementation survey
+- `standard-8` — Python implementation standard (module boundaries, error handling)
+- `standard-11` — component architecture standard (separation of concerns)
+
+# Output
+
+Produce `docs/installer/backend-overlay-artifact-contracts.md` with these sections:
+
+## Backend kinds
+
+For each backend kind, document:
+- Backend name (exact identifier)
+- Target kinds it supports
+- Required capabilities (what the backend needs from the target)
+- Module path (where implementation lives)
+- Configuration schema (required config keys and types)
+
+## Overlay rules
+
+For each overlay type, document:
+- Overlay name
+- Which backend kinds it applies to
+- Overlay priority (which overlay wins when multiple apply)
+- Overlay conflict resolution rules
+- Overlay validation rules (what makes an overlay invalid)
+
+## Artifact forms
+
+For each artifact form, document:
+- Artifact name (e.g., package, file, directory)
+- Source location
+- Destination location
+- Transformation rules (if any)
+- Verification method (how to prove artifact was applied correctly)
+
+## OS and compatibility inputs
+
+For each OS family, document:
+- OS family name (e.g., Linux, Windows, macOS)
+- Supported backend kinds
+- Supported artifact forms
+- OS-specific overlay rules
+- Compatibility constraints (e.g., Python version requirements)
+
+# What not to change
+
+- do not assume one backend fits all targets (each backend lists supported target kinds)
+- do not treat one overlay as central platform definition (overlays are backend-specific)
+- do not modify existing target module signatures in `src/audiagentic/targets/`
+- do not add backend kinds beyond those listed in spec-83
+- do not add OS families beyond Linux, Windows, macOS for stage one
+- do not change existing artifact form names or formats
+- do not introduce overlay priority rules that conflict with existing behavior
+
+# Blocker handling
+
+- if `src/audiagentic/targets/` does not exist or is not the live target surface, record the discovered replacement path or mark it as a planned new path
+- if a presumed backend or overlay concept is absent in the live repo, record that absence explicitly rather than fabricating an existing implementation surface
+
+# Acceptance criteria
+
+- [ ] all backend kinds are documented with target support, capabilities, and module paths
+- [ ] all overlay types are documented with priority, conflict resolution, and validation rules
+- [ ] all artifact forms are documented with source, destination, transformation, and verification
+- [ ] OS compatibility inputs are documented for each OS family
+- [ ] no backend is assumed to fit all targets (each backend lists supported target kinds)
+- [ ] no overlay is treated as central platform definition (overlays are backend-specific)
+- [ ] reviewer can verify by checking that each backend/module path exists or is a valid new path

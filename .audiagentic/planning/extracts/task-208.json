@@ -1,17 +1,17 @@
 {
   "item": {
     "id": "task-208",
-    "label": "Implement tm_bulk_state for state transitions",
+    "label": "Write tests for bulk operations and backward compatibility",
     "state": "cancelled",
-    "summary": "Add tm_bulk_state(ids, new_state, summary_only) operation optimized for bulk state changes",
-    "spec_ref": "spec-8",
+    "summary": "Add comprehensive test coverage for multi-item batch, bulk state, summary_only flag, and backward compat",
+    "spec_ref": "spec-11",
     "request_refs": [],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-208-implement-tm-bulk-state-for-state-transitions.md",
+    "path": "docs/planning/tasks/core/task-208-write-tests-for-bulk-operations-and-backward-compatibility.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -23,5 +23,5 @@
     "standard-6",
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nCancelled with `spec-008` after the owning request record was removed. Recreate this task under a new request if bulk state support is resumed.\n\n# Acceptance Criteria\n\nCancelled with parent specification.\n\n# Notes\n\nThis task was never fleshed into implementation-ready detail before the request chain disappeared.\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nCancelled with `spec-008` after the owning request record was removed. Recreate this task under a new request if bulk-operation coverage work is resumed.\n\n# Acceptance Criteria\n\nCancelled with parent specification.\n\n# Notes\n\nThis task was never fleshed into implementation-ready detail before the request chain disappeared.\n"
 }

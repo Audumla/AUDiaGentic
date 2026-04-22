@@ -1,10 +1,10 @@
 {
   "item": {
     "id": "task-255",
-    "label": "Bridge planning hooks onto canonical events without removing legacy hooks",
+    "label": "Create event schema registry and documentation",
     "state": "done",
-    "summary": "Preserve current planning hook behavior while routing compatible post-commit behavior through canonical events during transition \u2014 complete",
-    "spec_ref": "spec-19",
+    "summary": "Define event schema registry and governance \u2014 complete",
+    "spec_ref": "spec-23",
     "request_refs": [
       "request-17"
     ],
@@ -13,7 +13,7 @@
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-255-bridge-planning-hooks-onto-canonical-events-without-removing-legacy-hooks.md",
+    "path": "docs/planning/tasks/core/task-255-create-event-schema-registry-and-documentation.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -23,7 +23,7 @@
   "effective_standard_refs": [
     "standard-5",
     "standard-6",
-    "standard-11"
+    "standard-10"
   ],
-  "body": "\n\n\n\n# Description\n\nMigrate planning hooks to events per inventory from task-0262. This task wires hook-driven flows through canonical events while preserving current behavior during transition.\n\n**Migration approach:**\n1. For each high-priority hook from task-0262:\n   - Create event subscription that replicates hook behavior\n   - Keep hook functional via compatibility bridge\n   - Test both paths work identically\n2. Update documentation to mark hooks as deprecated\n3. Verify no user-visible behavior changes\n\n**Example migration:**\n```python\n# Old: hook in hooks.yaml\n# task.after_state_change \u2192 some_action()\n\n# New: event subscription\nbus.subscribe(\"planning.item.state.changed\", lambda e: some_action(e))\n```\n\n# Acceptance Criteria\n\n- High-priority hooks from task-0262 migrated to events\n- Hook behavior preserved via compatibility bridge\n- No user-visible behavior changes\n- Hooks marked deprecated in documentation\n- Unit tests cover: compatibility path, event path equivalence\n- Smoke test proves planning workflows function after migration\n\n# Implementation\n\n**Event Publishing** (`src/audiagentic/planning/app/api.py`):\n- `_publish_event()` method publishes events to EventBus with optional integration (try/except)\n- All planning API operations now publish events after successful completion\n- EventBus integration is optional - API works without it\n\n**Migrated hooks:**\n- \u2705 `after_create` \u2192 `planning.item.created.{kind}`\n- \u2705 `after_update` \u2192 `planning.item.updated.{kind}`\n- \u2705 `before_state_change` \u2192 `planning.item.state.will-change.{kind}`\n- \u2705 `after_state_change` \u2192 `planning.item.state.changed.{kind}`\n- \u2705 `after_delete` \u2192 `planning.item.deleted.{kind}`\n- \u2705 `after_reconcile` \u2192 `planning.reconciled.planning`\n\n**Integration points:**\n- `PlanningAPI.new()` - after_create\n- `PlanningAPI.create_with_content()` - after_create\n- `PlanningAPI.update()` - after_update\n- `PlanningAPI.update_content()` - after_update\n- `PlanningAPI.state()` - after_state_change\n- `PlanningAPI.delete()` - after_delete\n- `PlanningAPI.reconcile()` - after_reconcile\n\n**State Propagation Engine Integration:**\nThe `StatePropagationEngine` is automatically initialized in `PlanningAPI.__init__()` when the EventBus is available. It subscribes to `planning.item.state.changed` events and handles automatic state propagation across planning hierarchies (task\u2192wp\u2192plan\u2192spec).\n\n# Notes\n\nDepends on: task-262 (inventory). Legacy hook removal is task-0263.\n\n## Implementation Status: Complete \u2705 (2026-04-15)\n\nAll hooks have been migrated to canonical events. The hook system files (`hooks.py`, `hook_bridge.py`) have been removed (task-0263). Event publishing is integrated into all planning API operations with optional EventBus integration. The StatePropagationEngine is automatically initialized and handles state propagation across planning hierarchies.\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\nDefine event type schemas, namespaces, and example payloads. This task creates the event registry documenting all event types used by the interoperability layer.\n\n**Registry location:** `.audiagentic/interoperability/events.yaml`\n\n**Event types documented:**\n- planning.item.state.changed\n- planning.item.created\n- planning.item.updated\n- planning.item.deleted\n- planning.reconciled\n- knowledge.entry.created\n- knowledge.drift.detected\n- interop.bus.started\n- interop.subscriber.failed\n- interop.store.write_failed\n\n**Note:** This is documentation-only. Event validation/schema governance is V2 (post-core-stable).\n\n# Acceptance Criteria\n\n- Event registry created at `.audiagentic/interoperability/events.yaml` \u2705\n- All event types documented with: type, version, subject, payload, metadata \u2705\n- Example payloads provided for each event type \u2705\n- Namespace organization: planning, knowledge, interop \u2705\n- Documentation proves registry is complete and accurate \u2705\n- Smoke test proves registry file loads as valid YAML \u2705\n\n# Implementation\n\nCreated `.audiagentic/interoperability/events.yaml` with:\n- 10 event types across 3 namespaces (planning, knowledge, interop)\n- Subject, payload, and metadata schemas for each event\n- JSON examples for each event type\n- Event lifecycle documentation\n- Event ordering rules\n- Error handling guidelines\n\n# Notes\n\nThis task is documentation only. Event validation/schema governance is V2 (post-core-stable).\n"
 }

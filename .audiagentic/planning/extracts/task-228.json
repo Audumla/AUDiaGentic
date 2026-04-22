@@ -1,19 +1,17 @@
 {
   "item": {
     "id": "task-228",
-    "label": "Implement cascade archive for requests",
+    "label": "Integrate knowledge component source code",
     "state": "done",
-    "summary": "When a request is archived, cascade to all specs/tasks/WPs that have no other active request refs",
-    "spec_ref": "spec-11",
-    "request_refs": [
-      "request-12"
-    ],
+    "summary": "Copy and integrate knowledge component source files into the project structure at src/audiagentic/knowledge/.",
+    "spec_ref": "spec-18",
+    "request_refs": [],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-228-implement-cascade-archive-for-requests.md",
+    "path": "docs/planning/tasks/core/task-228-integrate-knowledge-component-source-code.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,8 +20,7 @@
   },
   "effective_standard_refs": [
     "standard-5",
-    "standard-6",
-    "standard-9"
+    "standard-6"
   ],
-  "body": "\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n\n# State\n\ndone\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
 }

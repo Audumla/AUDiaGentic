@@ -1,9 +1,9 @@
 {
   "item": {
     "id": "task-271",
-    "label": "Review get_task_by_id function reference",
-    "state": "cancelled",
-    "summary": "Function does not exist - task cancelled",
+    "label": "Add validation for session_input --details-json",
+    "state": "completed",
+    "summary": "Validate event data structure in CLI arguments",
     "request_refs": [
       "request-19"
     ],
@@ -12,7 +12,7 @@
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-271-review-get-task-by-id-function-reference.md",
+    "path": "docs/planning/tasks/core/task-271-add-validation-for-session-input-details-json.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -23,5 +23,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n## Investigation\n\nThe `get_task_by_id` function referenced in request-19 at line 645 of api.py does not exist in the codebase.\n\n## Findings\n\n1. **Searched for function**: No `get_task_by_id` function found in:\n   - `src/audiagentic/planning/app/api.py`\n   - `src/audiagentic/planning/app/task_mgr.py`\n   - Any other planning module\n\n2. **Line 645 contains**: `create_with_content` method, not `get_task_by_id`\n\n3. **Available get methods**: Only `get_content(self, id_: str) -> str` at line 808\n\n## Resolution\n\nThis task is cancelled as the referenced function does not exist. The original issue in request-19 was likely based on outdated code or incorrect line reference.\n\n## Recommendation\n\nReview request-19 to identify the correct function that needs type hints and documentation, or remove this compliance issue if it was a false positive.\n"
+  "body": "\n\n\n\n\n\n\n\n\n## Completed Work\n\nAdded validation for `session_input --details-json` argument in `channels/cli/main.py`.\n\n### Changes Made:\n\n1. **Replaced direct `json.loads` with `_load_json_argument`**:\n   - Now uses the validated JSON loading function\n   - Consistent error handling with other JSON arguments\n\n2. **Added `_validate_session_input_details` function**:\n   - Validates details is a JSON object\n   - Type validation for known fields:\n     - `kind`: must be string\n     - `label`: must be string\n     - `summary`: must be string\n     - `metadata`: must be object\n     - `attachments`: must be array\n   - Comprehensive docstring with valid structure example\n\n3. **Added validation call in session-input command**:\n   - Validates details before processing\n   - Raises ValueError with specific field error if validation fails\n\n## Standards Compliance\n- **standard-0005**: Schema validation for CLI arguments\n- **standard-0008**: Comprehensive documentation and type hints\n\n## Testing\nValidation now properly handles:\n- Non-object JSON (ValueError: details must be a JSON object)\n- Invalid kind type (ValueError: details.kind must be a string)\n- Invalid label type (ValueError: details.label must be a string)\n- Invalid summary type (ValueError: details.summary must be a string)\n- Invalid metadata type (ValueError: details.metadata must be an object)\n- Invalid attachments type (ValueError: details.attachments must be an array)\n- None/missing details (skipped validation, passes None to tool)\n"
 }

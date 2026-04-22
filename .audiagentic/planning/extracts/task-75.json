@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-75",
-    "label": "[PKT-JOB-009](task-0075): Job Cancellation",
+    "label": "[PKT-JOB-011](task-0077): Job Testing",
     "state": "draft",
-    "summary": "Handle job cancellation",
-    "spec_ref": "spec-11",
+    "summary": "Test job system",
+    "spec_ref": "spec-15",
     "kind": "task",
-    "path": "docs/planning/tasks/jobs/task-75-pkt-job-009-task-0075-job-cancellation.md",
+    "path": "docs/planning/tasks/jobs/task-75-pkt-job-011-task-0077-job-testing.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
   "effective_standard_refs": [
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-009](task-0065): Job Cancellation\n\n## Purpose\n\nHandle job cancellation.\n\n## Scope\n\n- Cancellation logic\n- Cleanup\n- State updates\n\n## Implementation\n\n1. Implement cancellation\n2. Add cleanup\n3. Update state\n\n## Acceptance Criteria\n\n1. Cancellation works\n2. Cleanup complete\n3. State updated\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-011](task-0067): Job Testing\n\n## Purpose\n\nTest job system.\n\n## Scope\n\n- Test cases\n- Integration tests\n- Performance tests\n\n## Implementation\n\n1. Write test cases\n2. Add integration tests\n3. Add performance tests\n\n## Acceptance Criteria\n\n1. Test cases complete\n2. Integration tests pass\n3. Performance acceptable\n"
 }

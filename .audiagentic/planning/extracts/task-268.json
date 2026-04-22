@@ -1,9 +1,9 @@
 {
   "item": {
     "id": "task-268",
-    "label": "Fix empty planning/app/__init__.py",
-    "state": "completed",
-    "summary": "Add module docstring and proper exports",
+    "label": "Review get_task_by_id function reference",
+    "state": "cancelled",
+    "summary": "Function does not exist - task cancelled",
     "request_refs": [
       "request-19"
     ],
@@ -12,7 +12,7 @@
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-268-fix-empty-planning-app-init-py.md",
+    "path": "docs/planning/tasks/core/task-268-review-get-task-by-id-function-reference.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -23,5 +23,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\nAdded comprehensive module docstring and exports to planning/app/__init__.py.\n\n## Completed Work\n\n1. **Added module docstring** covering:\n   - Module purpose: Planning application layer for managers, API, and utilities\n   - Key components: BaseMgr, TaskMgr, WPMgr, PlanMgr, ReqMgr, SpecMgr, PlanningAPI\n   - Supporting modules: Config, Paths, Events, Claims, Indexer, Validator, Relationships\n   - Cross-references to related modules\n\n2. **Added exports** in `__all__`:\n   - PlanningAPI: Main API class\n   - BaseMgr: Base manager class\n   - Config: Configuration management\n   - Paths: Path resolution utilities\n\n## Standards Compliance\n- **standard-0008**: Comprehensive module-level documentation\n- **standard-0001**: Planning documentation maintenance\n\n## Testing\nModule docstring is accessible via `help(planning.app)` and contains all required sections.\n"
+  "body": "\n\n\n\n\n\n\n\n\n## Investigation\n\nThe `get_task_by_id` function referenced in request-19 at line 645 of api.py does not exist in the codebase.\n\n## Findings\n\n1. **Searched for function**: No `get_task_by_id` function found in:\n   - `src/audiagentic/planning/app/api.py`\n   - `src/audiagentic/planning/app/task_mgr.py`\n   - Any other planning module\n\n2. **Line 645 contains**: `create_with_content` method, not `get_task_by_id`\n\n3. **Available get methods**: Only `get_content(self, id_: str) -> str` at line 808\n\n## Resolution\n\nThis task is cancelled as the referenced function does not exist. The original issue in request-19 was likely based on outdated code or incorrect line reference.\n\n## Recommendation\n\nReview request-19 to identify the correct function that needs type hints and documentation, or remove this compliance issue if it was a false positive.\n"
 }

@@ -1,17 +1,17 @@
 {
   "item": {
     "id": "task-205",
-    "label": "Add stale-index handling for lookup misses",
-    "state": "done",
-    "summary": "Define and implement consistent behavior when lookup.json is stale or missing: fall back to scan on miss or fail with a clear error directing the caller to run index() or reconcile()",
-    "spec_ref": "spec-7",
+    "label": "Implement tm_bulk_state for state transitions",
+    "state": "cancelled",
+    "summary": "Add tm_bulk_state(ids, new_state, summary_only) operation optimized for bulk state changes",
+    "spec_ref": "spec-11",
     "request_refs": [],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-205-add-stale-index-handling-for-lookup-misses.md",
+    "path": "docs/planning/tasks/core/task-205-implement-tm-bulk-state-for-state-transitions.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -20,7 +20,8 @@
   },
   "effective_standard_refs": [
     "standard-5",
-    "standard-6"
+    "standard-6",
+    "standard-9"
   ],
-  "body": "\n\n\n\n\n\n# Description\n\nDefine and implement consistent stale-index handling in `lookup(id_)` and `head(id_)` for two failure cases:\n\n**Index file missing** \u2014 `lookup.json` does not exist yet (e.g. `index()` has never been run). Fall back to a full `scan_items()` pass to locate the item. `lookup(id_)` should return the parsed item, and `head(id_)` should return the equivalent lean metadata derived from the located item. Log a warning that the index is missing.\n\n**Id not found in index** \u2014 the item exists on disk but the index is stale. Fall back to `scan_items()`, locate the item, and return it. `lookup(id_)` should return the parsed item, and `head(id_)` should return the equivalent lean metadata derived from the located item. If still not found after the fallback scan, raise a clear `ValueError(f\"{id_} not found\")`.\n\nDo not silently repair the index during a lookup \u2014 callers who need a fresh index should run `index()` or `reconcile()` explicitly. Document this in the method docstrings.\n\n# Acceptance Criteria\n\n- `lookup(id_)` succeeds when `lookup.json` is missing by falling back to scan\n- `head(id_)` succeeds when `lookup.json` is missing by falling back to scan and returning lean metadata\n- `lookup(id_)` succeeds when an id is absent from a stale index by falling back to scan\n- `head(id_)` succeeds when an id is absent from a stale index by falling back to scan and returning lean metadata\n- `lookup(id_)` raises `ValueError` with a clear message when the item does not exist at all\n- `head(id_)` raises a clear error when the id is not in the index and does not exist on disk\n- Fallback behaviour is consistent between `lookup()` and `head()`\n- Tests cover missing index, stale index (id absent), and genuinely missing item cases\n\n# Notes\n\nDepends on task-0201. The fallback to scan preserves correctness at the cost of performance \u2014 callers who care about performance should ensure the index is current before calling.\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nCancelled with `spec-008` after the owning request record was removed. Recreate this task under a new request if bulk state support is resumed.\n\n# Acceptance Criteria\n\nCancelled with parent specification.\n\n# Notes\n\nThis task was never fleshed into implementation-ready detail before the request chain disappeared.\n"
 }

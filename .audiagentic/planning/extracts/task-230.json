@@ -1,17 +1,17 @@
 {
   "item": {
     "id": "task-230",
-    "label": "Review knowledge component codebase",
+    "label": "Configure event adapter for planning bridge",
     "state": "done",
-    "summary": "Critically review all source files in the knowledge component for correctness, config-driven design, and compatibility with AUDiaGentic conventions.",
-    "spec_ref": "spec-14",
+    "summary": "Configure the event adapter to bridge planning task completion events to knowledge sync.",
+    "spec_ref": "spec-18",
     "request_refs": [],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-230-review-knowledge-component-codebase.md",
+    "path": "docs/planning/tasks/core/task-230-configure-event-adapter-for-planning-bridge.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,5 +22,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
 }

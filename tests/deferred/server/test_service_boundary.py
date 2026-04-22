@@ -4,13 +4,18 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[3]
 SRC = ROOT / "src"
 for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.channels.server.service_boundary import CoreServiceBoundary
+CoreServiceBoundary = pytest.importorskip(
+    "audiagentic.channels.server.service_boundary",
+    reason="optional server channel removed/deferred in current architecture",
+).CoreServiceBoundary
 from tests.helpers import sandbox as sandbox_helper
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError

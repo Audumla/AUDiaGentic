@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-89",
-    "label": "[PKT-PRV-012](task-0089): Provider Version Management",
+    "label": "[PKT-PRV-014](task-0091): Provider Rate Limiting",
     "state": "draft",
-    "summary": "Manage provider versions",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider rate limiting",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-89-pkt-prv-012-task-0089-provider-version-management.md",
+    "path": "docs/planning/tasks/providers/task-89-pkt-prv-014-task-0091-provider-rate-limiting.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-012](task-0079): Provider Version Management\n\n## Purpose\n\nManage provider versions.\n\n## Scope\n\n- Version format\n- Upgrade logic\n- Rollback\n\n## Implementation\n\n1. Define format\n2. Implement upgrade\n3. Add rollback\n\n## Acceptance Criteria\n\n1. Format defined\n2. Upgrade works\n3. Rollback works\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-014](task-0081): Provider Rate Limiting\n\n## Purpose\n\nImplement provider rate limiting.\n\n## Scope\n\n- Rate limit logic\n- Throttling\n- Retry\n\n## Implementation\n\n1. Implement limits\n2. Add throttling\n3. Add retry\n\n## Acceptance Criteria\n\n1. Limits work\n2. Throttling works\n3. Retry works\n"
 }

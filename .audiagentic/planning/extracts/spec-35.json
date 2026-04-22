@@ -1,0 +1,28 @@
+{
+  "item": {
+    "id": "spec-35",
+    "label": "MCP Test Spec",
+    "state": "cancelled",
+    "summary": "Spec for testing MCP server",
+    "request_refs": [
+      "request-23"
+    ],
+    "task_refs": [],
+    "standard_refs": [
+      "standard-6",
+      "standard-5"
+    ],
+    "kind": "spec",
+    "path": "docs/planning/specifications/spec-35-mcp-test-spec.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n\n\n\n\n\n\n\n# Purpose\n\n\n# Scope\n\n\n# Requirements\n\n\n# Constraints\n\n\n# Acceptance Criteria\n\n# Notes\n\nCancelled on 2026-04-17 as a test artifact under superseded `request-26`.\n"
+}

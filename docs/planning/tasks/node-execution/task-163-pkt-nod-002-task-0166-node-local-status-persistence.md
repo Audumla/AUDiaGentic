@@ -1,0 +1,43 @@
+---
+id: task-163
+label: '[PKT-NOD-002](task-0166): Node-Local Status Persistence'
+state: draft
+summary: Implement node-local status persistence
+spec_ref: spec-19
+---
+
+
+
+
+
+
+
+
+# Description
+
+Implement this task.
+
+
+# [PKT-NOD-002](task-0155): Node-Local Status Persistence
+
+## Purpose
+
+Implement node-local status persistence.
+
+## Scope
+
+- Persistence format
+- Storage logic
+- Recovery
+
+## Implementation
+
+1. Define format
+2. Implement storage
+3. Add recovery
+
+## Acceptance Criteria
+
+1. Format defined
+2. Storage works
+3. Recovery works

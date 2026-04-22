@@ -1,0 +1,21 @@
+{
+  "item": {
+    "id": "task-116",
+    "label": "[PKT-PRV-041](task-0119): Provider Authorization",
+    "state": "draft",
+    "summary": "Implement provider authorization",
+    "spec_ref": "spec-16",
+    "kind": "task",
+    "path": "docs/planning/tasks/providers/task-116-pkt-prv-041-task-0119-provider-authorization.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-041](task-0108): Provider Authorization\n\n## Purpose\n\nImplement provider authorization.\n\n## Scope\n\n- Authz rules\n- Permissions\n- Access control\n\n## Implementation\n\n1. Define rules\n2. Add permissions\n3. Implement access control\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Permissions work\n3. Access controlled\n"
+}
