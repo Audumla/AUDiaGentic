@@ -38,7 +38,6 @@ knowledge/
   config.py            - Configuration loading
   diffing.py           - Change detection
   events.py            - Event processing (TODO: split)
-  hooks.py             - Sync hooks
   importers.py         - Page scaffolding
   llm.py               - Optional LLM integration
   markdown_io.py       - Markdown parsing

@@ -1,21 +1,18 @@
 {
   "item": {
     "id": "task-156",
-    "label": "[PKT-PRV-078](task-0156): Provider Data Standards Monitoring",
-    "state": "draft",
-    "summary": "Implement provider data standards monitoring",
-    "spec_ref": "spec-12",
+    "label": "[PKT-DSC-002](task-0159): Release Summary Publishing",
+    "state": "cancelled",
+    "summary": "Implement Discord release summary publishing",
+    "spec_ref": "spec-17",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-156-pkt-prv-078-task-0156-provider-data-standards-monitoring.md",
+    "path": "docs/planning/tasks/discord/task-156-pkt-dsc-002-task-0159-release-summary-publishing.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
-    "standard-6",
-    "standard-5"
-  ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-078](task-0145): Provider Data Standards Monitoring\n\n## Purpose\n\nImplement provider data standards monitoring.\n\n## Scope\n\n- Monitoring logic\n- Compliance checks\n- Alerts\n\n## Implementation\n\n1. Implement monitoring\n2. Add compliance checks\n3. Add alerts\n\n## Acceptance Criteria\n\n1. Monitoring works\n2. Compliance checked\n3. Alerts sent\n"
+  "effective_standard_refs": [],
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The Discord overlay line was superseded and archived.\n\n\n# [PKT-DSC-002](task-0148): Release Summary Publishing\n\n## Purpose\n\nImplement Discord release summary publishing.\n\n## Scope\n\n- Summary format\n- Publishing logic\n- Scheduling\n\n## Implementation\n\n1. Define format\n2. Implement publishing\n3. Add scheduling\n\n## Acceptance Criteria\n\n1. Format defined\n2. Publishing works\n3. Scheduled\n"
 }

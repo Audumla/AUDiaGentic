@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-190",
-    "label": "Fix update_content() section-mode regex",
+    "label": "Fix hook event payloads",
     "state": "done",
-    "summary": "Fix regex to correctly bound section end and prevent corruption of sibling sections",
-    "spec_ref": "spec-3",
+    "summary": "Fix review_stub, report_stub, note_stub hook payloads to have correct structure",
+    "spec_ref": "spec-6",
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-190-fix-update-content-section-mode-regex.md",
+    "path": "docs/planning/tasks/core/task-190-fix-hook-event-payloads.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -14,5 +14,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n# Description\n\nFix section-mode updates so replacing a named section does not corrupt neighboring sections and appends cleanly when the section is missing.\n\n# Acceptance Criteria\n\n1. Replacing a section updates only the targeted section body\n2. Missing sections are appended in a stable format\n3. Regression coverage proves sibling sections remain intact\n\n# Notes\n\n- Verified by the passing section-mode coverage tests in `tests/integration/planning/test_planning_api_coverage.py`\n- Current implementation lives in `PlanningAPI.update_content()`\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nAlign hook stub payloads for review/report/note actions with the event shape expected by the coverage tests.\n\n# Acceptance Criteria\n\n1. `review_stub` emits the expected event payload\n2. `report_stub` emits the expected event payload\n3. `note_stub` includes the note content in payload\n\n# Notes\n\n- Implemented in `src/audiagentic/planning/app/hook_mgr.py`\n- Verified by the `review_stub`, `report_stub`, and `note_stub` coverage tests\n"
 }

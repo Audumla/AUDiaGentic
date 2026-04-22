@@ -82,7 +82,9 @@ def maintain_index_pages(config: KnowledgeConfig) -> list[Path]:
         by_type.setdefault(page_type, []).append(page)
 
     for page_type, type_pages in by_type.items():
-        type_dir = config.pages_root / page_type
+        # Use config's page_type_dirs mapping to get the actual directory name
+        type_dir_name = config.page_type_dirs.get(page_type, page_type)
+        type_dir = config.pages_root / type_dir_name
         type_index = type_dir / "index.md"
 
         # Build type-specific index content

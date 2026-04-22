@@ -1,13 +1,87 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "inheritanceRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["direct", "recursive"]
+        },
+        "sub_inheritance": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inheritanceRule"
+          }
+        }
+      },
+      "required": ["field"],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "sub_inheritance": {
+                "type": "array"
+              }
+            },
+            "required": ["sub_inheritance"]
+          },
+          "then": {
+            "required": ["type"]
+          }
+        }
+      ]
+    },
+    "creationExtraFields": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "use_profile_defaults": { "type": "boolean" },
+        "use_guidance_defaults": { "type": "boolean" },
+        "source_field": { "type": "string" },
+        "guidance_field": { "type": "string" },
+        "context_field": { "type": "string" },
+        "understanding_field": { "type": "string" },
+        "open_questions_field": { "type": "string" },
+        "meta_field": { "type": "string" }
+      }
+    },
+    "creation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "duplicate_check": { "type": "boolean" },
+        "require_source": { "type": "boolean" },
+        "validate_request_refs": { "type": "boolean" },
+        "refinement_source_prefix": { "type": "string" },
+        "seed_reference_fields": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "extra_fields": {
+          "$ref": "#/$defs/creationExtraFields"
+        }
+      }
+    }
+  },
   "properties": {
     "planning": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "convention_version",
+        "naming",
         "dirs",
-        "kinds"
+        "kinds",
+        "reference_field_shapes"
       ],
       "properties": {
         "convention_version": {
@@ -17,28 +91,59 @@
           "type": "string"
         },
         "default_guidance": {
-          "type": "string",
-          "enum": ["light", "standard", "deep"]
+          "type": "string"
         },
-        "dirs": {
-          "type": "object"
-        },
-        "task_domains": {
-          "type": "array",
-          "items": {
+        "kind_aliases": {
+          "type": "object",
+          "additionalProperties": {
             "type": "string"
           }
         },
-        "work_package_domains": {
-          "type": "array",
-          "items": {
+        "naming": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["numeric_format", "slug_policy", "default_pattern"],
+          "properties": {
+            "numeric_format": {
+              "type": "string"
+            },
+            "slug_policy": {
+              "type": "string"
+            },
+            "default_pattern": {
+              "type": "string"
+            }
+          }
+        },
+        "dirs": {
+          "type": "object",
+          "required": ["base", "attachments", "indexes", "meta", "extracts", "events", "claims", "cache"],
+          "properties": {
+            "base": { "type": "string" },
+            "attachments": { "type": "string" },
+            "indexes": { "type": "string" },
+            "meta": { "type": "string" },
+            "extracts": { "type": "string" },
+            "events": { "type": "string" },
+            "claims": { "type": "string" },
+            "cache": { "type": "string" }
+          },
+          "additionalProperties": {
             "type": "string"
+          }
+        },
+        "reference_field_shapes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "enum": ["scalar_ref", "scalar_ref_list", "rel_list"]
           }
         },
         "kinds": {
           "type": "object",
           "additionalProperties": {
             "type": "object",
+            "additionalProperties": false,
             "required": ["dir", "id_prefix", "counter_file", "has_domain", "required_refs", "required_fields", "optional_fields"],
             "properties": {
               "dir": {
@@ -74,46 +179,32 @@
               "standard_refs_inheritance": {
                 "type": "array",
                 "items": {
-                  "type": "object",
-                  "properties": {
-                    "field": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string",
-                      "enum": ["direct", "recursive"]
-                    },
-                    "sub_inheritance": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "field": {
-                            "type": "string"
-                          },
-                          "type": {
-                            "type": "string",
-                            "enum": ["direct", "recursive"]
-                          },
-                          "sub_inheritance": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "field": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": ["field"]
-                            }
-                          }
-                        },
-                        "required": ["field"]
-                      }
-                    }
-                  },
-                  "required": ["field", "type"]
+                  "$ref": "#/$defs/inheritanceRule"
                 }
+              },
+              "reference_inheritance": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/inheritanceRule"
+                  }
+                }
+              },
+              "creation": {
+                "$ref": "#/$defs/creation"
+              },
+              "state_cascades": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "filename_pattern": {
+                "type": "string"
               }
             }
           }

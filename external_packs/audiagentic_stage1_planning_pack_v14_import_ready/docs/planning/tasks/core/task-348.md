@@ -1,0 +1,74 @@
+---
+id: task-348
+label: Freeze generic installer nouns and layer placement
+state: draft
+summary: Define installer nouns and assign them to domain, application, infrastructure, and surface layers.
+spec_ref: spec-81
+request_refs:
+- request-32
+standard_refs:
+- standard-6
+- standard-11
+---
+
+# Description
+
+Make layer placement explicit so later implementation does not leak resolution or business rules into CLI handlers or backend adapters.
+
+# Inputs
+
+Read before starting:
+- `docs/installer/current-state-inventory.md` (output from task-347)
+- `spec-81` — architecture model spec
+- `standard-11` — component architecture standard (layering rules, extension points)
+- `src/audiagentic/runtime/` — existing runtime module structure
+
+# Blocker handling
+
+- if `docs/installer/current-state-inventory.md` reports a missing or changed source path, do not paper over it here; cite the blocker and limit layer assignment to confirmed surfaces
+- if the current runtime layout does not match the planned noun split, record that mismatch explicitly
+
+# Output
+
+Produce `docs/installer/noun-layer-assignment.md` with these sections:
+
+## Noun inventory
+
+For each installer noun (target, backend, overlay, artifact, packet, fixture, registry, resolver), document:
+- Noun name (exact identifier string)
+- Layer assignment: `foundation` | `registry` | `resolution` | `execution` | `cli-surface`
+- Primary responsibility (one sentence)
+- Related nouns (which nouns this creates, consumes, or modifies)
+
+## Layer assignment rationale
+
+For each layer, document:
+- Which nouns belong here
+- Why (reference specific standard-11 rules)
+- Inward dependencies (what this layer imports from lower layers)
+- Outward dependencies (what lower layers import from this layer)
+
+## Extension points
+
+For each extension point:
+- Extension point name
+- Which layer it lives in
+- How it is discovered at runtime (not import-time registration)
+- Which noun uses it
+
+# What not to change
+
+- do not assign any noun to two layers (each noun has exactly one layer)
+- do not create new nouns beyond the eight listed (target, backend, overlay, artifact, packet, fixture, registry, resolver)
+- do not introduce import-time registration for extension points
+- do not modify existing runtime module structure in `src/audiagentic/runtime/`
+- do not add nouns that require inward-to-outward imports (violates standard-11)
+- do not change canonical-id definitions or provider registry structure
+
+# Acceptance criteria
+
+- [ ] all eight nouns listed in the description are present with exactly one layer each
+- [ ] no noun is assigned to two layers
+- [ ] layer assignments satisfy standard-11 (no inward-to-outward imports)
+- [ ] at least one extension point is documented with runtime discovery mechanism
+- [ ] reviewer can verify by checking that each noun's layer matches its expected module location in `src/audiagentic/`

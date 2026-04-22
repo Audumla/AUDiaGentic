@@ -6,14 +6,37 @@ summary: Define the installer as a generic, config-driven reconciliation platfor
 request_refs:
 - request-0032
 standard_refs:
-- standard-0006
-- standard-0008
-- standard-0011
+- standard-06
+- standard-08
+- standard-11
 ---
 
 # Purpose
 
 Prevent the installer slice from becoming a config-shaped restatement of current repo files and hardcoded ids.
+
+# Discovery requirement
+
+Before assigning installer layers and registry ownership, survey the current module layout and identify which live modules already perform:
+- CLI entry and dispatch
+- contract definition and validation
+- lifecycle resolution or apply behavior
+- release packaging
+- profile or registry loading
+
+The architecture output must name the surveyed modules explicitly. If the current module layout no longer matches the planning assumptions, report that as a blocker.
+
+# Scope
+
+This spec defines the installer as a generic, config-driven reconciliation platform with registry-owned definitions, explicit layering, and separation between product-owned contracts and installer-platform contracts. It covers core nouns, registry groups, resolution ownership, and layering rules.
+
+# Constraints
+
+- Must not treat `canonical_ids.py` as installer registry source of truth.
+- Must not move product-owned provider/profile concepts wholesale into installer-owned definitions.
+- Must not let backend handlers define domain rules during execution.
+- Must not add import-time self-registration for targets, backends, or overlays.
+- Current repo-owned contracts may remain stable but must not become the source of truth for generic installer evolution.
 
 # Architecture rules
 

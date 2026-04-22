@@ -1,9 +1,9 @@
 {
   "item": {
     "id": "task-275",
-    "label": "Fix generic error handling in CLI",
+    "label": "Fix tight coupling in session_input_tool",
     "state": "completed",
-    "summary": "Implement structured error handling with suggestions",
+    "summary": "Implement dependency injection for session_input_tool",
     "request_refs": [
       "request-19"
     ],
@@ -12,7 +12,7 @@
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-275-fix-generic-error-handling-in-cli.md",
+    "path": "docs/planning/tasks/core/task-275-fix-tight-coupling-in-session-input-tool.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -23,5 +23,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n## Completed Work\n\nFixed generic error handling in `channels/cli/main.py` prompt-launch command.\n\n### Changes Made:\n\n1. **Enhanced error response structure**:\n   - Added `error-code` field: \"CLI-VALIDATION-001\"\n   - Added `suggestion` field with recovery guidance\n   - Maintained existing `status`, `kind`, and `message` fields\n\n2. **Context-aware suggestions**:\n   - JSON errors: \"Check that JSON arguments are valid and properly formatted\"\n   - Prompt errors: \"Ensure prompt contains valid @ag-* tag and required fields\"\n   - Generic errors: \"Review argument values and ensure they match expected format\"\n\n3. **Machine-parseable output**:\n   - All errors returned as structured JSON\n   - Consistent field names across error types\n   - Error codes follow CLI-VALIDATION-XXX pattern\n\n## Standards Compliance\n- **standard-0010**: Structured error handling with suggestions\n- **standard-0005**: Verification with recovery guidance\n\n## Testing\nError handling now provides:\n- Specific error codes for tracking\n- Context-aware recovery suggestions\n- Machine-parseable JSON format\n- User-friendly messages with technical details\n"
+  "body": "\n\n\n\n\n\n\n## Implementation\n\nAdded dependency injection support to `session_input_store.py` following the pattern from `job_control_tool`:\n\n1. Added `JobStoreInterface` type alias for interface consistency\n2. Added optional `job_store` parameter to `build_and_persist_session_input()` with default to global store\n3. Updated function to use injected `job_store` for reading job records when `provider_id` not provided\n4. Updated CLI caller in `main.py:310` to pass `job_store.read_job_record` explicitly\n5. Added comprehensive docstring documenting dependency injection pattern\n6. Maintained backward compatibility through default parameter\n\n## Files Modified\n\n- `src/audiagentic/runtime/state/session_input_store.py` - Added dependency injection support\n- `src/audiagentic/channels/cli/main.py` - Updated to use dependency injection pattern\n\n## Pattern\n\n```python\n# Production: Explicit dependency injection\nrecord = build_and_persist_session_input(\n    project_root,\n    job_id=job_id,\n    job_store=job_store.read_job_record,  # Explicit injection\n)\n\n# Test: Mock job store\nmock_store = Mock()\nmock_store.read_job_record.return_value = {\"provider-id\": \"test\"}\nrecord = build_and_persist_session_input(\n    project_root,\n    job_id=job_id,\n    job_store=mock_store.read_job_record,\n)\n\n# Backward compatible: Uses global store\nrecord = build_and_persist_session_input(project_root, job_id=job_id)\n```\n\n## Verification\n\n- No direct global variable access in function body\n- All callers updated to use dependency injection pattern\n- Backward compatibility maintained through default parameter\n- Consistent with `job_control_tool` pattern\n"
 }

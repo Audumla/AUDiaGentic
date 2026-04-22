@@ -1,19 +1,19 @@
 {
   "item": {
     "id": "task-224",
-    "label": "Draft standard-0010 with guidance level definitions",
+    "label": "Update workflows.yaml with unified states",
     "state": "done",
-    "summary": "Create standard-0010.md with canonical definitions for light/standard/deep guidance levels including required sections, acceptance criteria depth, and implementation expectations",
-    "spec_ref": "spec-12",
+    "summary": "Align workflow states across request/spec/plan/task/wp with consistent transitions",
+    "spec_ref": "spec-15",
     "request_refs": [
-      "request-13"
+      "request-12"
     ],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-224-draft-standard-0010-with-guidance-level-definitions.md",
+    "path": "docs/planning/tasks/core/task-224-update-workflows-yaml-with-unified-states.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,7 +22,8 @@
   },
   "effective_standard_refs": [
     "standard-5",
-    "standard-6"
+    "standard-6",
+    "standard-9"
   ],
-  "body": "\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n\n# State\n\ndone\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n\n# State\n\ndone\n"
 }

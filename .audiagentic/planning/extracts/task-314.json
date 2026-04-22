@@ -1,9 +1,9 @@
 {
   "item": {
     "id": "task-314",
-    "label": "standard-8-python-impl-impl",
+    "label": "standard-11-component-arch-impl",
     "state": "cancelled",
-    "summary": "Implement standard-0008 Python implementation rules in all modules",
+    "summary": "Implement standard-0011 component architecture rules",
     "request_refs": [
       "request-19"
     ],
@@ -12,7 +12,7 @@
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-314-standard-8-python-impl-impl.md",
+    "path": "docs/planning/tasks/core/task-314-standard-11-component-arch-impl.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -23,5 +23,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n# Description\n\nImplement standard-0008 Python implementation rules in all modules.\n\n# Cancellation Reason\n\nThis task was created as a generic placeholder during request-19 compliance review but lacks actionable content. The task description is too vague to be actionable - it references implementing rules \"in all modules\" without specifying:\n- Which specific modules need changes\n- What specific compliance issues exist\n- What changes need to be made\n\nStandard-0008 compliance issues that were found during request-19 have already been addressed through specific, actionable tasks (task-0267 through task-0279).\n\n# Next Steps\n\nNo action required. Any remaining standard-0008 compliance issues should be addressed through specific, file-level tasks with clear acceptance criteria.\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement standard-0011 component architecture rules.\n\n# Cancellation Reason\n\nThis task was created as a generic placeholder during request-19 compliance review but lacks actionable content. The task description is too vague to be actionable - it references implementing rules without specifying:\n- Which specific components need changes\n- What specific compliance issues exist\n- What changes need to be made\n\nStandard-0011 compliance issues that were found during request-19 have already been addressed through specific, actionable tasks:\n- task-277: Fixed global state access in job_control_tool\n- task-278: Fixed tight coupling in session_input_tool\n- task-279: Refactored event bus singleton pattern with proper documentation\n\n# Next Steps\n\nNo action required. Standard-0011 compliance issues have been addressed through specific tasks.\n"
 }

@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-158",
-    "label": "[PKT-DSC-001](task-0158): Event Subscriber",
+    "label": "[PKT-DSC-004](task-0161): Lifecycle/Migration Notices",
     "state": "cancelled",
-    "summary": "Implement Discord event subscriber",
-    "spec_ref": "spec-13",
+    "summary": "Implement Discord lifecycle/migration notices",
+    "spec_ref": "spec-17",
     "kind": "task",
-    "path": "docs/planning/tasks/discord/task-158-pkt-dsc-001-task-0158-event-subscriber.md",
+    "path": "docs/planning/tasks/discord/task-158-pkt-dsc-004-task-0161-lifecycle-migration-notices.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -14,5 +14,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The Discord overlay line was superseded and archived.\n\n\n# [PKT-DSC-001](task-0147): Event Subscriber\n\n## Purpose\n\nImplement Discord event subscriber.\n\n## Scope\n\n- Event format\n- Subscription logic\n- Processing\n\n## Implementation\n\n1. Define format\n2. Implement subscription\n3. Add processing\n\n## Acceptance Criteria\n\n1. Format defined\n2. Subscription works\n3. Processing works\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The Discord overlay line was superseded and archived.\n\n\n# [PKT-DSC-004](task-0150): Lifecycle/Migration Notices\n\n## Purpose\n\nImplement Discord lifecycle/migration notices.\n\n## Scope\n\n- Notice format\n- Publishing logic\n- Triggering\n\n## Implementation\n\n1. Define format\n2. Implement publishing\n3. Add triggering\n\n## Acceptance Criteria\n\n1. Format defined\n2. Publishing works\n3. Triggered correctly\n"
 }

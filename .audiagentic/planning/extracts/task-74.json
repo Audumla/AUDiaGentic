@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-74",
-    "label": "[PKT-JOB-008](task-0074): Job Monitoring",
+    "label": "[PKT-JOB-010](task-0076): Job Documentation",
     "state": "draft",
-    "summary": "Monitor job execution",
-    "spec_ref": "spec-11",
+    "summary": "Document job system",
+    "spec_ref": "spec-15",
     "kind": "task",
-    "path": "docs/planning/tasks/jobs/task-74-pkt-job-008-task-0074-job-monitoring.md",
+    "path": "docs/planning/tasks/jobs/task-74-pkt-job-010-task-0076-job-documentation.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
   "effective_standard_refs": [
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-008](task-0064): Job Monitoring\n\n## Purpose\n\nMonitor job execution.\n\n## Scope\n\n- Monitoring logic\n- Metrics\n- Alerts\n\n## Implementation\n\n1. Implement monitoring\n2. Add metrics\n3. Add alerts\n\n## Acceptance Criteria\n\n1. Monitoring works\n2. Metrics collected\n3. Alerts sent\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-010](task-0066): Job Documentation\n\n## Purpose\n\nDocument job system.\n\n## Scope\n\n- User docs\n- Developer docs\n- API docs\n\n## Implementation\n\n1. Write user docs\n2. Write developer docs\n3. Document API\n\n## Acceptance Criteria\n\n1. User docs complete\n2. Developer docs complete\n3. API documented\n"
 }

@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-99",
-    "label": "[PKT-PRV-022](task-0099): Provider Lifecycle",
+    "label": "[PKT-PRV-024](task-0101): Provider API Gateway",
     "state": "draft",
-    "summary": "Manage provider lifecycle",
-    "spec_ref": "spec-12",
+    "summary": "Create provider API gateway",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-99-pkt-prv-022-task-0099-provider-lifecycle.md",
+    "path": "docs/planning/tasks/providers/task-99-pkt-prv-024-task-0101-provider-api-gateway.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-022](task-0089): Provider Lifecycle\n\n## Purpose\n\nManage provider lifecycle.\n\n## Scope\n\n- Lifecycle states\n- Transitions\n- Cleanup\n\n## Implementation\n\n1. Define states\n2. Implement transitions\n3. Add cleanup\n\n## Acceptance Criteria\n\n1. States defined\n2. Transitions work\n3. Cleanup works\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-024](task-0091): Provider API Gateway\n\n## Purpose\n\nCreate provider API gateway.\n\n## Scope\n\n- Gateway interface\n- Routing\n- Security\n\n## Implementation\n\n1. Define interface\n2. Implement routing\n3. Add security\n\n## Acceptance Criteria\n\n1. Interface defined\n2. Routing works\n3. Secure\n"
 }

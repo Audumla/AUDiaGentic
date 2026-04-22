@@ -1,0 +1,43 @@
+---
+id: task-166
+label: '[PKT-DIS-002](task-0169): Static Registry Provider'
+state: draft
+summary: Implement static registry provider
+spec_ref: spec-20
+---
+
+
+
+
+
+
+
+
+# Description
+
+Implement this task.
+
+
+# [PKT-DIS-002](task-0158): Static Registry Provider
+
+## Purpose
+
+Implement static registry provider.
+
+## Scope
+
+- Registry format
+- Static registration
+- Lookup
+
+## Implementation
+
+1. Define format
+2. Implement registration
+3. Add lookup
+
+## Acceptance Criteria
+
+1. Format defined
+2. Registration works
+3. Lookup works

@@ -1,19 +1,19 @@
 {
   "item": {
     "id": "task-222",
-    "label": "Add default_guidance to planning.yaml",
+    "label": "Update validation to enforce guidance level requirements",
     "state": "done",
-    "summary": "Add default_guidance field to .audiagentic/planning/config/planning.yaml, update Config class to load and provide default",
-    "spec_ref": "spec-10",
+    "summary": "Update val_mgr.py to enforce required sections and acceptance criteria depth based on guidance level",
+    "spec_ref": "spec-16",
     "request_refs": [
-      "request-11"
+      "request-13"
     ],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-222-add-default-guidance-to-planning-yaml.md",
+    "path": "docs/planning/tasks/core/task-222-update-validation-to-enforce-guidance-level-requirements.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,8 +22,7 @@
   },
   "effective_standard_refs": [
     "standard-5",
-    "standard-6",
-    "standard-9"
+    "standard-6"
   ],
-  "body": "\n\n\n\n\n\n\n# Description\n\nAdd default_guidance field to `.audiagentic/planning/config/planning.yaml` and update Config class to load and provide default guidance value.\n\n# Acceptance Criteria\n\n- [ ] default_guidance field added to planning.yaml\n- [ ] Valid values: light, standard, deep\n- [ ] Default value: standard\n- [ ] Config class loads default_guidance\n- [ ] Config provides default_guidance() method\n- [ ] Used when guidance not specified in request\n- [ ] Validation for invalid values\n- [ ] Tests for default loading\n- [ ] Backward compatible (existing files without field)\n\n# Notes\n\nThis provides project-level default guidance that can be overridden per-request.\n\n# State\n\ndone\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n\n# State\n\ndone\n"
 }

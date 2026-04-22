@@ -11,6 +11,7 @@ from ..fs.scan import scan_items
 from ..fs.write import dump_markdown
 from .api_types import ItemView
 from .claims import Claims
+from .compact_mgr import Compactor
 from .config import Config
 from .events import EventLog
 from .ext_mgr import Extracts
@@ -32,6 +33,12 @@ except ImportError:
     _EVENT_BUS_ENABLED = False
     _EVENT_BUS = None
     StatePropagationEngine = None  # type: ignore
+
+
+# Global registry: one active propagation subscription per project root.
+# Prevents subscription accumulation when PlanningAPI is re-created per call
+# (e.g. tm_helper creates a new instance for every MCP tool invocation).
+_propagation_subscriptions: dict[str, object] = {}
 
 
 class PlanningAPI:
@@ -62,12 +69,21 @@ class PlanningAPI:
                     enabled=True,
                     config_path=config_path,
                 )
-                # Register event handler (planning component owns the subscription)
+                # Unsubscribe any stale subscription for this root before registering
+                # a new one. Prevents fan-out when PlanningAPI is re-created per call.
+                root_key = str(self.root.resolve())
                 bus = get_bus()
+                old = _propagation_subscriptions.get(root_key)
+                if old is not None:
+                    try:
+                        bus.unsubscribe(old)
+                    except Exception:
+                        pass
                 self._propagation_subscription = bus.subscribe(
                     "planning.item.state.changed",
                     self._on_state_change_for_propagation,
                 )
+                _propagation_subscriptions[root_key] = self._propagation_subscription
             except Exception as e:
                 warnings.warn(
                     f"State propagation engine initialization failed: {e}", RuntimeWarning
@@ -441,6 +457,35 @@ class PlanningAPI:
             **rebaseline_result,
         }
 
+    def compact(self) -> dict:
+        """Compact all planning item IDs: remove gaps, rewrite refs, rename files.
+
+        Deterministic, non-AI operation. Items are renumbered sequentially (1, 2, 3, ...)
+        per kind, preserving relative order. All cross-references are updated atomically.
+        Counters are set to the new max IDs.
+
+        After compaction, runs full validate. Errors that cannot be auto-repaired are
+        returned in the ``cannot_repair`` list for human or AI review.
+
+        Returns:
+            Report dict with remap table, rename log, updated counters, and repair list.
+        """
+        result = Compactor(self.root).run()
+        if not result.get("aborted"):
+            # Rebuild indexes and extracts against the new IDs
+            self.rebaseline()
+        self._publish_event(
+            "planning.compacted",
+            {
+                "remapped": result["remapped"],
+                "renames": len(result["renames"]),
+                "repair_count": result["repair_count"],
+                "aborted": bool(result.get("aborted")),
+            },
+            {"triggered_by": "manual"},
+        )
+        return result
+
     def reconcile(self):
         result = self.maintain()
         self._publish_event(
@@ -502,10 +547,7 @@ class PlanningAPI:
         Raises:
             ValueError: If kind not in config or required refs missing
         """
-        from ..domain.states import KIND_MAP
-
-        # Normalize kind using KIND_MAP
-        kind = KIND_MAP.get(kind, kind)
+        kind = self.config.normalize_kind(kind)
 
         # Validate kind exists in config
         try:
@@ -517,7 +559,7 @@ class PlanningAPI:
             )
 
         # Apply default standards if not explicitly provided
-        if standard_refs is None and kind in {"spec", "task", "plan", "wp", "request"}:
+        if standard_refs is None and kind in self.config.all_kinds():
             standard_refs = self.config.standard_defaults_for(kind)
         else:
             standard_refs = standard_refs or []
@@ -534,14 +576,12 @@ class PlanningAPI:
             },
         )
 
-        # Kind-specific validations
-        if kind in {"request", "spec"} and check_duplicates:
+        # Config-driven creation validations
+        if self.config.should_duplicate_check(kind) and check_duplicates:
             self._check_duplicate(kind, label, summary)
-        if kind in {"spec", "plan", "task"}:
+        if self.config.validate_request_refs_on_create(kind):
             self._validate_request_refs(request_refs or [])
-        if kind == "spec":
-            self._require_request_refs_for_spec(request_refs or [])
-        if kind == "request" and not source:
+        if self.config.requires_source_on_create(kind) and not source:
             raise ValueError("request requires --source to track request origin")
 
         # Generate ID using config-defined prefix and counter
@@ -571,13 +611,13 @@ class PlanningAPI:
         )
 
         # Handle request profile cascade
-        if kind == "request" and source and source.startswith("refinement-of-"):
-            superseded_id = source.replace("refinement-of-", "")
+        refinement_prefix = self.config.refinement_source_prefix(kind)
+        if refinement_prefix and source and source.startswith(refinement_prefix):
+            superseded_id = source.replace(refinement_prefix, "")
             self._auto_supersede(superseded_id, id_)
 
         if kind == "request" and profile:
-            prof = self.config.profile_for(profile)
-            cascade = prof.get("on_request_create", [])
+            cascade = self.config.profile_cascade_targets(profile)
             if "specification" in cascade:
                 spec_id = self._next_id_for_kind("spec")
                 spec_kind_config = self.config.kind_config("spec")
@@ -648,7 +688,7 @@ class PlanningAPI:
         id_prefix = self.config.kind_id_prefix(kind)
         counter_file = self.config.kind_counter_file(kind)
         counter_path = self.root / ".audiagentic" / "planning" / "meta" / counter_file
-        return next_id(counter_path, id_prefix)
+        return next_id(counter_path=counter_path, id_prefix=id_prefix)
 
     def _validate_required_refs(self, kind: str, required_refs: list[str], provided: dict) -> None:
         """Validate that all required references are provided.
@@ -704,96 +744,30 @@ class PlanningAPI:
         Returns:
             Path to created item
         """
-        if guidance is None:
-            guidance = self.config.default_guidance()
+        frontmatter = self._build_frontmatter(
+            kind=kind,
+            id_=id_,
+            label=label,
+            summary=summary,
+            domain=domain,
+            spec=spec,
+            plan=plan,
+            parent=parent,
+            target=target,
+            workflow=workflow,
+            request_refs=request_refs or [],
+            standard_refs=standard_refs or [],
+            profile=profile,
+            guidance=guidance,
+            current_understanding=current_understanding,
+            open_questions=open_questions,
+            source=source,
+            context=context,
+            state=state,
+            task_refs=task_refs,
+        )
 
-        frontmatter = {
-            "id": id_,
-            "label": label,
-            "state": state or ("draft" if kind != "request" else "captured"),
-            "summary": summary,
-        }
-
-        if domain:
-            frontmatter["domain"] = domain
-
-        if kind == "request":
-            profile_cfg = {}
-            if profile:
-                try:
-                    profile_cfg = self.config.profile_for(profile)
-                except ValueError:
-                    pass
-
-            defaults = profile_cfg.get("defaults", {})
-            default_understanding = defaults.get("current_understanding")
-            default_open_questions = defaults.get("open_questions", [])
-            default_meta = defaults.get("meta", {})
-
-            guidance_cfg = self.config.guidance_levels().get(guidance, {})
-            guidance_defaults = guidance_cfg.get("defaults", {})
-            guidance_understanding = guidance_defaults.get("current_understanding")
-            guidance_open_questions = guidance_defaults.get("open_questions", [])
-
-            frontmatter["source"] = source or ""
-            frontmatter["guidance"] = guidance
-            frontmatter["current_understanding"] = (
-                current_understanding
-                or default_understanding
-                or guidance_understanding
-                or f"Initial request intake captured: {summary}"
-            )
-            frontmatter["open_questions"] = (
-                open_questions
-                if open_questions is not None
-                else (default_open_questions or guidance_open_questions or [])
-            )
-            if context:
-                frontmatter["context"] = context
-            if default_meta:
-                frontmatter["meta"] = default_meta
-            if standard_refs:
-                frontmatter["standard_refs"] = standard_refs
-            if request_refs:
-                frontmatter["spec_refs"] = request_refs
-
-        elif kind == "spec":
-            frontmatter["request_refs"] = request_refs or []
-            frontmatter["task_refs"] = []
-            if standard_refs:
-                frontmatter["standard_refs"] = standard_refs
-
-        elif kind == "plan":
-            frontmatter["spec_refs"] = [spec] if spec else []
-            frontmatter["request_refs"] = request_refs or []
-            frontmatter["work_package_refs"] = []
-            if standard_refs:
-                frontmatter["standard_refs"] = standard_refs
-
-        elif kind == "task":
-            if spec:
-                frontmatter["spec_ref"] = spec
-            if parent:
-                frontmatter["parent_task_ref"] = parent
-            if target:
-                frontmatter["target"] = target
-            if workflow:
-                frontmatter["workflow"] = workflow
-            if request_refs:
-                frontmatter["request_refs"] = request_refs
-            if standard_refs:
-                frontmatter["standard_refs"] = standard_refs
-
-        elif kind == "wp":
-            if plan:
-                frontmatter["plan_ref"] = plan
-            frontmatter["task_refs"] = task_refs or []
-            if workflow:
-                frontmatter["workflow"] = workflow
-            if standard_refs:
-                frontmatter["standard_refs"] = standard_refs
-
-        body = self.config.document_template(kind, guidance)
+        body = self.config.creation_template(kind, guidance=guidance, profile=profile)
         path = self.paths.kind_file(kind, id_, label, domain)
         dump_markdown(path, frontmatter, body)
 
@@ -822,6 +796,8 @@ class PlanningAPI:
         open_questions: list[str] | None,
         source: str | None,
         context: str | None,
+        state: str | None = None,
+        task_refs: list[dict] | None = None,
     ) -> dict:
         """Build frontmatter dict for a planning item based on kind.
 
@@ -841,7 +817,7 @@ class PlanningAPI:
         frontmatter = {
             "id": id_,
             "label": label,
-            "state": "draft" if kind != "request" else "captured",
+            "state": state or self.config.initial_state(kind, workflow),
             "summary": summary,
         }
 
@@ -849,87 +825,47 @@ class PlanningAPI:
         if domain:
             frontmatter["domain"] = domain
 
-        # Kind-specific fields
-        if kind == "request":
-            # Handle profile defaults
-            profile_cfg = {}
-            if profile:
-                try:
-                    profile_cfg = self.config.profile_for(profile)
-                except ValueError:
-                    pass
+        ref_input_values = {
+            "request_refs": request_refs or [],
+            "spec_refs": [spec] if spec else [],
+            "standard_refs": standard_refs,
+            "spec_ref": spec,
+            "plan_ref": plan,
+            "parent_task_ref": parent,
+            "packet_ref": target,
+            "task_refs": task_refs or [],
+        }
+        seed_field_sources = self.config.seeded_reference_fields(kind)
 
-            defaults = profile_cfg.get("defaults", {})
-            default_understanding = defaults.get("current_understanding")
-            default_open_questions = defaults.get("open_questions", [])
-            default_meta = defaults.get("meta", {})
+        for field in self.config.reference_fields(kind):
+            if field in seed_field_sources:
+                value = ref_input_values.get(seed_field_sources[field])
+            elif self.config.reference_field_shape(field) == "rel_list":
+                value = []
+            else:
+                value = ref_input_values.get(field)
 
-            # Handle guidance defaults
-            guidance_cfg = self.config.guidance_levels().get(guidance, {})
-            guidance_defaults = guidance_cfg.get("defaults", {})
-            guidance_understanding = guidance_defaults.get("current_understanding")
-            guidance_open_questions = guidance_defaults.get("open_questions", [])
+            if value in (None, [], ""):
+                continue
+            frontmatter[field] = value
 
-            frontmatter["source"] = source or ""
-            frontmatter["guidance"] = guidance
-            frontmatter["current_understanding"] = (
-                current_understanding
-                or default_understanding
-                or guidance_understanding
-                or f"Initial request intake captured: {summary}"
+        if workflow:
+            frontmatter["workflow"] = workflow
+        if target:
+            frontmatter["target"] = target
+
+        frontmatter.update(
+            self.config.build_creation_extra_fields(
+                kind,
+                summary=summary,
+                guidance=guidance,
+                profile=profile,
+                current_understanding=current_understanding,
+                open_questions=open_questions,
+                source=source,
+                context=context,
             )
-            frontmatter["open_questions"] = (
-                open_questions
-                if open_questions is not None
-                else (default_open_questions or guidance_open_questions or [])
-            )
-            if context:
-                frontmatter["context"] = context
-            if default_meta:
-                frontmatter["meta"] = default_meta
-            if standard_refs:
-                frontmatter["standard_refs"] = standard_refs
-            if request_refs:
-                frontmatter["spec_refs"] = request_refs
-
-        elif kind == "spec":
-            frontmatter["request_refs"] = request_refs or []
-            frontmatter["task_refs"] = []
-            if standard_refs:
-                frontmatter["standard_refs"] = standard_refs
-
-        elif kind == "plan":
-            frontmatter["spec_refs"] = [spec] if spec else []
-            frontmatter["request_refs"] = request_refs or []
-            frontmatter["work_package_refs"] = []
-            if standard_refs:
-                frontmatter["standard_refs"] = standard_refs
-
-        elif kind == "task":
-            if spec:
-                frontmatter["spec_ref"] = spec
-            if parent:
-                frontmatter["parent_task_ref"] = parent
-            if target:
-                frontmatter["target"] = target
-            if workflow:
-                frontmatter["workflow"] = workflow
-            if request_refs:
-                frontmatter["request_refs"] = request_refs
-            if standard_refs:
-                frontmatter["standard_refs"] = standard_refs
-
-        elif kind == "wp":
-            if plan:
-                frontmatter["plan_ref"] = plan
-            frontmatter["task_refs"] = []
-            if workflow:
-                frontmatter["workflow"] = workflow
-            if standard_refs:
-                frontmatter["standard_refs"] = standard_refs
-
-        elif kind == "standard":
-            pass  # Standard only needs id, label, state, summary
+        )
 
         return frontmatter
 
@@ -998,13 +934,13 @@ class PlanningAPI:
         )
 
         relationship_errors = self.relationship_config.validate_refs(
-            kind, frontmatter, validate_required=False
+            kind, frontmatter, validate_required=True
         )
         if relationship_errors:
             raise ValueError("; ".join(relationship_errors))
 
         # Render body template
-        body = self.config.document_template(kind, guidance)
+        body = self.config.creation_template(kind, guidance=guidance, profile=profile)
 
         # Get path and create file
         path = self.paths.kind_file(kind, id_, label, effective_domain)
@@ -1050,13 +986,13 @@ class PlanningAPI:
             "kind": kind,
             "label": label,
             "summary": summary,
-            "state": "draft",
+            "state": self.config.initial_state(kind),
         }
 
         if domain:
             frontmatter["domain"] = domain
 
-        body = self.config.document_template(kind) or ""
+        body = self.config.creation_template(kind)
         dump_markdown(item_path, frontmatter, body)
 
         return item_path
@@ -1131,10 +1067,10 @@ class PlanningAPI:
         )
         # Manually add task refs to WP frontmatter
         wp_path = self.paths.kind_file("wp", wp_id, label, domain)
-        wp_data = parse_markdown(wp_path)
+        wp_fm, wp_body = parse_markdown(wp_path)
         task_refs = [{"ref": t} for t in task_ids]
-        wp_data["frontmatter"]["task_refs"] = task_refs
-        dump_markdown(wp_path, wp_data["frontmatter"], wp_data["body"])
+        wp_fm["task_refs"] = task_refs
+        dump_markdown(wp_path, wp_fm, wp_body)
         self.index()
         return {"plan": self._find(plan_id), "wp": self._find(wp_id)}
 
@@ -1170,31 +1106,28 @@ class PlanningAPI:
             workflow: Workflow name
             request_refs: Request references for spec
         """
-        kind = {
-            "req": "request",
-            "request": "request",
-            "sp": "spec",
-            "spec": "spec",
-            "pl": "plan",
-            "plan": "plan",
-            "task": "task",
-            "wp": "wp",
-            "standard": "standard",
-        }.get(kind, kind)
+        kind = self.config.normalize_kind(kind)
 
-        # Apply default standards if not explicitly provided
-        if standard_refs is None and kind in {"spec", "task", "plan", "wp", "request"}:
+        if standard_refs is None:
             standard_refs = self.config.standard_defaults_for(kind)
         else:
             standard_refs = standard_refs or []
 
-        if kind in {"request", "spec"} and check_duplicates:
+        if self.config.should_duplicate_check(kind) and check_duplicates:
             self._check_duplicate(kind, label, summary)
-        if kind in {"spec", "plan", "task"}:
+        if self.config.validate_request_refs_on_create(kind):
             self._validate_request_refs(request_refs or [])
-        if kind == "spec":
-            self._require_request_refs_for_spec(request_refs or [])
-        if kind == "request" and not source:
+        required_refs = self.config.kind_config(kind).get("required_refs", [])
+        self._validate_required_refs(
+            kind,
+            required_refs,
+            {
+                "spec": spec,
+                "plan": plan,
+                "request_refs": request_refs,
+            },
+        )
+        if self.config.requires_source_on_create(kind) and not source:
             raise ValueError("request requires source to track request origin")
         id_ = self._next_id_for_kind(kind)
         kind_config = self.config.kind_config(kind)
@@ -1338,7 +1271,7 @@ class PlanningAPI:
     def move(self, id_: str, domain: str):
         item = self._find(id_)
         self._assert_not_archived(item, "move")
-        if item.kind not in {"task", "wp"}:
+        if not self.config.kind_has_domain(item.kind):
             raise ValueError("only task/wp can move by domain")
         dest_dir = self.paths.kind_dir(item.kind, domain)
         dest = dest_dir / item.path.name
@@ -1388,21 +1321,21 @@ class PlanningAPI:
         dump_markdown(item.path, data, body)
         if new_state == "archived":
             self.events.emit(f"{item.kind}.archived", event_payload)
-            # Cascade archive for request-012
-            self._cascade_archive(id_, item.kind, "archived", actor, reason)
         elif new_state == "superseded":
             self.events.emit(f"{item.kind}.superseded", event_payload)
-            # Cascade supersede for request-012
-            self._cascade_archive(id_, item.kind, "superseded", actor, reason)
         elif old == "archived":
             self.events.emit(f"{item.kind}.restored", event_payload)
 
-        # Cascade close child tasks when request is closed
-        if item.kind == "request" and new_state == "closed":
-            self._cascade_close_children(id_, item.kind)
+        self._cascade_state_change(id_, item.kind, new_state, actor, reason)
 
         # Publish canonical event (task-0283)
-        event_metadata = {"subject": {"kind": item.kind, "id": id_}, "triggered_by": "manual"}
+        # project_root lets subscribers (e.g. knowledge handler) scope I/O to the correct
+        # project without relying on Path.cwd() — critical for template/multi-project use.
+        event_metadata = {
+            "subject": {"kind": item.kind, "id": id_},
+            "triggered_by": "manual",
+            "project_root": str(self.root.resolve()),
+        }
         if metadata:
             event_metadata.update(metadata)
 
@@ -1430,17 +1363,19 @@ class PlanningAPI:
         item = self._find(src_id)
         self._assert_not_archived(item, "relink")
         data, body = parse_markdown(item.path)
-        if field in {"request_refs", "spec_refs", "standard_refs"}:
+        if field not in self.config.reference_fields(item.kind):
+            raise ValueError(f"unsupported field {field}")
+
+        field_shape = self.config.reference_field_shape(field)
+        if field_shape == "scalar_ref_list":
             vals = list(data.get(field, []) or [])
             if dst_id not in vals:
                 vals.append(dst_id)
             data[field] = vals
-        elif field in {"plan_ref", "spec_ref", "parent_task_ref"}:
+        elif field_shape == "scalar_ref":
             data[field] = dst_id
-        elif field in {"task_refs", "work_package_refs"}:
+        elif field_shape == "rel_list":
             data[field] = Relationships.ensure_rel_list(data.get(field), dst_id, seq, display)
-        else:
-            raise ValueError(f"unsupported field {field}")
         dump_markdown(item.path, data, body)
         if item.kind == "spec" and field == "request_refs":
             self._sync_request_spec_refs(src_id, [dst_id])
@@ -1616,10 +1551,9 @@ class PlanningAPI:
 
     def sync_id_counters(self) -> None:
         """Seed persisted counters from existing docs. Run once after install."""
-        from ..domain.states import CANONICAL_KINDS
         from .id_gen import sync_counter
 
-        for kind in CANONICAL_KINDS:
+        for kind in self.config.all_kinds():
             sync_counter(self.root, kind)
 
     def delete(
@@ -1668,102 +1602,65 @@ class PlanningAPI:
             if item.kind != "request":
                 raise ValueError(f"request '{req_id}' does not exist")
 
-    def _require_request_refs_for_spec(self, request_refs: list[str]) -> None:
-        if not request_refs:
-            raise ValueError("spec requires at least one request reference")
+    @staticmethod
+    def _iter_ref_ids(value) -> list[str]:
+        """Normalize reference values to bare ID strings."""
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, list):
+            refs: list[str] = []
+            for entry in value:
+                if isinstance(entry, str):
+                    refs.append(entry)
+                elif isinstance(entry, dict):
+                    ref = entry.get("ref")
+                    if isinstance(ref, str):
+                        refs.append(ref)
+            return refs
+        if isinstance(value, dict):
+            ref = value.get("ref")
+            return [ref] if isinstance(ref, str) else []
+        return []
 
-    def _cascade_archive(
+    def _child_refs_parent(self, child_item, parent_kind: str, parent_id: str) -> bool:
+        """Return True if child item solely references the given parent."""
+        field = self.config.referenced_by(parent_kind).get(child_item.kind)
+        if not field:
+            return False
+        active_refs = [
+            ref
+            for ref in self._iter_ref_ids(child_item.data.get(field))
+            if ref == parent_id or not self._is_terminal(ref)
+        ]
+        return len(active_refs) == 1 and active_refs[0] == parent_id
+
+    def _cascade_state_change(
         self, id_: str, kind: str, new_state: str, actor: str | None, reason: str | None
     ) -> None:
-        """Cascade archive to downstream items solely owned by the archived item.
-
-        Implements request-012 cascade archive:
-        - Archiving a request → archive specs whose only active request ref is this request
-        - Archiving a spec → archive plans/tasks/WPs whose only active spec ref is this spec
-
-        Args:
-            id_: ID of the item being archived
-            kind: Kind of the item being archived (request, spec, etc.)
-            new_state: The terminal state (archived, superseded)
-            actor: Who triggered the archive
-            reason: Reason for the archive
-        """
-        if kind == "request":
-            # Find specs that solely reference this request
-            for item in self._scan():
-                if item.kind != "spec" or item.data.get("state") in (
-                    "archived",
-                    "deleted",
-                    "superseded",
-                ):
-                    continue
-                request_refs = item.data.get("request_refs", []) or []
-                # Check if this request is the only active request ref
-                active_refs = [ref for ref in request_refs if not self._is_terminal(ref)]
-                if len(active_refs) == 1 and active_refs[0] == id_:
-                    # Cascade archive this spec
-                    try:
-                        self.state(
-                            item.data["id"], new_state, reason=f"Cascaded from {id_}", actor=actor
-                        )
-                    except Exception:
-                        pass  # Silently skip if cascade fails
-        elif kind == "spec":
-            # Find plans/tasks/WPs that solely reference this spec
-            for item in self._scan():
-                if item.kind not in ("plan", "task", "wp"):
-                    continue
-                if item.data.get("state") in ("archived", "deleted", "superseded"):
-                    continue
-                spec_ref = item.data.get("spec_ref")
-                if spec_ref == id_ and not self._is_terminal(id_):
-                    # Cascade archive this item
-                    try:
-                        self.state(
-                            item.data["id"], new_state, reason=f"Cascaded from {id_}", actor=actor
-                        )
-                    except Exception:
-                        pass  # Silently skip if cascade fails
-
-    def _cascade_close_children(self, id_: str, kind: str) -> None:
-        """Cascade close to child tasks when a request is closed.
-
-        Implements request lifecycle closure: when a request is closed, all child tasks
-        and specs that solely belong to it should also be closed.
-
-        Args:
-            id_: ID of the request being closed
-            kind: Always "request"
-        """
-        if kind != "request":
+        """Cascade configured state changes to solely-owned children."""
+        cascade_rules = self.config.state_cascades(kind, new_state)
+        if not cascade_rules:
             return
 
-        # Find tasks that solely reference this request
         for item in self._scan():
-            if item.kind == "task":
-                if item.data.get("state") in ("closed", "archived", "deleted", "superseded"):
-                    continue
-                request_refs = item.data.get("request_refs", []) or []
-                active_refs = [ref for ref in request_refs if not self._is_terminal(ref)]
-                if len(active_refs) == 1 and active_refs[0] == id_:
-                    try:
-                        self.state(
-                            item.data["id"], "closed", reason=f"Cascade from request close: {id_}"
-                        )
-                    except Exception:
-                        pass  # Silently skip if cascade fails
-            elif item.kind == "spec":
-                if item.data.get("state") in ("closed", "archived", "deleted", "superseded"):
-                    continue
-                request_refs = item.data.get("request_refs", []) or []
-                active_refs = [ref for ref in request_refs if not self._is_terminal(ref)]
-                if len(active_refs) == 1 and active_refs[0] == id_:
-                    try:
-                        self.state(
-                            item.data["id"], "closed", reason=f"Cascade from request close: {id_}"
-                        )
-                    except Exception:
-                        pass  # Silently skip if cascade fails
+            target_state = cascade_rules.get(item.kind)
+            if not target_state:
+                continue
+            if item.data.get("state") in ("archived", "deleted", "superseded"):
+                continue
+            if not self._child_refs_parent(item, kind, id_):
+                continue
+            try:
+                self.state(
+                    item.data["id"],
+                    target_state,
+                    reason=reason or f"Cascaded from {id_}",
+                    actor=actor,
+                )
+            except Exception:
+                pass
 
     def _is_terminal(self, id_: str) -> bool:
         """Check if an item is in a terminal state (archived, deleted, superseded)."""

@@ -6,6 +6,12 @@ summary: Default standard for how AUDiaGentic planning and project-facing docume
   should be structured, named, and maintained across surfaces.
 ---
 
+
+
+
+
+
+
 # Standard
 
 Default standard for planning-related documentation surfaces and content organization in AUDiaGentic-based projects.

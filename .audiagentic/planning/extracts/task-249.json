@@ -1,19 +1,19 @@
 {
   "item": {
     "id": "task-249",
-    "label": "Implement FileEventStore for optional persistence",
+    "label": "Create state propagation config system",
     "state": "done",
-    "summary": "Create FileEventStore with atomic writes, JSON file format, and best-effort persistence",
-    "spec_ref": "spec-19",
+    "summary": "Implement state_propagation.yaml config with default rules and workflow overrides",
+    "spec_ref": "spec-24",
     "request_refs": [
-      "request-17"
+      "request-18"
     ],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-249-implement-fileeventstore-for-optional-persistence.md",
+    "path": "docs/planning/tasks/core/task-249-create-state-propagation-config-system.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,8 +22,7 @@
   },
   "effective_standard_refs": [
     "standard-5",
-    "standard-6",
-    "standard-11"
+    "standard-6"
   ],
-  "body": "\n\n\n\n\n\n# Description\n\nImplement optional file-backed event persistence. This task owns storing canonical event envelopes durably with atomic writes, using configured runtime location and file naming rules, keeping persistence failures non-fatal to publish.\n\n**File format:**\n```\nruntime/interoperability/events/\n  2026-04-14T12-34-56-123Z_planning.item.state.changed_evt_abc123.json\n```\n\n**Key behaviors:**\n- Atomic writes: temp file + rename to prevent corruption\n- Best-effort: persistence failures logged but don't block publish\n- Configurable: enable/disable via `.audiagentic/interoperability/config.yaml`\n- Envelope stored: full canonical envelope from task-0248\n- Filename format: `{timestamp_utc}_{sanitized_type}_{event_id}.json`\n- Query support: filter by timestamp range and event type pattern\n- Cleanup: remove old events based on retention_days config\n\n# Acceptance Criteria\n\n- `FileEventStore` persists events to configured runtime location\n- Filenames follow: `{timestamp_utc}_{sanitized_type}_{event_id}.json`\n- Atomic writes use temp file + rename pattern\n- Persistence can be enabled/disabled via config\n- Persistence failures logged but don't fail `publish()` call\n- Persisted files contain full canonical envelope\n- Unit tests cover: successful persistence, disabled mode, write-failure handling\n- Smoke test proves FileEventStore imports and basic write path works\n\n# Notes\n\nReplay logic is task-0250. This task is persistence only.\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\nCreate configuration surface for planning state propagation. This task owns loading default propagation behavior, supporting workflow-specific overrides, and exposing on/off control for rollout and debugging.\n\n**Config file:** `.audiagentic/planning/config/state_propagation.yaml`\n\n**Default rules:**\n```yaml\nenabled: true\nmode: ASYNC  # SYNC or ASYNC\nmax_depth: 10\nlog_file: planning/meta/propagation_log.json\ndefaults:\n  task:\n    to_in_progress: trigger_wp_in_progress\n    to_done: check_all_tasks_done_for_wp\n    to_blocked: trigger_wp_blocked\n  wp:\n    to_in_progress: trigger_plan_in_progress\n    to_done: check_all_wps_done_for_plan\n    to_blocked: trigger_plan_blocked\n  plan:\n    to_in_progress: trigger_spec_in_progress\n    to_done: check_all_plans_done_for_spec\n    to_blocked: trigger_spec_blocked\nworkflows:\n  custom_workflow:\n    overrides:\n      # workflow-specific rules\n```\n\n**Key behaviors:**\n- Default rules applied if config file missing\n- `enabled: false` disables all propagation globally\n- `mode: ASYNC` recommended for eventual consistency\n- `max_depth: 10` prevents infinite loops\n- Workflow-specific overrides supported\n- Invalid config fails with clear error message\n\n# Acceptance Criteria\n\n- Default propagation works without explicit config file\n- Config file loaded from `.audiagentic/planning/config/state_propagation.yaml`\n- `enabled: false` disables all propagation globally\n- Workflow-specific overrides loaded and applied\n- Invalid config fails with clear error message\n- Unit tests cover: defaults, overrides, disablement, invalid config\n- Smoke test proves planning config loads with/without propagation settings\n\n# Notes\n\nPropagation engine (task-0251) consumes this config. This task is config loading only.\n"
 }

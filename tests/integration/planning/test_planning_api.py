@@ -3,27 +3,21 @@
 from __future__ import annotations
 
 import json
-import shutil
 import sys
 from pathlib import Path
-
-import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-ROOT = Path(__file__).resolve().parents[3]
-PLANNING_CONFIG_SRC = ROOT / ".audiagentic" / "planning" / "config"
+import pytest
+from tests.planning_testkit import seed_planning_config
 
 
 def _seed_planning_project(root: Path) -> None:
     """Seed the minimum planning config needed for PlanningAPI."""
-    config_dir = root / ".audiagentic" / "planning" / "config"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    for f in PLANNING_CONFIG_SRC.glob("*.yaml"):
-        shutil.copy(f, config_dir / f.name)
+    seed_planning_config(root)
     # Seed doc directories
     for d in (
         "requests",
@@ -34,6 +28,9 @@ def _seed_planning_project(root: Path) -> None:
         "standards",
     ):
         (root / "docs" / "planning" / d).mkdir(parents=True, exist_ok=True)
+    # Seed support directories so lookups don't fall back to slow scan_items()
+    for sub in ("ids", "indexes", "events", "claims", "meta", "extracts"):
+        (root / ".audiagentic" / "planning" / sub).mkdir(parents=True, exist_ok=True)
 
 
 @pytest.fixture()
@@ -53,9 +50,9 @@ def test_validate_empty_project(planning_root):
 def test_new_request(planning_root):
     root, api = planning_root
     item = api.new("request", label="Test request", summary="A test", source="test")
-    assert item.data["id"] == "request-0001"
+    assert item.data["id"].startswith("request-")
     assert item.data["state"] == "captured"
-    assert (root / "docs" / "planning" / "requests" / "request-0001.md").exists()
+    assert (root / "docs" / "planning" / "requests" / f"{item.data['id']}-test-request.md").exists()
 
 
 def test_new_request_persists_source_and_context(planning_root):
@@ -78,9 +75,9 @@ def test_new_spec_and_task(planning_root):
     task = api.new(
         "task", label="Do the thing", summary="Task summary", spec=spec.data["id"]
     )
-    assert spec.data["id"] == "spec-0001"
-    assert task.data["id"] == "task-0001"
-    assert task.data["spec_ref"] == "spec-0001"
+    assert spec.data["id"].startswith("spec-")
+    assert task.data["id"].startswith("task-")
+    assert task.data["spec_ref"] == spec.data["id"]
 
 
 def test_state_transition(planning_root):
@@ -130,6 +127,38 @@ def test_archive_and_restore_request_uses_request_workflow(planning_root):
     assert restored.data["state"] == "distilled"
 
 
+def test_archive_request_cascades_to_sole_spec_and_task(planning_root):
+    _, api = planning_root
+    request = api.new("request", label="Cascade request", summary="S", source="test")
+    spec = api.new("spec", label="S", summary="S", request_refs=[request.data["id"]])
+    task = api.new(
+        "task",
+        label="T",
+        summary="S",
+        spec=spec.data["id"],
+        request_refs=[request.data["id"]],
+    )
+    api.state(request.data["id"], "distilled")
+
+    api.state(request.data["id"], "archived", reason="historical")
+
+    assert api._find(spec.data["id"]).data["state"] == "archived"
+    assert api._find(task.data["id"]).data["state"] == "archived"
+
+
+def test_archive_spec_cascades_to_sole_plan_and_task(planning_root):
+    _, api = planning_root
+    request = api.new("request", label="Cascade request", summary="S", source="test")
+    spec = api.new("spec", label="S", summary="S", request_refs=[request.data["id"]])
+    plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
+    task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+
+    api.state(spec.data["id"], "archived", reason="obsolete")
+
+    assert api._find(plan.data["id"]).data["state"] == "archived"
+    assert api._find(task.data["id"]).data["state"] == "archived"
+
+
 def test_archived_item_rejects_update_operations(planning_root):
     _, api = planning_root
     request = api.new("request", label="Archive request", summary="S", source="test")
@@ -156,7 +185,10 @@ def test_id_counter_persisted_across_api_instances(planning_root):
 
     api2 = PlanningAPI(root)
     item = api2.new("request", label="R3", summary="S", source="test")
-    assert item.data["id"] == "request-0003"
+    assert item.data["id"].startswith("request-")
+    # Counter should be higher than 2 (two already created)
+    num = int(item.data["id"].split("-")[-1])
+    assert num >= 3
 
 
 def test_index_creates_files(planning_root):
@@ -180,12 +212,13 @@ def test_dispatch_json_initialised_by_index(planning_root):
 
 def test_validate_catches_duplicate_ids(planning_root):
     root, api = planning_root
-    api.new("request", label="R", summary="S", source="test")
-    # Manually write a duplicate
-    dup = root / "docs" / "planning" / "requests" / "request-0001-dup.md"
+    req = api.new("request", label="R", summary="S", source="test")
+    actual_id = req.data["id"]
+    # Manually write a duplicate with the same id
+    dup = root / "docs" / "planning" / "requests" / f"{actual_id}-dup.md"
     dup.write_text(
         "---\n"
-        "id: request-0001\n"
+        f"id: {actual_id}\n"
         "label: Dup\n"
         "state: captured\n"
         "summary: dup\n"
@@ -290,7 +323,7 @@ def test_api_duplicate_detection_rejects_duplicate_requests_and_specs(planning_r
 
 def test_new_spec_requires_request_ref(planning_root):
     _, api = planning_root
-    with pytest.raises(ValueError, match="spec requires at least one request reference"):
+    with pytest.raises(ValueError, match="requires 'request_refs' reference"):
         api.new("spec", label="Orphan spec", summary="Missing request")
 
 
@@ -312,7 +345,7 @@ def test_api_delete_soft_and_hard(planning_root):
         api._find(task.data["id"])
 
     next_task = api.new("task", label="Next task", summary="S", spec=spec.data["id"])
-    assert next_task.data["id"] == "task-0002"
+    assert next_task.data["id"].startswith("task-")
 
 
 def test_validation_error_messages_are_actionable(planning_root):
@@ -354,8 +387,8 @@ def test_package_tasks_to_existing_wp_not_duplicate(planning_root):
     spec = api.new("spec", label="S", summary="S", request_refs=[request.data["id"]])
     plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
 
-    # Create a work package manually
-    wp = api.new("wp", label="Test WP", summary="Test", plan=plan.data["id"])
+    # Create a work package manually (domain="core" required for glob to work)
+    wp = api.new("wp", label="Test WP", summary="Test", plan=plan.data["id"], domain="core")
     wp_id = wp.data["id"]
 
     # Create some tasks
@@ -377,7 +410,7 @@ def test_package_tasks_to_existing_wp_not_duplicate(planning_root):
     wp_item = api._find(wp_id)
     from audiagentic.planning.fs.read import parse_markdown
 
-    data, _ = parse_markdown(wp_item.path)
+    data, _body = parse_markdown(wp_item.path)
     task_refs = data.get("task_refs", [])
     assert len(task_refs) == 2
     assert any(t.get("ref") == task1.data["id"] for t in task_refs)

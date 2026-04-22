@@ -1,14 +1,18 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
+  "additionalProperties": false,
   "properties": {
     "planning": {
       "type": "object",
+      "additionalProperties": false,
+      "required": ["automations"],
       "properties": {
         "automations": {
           "type": "array",
           "items": {
             "type": "object",
+            "additionalProperties": false,
             "required": [
               "name",
               "on",
@@ -19,12 +23,25 @@
                 "type": "string"
               },
               "on": {
-                "type": "object"
+                "type": "object",
+                "required": ["event"],
+                "properties": {
+                  "event": { "type": "string" }
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
               },
               "do": {
                 "type": "array",
                 "items": {
-                  "type": "object"
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["action"],
+                  "properties": {
+                    "action": { "type": "string" },
+                    "params": { "type": "object" }
+                  }
                 }
               }
             }

@@ -16,12 +16,22 @@ open_questions:
 - 'What search enhancement approach: BM25 vs fuzzy matching?'
 meta:
   request_type: feature
+  spec_refs:
+  - spec-20
 standard_refs:
 - standard-1
 spec_refs:
-- spec-15
-- spec-16
+- spec-19
+- spec-20
 ---
+
+
+
+
+
+
+
+
 
 
 
@@ -33,11 +43,14 @@ spec_refs:
 Knowledge component integrated successfully but has gaps: zero tests, events.py too large (413 lines), naive search, no lifecycle for proposals/jobs, 28 MCP tools too many. README updated, bootstrap idempotency verified, config paths verified. Need to track improvements.
 
 # Open Questions
+1. What is the priority order for adding tests?
+**Answered:** Tests first (R1 is HIGH priority, foundation for safe refactoring).
 
-- What is the priority order for adding tests?
-- Should MCP consolidation happen before or after tests?
-- What search enhancement approach: BM25 vs fuzzy matching?
+2. Should MCP consolidation happen before or after tests?
+**Answered:** MCP consolidation already implemented via grouped knowledge MCP operations (28→16 tools). Marked as stale-complete.
 
+3. What search enhancement approach: BM25 vs fuzzy matching?
+**Answered:** spec-16 R3 includes both stemming and fuzzy matching as in-scope. Evaluation deferred to Phase 2 of plan-11.
 # Problem
 
 

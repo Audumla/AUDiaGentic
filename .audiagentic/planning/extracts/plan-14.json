@@ -1,37 +1,21 @@
 {
   "item": {
     "id": "plan-14",
-    "label": "Implement config-driven planning structure",
+    "label": "Knowledge Component Integration Plan",
     "state": "done",
-    "summary": "Plan to refactor planning module to use config-driven document structure",
+    "summary": "Plan for integrating knowledge component v7.4 with review, testing, configuration, and event bridging.",
     "spec_refs": [
-      "spec-29"
+      "spec-18"
     ],
     "request_refs": [
-      "request-25"
+      "request-14"
     ],
-    "work_package_refs": [
-      {
-        "ref": "wp-16"
-      },
-      {
-        "ref": "wp-17"
-      },
-      {
-        "ref": "wp-18"
-      },
-      {
-        "ref": "wp-19"
-      },
-      {
-        "ref": "wp-20"
-      }
-    ],
+    "work_package_refs": [],
     "standard_refs": [
       "standard-6"
     ],
     "kind": "plan",
-    "path": "docs/planning/plans/plan-14-implement-config-driven-planning-structure.md",
+    "path": "docs/planning/plans/plan-14-knowledge-component-integration-plan.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -41,5 +25,5 @@
   "effective_standard_refs": [
     "standard-6"
   ],
-  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n# Objectives\nEliminate all hardcoded document structure from planning module managers. Replace with config-driven approach that allows profiles and guidance levels to control document templates, sections, and relationships. Maintain backward compatibility while enabling flexible configuration.\n# Delivery Approach\nDelivery Approach\n\nWork will proceed in 5 phases:\n\n1. **Config Schema Extensions** (wp-0016): Extend profiles.schema.json and create document-structure.schema.json to support document templates, sections, and relationships in config.\n\n2. **Core Infrastructure** (wp-0017): Create TemplateEngine class for rendering document bodies from config templates, and RelationshipConfig class for validating refs against config rules.\n\n3. **Manager Refactoring** (wp-0018): Refactor all managers (SpecMgr, TaskMgr, PlanMgr, WPMgr, StandardMgr) to use TemplateEngine instead of hardcoded body templates. Update section_registry.py to load from config.\n\n4. **Config Migration** (wp-0019): Migrate existing hardcoded values (SECTION_KEYS, body templates) to profiles.yaml. Provide migration path for existing projects.\n\n5. **Testing** (wp-0020): Add tests for TemplateEngine, RelationshipConfig, and refactored managers. Validate backward compatibility.\n\nEach phase builds on the previous. Phase 1 must complete before Phase 2. Phase 2 must complete before Phase 3. Phase 3 and 4 can run in parallel. Phase 5 validates all previous phases.\n# Dependencies\nwp-16\n\n\n# Status Summary\n## Completed Phases\n\n- \u2705 **Phase 1 (wp-0016)**: Config schema extensions complete\n- \u2705 **Phase 2 (wp-0017)**: TemplateEngine and RelationshipConfig created\n- \u2705 **Phase 3 (wp-0018)**: All managers refactored to use TemplateEngine\n- \u2705 **Phase 4 (wp-0019)**: Config migration complete\n  - \u2705 REQ_SECTIONS migrated to profiles.yaml\n  - \u2705 val_mgr.py updated to load from config\n  - \u2705 Config method `required_sections()` added\n  - \u2705 Comprehensive README created\n  - \u2705 Hardcoded reference analysis complete (api.py, ext_mgr.py, states.py accepted as-is)\n- \u2705 **Phase 5 (wp-0020)**: Testing complete\n  - \u2705 42 tests created in `tools/planning/tests/test_config_driven_structure.py`\n  - \u2705 All tests passing\n  - \u2705 Coverage: Config methods, document templates, guidance levels, relationship rules, manager integration, backward compatibility\n\n## Key Deliverables\n\n1. **Config-driven templates**: All managers use `TemplateEngine` to render document bodies\n2. **Config-driven sections**: Required sections loaded from `profiles.yaml` \u2192 `required_sections`\n3. **Guidance level support**: Templates vary by light/standard/deep guidance levels\n4. **Comprehensive documentation**: README explains config-driven approach, how to extend, and best practices\n5. **Comprehensive tests**: 42 tests validating all aspects of config-driven structure\n6. **Backward compatibility**: Existing documents remain valid, manager APIs unchanged\n\n## Files Modified\n\n### Config\n- `.audiagentic/planning/config/profiles.yaml` - Added `required_sections`, `document_templates`, `relationship_config`\n\n### Code\n- `src/audiagentic/planning/app/config.py` - Added `required_sections()`, `document_template()`, `relationship_rules()`, `can_reference()`, `required_refs()` methods\n- `src/audiagentic/planning/app/val_mgr.py` - Removed hardcoded `REQ_SECTIONS`, loads from config\n- Fixed indentation issues in `plan_mgr.py`, `req_mgr.py`, `wp_mgr.py`\n\n### Tests\n- `tools/planning/tests/test_config_driven_structure.py` - 42 comprehensive tests\n\n### Documentation\n- `src/audiagentic/planning/README.md` - Comprehensive config-driven documentation\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n# Objectives\n\n\n# Delivery Approach\n\n\n# Dependencies\n"
 }

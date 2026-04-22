@@ -1,10 +1,10 @@
 {
   "item": {
     "id": "task-216",
-    "label": "Add guidance_levels to profiles.yaml",
+    "label": "Update tm_helper.py new_request() with guidance parameter",
     "state": "done",
-    "summary": "Add guidance_levels section (light/standard/deep) to .audiagentic/planning/config/profiles.yaml with defaults, sections, and acceptance_criteria_depth",
-    "spec_ref": "spec-10",
+    "summary": "Add guidance parameter to new_request(), validate against guidance_levels, apply guidance defaults to Understanding and Open Questions",
+    "spec_ref": "spec-13",
     "request_refs": [
       "request-11"
     ],
@@ -13,7 +13,7 @@
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-216-add-guidance-levels-to-profiles-yaml.md",
+    "path": "docs/planning/tasks/core/task-216-update-tm-helper-py-new-request-with-guidance-parameter.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -25,5 +25,5 @@
     "standard-6",
     "standard-9"
   ],
-  "body": "\n\n\n\n\n\n\n# Description\n\nAdd guidance_levels section to `.audiagentic/planning/config/profiles.yaml` with three levels: light, standard, and deep. Each level defines defaults for current_understanding, open_questions, spec_sections, task_sections, and acceptance_criteria_depth.\n\n# Acceptance Criteria\n\n- [ ] guidance_levels section added to profiles.yaml under planning key\n- [ ] Three levels defined: light, standard, deep\n- [ ] Each level has: description, label, defaults, spec_sections, task_sections, acceptance_criteria_depth\n- [ ] light: basic depth, minimal required sections, basic acceptance criteria\n- [ ] standard: standard depth, moderate required sections, standard acceptance criteria\n- [ ] deep: deep depth, all required sections, rigorous acceptance criteria\n- [ ] YAML syntax validated\n- [ ] Existing profiles.yaml structure preserved\n\n# Notes\n\nThis is the foundation for all other guidance level functionality. All other tasks depend on this being correct.\n\n# State\n\ndone\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\nAdd guidance parameter to new_request() function in tm_helper.py. Validate guidance against available guidance_levels and apply guidance-specific defaults to current_understanding and open_questions fields.\n\n# Acceptance Criteria\n\n- [ ] guidance parameter added to new_request() signature\n- [ ] Parameter defaults to config.default_guidance\n- [ ] Validation against guidance_levels from config\n- [ ] Guidance defaults applied to current_understanding\n- [ ] Guidance defaults applied to open_questions\n- [ ] Guidance field set in meta\n- [ ] Error raised for invalid guidance value\n- [ ] Tests for new_request() with guidance\n- [ ] Backward compatible (no guidance = standard)\n\n# Notes\n\nThis task ensures new requests get appropriate defaults based on guidance level.\n\n# State\n\ndone\n"
 }

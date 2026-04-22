@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ..fs.scan import scan_items
 from .claims import Claims
+from .config import Config
 from .util import now_iso
 
 
@@ -12,6 +13,7 @@ class Indexer:
     def __init__(self, root: Path, test_mode: bool = False):
         self.root = root
         self.test_mode = test_mode
+        self.config = Config(root)
 
     def write_indexes(self):
         items = scan_items(self.root)
@@ -42,15 +44,8 @@ class Indexer:
             idx_root = self.root / ".audiagentic/planning/indexes"
         idx_root.mkdir(parents=True, exist_ok=True)
         meta = {"convention_version": 1, "generated_at": now_iso()}
-        names = {
-            "request": "requests",
-            "spec": "specifications",
-            "plan": "plans",
-            "task": "tasks",
-            "wp": "work-packages",
-            "standard": "standards",
-        }
-        for kind, name in names.items():
+        for kind in self.config.all_kinds():
+            name = self.config.kind_dir_name(kind)
             payload = {**meta, "items": by_kind.get(kind, [])}
             (idx_root / f"{name}.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
         (idx_root / "lookup.json").write_text(
@@ -59,25 +54,27 @@ class Indexer:
         )
         trace = {**meta, "refs": []}
         for item in items:
-            for field in ["request_refs", "spec_refs", "standard_refs"]:
-                for r in item.data.get(field, []) or []:
-                    trace["refs"].append({"src": item.data["id"], "dst": r, "field": field})
-            for field in ["plan_ref", "spec_ref", "parent_task_ref"]:
-                if item.data.get(field):
-                    trace["refs"].append(
-                        {"src": item.data["id"], "dst": item.data[field], "field": field}
-                    )
-            for field in ["task_refs", "work_package_refs"]:
-                for rel in item.data.get(field, []) or []:
-                    trace["refs"].append(
-                        {
-                            "src": item.data["id"],
-                            "dst": rel["ref"],
-                            "field": field,
-                            "seq": rel.get("seq"),
-                            "display": rel.get("display"),
-                        }
-                    )
+            for field in self.config.reference_fields(item.kind):
+                shape = self.config.reference_field_shape(field)
+                if shape == "scalar_ref":
+                    if item.data.get(field):
+                        trace["refs"].append(
+                            {"src": item.data["id"], "dst": item.data[field], "field": field}
+                        )
+                elif shape == "scalar_ref_list":
+                    for ref in item.data.get(field, []) or []:
+                        trace["refs"].append({"src": item.data["id"], "dst": ref, "field": field})
+                elif shape == "rel_list":
+                    for rel in item.data.get(field, []) or []:
+                        trace["refs"].append(
+                            {
+                                "src": item.data["id"],
+                                "dst": rel["ref"],
+                                "field": field,
+                                "seq": rel.get("seq"),
+                                "display": rel.get("display"),
+                            }
+                        )
         (idx_root / "trace.json").write_text(json.dumps(trace, indent=2), encoding="utf-8")
         if self.test_mode:
             claims_path = self.root / "test" / ".audiagentic/planning/claims/claims.json"
@@ -99,7 +96,7 @@ class Indexer:
         (idx_root / "claims.json").write_text(
             json.dumps({**meta, "claims": claims}, indent=2), encoding="utf-8"
         )
-        # Preserve dispatch registry if it exists; do not overwrite (it is append-only via hook)
+        # Preserve dispatch registry if it exists; do not overwrite (it is append-only via event)
         dispatch_path = idx_root / "dispatch.json"
         if not dispatch_path.exists():
             dispatch_path.write_text(

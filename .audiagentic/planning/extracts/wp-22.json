@@ -1,0 +1,30 @@
+{
+  "item": {
+    "id": "wp-22",
+    "label": "Phase 5: Testing",
+    "state": "done",
+    "summary": "Add tests for config-driven structure",
+    "plan_ref": "plan-18",
+    "task_refs": [
+      {
+        "ref": "task-331",
+        "seq": 1000
+      }
+    ],
+    "standard_refs": [
+      "standard-6"
+    ],
+    "kind": "wp",
+    "path": "docs/planning/work-packages/core/wp-22-phase-5-testing.md",
+    "archived_at": null,
+    "archived_by": null,
+    "archive_reason": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [
+    "standard-6",
+    "standard-5"
+  ],
+  "body": "\n\n\n\n\n\n\n\n\n\n## Objective\n\nAdd comprehensive tests for the config-driven planning structure implemented in plan-0014 phases 1-4.\n\n## Scope of This Package\n\n- Test TemplateEngine functionality with all document kinds and guidance levels\n- Test RelationshipConfig validation\n- Test Config class methods (required_sections, document_template, relationship_rules)\n- Test manager integration with config-driven approach\n- Validate backward compatibility with existing documents\n\n## Inputs\n\n- Phase 1-4 implementation complete (wp-0016 through wp-0019)\n- Config files in `.audiagentic/planning/config/`\n- Existing test patterns in `tools/planning/tests/test_tm_helper.py`\n\n## Instructions\n\n1. Create test file at `tools/planning/tests/test_config_driven_structure.py`\n2. Test all Config methods added in phases 1-4\n3. Test document templates vary by guidance level (light/standard/deep)\n4. Test relationship rules for all document kinds\n5. Test manager integration with config-driven approach\n6. Validate backward compatibility\n7. Ensure all tests pass with `pytest tools/planning/tests/test_config_driven_structure.py`\n\n## Required Outputs\n\n- Test file with comprehensive coverage\n- All tests passing\n- Test documentation in task notes\n\n## Acceptance Checks\n\n- [x] 42 tests created and passing\n- [x] All document kinds tested (request, spec, plan, wp, task, standard)\n- [x] All guidance levels tested (light, standard, deep)\n- [x] Relationship rules validated\n- [x] Manager integration verified\n- [x] Backward compatibility confirmed\n\n## Non-Goals\n\n- Performance testing\n- Integration with external systems\n- UI/UX testing\n"
+}

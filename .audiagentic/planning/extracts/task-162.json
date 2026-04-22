@@ -1,21 +1,18 @@
 {
   "item": {
     "id": "task-162",
-    "label": "[PKT-MIG-001](task-0162): Migration Fixtures and Examples",
+    "label": "[PKT-NOD-001](task-0165): Node Descriptor and Heartbeat",
     "state": "draft",
-    "summary": "Create migration fixtures and examples",
-    "spec_ref": "spec-14",
+    "summary": "Implement node descriptor and heartbeat",
+    "spec_ref": "spec-19",
     "kind": "task",
-    "path": "docs/planning/tasks/migration/task-162-pkt-mig-001-task-0162-migration-fixtures-and-examples.md",
+    "path": "docs/planning/tasks/node-execution/task-162-pkt-nod-001-task-0165-node-descriptor-and-heartbeat.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
-    "standard-6",
-    "standard-5"
-  ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-MIG-001](task-0151): Migration Fixtures and Examples\n\n## Purpose\n\nCreate migration fixtures and examples.\n\n## Scope\n\n- Fixture format\n- Example migration\n- Validation\n\n## Implementation\n\n1. Define format\n2. Create examples\n3. Add validation\n\n## Acceptance Criteria\n\n1. Format defined\n2. Examples complete\n3. Validated\n"
+  "effective_standard_refs": [],
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-NOD-001](task-0154): Node Descriptor and Heartbeat\n\n## Purpose\n\nImplement node descriptor and heartbeat.\n\n## Scope\n\n- Descriptor format\n- Heartbeat logic\n- Status reporting\n\n## Implementation\n\n1. Define format\n2. Implement heartbeat\n3. Add status reporting\n\n## Acceptance Criteria\n\n1. Format defined\n2. Heartbeat works\n3. Status reported\n"
 }

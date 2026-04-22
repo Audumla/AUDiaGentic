@@ -1,29 +1,25 @@
 {
   "item": {
     "id": "wp-18",
-    "label": "Phase 3: Manager Refactoring",
+    "label": "Phase 2: Core Infrastructure",
     "state": "done",
-    "summary": "Refactor all managers to use config-driven approach",
-    "plan_ref": "plan-14",
+    "summary": "Create TemplateEngine and RelationshipConfig classes",
+    "plan_ref": "plan-18",
     "task_refs": [
       {
-        "ref": "task-332",
+        "ref": "task-327",
         "seq": 1000
       },
       {
-        "ref": "task-3251",
-        "seq": 1001
-      },
-      {
-        "ref": "task-3252",
-        "seq": 1002
+        "ref": "task-328",
+        "seq": 2000
       }
     ],
     "standard_refs": [
       "standard-6"
     ],
     "kind": "wp",
-    "path": "docs/planning/work-packages/core/wp-18-phase-3-manager-refactoring.md",
+    "path": "docs/planning/work-packages/core/wp-18-phase-2-core-infrastructure.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -34,5 +30,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n\n\n\n\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n# Objective\n\n\n# Scope of This Package\n\n\n# Inputs\n\n\n# Instructions\n\n\n# Required Outputs\n\n\n# Acceptance Checks\n\n\n# Non-Goals\n"
 }

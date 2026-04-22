@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-76",
-    "label": "[PKT-JOB-010](task-0076): Job Documentation",
+    "label": "[PKT-PRV-001](task-0078): Provider Registry",
     "state": "draft",
-    "summary": "Document job system",
-    "spec_ref": "spec-11",
+    "summary": "Create provider registry",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/jobs/task-76-pkt-job-010-task-0076-job-documentation.md",
+    "path": "docs/planning/tasks/providers/task-76-pkt-prv-001-task-0078-provider-registry.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -14,7 +14,8 @@
     "restored_by": null
   },
   "effective_standard_refs": [
-    "standard-9"
+    "standard-6",
+    "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-010](task-0066): Job Documentation\n\n## Purpose\n\nDocument job system.\n\n## Scope\n\n- User docs\n- Developer docs\n- API docs\n\n## Implementation\n\n1. Write user docs\n2. Write developer docs\n3. Document API\n\n## Acceptance Criteria\n\n1. User docs complete\n2. Developer docs complete\n3. API documented\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-001](task-0068): Provider Registry\n\n## Purpose\n\nCreate provider registry.\n\n## Scope\n\n- Registry format\n- Registration logic\n- Discovery\n\n## Implementation\n\n1. Define format\n2. Implement registration\n3. Add discovery\n\n## Acceptance Criteria\n\n1. Format defined\n2. Registration works\n3. Discovery works\n"
 }

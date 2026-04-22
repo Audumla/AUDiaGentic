@@ -1,0 +1,43 @@
+---
+id: task-117
+label: '[PKT-PRV-042](task-0120): Provider Audit Logging'
+state: draft
+summary: Implement provider audit logging
+spec_ref: spec-16
+---
+
+
+
+
+
+
+
+
+# Description
+
+Implement this task.
+
+
+# [PKT-PRV-042](task-0109): Provider Audit Logging
+
+## Purpose
+
+Implement provider audit logging.
+
+## Scope
+
+- Audit format
+- Logging
+- Retention
+
+## Implementation
+
+1. Define format
+2. Implement logging
+3. Set retention
+
+## Acceptance Criteria
+
+1. Format defined
+2. Logging works
+3. Retention set

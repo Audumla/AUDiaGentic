@@ -1,17 +1,20 @@
 {
   "item": {
     "id": "task-235",
-    "label": "Validate documentation",
-    "state": "cancelled",
-    "summary": "Review and validate that the knowledge component documentation is well-written and accurate.",
-    "spec_ref": "spec-14",
-    "request_refs": [],
+    "label": "Enhance lexical search",
+    "state": "draft",
+    "summary": "Add stemming, fuzzy matching, stopword filtering to search.py",
+    "spec_ref": "spec-20",
+    "parent_task_ref": "wp-14",
+    "request_refs": [
+      "request-15"
+    ],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-235-validate-documentation.md",
+    "path": "docs/planning/tasks/core/task-235-enhance-lexical-search.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,5 +25,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\nCancelled on 2026-04-17 as a stale empty placeholder. The task contained no actionable acceptance criteria, and request closure was based on the implemented integration work rather than this shell record.\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n# Description\nUpgrade lexical search so it is useful for real documentation lookup, not just literal token hits. Add stemming, stopword filtering, and a deterministic fuzzy boost path where available, then keep scoring predictable enough for tests and agent use.\n\n# Acceptance Criteria\n1. Search ignores common stopwords in ranking.\n2. Search matches basic word variants through stemming or equivalent normalization.\n3. Search uses deterministic fuzzy fallback when exact scoring is zero.\n4. Search results remain stable across repeated runs with the same data.\n5. Query snippets and match metadata remain useful for agent review.\n6. No external service is required for search to function.\n\n# Notes\n- Favor lightweight standard-library implementations unless an existing optional dependency is already available.\n- Keep scoring predictable so tests can assert ordering and match behavior.\n"
 }

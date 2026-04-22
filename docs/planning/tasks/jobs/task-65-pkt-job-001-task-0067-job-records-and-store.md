@@ -1,0 +1,43 @@
+---
+id: task-65
+label: '[PKT-JOB-001](task-0067): Job Records and Store'
+state: draft
+summary: Create job records and store
+spec_ref: spec-15
+---
+
+
+
+
+
+
+
+
+# Description
+
+Implement this task.
+
+
+# [PKT-JOB-001](task-0057): Job Records and Store
+
+## Purpose
+
+Create job records and store.
+
+## Scope
+
+- Record format
+- Store implementation
+- CRUD operations
+
+## Implementation
+
+1. Define record format
+2. Implement store
+3. Add CRUD
+
+## Acceptance Criteria
+
+1. Record format defined
+2. Store works
+3. CRUD functional
