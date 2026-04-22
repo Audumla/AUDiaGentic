@@ -6,6 +6,12 @@ summary: Default standard for how planning work should be structured and what re
   specs, plans, work packages, and tasks must contain to be actionable and reviewable.
 ---
 
+
+
+
+
+
+
 # Standard
 
 Default standard for how planning work in AUDiaGentic-based projects should be structured, and what planning records must contain to be actionable, reviewable, and safe to execute.

@@ -1,10 +1,10 @@
 {
   "item": {
     "id": "task-218",
-    "label": "Add guidance field to request schema",
+    "label": "Update validation to enforce guidance-appropriate sections",
     "state": "done",
-    "summary": "Update request.schema.json to include optional guidance field (light/standard/deep), add validation for valid values",
-    "spec_ref": "spec-10",
+    "summary": "Update val_mgr.py to check guidance field and enforce required/suggested sections per guidance level, warn about excessive/minimal detail",
+    "spec_ref": "spec-13",
     "request_refs": [
       "request-11"
     ],
@@ -13,7 +13,7 @@
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-218-add-guidance-field-to-request-schema.md",
+    "path": "docs/planning/tasks/core/task-218-update-validation-to-enforce-guidance-appropriate-sections.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -25,5 +25,5 @@
     "standard-6",
     "standard-9"
   ],
-  "body": "\n\n\n\n\n\n\n# Description\n\nUpdate request.schema.json to include optional guidance field with enum validation for light/standard/deep values. The field should be optional for backward compatibility.\n\n# Acceptance Criteria\n\n- [ ] guidance field added to request.schema.json\n- [ ] Field type: string or null\n- [ ] Enum values: [light, standard, deep]\n- [ ] Field marked as optional (not in required array)\n- [ ] Schema validated against JSON Schema spec\n- [ ] Existing fields preserved\n- [ ] Tests for schema validation\n- [ ] Backward compatible (no guidance = standard defaults)\n\n# Notes\n\nThis schema update enables JSON Schema validation for the guidance field across all tools that use the schema.\n\n# State\n\ndone\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\nUpdate val_mgr.py to check guidance field and enforce required/suggested sections per guidance level. Warn about excessive detail for light guidance and minimal detail for deep guidance.\n\n# Acceptance Criteria\n\n- [ ] Validation checks guidance field in frontmatter\n- [ ] Guidance defaults to standard if not specified\n- [ ] Spec sections validated against guidance spec_sections\n- [ ] Task sections validated against guidance task_sections\n- [ ] light: warn about excessive detail\n- [ ] standard: standard validation\n- [ ] deep: require all required sections\n- [ ] Acceptance criteria depth validated\n- [ ] Warnings logged for violations\n- [ ] Tests for validation rules\n- [ ] Backward compatible (no guidance = standard)\n\n# Notes\n\nThis task ensures content depth matches guidance level expectations.\n\n# State\n\ndone\n"
 }

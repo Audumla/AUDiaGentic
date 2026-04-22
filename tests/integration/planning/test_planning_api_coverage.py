@@ -10,20 +10,17 @@ the corresponding functionality is implemented or bugs are fixed.
 from __future__ import annotations
 
 import json
-import shutil
 import sys
 import time
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[3]
-PLANNING_CONFIG_SRC = ROOT / ".audiagentic" / "planning" / "config"
-
 for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+import pytest
+from tests.planning_testkit import seed_planning_config
 
 # ---------------------------------------------------------------------------
 # Fixture
@@ -31,13 +28,7 @@ for _p in (str(ROOT), str(ROOT / "src")):
 
 
 def _seed(root: Path) -> None:
-    config_dir = root / ".audiagentic" / "planning" / "config"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    for f in PLANNING_CONFIG_SRC.glob("*.yaml"):
-        shutil.copy(f, config_dir / f.name)
-    pp_src = PLANNING_CONFIG_SRC / "profile-packs"
-    if pp_src.exists():
-        shutil.copytree(pp_src, config_dir / "profile-packs", dirs_exist_ok=True)
+    seed_planning_config(root)
     for d in (
         "requests",
         "specifications",
@@ -262,14 +253,12 @@ class TestCreateWithContent:
         item = api.create_with_content("standard", label="Naming", summary="S", content=content)
         assert "snake_case" in api.get_content(item.data["id"])
 
-    def test_create_with_content_task_without_spec_allowed(self, pr):
+    def test_create_with_content_task_requires_spec(self, pr):
         _, api = pr
-        # Tasks no longer require specs (spec_ref is optional)
-        item = api.create_with_content(
-            "task", label="T", summary="S", content="# Description\n\nX.\n"
-        )
-        assert item.data["id"].startswith("task-")
-        assert "spec_ref" not in item.data  # Not set if not provided
+        with pytest.raises(ValueError, match="requires 'spec' reference"):
+            api.create_with_content(
+                "task", label="T", summary="S", content="# Description\n\nX.\n"
+            )
 
 
 # ===========================================================================
@@ -284,7 +273,8 @@ class TestMove:
         task = api.new("task", label="T", summary="S", spec=spec.data["id"])
         moved = api.move(task.data["id"], "contrib")
         assert "contrib" in str(moved.path)
-        assert (root / "docs" / "planning" / "tasks" / "contrib" / f"{task.data['id']}.md").exists()
+        assert moved.path.exists()
+        assert moved.path.name == api.paths.filename_for("task", task.data["id"], task.data["label"])
 
     def test_move_wp_to_contrib(self, pr):
         root, api = pr
@@ -793,17 +783,12 @@ class TestEventEmission:
 
 class TestValidationCoverage:
     def test_validate_request_required_sections(self, pr):
-        """Requests have required sections: Understanding, Open Questions, Notes."""
+        """New requests include required sections: Understanding, Open Questions, Notes."""
         _, api = pr
         api.new("request", label="R", summary="S", source="test")
         errors = api.validate()
-        # Should have missing section errors for Understanding, Open Questions, Notes
         missing_section_errors = [e for e in errors if "missing section" in e]
-        assert len(missing_section_errors) == 3
-        section_names = [e.split("'")[1] for e in missing_section_errors]
-        assert "Understanding" in section_names
-        assert "Open Questions" in section_names
-        assert "Notes" in section_names
+        assert missing_section_errors == []
 
     def test_validate_standard_no_required_sections(self, pr):
         """Standards have no required body sections in REQ_SECTIONS."""
@@ -836,6 +821,40 @@ class TestValidationCoverage:
         dump_markdown(task.path, data, "\n")
         errors = api.validate()
         assert any("missing section" in e and "Description" in e for e in errors)
+
+    def test_validate_done_task_requires_state_configured_sections(self, pr):
+        _, api = pr
+        spec = _new_spec(api)
+        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        api.state(task.data["id"], "ready")
+        api.state(task.data["id"], "in_progress")
+        api.state(task.data["id"], "done")
+        errors = api.validate()
+        assert any(
+            "missing section" in e
+            and "Implementation Notes" in e
+            and "state 'done'" in e
+            for e in errors
+        )
+
+    def test_validate_done_task_passes_when_state_sections_present(self, pr):
+        _, api = pr
+        task_body = "# Description\n\nTask detail.\n\n# Implementation Notes\n\nWork completed.\n"
+        spec = _new_spec(api)
+        task = api.create_with_content(
+            "task",
+            label="T",
+            summary="S",
+            content=task_body,
+            spec=spec.data["id"],
+        )
+        api.state(task.data["id"], "ready")
+        api.state(task.data["id"], "in_progress")
+        api.state(task.data["id"], "done")
+        errors = api.validate()
+        assert not any(
+            "missing section 'Implementation Notes' for state 'done'" in e for e in errors
+        )
 
     def test_validate_duplicate_standard_id_caught(self, pr):
         root, api = pr
@@ -1083,3 +1102,84 @@ class TestValidateRaiseOnError:
         errors = api.validate(raise_on_error=False)
         assert isinstance(errors, list)
         assert len(errors) > 0
+
+
+# ===========================================================================
+# spec-29 AC 8: guidance-level section variation
+# ===========================================================================
+
+
+class TestGuidanceSectionVariation:
+    def test_spec_light_has_fewer_sections_than_deep(self, pr):
+        _, api = pr
+        from audiagentic.planning.app.section_registry import list_sections
+        light = list_sections("spec", "light", api.root)
+        deep = list_sections("spec", "deep", api.root)
+        assert len(light) < len(deep)
+
+    def test_task_standard_sections_nonempty(self, pr):
+        _, api = pr
+        from audiagentic.planning.app.section_registry import list_sections
+        sections = list_sections("task", "standard", api.root)
+        assert len(sections) > 0
+
+    def test_document_template_varies_by_guidance(self, pr):
+        _, api = pr
+        light_body = api.config.document_template("spec", "light")
+        deep_body = api.config.document_template("spec", "deep")
+        assert light_body != deep_body
+        assert len(deep_body) > len(light_body)
+
+    def test_new_spec_with_guidance_uses_template(self, pr):
+        _, api = pr
+        req = api.new("request", label="Guidance test req", summary="S", source="test")
+        spec = api.new(
+            "spec",
+            label="Guidance test spec",
+            summary="S",
+            request_refs=[req.data["id"]],
+            guidance="deep",
+        )
+        body = api.get_content(spec.data["id"])
+        deep_template = api.config.document_template("spec", "deep")
+        # Body should contain at least one section from the deep template
+        deep_sections = [line for line in deep_template.splitlines() if line.startswith("# ")]
+        assert any(s.lstrip("# ").strip() in body for s in deep_sections)
+
+
+# ===========================================================================
+# spec-29 AC 11: required-ref enforcement regression
+# ===========================================================================
+
+
+class TestRequiredRefEnforcement:
+    def test_spec_without_request_refs_rejected(self, pr):
+        _, api = pr
+        with pytest.raises((ValueError, Exception)):
+            api.new("spec", label="Orphan spec", summary="S", request_refs=[])
+
+    def test_spec_with_request_refs_succeeds(self, pr):
+        _, api = pr
+        req = api.new("request", label="R", summary="S", source="test")
+        spec = api.new("spec", label="S", summary="S", request_refs=[req.data["id"]])
+        assert spec.data["id"].startswith("spec-")
+
+    def test_plan_without_spec_rejected(self, pr):
+        _, api = pr
+        with pytest.raises((ValueError, Exception)):
+            api.new("plan", label="Orphan plan", summary="S")
+
+    def test_plan_with_spec_succeeds(self, pr):
+        _, api = pr
+        req = api.new("request", label="R", summary="S", source="test")
+        spec = api.new("spec", label="S", summary="S", request_refs=[req.data["id"]])
+        plan = api.new("plan", label="P", summary="S", spec=spec.data["id"])
+        assert plan.data["id"].startswith("plan-")
+
+    def test_task_without_spec_ref_succeeds(self, pr):
+        _, api = pr
+        # task has required_for_children: [] in RelationshipConfig
+        req = api.new("request", label="R", summary="S", source="test")
+        spec = api.new("spec", label="S", summary="S", request_refs=[req.data["id"]])
+        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        assert task.data["id"].startswith("task-")

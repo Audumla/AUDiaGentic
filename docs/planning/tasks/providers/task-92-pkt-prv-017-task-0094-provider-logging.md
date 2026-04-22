@@ -1,0 +1,43 @@
+---
+id: task-92
+label: '[PKT-PRV-017](task-0094): Provider Logging'
+state: draft
+summary: Implement provider logging
+spec_ref: spec-16
+---
+
+
+
+
+
+
+
+
+# Description
+
+Implement this task.
+
+
+# [PKT-PRV-017](task-0084): Provider Logging
+
+## Purpose
+
+Implement provider logging.
+
+## Scope
+
+- Log format
+- Levels
+- Retention
+
+## Implementation
+
+1. Define format
+2. Add levels
+3. Set retention
+
+## Acceptance Criteria
+
+1. Format defined
+2. Levels work
+3. Retention set

@@ -1,33 +1,19 @@
 {
   "item": {
     "id": "plan-4",
-    "label": "Implement archive functionality",
-    "state": "done",
-    "summary": "Implement archive state, state-based archive/restore behavior, and filtering",
-    "spec_refs": [
-      "spec-1"
-    ],
-    "standard_refs": [
-      "standard-6",
-      "standard-9"
-    ],
-    "work_package_refs": [
-      {
-        "ref": "wp-0009",
-        "seq": 1000
-      }
-    ],
+    "label": "Phase 0 Build Book",
+    "state": "draft",
+    "summary": "Complete implementation guide for Phase 0 contracts and scaffolding",
+    "spec_refs": [],
+    "work_package_refs": [],
     "kind": "plan",
-    "path": "docs/planning/plans/plan-4-implement-archive-functionality.md",
+    "path": "docs/planning/plans/plan-4-phase-0-build-book.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
-    "standard-6",
-    "standard-9"
-  ],
-  "body": "\n\n\n\n\n# Objectives\n\nImplement archive functionality for planning items to enable:\n- Archiving older or redundant planning items\n- Maintaining historical records\n- Querying archived items when needed\n- Restoring archived items when needed\n\n# Delivery Approach\n\n1. Add archived state to planning state machine (task-0178)\n2. Implement state-based archive and restore behavior in the planning core (task-0179)\n3. Update tm_list() with archive filtering (task-0180)\n4. Update tm_validate() with archive rules (task-0181)\n5. Update tm_show() with archive metadata (task-0182)\n\n# Dependencies\n\n- spec-1: Archive state and functionality specification\n- Existing planning state machine\n- Existing tm_helper functions\n- MCP/helper surface alignment with planning-core behavior\n\n# Risks\n\n1. Breaking existing workflows that rely on current state machine\n2. Performance impact of archive filtering\n3. Data loss if archive metadata is not properly persisted\n4. Behavioral drift between workflow/core semantics and MCP-facing convenience surfaces\n\n# Mitigations\n\n1. Thorough testing of state transitions\n2. Performance testing with large item sets\n3. Comprehensive archive metadata logging\n4. Keep MCP exposure aligned to core state semantics instead of introducing separate archive-only behavior in wrappers\n"
+  "effective_standard_refs": [],
+  "body": "\n\n\n\n\n\n\n\n# Phase 0 Build Book\n\n## Overview\n\nThis build book documents the complete implementation of Phase 0 - Contracts and Scaffolding.\n\n## Implementation Sequence\n\n### Foundation Packets ([PKT-FND-001](task-0022) to [PKT-FND-005](task-0026))\n\n1. **[PKT-FND-001](task-0022)**: Canonical IDs and naming normalization\n2. **[PKT-FND-002](task-0023)**: Schema package and fixtures\n3. **[PKT-FND-003](task-0024)**: Example project scaffold\n4. **[PKT-FND-004](task-0025)**: Lifecycle CLI stub\n5. **[PKT-FND-005](task-0026)**: Packet/test harness scaffolding\n\n### Supporting Packets ([PKT-FND-006](task-0027) to [PKT-FND-013](task-0034))\n\n6. **[PKT-FND-006](task-0027)**: Naming validator script\n7. **[PKT-FND-007](task-0028)**: Schema validator script\n8. **[PKT-FND-008](task-0029)**: Checkpoint writer\n9. **[PKT-FND-009](task-0030)**: Fixture generator\n10. **[PKT-FND-010](task-0031)**: Integration tests\n11. **[PKT-FND-011](task-0032)**: Documentation\n12. **[PKT-FND-012](task-0033)**: Migration runbook\n13. **[PKT-FND-013](task-0034)**: Exit gate validation\n\n## Dependencies\n\n- [spec-0004](spec-0004): Phase 0 Contracts and Scaffolding\n\n## Exit Criteria\n\n- All schema files non-placeholder\n- Validators pass/fail correctly\n- Lifecycle CLI stub functional\n- Example scaffold complete\n\n# Objectives\n\nComplete Phase 0 implementation with all foundation packets.\n\n# Delivery Approach\n\nSequential packet execution with validation at each step.\n\n# Dependencies\n\n- spec-0004: Phase 0 Contracts and Scaffolding\n"
 }

@@ -1,19 +1,19 @@
 {
   "item": {
     "id": "task-248",
-    "label": "Implement InProcessEventBus satisfying EventBusProtocol",
+    "label": "Implement state propagation engine for planning hierarchies",
     "state": "done",
-    "summary": "Implement InProcessEventBus in bus.py satisfying EventBusProtocol: SYNC/ASYNC dispatch, single-segment wildcard pattern matching, subscriber isolation, cycle detection via propagation_depth and correlation_id",
-    "spec_ref": "spec-19",
+    "summary": "Create propagation logic that subscribes to planning.item.state.changed and cascades state changes up hierarchy",
+    "spec_ref": "spec-24",
     "request_refs": [
-      "request-17"
+      "request-18"
     ],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-248-implement-inprocesseventbus-satisfying-eventbusprotocol.md",
+    "path": "docs/planning/tasks/core/task-248-implement-state-propagation-engine-for-planning-hierarchies.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,8 +22,7 @@
   },
   "effective_standard_refs": [
     "standard-5",
-    "standard-6",
-    "standard-11"
+    "standard-6"
   ],
-  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement the core in-process `EventBus` for the interoperability layer. This task owns synchronous and asynchronous publish/subscribe, subscription registry, wildcard pattern matching, unsubscribe support, subscriber isolation, event envelope generation, and **cycle detection via propagation_depth limits**.\n\n**Core API:**\n```python\n# Explicit dependency injection (preferred)\nbus = EventBus()\nhandle = bus.subscribe(\"planning.task.*\", handler)\n\n# Or singleton for bootstrap convenience\nfrom audiagentic.interoperability import EventBus\nbus = EventBus.get_instance()\n```\n\n**Key behaviors:**\n- SYNC mode: blocks until all subscribers complete\n- ASYNC mode: returns immediately, events processed by background worker (task-0264)\n- Registration order: subscribers invoked in subscription order\n- **Wildcard patterns:**\n  - `*` matches exactly one segment (e.g., `planning.task.*` matches `planning.task.done`)\n  - `**` matches zero or more segments (e.g., `planning.**` matches all planning events)\n- Subscriber isolation: one failure doesn't affect others\n- Envelope generation: auto-generate `id`, `occurred_at`, `source_component`, `is_replay`, `propagation_depth`\n- **Cycle detection: reject events with `propagation_depth >= 10` or `correlation_id` in current chain**\n\n# Acceptance Criteria\n\n- `EventBus.publish(event_type, payload, metadata=None, mode=SYNC)` delivers to all matching subscribers (blocking)\n- `EventBus.publish(event_type, payload, metadata=None, mode=ASYNC)` returns immediately (non-blocking)\n- `EventBus.subscribe(pattern, handler)` returns `SubscriptionHandle`\n- `EventBus.unsubscribe(handle)` removes subscriber\n- Wildcard `planning.task.*` matches `planning.task.done` but not `planning.task.subtask.done`\n- Subscriber exceptions logged but don't crash bus or affect other subscribers\n- Event envelope includes: `id`, `type`, `version`, `occurred_at`, `source_component`, `payload`, `metadata`, `is_replay`, `propagation_depth`\n- **Events with `propagation_depth >= 10` rejected and logged**\n- **Events with `correlation_id` in current chain skipped and logged**\n- Unit tests cover: SYNC/ASYNC delivery, wildcard matching, unsubscribe, subscriber failure isolation, cycle detection\n- Smoke test proves EventBus imports and basic publish/subscribe works\n\n# Notes\n\nPersistence is task-0249, replay is task-0250, async queue is task-0264. This task is in-memory bus with cycle detection.\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\nImplement planning state propagation engine. This task owns subscribing to `planning.item.state.changed` events, evaluating parent-child relationships, and applying automatic propagation across task \u2192 wp \u2192 plan \u2192 spec.\n\n**Propagation rules:**\n- Any child `in_progress` \u2192 parent `in_progress` (if parent is `ready`)\n- All children `done` \u2192 parent `done`\n- Any child `blocked` \u2192 parent `blocked` (unless terminal state)\n- Rollback: child reverts \u2192 parent reverts (if no other children in target state)\n\n**Key behaviors:**\n- Subscribe to `planning.item.state.changed` events\n- **Use ASYNC mode by default (non-blocking, eventual consistency)**\n- Skip replayed events (`is_replay: true`) unless opt-in via config\n- Skip events with `propagation_depth >= 10` (cycle detection)\n- Emit new event for each propagation step (enables chaining)\n- Respect config from task-0252\n- Idempotent: safe to run multiple times on same event\n- **Log all propagation attempts to `.audiagentic/planning/meta/propagation_log.json`**\n- **Batch parent state changes to minimize disk I/O**\n- Conflict resolution: `blocked` > `in_progress` > `ready` > `draft`\n- Terminal states (`done`, `archived`) not overwritten\n\n# Acceptance Criteria\n\n- Task\u2192WP propagation: `in_progress`, `done`, `blocked` scenarios work (ASYNC)\n- WP\u2192Plan propagation: same rules apply\n- Plan\u2192Spec propagation: same rules apply\n- Conflict resolution: `blocked` > `in_progress` > `ready` > `draft`\n- Terminal states (`done`, `archived`) not overwritten\n- Rollback handling: child revert triggers parent revert\n- Replayed events skipped (`is_replay: true`)\n- Events with `propagation_depth >= 10` rejected and logged\n- Each propagation emits `planning.item.state.changed` event with incremented depth\n- **All propagation attempts logged to `propagation_log.json`**\n- **Batched writes reduce disk I/O compared to naive implementation**\n- Integration tests cover: forward propagation, rollback, conflicts, idempotency, cycle detection\n- Smoke test proves planning state transitions work with propagation enabled (ASYNC mode)\n\n# Notes\n\nDepends on: task-248 (EventBus), task-0252 (config), task-0253 (planning emits events), task-0264 (async queue). Audit tool is task-0265.\n"
 }

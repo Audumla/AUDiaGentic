@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-129",
-    "label": "[PKT-PRV-051](task-0129): Provider Data Validation",
+    "label": "[PKT-PRV-054](task-0132): Provider Data Lineage",
     "state": "draft",
-    "summary": "Implement provider data validation",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data lineage tracking",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-129-pkt-prv-051-task-0129-provider-data-validation.md",
+    "path": "docs/planning/tasks/providers/task-129-pkt-prv-054-task-0132-provider-data-lineage.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-051](task-0118): Provider Data Validation\n\n## Purpose\n\nImplement provider data validation.\n\n## Scope\n\n- Validation rules\n- Schema checking\n- Error reporting\n\n## Implementation\n\n1. Define rules\n2. Add schema checking\n3. Report errors\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Schema checked\n3. Errors reported\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-054](task-0121): Provider Data Lineage\n\n## Purpose\n\nImplement provider data lineage tracking.\n\n## Scope\n\n- Lineage format\n- Tracking\n- Visualization\n\n## Implementation\n\n1. Define format\n2. Implement tracking\n3. Add visualization\n\n## Acceptance Criteria\n\n1. Format defined\n2. Tracking works\n3. Visualization works\n"
 }

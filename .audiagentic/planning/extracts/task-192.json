@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-192",
-    "label": "Implement claims TTL lazy purge",
+    "label": "Fix tm.status() return shape",
     "state": "done",
-    "summary": "Add lazy purge of expired claims on read in Claims._load() or next_items()/claims()",
-    "spec_ref": "spec-3",
+    "summary": "Align tm.status() return keys with {request, spec, plan, task, wp} naming",
+    "spec_ref": "spec-6",
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-192-implement-claims-ttl-lazy-purge.md",
+    "path": "docs/planning/tasks/core/task-192-fix-tm-status-return-shape.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -14,5 +14,5 @@
     "restored_by": null
   },
   "effective_standard_refs": [],
-  "body": "\n\n# Description\n\nLazily purge expired claims on read so stale claims do not appear in planning queries or block work selection.\n\n# Acceptance Criteria\n\n1. Expired claims are filtered out during claim loads/reads\n2. `claims()` and `next_items()` ignore stale claims\n3. Coverage proves expired claims no longer block workflows\n\n# Notes\n\n- Implemented in `src/audiagentic/planning/app/claims.py`\n- Verified by the passing planning coverage suite\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nNormalize `tm.status()` so callers receive stable kind counts with the expected `{request, spec, plan, task, wp}` keys.\n\n# Acceptance Criteria\n\n1. Status payload contains the expected kind keys\n2. Key names are stable across helper and MCP usage\n3. Regression coverage proves the expected shape\n\n# Notes\n\n- Verified by status assertions in the MCP and planning coverage tests\n"
 }

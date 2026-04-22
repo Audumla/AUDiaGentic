@@ -1,0 +1,65 @@
+proposal_kind: event_review
+proposal_mode: review_only
+target_page_id: guide-using-planning
+generated_at: '2026-04-22T03:27:28.829593+00:00'
+status: pending
+status_updated_at: '2026-04-22T03:27:28.829600+00:00'
+summary: Planning/runtime event drift detected for guide-using-planning. Review the current-state page.
+assessment:
+  likely_requires_doc_change: false
+  reason: Event appears to be workflow churn without a durable behavior change.
+  confidence: high
+  recommended_action: reject_no_doc_change
+  affected_sections: &id001
+  - Sync notes
+  - References
+  state_sequence:
+  - distilled
+  actions: &id003 []
+  suggested_steps:
+  - Review the event source change.
+  - Reject this proposal unless the workflow state caused a real user-facing behavior change.
+  - Keep in-progress or transient execution churn out of current-state pages.
+recommendation: reject_no_doc_change
+affected_sections: *id001
+events:
+- event_id: runtime-planning::planning.item.state.changed::request::request-1::distilled::manual
+  adapter_id: planning-state-changes
+  event_name: planning.item.state.changed
+  source_path: .audiagentic/planning/events/events.jsonl
+  status: distilled
+  summary: Planning request request-1 state changed to distilled
+  details:
+    payload:
+      id: request-1
+      old_state: archived
+      new_state: distilled
+      restored_at: '2026-04-22T03:27:27.610490+00:00'
+      restored_by: system
+    metadata: &id002
+      subject:
+        kind: request
+        id: request-1
+      triggered_by: manual
+    raw_event:
+      event: planning.item.state.changed
+      event_name: planning.item.state.changed
+      id: request-1
+      subject:
+        kind: request
+        id: request-1
+      old_state: archived
+      new_state: distilled
+      restored_at: '2026-04-22T03:27:27.610490+00:00'
+      restored_by: system
+      metadata: *id002
+    source_system: planning-runtime
+  diff_excerpt: null
+suggested_steps:
+- Review the event source change.
+- Reject this proposal unless the workflow state caused a real user-facing behavior change.
+- Keep in-progress or transient execution churn out of current-state pages.
+- Record fresh sync and event baselines after review.
+actions: *id003
+proposal_id: 20260422T032728Z-guide-using-planning-event-review
+dedupe_key: da6b15d558a0adde

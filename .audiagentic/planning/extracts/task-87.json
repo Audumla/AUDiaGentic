@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-87",
-    "label": "[PKT-PRV-010](task-0087): Provider Performance Benchmarks",
+    "label": "[PKT-PRV-012](task-0089): Provider Version Management",
     "state": "draft",
-    "summary": "Create provider performance benchmarks",
-    "spec_ref": "spec-12",
+    "summary": "Manage provider versions",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-87-pkt-prv-010-task-0087-provider-performance-benchmarks.md",
+    "path": "docs/planning/tasks/providers/task-87-pkt-prv-012-task-0089-provider-version-management.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-010](task-0077): Provider Performance Benchmarks\n\n## Purpose\n\nCreate provider performance benchmarks.\n\n## Scope\n\n- Benchmark suite\n- Metrics\n- Reporting\n\n## Implementation\n\n1. Define suite\n2. Add metrics\n3. Add reporting\n\n## Acceptance Criteria\n\n1. Suite defined\n2. Metrics collected\n3. Reports generated\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-012](task-0079): Provider Version Management\n\n## Purpose\n\nManage provider versions.\n\n## Scope\n\n- Version format\n- Upgrade logic\n- Rollback\n\n## Implementation\n\n1. Define format\n2. Implement upgrade\n3. Add rollback\n\n## Acceptance Criteria\n\n1. Format defined\n2. Upgrade works\n3. Rollback works\n"
 }

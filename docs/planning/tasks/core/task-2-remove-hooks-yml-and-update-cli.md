@@ -12,6 +12,12 @@ standard_refs:
 
 
 
+
+
+
+
+
+
 The hooks.yml file defines hook eligibility rules that should be removed. Also, the CLI has hooks-related commands (`_print_hooks()` and `_print_evaluate()`) that need to be removed from cli.py. The config.py also references `hook_config_file` which needs to be removed.
 
 # Notes

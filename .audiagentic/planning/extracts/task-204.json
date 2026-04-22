@@ -1,17 +1,17 @@
 {
   "item": {
     "id": "task-204",
-    "label": "Expose head(id) and refined extract controls in MCP and tm_helper",
-    "state": "done",
-    "summary": "Add tm_head MCP tool and tm_helper.head() function; update tm_extract to expose include_body and write_to_disk options so AI consumers have a clear low-token read path",
-    "spec_ref": "spec-7",
+    "label": "Extend tm_batch_update to support multi-item operations",
+    "state": "cancelled",
+    "summary": "Extend tm_batch_update(id, operations) to also accept multi-item format with backward compatibility",
+    "spec_ref": "spec-11",
     "request_refs": [],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-204-expose-head-id-and-refined-extract-controls-in-mcp-and-tm-helper.md",
+    "path": "docs/planning/tasks/core/task-204-extend-tm-batch-update-to-support-multi-item-operations.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -20,7 +20,8 @@
   },
   "effective_standard_refs": [
     "standard-5",
-    "standard-6"
+    "standard-6",
+    "standard-9"
   ],
-  "body": "\n\n\n\n\n\n# Description\n\nExpose the new `head(id)` capability and the refined `extract()` controls at the helper and MCP layers.\n\n**`tm_helper.py`**\n\nAdd `head(root, id_)` function that calls `api.head(id_)` and returns the index entry dict. Keep it consistent with the existing `show()` pattern.\n\n**`tools/mcp/audiagentic-planning/audiagentic-planning_mcp.py`**\n\nAdd a `tm_head` MCP tool:\n\n```python\n@mcp.tool()\ndef tm_head(id: str) -> dict:\n    \"\"\"Return lean index-only metadata for a planning item. No markdown parse. Lowest token cost.\"\"\"\n    return _wrap_tool_result(tm_helper.head(root, id))\n```\n\nUpdate `tm_extract` to expose `include_body` and `write_to_disk` parameters:\n\n```python\n@mcp.tool()\ndef tm_extract(id: str, with_related: bool = False, with_resources: bool = False,\n               include_body: bool = True, write_to_disk: bool = True) -> dict:\n```\n\nUpdate tool docstrings to make the cost hierarchy clear to AI consumers:\n\n- `tm_head` \u2014 index only, no file parse, minimum tokens\n- `tm_show` \u2014 full frontmatter, single file parse, no body\n- `tm_extract` \u2014 body-inclusive, use `include_body=False` to get frontmatter without body\n\n# Acceptance Criteria\n\n- `tm_head` MCP tool exists and returns `{id, kind, label, state, path, deleted}`\n- `tm_helper.head()` function exists and is callable from outside MCP\n- `tm_extract` MCP tool accepts `include_body` and `write_to_disk` parameters\n- Tool descriptions distinguish the three read tiers clearly\n- Tests cover `tm_head` returning index data and `tm_extract` with `include_body=False`\n\n# Notes\n\nDepends on task-0201 (head helper) and task-0203 (extract controls). This is the final surface-exposure step \u2014 no new logic, only wiring.\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nCancelled with `spec-008` after the owning request record was removed. Recreate this task under a new request if multi-item batch update work is resumed.\n\n# Acceptance Criteria\n\nCancelled with parent specification.\n\n# Notes\n\nThis task was never fleshed into implementation-ready detail before the request chain disappeared.\n"
 }

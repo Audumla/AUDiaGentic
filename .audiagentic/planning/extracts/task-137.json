@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-137",
-    "label": "[PKT-PRV-059](task-0137): Provider Data Profiling",
+    "label": "[PKT-PRV-062](task-0140): Provider Data Retention Rules",
     "state": "draft",
-    "summary": "Implement provider data profiling",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data retention rules",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-137-pkt-prv-059-task-0137-provider-data-profiling.md",
+    "path": "docs/planning/tasks/providers/task-137-pkt-prv-062-task-0140-provider-data-retention-rules.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-059](task-0126): Provider Data Profiling\n\n## Purpose\n\nImplement provider data profiling.\n\n## Scope\n\n- Profile format\n- Analysis\n- Reporting\n\n## Implementation\n\n1. Define format\n2. Implement analysis\n3. Add reporting\n\n## Acceptance Criteria\n\n1. Format defined\n2. Analysis works\n3. Reports generated\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-062](task-0129): Provider Data Retention Rules\n\n## Purpose\n\nImplement provider data retention rules.\n\n## Scope\n\n- Retention rules\n- Enforcement\n- Exceptions\n\n## Implementation\n\n1. Define rules\n2. Implement enforcement\n3. Handle exceptions\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Enforcement works\n3. Exceptions handled\n"
 }

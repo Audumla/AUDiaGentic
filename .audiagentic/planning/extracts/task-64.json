@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-64",
-    "label": "[PKT-RLS-009](task-0064): Audit Trail",
+    "label": "[PKT-RLS-011](task-0066): Release Documentation",
     "state": "draft",
-    "summary": "Create audit trail for releases",
-    "spec_ref": "spec-10",
+    "summary": "Document release process",
+    "spec_ref": "spec-13",
     "kind": "task",
-    "path": "docs/planning/tasks/release/task-64-pkt-rls-009-task-0064-audit-trail.md",
+    "path": "docs/planning/tasks/release/task-64-pkt-rls-011-task-0066-release-documentation.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
   "effective_standard_refs": [
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-009](task-0054): Audit Trail\n\n## Purpose\n\nCreate audit trail for releases.\n\n## Scope\n\n- Trail format\n- Logging\n- Retention\n\n## Implementation\n\n1. Define trail format\n2. Implement logging\n3. Set retention\n\n## Acceptance Criteria\n\n1. Trail format defined\n2. Logging works\n3. Retention set\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-011](task-0056): Release Documentation\n\n## Purpose\n\nDocument release process.\n\n## Scope\n\n- User docs\n- Developer docs\n- API docs\n\n## Implementation\n\n1. Write user docs\n2. Write developer docs\n3. Document API\n\n## Acceptance Criteria\n\n1. User docs complete\n2. Developer docs complete\n3. API documented\n"
 }

@@ -12,6 +12,14 @@ planning:
     # canonical pattern: {id}-{slug}.md  e.g. request-31-reconcile-filename-conventions.md
     slug_policy: always
     default_pattern: "{id}-{slug}.md"
+  kind_aliases:
+    req: request
+    specification: spec
+    sp: spec
+    pl: plan
+    ta: task
+    work-package: wp
+    work_package: wp
   
   # Config-driven kind definitions - add new kinds here without code changes
   kinds:
@@ -21,9 +29,31 @@ planning:
       counter_file: requests.json
       has_domain: false
       required_refs: []
-      standard_refs_inheritance: []
+      reference_inheritance: {}
+      creation:
+        duplicate_check: true
+        require_source: true
+        validate_request_refs: false
+        refinement_source_prefix: refinement-of-
+        seed_reference_fields:
+          spec_refs: request_refs
+        extra_fields:
+          use_profile_defaults: true
+          use_guidance_defaults: true
+          source_field: source
+          guidance_field: guidance
+          context_field: context
+          understanding_field: current_understanding
+          open_questions_field: open_questions
+          meta_field: meta
+      state_cascades:
+        archived:
+          spec: archived
+          task: archived
+        superseded:
+          spec: superseded
       required_fields: [id, label, state, summary]
-      optional_fields: [profile, source, context, current_understanding, open_questions, guidance, request_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
+      optional_fields: [profile, source, context, current_understanding, open_questions, guidance, spec_refs, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
       filename_pattern: "{id}-{slug}.md"
       
     spec:
@@ -31,10 +61,17 @@ planning:
       id_prefix: spec
       counter_file: specs.json
       has_domain: false
-      required_refs: []
-      standard_refs_inheritance: []
+      required_refs: [request_refs]
+      reference_inheritance: {}
+      creation:
+        duplicate_check: true
+        validate_request_refs: true
+      state_cascades:
+        archived:
+          plan: archived
+          task: archived
       required_fields: [id, label, state, summary, request_refs]
-      optional_fields: [workflow, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
+      optional_fields: [workflow, task_refs, standard_refs, spec_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
       filename_pattern: "{id}-{slug}.md"
       
     plan:
@@ -43,9 +80,11 @@ planning:
       counter_file: plans.json
       has_domain: false
       required_refs: []
-      standard_refs_inheritance: []
+      reference_inheritance: {}
+      creation:
+        validate_request_refs: true
       required_fields: [id, label, state, summary]
-      optional_fields: [workflow, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
+      optional_fields: [workflow, spec_refs, request_refs, work_package_refs, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
       filename_pattern: "{id}-{slug}.md"
       
     task:
@@ -54,11 +93,14 @@ planning:
       counter_file: tasks.json
       has_domain: true
       required_refs: [spec]
-      standard_refs_inheritance:
-        - field: spec_ref
-          type: direct
-        - field: parent_task_ref
-          type: direct
+      reference_inheritance:
+        standard_refs:
+          - field: spec_ref
+            type: direct
+          - field: parent_task_ref
+            type: direct
+      creation:
+        validate_request_refs: true
       required_fields: [id, label, state, summary]
       optional_fields: [workflow, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by, spec_ref, parent_task_ref, target, packet_ref, request_refs]
       filename_pattern: "{id}-{slug}.md"
@@ -69,17 +111,18 @@ planning:
       counter_file: wps.json
       has_domain: true
       required_refs: [plan]
-      standard_refs_inheritance:
-        - field: plan_ref
-          type: direct
-        - field: task_refs
-          type: recursive
-          sub_inheritance:
-            - field: standard_refs
-            - field: spec_ref
-              type: direct
-              sub_inheritance:
-                - field: standard_refs
+      reference_inheritance:
+        standard_refs:
+          - field: plan_ref
+            type: direct
+          - field: task_refs
+            type: recursive
+            sub_inheritance:
+              - field: standard_refs
+              - field: spec_ref
+                type: direct
+                sub_inheritance:
+                  - field: standard_refs
       required_fields: [id, label, state, summary, plan_ref]
       optional_fields: [workflow, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by, task_refs]
       filename_pattern: "{id}-{slug}.md"
@@ -90,9 +133,9 @@ planning:
       counter_file: standards.json
       has_domain: false
       required_refs: []
-      standard_refs_inheritance: []
+      reference_inheritance: {}
       required_fields: [id, label, state, summary]
-      optional_fields: [meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
+      optional_fields: [request_refs, task_refs, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
       filename_pattern: "{id}-{slug}.md"
       
   dirs:
@@ -104,5 +147,6 @@ planning:
     events: .audiagentic/planning/events
     claims: .audiagentic/planning/claims
     cache: .audiagentic/planning/cache
-  task_domains: [core, provider, architecture, infra, docs, ui]
-  work_package_domains: [core, provider, architecture, infra, docs, ui]
+  reference_field_shapes:
+    task_refs: rel_list
+    work_package_refs: rel_list

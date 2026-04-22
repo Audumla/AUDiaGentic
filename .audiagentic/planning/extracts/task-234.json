@@ -1,17 +1,20 @@
 {
   "item": {
     "id": "task-234",
-    "label": "Test knowledge component integration",
-    "state": "done",
-    "summary": "Run comprehensive tests to validate the knowledge component integration, including event scanning, processing, and sync operations.",
-    "spec_ref": "spec-14",
-    "request_refs": [],
+    "label": "Refactor events.py into separate modules",
+    "state": "draft",
+    "summary": "Split events.py (413 lines) into scanning.py, normalization.py, dispatch.py, state.py",
+    "spec_ref": "spec-20",
+    "parent_task_ref": "wp-14",
+    "request_refs": [
+      "request-15"
+    ],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-234-test-knowledge-component-integration.md",
+    "path": "docs/planning/tasks/core/task-234-refactor-events-py-into-separate-modules.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,5 +25,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n# Description\nRefactor the monolithic `events.py` facade into clear internal modules with one responsibility each while preserving the public import surface. The split should reflect the current implementation reality: scanning, normalization, dispatch/handlers, and state I/O already exist as separate concerns and need to be organized so the codebase stays maintainable.\n\n# Acceptance Criteria\n1. Event scanning, normalization, dispatch, and state persistence live in separate modules.\n2. The public `events.py` module remains a compatibility shim that re-exports the supported API.\n3. Each split module has a narrow responsibility and stays under the agreed size target.\n4. Existing event processing behavior remains unchanged.\n5. Tests still pass for event ingestion, state changes, and proposal generation.\n\n# Notes\n- Align module names with the current internal split already in place where possible.\n- Avoid changing event semantics during the refactor; this is structure work, not behavior work.\n"
 }

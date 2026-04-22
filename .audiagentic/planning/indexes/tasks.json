@@ -1,126 +1,90 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-17T13:35:20.317126+00:00",
+  "generated_at": "2026-04-22T10:28:38.324303+00:00",
   "items": [
     {
-      "id": "task-32",
+      "id": "task-30",
       "label": "[PKT-FND-001](task-0032): Canonical IDs and Naming Normalization",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-32-pkt-fnd-001-task-0032-canonical-ids-and-naming-normalization.md"
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-30-pkt-fnd-001-task-0032-canonical-ids-and-naming-normalization.md"
+    },
+    {
+      "id": "task-31",
+      "label": "[PKT-FND-002](task-0033): Schema Package and Fixtures",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-31-pkt-fnd-002-task-0033-schema-package-and-fixtures.md"
+    },
+    {
+      "id": "task-32",
+      "label": "[PKT-FND-003](task-0034): Example Project Scaffold",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-32-pkt-fnd-003-task-0034-example-project-scaffold.md"
     },
     {
       "id": "task-33",
-      "label": "[PKT-FND-002](task-0033): Schema Package and Fixtures",
+      "label": "[PKT-FND-004](task-0035): Lifecycle CLI Stub",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-33-pkt-fnd-002-task-0033-schema-package-and-fixtures.md"
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-33-pkt-fnd-004-task-0035-lifecycle-cli-stub.md"
     },
     {
       "id": "task-34",
-      "label": "[PKT-FND-003](task-0034): Example Project Scaffold",
+      "label": "[PKT-FND-005](task-0036): Packet/Test Harness Scaffolding",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-34-pkt-fnd-003-task-0034-example-project-scaffold.md"
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-34-pkt-fnd-005-task-0036-packet-test-harness-scaffolding.md"
     },
     {
       "id": "task-35",
-      "label": "[PKT-FND-004](task-0035): Lifecycle CLI Stub",
+      "label": "[PKT-FND-006](task-0037): Naming Validator Script",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-35-pkt-fnd-004-task-0035-lifecycle-cli-stub.md"
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-35-pkt-fnd-006-task-0037-naming-validator-script.md"
     },
     {
       "id": "task-36",
-      "label": "[PKT-FND-005](task-0036): Packet/Test Harness Scaffolding",
+      "label": "[PKT-FND-007](task-0038): Schema Validator Script",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-36-pkt-fnd-005-task-0036-packet-test-harness-scaffolding.md"
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-36-pkt-fnd-007-task-0038-schema-validator-script.md"
     },
     {
       "id": "task-37",
-      "label": "[PKT-FND-006](task-0037): Naming Validator Script",
+      "label": "[PKT-FND-008](task-0039): Checkpoint Writer",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-37-pkt-fnd-006-task-0037-naming-validator-script.md"
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-37-pkt-fnd-008-task-0039-checkpoint-writer.md"
     },
     {
       "id": "task-38",
-      "label": "[PKT-FND-007](task-0038): Schema Validator Script",
+      "label": "[PKT-FND-009](task-0040): Fixture Generator",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-38-pkt-fnd-007-task-0038-schema-validator-script.md"
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-38-pkt-fnd-009-task-0040-fixture-generator.md"
     },
     {
       "id": "task-39",
-      "label": "[PKT-FND-008](task-0039): Checkpoint Writer",
+      "label": "[PKT-FND-010](task-0041): Integration Tests",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-39-pkt-fnd-008-task-0039-checkpoint-writer.md"
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-39-pkt-fnd-010-task-0041-integration-tests.md"
     },
     {
       "id": "task-40",
-      "label": "[PKT-FND-009](task-0040): Fixture Generator",
+      "label": "[PKT-FND-011](task-0042): Documentation",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-40-pkt-fnd-009-task-0040-fixture-generator.md"
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-40-pkt-fnd-011-task-0042-documentation.md"
     },
     {
       "id": "task-41",
-      "label": "[PKT-FND-010](task-0041): Integration Tests",
+      "label": "[PKT-FND-012](task-0043): Migration Runbook",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-41-pkt-fnd-010-task-0041-integration-tests.md"
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-41-pkt-fnd-012-task-0043-migration-runbook.md"
     },
     {
       "id": "task-42",
-      "label": "[PKT-FND-011](task-0042): Documentation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-42-pkt-fnd-011-task-0042-documentation.md"
-    },
-    {
-      "id": "task-43",
-      "label": "[PKT-FND-012](task-0043): Migration Runbook",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-43-pkt-fnd-012-task-0043-migration-runbook.md"
-    },
-    {
-      "id": "task-44",
       "label": "[PKT-FND-013](task-0044): Exit Gate Validation",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-44-pkt-fnd-013-task-0044-exit-gate-validation.md"
+      "path": "docs\\planning\\tasks\\contracts-scaffolding\\task-42-pkt-fnd-013-task-0044-exit-gate-validation.md"
     },
     {
-      "id": "task-318",
+      "id": "task-315",
       "label": "[PKT-CRD-001](task-0173): Coordinator Consumption Seam",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\coordinator\\task-318-pkt-crd-001-task-0173-coordinator-consumption-seam.md"
-    },
-    {
-      "id": "task-0014",
-      "label": "Implement proposal targeting logic from drift analysis",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0014-implement-proposal-targeting-logic-from-drift-analysis.md"
-    },
-    {
-      "id": "task-0015",
-      "label": "Implement proposal classification (actionable, review-only, no-op)",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0015-implement-proposal-classification-actionable-review-only-no-op.md"
-    },
-    {
-      "id": "task-0016",
-      "label": "Filter and skip no-op transient proposals",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0016-filter-and-skip-no-op-transient-proposals.md"
-    },
-    {
-      "id": "task-0017",
-      "label": "Generate patch actions for high-confidence proposals",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0017-generate-patch-actions-for-high-confidence-proposals.md"
-    },
-    {
-      "id": "task-0018",
-      "label": "Add tests and benchmark proposal volume reduction",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0018-add-tests-and-benchmark-proposal-volume-reduction.md"
-    },
-    {
-      "id": "task-0019",
-      "label": "Integrate with apply_proposal workflow",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-0019-integrate-with-apply-proposal-workflow.md"
+      "path": "docs\\planning\\tasks\\coordinator\\task-315-pkt-crd-001-task-0173-coordinator-consumption-seam.md"
     },
     {
       "id": "task-1",
@@ -154,219 +118,237 @@
     },
     {
       "id": "task-14",
-      "label": "Update tm_validate with archive rules",
+      "label": "Implement proposal targeting logic from drift analysis",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-14-update-tm-validate-with-archive-rules.md"
+      "path": "docs\\planning\\tasks\\core\\task-14-implement-proposal-targeting-logic-from-drift-analysis.md"
     },
     {
       "id": "task-15",
-      "label": "Update tm_show to include archive metadata",
+      "label": "Update tm_validate with archive rules",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-15-update-tm-show-to-include-archive-metadata.md"
+      "path": "docs\\planning\\tasks\\core\\task-15-update-tm-validate-with-archive-rules.md"
     },
     {
       "id": "task-16",
-      "label": "Add archived state to planning state machine",
+      "label": "Implement proposal classification (actionable, review-only, no-op)",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-16-add-archived-state-to-planning-state-machine.md"
+      "path": "docs\\planning\\tasks\\core\\task-16-implement-proposal-classification-actionable-review-only-no-op.md"
+    },
+    {
+      "id": "task-167",
+      "label": "Implement update_task_status() wrapper function",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-167-implement-update-task-status-wrapper-function.md"
+    },
+    {
+      "id": "task-168",
+      "label": "Define reference docs and project-facing documentation surfaces",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-168-define-reference-docs-and-project-facing-documentation-surfaces.md"
+    },
+    {
+      "id": "task-169",
+      "label": "Scope manifest and migration-registry scaffolding",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-169-scope-manifest-and-migration-registry-scaffolding.md"
     },
     {
       "id": "task-17",
-      "label": "Implement tm_archive and tm_restore functions",
+      "label": "Update tm_show to include archive metadata",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-17-implement-tm-archive-and-tm-restore-functions.md"
+      "path": "docs\\planning\\tasks\\core\\task-17-update-tm-show-to-include-archive-metadata.md"
     },
     {
       "id": "task-170",
-      "label": "Implement update_task_status() wrapper function",
+      "label": "Expand helper and MCP surfaces for documentation views",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-170-implement-update-task-status-wrapper-function.md"
+      "path": "docs\\planning\\tasks\\core\\task-170-expand-helper-and-mcp-surfaces-for-documentation-views.md"
     },
     {
       "id": "task-171",
-      "label": "Define reference docs and project-facing documentation surfaces",
+      "label": "Define section registry and subsection navigation limits",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-171-define-reference-docs-and-project-facing-documentation-surfaces.md"
+      "path": "docs\\planning\\tasks\\core\\task-171-define-section-registry-and-subsection-navigation-limits.md"
     },
     {
       "id": "task-172",
-      "label": "Scope manifest and migration-registry scaffolding",
+      "label": "Define supporting-doc metadata and registry behavior",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-172-scope-manifest-and-migration-registry-scaffolding.md"
+      "path": "docs\\planning\\tasks\\core\\task-172-define-supporting-doc-metadata-and-registry-behavior.md"
     },
     {
       "id": "task-173",
-      "label": "Expand helper and MCP surfaces for documentation views",
+      "label": "Define documentation-sync obligations and verification coverage",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-173-expand-helper-and-mcp-surfaces-for-documentation-views.md"
+      "path": "docs\\planning\\tasks\\core\\task-173-define-documentation-sync-obligations-and-verification-coverage.md"
     },
     {
       "id": "task-174",
-      "label": "Define section registry and subsection navigation limits",
+      "label": "Implement MCP helper root configurability",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-174-define-section-registry-and-subsection-navigation-limits.md"
+      "path": "docs\\planning\\tasks\\core\\task-174-implement-mcp-helper-root-configurability.md"
     },
     {
       "id": "task-175",
-      "label": "Define supporting-doc metadata and registry behavior",
+      "label": "Add archived state to planning state machine",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-175-define-supporting-doc-metadata-and-registry-behavior.md"
+      "path": "docs\\planning\\tasks\\core\\task-175-add-archived-state-to-planning-state-machine.md"
     },
     {
       "id": "task-176",
-      "label": "Define documentation-sync obligations and verification coverage",
+      "label": "Implement state-based archive and restore behavior",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-176-define-documentation-sync-obligations-and-verification-coverage.md"
+      "path": "docs\\planning\\tasks\\core\\task-176-implement-state-based-archive-and-restore-behavior.md"
     },
     {
       "id": "task-177",
-      "label": "Implement MCP helper root configurability",
+      "label": "Update tm_list with archive filter parameter",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-177-implement-mcp-helper-root-configurability.md"
+      "path": "docs\\planning\\tasks\\core\\task-177-update-tm-list-with-archive-filter-parameter.md"
     },
     {
       "id": "task-178",
-      "label": "Add archived state to planning state machine",
+      "label": "Update tm_validate with archive validation rules",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-178-add-archived-state-to-planning-state-machine.md"
+      "path": "docs\\planning\\tasks\\core\\task-178-update-tm-validate-with-archive-validation-rules.md"
     },
     {
       "id": "task-179",
-      "label": "Implement state-based archive and restore behavior",
+      "label": "Update tm_show to include archive metadata",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-179-implement-state-based-archive-and-restore-behavior.md"
+      "path": "docs\\planning\\tasks\\core\\task-179-update-tm-show-to-include-archive-metadata.md"
     },
     {
       "id": "task-18",
-      "label": "Update tm_list with archive filter parameter",
+      "label": "Filter and skip no-op transient proposals",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-18-update-tm-list-with-archive-filter-parameter.md"
+      "path": "docs\\planning\\tasks\\core\\task-18-filter-and-skip-no-op-transient-proposals.md"
     },
     {
       "id": "task-180",
-      "label": "Update tm_list with archive filter parameter",
+      "label": "Verify and preserve schema-compliant task reference placement",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-180-update-tm-list-with-archive-filter-parameter.md"
+      "path": "docs\\planning\\tasks\\core\\task-180-verify-and-preserve-schema-compliant-task-reference-placement.md"
     },
     {
       "id": "task-181",
-      "label": "Update tm_validate with archive validation rules",
+      "label": "Implement automatic counter sync on delete",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-181-update-tm-validate-with-archive-validation-rules.md"
+      "path": "docs\\planning\\tasks\\core\\task-181-implement-automatic-counter-sync-on-delete.md"
     },
     {
       "id": "task-182",
-      "label": "Update tm_show to include archive metadata",
+      "label": "Implement soft delete functionality",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-182-update-tm-show-to-include-archive-metadata.md"
+      "path": "docs\\planning\\tasks\\core\\task-182-implement-soft-delete-functionality.md"
     },
     {
       "id": "task-183",
-      "label": "Verify and preserve schema-compliant task reference placement",
+      "label": "Extend auto-reference updates to plans and tasks",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-183-verify-and-preserve-schema-compliant-task-reference-placement.md"
+      "path": "docs\\planning\\tasks\\core\\task-183-extend-auto-reference-updates-to-plans-and-tasks.md"
     },
     {
       "id": "task-184",
-      "label": "Implement automatic counter sync on delete",
+      "label": "Add duplicate detection for requests and specs",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-184-implement-automatic-counter-sync-on-delete.md"
+      "path": "docs\\planning\\tasks\\core\\task-184-add-duplicate-detection-for-requests-and-specs.md"
     },
     {
       "id": "task-185",
-      "label": "Implement soft delete functionality",
+      "label": "Improve schema validation error messages",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-185-implement-soft-delete-functionality.md"
+      "path": "docs\\planning\\tasks\\core\\task-185-improve-schema-validation-error-messages.md"
     },
     {
       "id": "task-186",
-      "label": "Extend auto-reference updates to plans and tasks",
+      "label": "Add integration tests for critical fixes",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-186-extend-auto-reference-updates-to-plans-and-tasks.md"
+      "path": "docs\\planning\\tasks\\core\\task-186-add-integration-tests-for-critical-fixes.md"
     },
     {
       "id": "task-187",
-      "label": "Add duplicate detection for requests and specs",
+      "label": "Fix update_content() section-mode regex",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-187-add-duplicate-detection-for-requests-and-specs.md"
+      "path": "docs\\planning\\tasks\\core\\task-187-fix-update-content-section-mode-regex.md"
     },
     {
       "id": "task-188",
-      "label": "Improve schema validation error messages",
+      "label": "Fix move() for work-packages",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-188-improve-schema-validation-error-messages.md"
+      "path": "docs\\planning\\tasks\\core\\task-188-fix-move-for-work-packages.md"
     },
     {
       "id": "task-189",
-      "label": "Add integration tests for critical fixes",
+      "label": "Implement claims TTL lazy purge",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-189-add-integration-tests-for-critical-fixes.md"
+      "path": "docs\\planning\\tasks\\core\\task-189-implement-claims-ttl-lazy-purge.md"
     },
     {
       "id": "task-19",
-      "label": "Update tm_validate with archive validation rules",
+      "label": "Add archived state to planning state machine",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-19-update-tm-validate-with-archive-validation-rules.md"
+      "path": "docs\\planning\\tasks\\core\\task-19-add-archived-state-to-planning-state-machine.md"
     },
     {
       "id": "task-190",
-      "label": "Fix update_content() section-mode regex",
+      "label": "Fix hook event payloads",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-190-fix-update-content-section-mode-regex.md"
+      "path": "docs\\planning\\tasks\\core\\task-190-fix-hook-event-payloads.md"
     },
     {
       "id": "task-191",
-      "label": "Fix move() for work-packages",
+      "label": "Fix batch meta op",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-191-fix-move-for-work-packages.md"
+      "path": "docs\\planning\\tasks\\core\\task-191-fix-batch-meta-op.md"
     },
     {
       "id": "task-192",
-      "label": "Implement claims TTL lazy purge",
+      "label": "Fix tm.status() return shape",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-192-implement-claims-ttl-lazy-purge.md"
+      "path": "docs\\planning\\tasks\\core\\task-192-fix-tm-status-return-shape.md"
     },
     {
       "id": "task-193",
-      "label": "Fix hook event payloads",
+      "label": "Fix FastMCP empty-list serialization",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-193-fix-hook-event-payloads.md"
+      "path": "docs\\planning\\tasks\\core\\task-193-fix-fastmcp-empty-list-serialization.md"
     },
     {
       "id": "task-194",
-      "label": "Fix batch meta op",
+      "label": "Add AUDIAGENTIC_ROOT env var support",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-194-fix-batch-meta-op.md"
+      "path": "docs\\planning\\tasks\\core\\task-194-add-audiagentic-root-env-var-support.md"
     },
     {
       "id": "task-195",
-      "label": "Fix tm.status() return shape",
+      "label": "Add --root CLI flag support",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-195-fix-tm-status-return-shape.md"
+      "path": "docs\\planning\\tasks\\core\\task-195-add-root-cli-flag-support.md"
     },
     {
       "id": "task-196",
-      "label": "Fix FastMCP empty-list serialization",
+      "label": "Unify --profile and --stack-profile into single parameter",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-196-fix-fastmcp-empty-list-serialization.md"
+      "path": "docs\\planning\\tasks\\core\\task-196-unify-profile-and-stack-profile-into-single-parameter.md"
     },
     {
       "id": "task-197",
-      "label": "Add AUDIAGENTIC_ROOT env var support",
+      "label": "Add lookup.json global index generation to idx_mgr",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-197-add-audiagentic-root-env-var-support.md"
+      "path": "docs\\planning\\tasks\\core\\task-197-add-lookup-json-global-index-generation-to-idx-mgr.md"
     },
     {
       "id": "task-198",
-      "label": "Add --root CLI flag support",
+      "label": "Add internal lookup(id) and head(id) helpers to api.py",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-198-add-root-cli-flag-support.md"
+      "path": "docs\\planning\\tasks\\core\\task-198-add-internal-lookup-id-and-head-id-helpers-to-api-py.md"
     },
     {
       "id": "task-199",
-      "label": "Unify --profile and --stack-profile into single parameter",
+      "label": "Refactor _find(), show(), and extract() onto lookup path",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-199-unify-profile-and-stack-profile-into-single-parameter.md"
+      "path": "docs\\planning\\tasks\\core\\task-199-refactor-find-show-and-extract-onto-lookup-path.md"
     },
     {
       "id": "task-2",
@@ -376,615 +358,663 @@
     },
     {
       "id": "task-20",
-      "label": "Update tm_show to include archive metadata",
+      "label": "Generate patch actions for high-confidence proposals",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-20-update-tm-show-to-include-archive-metadata.md"
+      "path": "docs\\planning\\tasks\\core\\task-20-generate-patch-actions-for-high-confidence-proposals.md"
     },
     {
       "id": "task-200",
-      "label": "Add lookup.json global index generation to idx_mgr",
+      "label": "Add include_body and write_to_disk controls to extract()",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-200-add-lookup-json-global-index-generation-to-idx-mgr.md"
+      "path": "docs\\planning\\tasks\\core\\task-200-add-include-body-and-write-to-disk-controls-to-extract.md"
     },
     {
       "id": "task-201",
-      "label": "Add internal lookup(id) and head(id) helpers to api.py",
+      "label": "Expose head(id) and refined extract controls in MCP and tm_helper",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-201-add-internal-lookup-id-and-head-id-helpers-to-api-py.md"
+      "path": "docs\\planning\\tasks\\core\\task-201-expose-head-id-and-refined-extract-controls-in-mcp-and-tm-helper.md"
     },
     {
       "id": "task-202",
-      "label": "Refactor _find(), show(), and extract() onto lookup path",
+      "label": "Add stale-index handling for lookup misses",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-202-refactor-find-show-and-extract-onto-lookup-path.md"
+      "path": "docs\\planning\\tasks\\core\\task-202-add-stale-index-handling-for-lookup-misses.md"
     },
     {
       "id": "task-203",
-      "label": "Add include_body and write_to_disk controls to extract()",
-      "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-203-add-include-body-and-write-to-disk-controls-to-extract.md"
+      "label": "Add body content parameters to task creation and enforce non-empty body via validation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-203-add-body-content-parameters-to-task-creation-and-enforce-non-empty-body-via-validation.md"
     },
     {
       "id": "task-204",
-      "label": "Expose head(id) and refined extract controls in MCP and tm_helper",
-      "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-204-expose-head-id-and-refined-extract-controls-in-mcp-and-tm-helper.md"
+      "label": "Extend tm_batch_update to support multi-item operations",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-204-extend-tm-batch-update-to-support-multi-item-operations.md"
     },
     {
       "id": "task-205",
-      "label": "Add stale-index handling for lookup misses",
-      "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-205-add-stale-index-handling-for-lookup-misses.md"
+      "label": "Implement tm_bulk_state for state transitions",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-205-implement-tm-bulk-state-for-state-transitions.md"
     },
     {
       "id": "task-206",
-      "label": "Add body content parameters to task creation and enforce non-empty body via validation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-206-add-body-content-parameters-to-task-creation-and-enforce-non-empty-body-via-validation.md"
+      "label": "Add summary_only flag to individual operations",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-206-add-summary-only-flag-to-individual-operations.md"
     },
     {
       "id": "task-207",
-      "label": "Extend tm_batch_update to support multi-item operations",
+      "label": "Expose bulk operations in MCP and tm_helper",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-207-extend-tm-batch-update-to-support-multi-item-operations.md"
+      "path": "docs\\planning\\tasks\\core\\task-207-expose-bulk-operations-in-mcp-and-tm-helper.md"
     },
     {
       "id": "task-208",
-      "label": "Implement tm_bulk_state for state transitions",
+      "label": "Write tests for bulk operations and backward compatibility",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-208-implement-tm-bulk-state-for-state-transitions.md"
+      "path": "docs\\planning\\tasks\\core\\task-208-write-tests-for-bulk-operations-and-backward-compatibility.md"
     },
     {
       "id": "task-209",
-      "label": "Add summary_only flag to individual operations",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-209-add-summary-only-flag-to-individual-operations.md"
+      "label": "Implement detect_sensitive_patterns function with regex patterns",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-209-implement-detect-sensitive-patterns-function-with-regex-patterns.md"
     },
     {
       "id": "task-21",
-      "label": "Extend planning tools with full content management",
-      "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-21-extend-planning-tools-with-full-content-management.md"
+      "label": "Implement tm_archive and tm_restore functions",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-21-implement-tm-archive-and-tm-restore-functions.md"
     },
     {
       "id": "task-210",
-      "label": "Expose bulk operations in MCP and tm_helper",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-210-expose-bulk-operations-in-mcp-and-tm-helper.md"
+      "label": "Integrate sensitive data detection into tm_validate output",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-210-integrate-sensitive-data-detection-into-tm-validate-output.md"
     },
     {
       "id": "task-211",
-      "label": "Write tests for bulk operations and backward compatibility",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-211-write-tests-for-bulk-operations-and-backward-compatibility.md"
+      "label": "Write tests for sensitive data detection",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-211-write-tests-for-sensitive-data-detection.md"
     },
     {
       "id": "task-212",
-      "label": "Implement detect_sensitive_patterns function with regex patterns",
-      "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-212-implement-detect-sensitive-patterns-function-with-regex-patterns.md"
+      "label": "Implement audience profile system in config and API",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-212-implement-audience-profile-system-in-config-and-api.md"
     },
     {
       "id": "task-213",
-      "label": "Integrate sensitive data detection into tm_validate output",
+      "label": "Add guidance_levels to profiles.yaml",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-213-integrate-sensitive-data-detection-into-tm-validate-output.md"
+      "path": "docs\\planning\\tasks\\core\\task-213-add-guidance-levels-to-profiles-yaml.md"
     },
     {
       "id": "task-214",
-      "label": "Write tests for sensitive data detection",
+      "label": "Update config.py to load guidance levels",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-214-write-tests-for-sensitive-data-detection.md"
+      "path": "docs\\planning\\tasks\\core\\task-214-update-config-py-to-load-guidance-levels.md"
     },
     {
       "id": "task-215",
-      "label": "Implement audience profile system in config and API",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-215-implement-audience-profile-system-in-config-and-api.md"
+      "label": "Add guidance field to request schema",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-215-add-guidance-field-to-request-schema.md"
     },
     {
       "id": "task-216",
-      "label": "Add guidance_levels to profiles.yaml",
+      "label": "Update tm_helper.py new_request() with guidance parameter",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-216-add-guidance-levels-to-profiles-yaml.md"
+      "path": "docs\\planning\\tasks\\core\\task-216-update-tm-helper-py-new-request-with-guidance-parameter.md"
     },
     {
       "id": "task-217",
-      "label": "Update config.py to load guidance levels",
+      "label": "Add --guidance CLI parameter to tm.py",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-217-update-config-py-to-load-guidance-levels.md"
+      "path": "docs\\planning\\tasks\\core\\task-217-add-guidance-cli-parameter-to-tm-py.md"
     },
     {
       "id": "task-218",
-      "label": "Add guidance field to request schema",
+      "label": "Update validation to enforce guidance-appropriate sections",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-218-add-guidance-field-to-request-schema.md"
+      "path": "docs\\planning\\tasks\\core\\task-218-update-validation-to-enforce-guidance-appropriate-sections.md"
     },
     {
       "id": "task-219",
-      "label": "Update tm_helper.py new_request() with guidance parameter",
+      "label": "Add default_guidance to planning.yaml",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-219-update-tm-helper-py-new-request-with-guidance-parameter.md"
+      "path": "docs\\planning\\tasks\\core\\task-219-add-default-guidance-to-planning-yaml.md"
+    },
+    {
+      "id": "task-22",
+      "label": "Add tests and benchmark proposal volume reduction",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-22-add-tests-and-benchmark-proposal-volume-reduction.md"
     },
     {
       "id": "task-220",
-      "label": "Add --guidance CLI parameter to tm.py",
+      "label": "Write tests for guidance levels",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-220-add-guidance-cli-parameter-to-tm-py.md"
+      "path": "docs\\planning\\tasks\\core\\task-220-write-tests-for-guidance-levels.md"
     },
     {
       "id": "task-221",
-      "label": "Update validation to enforce guidance-appropriate sections",
+      "label": "Draft standard-0010 with guidance level definitions",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-221-update-validation-to-enforce-guidance-appropriate-sections.md"
+      "path": "docs\\planning\\tasks\\core\\task-221-draft-standard-0010-with-guidance-level-definitions.md"
     },
     {
       "id": "task-222",
-      "label": "Add default_guidance to planning.yaml",
+      "label": "Update validation to enforce guidance level requirements",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-222-add-default-guidance-to-planning-yaml.md"
+      "path": "docs\\planning\\tasks\\core\\task-222-update-validation-to-enforce-guidance-level-requirements.md"
     },
     {
       "id": "task-223",
-      "label": "Write tests for guidance levels",
+      "label": "Add guidance level selection guide to documentation",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-223-write-tests-for-guidance-levels.md"
+      "path": "docs\\planning\\tasks\\core\\task-223-add-guidance-level-selection-guide-to-documentation.md"
     },
     {
       "id": "task-224",
-      "label": "Draft standard-0010 with guidance level definitions",
+      "label": "Update workflows.yaml with unified states",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-224-draft-standard-0010-with-guidance-level-definitions.md"
+      "path": "docs\\planning\\tasks\\core\\task-224-update-workflows-yaml-with-unified-states.md"
     },
     {
       "id": "task-225",
-      "label": "Update validation to enforce guidance level requirements",
+      "label": "Implement cascade archive for requests",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-225-update-validation-to-enforce-guidance-level-requirements.md"
+      "path": "docs\\planning\\tasks\\core\\task-225-implement-cascade-archive-for-requests.md"
     },
     {
       "id": "task-226",
-      "label": "Add guidance level selection guide to documentation",
+      "label": "Implement cascade archive for specs",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-226-add-guidance-level-selection-guide-to-documentation.md"
+      "path": "docs\\planning\\tasks\\core\\task-226-implement-cascade-archive-for-specs.md"
     },
     {
       "id": "task-227",
-      "label": "Update workflows.yaml with unified states",
+      "label": "Review knowledge component codebase",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-227-update-workflows-yaml-with-unified-states.md"
+      "path": "docs\\planning\\tasks\\core\\task-227-review-knowledge-component-codebase.md"
     },
     {
       "id": "task-228",
-      "label": "Implement cascade archive for requests",
+      "label": "Integrate knowledge component source code",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-228-implement-cascade-archive-for-requests.md"
+      "path": "docs\\planning\\tasks\\core\\task-228-integrate-knowledge-component-source-code.md"
     },
     {
       "id": "task-229",
-      "label": "Implement cascade archive for specs",
+      "label": "Bootstrap knowledge component configuration",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-229-implement-cascade-archive-for-specs.md"
+      "path": "docs\\planning\\tasks\\core\\task-229-bootstrap-knowledge-component-configuration.md"
+    },
+    {
+      "id": "task-23",
+      "label": "Update tm_list with archive filter parameter",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-23-update-tm-list-with-archive-filter-parameter.md"
     },
     {
       "id": "task-230",
-      "label": "Review knowledge component codebase",
+      "label": "Configure event adapter for planning bridge",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-230-review-knowledge-component-codebase.md"
+      "path": "docs\\planning\\tasks\\core\\task-230-configure-event-adapter-for-planning-bridge.md"
     },
     {
       "id": "task-231",
-      "label": "Integrate knowledge component source code",
+      "label": "Test knowledge component integration",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-231-integrate-knowledge-component-source-code.md"
+      "path": "docs\\planning\\tasks\\core\\task-231-test-knowledge-component-integration.md"
     },
     {
       "id": "task-232",
-      "label": "Bootstrap knowledge component configuration",
-      "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-232-bootstrap-knowledge-component-configuration.md"
+      "label": "Validate documentation",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-232-validate-documentation.md"
     },
     {
       "id": "task-233",
-      "label": "Configure event adapter for planning bridge",
-      "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-233-configure-event-adapter-for-planning-bridge.md"
+      "label": "Add unit tests for knowledge component",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-233-add-unit-tests-for-knowledge-component.md"
     },
     {
       "id": "task-234",
-      "label": "Test knowledge component integration",
-      "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-234-test-knowledge-component-integration.md"
+      "label": "Refactor events.py into separate modules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-234-refactor-events-py-into-separate-modules.md"
     },
     {
       "id": "task-235",
-      "label": "Validate documentation",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-235-validate-documentation.md"
+      "label": "Enhance lexical search",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-235-enhance-lexical-search.md"
     },
     {
       "id": "task-236",
-      "label": "Add unit tests for knowledge component",
+      "label": "Add lifecycle management for jobs and proposals",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-236-add-unit-tests-for-knowledge-component.md"
+      "path": "docs\\planning\\tasks\\core\\task-236-add-lifecycle-management-for-jobs-and-proposals.md"
     },
     {
       "id": "task-237",
-      "label": "Refactor events.py into separate modules",
+      "label": "Consolidate MCP tools",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-237-refactor-events-py-into-separate-modules.md"
+      "path": "docs\\planning\\tasks\\core\\task-237-consolidate-mcp-tools.md"
     },
     {
       "id": "task-238",
-      "label": "Enhance lexical search",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-238-enhance-lexical-search.md"
+      "label": "Fix create_with_content() standard_refs bug",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-238-fix-create-with-content-standard-refs-bug.md"
     },
     {
       "id": "task-239",
-      "label": "Add lifecycle management for jobs and proposals",
+      "label": "Remove dead code in update_content() section mode",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-239-remove-dead-code-in-update-content-section-mode.md"
+    },
+    {
+      "id": "task-24",
+      "label": "Integrate with apply_proposal workflow",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-239-add-lifecycle-management-for-jobs-and-proposals.md"
+      "path": "docs\\planning\\tasks\\core\\task-24-integrate-with-apply-proposal-workflow.md"
     },
     {
       "id": "task-240",
-      "label": "Consolidate MCP tools",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-240-consolidate-mcp-tools.md"
+      "label": "Add atomic write guarantee to dump_markdown()",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-240-add-atomic-write-guarantee-to-dump-markdown.md"
     },
     {
       "id": "task-241",
-      "label": "Fix create_with_content() standard_refs bug",
+      "label": "Fix val_mgr.py duplicated validation",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-241-fix-create-with-content-standard-refs-bug.md"
+      "path": "docs\\planning\\tasks\\core\\task-241-fix-val-mgr-py-duplicated-validation.md"
     },
     {
       "id": "task-242",
-      "label": "Remove dead code in update_content() section mode",
-      "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-242-remove-dead-code-in-update-content-section-mode.md"
+      "label": "Add cycle detection to standards cascade",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-242-add-cycle-detection-to-standards-cascade.md"
     },
     {
       "id": "task-243",
-      "label": "Add atomic write guarantee to dump_markdown()",
+      "label": "Improve validation error messages",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-243-add-atomic-write-guarantee-to-dump-markdown.md"
+      "path": "docs\\planning\\tasks\\core\\task-243-improve-validation-error-messages.md"
     },
     {
       "id": "task-244",
-      "label": "Fix val_mgr.py duplicated validation",
+      "label": "Consolidate new() and create_with_content() logic",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-244-fix-val-mgr-py-duplicated-validation.md"
+      "path": "docs\\planning\\tasks\\core\\task-244-consolidate-new-and-create-with-content-logic.md"
     },
     {
       "id": "task-245",
-      "label": "Add cycle detection to standards cascade",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-245-add-cycle-detection-to-standards-cascade.md"
+      "label": "Implement InProcessEventBus satisfying EventBusProtocol",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-245-implement-inprocesseventbus-satisfying-eventbusprotocol.md"
     },
     {
       "id": "task-246",
-      "label": "Improve validation error messages",
+      "label": "Implement FileEventStore for optional persistence",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-246-improve-validation-error-messages.md"
+      "path": "docs\\planning\\tasks\\core\\task-246-implement-fileeventstore-for-optional-persistence.md"
     },
     {
       "id": "task-247",
-      "label": "Consolidate new() and create_with_content() logic",
+      "label": "Implement replay functionality with is_replay flag",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-247-consolidate-new-and-create-with-content-logic.md"
+      "path": "docs\\planning\\tasks\\core\\task-247-implement-replay-functionality-with-is-replay-flag.md"
     },
     {
       "id": "task-248",
-      "label": "Implement InProcessEventBus satisfying EventBusProtocol",
+      "label": "Implement state propagation engine for planning hierarchies",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-248-implement-inprocesseventbus-satisfying-eventbusprotocol.md"
+      "path": "docs\\planning\\tasks\\core\\task-248-implement-state-propagation-engine-for-planning-hierarchies.md"
     },
     {
       "id": "task-249",
-      "label": "Implement FileEventStore for optional persistence",
+      "label": "Create state propagation config system",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-249-implement-fileeventstore-for-optional-persistence.md"
+      "path": "docs\\planning\\tasks\\core\\task-249-create-state-propagation-config-system.md"
+    },
+    {
+      "id": "task-25",
+      "label": "Update tm_validate with archive validation rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-25-update-tm-validate-with-archive-validation-rules.md"
     },
     {
       "id": "task-250",
-      "label": "Implement replay functionality with is_replay flag",
+      "label": "Integrate interoperability layer with planning component",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-250-implement-replay-functionality-with-is-replay-flag.md"
+      "path": "docs\\planning\\tasks\\core\\task-250-integrate-interoperability-layer-with-planning-component.md"
     },
     {
       "id": "task-251",
-      "label": "Implement state propagation engine for planning hierarchies",
+      "label": "Integrate interoperability layer with knowledge component",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-251-implement-state-propagation-engine-for-planning-hierarchies.md"
+      "path": "docs\\planning\\tasks\\core\\task-251-integrate-interoperability-layer-with-knowledge-component.md"
     },
     {
       "id": "task-252",
-      "label": "Create state propagation config system",
+      "label": "Bridge planning hooks onto canonical events without removing legacy hooks",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-252-create-state-propagation-config-system.md"
+      "path": "docs\\planning\\tasks\\core\\task-252-bridge-planning-hooks-onto-canonical-events-without-removing-legacy-hooks.md"
     },
     {
       "id": "task-253",
-      "label": "Integrate interoperability layer with planning component",
+      "label": "Add integration tests for event layer and state propagation",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-253-integrate-interoperability-layer-with-planning-component.md"
+      "path": "docs\\planning\\tasks\\core\\task-253-add-integration-tests-for-event-layer-and-state-propagation.md"
     },
     {
       "id": "task-254",
-      "label": "Integrate interoperability layer with knowledge component",
+      "label": "Create interoperability package structure with transport protocol abstraction",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-254-integrate-interoperability-layer-with-knowledge-component.md"
+      "path": "docs\\planning\\tasks\\core\\task-254-create-interoperability-package-structure-with-transport-protocol-abstraction.md"
     },
     {
       "id": "task-255",
-      "label": "Bridge planning hooks onto canonical events without removing legacy hooks",
+      "label": "Create event schema registry and documentation",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-255-bridge-planning-hooks-onto-canonical-events-without-removing-legacy-hooks.md"
+      "path": "docs\\planning\\tasks\\core\\task-255-create-event-schema-registry-and-documentation.md"
     },
     {
       "id": "task-256",
-      "label": "Add integration tests for event layer and state propagation",
-      "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-256-add-integration-tests-for-event-layer-and-state-propagation.md"
+      "label": "Add CLI commands and diagnostics for event layer",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-256-add-cli-commands-and-diagnostics-for-event-layer.md"
     },
     {
       "id": "task-257",
-      "label": "Create interoperability package structure with transport protocol abstraction",
-      "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-257-create-interoperability-package-structure-with-transport-protocol-abstraction.md"
+      "label": "Validate event layer performance targets",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-257-validate-event-layer-performance-targets.md"
     },
     {
       "id": "task-258",
-      "label": "Create event schema registry and documentation",
+      "label": "Implement knowledge event handler for planning state changes",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-258-create-event-schema-registry-and-documentation.md"
+      "path": "docs\\planning\\tasks\\core\\task-258-implement-knowledge-event-handler-for-planning-state-changes.md"
     },
     {
       "id": "task-259",
-      "label": "Add CLI commands and diagnostics for event layer",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-259-add-cli-commands-and-diagnostics-for-event-layer.md"
+      "label": "Inventory planning hooks and create migration plan",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-259-inventory-planning-hooks-and-create-migration-plan.md"
+    },
+    {
+      "id": "task-26",
+      "label": "Update tm_show to include archive metadata",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-26-update-tm-show-to-include-archive-metadata.md"
     },
     {
       "id": "task-260",
-      "label": "Validate event layer performance targets",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-260-validate-event-layer-performance-targets.md"
+      "label": "Remove legacy hook system after migration complete",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-260-remove-legacy-hook-system-after-migration-complete.md"
     },
     {
       "id": "task-261",
-      "label": "Implement knowledge event handler for planning state changes",
+      "label": "Implement async event queue for background processing",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-261-implement-knowledge-event-handler-for-planning-state-changes.md"
+      "path": "docs\\planning\\tasks\\core\\task-261-implement-async-event-queue-for-background-processing.md"
     },
     {
       "id": "task-262",
-      "label": "Inventory planning hooks and create migration plan",
+      "label": "Implement planning audit and repair CLI command",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-262-inventory-planning-hooks-and-create-migration-plan.md"
+      "path": "docs\\planning\\tasks\\core\\task-262-implement-planning-audit-and-repair-cli-command.md"
     },
     {
       "id": "task-263",
-      "label": "Remove legacy hook system after migration complete",
+      "label": "Improve MCP layer robustness and type safety",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-263-remove-legacy-hook-system-after-migration-complete.md"
+      "path": "docs\\planning\\tasks\\core\\task-263-improve-mcp-layer-robustness-and-type-safety.md"
     },
     {
       "id": "task-264",
-      "label": "Implement async event queue for background processing",
-      "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-264-implement-async-event-queue-for-background-processing.md"
+      "label": "Add module docstring to execution/jobs/__init__.py",
+      "state": "completed",
+      "path": "docs\\planning\\tasks\\core\\task-264-add-module-docstring-to-execution-jobs-init-py.md"
     },
     {
       "id": "task-265",
-      "label": "Implement planning audit and repair CLI command",
-      "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-265-implement-planning-audit-and-repair-cli-command.md"
+      "label": "Fix empty planning/app/__init__.py",
+      "state": "completed",
+      "path": "docs\\planning\\tasks\\core\\task-265-fix-empty-planning-app-init-py.md"
     },
     {
       "id": "task-266",
-      "label": "Improve MCP layer robustness and type safety",
-      "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-266-improve-mcp-layer-robustness-and-type-safety.md"
+      "label": "Fix incomplete runtime/__init__.py docstring",
+      "state": "completed",
+      "path": "docs\\planning\\tasks\\core\\task-266-fix-incomplete-runtime-init-py-docstring.md"
     },
     {
       "id": "task-267",
-      "label": "Add module docstring to execution/jobs/__init__.py",
+      "label": "Add class and method docstrings to base_mgr.py",
       "state": "completed",
-      "path": "docs\\planning\\tasks\\core\\task-267-add-module-docstring-to-execution-jobs-init-py.md"
+      "path": "docs\\planning\\tasks\\core\\task-267-add-class-and-method-docstrings-to-base-mgr-py.md"
     },
     {
       "id": "task-268",
-      "label": "Fix empty planning/app/__init__.py",
-      "state": "completed",
-      "path": "docs\\planning\\tasks\\core\\task-268-fix-empty-planning-app-init-py.md"
+      "label": "Review get_task_by_id function reference",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-268-review-get-task-by-id-function-reference.md"
     },
     {
       "id": "task-269",
-      "label": "Fix incomplete runtime/__init__.py docstring",
+      "label": "Fix error handling in validation.py:42",
       "state": "completed",
-      "path": "docs\\planning\\tasks\\core\\task-269-fix-incomplete-runtime-init-py-docstring.md"
+      "path": "docs\\planning\\tasks\\core\\task-269-fix-error-handling-in-validation-py-42.md"
+    },
+    {
+      "id": "task-27",
+      "label": "Extend planning tools with full content management",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-27-extend-planning-tools-with-full-content-management.md"
     },
     {
       "id": "task-270",
-      "label": "Add class and method docstrings to base_mgr.py",
+      "label": "Add JSON schema validation to _load_json_argument",
       "state": "completed",
-      "path": "docs\\planning\\tasks\\core\\task-270-add-class-and-method-docstrings-to-base-mgr-py.md"
+      "path": "docs\\planning\\tasks\\core\\task-270-add-json-schema-validation-to-load-json-argument.md"
     },
     {
       "id": "task-271",
-      "label": "Review get_task_by_id function reference",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-271-review-get-task-by-id-function-reference.md"
+      "label": "Add validation for session_input --details-json",
+      "state": "completed",
+      "path": "docs\\planning\\tasks\\core\\task-271-add-validation-for-session-input-details-json.md"
     },
     {
       "id": "task-272",
-      "label": "Fix error handling in validation.py:42",
+      "label": "Fix generic error handling in CLI",
       "state": "completed",
-      "path": "docs\\planning\\tasks\\core\\task-272-fix-error-handling-in-validation-py-42.md"
+      "path": "docs\\planning\\tasks\\core\\task-272-fix-generic-error-handling-in-cli.md"
     },
     {
       "id": "task-273",
-      "label": "Add JSON schema validation to _load_json_argument",
-      "state": "completed",
-      "path": "docs\\planning\\tasks\\core\\task-273-add-json-schema-validation-to-load-json-argument.md"
+      "label": "standard-12-knowledge-maintenance-impl",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-273-standard-12-knowledge-maintenance-impl.md"
     },
     {
       "id": "task-274",
-      "label": "Add validation for session_input --details-json",
+      "label": "Fix global state access in job_control_tool",
       "state": "completed",
-      "path": "docs\\planning\\tasks\\core\\task-274-add-validation-for-session-input-details-json.md"
+      "path": "docs\\planning\\tasks\\core\\task-274-fix-global-state-access-in-job-control-tool.md"
     },
     {
       "id": "task-275",
-      "label": "Fix generic error handling in CLI",
+      "label": "Fix tight coupling in session_input_tool",
       "state": "completed",
-      "path": "docs\\planning\\tasks\\core\\task-275-fix-generic-error-handling-in-cli.md"
+      "path": "docs\\planning\\tasks\\core\\task-275-fix-tight-coupling-in-session-input-tool.md"
     },
     {
       "id": "task-276",
-      "label": "standard-12-knowledge-maintenance-impl",
-      "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-276-standard-12-knowledge-maintenance-impl.md"
+      "label": "Refactor event bus singleton pattern",
+      "state": "completed",
+      "path": "docs\\planning\\tasks\\core\\task-276-refactor-event-bus-singleton-pattern.md"
     },
     {
       "id": "task-277",
-      "label": "Fix global state access in job_control_tool",
-      "state": "completed",
-      "path": "docs\\planning\\tasks\\core\\task-277-fix-global-state-access-in-job-control-tool.md"
+      "label": "spec-60",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-277-spec-60.md"
     },
     {
       "id": "task-278",
-      "label": "Fix tight coupling in session_input_tool",
-      "state": "completed",
-      "path": "docs\\planning\\tasks\\core\\task-278-fix-tight-coupling-in-session-input-tool.md"
+      "label": "spec-65",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-278-spec-65.md"
     },
     {
       "id": "task-279",
-      "label": "Refactor event bus singleton pattern",
-      "state": "completed",
-      "path": "docs\\planning\\tasks\\core\\task-279-refactor-event-bus-singleton-pattern.md"
+      "label": "std-0010",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-279-std-0010.md"
+    },
+    {
+      "id": "task-28",
+      "label": "MCP Test Task",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-28-mcp-test-task.md"
     },
     {
       "id": "task-280",
-      "label": "spec-60",
+      "label": "std-0011",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-280-spec-60.md"
+      "path": "docs\\planning\\tasks\\core\\task-280-std-0011.md"
     },
     {
       "id": "task-281",
-      "label": "spec-65",
+      "label": "plan-17",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-281-spec-65.md"
+      "path": "docs\\planning\\tasks\\core\\task-281-plan-17.md"
     },
     {
       "id": "task-282",
-      "label": "std-0010",
+      "label": "plan-18",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-282-std-0010.md"
+      "path": "docs\\planning\\tasks\\core\\task-282-plan-18.md"
     },
     {
       "id": "task-283",
-      "label": "std-0011",
+      "label": "plan-19",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-283-std-0011.md"
+      "path": "docs\\planning\\tasks\\core\\task-283-plan-19.md"
     },
     {
       "id": "task-284",
-      "label": "plan-17",
+      "label": "plan-20",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-284-plan-17.md"
+      "path": "docs\\planning\\tasks\\core\\task-284-plan-20.md"
     },
     {
       "id": "task-285",
-      "label": "plan-18",
+      "label": "plan-21",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-285-plan-18.md"
+      "path": "docs\\planning\\tasks\\core\\task-285-plan-21.md"
     },
     {
       "id": "task-286",
-      "label": "plan-19",
+      "label": "plan-22",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-286-plan-19.md"
+      "path": "docs\\planning\\tasks\\core\\task-286-plan-22.md"
     },
     {
       "id": "task-287",
-      "label": "plan-20",
+      "label": "wp-22",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-287-plan-20.md"
+      "path": "docs\\planning\\tasks\\core\\task-287-wp-22.md"
     },
     {
       "id": "task-288",
-      "label": "plan-21",
+      "label": "wp-21",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-288-plan-21.md"
+      "path": "docs\\planning\\tasks\\core\\task-288-wp-21.md"
     },
     {
       "id": "task-289",
-      "label": "plan-22",
+      "label": "wp-22",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-289-plan-22.md"
+      "path": "docs\\planning\\tasks\\core\\task-289-wp-22.md"
+    },
+    {
+      "id": "task-29",
+      "label": "Verify test coverage for config-driven planning create paths",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-29-verify-test-coverage-for-config-driven-planning-create-paths.md"
     },
     {
       "id": "task-290",
-      "label": "wp-20",
+      "label": "wp-23",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-290-wp-20.md"
+      "path": "docs\\planning\\tasks\\core\\task-290-wp-23.md"
     },
     {
       "id": "task-291",
-      "label": "wp-21",
+      "label": "wp-24",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-291-wp-21.md"
+      "path": "docs\\planning\\tasks\\core\\task-291-wp-24.md"
     },
     {
       "id": "task-292",
-      "label": "wp-22",
+      "label": "wp-25",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-292-wp-22.md"
+      "path": "docs\\planning\\tasks\\core\\task-292-wp-25.md"
     },
     {
       "id": "task-293",
-      "label": "wp-23",
+      "label": "req-0032",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-293-wp-23.md"
+      "path": "docs\\planning\\tasks\\core\\task-293-req-0032.md"
     },
     {
       "id": "task-294",
-      "label": "wp-24",
+      "label": "req-0033",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-294-wp-24.md"
+      "path": "docs\\planning\\tasks\\core\\task-294-req-0033.md"
     },
     {
       "id": "task-295",
-      "label": "wp-25",
+      "label": "req-0034",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-295-wp-25.md"
+      "path": "docs\\planning\\tasks\\core\\task-295-req-0034.md"
     },
     {
       "id": "task-296",
-      "label": "req-0032",
+      "label": "req-0035",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-296-req-0032.md"
+      "path": "docs\\planning\\tasks\\core\\task-296-req-0035.md"
     },
     {
       "id": "task-297",
-      "label": "req-0033",
+      "label": "req-0036",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-297-req-0033.md"
+      "path": "docs\\planning\\tasks\\core\\task-297-req-0036.md"
     },
     {
       "id": "task-298",
-      "label": "req-0034",
+      "label": "req-0037",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-298-req-0034.md"
+      "path": "docs\\planning\\tasks\\core\\task-298-req-0037.md"
     },
     {
       "id": "task-299",
-      "label": "req-0035",
+      "label": "req-0038",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-299-req-0035.md"
+      "path": "docs\\planning\\tasks\\core\\task-299-req-0038.md"
     },
     {
       "id": "task-3",
@@ -994,219 +1024,213 @@
     },
     {
       "id": "task-300",
-      "label": "req-0036",
+      "label": "req-0039",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-300-req-0036.md"
-    },
-    {
-      "id": "task-3000",
-      "label": "Implement agent-facing planning config discovery",
-      "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-3000-implement-agent-facing-planning-config-discovery.md"
+      "path": "docs\\planning\\tasks\\core\\task-300-req-0039.md"
     },
     {
       "id": "task-301",
-      "label": "req-0037",
+      "label": "req-0040",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-301-req-0037.md"
+      "path": "docs\\planning\\tasks\\core\\task-301-req-0040.md"
     },
     {
       "id": "task-302",
-      "label": "req-0038",
+      "label": "req-0041",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-302-req-0038.md"
+      "path": "docs\\planning\\tasks\\core\\task-302-req-0041.md"
     },
     {
       "id": "task-303",
-      "label": "req-0039",
+      "label": "req-0042",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-303-req-0039.md"
+      "path": "docs\\planning\\tasks\\core\\task-303-req-0042.md"
     },
     {
       "id": "task-304",
-      "label": "req-0040",
+      "label": "req-0043",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-304-req-0040.md"
+      "path": "docs\\planning\\tasks\\core\\task-304-req-0043.md"
     },
     {
       "id": "task-305",
-      "label": "req-0041",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-305-req-0041.md"
+      "label": "interop",
+      "state": "closed",
+      "path": "docs\\planning\\tasks\\core\\task-305-interop.md"
     },
     {
       "id": "task-306",
-      "label": "req-0042",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-306-req-0042.md"
+      "label": "knowledge",
+      "state": "closed",
+      "path": "docs\\planning\\tasks\\core\\task-306-knowledge.md"
     },
     {
       "id": "task-307",
-      "label": "req-0043",
+      "label": "docs",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-307-req-0043.md"
+      "path": "docs\\planning\\tasks\\core\\task-307-docs.md"
     },
     {
       "id": "task-308",
-      "label": "interop",
-      "state": "closed",
-      "path": "docs\\planning\\tasks\\core\\task-308-interop.md"
+      "label": "docs2",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-308-docs2.md"
     },
     {
       "id": "task-309",
-      "label": "knowledge",
-      "state": "closed",
-      "path": "docs\\planning\\tasks\\core\\task-309-knowledge.md"
+      "label": "extracts",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-309-extracts.md"
     },
     {
       "id": "task-310",
-      "label": "docs",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-310-docs.md"
+      "label": "standard-7-migration-change-control-impl",
+      "state": "ready",
+      "path": "docs\\planning\\tasks\\core\\task-310-standard-7-migration-change-control-impl.md"
     },
     {
       "id": "task-311",
-      "label": "docs2",
+      "label": "standard-8-python-impl-impl",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-311-docs2.md"
+      "path": "docs\\planning\\tasks\\core\\task-311-standard-8-python-impl-impl.md"
     },
     {
       "id": "task-312",
-      "label": "extracts",
+      "label": "standard-9-planning-enhancement-impl",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-312-extracts.md"
+      "path": "docs\\planning\\tasks\\core\\task-312-standard-9-planning-enhancement-impl.md"
     },
     {
       "id": "task-313",
-      "label": "standard-7-migration-change-control-impl",
-      "state": "ready",
-      "path": "docs\\planning\\tasks\\core\\task-313-standard-7-migration-change-control-impl.md"
+      "label": "standard-0010-mcp-server-impl",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-313-standard-0010-mcp-server-impl.md"
     },
     {
       "id": "task-314",
-      "label": "standard-8-python-impl-impl",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-314-standard-8-python-impl-impl.md"
-    },
-    {
-      "id": "task-315",
-      "label": "standard-9-planning-enhancement-impl",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-315-standard-9-planning-enhancement-impl.md"
-    },
-    {
-      "id": "task-316",
-      "label": "standard-0010-mcp-server-impl",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-316-standard-0010-mcp-server-impl.md"
-    },
-    {
-      "id": "task-317",
       "label": "standard-11-component-arch-impl",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-317-standard-11-component-arch-impl.md"
+      "path": "docs\\planning\\tasks\\core\\task-314-standard-11-component-arch-impl.md"
     },
     {
-      "id": "task-3245",
-      "label": "Implement source/target documentation (standard-0007 req 1-3)",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-3245-implement-source-target-documentation-standard-0007-req-1-3.md"
-    },
-    {
-      "id": "task-3251",
-      "label": "Refactor section_registry to use config",
+      "id": "task-326",
+      "label": "Extend config schema for document structure",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-3251-refactor-section-registry-to-use-config.md"
+      "path": "docs\\planning\\tasks\\core\\task-326-extend-config-schema-for-document-structure.md"
     },
     {
-      "id": "task-3252",
-      "label": "Clean up req_mgr hardcoded defaults",
+      "id": "task-327",
+      "label": "Create TemplateEngine class",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-3252-clean-up-req-mgr-hardcoded-defaults.md"
+      "path": "docs\\planning\\tasks\\core\\task-327-create-templateengine-class.md"
     },
     {
-      "id": "task-3253",
-      "label": "Integrate relationship validation into managers",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-3253-integrate-relationship-validation-into-managers.md"
-    },
-    {
-      "id": "task-3258",
-      "label": "Test Task",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-3258-test-task.md"
-    },
-    {
-      "id": "task-3259",
-      "label": "API Compatibility Test",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-3259-api-compatibility-test.md"
-    },
-    {
-      "id": "task-3261",
-      "label": "Atomicity Test",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-3261-atomicity-test.md"
-    },
-    {
-      "id": "task-3262",
-      "label": "Atomicity Test",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\core\\task-3262-atomicity-test.md"
-    },
-    {
-      "id": "task-3263",
-      "label": "Atomicity Task",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-3263-atomicity-task.md"
-    },
-    {
-      "id": "task-3264",
-      "label": "Generic Task",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-3264-generic-task.md"
+      "id": "task-328",
+      "label": "Create RelationshipConfig class",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-328-create-relationshipconfig-class.md"
     },
     {
       "id": "task-329",
-      "label": "Extend config schema for document structure",
+      "label": "Refactor managers to use config",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-329-extend-config-schema-for-document-structure.md"
+      "path": "docs\\planning\\tasks\\core\\task-329-refactor-managers-to-use-config.md"
     },
     {
       "id": "task-330",
-      "label": "Create TemplateEngine class",
+      "label": "Migrate hardcoded values to config",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-330-create-templateengine-class.md"
+      "path": "docs\\planning\\tasks\\core\\task-330-migrate-hardcoded-values-to-config.md"
     },
     {
       "id": "task-331",
-      "label": "Create RelationshipConfig class",
+      "label": "Add tests for config-driven structure",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-331-create-relationshipconfig-class.md"
+      "path": "docs\\planning\\tasks\\core\\task-331-add-tests-for-config-driven-structure.md"
     },
     {
       "id": "task-332",
-      "label": "Refactor managers to use config",
-      "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-332-refactor-managers-to-use-config.md"
+      "label": "Updated Test Task",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-332-updated-test-task.md"
     },
     {
       "id": "task-333",
-      "label": "Migrate hardcoded values to config",
+      "label": "Implement agent-facing planning config discovery",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-333-migrate-hardcoded-values-to-config.md"
+      "path": "docs\\planning\\tasks\\core\\task-333-implement-agent-facing-planning-config-discovery.md"
     },
     {
       "id": "task-334",
-      "label": "Add tests for config-driven structure",
+      "label": "Refactor section_registry to use config",
       "state": "done",
-      "path": "docs\\planning\\tasks\\core\\task-334-add-tests-for-config-driven-structure.md"
+      "path": "docs\\planning\\tasks\\core\\task-334-refactor-section-registry-to-use-config.md"
     },
     {
       "id": "task-335",
-      "label": "Updated Test Task",
+      "label": "Clean up req_mgr hardcoded defaults",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-335-clean-up-req-mgr-hardcoded-defaults.md"
+    },
+    {
+      "id": "task-336",
+      "label": "Integrate relationship validation into managers",
+      "state": "done",
+      "path": "docs\\planning\\tasks\\core\\task-336-integrate-relationship-validation-into-managers.md"
+    },
+    {
+      "id": "task-337",
+      "label": "Test Task",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-337-test-task.md"
+    },
+    {
+      "id": "task-338",
+      "label": "API Compatibility Test",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-338-api-compatibility-test.md"
+    },
+    {
+      "id": "task-339",
+      "label": "Atomicity Test",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-339-atomicity-test.md"
+    },
+    {
+      "id": "task-340",
+      "label": "Atomicity Test",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-340-atomicity-test.md"
+    },
+    {
+      "id": "task-341",
+      "label": "Generic Task",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\core\\task-335-updated-test-task.md"
+      "path": "docs\\planning\\tasks\\core\\task-341-generic-task.md"
+    },
+    {
+      "id": "task-342",
+      "label": "Implement source/target documentation (standard-0007 req 1-3)",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-342-implement-source-target-documentation-standard-0007-req-1-3.md"
+    },
+    {
+      "id": "task-343",
+      "label": "Atomicity Task",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\core\\task-343-atomicity-task.md"
+    },
+    {
+      "id": "task-344",
+      "label": "MCP Test Task",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-344-mcp-test-task.md"
+    },
+    {
+      "id": "task-345",
+      "label": "Updated Test Task",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\core\\task-345-updated-test-task.md"
     },
     {
       "id": "task-4",
@@ -1239,808 +1263,808 @@
       "path": "docs\\planning\\tasks\\core\\task-9-refactor-events-py-into-modular-handlers.md"
     },
     {
-      "id": "task-158",
+      "id": "task-155",
       "label": "[PKT-DSC-001](task-0158): Event Subscriber",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\discord\\task-158-pkt-dsc-001-task-0158-event-subscriber.md"
-    },
-    {
-      "id": "task-159",
-      "label": "[PKT-DSC-002](task-0159): Release Summary Publishing",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\discord\\task-159-pkt-dsc-002-task-0159-release-summary-publishing.md"
-    },
-    {
-      "id": "task-160",
-      "label": "[PKT-DSC-003](task-0160): Approval Publishing/Response Handling",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\discord\\task-160-pkt-dsc-003-task-0160-approval-publishing-response-handling.md"
-    },
-    {
-      "id": "task-161",
-      "label": "[PKT-DSC-004](task-0161): Lifecycle/Migration Notices",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\discord\\task-161-pkt-dsc-004-task-0161-lifecycle-migration-notices.md"
-    },
-    {
-      "id": "task-168",
-      "label": "[PKT-DIS-001](task-0168): Locator Provider Contract",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\discovery\\task-168-pkt-dis-001-task-0168-locator-provider-contract.md"
-    },
-    {
-      "id": "task-169",
-      "label": "[PKT-DIS-002](task-0169): Static Registry Provider",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\discovery\\task-169-pkt-dis-002-task-0169-static-registry-provider.md"
-    },
-    {
-      "id": "task-319",
-      "label": "[PKT-DIS-003](task-0170): Optional Provider Seams",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\discovery\\task-319-pkt-dis-003-task-0170-optional-provider-seams.md"
-    },
-    {
-      "id": "task-320",
-      "label": "[PKT-EVT-001](task-0171): Node Event Families",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\eventing\\task-320-pkt-evt-001-task-0171-node-event-families.md"
-    },
-    {
-      "id": "task-321",
-      "label": "[PKT-EVT-002](task-0172): Control Request Contracts",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\eventing\\task-321-pkt-evt-002-task-0172-control-request-contracts.md"
-    },
-    {
-      "id": "task-322",
-      "label": "[PKT-EXT-001](task-0174): External Connector Contract and Mock",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\external-tools\\task-322-pkt-ext-001-task-0174-external-connector-contract-and-mock.md"
-    },
-    {
-      "id": "task-323",
-      "label": "Phase 1-11 Build Books",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\implementation-docs\\task-323-phase-1-11-build-books.md"
-    },
-    {
-      "id": "task-324",
-      "label": "Provider Plans and Runbooks",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\implementation-docs\\task-324-provider-plans-and-runbooks.md"
-    },
-    {
-      "id": "task-325",
-      "label": "Refactor Docs",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\implementation-docs\\task-325-refactor-docs.md"
-    },
-    {
-      "id": "task-326",
-      "label": "Testing and Status Reports",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\implementation-docs\\task-326-testing-and-status-reports.md"
-    },
-    {
-      "id": "task-327",
-      "label": "Reference Resolution",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\implementation-docs\\task-327-reference-resolution.md"
-    },
-    {
-      "id": "task-328",
-      "label": "Final Validation and Cleanup",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\implementation-docs\\task-328-final-validation-and-cleanup.md"
-    },
-    {
-      "id": "task-67",
-      "label": "[PKT-JOB-001](task-0067): Job Records and Store",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\jobs\\task-67-pkt-job-001-task-0067-job-records-and-store.md"
-    },
-    {
-      "id": "task-68",
-      "label": "[PKT-JOB-002](task-0068): State Machine",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\jobs\\task-68-pkt-job-002-task-0068-state-machine.md"
-    },
-    {
-      "id": "task-69",
-      "label": "[PKT-JOB-003](task-0069): Workflow Profiles",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\jobs\\task-69-pkt-job-003-task-0069-workflow-profiles.md"
-    },
-    {
-      "id": "task-70",
-      "label": "[PKT-JOB-004](task-0070): Packet Runner",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\jobs\\task-70-pkt-job-004-task-0070-packet-runner.md"
-    },
-    {
-      "id": "task-71",
-      "label": "[PKT-JOB-005](task-0071): Approval Handling",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\jobs\\task-71-pkt-job-005-task-0071-approval-handling.md"
-    },
-    {
-      "id": "task-72",
-      "label": "[PKT-JOB-006](task-0072): Release Bridge",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\jobs\\task-72-pkt-job-006-task-0072-release-bridge.md"
-    },
-    {
-      "id": "task-73",
-      "label": "[PKT-JOB-007](task-0073): Job Validation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\jobs\\task-73-pkt-job-007-task-0073-job-validation.md"
-    },
-    {
-      "id": "task-74",
-      "label": "[PKT-JOB-008](task-0074): Job Monitoring",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\jobs\\task-74-pkt-job-008-task-0074-job-monitoring.md"
-    },
-    {
-      "id": "task-75",
-      "label": "[PKT-JOB-009](task-0075): Job Cancellation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\jobs\\task-75-pkt-job-009-task-0075-job-cancellation.md"
-    },
-    {
-      "id": "task-76",
-      "label": "[PKT-JOB-010](task-0076): Job Documentation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\jobs\\task-76-pkt-job-010-task-0076-job-documentation.md"
-    },
-    {
-      "id": "task-77",
-      "label": "[PKT-JOB-011](task-0077): Job Testing",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\jobs\\task-77-pkt-job-011-task-0077-job-testing.md"
-    },
-    {
-      "id": "task-45",
-      "label": "[PKT-LFC-001](task-0045): Installed-State Detector",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\lifecycle\\task-45-pkt-lfc-001-task-0045-installed-state-detector.md"
-    },
-    {
-      "id": "task-46",
-      "label": "[PKT-LFC-002](task-0046): Lifecycle Manifest and Checkpoint Writer",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\lifecycle\\task-46-pkt-lfc-002-task-0046-lifecycle-manifest-and-checkpoint-writer.md"
-    },
-    {
-      "id": "task-47",
-      "label": "[PKT-LFC-003](task-0047): Fresh Install Apply/Validate",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\lifecycle\\task-47-pkt-lfc-003-task-0047-fresh-install-apply-validate.md"
-    },
-    {
-      "id": "task-48",
-      "label": "[PKT-LFC-004](task-0048): Update Dispatch and Version Module Selection",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\lifecycle\\task-48-pkt-lfc-004-task-0048-update-dispatch-and-version-module-selection.md"
-    },
-    {
-      "id": "task-49",
-      "label": "[PKT-LFC-005](task-0049): Legacy Cutover",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\lifecycle\\task-49-pkt-lfc-005-task-0049-legacy-cutover.md"
-    },
-    {
-      "id": "task-50",
-      "label": "[PKT-LFC-006](task-0050): Uninstall Current AUDiaGentic",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\lifecycle\\task-50-pkt-lfc-006-task-0050-uninstall-current-audiagentic.md"
-    },
-    {
-      "id": "task-51",
-      "label": "[PKT-LFC-007](task-0051): Document Migration Outcomes and Reports",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\lifecycle\\task-51-pkt-lfc-007-task-0051-document-migration-outcomes-and-reports.md"
-    },
-    {
-      "id": "task-52",
-      "label": "[PKT-LFC-010](task-0052): Preserve Provider Auto-Install Policy Fields",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\lifecycle\\task-52-pkt-lfc-010-task-0052-preserve-provider-auto-install-policy-fields.md"
-    },
-    {
-      "id": "task-53",
-      "label": "[PKT-LFC-011](task-0053): Installable Baseline Inventory and Sync-Mode Classification",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\lifecycle\\task-53-pkt-lfc-011-task-0053-installable-baseline-inventory-and-sync-mode-classification.md"
-    },
-    {
-      "id": "task-54",
-      "label": "[PKT-LFC-012](task-0054): Shared Baseline Sync Engine for Lifecycle and Bootstrap",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\lifecycle\\task-54-pkt-lfc-012-task-0054-shared-baseline-sync-engine-for-lifecycle-and-bootstrap.md"
-    },
-    {
-      "id": "task-55",
-      "label": "[PKT-LFC-013](task-0055): Converge Fresh-Install and Release-Bootstrap on Baseline Sync",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\lifecycle\\task-55-pkt-lfc-013-task-0055-converge-fresh-install-and-release-bootstrap-on-baseline-sync.md"
-    },
-    {
-      "id": "task-162",
-      "label": "[PKT-MIG-001](task-0162): Migration Fixtures and Examples",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\migration\\task-162-pkt-mig-001-task-0162-migration-fixtures-and-examples.md"
-    },
-    {
-      "id": "task-163",
-      "label": "[PKT-MIG-002](task-0163): Provider Migration Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\migration\\task-163-pkt-mig-002-task-0163-provider-migration-rules.md"
-    },
-    {
-      "id": "task-164",
-      "label": "[PKT-MIG-003](task-0164): Cutover Runbooks",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\migration\\task-164-pkt-mig-003-task-0164-cutover-runbooks.md"
-    },
-    {
-      "id": "task-165",
-      "label": "[PKT-NOD-001](task-0165): Node Descriptor and Heartbeat",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\node-execution\\task-165-pkt-nod-001-task-0165-node-descriptor-and-heartbeat.md"
-    },
-    {
-      "id": "task-166",
-      "label": "[PKT-NOD-002](task-0166): Node-Local Status Persistence",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\node-execution\\task-166-pkt-nod-002-task-0166-node-local-status-persistence.md"
-    },
-    {
-      "id": "task-167",
-      "label": "[PKT-NOD-003](task-0167): Node Runtime Module Skeleton",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\node-execution\\task-167-pkt-nod-003-task-0167-node-runtime-module-skeleton.md"
-    },
-    {
-      "id": "task-100",
-      "label": "[PKT-PRV-023](task-0100): Provider Plugin System",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-100-pkt-prv-023-task-0100-provider-plugin-system.md"
-    },
-    {
-      "id": "task-101",
-      "label": "[PKT-PRV-024](task-0101): Provider API Gateway",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-101-pkt-prv-024-task-0101-provider-api-gateway.md"
-    },
-    {
-      "id": "task-102",
-      "label": "[PKT-PRV-025](task-0102): Provider Webhook Support",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-102-pkt-prv-025-task-0102-provider-webhook-support.md"
-    },
-    {
-      "id": "task-103",
-      "label": "[PKT-PRV-026](task-0103): Provider Event Bus",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-103-pkt-prv-026-task-0103-provider-event-bus.md"
-    },
-    {
-      "id": "task-104",
-      "label": "[PKT-PRV-027](task-0104): Provider Message Queue",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\providers\\task-104-pkt-prv-027-task-0104-provider-message-queue.md"
-    },
-    {
-      "id": "task-105",
-      "label": "[PKT-PRV-028](task-0105): Provider Queue Management",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-105-pkt-prv-028-task-0105-provider-queue-management.md"
-    },
-    {
-      "id": "task-106",
-      "label": "[PKT-PRV-029](task-0106): Provider Batch Processing",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\providers\\task-106-pkt-prv-029-task-0106-provider-batch-processing.md"
-    },
-    {
-      "id": "task-107",
-      "label": "[PKT-PRV-030](task-0107): Provider Stream Processing",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-107-pkt-prv-030-task-0107-provider-stream-processing.md"
-    },
-    {
-      "id": "task-108",
-      "label": "[PKT-PRV-031](task-0108): Provider Async Support",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-108-pkt-prv-031-task-0108-provider-async-support.md"
-    },
-    {
-      "id": "task-109",
-      "label": "[PKT-PRV-032](task-0109): Provider Sync Support",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-109-pkt-prv-032-task-0109-provider-sync-support.md"
-    },
-    {
-      "id": "task-110",
-      "label": "[PKT-PRV-033](task-0110): Provider Timeout Handling",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-110-pkt-prv-033-task-0110-provider-timeout-handling.md"
-    },
-    {
-      "id": "task-111",
-      "label": "[PKT-PRV-034](task-0111): Provider Retry Logic",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-111-pkt-prv-034-task-0111-provider-retry-logic.md"
-    },
-    {
-      "id": "task-112",
-      "label": "[PKT-PRV-035](task-0112): Provider Circuit Breaker",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-112-pkt-prv-035-task-0112-provider-circuit-breaker.md"
-    },
-    {
-      "id": "task-113",
-      "label": "[PKT-PRV-036](task-0113): Provider Bulkhead",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\providers\\task-113-pkt-prv-036-task-0113-provider-bulkhead.md"
-    },
-    {
-      "id": "task-114",
-      "label": "[PKT-PRV-037](task-0114): Provider Load Balancing",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-114-pkt-prv-037-task-0114-provider-load-balancing.md"
-    },
-    {
-      "id": "task-115",
-      "label": "[PKT-PRV-038](task-0115): Provider Connection Pooling",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\providers\\task-115-pkt-prv-038-task-0115-provider-connection-pooling.md"
-    },
-    {
-      "id": "task-117",
-      "label": "[PKT-PRV-039](task-0117): Provider SSL/TLS Support",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-117-pkt-prv-039-task-0117-provider-ssl-tls-support.md"
-    },
-    {
-      "id": "task-118",
-      "label": "[PKT-PRV-040](task-0118): Provider Authentication",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-118-pkt-prv-040-task-0118-provider-authentication.md"
-    },
-    {
-      "id": "task-119",
-      "label": "[PKT-PRV-041](task-0119): Provider Authorization",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-119-pkt-prv-041-task-0119-provider-authorization.md"
-    },
-    {
-      "id": "task-120",
-      "label": "[PKT-PRV-042](task-0120): Provider Audit Logging",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-120-pkt-prv-042-task-0120-provider-audit-logging.md"
-    },
-    {
-      "id": "task-121",
-      "label": "[PKT-PRV-043](task-0121): Provider Compliance Checks",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-121-pkt-prv-043-task-0121-provider-compliance-checks.md"
-    },
-    {
-      "id": "task-122",
-      "label": "[PKT-PRV-044](task-0122): Provider Policy Enforcement",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\providers\\task-122-pkt-prv-044-task-0122-provider-policy-enforcement.md"
-    },
-    {
-      "id": "task-123",
-      "label": "[PKT-PRV-045](task-0123): Provider Data Encryption",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-123-pkt-prv-045-task-0123-provider-data-encryption.md"
-    },
-    {
-      "id": "task-124",
-      "label": "[PKT-PRV-046](task-0124): Provider Data Masking",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\providers\\task-124-pkt-prv-046-task-0124-provider-data-masking.md"
-    },
-    {
-      "id": "task-125",
-      "label": "[PKT-PRV-047](task-0125): Provider Data Retention",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-125-pkt-prv-047-task-0125-provider-data-retention.md"
-    },
-    {
-      "id": "task-126",
-      "label": "[PKT-PRV-048](task-0126): Provider Data Export",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-126-pkt-prv-048-task-0126-provider-data-export.md"
-    },
-    {
-      "id": "task-127",
-      "label": "[PKT-PRV-049](task-0127): Provider Data Import",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-127-pkt-prv-049-task-0127-provider-data-import.md"
-    },
-    {
-      "id": "task-128",
-      "label": "[PKT-PRV-050](task-0128): Provider Data Transformation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-128-pkt-prv-050-task-0128-provider-data-transformation.md"
-    },
-    {
-      "id": "task-129",
-      "label": "[PKT-PRV-051](task-0129): Provider Data Validation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-129-pkt-prv-051-task-0129-provider-data-validation.md"
-    },
-    {
-      "id": "task-130",
-      "label": "[PKT-PRV-052](task-0130): Provider Data Quality",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-130-pkt-prv-052-task-0130-provider-data-quality.md"
-    },
-    {
-      "id": "task-131",
-      "label": "[PKT-PRV-053](task-0131): Provider Data Governance",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-131-pkt-prv-053-task-0131-provider-data-governance.md"
-    },
-    {
-      "id": "task-132",
-      "label": "[PKT-PRV-054](task-0132): Provider Data Lineage",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-132-pkt-prv-054-task-0132-provider-data-lineage.md"
-    },
-    {
-      "id": "task-133",
-      "label": "[PKT-PRV-055](task-0133): Provider Data Catalog",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-133-pkt-prv-055-task-0133-provider-data-catalog.md"
-    },
-    {
-      "id": "task-134",
-      "label": "[PKT-PRV-056](task-0134): Provider Data Dictionary",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-134-pkt-prv-056-task-0134-provider-data-dictionary.md"
-    },
-    {
-      "id": "task-135",
-      "label": "[PKT-PRV-057](task-0135): Provider Data Standards",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-135-pkt-prv-057-task-0135-provider-data-standards.md"
-    },
-    {
-      "id": "task-136",
-      "label": "[PKT-PRV-058](task-0136): Provider Data Quality Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-136-pkt-prv-058-task-0136-provider-data-quality-rules.md"
-    },
-    {
-      "id": "task-137",
-      "label": "[PKT-PRV-059](task-0137): Provider Data Profiling",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-137-pkt-prv-059-task-0137-provider-data-profiling.md"
-    },
-    {
-      "id": "task-138",
-      "label": "[PKT-PRV-060](task-0138): Provider Data Anomaly Detection",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-138-pkt-prv-060-task-0138-provider-data-anomaly-detection.md"
-    },
-    {
-      "id": "task-139",
-      "label": "[PKT-PRV-061](task-0139): Provider Data Masking Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-139-pkt-prv-061-task-0139-provider-data-masking-rules.md"
-    },
-    {
-      "id": "task-140",
-      "label": "[PKT-PRV-062](task-0140): Provider Data Retention Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-140-pkt-prv-062-task-0140-provider-data-retention-rules.md"
-    },
-    {
-      "id": "task-141",
-      "label": "[PKT-PRV-063](task-0141): Provider Data Export Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-141-pkt-prv-063-task-0141-provider-data-export-rules.md"
-    },
-    {
-      "id": "task-142",
-      "label": "[PKT-PRV-064](task-0142): Provider Data Import Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-142-pkt-prv-064-task-0142-provider-data-import-rules.md"
-    },
-    {
-      "id": "task-143",
-      "label": "[PKT-PRV-065](task-0143): Provider Data Transformation Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-143-pkt-prv-065-task-0143-provider-data-transformation-rules.md"
-    },
-    {
-      "id": "task-144",
-      "label": "[PKT-PRV-066](task-0144): Provider Data Validation Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-144-pkt-prv-066-task-0144-provider-data-validation-rules.md"
-    },
-    {
-      "id": "task-145",
-      "label": "[PKT-PRV-067](task-0145): Provider Data Quality Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-145-pkt-prv-067-task-0145-provider-data-quality-rules.md"
-    },
-    {
-      "id": "task-146",
-      "label": "[PKT-PRV-068](task-0146): Provider Data Governance Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-146-pkt-prv-068-task-0146-provider-data-governance-rules.md"
-    },
-    {
-      "id": "task-147",
-      "label": "[PKT-PRV-069](task-0147): Provider Data Lineage Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-147-pkt-prv-069-task-0147-provider-data-lineage-rules.md"
-    },
-    {
-      "id": "task-148",
-      "label": "[PKT-PRV-070](task-0148): Provider Data Catalog Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-148-pkt-prv-070-task-0148-provider-data-catalog-rules.md"
-    },
-    {
-      "id": "task-149",
-      "label": "[PKT-PRV-071](task-0149): Provider Data Dictionary Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-149-pkt-prv-071-task-0149-provider-data-dictionary-rules.md"
-    },
-    {
-      "id": "task-150",
-      "label": "[PKT-PRV-072](task-0150): Provider Data Standards Rules",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-150-pkt-prv-072-task-0150-provider-data-standards-rules.md"
-    },
-    {
-      "id": "task-151",
-      "label": "[PKT-PRV-073](task-0151): Provider Data Quality Monitoring",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-151-pkt-prv-073-task-0151-provider-data-quality-monitoring.md"
-    },
-    {
-      "id": "task-152",
-      "label": "[PKT-PRV-074](task-0152): Provider Data Governance Monitoring",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-152-pkt-prv-074-task-0152-provider-data-governance-monitoring.md"
-    },
-    {
-      "id": "task-153",
-      "label": "[PKT-PRV-075](task-0153): Provider Data Lineage Monitoring",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-153-pkt-prv-075-task-0153-provider-data-lineage-monitoring.md"
-    },
-    {
-      "id": "task-154",
-      "label": "[PKT-PRV-076](task-0154): Provider Data Catalog Monitoring",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-154-pkt-prv-076-task-0154-provider-data-catalog-monitoring.md"
-    },
-    {
-      "id": "task-155",
-      "label": "[PKT-PRV-077](task-0155): Provider Data Dictionary Monitoring",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-155-pkt-prv-077-task-0155-provider-data-dictionary-monitoring.md"
+      "path": "docs\\planning\\tasks\\discord\\task-155-pkt-dsc-001-task-0158-event-subscriber.md"
     },
     {
       "id": "task-156",
-      "label": "[PKT-PRV-078](task-0156): Provider Data Standards Monitoring",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-156-pkt-prv-078-task-0156-provider-data-standards-monitoring.md"
+      "label": "[PKT-DSC-002](task-0159): Release Summary Publishing",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\discord\\task-156-pkt-dsc-002-task-0159-release-summary-publishing.md"
     },
     {
       "id": "task-157",
-      "label": "[PKT-SRV-001](task-0157): Provider Service Seam",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-157-pkt-srv-001-task-0157-provider-service-seam.md"
-    },
-    {
-      "id": "task-78",
-      "label": "[PKT-PRV-001](task-0078): Provider Registry",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-78-pkt-prv-001-task-0078-provider-registry.md"
-    },
-    {
-      "id": "task-79",
-      "label": "[PKT-PRV-002](task-0079): Health Checks",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-79-pkt-prv-002-task-0079-health-checks.md"
-    },
-    {
-      "id": "task-80",
-      "label": "[PKT-PRV-003](task-0080): Provider Selection",
+      "label": "[PKT-DSC-003](task-0160): Approval Publishing/Response Handling",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\providers\\task-80-pkt-prv-003-task-0080-provider-selection.md"
+      "path": "docs\\planning\\tasks\\discord\\task-157-pkt-dsc-003-task-0160-approval-publishing-response-handling.md"
     },
     {
-      "id": "task-81",
-      "label": "[PKT-PRV-004](task-0081): Provider Adapters",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-81-pkt-prv-004-task-0081-provider-adapters.md"
-    },
-    {
-      "id": "task-82",
-      "label": "[PKT-PRV-005](task-0082): Service Seam",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-82-pkt-prv-005-task-0082-service-seam.md"
-    },
-    {
-      "id": "task-83",
-      "label": "[PKT-PRV-006](task-0083): Provider Implementation Template",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-83-pkt-prv-006-task-0083-provider-implementation-template.md"
-    },
-    {
-      "id": "task-84",
-      "label": "[PKT-PRV-007](task-0084): Provider Configuration Schema",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-84-pkt-prv-007-task-0084-provider-configuration-schema.md"
-    },
-    {
-      "id": "task-85",
-      "label": "[PKT-PRV-008](task-0085): Provider Documentation",
+      "id": "task-158",
+      "label": "[PKT-DSC-004](task-0161): Lifecycle/Migration Notices",
       "state": "cancelled",
-      "path": "docs\\planning\\tasks\\providers\\task-85-pkt-prv-008-task-0085-provider-documentation.md"
+      "path": "docs\\planning\\tasks\\discord\\task-158-pkt-dsc-004-task-0161-lifecycle-migration-notices.md"
     },
     {
-      "id": "task-86",
-      "label": "[PKT-PRV-009](task-0086): Provider Testing Framework",
+      "id": "task-165",
+      "label": "[PKT-DIS-001](task-0168): Locator Provider Contract",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-86-pkt-prv-009-task-0086-provider-testing-framework.md"
+      "path": "docs\\planning\\tasks\\discovery\\task-165-pkt-dis-001-task-0168-locator-provider-contract.md"
     },
     {
-      "id": "task-87",
-      "label": "[PKT-PRV-010](task-0087): Provider Performance Benchmarks",
+      "id": "task-166",
+      "label": "[PKT-DIS-002](task-0169): Static Registry Provider",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-87-pkt-prv-010-task-0087-provider-performance-benchmarks.md"
+      "path": "docs\\planning\\tasks\\discovery\\task-166-pkt-dis-002-task-0169-static-registry-provider.md"
     },
     {
-      "id": "task-88",
-      "label": "[PKT-PRV-011](task-0088): Provider Security Audit",
+      "id": "task-316",
+      "label": "[PKT-DIS-003](task-0170): Optional Provider Seams",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-88-pkt-prv-011-task-0088-provider-security-audit.md"
+      "path": "docs\\planning\\tasks\\discovery\\task-316-pkt-dis-003-task-0170-optional-provider-seams.md"
     },
     {
-      "id": "task-89",
-      "label": "[PKT-PRV-012](task-0089): Provider Version Management",
+      "id": "task-317",
+      "label": "[PKT-EVT-001](task-0171): Node Event Families",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-89-pkt-prv-012-task-0089-provider-version-management.md"
+      "path": "docs\\planning\\tasks\\eventing\\task-317-pkt-evt-001-task-0171-node-event-families.md"
     },
     {
-      "id": "task-90",
-      "label": "[PKT-PRV-013](task-0090): Provider Feature Flags",
+      "id": "task-318",
+      "label": "[PKT-EVT-002](task-0172): Control Request Contracts",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-90-pkt-prv-013-task-0090-provider-feature-flags.md"
+      "path": "docs\\planning\\tasks\\eventing\\task-318-pkt-evt-002-task-0172-control-request-contracts.md"
     },
     {
-      "id": "task-91",
-      "label": "[PKT-PRV-014](task-0091): Provider Rate Limiting",
+      "id": "task-319",
+      "label": "[PKT-EXT-001](task-0174): External Connector Contract and Mock",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-91-pkt-prv-014-task-0091-provider-rate-limiting.md"
+      "path": "docs\\planning\\tasks\\external-tools\\task-319-pkt-ext-001-task-0174-external-connector-contract-and-mock.md"
     },
     {
-      "id": "task-92",
-      "label": "[PKT-PRV-015](task-0092): Provider Caching",
+      "id": "task-320",
+      "label": "Phase 1-11 Build Books",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-92-pkt-prv-015-task-0092-provider-caching.md"
+      "path": "docs\\planning\\tasks\\implementation-docs\\task-320-phase-1-11-build-books.md"
     },
     {
-      "id": "task-93",
-      "label": "[PKT-PRV-016](task-0093): Provider Error Handling",
+      "id": "task-321",
+      "label": "Provider Plans and Runbooks",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-93-pkt-prv-016-task-0093-provider-error-handling.md"
+      "path": "docs\\planning\\tasks\\implementation-docs\\task-321-provider-plans-and-runbooks.md"
     },
     {
-      "id": "task-94",
-      "label": "[PKT-PRV-017](task-0094): Provider Logging",
+      "id": "task-322",
+      "label": "Refactor Docs",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-94-pkt-prv-017-task-0094-provider-logging.md"
+      "path": "docs\\planning\\tasks\\implementation-docs\\task-322-refactor-docs.md"
     },
     {
-      "id": "task-95",
-      "label": "[PKT-PRV-018](task-0095): Provider Metrics",
+      "id": "task-323",
+      "label": "Testing and Status Reports",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-95-pkt-prv-018-task-0095-provider-metrics.md"
+      "path": "docs\\planning\\tasks\\implementation-docs\\task-323-testing-and-status-reports.md"
     },
     {
-      "id": "task-96",
-      "label": "[PKT-PRV-019](task-0096): Provider Tracing",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\providers\\task-96-pkt-prv-019-task-0096-provider-tracing.md"
-    },
-    {
-      "id": "task-97",
-      "label": "[PKT-PRV-020](task-0097): Provider Configuration Management",
+      "id": "task-324",
+      "label": "Reference Resolution",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-97-pkt-prv-020-task-0097-provider-configuration-management.md"
+      "path": "docs\\planning\\tasks\\implementation-docs\\task-324-reference-resolution.md"
     },
     {
-      "id": "task-98",
-      "label": "[PKT-PRV-021](task-0098): Provider Discovery",
-      "state": "cancelled",
-      "path": "docs\\planning\\tasks\\providers\\task-98-pkt-prv-021-task-0098-provider-discovery.md"
-    },
-    {
-      "id": "task-99",
-      "label": "[PKT-PRV-022](task-0099): Provider Lifecycle",
+      "id": "task-325",
+      "label": "Final Validation and Cleanup",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\providers\\task-99-pkt-prv-022-task-0099-provider-lifecycle.md"
-    },
-    {
-      "id": "task-56",
-      "label": "[PKT-RLS-001](task-0056): Fragment Capture",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\release\\task-56-pkt-rls-001-task-0056-fragment-capture.md"
-    },
-    {
-      "id": "task-57",
-      "label": "[PKT-RLS-002](task-0057): Sync with Locking and Idempotency",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\release\\task-57-pkt-rls-002-task-0057-sync-with-locking-and-idempotency.md"
-    },
-    {
-      "id": "task-58",
-      "label": "[PKT-RLS-003](task-0058): Current Release Summary",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\release\\task-58-pkt-rls-003-task-0058-current-release-summary.md"
-    },
-    {
-      "id": "task-59",
-      "label": "[PKT-RLS-004](task-0059): Audit/Check-in Summary Generation",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\release\\task-59-pkt-rls-004-task-0059-audit-check-in-summary-generation.md"
-    },
-    {
-      "id": "task-60",
-      "label": "[PKT-RLS-005](task-0060): Finalization with Exactly-Once Historical Append",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\release\\task-60-pkt-rls-005-task-0060-finalization-with-exactly-once-historical-append.md"
-    },
-    {
-      "id": "task-61",
-      "label": "[PKT-RLS-006](task-0061): Release Please Baseline Workflow",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\release\\task-61-pkt-rls-006-task-0061-release-please-baseline-workflow.md"
-    },
-    {
-      "id": "task-62",
-      "label": "[PKT-RLS-007](task-0062): Release Please Config Management",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\release\\task-62-pkt-rls-007-task-0062-release-please-config-management.md"
-    },
-    {
-      "id": "task-63",
-      "label": "[PKT-RLS-008](task-0063): Ledger Integration",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\release\\task-63-pkt-rls-008-task-0063-ledger-integration.md"
-    },
-    {
-      "id": "task-64",
-      "label": "[PKT-RLS-009](task-0064): Audit Trail",
-      "state": "draft",
-      "path": "docs\\planning\\tasks\\release\\task-64-pkt-rls-009-task-0064-audit-trail.md"
+      "path": "docs\\planning\\tasks\\implementation-docs\\task-325-final-validation-and-cleanup.md"
     },
     {
       "id": "task-65",
-      "label": "[PKT-RLS-010](task-0065): Release Validation",
+      "label": "[PKT-JOB-001](task-0067): Job Records and Store",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\release\\task-65-pkt-rls-010-task-0065-release-validation.md"
+      "path": "docs\\planning\\tasks\\jobs\\task-65-pkt-job-001-task-0067-job-records-and-store.md"
     },
     {
       "id": "task-66",
+      "label": "[PKT-JOB-002](task-0068): State Machine",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-66-pkt-job-002-task-0068-state-machine.md"
+    },
+    {
+      "id": "task-67",
+      "label": "[PKT-JOB-003](task-0069): Workflow Profiles",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-67-pkt-job-003-task-0069-workflow-profiles.md"
+    },
+    {
+      "id": "task-68",
+      "label": "[PKT-JOB-004](task-0070): Packet Runner",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-68-pkt-job-004-task-0070-packet-runner.md"
+    },
+    {
+      "id": "task-69",
+      "label": "[PKT-JOB-005](task-0071): Approval Handling",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-69-pkt-job-005-task-0071-approval-handling.md"
+    },
+    {
+      "id": "task-70",
+      "label": "[PKT-JOB-006](task-0072): Release Bridge",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-70-pkt-job-006-task-0072-release-bridge.md"
+    },
+    {
+      "id": "task-71",
+      "label": "[PKT-JOB-007](task-0073): Job Validation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-71-pkt-job-007-task-0073-job-validation.md"
+    },
+    {
+      "id": "task-72",
+      "label": "[PKT-JOB-008](task-0074): Job Monitoring",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-72-pkt-job-008-task-0074-job-monitoring.md"
+    },
+    {
+      "id": "task-73",
+      "label": "[PKT-JOB-009](task-0075): Job Cancellation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-73-pkt-job-009-task-0075-job-cancellation.md"
+    },
+    {
+      "id": "task-74",
+      "label": "[PKT-JOB-010](task-0076): Job Documentation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-74-pkt-job-010-task-0076-job-documentation.md"
+    },
+    {
+      "id": "task-75",
+      "label": "[PKT-JOB-011](task-0077): Job Testing",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\jobs\\task-75-pkt-job-011-task-0077-job-testing.md"
+    },
+    {
+      "id": "task-43",
+      "label": "[PKT-LFC-001](task-0045): Installed-State Detector",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-43-pkt-lfc-001-task-0045-installed-state-detector.md"
+    },
+    {
+      "id": "task-44",
+      "label": "[PKT-LFC-002](task-0046): Lifecycle Manifest and Checkpoint Writer",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-44-pkt-lfc-002-task-0046-lifecycle-manifest-and-checkpoint-writer.md"
+    },
+    {
+      "id": "task-45",
+      "label": "[PKT-LFC-003](task-0047): Fresh Install Apply/Validate",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-45-pkt-lfc-003-task-0047-fresh-install-apply-validate.md"
+    },
+    {
+      "id": "task-46",
+      "label": "[PKT-LFC-004](task-0048): Update Dispatch and Version Module Selection",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-46-pkt-lfc-004-task-0048-update-dispatch-and-version-module-selection.md"
+    },
+    {
+      "id": "task-47",
+      "label": "[PKT-LFC-005](task-0049): Legacy Cutover",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-47-pkt-lfc-005-task-0049-legacy-cutover.md"
+    },
+    {
+      "id": "task-48",
+      "label": "[PKT-LFC-006](task-0050): Uninstall Current AUDiaGentic",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-48-pkt-lfc-006-task-0050-uninstall-current-audiagentic.md"
+    },
+    {
+      "id": "task-49",
+      "label": "[PKT-LFC-007](task-0051): Document Migration Outcomes and Reports",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-49-pkt-lfc-007-task-0051-document-migration-outcomes-and-reports.md"
+    },
+    {
+      "id": "task-50",
+      "label": "[PKT-LFC-010](task-0052): Preserve Provider Auto-Install Policy Fields",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-50-pkt-lfc-010-task-0052-preserve-provider-auto-install-policy-fields.md"
+    },
+    {
+      "id": "task-51",
+      "label": "[PKT-LFC-011](task-0053): Installable Baseline Inventory and Sync-Mode Classification",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-51-pkt-lfc-011-task-0053-installable-baseline-inventory-and-sync-mode-classification.md"
+    },
+    {
+      "id": "task-52",
+      "label": "[PKT-LFC-012](task-0054): Shared Baseline Sync Engine for Lifecycle and Bootstrap",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-52-pkt-lfc-012-task-0054-shared-baseline-sync-engine-for-lifecycle-and-bootstrap.md"
+    },
+    {
+      "id": "task-53",
+      "label": "[PKT-LFC-013](task-0055): Converge Fresh-Install and Release-Bootstrap on Baseline Sync",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\lifecycle\\task-53-pkt-lfc-013-task-0055-converge-fresh-install-and-release-bootstrap-on-baseline-sync.md"
+    },
+    {
+      "id": "task-159",
+      "label": "[PKT-MIG-001](task-0162): Migration Fixtures and Examples",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\migration\\task-159-pkt-mig-001-task-0162-migration-fixtures-and-examples.md"
+    },
+    {
+      "id": "task-160",
+      "label": "[PKT-MIG-002](task-0163): Provider Migration Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\migration\\task-160-pkt-mig-002-task-0163-provider-migration-rules.md"
+    },
+    {
+      "id": "task-161",
+      "label": "[PKT-MIG-003](task-0164): Cutover Runbooks",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\migration\\task-161-pkt-mig-003-task-0164-cutover-runbooks.md"
+    },
+    {
+      "id": "task-162",
+      "label": "[PKT-NOD-001](task-0165): Node Descriptor and Heartbeat",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\node-execution\\task-162-pkt-nod-001-task-0165-node-descriptor-and-heartbeat.md"
+    },
+    {
+      "id": "task-163",
+      "label": "[PKT-NOD-002](task-0166): Node-Local Status Persistence",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\node-execution\\task-163-pkt-nod-002-task-0166-node-local-status-persistence.md"
+    },
+    {
+      "id": "task-164",
+      "label": "[PKT-NOD-003](task-0167): Node Runtime Module Skeleton",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\node-execution\\task-164-pkt-nod-003-task-0167-node-runtime-module-skeleton.md"
+    },
+    {
+      "id": "task-100",
+      "label": "[PKT-PRV-025](task-0102): Provider Webhook Support",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-100-pkt-prv-025-task-0102-provider-webhook-support.md"
+    },
+    {
+      "id": "task-101",
+      "label": "[PKT-PRV-026](task-0103): Provider Event Bus",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-101-pkt-prv-026-task-0103-provider-event-bus.md"
+    },
+    {
+      "id": "task-102",
+      "label": "[PKT-PRV-027](task-0104): Provider Message Queue",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\providers\\task-102-pkt-prv-027-task-0104-provider-message-queue.md"
+    },
+    {
+      "id": "task-103",
+      "label": "[PKT-PRV-028](task-0105): Provider Queue Management",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-103-pkt-prv-028-task-0105-provider-queue-management.md"
+    },
+    {
+      "id": "task-104",
+      "label": "[PKT-PRV-029](task-0106): Provider Batch Processing",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\providers\\task-104-pkt-prv-029-task-0106-provider-batch-processing.md"
+    },
+    {
+      "id": "task-105",
+      "label": "[PKT-PRV-030](task-0107): Provider Stream Processing",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-105-pkt-prv-030-task-0107-provider-stream-processing.md"
+    },
+    {
+      "id": "task-106",
+      "label": "[PKT-PRV-031](task-0108): Provider Async Support",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-106-pkt-prv-031-task-0108-provider-async-support.md"
+    },
+    {
+      "id": "task-107",
+      "label": "[PKT-PRV-032](task-0109): Provider Sync Support",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-107-pkt-prv-032-task-0109-provider-sync-support.md"
+    },
+    {
+      "id": "task-108",
+      "label": "[PKT-PRV-033](task-0110): Provider Timeout Handling",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-108-pkt-prv-033-task-0110-provider-timeout-handling.md"
+    },
+    {
+      "id": "task-109",
+      "label": "[PKT-PRV-034](task-0111): Provider Retry Logic",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-109-pkt-prv-034-task-0111-provider-retry-logic.md"
+    },
+    {
+      "id": "task-110",
+      "label": "[PKT-PRV-035](task-0112): Provider Circuit Breaker",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-110-pkt-prv-035-task-0112-provider-circuit-breaker.md"
+    },
+    {
+      "id": "task-111",
+      "label": "[PKT-PRV-036](task-0113): Provider Bulkhead",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\providers\\task-111-pkt-prv-036-task-0113-provider-bulkhead.md"
+    },
+    {
+      "id": "task-112",
+      "label": "[PKT-PRV-037](task-0114): Provider Load Balancing",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-112-pkt-prv-037-task-0114-provider-load-balancing.md"
+    },
+    {
+      "id": "task-113",
+      "label": "[PKT-PRV-038](task-0115): Provider Connection Pooling",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\providers\\task-113-pkt-prv-038-task-0115-provider-connection-pooling.md"
+    },
+    {
+      "id": "task-114",
+      "label": "[PKT-PRV-039](task-0117): Provider SSL/TLS Support",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-114-pkt-prv-039-task-0117-provider-ssl-tls-support.md"
+    },
+    {
+      "id": "task-115",
+      "label": "[PKT-PRV-040](task-0118): Provider Authentication",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-115-pkt-prv-040-task-0118-provider-authentication.md"
+    },
+    {
+      "id": "task-116",
+      "label": "[PKT-PRV-041](task-0119): Provider Authorization",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-116-pkt-prv-041-task-0119-provider-authorization.md"
+    },
+    {
+      "id": "task-117",
+      "label": "[PKT-PRV-042](task-0120): Provider Audit Logging",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-117-pkt-prv-042-task-0120-provider-audit-logging.md"
+    },
+    {
+      "id": "task-118",
+      "label": "[PKT-PRV-043](task-0121): Provider Compliance Checks",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-118-pkt-prv-043-task-0121-provider-compliance-checks.md"
+    },
+    {
+      "id": "task-119",
+      "label": "[PKT-PRV-044](task-0122): Provider Policy Enforcement",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\providers\\task-119-pkt-prv-044-task-0122-provider-policy-enforcement.md"
+    },
+    {
+      "id": "task-120",
+      "label": "[PKT-PRV-045](task-0123): Provider Data Encryption",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-120-pkt-prv-045-task-0123-provider-data-encryption.md"
+    },
+    {
+      "id": "task-121",
+      "label": "[PKT-PRV-046](task-0124): Provider Data Masking",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\providers\\task-121-pkt-prv-046-task-0124-provider-data-masking.md"
+    },
+    {
+      "id": "task-122",
+      "label": "[PKT-PRV-047](task-0125): Provider Data Retention",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-122-pkt-prv-047-task-0125-provider-data-retention.md"
+    },
+    {
+      "id": "task-123",
+      "label": "[PKT-PRV-048](task-0126): Provider Data Export",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-123-pkt-prv-048-task-0126-provider-data-export.md"
+    },
+    {
+      "id": "task-124",
+      "label": "[PKT-PRV-049](task-0127): Provider Data Import",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-124-pkt-prv-049-task-0127-provider-data-import.md"
+    },
+    {
+      "id": "task-125",
+      "label": "[PKT-PRV-050](task-0128): Provider Data Transformation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-125-pkt-prv-050-task-0128-provider-data-transformation.md"
+    },
+    {
+      "id": "task-126",
+      "label": "[PKT-PRV-051](task-0129): Provider Data Validation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-126-pkt-prv-051-task-0129-provider-data-validation.md"
+    },
+    {
+      "id": "task-127",
+      "label": "[PKT-PRV-052](task-0130): Provider Data Quality",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-127-pkt-prv-052-task-0130-provider-data-quality.md"
+    },
+    {
+      "id": "task-128",
+      "label": "[PKT-PRV-053](task-0131): Provider Data Governance",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-128-pkt-prv-053-task-0131-provider-data-governance.md"
+    },
+    {
+      "id": "task-129",
+      "label": "[PKT-PRV-054](task-0132): Provider Data Lineage",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-129-pkt-prv-054-task-0132-provider-data-lineage.md"
+    },
+    {
+      "id": "task-130",
+      "label": "[PKT-PRV-055](task-0133): Provider Data Catalog",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-130-pkt-prv-055-task-0133-provider-data-catalog.md"
+    },
+    {
+      "id": "task-131",
+      "label": "[PKT-PRV-056](task-0134): Provider Data Dictionary",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-131-pkt-prv-056-task-0134-provider-data-dictionary.md"
+    },
+    {
+      "id": "task-132",
+      "label": "[PKT-PRV-057](task-0135): Provider Data Standards",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-132-pkt-prv-057-task-0135-provider-data-standards.md"
+    },
+    {
+      "id": "task-133",
+      "label": "[PKT-PRV-058](task-0136): Provider Data Quality Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-133-pkt-prv-058-task-0136-provider-data-quality-rules.md"
+    },
+    {
+      "id": "task-134",
+      "label": "[PKT-PRV-059](task-0137): Provider Data Profiling",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-134-pkt-prv-059-task-0137-provider-data-profiling.md"
+    },
+    {
+      "id": "task-135",
+      "label": "[PKT-PRV-060](task-0138): Provider Data Anomaly Detection",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-135-pkt-prv-060-task-0138-provider-data-anomaly-detection.md"
+    },
+    {
+      "id": "task-136",
+      "label": "[PKT-PRV-061](task-0139): Provider Data Masking Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-136-pkt-prv-061-task-0139-provider-data-masking-rules.md"
+    },
+    {
+      "id": "task-137",
+      "label": "[PKT-PRV-062](task-0140): Provider Data Retention Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-137-pkt-prv-062-task-0140-provider-data-retention-rules.md"
+    },
+    {
+      "id": "task-138",
+      "label": "[PKT-PRV-063](task-0141): Provider Data Export Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-138-pkt-prv-063-task-0141-provider-data-export-rules.md"
+    },
+    {
+      "id": "task-139",
+      "label": "[PKT-PRV-064](task-0142): Provider Data Import Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-139-pkt-prv-064-task-0142-provider-data-import-rules.md"
+    },
+    {
+      "id": "task-140",
+      "label": "[PKT-PRV-065](task-0143): Provider Data Transformation Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-140-pkt-prv-065-task-0143-provider-data-transformation-rules.md"
+    },
+    {
+      "id": "task-141",
+      "label": "[PKT-PRV-066](task-0144): Provider Data Validation Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-141-pkt-prv-066-task-0144-provider-data-validation-rules.md"
+    },
+    {
+      "id": "task-142",
+      "label": "[PKT-PRV-067](task-0145): Provider Data Quality Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-142-pkt-prv-067-task-0145-provider-data-quality-rules.md"
+    },
+    {
+      "id": "task-143",
+      "label": "[PKT-PRV-068](task-0146): Provider Data Governance Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-143-pkt-prv-068-task-0146-provider-data-governance-rules.md"
+    },
+    {
+      "id": "task-144",
+      "label": "[PKT-PRV-069](task-0147): Provider Data Lineage Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-144-pkt-prv-069-task-0147-provider-data-lineage-rules.md"
+    },
+    {
+      "id": "task-145",
+      "label": "[PKT-PRV-070](task-0148): Provider Data Catalog Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-145-pkt-prv-070-task-0148-provider-data-catalog-rules.md"
+    },
+    {
+      "id": "task-146",
+      "label": "[PKT-PRV-071](task-0149): Provider Data Dictionary Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-146-pkt-prv-071-task-0149-provider-data-dictionary-rules.md"
+    },
+    {
+      "id": "task-147",
+      "label": "[PKT-PRV-072](task-0150): Provider Data Standards Rules",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-147-pkt-prv-072-task-0150-provider-data-standards-rules.md"
+    },
+    {
+      "id": "task-148",
+      "label": "[PKT-PRV-073](task-0151): Provider Data Quality Monitoring",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-148-pkt-prv-073-task-0151-provider-data-quality-monitoring.md"
+    },
+    {
+      "id": "task-149",
+      "label": "[PKT-PRV-074](task-0152): Provider Data Governance Monitoring",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-149-pkt-prv-074-task-0152-provider-data-governance-monitoring.md"
+    },
+    {
+      "id": "task-150",
+      "label": "[PKT-PRV-075](task-0153): Provider Data Lineage Monitoring",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-150-pkt-prv-075-task-0153-provider-data-lineage-monitoring.md"
+    },
+    {
+      "id": "task-151",
+      "label": "[PKT-PRV-076](task-0154): Provider Data Catalog Monitoring",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-151-pkt-prv-076-task-0154-provider-data-catalog-monitoring.md"
+    },
+    {
+      "id": "task-152",
+      "label": "[PKT-PRV-077](task-0155): Provider Data Dictionary Monitoring",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-152-pkt-prv-077-task-0155-provider-data-dictionary-monitoring.md"
+    },
+    {
+      "id": "task-153",
+      "label": "[PKT-PRV-078](task-0156): Provider Data Standards Monitoring",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-153-pkt-prv-078-task-0156-provider-data-standards-monitoring.md"
+    },
+    {
+      "id": "task-154",
+      "label": "[PKT-SRV-001](task-0157): Provider Service Seam",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-154-pkt-srv-001-task-0157-provider-service-seam.md"
+    },
+    {
+      "id": "task-76",
+      "label": "[PKT-PRV-001](task-0078): Provider Registry",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-76-pkt-prv-001-task-0078-provider-registry.md"
+    },
+    {
+      "id": "task-77",
+      "label": "[PKT-PRV-002](task-0079): Health Checks",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-77-pkt-prv-002-task-0079-health-checks.md"
+    },
+    {
+      "id": "task-78",
+      "label": "[PKT-PRV-003](task-0080): Provider Selection",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\providers\\task-78-pkt-prv-003-task-0080-provider-selection.md"
+    },
+    {
+      "id": "task-79",
+      "label": "[PKT-PRV-004](task-0081): Provider Adapters",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-79-pkt-prv-004-task-0081-provider-adapters.md"
+    },
+    {
+      "id": "task-80",
+      "label": "[PKT-PRV-005](task-0082): Service Seam",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-80-pkt-prv-005-task-0082-service-seam.md"
+    },
+    {
+      "id": "task-81",
+      "label": "[PKT-PRV-006](task-0083): Provider Implementation Template",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-81-pkt-prv-006-task-0083-provider-implementation-template.md"
+    },
+    {
+      "id": "task-82",
+      "label": "[PKT-PRV-007](task-0084): Provider Configuration Schema",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-82-pkt-prv-007-task-0084-provider-configuration-schema.md"
+    },
+    {
+      "id": "task-83",
+      "label": "[PKT-PRV-008](task-0085): Provider Documentation",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\providers\\task-83-pkt-prv-008-task-0085-provider-documentation.md"
+    },
+    {
+      "id": "task-84",
+      "label": "[PKT-PRV-009](task-0086): Provider Testing Framework",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-84-pkt-prv-009-task-0086-provider-testing-framework.md"
+    },
+    {
+      "id": "task-85",
+      "label": "[PKT-PRV-010](task-0087): Provider Performance Benchmarks",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-85-pkt-prv-010-task-0087-provider-performance-benchmarks.md"
+    },
+    {
+      "id": "task-86",
+      "label": "[PKT-PRV-011](task-0088): Provider Security Audit",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-86-pkt-prv-011-task-0088-provider-security-audit.md"
+    },
+    {
+      "id": "task-87",
+      "label": "[PKT-PRV-012](task-0089): Provider Version Management",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-87-pkt-prv-012-task-0089-provider-version-management.md"
+    },
+    {
+      "id": "task-88",
+      "label": "[PKT-PRV-013](task-0090): Provider Feature Flags",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-88-pkt-prv-013-task-0090-provider-feature-flags.md"
+    },
+    {
+      "id": "task-89",
+      "label": "[PKT-PRV-014](task-0091): Provider Rate Limiting",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-89-pkt-prv-014-task-0091-provider-rate-limiting.md"
+    },
+    {
+      "id": "task-90",
+      "label": "[PKT-PRV-015](task-0092): Provider Caching",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-90-pkt-prv-015-task-0092-provider-caching.md"
+    },
+    {
+      "id": "task-91",
+      "label": "[PKT-PRV-016](task-0093): Provider Error Handling",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-91-pkt-prv-016-task-0093-provider-error-handling.md"
+    },
+    {
+      "id": "task-92",
+      "label": "[PKT-PRV-017](task-0094): Provider Logging",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-92-pkt-prv-017-task-0094-provider-logging.md"
+    },
+    {
+      "id": "task-93",
+      "label": "[PKT-PRV-018](task-0095): Provider Metrics",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-93-pkt-prv-018-task-0095-provider-metrics.md"
+    },
+    {
+      "id": "task-94",
+      "label": "[PKT-PRV-019](task-0096): Provider Tracing",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\providers\\task-94-pkt-prv-019-task-0096-provider-tracing.md"
+    },
+    {
+      "id": "task-95",
+      "label": "[PKT-PRV-020](task-0097): Provider Configuration Management",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-95-pkt-prv-020-task-0097-provider-configuration-management.md"
+    },
+    {
+      "id": "task-96",
+      "label": "[PKT-PRV-021](task-0098): Provider Discovery",
+      "state": "cancelled",
+      "path": "docs\\planning\\tasks\\providers\\task-96-pkt-prv-021-task-0098-provider-discovery.md"
+    },
+    {
+      "id": "task-97",
+      "label": "[PKT-PRV-022](task-0099): Provider Lifecycle",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-97-pkt-prv-022-task-0099-provider-lifecycle.md"
+    },
+    {
+      "id": "task-98",
+      "label": "[PKT-PRV-023](task-0100): Provider Plugin System",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-98-pkt-prv-023-task-0100-provider-plugin-system.md"
+    },
+    {
+      "id": "task-99",
+      "label": "[PKT-PRV-024](task-0101): Provider API Gateway",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\providers\\task-99-pkt-prv-024-task-0101-provider-api-gateway.md"
+    },
+    {
+      "id": "task-54",
+      "label": "[PKT-RLS-001](task-0056): Fragment Capture",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-54-pkt-rls-001-task-0056-fragment-capture.md"
+    },
+    {
+      "id": "task-55",
+      "label": "[PKT-RLS-002](task-0057): Sync with Locking and Idempotency",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-55-pkt-rls-002-task-0057-sync-with-locking-and-idempotency.md"
+    },
+    {
+      "id": "task-56",
+      "label": "[PKT-RLS-003](task-0058): Current Release Summary",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-56-pkt-rls-003-task-0058-current-release-summary.md"
+    },
+    {
+      "id": "task-57",
+      "label": "[PKT-RLS-004](task-0059): Audit/Check-in Summary Generation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-57-pkt-rls-004-task-0059-audit-check-in-summary-generation.md"
+    },
+    {
+      "id": "task-58",
+      "label": "[PKT-RLS-005](task-0060): Finalization with Exactly-Once Historical Append",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-58-pkt-rls-005-task-0060-finalization-with-exactly-once-historical-append.md"
+    },
+    {
+      "id": "task-59",
+      "label": "[PKT-RLS-006](task-0061): Release Please Baseline Workflow",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-59-pkt-rls-006-task-0061-release-please-baseline-workflow.md"
+    },
+    {
+      "id": "task-60",
+      "label": "[PKT-RLS-007](task-0062): Release Please Config Management",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-60-pkt-rls-007-task-0062-release-please-config-management.md"
+    },
+    {
+      "id": "task-61",
+      "label": "[PKT-RLS-008](task-0063): Ledger Integration",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-61-pkt-rls-008-task-0063-ledger-integration.md"
+    },
+    {
+      "id": "task-62",
+      "label": "[PKT-RLS-009](task-0064): Audit Trail",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-62-pkt-rls-009-task-0064-audit-trail.md"
+    },
+    {
+      "id": "task-63",
+      "label": "[PKT-RLS-010](task-0065): Release Validation",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\release\\task-63-pkt-rls-010-task-0065-release-validation.md"
+    },
+    {
+      "id": "task-64",
       "label": "[PKT-RLS-011](task-0066): Release Documentation",
       "state": "draft",
-      "path": "docs\\planning\\tasks\\release\\task-66-pkt-rls-011-task-0066-release-documentation.md"
+      "path": "docs\\planning\\tasks\\release\\task-64-pkt-rls-011-task-0066-release-documentation.md"
     },
     {
       "id": "task-7",

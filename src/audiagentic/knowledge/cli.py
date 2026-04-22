@@ -11,7 +11,6 @@ from .bootstrap import bootstrap_project
 from .capability import doctor, show_capability_contract, show_install_profiles
 from .config import load_config
 from .events import load_event_adapters, process_events, record_event_baseline, scan_events
-from .hooks import evaluate_source, load_hooks
 from .importers import scaffold_page, seed_from_manifest
 from .index_maintenance import maintain_index_pages, refresh_index, validate_index_links
 from .lifecycle import (
@@ -217,12 +216,6 @@ def main() -> None:
             args.json,
         )
         return
-    if args.command == "show-hooks":
-        _print(load_hooks(config), args.json)
-        return
-    if args.command == "evaluate-source":
-        _print(evaluate_source(config, args.relative_path), args.json)
-        return
     if args.command == "show-event-adapters":
         _print(load_event_adapters(config), args.json)
         return
@@ -382,7 +375,6 @@ def build_parser() -> argparse.ArgumentParser:
     common_json_commands = [
         "validate",
         "status",
-        "show-hooks",
         "show-event-adapters",
         "show-importer-registry",
         "show-action-registry",
@@ -530,10 +522,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--archive-retention-days", type=int)
     p.add_argument("--keep-pending-proposals", action="store_true")
     p.add_argument("--keep-duplicate-proposals", action="store_true")
-    p.add_argument("--json", action="store_true")
-
-    p = sub.add_parser("evaluate-source")
-    p.add_argument("relative_path")
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("scan-events")

@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-59",
-    "label": "[PKT-RLS-004](task-0059): Audit/Check-in Summary Generation",
+    "label": "[PKT-RLS-006](task-0061): Release Please Baseline Workflow",
     "state": "draft",
-    "summary": "Generate audit/check-in summary",
-    "spec_ref": "spec-10",
+    "summary": "Create Release Please baseline workflow",
+    "spec_ref": "spec-13",
     "kind": "task",
-    "path": "docs/planning/tasks/release/task-59-pkt-rls-004-task-0059-audit-check-in-summary-generation.md",
+    "path": "docs/planning/tasks/release/task-59-pkt-rls-006-task-0061-release-please-baseline-workflow.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
   "effective_standard_refs": [
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-004](task-0049): Audit/Check-in Summary Generation\n\n## Purpose\n\nGenerate audit/check-in summary.\n\n## Scope\n\n- Audit data collection\n- Summary generation\n- Check-in tracking\n\n## Implementation\n\n1. Collect audit data\n2. Generate summary\n3. Track check-ins\n\n## Acceptance Criteria\n\n1. Audit data collected\n2. Summary generated\n3. Check-ins tracked\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-006](task-0051): Release Please Baseline Workflow\n\n## Purpose\n\nCreate Release Please baseline workflow.\n\n## Scope\n\n- Workflow definition\n- Configuration\n- Integration\n\n## Implementation\n\n1. Define workflow\n2. Configure\n3. Integrate\n\n## Acceptance Criteria\n\n1. Workflow defined\n2. Configured\n3. Integrated\n"
 }

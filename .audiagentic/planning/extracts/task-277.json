@@ -1,27 +1,20 @@
 {
   "item": {
     "id": "task-277",
-    "label": "Fix global state access in job_control_tool",
-    "state": "completed",
-    "summary": "Implement dependency injection for job_control_tool",
+    "label": "spec-60",
+    "state": "cancelled",
+    "summary": "Document spec-0060 knowledge vault",
     "request_refs": [
       "request-19"
     ],
-    "standard_refs": [
-      "standard-5",
-      "standard-6"
-    ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-277-fix-global-state-access-in-job-control-tool.md",
+    "path": "docs/planning/tasks/core/task-277-spec-60.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
-    "standard-5",
-    "standard-6"
-  ],
-  "body": "\n\n\n## Completed Work\n\nRefactored `execution/jobs/control.py` to support dependency injection while maintaining backward compatibility.\n\n### Changes Made:\n\n1. **Added dependency injection support**:\n   - Added `JobStoreInterface` type alias for store interface\n   - Changed `store` import to `_default_store` to indicate it's a default\n   - Added optional `store` parameter to `request_job_control()` and `apply_pending_job_control()`\n   - Both functions default to `_default_store` for backward compatibility\n\n2. **Enhanced module documentation**:\n   - Added comprehensive module docstring explaining purpose and DI pattern\n   - Documented key functions and their responsibilities\n   - Added dependency injection usage examples\n\n3. **Added function docstrings**:\n   - `request_job_control()`: Documented state validation logic and DI parameter\n   - `apply_pending_job_control()`: Documented pending request handling and DI parameter\n   - Both include usage examples showing how to inject custom store\n\n4. **Maintained backward compatibility**:\n   - All existing callers continue to work without changes\n   - Default store used when no store parameter provided\n   - No breaking changes to public API\n\n## Standards Compliance\n- **standard-0011**: Dependency injection instead of global state access\n- **standard-0008**: Comprehensive documentation and type hints\n\n## Testing\nFunctions now support:\n- Default behavior: `request_job_control(project_root, payload)` - uses global store\n- Test isolation: `request_job_control(project_root, payload, mock_store)` - uses injected store\n- Backward compatibility: All existing callers work without modification\n"
+  "effective_standard_refs": [],
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nDocument spec-0060 knowledge vault\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n\n# Cancellation Reason\n\nTask cancelled: spec-60 does not exist. Task was a placeholder without actionable content.\n"
 }

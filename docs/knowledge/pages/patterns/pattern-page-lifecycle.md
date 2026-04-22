@@ -16,12 +16,12 @@ scaffold → draft → active → stale → (update | archive)
 | **draft** | Content being written, not complete | `status: draft` |
 | **active** | Complete and current | `status: active` |
 | **stale** | Sources changed, needs review | `status: stale` |
-| **archived** | Superseded, moved to archive | Moved to `archive/` |
+| **archived** | Superseded, moved to archive | Moved to `data/archive/` |
 
 **Page Structure:**
 Each page has two files:
 1. **Content**: `docs/knowledge/pages/<type>/<page-id>.md`
-2. **Metadata**: `docs/knowledge/meta/<type>/<page-id>.meta.yml`
+2. **Metadata**: `docs/knowledge/data/meta/<type>/<page-id>.meta.yml`
 
 **Standard Sections:**
 ```markdown
@@ -73,12 +73,7 @@ updated_at: 2026-04-14
 ```bash
 
 ## Scaffold a new page
-audiagentic-knowledge --root . scaffold \
-  --id my-new-page \
-  --type system \
-  --title "My New Page" \
-  --summary "Brief description" \
-  --owners ["team"]
+python -m src.audiagentic.knowledge.cli --root . scaffold-page my-new-page system "My New Page" "Brief description" --owner team
 ```
 
 **Writing Content:**
@@ -88,7 +83,7 @@ audiagentic-knowledge --root . scaffold \
 4. Add `updated_at` date
 
 **Responding to Stale Status:**
-1. Check `docs/knowledge/proposals/` for sync proposals
+1. Check `docs/knowledge/data/proposals/` for sync proposals
 2. Review what changed in source materials
 3. Update page content
 4. Change `status: stale` to `status: active`
@@ -96,7 +91,7 @@ audiagentic-knowledge --root . scaffold \
 
 **Archiving a Page:**
 1. Create replacement page if needed
-2. Move old page to `docs/knowledge/archive/`
+2. Move old page to `docs/knowledge/data/archive/`
 3. Update metadata: `status: archived`
 4. Add note about superseding page
 

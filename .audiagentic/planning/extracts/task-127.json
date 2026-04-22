@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-127",
-    "label": "[PKT-PRV-049](task-0127): Provider Data Import",
+    "label": "[PKT-PRV-052](task-0130): Provider Data Quality",
     "state": "draft",
-    "summary": "Implement provider data import",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data quality checks",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-127-pkt-prv-049-task-0127-provider-data-import.md",
+    "path": "docs/planning/tasks/providers/task-127-pkt-prv-052-task-0130-provider-data-quality.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-049](task-0116): Provider Data Import\n\n## Purpose\n\nImplement provider data import.\n\n## Scope\n\n- Import format\n- Import logic\n- Validation\n\n## Implementation\n\n1. Define format\n2. Implement import\n3. Add validation\n\n## Acceptance Criteria\n\n1. Format defined\n2. Import works\n3. Validated\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-052](task-0119): Provider Data Quality\n\n## Purpose\n\nImplement provider data quality checks.\n\n## Scope\n\n- Quality metrics\n- Monitoring\n- Alerts\n\n## Implementation\n\n1. Define metrics\n2. Add monitoring\n3. Add alerts\n\n## Acceptance Criteria\n\n1. Metrics defined\n2. Monitoring works\n3. Alerts sent\n"
 }

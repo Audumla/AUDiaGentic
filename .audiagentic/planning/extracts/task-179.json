@@ -1,20 +1,20 @@
 {
   "item": {
     "id": "task-179",
-    "label": "Implement state-based archive and restore behavior",
+    "label": "Update tm_show to include archive metadata",
     "state": "done",
-    "summary": "Extend planning state transition behavior to support archive and restore metadata, events, and guardrails",
-    "spec_ref": "spec-1",
+    "summary": "Add archive metadata (archived_at, archived_by, reason) to tm_show() output",
+    "spec_ref": "spec-2",
     "meta": {
       "task_refs": [
         {
           "ref": "wp-0009",
-          "seq": 1001
+          "seq": 1004
         }
       ]
     },
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-179-implement-state-based-archive-and-restore-behavior.md",
+    "path": "docs/planning/tasks/core/task-179-update-tm-show-to-include-archive-metadata.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -26,5 +26,5 @@
     "standard-5",
     "standard-9"
   ],
-  "body": "\n\n\n# Description\n\nImplement archive and restore behavior through the planning core's canonical state transition model.\n\n## Requirements\n\n### Archive Transition\n\n```python\ndef tm_state(\n    id_: str,\n    new_state: str,\n    reason: str | None = None,\n    actor: str | None = None,\n    root: Path | None = None,\n) -> dict[str, Any]:\n    \"\"\"Change planning item state, including archive transitions.\n    \n    Args:\n        id_: Item ID to change\n        new_state: Target state (`archived` for archive)\n        reason: Optional archive reason\n        actor: Optional actor identifier\n        root: Optional project root\n    \n    Returns:\n        Dict with id, state, archived_at, archived_by, reason\n    \"\"\"\n```\n\n### Restore Transition\n\n```python\ndef tm_state(\n    id_: str,\n    new_state: str,\n    actor: str | None = None,\n    root: Path | None = None,\n) -> dict[str, Any]:\n    \"\"\"Change planning item state, including restore transitions.\n    \n    Args:\n        id_: Item ID to change\n        new_state: Target state for restore from archive, as allowed by the item workflow\n        actor: Optional actor identifier\n        root: Optional project root\n    \n    Returns:\n        Dict with id, state, restored_at, restored_by\n    \"\"\"\n```\n\n## Implementation\n\n- Extend the planning core state/lifecycle path\n- Update `tools/planning/tm_helper.py` and underlying planning API surfaces as needed\n- Keep any MCP convenience exposure aligned to the same core semantics\n- Record archive metadata (archived_at, archived_by, reason)\n- Log archive events\n\n## Acceptance Criteria\n\n1. State-driven archive transitions move items to archived state\n2. State-driven restore transitions move items back to a valid active state\n3. Archive metadata is recorded (timestamp, user, reason)\n4. Archive events are logged\n5. Archived items cannot be modified directly\n\n# Notes\n\n- Implemented in `PlanningAPI.state()` with archive/restore metadata and event emission.\n- Archived items are now protected from normal update, content update, move, and relink mutations until restored.\n- Verified by planning API integration tests and coverage tests.\n"
+  "body": "\n\n\n\n\n\n\n\n\n# Description\n\nAdd archive metadata (archived_at, archived_by, reason) to tm_show() output.\n\n## Requirements\n\nArchive metadata should be included in item metadata:\n\n```python\n{\n    \"id\": \"task-0001\",\n    \"kind\": \"task\",\n    \"label\": \"Example task\",\n    \"state\": \"archived\",\n    \"archived_at\": \"2026-04-09T12:00:00Z\",\n    \"archived_by\": \"user@example.com\",\n    \"archive_reason\": \"Feature deprecated\",\n    \"restored_at\": None,\n    \"restored_by\": None,\n}\n```\n\n## Implementation\n\n- Update `src/audiagentic/planning/app/api.py` extracts.show()\n- Add archive metadata to item data\n- Store metadata in YAML frontmatter\n- Include in tm_show() output\n- Keep metadata shape aligned with the state-driven archive/restore model\n\n## Acceptance Criteria\n\n1. Archived items show archive metadata in tm_show()\n2. Metadata includes timestamp, user, and reason\n3. Restored items show restore metadata\n4. Non-archived items show None for archive fields\n\n# Notes\n\n- Implemented in `src/audiagentic/planning/app/ext_mgr.py` and validated through helper/API integration tests.\n- `tm_show()` now returns stable archive-related fields for both archived and non-archived items.\n"
 }

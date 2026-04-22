@@ -6,6 +6,12 @@ summary: Default standard for how reviews should present findings, evidence, sev
   and residual risks.
 ---
 
+
+
+
+
+
+
 # Standard
 
 Default standard for how reviews in AUDiaGentic-based projects should present findings, evidence, assumptions, and residual risks.

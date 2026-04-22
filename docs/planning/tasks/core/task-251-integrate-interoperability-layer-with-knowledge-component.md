@@ -1,0 +1,61 @@
+---
+id: task-251
+label: Integrate interoperability layer with knowledge component
+state: done
+summary: Wire EventBus into knowledge component — blocked on task-0281 (planning integration)
+  and core event bus being stable in practice
+spec_ref: spec-23
+request_refs:
+- request-17
+standard_refs:
+- standard-5
+- standard-6
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Description
+
+Integrate interoperability event layer with knowledge component. This task owns knowledge-side subscription wiring to consume canonical planning state-change events.
+
+**Subscription setup:**
+```python
+from audiagentic.interoperability import get_bus
+bus = get_bus()
+bus.subscribe("planning.item.state.changed", knowledge_event_handler)
+```
+
+**Key behaviors:**
+- Subscribe at knowledge component startup
+- Use canonical event shape from spec-019
+- Keep legacy file-scan path compatible during transition
+- Don't break existing knowledge workflows
+- Optional integration: use try/except to avoid breaking if EventBus not available
+- Handler implementation is task-0261
+
+# Acceptance Criteria
+
+- Knowledge subscribes to `planning.item.state.changed` via EventBus
+- Subscription registered at knowledge component startup
+- Event handler receives canonical envelope shape
+- Legacy file-scan path still works during transition
+- Unit tests cover: subscription registration, event receipt
+- Smoke test proves knowledge loads and subscribes without breaking startup
+
+# Notes
+Depends on: task-248 (EventBus), task-0253 (planning emits). Handler implementation is task-0261.
+
+Marked done on 2026-04-17 after review. Planning now explicitly calls `audiagentic.knowledge.setup_event_subscriptions()` during bootstrap in `src/audiagentic/planning/app/api.py`, and knowledge subscribes to `planning.item.state.changed` in `src/audiagentic/knowledge/__init__.py`. Remaining knowledge-side follow-up is tracked separately under `task-0261`.

@@ -1,20 +1,19 @@
 {
   "item": {
     "id": "task-239",
-    "label": "Add lifecycle management for jobs and proposals",
-    "state": "draft",
-    "summary": "Add expiry, cleanup, status tracking for LLM jobs and sync proposals",
-    "spec_ref": "spec-16",
-    "parent_task_ref": "wp-13",
+    "label": "Remove dead code in update_content() section mode",
+    "state": "done",
+    "summary": "Remove duplicated regex block in update_content() section mode, ensure consistent formatting",
+    "spec_ref": "spec-22",
     "request_refs": [
-      "request-15"
+      "request-16"
     ],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-239-add-lifecycle-management-for-jobs-and-proposals.md",
+    "path": "docs/planning/tasks/core/task-239-remove-dead-code-in-update-content-section-mode.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -25,5 +24,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
 }

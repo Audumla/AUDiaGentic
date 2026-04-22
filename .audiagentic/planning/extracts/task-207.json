@@ -1,17 +1,17 @@
 {
   "item": {
     "id": "task-207",
-    "label": "Extend tm_batch_update to support multi-item operations",
+    "label": "Expose bulk operations in MCP and tm_helper",
     "state": "cancelled",
-    "summary": "Extend tm_batch_update(id, operations) to also accept multi-item format with backward compatibility",
-    "spec_ref": "spec-8",
+    "summary": "Add tm_bulk_state and multi-item tm_batch_update to MCP tools and tm_helper functions",
+    "spec_ref": "spec-11",
     "request_refs": [],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-207-extend-tm-batch-update-to-support-multi-item-operations.md",
+    "path": "docs/planning/tasks/core/task-207-expose-bulk-operations-in-mcp-and-tm-helper.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -23,5 +23,5 @@
     "standard-6",
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nCancelled with `spec-008` after the owning request record was removed. Recreate this task under a new request if multi-item batch update work is resumed.\n\n# Acceptance Criteria\n\nCancelled with parent specification.\n\n# Notes\n\nThis task was never fleshed into implementation-ready detail before the request chain disappeared.\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nCancelled with `spec-008` after the owning request record was removed. Recreate this task under a new request if helper and MCP exposure for bulk operations is resumed.\n\n# Acceptance Criteria\n\nCancelled with parent specification.\n\n# Notes\n\nThis task was never fleshed into implementation-ready detail before the request chain disappeared.\n"
 }

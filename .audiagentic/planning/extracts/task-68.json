@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-68",
-    "label": "[PKT-JOB-002](task-0068): State Machine",
+    "label": "[PKT-JOB-004](task-0070): Packet Runner",
     "state": "draft",
-    "summary": "Implement job state machine",
-    "spec_ref": "spec-11",
+    "summary": "Implement packet runner",
+    "spec_ref": "spec-15",
     "kind": "task",
-    "path": "docs/planning/tasks/jobs/task-68-pkt-job-002-task-0068-state-machine.md",
+    "path": "docs/planning/tasks/jobs/task-68-pkt-job-004-task-0070-packet-runner.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
   "effective_standard_refs": [
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-002](task-0058): State Machine\n\n## Purpose\n\nImplement job state machine.\n\n## Scope\n\n- States\n- Transitions\n- Validation\n\n## Implementation\n\n1. Define states\n2. Implement transitions\n3. Add validation\n\n## Acceptance Criteria\n\n1. States defined\n2. Transitions work\n3. Validated\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-004](task-0060): Packet Runner\n\n## Purpose\n\nImplement packet runner.\n\n## Scope\n\n- Runner logic\n- Execution\n- Error handling\n\n## Implementation\n\n1. Implement runner\n2. Add execution\n3. Handle errors\n\n## Acceptance Criteria\n\n1. Runner works\n2. Executes packets\n3. Errors handled\n"
 }

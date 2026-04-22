@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-132",
-    "label": "[PKT-PRV-054](task-0132): Provider Data Lineage",
+    "label": "[PKT-PRV-057](task-0135): Provider Data Standards",
     "state": "draft",
-    "summary": "Implement provider data lineage tracking",
-    "spec_ref": "spec-12",
+    "summary": "Implement provider data standards",
+    "spec_ref": "spec-16",
     "kind": "task",
-    "path": "docs/planning/tasks/providers/task-132-pkt-prv-054-task-0132-provider-data-lineage.md",
+    "path": "docs/planning/tasks/providers/task-132-pkt-prv-057-task-0135-provider-data-standards.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +17,5 @@
     "standard-6",
     "standard-5"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-054](task-0121): Provider Data Lineage\n\n## Purpose\n\nImplement provider data lineage tracking.\n\n## Scope\n\n- Lineage format\n- Tracking\n- Visualization\n\n## Implementation\n\n1. Define format\n2. Implement tracking\n3. Add visualization\n\n## Acceptance Criteria\n\n1. Format defined\n2. Tracking works\n3. Visualization works\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-PRV-057](task-0124): Provider Data Standards\n\n## Purpose\n\nImplement provider data standards.\n\n## Scope\n\n- Standard format\n- Enforcement\n- Compliance\n\n## Implementation\n\n1. Define format\n2. Implement enforcement\n3. Check compliance\n\n## Acceptance Criteria\n\n1. Format defined\n2. Enforcement works\n3. Compliant\n"
 }

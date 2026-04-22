@@ -1,12 +1,17 @@
 {
   "item": {
     "id": "task-327",
-    "label": "Reference Resolution",
-    "state": "draft",
-    "summary": "Resolve all cross-references between planning objects",
-    "spec_ref": "spec-0002",
+    "label": "Create TemplateEngine class",
+    "state": "done",
+    "summary": "Create template engine to render document bodies from config templates",
+    "spec_ref": "spec-33",
+    "request_refs": [],
+    "standard_refs": [
+      "standard-5",
+      "standard-6"
+    ],
     "kind": "task",
-    "path": "docs/planning/tasks/implementation-docs/task-327-reference-resolution.md",
+    "path": "docs/planning/tasks/core/task-327-create-templateengine-class.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -14,8 +19,8 @@
     "restored_by": null
   },
   "effective_standard_refs": [
-    "standard-0006",
-    "standard-0005"
+    "standard-5",
+    "standard-6"
   ],
-  "body": "\n# Description\n\nImplement this task.\n\n\n# Reference Resolution\n\n## Purpose\n\nResolve all cross-references between planning objects.\n\n## Scope\n\n- Update all references\n- Link objects\n- Validate\n\n## Implementation\n\n1. Update references\n2. Link objects\n3. Validate\n\n## Acceptance Criteria\n\n1. All references updated\n2. Objects linked\n3. Validation passes\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\nAssessment on 2026-04-17: `TemplateEngine` already exists in `src/audiagentic/planning/app/template_engine.py` and is referenced by planning managers and tests. Marking stale task record complete.\n"
 }

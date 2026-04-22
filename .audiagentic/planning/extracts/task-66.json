@@ -1,12 +1,12 @@
 {
   "item": {
     "id": "task-66",
-    "label": "[PKT-RLS-011](task-0066): Release Documentation",
+    "label": "[PKT-JOB-002](task-0068): State Machine",
     "state": "draft",
-    "summary": "Document release process",
-    "spec_ref": "spec-10",
+    "summary": "Implement job state machine",
+    "spec_ref": "spec-15",
     "kind": "task",
-    "path": "docs/planning/tasks/release/task-66-pkt-rls-011-task-0066-release-documentation.md",
+    "path": "docs/planning/tasks/jobs/task-66-pkt-job-002-task-0068-state-machine.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -16,5 +16,5 @@
   "effective_standard_refs": [
     "standard-9"
   ],
-  "body": "\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-011](task-0056): Release Documentation\n\n## Purpose\n\nDocument release process.\n\n## Scope\n\n- User docs\n- Developer docs\n- API docs\n\n## Implementation\n\n1. Write user docs\n2. Write developer docs\n3. Document API\n\n## Acceptance Criteria\n\n1. User docs complete\n2. Developer docs complete\n3. API documented\n"
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-002](task-0058): State Machine\n\n## Purpose\n\nImplement job state machine.\n\n## Scope\n\n- States\n- Transitions\n- Validation\n\n## Implementation\n\n1. Define states\n2. Implement transitions\n3. Add validation\n\n## Acceptance Criteria\n\n1. States defined\n2. Transitions work\n3. Validated\n"
 }

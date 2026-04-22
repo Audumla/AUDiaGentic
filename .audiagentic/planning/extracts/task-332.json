@@ -1,17 +1,20 @@
 {
   "item": {
     "id": "task-332",
-    "label": "Refactor managers to use config",
-    "state": "done",
-    "summary": "Refactor SpecMgr, TaskMgr, PlanMgr, WPMgr, StandardMgr to use TemplateEngine",
-    "spec_ref": "spec-29",
+    "label": "Updated Test Task",
+    "state": "cancelled",
+    "summary": "Task for testing MCP server",
+    "spec_ref": "spec-35",
     "request_refs": [],
     "standard_refs": [
       "standard-5",
       "standard-6"
     ],
+    "meta": {
+      "test_flag": "true"
+    },
     "kind": "task",
-    "path": "docs/planning/tasks/core/task-332-refactor-managers-to-use-config.md",
+    "path": "docs/planning/tasks/core/task-332-updated-test-task.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -22,5 +25,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n\n\n\n# Description\n\nRefactor all planning managers to use TemplateEngine for body generation instead of hardcoded templates.\n\n## Managers to Refactor\n\n1. **SpecMgr** - Replace hardcoded body at line 18\n2. **TaskMgr** - Replace hardcoded body at line 34\n3. **PlanMgr** - Replace hardcoded body at line 28\n4. **WPMgr** - Replace hardcoded body at line 13\n5. **StandardMgr** - Replace hardcoded body at line 9\n\n## Required Changes\n\nEach manager must:\n1. Import TemplateEngine\n2. Initialize TemplateEngine with config\n3. Call template_engine.render(kind, guidance) instead of hardcoded string\n4. Support optional guidance parameter to override template\n\n## Related Tasks\n\n- task-3251: Refactor section_registry to use config\n- task-3252: Clean up req_mgr hardcoded defaults\n- task-3253: Integrate relationship validation into managers\n\n# Acceptance Criteria\n\n1. No hardcoded body templates in spec_mgr, task_mgr, plan_mgr, wp_mgr, std_mgr\n2. All managers use TemplateEngine.render() for body generation\n3. Managers support optional guidance parameter\n4. Existing documents remain valid\n5. All existing tests pass\n\n# Notes\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\nCancelled on 2026-04-17 as a test artifact under superseded `request-26`.\n# Test Section\n\nTest content\n"
 }

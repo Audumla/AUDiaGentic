@@ -1,12 +1,17 @@
 {
   "item": {
     "id": "task-326",
-    "label": "Testing and Status Reports",
-    "state": "draft",
-    "summary": "Migrate all testing and status reports",
-    "spec_ref": "spec-20",
+    "label": "Extend config schema for document structure",
+    "state": "done",
+    "summary": "Extend profiles.schema.json and create document-structure.schema.json for config-driven templates",
+    "spec_ref": "spec-33",
+    "request_refs": [],
+    "standard_refs": [
+      "standard-5",
+      "standard-6"
+    ],
     "kind": "task",
-    "path": "docs/planning/tasks/implementation-docs/task-326-testing-and-status-reports.md",
+    "path": "docs/planning/tasks/core/task-326-extend-config-schema-for-document-structure.md",
     "archived_at": null,
     "archived_by": null,
     "archive_reason": null,
@@ -17,5 +22,5 @@
     "standard-5",
     "standard-6"
   ],
-  "body": "\n# Description\n\nImplement this task.\n\n\n# Testing and Status Reports\n\n## Purpose\n\nMigrate all testing and status reports.\n\n## Scope\n\n- Testing reports\n- Status reports\n- Validation reports\n\n## Implementation\n\n1. Migrate testing reports\n2. Migrate status reports\n3. Migrate validation reports\n\n## Acceptance Criteria\n\n1. Testing reports migrated\n2. Status reports migrated\n3. Validation reports migrated\n"
+  "body": "\n\n\n\n\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\nMarked done on 2026-04-17 after review. The config schema extensions landed in `profiles.schema.json` and the planning config now carries `document_templates` and `relationship_config`. The implementation satisfied the phase outcome without introducing a separate `document-structure.schema.json` file.\n"
 }
