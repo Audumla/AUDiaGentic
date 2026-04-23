@@ -10,3 +10,4 @@ src/*.egg-info/
 dist/
 build/
 opencode.json
+.aider*
