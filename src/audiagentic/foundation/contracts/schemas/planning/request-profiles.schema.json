@@ -9,6 +9,7 @@
       "type": "object",
       "additionalProperties": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "label": {
             "type": "string"

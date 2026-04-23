@@ -139,6 +139,50 @@
             "enum": ["scalar_ref", "scalar_ref_list", "rel_list"]
           }
         },
+        "lifecycle": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "archived_state": { "type": "string" },
+            "superseded_state": { "type": "string" },
+            "terminal_states": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "state_sets": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "initial": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "active": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "complete": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "terminal": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "blocked": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         "kinds": {
           "type": "object",
           "additionalProperties": {

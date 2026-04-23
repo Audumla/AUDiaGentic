@@ -22,15 +22,20 @@ kinds:
     parent_kind: wp  # Tasks belong to WPs
     parent_field: task_refs  # WP field that references tasks (e.g., task_refs contains task IDs)
     state_rules:
-      # When task enters this state, apply this rule
       in_progress:
-        rule: trigger_parent_if_ready
+        rule: parent_in_set
+        when:
+          state_set: initial
         new_state: in_progress
       done:
-        rule: check_all_children_done
+        rule: all_children_in_set
+        when:
+          state_set: complete
         new_state: done
       blocked:
-        rule: trigger_parent_unless_terminal
+        rule: parent_not_in_set
+        when:
+          state_set: terminal
         new_state: blocked
       archived:
         rule: none
@@ -45,13 +50,19 @@ kinds:
     # For check_all_children_done, we need to find tasks that reference this WP
     state_rules:
       in_progress:
-        rule: trigger_parent_if_ready
+        rule: parent_in_set
+        when:
+          state_set: initial
         new_state: in_progress
       done:
-        rule: check_all_children_done
+        rule: all_children_in_set
+        when:
+          state_set: complete
         new_state: done
       blocked:
-        rule: trigger_parent_unless_terminal
+        rule: parent_not_in_set
+        when:
+          state_set: terminal
         new_state: blocked
       archived:
         rule: none
@@ -64,13 +75,19 @@ kinds:
     parent_field: spec_refs  # Plan field that references specs
     state_rules:
       in_progress:
-        rule: trigger_parent_if_ready
+        rule: parent_in_set
+        when:
+          state_set: initial
         new_state: in_progress
       done:
-        rule: check_all_children_done
+        rule: all_children_in_set
+        when:
+          state_set: complete
         new_state: done
       blocked:
-        rule: trigger_parent_unless_terminal
+        rule: parent_not_in_set
+        when:
+          state_set: terminal
         new_state: blocked
       archived:
         rule: none
@@ -83,15 +100,25 @@ kinds:
     parent_field: request_refs  # Spec field that references requests
     state_rules:
       in_progress:
-        rule: trigger_parent_if_ready
+        rule: parent_in_set
+        when:
+          state_set: initial
         new_state: in_progress
       done:
-        rule: check_all_children_done
+        rule: all_children_in_set
+        when:
+          state_set: complete
         new_state: done
-        # Additional action: check if request should auto-complete
-        check_request_completion: true
+        actions:
+          - action: complete_parent
+            parent_field: request_refs
+            required_state_set: complete
+            parent_blocking_set: terminal
+            target_state: closed
       blocked:
-        rule: trigger_parent_unless_terminal
+        rule: parent_not_in_set
+        when:
+          state_set: terminal
         new_state: blocked
       archived:
         rule: none
@@ -115,31 +142,27 @@ rules:
     description: "No state propagation"
     logic: "audiagentic.planning.app.propagation_rules.rule_none"
 
-  # Trigger parent to enter new_state if parent is in 'ready' state
-  trigger_parent_if_ready:
+  parent_in_set:
     enabled: true
-    description: "Set parent to new_state if parent is ready"
-    logic: "audiagentic.planning.app.propagation_rules.rule_trigger_parent_if_ready"
+    description: "Set parent to new_state when parent is in configured state set"
+    logic: "audiagentic.planning.app.propagation_rules.rule_parent_in_set"
 
-  # Check if all sibling children are in new_state, then set parent to new_state
-  check_all_children_done:
+  all_children_in_set:
     enabled: true
-    description: "Set parent to new_state if all sibling children are in new_state"
-    logic: "audiagentic.planning.app.propagation_rules.rule_check_all_children_done"
+    description: "Set parent to new_state when all sibling children are in configured state set"
+    logic: "audiagentic.planning.app.propagation_rules.rule_all_children_in_set"
 
-  # Trigger parent to new_state unless parent is in terminal state (done/archived)
-  trigger_parent_unless_terminal:
+  parent_not_in_set:
     enabled: true
-    description: "Set parent to new_state unless parent is done/archived"
-    logic: "audiagentic.planning.app.propagation_rules.rule_trigger_parent_unless_terminal"
+    description: "Set parent to new_state when parent is not in configured state set"
+    logic: "audiagentic.planning.app.propagation_rules.rule_parent_not_in_set"
 
 # Action definitions: additional logic to run after propagation
 actions:
-  # Check if request should auto-complete when spec is done
-  check_request_completion:
+  complete_parent:
     enabled: true
-    description: "Auto-complete request when all specs are done"
-    logic: "audiagentic.planning.app.propagation_rules.action_check_request_completion"
+    description: "Complete parent when all related children are in configured state set"
+    logic: "audiagentic.planning.app.propagation_rules.action_complete_parent"
 
 # Terminal states (states that block further propagation)
 terminal_states:
@@ -173,12 +196,16 @@ workflows:
       task:
         state_rules:
           in_progress:
-            rule: trigger_parent_unless_terminal  # More aggressive
+            rule: parent_not_in_set  # More aggressive
+            when:
+              state_set: terminal
             new_state: in_progress
       wp:
         state_rules:
           done:
-            rule: trigger_parent_if_ready  # Don't wait for all children
+            rule: parent_in_set  # Don't wait for all children
+            when:
+              state_set: initial
             new_state: done
 
   # Conservative workflow: minimal propagation
@@ -223,9 +250,9 @@ validation:
     - kinds.spec.parent_kind
   required_rules:
     - none
-    - trigger_parent_if_ready
-    - check_all_children_done
-    - trigger_parent_unless_terminal
+    - parent_in_set
+    - all_children_in_set
+    - parent_not_in_set
   valid_states:
     - ready
     - in_progress
@@ -234,9 +261,9 @@ validation:
     - archived
   valid_rules:
     - none
-    - trigger_parent_if_ready
-    - check_all_children_done
-    - trigger_parent_unless_terminal
+    - parent_in_set
+    - all_children_in_set
+    - parent_not_in_set
 
 # Healing configuration: error detection and auto-fix
 healing:

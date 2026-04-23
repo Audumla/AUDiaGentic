@@ -203,12 +203,20 @@ class StatePropagationEngine:
             if self._apply_rule(item_id, parent_id, new_state, state_rules):
                 propagations.append((parent_id, parent_kind, target_state))
 
-                actions = state_rules.get("actions", [])
-                for action_entry in actions:
-                    action_propagations = self._execute_action(action_entry, item_id, state_rules)
-                    propagations.extend(action_propagations)
+        actions = state_rules.get("actions", [])
+        for action_entry in actions:
+            action_propagations = self._execute_action(action_entry, item_id, state_rules)
+            propagations.extend(action_propagations)
 
-        return propagations
+        deduped: list[tuple[str, str, str]] = []
+        seen: set[tuple[str, str, str]] = set()
+        for propagation in propagations:
+            if propagation in seen:
+                continue
+            seen.add(propagation)
+            deduped.append(propagation)
+
+        return deduped
 
     def apply_propagation(
         self,
@@ -615,14 +623,9 @@ class StatePropagationEngine:
         parents = []
 
         # Check if item references parent directly (e.g., plan_ref)
-        parent_id = item_view.data.get(parent_field)
-        if parent_id:
-            # Handle both string and list references
-            if isinstance(parent_id, list):
-                for pid in parent_id:
-                    parents.append((pid, parent_kind))
-            else:
-                parents.append((parent_id, parent_kind))
+        parent_ids = self._extract_ref_ids(item_view.data.get(parent_field))
+        for parent_id in parent_ids:
+            parents.append((parent_id, parent_kind))
 
         # Check if parent references item (e.g., task_refs in WP)
         # This requires scanning for items with the reverse relationship
@@ -663,18 +666,58 @@ class StatePropagationEngine:
                 continue
 
             # Check if this item references our item
-            child_refs = item_view.data.get(parent_field, [])
-            if isinstance(child_refs, str):
-                child_refs = [child_refs]
-
-            # Handle both direct IDs and dict refs with 'ref' key
-            for ref in child_refs:
-                ref_id = ref.get("ref") if isinstance(ref, dict) else ref
-                if ref_id == item_id:
-                    parents.append((item_view.data["id"], parent_kind))
-                    break
+            child_refs = self._extract_ref_ids(item_view.data.get(parent_field, []))
+            if item_id in child_refs:
+                parents.append((item_view.data["id"], parent_kind))
 
         return parents
+
+    def _extract_ref_ids(self, value: Any) -> list[str]:
+        """Normalize scalar/list/dict reference values into plain item IDs."""
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, dict):
+            ref_id = value.get("ref")
+            return [ref_id] if isinstance(ref_id, str) and ref_id else []
+        if isinstance(value, list):
+            ids: list[str] = []
+            for entry in value:
+                ids.extend(self._extract_ref_ids(entry))
+            return ids
+        return []
+
+    def _linked_child_ids(self, parent_id: str, parent_kind: str, child_kind: str, parent_field: str) -> list[str]:
+        """Resolve all child IDs linked to a parent across direct and reverse ref styles."""
+        child_ids: list[str] = []
+        seen: set[str] = set()
+
+        parent_view = self._planning_api.lookup(parent_id)
+        if parent_view and parent_view.data:
+            for child_id in self._extract_ref_ids(parent_view.data.get(parent_field, [])):
+                child_view = self._planning_api.lookup(child_id)
+                if not child_view or not child_view.data:
+                    continue
+                resolved_kind = getattr(child_view, "kind", None) or child_view.data.get("kind")
+                if resolved_kind != child_kind or child_id in seen:
+                    continue
+                seen.add(child_id)
+                child_ids.append(child_id)
+
+        for item_view in self._planning_api._scan():
+            item_kind = getattr(item_view, "kind", None) or item_view.data.get("kind")
+            if item_kind != child_kind:
+                continue
+            item_id = item_view.data.get("id")
+            if not item_id or item_id in seen:
+                continue
+            if parent_id not in self._extract_ref_ids(item_view.data.get(parent_field)):
+                continue
+            seen.add(item_id)
+            child_ids.append(item_id)
+
+        return child_ids
 
     def _apply_rule(
         self,
