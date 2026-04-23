@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "global": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "max_depth": { "type": "integer" },
+        "default_mode": {
+          "type": "string",
+          "enum": ["async", "sync"]
+        }
+      }
+    },
+    "kinds": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "parent_kind": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "null" }
+            ]
+          },
+          "parent_field": { "type": "string" },
+          "state_rules": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "rule": { "type": "string" },
+                "new_state": {
+                  "oneOf": [
+                    { "type": "string" },
+                    { "type": "null" }
+                  ]
+                }
+              },
+              "required": ["rule", "new_state"]
+            }
+          }
+        }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "description": { "type": "string" },
+          "logic": { "type": "string" }
+        }
+      }
+    },
+    "actions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "description": { "type": "string" },
+          "logic": { "type": "string" }
+        }
+      }
+    },
+    "terminal_states": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "state_priority": {
+      "type": "object",
+      "additionalProperties": { "type": "integer" }
+    },
+    "workflows": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "healing": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "auto_fix": { "type": "boolean" },
+        "log_only": { "type": "boolean" },
+        "on_state_change": { "type": "boolean" },
+        "max_fixes_per_run": { "type": "integer" }
+      }
+    }
+  }
+}

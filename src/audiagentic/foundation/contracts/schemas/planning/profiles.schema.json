@@ -19,8 +19,19 @@
             "properties": {
               "description": { "type": "string" },
               "label": { "type": "string" },
-              "on_create": { "type": "array", "items": { "type": "string" } },
-              "on_request_create": { "type": "array", "items": { "type": "string" } },
+              "on_create": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": { "type": "string" },
+                    "label_suffix": { "type": "string" },
+                    "domain": { "type": "string" }
+                  },
+                  "required": ["kind"]
+                }
+              },
               "allow_plan_overlay": { "type": "boolean" },
               "defaults": { "type": "object" },
               "suggested_sections": { "type": "array", "items": { "type": "string" } }
@@ -89,22 +100,6 @@
               "required": { "type": "array", "items": { "type": "string" } },
               "suggested": { "type": "array", "items": { "type": "string" } }
             }
-          }
-        },
-        "spec_sections": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "required": { "type": "array", "items": { "type": "string" } },
-            "suggested": { "type": "array", "items": { "type": "string" } }
-          }
-        },
-        "task_sections": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "required": { "type": "array", "items": { "type": "string" } },
-            "suggested": { "type": "array", "items": { "type": "string" } }
           }
         },
         "acceptance_criteria_depth": { "type": "string" },

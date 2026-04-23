@@ -55,13 +55,19 @@ kinds:
     parent_field: task_refs
     state_rules:
       in_progress:
-        rule: trigger_parent_if_ready
+        rule: parent_in_set
+        when:
+          state_set: initial
         new_state: in_progress
       done:
-        rule: check_all_children_done
+        rule: all_children_in_set
+        when:
+          state_set: complete
         new_state: done
       blocked:
-        rule: trigger_parent_unless_terminal
+        rule: parent_not_in_set
+        when:
+          state_set: terminal
         new_state: blocked
 
   wp:
@@ -70,13 +76,19 @@ kinds:
     parent_field: plan_ref
     state_rules:
       in_progress:
-        rule: trigger_parent_if_ready
+        rule: parent_in_set
+        when:
+          state_set: initial
         new_state: in_progress
       done:
-        rule: check_all_children_done
+        rule: all_children_in_set
+        when:
+          state_set: complete
         new_state: done
       blocked:
-        rule: trigger_parent_unless_terminal
+        rule: parent_not_in_set
+        when:
+          state_set: terminal
         new_state: blocked
 
   plan:
@@ -85,13 +97,19 @@ kinds:
     parent_field: spec_refs
     state_rules:
       in_progress:
-        rule: trigger_parent_if_ready
+        rule: parent_in_set
+        when:
+          state_set: initial
         new_state: in_progress
       done:
-        rule: check_all_children_done
+        rule: all_children_in_set
+        when:
+          state_set: complete
         new_state: done
       blocked:
-        rule: trigger_parent_unless_terminal
+        rule: parent_not_in_set
+        when:
+          state_set: terminal
         new_state: blocked
 
   spec:
@@ -100,14 +118,25 @@ kinds:
     parent_field: request_refs
     state_rules:
       in_progress:
-        rule: trigger_parent_if_ready
+        rule: parent_in_set
+        when:
+          state_set: initial
         new_state: in_progress
       done:
-        rule: check_all_children_done
+        rule: all_children_in_set
+        when:
+          state_set: complete
         new_state: done
-        check_request_completion: true
+        actions:
+          - action: complete_parent
+            parent_field: request_refs
+            required_state_set: complete
+            parent_blocking_set: terminal
+            target_state: closed
       blocked:
-        rule: trigger_parent_unless_terminal
+        rule: parent_not_in_set
+        when:
+          state_set: terminal
         new_state: blocked
 
   request:
@@ -135,26 +164,26 @@ rules:
     description: "No state propagation"
     logic: "audiagentic.planning.app.propagation_rules.rule_none"
 
-  trigger_parent_if_ready:
+  parent_in_set:
     enabled: true
-    description: "Set parent to new_state if parent is ready"
-    logic: "audiagentic.planning.app.propagation_rules.rule_trigger_parent_if_ready"
+    description: "Set parent to new_state when parent is in configured state set"
+    logic: "audiagentic.planning.app.propagation_rules.rule_parent_in_set"
 
-  check_all_children_done:
+  all_children_in_set:
     enabled: true
-    description: "Set parent to new_state if all sibling children are in new_state"
-    logic: "audiagentic.planning.app.propagation_rules.rule_check_all_children_done"
+    description: "Set parent to new_state when all sibling children are in configured state set"
+    logic: "audiagentic.planning.app.propagation_rules.rule_all_children_in_set"
 
-  trigger_parent_unless_terminal:
+  parent_not_in_set:
     enabled: true
-    description: "Set parent to new_state unless parent is done/archived"
-    logic: "audiagentic.planning.app.propagation_rules.rule_trigger_parent_unless_terminal"
+    description: "Set parent to new_state when parent is not in configured state set"
+    logic: "audiagentic.planning.app.propagation_rules.rule_parent_not_in_set"
 
 actions:
-  check_request_completion:
+  complete_parent:
     enabled: true
-    description: "Auto-complete request when all specs are done"
-    logic: "audiagentic.planning.app.propagation_rules.action_check_request_completion"
+    description: "Complete parent when all related children are in configured state set"
+    logic: "audiagentic.planning.app.propagation_rules.action_complete_parent"
 """)
 
 
@@ -443,3 +472,50 @@ state_priority: {}
             and entry.get("reason") == "invalid_transition"
             for entry in _read_propagation_log(root)
         )
+
+    def test_done_propagates_through_direct_parent_ref(self, planning_root):
+        """Completion propagation works when child stores the parent ref directly."""
+        _, planning_api = planning_root
+        _, _, plan_id, wp_id, _ = _create_task_hierarchy(planning_api)
+
+        planning_api.state(plan_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        planning_api.state(plan_id, "in_progress", metadata={})
+        _wait_for_propagation(planning_api)
+        planning_api.state(wp_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        planning_api.state(wp_id, "in_progress", metadata={})
+        _wait_for_propagation(planning_api)
+        planning_api.state(wp_id, "done", metadata={})
+        _wait_for_propagation(planning_api)
+
+        plan_view = planning_api.lookup(plan_id)
+        assert plan_view is not None
+        assert plan_view.data["state"] == "done"
+
+    def test_request_completion_uses_rel_list_and_runs_once(self, planning_root):
+        """Parent completion action supports rel-list refs and avoids duplicate attempts."""
+        root, planning_api = planning_root
+        request_id, spec_id = _create_request_and_spec(planning_api)
+
+        planning_api.state(request_id, "distilled", metadata={})
+        _wait_for_propagation(planning_api)
+        planning_api.state(spec_id, "ready", metadata={})
+        _wait_for_propagation(planning_api)
+        planning_api.state(spec_id, "in_progress", metadata={})
+        _wait_for_propagation(planning_api)
+        planning_api.state(spec_id, "done", metadata={})
+        _wait_for_propagation(planning_api)
+
+        request_view = planning_api.lookup(request_id)
+        assert request_view is not None
+        assert request_view.data["state"] == "closed"
+
+        matching = [
+            entry
+            for entry in _read_propagation_log(root)
+            if entry.get("target_id") == request_id
+            and entry.get("new_state") == "closed"
+            and entry.get("status") == "success"
+        ]
+        assert len(matching) == 1

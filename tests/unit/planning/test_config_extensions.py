@@ -67,8 +67,9 @@ def test_guidance_level_semantics(tmp_path: Path) -> None:
         assert "description" in level_config
         assert "label" in level_config
         assert "defaults" in level_config
-        assert "spec_sections" in level_config
-        assert "task_sections" in level_config
+        assert "sections_by_kind" in level_config
+        assert "spec" in level_config["sections_by_kind"]
+        assert "task" in level_config["sections_by_kind"]
         assert "acceptance_criteria_depth" in level_config
         assert "semantics" in level_config
         semantics = level_config["semantics"]
@@ -111,15 +112,21 @@ def test_guidance_sections_by_depth(tmp_path: Path) -> None:
     light = cfg.guidance_for("light")
     standard = cfg.guidance_for("standard")
     deep = cfg.guidance_for("deep")
-    light_required = len(light["spec_sections"]["required"])
-    standard_required = len(standard["spec_sections"]["required"])
-    deep_required = len(deep["spec_sections"]["required"])
+    light_required = len(light["sections_by_kind"]["spec"]["required"])
+    standard_required = len(standard["sections_by_kind"]["spec"]["required"])
+    deep_required = len(deep["sections_by_kind"]["spec"]["required"])
     assert light_required <= standard_required <= deep_required
     assert light["acceptance_criteria_depth"] == "basic"
     assert standard["acceptance_criteria_depth"] == "standard"
     assert deep["acceptance_criteria_depth"] == "rigorous"
-    assert cfg.guidance_required_sections("standard", "spec") == standard["spec_sections"]["required"]
-    assert cfg.guidance_required_sections("standard", "task") == standard["task_sections"]["required"]
+    assert (
+        cfg.guidance_required_sections("standard", "spec")
+        == standard["sections_by_kind"]["spec"]["required"]
+    )
+    assert (
+        cfg.guidance_required_sections("standard", "task")
+        == standard["sections_by_kind"]["task"]["required"]
+    )
 
 
 def test_state_section_requirements_load(tmp_path: Path) -> None:
@@ -153,9 +160,7 @@ def test_request_creation_sections_merge_template_profile_and_required(tmp_path:
         "Problem",
         "Desired Outcome",
         "Constraints",
-        "Understanding",
         "Open Questions",
-        "Notes",
     ]
 
 
@@ -196,6 +201,16 @@ def test_state_cascades_are_loaded_from_config(tmp_path: Path) -> None:
     assert cfg.state_cascades("request", "archived") == {"spec": "archived", "task": "archived"}
     assert cfg.state_cascades("request", "superseded") == {"spec": "superseded"}
     assert cfg.state_cascades("spec", "archived") == {"plan": "archived", "task": "archived"}
+
+
+def test_lifecycle_state_sets_load_per_kind_and_workflow(tmp_path: Path) -> None:
+    root = _seed_base_config(tmp_path, include_optional=True)
+    cfg = Config(root)
+    assert cfg.states_in_set("request", "terminal") == ["superseded", "archived"]
+    assert cfg.states_in_set("task", "initial") == ["draft", "ready"]
+    assert cfg.states_in_set("task", "initial", "review_heavy") == ["draft", "review", "ready"]
+    assert cfg.state_in_set("task", "archived", "terminal")
+    assert not cfg.state_in_set("task", "in_progress", "terminal")
 
 
 def test_kind_aliases_are_loaded_from_config(tmp_path: Path) -> None:
@@ -247,7 +262,7 @@ def test_planning_schema_allows_extra_named_dirs_if_string(tmp_path: Path) -> No
     assert cfg.validate() == []
 
 
-def test_profiles_schema_accepts_generic_on_create_profile_key(tmp_path: Path) -> None:
+def test_profiles_schema_rejects_string_on_create_entries(tmp_path: Path) -> None:
     root = _seed_base_config(tmp_path, include_optional=True)
     profiles_path = root / ".audiagentic" / "planning" / "config" / "profiles.yaml"
     payload = yaml.safe_load(profiles_path.read_text(encoding="utf-8"))
@@ -255,7 +270,8 @@ def test_profiles_schema_accepts_generic_on_create_profile_key(tmp_path: Path) -
     profiles_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
     cfg = Config(root)
-    assert cfg.validate() == []
+    errors = cfg.validate()
+    assert any("profiles.yaml" in error and "'specification' is not of type 'object'" in error for error in errors)
 
 
 def test_profiles_schema_rejects_unknown_top_level_keys(tmp_path: Path) -> None:

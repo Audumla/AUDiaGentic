@@ -217,7 +217,12 @@ def sync_counter(root: Path, kind: str, test_mode: bool = False) -> None:
         ids_dir = root / ".audiagentic" / "planning" / _IDS_DIR
     ids_dir.mkdir(parents=True, exist_ok=True)
     max_n = 0
-    for item in scan_items(root):
+    try:
+        items = scan_items(root)
+    except FileNotFoundError:
+        items = []
+
+    for item in items:
         if item.kind == kind:
             try:
                 max_n = max(max_n, int(item.data["id"].split("-")[1]))
