@@ -50,10 +50,14 @@ kinds:
     parent_field: task_refs
     state_rules:
       in_progress:
-        rule: trigger_parent_if_ready
+        rule: parent_in_set
+        when:
+          state_set: initial
         new_state: in_progress
       done:
-        rule: check_all_children_done
+        rule: all_children_in_set
+        when:
+          state_set: complete
         new_state: done
 
   wp:
@@ -62,10 +66,14 @@ kinds:
     parent_field: plan_ref
     state_rules:
       in_progress:
-        rule: trigger_parent_if_ready
+        rule: parent_in_set
+        when:
+          state_set: initial
         new_state: in_progress
       done:
-        rule: check_all_children_done
+        rule: all_children_in_set
+        when:
+          state_set: complete
         new_state: done
 
   plan:
@@ -104,14 +112,14 @@ healing:
   max_fixes_per_run: 10
 
 rules:
-  trigger_parent_if_ready:
+  parent_in_set:
     enabled: true
-    description: "Set parent to new_state if parent is ready"
-    logic: "audiagentic.planning.app.propagation_rules.rule_trigger_parent_if_ready"
-  check_all_children_done:
+    description: "Set parent to new_state when parent is in configured state set"
+    logic: "audiagentic.planning.app.propagation_rules.rule_parent_in_set"
+  all_children_in_set:
     enabled: true
-    description: "Set to done if all children are done"
-    logic: "audiagentic.planning.app.propagation_rules.rule_check_all_children_done"
+    description: "Set to target state when all children are in configured state set"
+    logic: "audiagentic.planning.app.propagation_rules.rule_all_children_in_set"
   none:
     enabled: true
     description: "No state propagation"
@@ -167,8 +175,8 @@ def test_heal_auto_fix(tmp_path: Path) -> None:
     assert wp_view.data["state"] == "ready"
 
 
-def test_validate_parent_done_child_not_done(tmp_path: Path) -> None:
-    """Test validation detects parent done but child not done."""
+def test_validate_parent_complete_child_not_complete(tmp_path: Path) -> None:
+    """Test validation detects parent complete but child not complete."""
     _seed_planning_project(tmp_path)
     _seed_propagation_config(tmp_path)
     planning_api = PlanningAPI(tmp_path)
@@ -182,7 +190,9 @@ def test_validate_parent_done_child_not_done(tmp_path: Path) -> None:
     # Validate should detect inconsistency
     errors = planning_api._propagation_engine.validate_hierarchy(task_id)
     assert len(errors) > 0
-    assert any("Parent is done but child is not" in e.get("error", "") for e in errors)
+    assert any(
+        "Parent is complete but child is not complete" in e.get("error", "") for e in errors
+    )
 
 
 def test_heal_does_not_auto_fix_dangerous(tmp_path: Path) -> None:
@@ -192,7 +202,7 @@ def test_heal_does_not_auto_fix_dangerous(tmp_path: Path) -> None:
     planning_api = PlanningAPI(tmp_path)
     _, _, _, wp_id, task_id = _create_task_hierarchy(planning_api)
 
-    # Create dangerous inconsistency (parent done, child not done)
+    # Create dangerous inconsistency (parent complete, child not complete)
     planning_api.state(wp_id, "ready", metadata={})
     planning_api.state(wp_id, "in_progress", metadata={})
     planning_api.state(wp_id, "done", metadata={})
@@ -250,7 +260,9 @@ kinds:
     parent_field: task_refs
     state_rules:
       in_progress:
-        rule: trigger_parent_if_ready
+        rule: parent_in_set
+        when:
+          state_set: initial
         new_state: in_progress
 
   wp:
@@ -259,7 +271,9 @@ kinds:
     parent_field: plan_ref
     state_rules:
       in_progress:
-        rule: trigger_parent_if_ready
+        rule: parent_in_set
+        when:
+          state_set: initial
         new_state: in_progress
 
   plan:
@@ -280,10 +294,10 @@ state_priority:
   ready: 10
 
 rules:
-  trigger_parent_if_ready:
+  parent_in_set:
     enabled: true
-    description: "Set parent to new_state if parent is ready"
-    logic: "audiagentic.planning.app.propagation_rules.rule_trigger_parent_if_ready"
+    description: "Set parent to new_state when parent is in configured state set"
+    logic: "audiagentic.planning.app.propagation_rules.rule_parent_in_set"
   none:
     enabled: true
     description: "No state propagation"

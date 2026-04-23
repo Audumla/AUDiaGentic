@@ -48,6 +48,10 @@
     "request_refs": [
       "request-10"
     ],
+    "standard_refs": [
+      "standard-6",
+      "standard-5"
+    ],
     "task_refs": [
       {
         "ref": "task-218"
