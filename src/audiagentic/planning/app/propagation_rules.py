@@ -1,7 +1,8 @@
 """Config-driven propagation rule implementations.
 
 These functions are referenced by name in the state_propagation.yaml config.
-They can be replaced or extended without modifying the propagation engine.
+They operate purely on semantic state sets defined in configuration, with no
+hardcoded state names or legacy fallbacks.
 """
 
 from typing import Any
@@ -25,42 +26,45 @@ def rule_none(engine: Any, child_id: str, parent_id: str, new_state: str) -> boo
 def rule_parent_in_set(
     engine: Any, child_id: str, parent_id: str, new_state: str, when: dict[str, Any] | None = None
 ) -> bool:
-    """Trigger parent when parent state is in configured set.
+    """Trigger parent when parent state is in configured semantic set.
 
     Args:
         engine: StatePropagationEngine instance
         child_id: Child item ID
         parent_id: Parent item ID
         new_state: New state of child
+        when: Rule condition config containing 'state_set'
 
     Returns:
-        True if parent is in configured set
+        True if parent is in configured state set
     """
     parent_view = engine._planning_api.lookup(parent_id)
     if not parent_view or not parent_view.data:
         return False
 
     parent_kind = getattr(parent_view, "kind", None) or parent_view.data.get("kind")
-    initial_state = engine.config.initial_state(parent_kind) if engine.config and parent_kind else "ready"
-    parent_state = parent_view.data.get("state", initial_state)
+    parent_state = parent_view.data.get("state")
     state_set = (when or {}).get("state_set")
-    if engine.config and parent_kind and state_set:
-        return engine.config.state_in_set(
-            parent_kind, parent_state, state_set, parent_view.data.get("workflow")
-        )
-    return parent_state == initial_state
+
+    if not state_set or not engine.config or not parent_kind:
+        return False
+
+    return engine.config.state_in_set(
+        parent_kind, parent_state, state_set, parent_view.data.get("workflow")
+    )
 
 
 def rule_all_children_in_set(
     engine: Any, child_id: str, parent_id: str, new_state: str, when: dict[str, Any] | None = None
 ) -> bool:
-    """Check if all sibling children are in configured state set.
+    """Check if all sibling children are in configured semantic state set.
 
     Args:
         engine: StatePropagationEngine instance
         child_id: Child item ID
         parent_id: Parent item ID
         new_state: New state of child
+        when: Rule condition config containing 'state_set'
 
     Returns:
         True if all siblings are in configured set
@@ -73,17 +77,13 @@ def rule_all_children_in_set(
     if not child_view or not child_view.data:
         return False
 
-    # Get child kind from Item.kind attribute
     child_kind = getattr(child_view, "kind", None) or child_view.data.get("kind")
     child_config = engine._config.get("kinds", {}).get(child_kind, {})
-
-    # Use the child's parent_field to find the field in parent that contains children
     child_field = child_config.get("parent_field")
 
     if not child_field:
         return False
 
-    # Get all children from parent
     child_refs = parent_view.data.get(child_field, [])
     if isinstance(child_refs, str):
         child_refs = [child_refs]
@@ -95,11 +95,8 @@ def rule_all_children_in_set(
     if not state_set:
         return False
 
-    # Check all children are in target set
     for ref in child_refs:
-        # Handle both direct IDs and dict refs with 'ref' key
         cid = ref.get("ref") if isinstance(ref, dict) else ref
-
         sibling_view = engine._planning_api.lookup(cid)
         if not sibling_view or not sibling_view.data:
             return False
@@ -118,31 +115,32 @@ def rule_all_children_in_set(
 def rule_parent_not_in_set(
     engine: Any, child_id: str, parent_id: str, new_state: str, when: dict[str, Any] | None = None
 ) -> bool:
-    """Trigger parent when parent state is not in configured set.
+    """Trigger parent when parent state is not in configured semantic set.
 
     Args:
         engine: StatePropagationEngine instance
         child_id: Child item ID
         parent_id: Parent item ID
         new_state: New state of child
+        when: Rule condition config containing 'state_set'
 
     Returns:
-        True if parent is not in configured set
+        True if parent is not in configured state set
     """
     parent_view = engine._planning_api.lookup(parent_id)
     if not parent_view or not parent_view.data:
         return False
 
     parent_kind = getattr(parent_view, "kind", None) or parent_view.data.get("kind")
-    initial_state = engine.config.initial_state(parent_kind) if engine.config and parent_kind else "ready"
-    parent_state = parent_view.data.get("state", initial_state)
+    parent_state = parent_view.data.get("state")
     state_set = (when or {}).get("state_set")
-    if engine.config and parent_kind and state_set:
-        return not engine.config.state_in_set(
-            parent_kind, parent_state, state_set, parent_view.data.get("workflow")
-        )
-    terminal_states = engine._config.get("terminal_states", [])
-    return parent_state not in terminal_states
+
+    if not state_set or not engine.config or not parent_kind:
+        return False
+
+    return not engine.config.state_in_set(
+        parent_kind, parent_state, state_set, parent_view.data.get("workflow")
+    )
 
 
 def action_complete_parent(
@@ -151,7 +149,7 @@ def action_complete_parent(
     action_config: dict[str, Any],
     state_rules: dict[str, Any],
 ) -> list[tuple[str, str, str]]:
-    """Complete parent items when all sibling children are in configured set.
+    """Complete parent items when all sibling children are in configured semantic set.
 
     Args:
         engine: StatePropagationEngine instance
@@ -174,6 +172,7 @@ def action_complete_parent(
     parent_field = action_config.get("parent_field")
     target_state = action_config.get("target_state")
     parent_blocking_set = action_config.get("parent_blocking_set", "terminal")
+
     if not required_state_set or not parent_field or not target_state:
         return []
 
