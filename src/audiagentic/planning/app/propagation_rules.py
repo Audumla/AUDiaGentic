@@ -22,10 +22,10 @@ def rule_none(engine: Any, child_id: str, parent_id: str, new_state: str) -> boo
     return False
 
 
-def rule_trigger_parent_if_ready(
-    engine: Any, child_id: str, parent_id: str, new_state: str
+def rule_parent_in_set(
+    engine: Any, child_id: str, parent_id: str, new_state: str, when: dict[str, Any] | None = None
 ) -> bool:
-    """Trigger parent to enter new_state if parent is in 'ready' state.
+    """Trigger parent when parent state is in configured set.
 
     Args:
         engine: StatePropagationEngine instance
@@ -34,20 +34,27 @@ def rule_trigger_parent_if_ready(
         new_state: New state of child
 
     Returns:
-        True if parent is in 'ready' state
+        True if parent is in configured set
     """
     parent_view = engine._planning_api.lookup(parent_id)
     if not parent_view or not parent_view.data:
         return False
 
-    parent_state = parent_view.data.get("state", "ready")
-    return parent_state == "ready"
+    parent_kind = getattr(parent_view, "kind", None) or parent_view.data.get("kind")
+    initial_state = engine.config.initial_state(parent_kind) if engine.config and parent_kind else "ready"
+    parent_state = parent_view.data.get("state", initial_state)
+    state_set = (when or {}).get("state_set")
+    if engine.config and parent_kind and state_set:
+        return engine.config.state_in_set(
+            parent_kind, parent_state, state_set, parent_view.data.get("workflow")
+        )
+    return parent_state == initial_state
 
 
-def rule_check_all_children_done(
-    engine: Any, child_id: str, parent_id: str, new_state: str
+def rule_all_children_in_set(
+    engine: Any, child_id: str, parent_id: str, new_state: str, when: dict[str, Any] | None = None
 ) -> bool:
-    """Check if all sibling children are in new_state.
+    """Check if all sibling children are in configured state set.
 
     Args:
         engine: StatePropagationEngine instance
@@ -56,7 +63,7 @@ def rule_check_all_children_done(
         new_state: New state of child
 
     Returns:
-        True if all siblings are in new_state
+        True if all siblings are in configured set
     """
     parent_view = engine._planning_api.lookup(parent_id)
     if not parent_view or not parent_view.data:
@@ -84,7 +91,11 @@ def rule_check_all_children_done(
     if not child_refs:
         return False
 
-    # Check all children are in target state
+    state_set = (when or {}).get("state_set")
+    if not state_set:
+        return False
+
+    # Check all children are in target set
     for ref in child_refs:
         # Handle both direct IDs and dict refs with 'ref' key
         cid = ref.get("ref") if isinstance(ref, dict) else ref
@@ -93,16 +104,21 @@ def rule_check_all_children_done(
         if not sibling_view or not sibling_view.data:
             return False
 
-        if sibling_view.data.get("state") != new_state:
+        sibling_kind = getattr(sibling_view, "kind", None) or sibling_view.data.get("kind")
+        if not engine.config or not sibling_kind:
+            return False
+        if not engine.config.state_in_set(
+            sibling_kind, sibling_view.data.get("state"), state_set, sibling_view.data.get("workflow")
+        ):
             return False
 
     return True
 
 
-def rule_trigger_parent_unless_terminal(
-    engine: Any, child_id: str, parent_id: str, new_state: str
+def rule_parent_not_in_set(
+    engine: Any, child_id: str, parent_id: str, new_state: str, when: dict[str, Any] | None = None
 ) -> bool:
-    """Trigger parent to new_state unless parent is in terminal state.
+    """Trigger parent when parent state is not in configured set.
 
     Args:
         engine: StatePropagationEngine instance
@@ -111,65 +127,103 @@ def rule_trigger_parent_unless_terminal(
         new_state: New state of child
 
     Returns:
-        True if parent is not in terminal state
+        True if parent is not in configured set
     """
     parent_view = engine._planning_api.lookup(parent_id)
     if not parent_view or not parent_view.data:
         return False
 
-    parent_state = parent_view.data.get("state", "ready")
-    terminal_states = engine._config.get("terminal_states", ["done", "archived"])
+    parent_kind = getattr(parent_view, "kind", None) or parent_view.data.get("kind")
+    initial_state = engine.config.initial_state(parent_kind) if engine.config and parent_kind else "ready"
+    parent_state = parent_view.data.get("state", initial_state)
+    state_set = (when or {}).get("state_set")
+    if engine.config and parent_kind and state_set:
+        return not engine.config.state_in_set(
+            parent_kind, parent_state, state_set, parent_view.data.get("workflow")
+        )
+    terminal_states = engine._config.get("terminal_states", [])
     return parent_state not in terminal_states
 
 
-def action_check_request_completion(
-    engine: Any, item_id: str, state_rules: dict[str, Any]
+def action_complete_parent(
+    engine: Any,
+    item_id: str,
+    action_config: dict[str, Any],
+    state_rules: dict[str, Any],
 ) -> list[tuple[str, str, str]]:
-    """Check if a request should auto-complete based on spec states.
-
-    This action is called when a spec enters 'done' state. It checks if the
-    request(s) this spec belongs to should be marked as done.
+    """Complete parent items when all sibling children are in configured set.
 
     Args:
         engine: StatePropagationEngine instance
-        item_id: Spec ID that just changed state
+        item_id: Source item ID that changed state
+        action_config: Action config dict
         state_rules: State rules config for context
 
     Returns:
-        List of (request_id, "request", "done") tuples for propagation
+        List of (parent_id, parent_kind, target_state) tuples for propagation
     """
-    spec_view = engine._planning_api.lookup(item_id)
-    if not spec_view or not spec_view.data:
+    source_view = engine._planning_api.lookup(item_id)
+    if not source_view or not source_view.data:
         return []
 
-    if spec_view.data.get("state") != "done":
+    source_kind = getattr(source_view, "kind", None) or source_view.data.get("kind")
+    if not source_kind or not engine.config:
         return []
 
-    # Get the parent_field from spec config to find request references
-    spec_kind = getattr(spec_view, "kind", None) or spec_view.data.get("kind")
-    spec_config = engine._config.get("kinds", {}).get(spec_kind, {})
-    parent_field = spec_config.get("parent_field")
-
-    if not parent_field:
+    required_state_set = action_config.get("required_state_set")
+    parent_field = action_config.get("parent_field")
+    target_state = action_config.get("target_state")
+    parent_blocking_set = action_config.get("parent_blocking_set", "terminal")
+    if not required_state_set or not parent_field or not target_state:
         return []
 
-    # Find request(s) this spec belongs to
-    request_refs = spec_view.data.get(parent_field, [])
-    if isinstance(request_refs, str):
-        request_refs = [request_refs]
+    if not engine.config.state_in_set(
+        source_kind, source_view.data.get("state"), required_state_set, source_view.data.get("workflow")
+    ):
+        return []
+
+    parent_refs = source_view.data.get(parent_field, [])
+    if isinstance(parent_refs, str):
+        parent_refs = [parent_refs]
 
     propagations = []
 
-    for request_id in request_refs:
-        request_view = engine._planning_api.lookup(request_id)
-        if not request_view or not request_view.data:
+    for parent_id in parent_refs:
+        parent_view = engine._planning_api.lookup(parent_id)
+        if not parent_view or not parent_view.data:
             continue
 
-        # Check if all specs for this request are done
-        request_state = request_view.data.get("state", "ready")
-        terminal_states = engine._config.get("terminal_states", ["done", "archived"])
+        parent_kind = getattr(parent_view, "kind", None) or parent_view.data.get("kind")
+        if not parent_kind:
+            continue
+        if engine.config.state_in_set(
+            parent_kind,
+            parent_view.data.get("state"),
+            parent_blocking_set,
+            parent_view.data.get("workflow"),
+        ):
+            continue
 
-        if request_state not in terminal_states:
-            propagations.append((request_id, "request", "done"))
+        siblings_complete = True
+        for sibling_view in engine._planning_api._scan():
+            sibling_kind = getattr(sibling_view, "kind", None) or sibling_view.data.get("kind")
+            if sibling_kind != source_kind:
+                continue
+            sibling_refs = sibling_view.data.get(parent_field, [])
+            if isinstance(sibling_refs, str):
+                sibling_refs = [sibling_refs]
+            if parent_id not in sibling_refs:
+                continue
+            if not engine.config.state_in_set(
+                source_kind,
+                sibling_view.data.get("state"),
+                required_state_set,
+                sibling_view.data.get("workflow"),
+            ):
+                siblings_complete = False
+                break
+
+        if siblings_complete:
+            propagations.append((parent_id, parent_kind, target_state))
 
     return propagations
