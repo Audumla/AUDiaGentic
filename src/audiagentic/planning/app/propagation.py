@@ -2,7 +2,7 @@
 
 Config-driven state propagation across planning items. The engine is completely
 agnostic about workflows and document relationships - all rules, actions, and
-relationships are defined in the config file.
+relationships are defined in the config file using semantic state sets.
 
 This is a passive utility - it does NOT subscribe to events. The owner component
 (planning) is responsible for registering event handlers and calling propagate().
