@@ -89,6 +89,11 @@ class StatePropagationEngine:
                 "Either pass config_path or set enabled=False."
             )
 
+    @property
+    def config(self) -> Any:
+        """Access the PlanningAPI's Config instance."""
+        return getattr(self._planning_api, "config", None)
+
     def _ensure_config_loaded(self) -> None:
         """Ensure config is loaded, loading if necessary."""
         if self._config is None:
@@ -195,12 +200,12 @@ class StatePropagationEngine:
 
         propagations = []
         for parent_id, parent_kind in parents:
-            if self._apply_rule(item_id, parent_id, new_state, rule):
+            if self._apply_rule(item_id, parent_id, new_state, state_rules):
                 propagations.append((parent_id, parent_kind, target_state))
 
                 actions = state_rules.get("actions", [])
-                for action_name in actions:
-                    action_propagations = self._execute_action(action_name, parent_id, state_rules)
+                for action_entry in actions:
+                    action_propagations = self._execute_action(action_entry, item_id, state_rules)
                     propagations.extend(action_propagations)
 
         return propagations
@@ -240,8 +245,10 @@ class StatePropagationEngine:
             )
             return
 
-        current_state = target_view.data.get("state", "ready")
         target_kind = getattr(target_view, "kind", None) or target_view.data.get("kind")
+        cfg = self.config
+        default_state = cfg.initial_state(target_kind) if cfg else "ready"
+        current_state = target_view.data.get("state", default_state)
 
         # Skip if already in target state
         if current_state == target_state:
@@ -396,7 +403,7 @@ class StatePropagationEngine:
 
         workflow_name = target_view.data.get("workflow")
         workflow = config.workflow_for(target_kind, workflow_name)
-        current_state = target_view.data.get("state", "ready")
+        current_state = target_view.data.get("state", config.initial_state(target_kind))
 
         if target_state not in workflow.get("values", []):
             return False
@@ -674,7 +681,7 @@ class StatePropagationEngine:
         child_id: str,
         parent_id: str,
         new_state: str,
-        rule: str,
+        state_rules: dict[str, Any],
     ) -> bool:
         """Apply a propagation rule to determine if state should propagate.
 
@@ -682,12 +689,15 @@ class StatePropagationEngine:
             child_id: Child item ID
             parent_id: Parent item ID
             new_state: New state of child
-            rule: Rule name from config
+            state_rules: Rule config for current source state
 
         Returns:
             True if state should propagate to parent
         """
         # Look up rule implementation from config
+        rule = state_rules.get("rule")
+        if not rule:
+            return False
         rule_configs = self._config.get("rules", {})
         rule_config = rule_configs.get(rule, {})
 
@@ -704,18 +714,18 @@ class StatePropagationEngine:
 
         # Execute rule logic
         try:
-            return logic_func(self, child_id, parent_id, new_state)
+            return logic_func(self, child_id, parent_id, new_state, state_rules.get("when"))
         except Exception as e:
             logger.error("Rule %s failed: %s", rule, e)
             return False
 
     def _execute_action(
-        self, action_name: str, item_id: str, state_rules: dict[str, Any]
+        self, action_entry: dict[str, Any], item_id: str, state_rules: dict[str, Any]
     ) -> list[tuple[str, str, str]]:
         """Execute a configured action.
 
         Args:
-            action_name: Action name from config
+            action_entry: Action config entry
             item_id: Item ID that triggered the action
             state_rules: State rules config for context
 
@@ -723,6 +733,9 @@ class StatePropagationEngine:
             List of (item_id, kind, new_state) tuples for propagation
         """
         # Look up action implementation from config
+        action_name = action_entry.get("action")
+        if not action_name:
+            return []
         action_configs = self._config.get("actions", {})
         action_config = action_configs.get(action_name, {})
 
@@ -737,7 +750,7 @@ class StatePropagationEngine:
 
         # Execute action logic
         try:
-            return logic_func(self, item_id, state_rules)
+            return logic_func(self, item_id, action_entry, state_rules)
         except Exception as e:
             logger.error("Action %s failed: %s", action_name, e)
             return []
@@ -815,9 +828,18 @@ class StatePropagationEngine:
                 errors.append(f"Missing required rule: {rule_name}")
 
         # Check valid states in state_rules
-        valid_states = validation_rules.get(
-            "valid_states", ["ready", "in_progress", "done", "blocked", "archived"]
-        )
+        valid_states = validation_rules.get("valid_states")
+        if not valid_states and self.config:
+            # Build valid states from all configured kinds' workflows
+            all_states = set()
+            for kind_name in config.get("kinds", {}).keys():
+                try:
+                    all_states.update(self.config.workflow_states(kind_name))
+                except (KeyError, TypeError):
+                    pass
+            valid_states = list(all_states) if all_states else []
+        if not valid_states:
+            valid_states = []
         kinds = config.get("kinds", {})
         for kind_name, kind_config in kinds.items():
             state_rules = kind_config.get("state_rules", {})
@@ -828,12 +850,7 @@ class StatePropagationEngine:
         # Check valid rules in state_rules
         valid_rules = validation_rules.get(
             "valid_rules",
-            [
-                "none",
-                "trigger_parent_if_ready",
-                "check_all_children_done",
-                "trigger_parent_unless_terminal",
-            ],
+            ["none", "parent_in_set", "all_children_in_set", "parent_not_in_set"],
         )
         for kind_name, kind_config in kinds.items():
             state_rules = kind_config.get("state_rules", {})
@@ -888,10 +905,24 @@ class StatePropagationEngine:
                 )
                 continue
 
-            item_state = item_view.data.get("state", "draft")
-            parent_state = parent_view.data.get("state", "draft")
+            item_workflow = item_view.data.get("workflow")
+            parent_workflow = parent_view.data.get("workflow")
+            item_state = item_view.data.get("state", self.config.initial_state(kind, item_workflow))
+            parent_state = parent_view.data.get(
+                "state",
+                self.config.initial_state(found_parent_kind, parent_workflow),
+            )
 
-            if parent_state == "done":
+            parent_is_complete = self.config.state_in_set(
+                found_parent_kind, parent_state, "complete", parent_workflow
+            )
+            parent_is_initial = self.config.state_in_set(
+                found_parent_kind, parent_state, "initial", parent_workflow
+            )
+            item_is_active = self.config.state_in_set(kind, item_state, "active", item_workflow)
+            item_is_complete = self.config.state_in_set(kind, item_state, "complete", item_workflow)
+
+            if parent_is_complete:
                 child_refs = parent_view.data.get(parent_field, [])
                 if isinstance(child_refs, str):
                     child_refs = [child_refs]
@@ -900,11 +931,22 @@ class StatePropagationEngine:
                     ref_id = ref.get("ref") if isinstance(ref, dict) else ref
                     child_view = self._planning_api.lookup(ref_id)
                     if child_view and child_view.data:
-                        child_state = child_view.data.get("state", "draft")
-                        if child_state not in ["done", "archived"]:
+                        child_kind = getattr(child_view, "kind", None) or child_view.data.get("kind")
+                        child_workflow = child_view.data.get("workflow")
+                        child_state = child_view.data.get(
+                            "state",
+                            self.config.initial_state(child_kind, child_workflow),
+                        )
+                        child_is_complete = self.config.state_in_set(
+                            child_kind, child_state, "complete", child_workflow
+                        )
+                        child_is_terminal = self.config.state_in_set(
+                            child_kind, child_state, "terminal", child_workflow
+                        )
+                        if not child_is_complete and not child_is_terminal:
                             errors.append(
                                 {
-                                    "error": "Parent is done but child is not",
+                                    "error": "Parent is complete but child is not complete",
                                     "parent_id": parent_id,
                                     "parent_state": parent_state,
                                     "child_id": ref_id,
@@ -912,10 +954,10 @@ class StatePropagationEngine:
                                 }
                             )
 
-            elif parent_state == "draft" and item_state in ["in_progress", "done"]:
+            elif parent_is_initial and (item_is_active or item_is_complete):
                 errors.append(
                     {
-                        "error": "Child is active but parent is in draft",
+                        "error": "Child is active but parent is in initial state",
                         "parent_id": parent_id,
                         "parent_state": parent_state,
                         "child_id": item_id,
@@ -987,24 +1029,51 @@ class StatePropagationEngine:
         """
         error_type = error.get("error", "")
 
-        if error_type == "Parent is done but child is not":
-            # Suggest marking child as done or parent as not done
+        if error_type == "Parent is complete but child is not complete":
+            child_id = error.get("child_id")
+            target_state = None
+            if child_id:
+                child_view = self._planning_api.lookup(child_id)
+                if child_view and child_view.data:
+                    child_workflow = child_view.data.get("workflow")
+                    complete_states = self.config.states_in_set(
+                        child_view.kind, "complete", child_workflow
+                    )
+                    if complete_states:
+                        target_state = complete_states[0]
+
             return {
                 "error": error,
-                "suggestion": "Mark child as done or change parent state",
-                "target_id": error.get("child_id"),
-                "target_state": "done",
+                "suggestion": "Mark child complete or change parent state",
+                "target_id": child_id,
+                "target_state": target_state,
                 "can_auto_fix": False,  # Don't auto-fix this - could lose work
             }
 
-        elif error_type == "Child is active but parent is in draft":
-            # Suggest moving parent to ready
+        elif error_type == "Child is active but parent is in initial state":
+            parent_id = error.get("parent_id")
+            target_state = None
+            if parent_id:
+                parent_view = self._planning_api.lookup(parent_id)
+                if parent_view and parent_view.data:
+                    parent_workflow = parent_view.data.get("workflow")
+                    initial_states = self.config.states_in_set(
+                        parent_view.kind, "initial", parent_workflow
+                    )
+                    current_state = parent_view.data.get("state")
+                    for candidate in initial_states:
+                        if candidate != current_state:
+                            target_state = candidate
+                            break
+                    if target_state is None:
+                        target_state = self.config.initial_state(parent_view.kind, parent_workflow)
+
             return {
                 "error": error,
-                "suggestion": "Move parent to ready state",
-                "target_id": error.get("parent_id"),
-                "target_state": "ready",
-                "can_auto_fix": True,  # Safe to auto-fix
+                "suggestion": "Move parent within initial states",
+                "target_id": parent_id,
+                "target_state": target_state,
+                "can_auto_fix": bool(target_state),  # Safe when a target is available
             }
 
         return {
