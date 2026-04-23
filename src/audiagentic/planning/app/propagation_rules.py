@@ -79,24 +79,21 @@ def rule_all_children_in_set(
 
     child_kind = getattr(child_view, "kind", None) or child_view.data.get("kind")
     child_config = engine._config.get("kinds", {}).get(child_kind, {})
-    child_field = child_config.get("parent_field")
+    parent_kind = child_config.get("parent_kind")
+    parent_field = child_config.get("parent_field")
 
-    if not child_field:
-        return False
-
-    child_refs = parent_view.data.get(child_field, [])
-    if isinstance(child_refs, str):
-        child_refs = [child_refs]
-
-    if not child_refs:
+    if not parent_kind or not parent_field:
         return False
 
     state_set = (when or {}).get("state_set")
     if not state_set:
         return False
 
-    for ref in child_refs:
-        cid = ref.get("ref") if isinstance(ref, dict) else ref
+    child_ids = engine._linked_child_ids(parent_id, parent_kind, child_kind, parent_field)
+    if not child_ids:
+        return False
+
+    for cid in child_ids:
         sibling_view = engine._planning_api.lookup(cid)
         if not sibling_view or not sibling_view.data:
             return False
@@ -181,9 +178,7 @@ def action_complete_parent(
     ):
         return []
 
-    parent_refs = source_view.data.get(parent_field, [])
-    if isinstance(parent_refs, str):
-        parent_refs = [parent_refs]
+    parent_refs = engine._extract_ref_ids(source_view.data.get(parent_field, []))
 
     propagations = []
 
@@ -204,15 +199,14 @@ def action_complete_parent(
             continue
 
         siblings_complete = True
-        for sibling_view in engine._planning_api._scan():
-            sibling_kind = getattr(sibling_view, "kind", None) or sibling_view.data.get("kind")
-            if sibling_kind != source_kind:
-                continue
-            sibling_refs = sibling_view.data.get(parent_field, [])
-            if isinstance(sibling_refs, str):
-                sibling_refs = [sibling_refs]
-            if parent_id not in sibling_refs:
-                continue
+        sibling_ids = engine._linked_child_ids(parent_id, parent_kind, source_kind, parent_field)
+        if not sibling_ids:
+            continue
+        for sibling_id in sibling_ids:
+            sibling_view = engine._planning_api.lookup(sibling_id)
+            if not sibling_view or not sibling_view.data:
+                siblings_complete = False
+                break
             if not engine.config.state_in_set(
                 source_kind,
                 sibling_view.data.get("state"),

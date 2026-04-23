@@ -208,7 +208,7 @@ class PlanningAPI:
         }
 
     def _assert_not_archived(self, item: ItemView, action: str) -> None:
-        if item.data.get("state") == "archived":
+        if item.data.get("state") == self.config.archived_state():
             raise ValueError(f"cannot {action} archived item {item.data['id']}; restore it first")
 
     def _normalize_id(self, id_: str) -> str:
@@ -340,12 +340,76 @@ class PlanningAPI:
         data[field] = vals
         dump_markdown(item.path, data, body)
 
-    def _sync_request_spec_refs(self, spec_id: str, request_refs: list[str] | None = None) -> None:
-        for req_id in request_refs or []:
-            request = self._find(req_id)
-            if request.kind != "request":
-                raise ValueError(f"request '{req_id}' does not exist")
-            self._append_unique_ref(req_id, "spec_refs", spec_id)
+    def _sync_back_ref(
+        self, child_id: str, child_kind: str, parent_kind: str, parent_ids: list[str] | None = None
+    ) -> None:
+        """Sync back-reference from child item to parent items.
+
+        For each parent ID, appends the child ID to the parent's tracking field
+        (e.g., spec_refs on a request when a spec is created).
+
+        Args:
+            child_id: ID of the child item
+            child_kind: Kind of the child item (e.g., 'spec')
+            parent_kind: Kind of the parent item (e.g., 'request')
+            parent_ids: List of parent item IDs to update
+        """
+        back_ref_field = self.config.back_ref_rule(parent_kind, child_kind)
+        if not back_ref_field:
+            return
+
+        for parent_id in parent_ids or []:
+            try:
+                parent = self._find(parent_id)
+            except KeyError:
+                continue
+            if parent.kind != parent_kind:
+                raise ValueError(f"{parent_kind} '{parent_id}' does not exist")
+            self._append_unique_ref(parent_id, back_ref_field, child_id)
+
+    def _sync_creation_back_refs(
+        self,
+        id_: str,
+        kind: str,
+        request_refs: list[str] | None,
+        standard_refs: list[str] | None,
+        spec: str | None,
+        plan: str | None,
+    ) -> None:
+        """Sync back-references for all reference fields on a newly created item.
+
+        Args:
+            id_: ID of the newly created item
+            kind: Kind of the newly created item
+            request_refs: List of request IDs referenced by this item
+            standard_refs: List of standard IDs referenced by this item
+            spec: Single spec ID referenced by this item
+            plan: Single plan ID referenced by this item
+        """
+        if request_refs:
+            self._sync_back_ref(id_, kind, "request", request_refs)
+        if standard_refs:
+            self._sync_back_ref(id_, kind, "standard", standard_refs)
+        if spec:
+            self._sync_back_ref(id_, kind, "spec", [spec])
+        if plan:
+            self._sync_back_ref(id_, kind, "plan", [plan])
+
+    def _sync_relink_back_ref(
+        self, child_id: str, child_kind: str, field: str, parent_id: str
+    ) -> None:
+        """Sync back-reference when a relink operation adds a new reference.
+
+        Args:
+            child_id: ID of the item being relinked
+            child_kind: Kind of the item being relinked
+            field: Reference field that was updated (e.g., 'request_refs')
+            parent_id: ID of the parent item being referenced
+        """
+        parent_kind = self.config.reference_field_targets(field)
+        if not parent_kind:
+            return
+        self._sync_back_ref(child_id, child_kind, parent_kind[0], [parent_id])
 
     def validate(self, raise_on_error: bool = False):
         errors = self.validator.validate_all()
@@ -618,15 +682,20 @@ class PlanningAPI:
 
         if kind == "request" and profile:
             cascade = self.config.profile_cascade_targets(profile)
-            if "specification" in cascade:
-                spec_id = self._next_id_for_kind("spec")
-                spec_kind_config = self.config.kind_config("spec")
+            for target in cascade:
+                target_kind = target["kind"]
+                if target_kind == "request":
+                    continue
+                label_suffix = target.get("label_suffix", "")
+                target_domain = target.get("domain")
+                target_id = self._next_id_for_kind(target_kind)
+                target_kind_config = self.config.kind_config(target_kind)
                 self._create_item_with_manager(
-                    kind="spec",
-                    id_=spec_id,
-                    label=f"{label} — Specification",
-                    summary=f"Specification for {summary}",
-                    domain=None,
+                    kind=target_kind,
+                    id_=target_id,
+                    label=f"{label}{label_suffix}",
+                    summary=f"{target_kind.title()} for {summary}",
+                    domain=target_domain,
                     spec=None,
                     plan=None,
                     parent=None,
@@ -640,31 +709,7 @@ class PlanningAPI:
                     open_questions=None,
                     source=None,
                     context=None,
-                    kind_config=spec_kind_config,
-                )
-            elif "task" in cascade:
-                task_id = self._next_id_for_kind("task")
-                task_kind_config = self.config.kind_config("task")
-                self._create_item_with_manager(
-                    kind="task",
-                    id_=task_id,
-                    label=f"{label} — Task",
-                    summary=f"Task for {summary}",
-                    domain="core",
-                    spec=None,
-                    plan=None,
-                    parent=None,
-                    target=None,
-                    workflow=None,
-                    request_refs=[id_],
-                    standard_refs=[],
-                    profile=None,
-                    guidance=None,
-                    current_understanding=None,
-                    open_questions=None,
-                    source=None,
-                    context=None,
-                    kind_config=task_kind_config,
+                    kind_config=target_kind_config,
                 )
 
         self._publish_event(
@@ -825,15 +870,14 @@ class PlanningAPI:
         if domain:
             frontmatter["domain"] = domain
 
-        ref_input_values = {
-            "request_refs": request_refs or [],
-            "spec_refs": [spec] if spec else [],
-            "standard_refs": standard_refs,
-            "spec_ref": spec,
-            "plan_ref": plan,
-            "parent_task_ref": parent,
-            "packet_ref": target,
-            "task_refs": task_refs or [],
+        ref_input_values: dict[str, object] = {}
+        target_inputs: dict[str, object] = {
+            "request": request_refs or [],
+            "spec": spec,
+            "plan": plan,
+            "task": task_refs or [],
+            "packet": target,
+            "standard": standard_refs or [],
         }
         seed_field_sources = self.config.seeded_reference_fields(kind)
 
@@ -842,8 +886,32 @@ class PlanningAPI:
                 value = ref_input_values.get(seed_field_sources[field])
             elif self.config.reference_field_shape(field) == "rel_list":
                 value = []
+            elif field == "parent_task_ref":
+                value = parent
+            elif field == self.config.standard_ref_field():
+                value = standard_refs or []
             else:
-                value = ref_input_values.get(field)
+                targets = self.config.reference_field_targets(field)
+                value = None
+                if targets:
+                    base_value = target_inputs.get(targets[0])
+                    shape = self.config.reference_field_shape(field)
+                    if shape == "scalar_ref_list" and isinstance(base_value, str):
+                        value = [base_value]
+                    elif shape == "scalar_ref" and isinstance(base_value, list):
+                        value = base_value[0] if len(base_value) == 1 else None
+                    elif (
+                        field.endswith("_refs")
+                        and shape == "scalar_ref_list"
+                        and isinstance(base_value, str)
+                    ):
+                        value = [base_value]
+                    elif field.endswith("_refs") and isinstance(base_value, str):
+                        value = [base_value]
+                    else:
+                        value = base_value
+
+            ref_input_values[field] = value
 
             if value in (None, [], ""):
                 continue
@@ -947,8 +1015,7 @@ class PlanningAPI:
         dump_markdown(path, frontmatter, body)
 
         # Handle kind-specific post-creation logic
-        if kind == "spec" and request_refs:
-            self._sync_request_spec_refs(id_, request_refs)
+        self._sync_creation_back_refs(id_, kind, request_refs, standard_refs, spec, plan)
 
         return path
 
@@ -976,10 +1043,8 @@ class PlanningAPI:
         Returns:
             Path to created item
         """
-        item_dir = self.paths.kind_dir(kind, domain)
-        item_dir.mkdir(parents=True, exist_ok=True)
-
-        item_path = item_dir / f"{id_}.md"
+        item_path = self.paths.kind_file(kind, id_, label, domain)
+        item_path.parent.mkdir(parents=True, exist_ok=True)
 
         frontmatter = {
             "id": id_,
@@ -1019,7 +1084,7 @@ class PlanningAPI:
         Returns:
             Dict with 'plan' and 'wp' ItemView objects
         """
-        plan_id = next_id(self.root, "plan", self.test_mode)
+        plan_id = self._next_id_for_kind("plan")
         plan_kind_config = self.config.kind_config("plan")
         self._create_item_with_manager(
             kind="plan",
@@ -1042,7 +1107,7 @@ class PlanningAPI:
             context=None,
             kind_config=plan_kind_config,
         )
-        wp_id = next_id(self.root, "wp", self.test_mode)
+        wp_id = self._next_id_for_kind("wp")
         wp_kind_config = self.config.kind_config("wp")
         self._create_item_with_manager(
             kind="wp",
@@ -1304,7 +1369,7 @@ class PlanningAPI:
             event_payload["actor"] = actor
         if reason is not None:
             event_payload["reason"] = reason
-        if new_state == "archived":
+        if new_state == self.config.archived_state():
             data["archived_at"] = timestamp
             data["archived_by"] = actor or data.get("archived_by") or "system"
             data["archive_reason"] = reason or ""
@@ -1313,17 +1378,17 @@ class PlanningAPI:
             event_payload["archived_at"] = data["archived_at"]
             event_payload["archived_by"] = data["archived_by"]
             event_payload["archive_reason"] = data["archive_reason"]
-        elif old == "archived":
+        elif old == self.config.archived_state():
             data["restored_at"] = timestamp
             data["restored_by"] = actor or "system"
             event_payload["restored_at"] = data["restored_at"]
             event_payload["restored_by"] = data["restored_by"]
         dump_markdown(item.path, data, body)
-        if new_state == "archived":
+        if new_state == self.config.archived_state():
             self.events.emit(f"{item.kind}.archived", event_payload)
-        elif new_state == "superseded":
+        elif new_state == self.config.superseded_state():
             self.events.emit(f"{item.kind}.superseded", event_payload)
-        elif old == "archived":
+        elif old == self.config.archived_state():
             self.events.emit(f"{item.kind}.restored", event_payload)
 
         self._cascade_state_change(id_, item.kind, new_state, actor, reason)
@@ -1377,8 +1442,7 @@ class PlanningAPI:
         elif field_shape == "rel_list":
             data[field] = Relationships.ensure_rel_list(data.get(field), dst_id, seq, display)
         dump_markdown(item.path, data, body)
-        if item.kind == "spec" and field == "request_refs":
-            self._sync_request_spec_refs(src_id, [dst_id])
+        self._sync_relink_back_ref(src_id, item.kind, field, dst_id)
         self.index()
         return self._find(src_id)
 
@@ -1648,7 +1712,7 @@ class PlanningAPI:
             target_state = cascade_rules.get(item.kind)
             if not target_state:
                 continue
-            if item.data.get("state") in ("archived", "deleted", "superseded"):
+            if self.config.state_in_set(item.kind, item.data.get("state"), "terminal", item.data.get("workflow")):
                 continue
             if not self._child_refs_parent(item, kind, id_):
                 continue
@@ -1666,7 +1730,7 @@ class PlanningAPI:
         """Check if an item is in a terminal state (archived, deleted, superseded)."""
         try:
             item = self._find(id_)
-            return item.data.get("state") in ("archived", "deleted", "superseded")
+            return self.config.state_in_set(item.kind, item.data.get("state"), "terminal", item.data.get("workflow"))
         except KeyError:
             return True  # Treat missing items as terminal
 
@@ -1684,7 +1748,9 @@ class PlanningAPI:
             return
 
         try:
-            self.state(superseded_id, "superseded", reason=f"Auto-superseded by {new_id}")
+            self.state(
+                superseded_id, self.config.superseded_state(), reason=f"Auto-superseded by {new_id}"
+            )
         except ValueError:
             # If state transition is invalid, still add the metadata
             # but don't change state

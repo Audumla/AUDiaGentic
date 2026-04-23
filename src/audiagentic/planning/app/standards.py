@@ -100,4 +100,4 @@ def effective_standard_refs(
     """Backward-compatible wrapper for effective_references(..., 'standard_refs')."""
     if config is None:
         raise ValueError("config is required for effective_standard_refs()")
-    return effective_references(item, "standard_refs", items_by_id, config)
+    return effective_references(item, config.standard_ref_field(), items_by_id, config)

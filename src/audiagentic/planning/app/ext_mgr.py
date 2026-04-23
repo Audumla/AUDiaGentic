@@ -30,7 +30,7 @@ class Extracts:
         api = self._api()
         items_by_id = {entry.data["id"]: entry for entry in api._scan()}
         items_by_id[item.data["id"]] = item
-        return effective_references(item, "standard_refs", items_by_id, api.config)
+        return effective_references(item, api.config.standard_ref_field(), items_by_id, api.config)
 
     def _attachments_root(self) -> Path:
         api = self._api()

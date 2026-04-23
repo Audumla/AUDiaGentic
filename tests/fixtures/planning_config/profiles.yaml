@@ -9,12 +9,13 @@ planning:
           - What is the core requirement?
           - What are the main constraints?
           - How will success be verified?
-      spec_sections:
-        required: [Purpose, Scope, Requirements]
-        suggested: [Constraints, Acceptance Criteria]
-      task_sections:
-        required: [Description]
-        suggested: [Acceptance Criteria, Notes]
+      sections_by_kind:
+        spec:
+          required: [Purpose, Scope, Requirements]
+          suggested: [Constraints, Acceptance Criteria]
+        task:
+          required: [Description]
+          suggested: [Acceptance Criteria, Notes]
       acceptance_criteria_depth: basic
       semantics:
         target_implementor: "Experienced architect or designer who prefers minimal scaffolding"
@@ -37,12 +38,13 @@ planning:
           - What exact outcome is required?
           - What constraints or non-goals apply?
           - How will success be verified?
-      spec_sections:
-        required: [Purpose, Scope, Requirements, Constraints]
-        suggested: [Acceptance Criteria]
-      task_sections:
-        required: [Description]
-        suggested: [Acceptance Criteria, Notes]
+      sections_by_kind:
+        spec:
+          required: [Purpose, Scope, Requirements, Constraints]
+          suggested: [Acceptance Criteria]
+        task:
+          required: [Description]
+          suggested: [Acceptance Criteria, Notes]
       acceptance_criteria_depth: standard
       semantics:
         target_implementor: "AI agent or mid-level developer who needs clear direction"
@@ -66,12 +68,13 @@ planning:
           - What constraints or non-goals apply?
           - How will success be verified?
           - What are the implementation risks?
-      spec_sections:
-        required: [Purpose, Scope, Requirements, Constraints, Acceptance Criteria]
-        suggested: [Non-Goals, Compatibility]
-      task_sections:
-        required: [Description, Acceptance Criteria]
-        suggested: [Notes, Implementation Notes]
+      sections_by_kind:
+        spec:
+          required: [Purpose, Scope, Requirements, Constraints, Acceptance Criteria]
+          suggested: [Non-Goals, Compatibility]
+        task:
+          required: [Description, Acceptance Criteria]
+          suggested: [Notes, Implementation Notes]
       acceptance_criteria_depth: rigorous
       semantics:
         target_implementor: "Junior dev, complex system, or high-stakes work"
@@ -92,7 +95,10 @@ planning:
       description: Broader enhancement with request and specification, plus optional execution overlay
       label: Enhancement request
       # Stack topology
-      on_request_create: [request, specification]
+      on_create:
+        - kind: request
+        - kind: spec
+          label_suffix: " — Specification"
       allow_plan_overlay: true
       # Request defaults
       defaults:
@@ -107,7 +113,10 @@ planning:
     feature:
       description: Bounded feature work with request, specification, and direct execution tasking
       label: Feature request
-      on_request_create: [request, specification]
+      on_create:
+        - kind: request
+        - kind: spec
+          label_suffix: " — Specification"
       allow_plan_overlay: false
       defaults:
         meta:
@@ -117,11 +126,15 @@ planning:
           - What exact outcome is required?
           - What constraints or non-goals apply?
           - How will success be verified?
-      suggested_sections: [Problem, Desired Outcome, Constraints]
+      suggested_sections: [Problem, Desired Outcome, Constraints, Open Questions]
     issue:
       description: Issue report with direct request-to-task execution and stronger diagnosis framing
       label: Issue report
-      on_request_create: [request, task]
+      on_create:
+        - kind: request
+        - kind: task
+          label_suffix: " — Task"
+          domain: core
       allow_plan_overlay: false
       defaults:
         meta:
@@ -135,7 +148,11 @@ planning:
     fix:
       description: Implementation-ready corrective change with direct request-to-task execution
       label: Fix request
-      on_request_create: [request, task]
+      on_create:
+        - kind: request
+        - kind: task
+          label_suffix: " — Task"
+          domain: core
       allow_plan_overlay: false
       defaults:
         meta:
@@ -211,10 +228,6 @@ planning:
         task: standard_refs
         plan: standard_refs
         wp: standard_refs
-  required_sections:
-    request: [Understanding, Open Questions, Notes]
-    task: [Description]
-    standard: []
   state_section_requirements:
     task:
       done: [Implementation Notes]
