@@ -150,3 +150,49 @@ planning:
   reference_field_shapes:
     task_refs: rel_list
     work_package_refs: rel_list
+  lifecycle:
+    archived_state: archived
+    superseded_state: superseded
+    terminal_states: [archived, superseded, deleted]
+    state_sets:
+      request:
+        standard:
+          initial: [captured]
+          active: [distilled]
+          complete: [closed]
+          terminal: [superseded, archived]
+      spec:
+        standard:
+          initial: [draft, ready]
+          active: [in_progress, blocked]
+          complete: [done]
+          terminal: [cancelled, archived]
+      plan:
+        standard:
+          initial: [draft, ready]
+          active: [in_progress, blocked]
+          complete: [done]
+          terminal: [cancelled, archived]
+      task:
+        standard:
+          initial: [draft, ready]
+          active: [in_progress, blocked]
+          complete: [done]
+          terminal: [cancelled, archived]
+        review_heavy:
+          initial: [draft, review, ready]
+          active: [in_progress, blocked]
+          complete: [done]
+          terminal: [cancelled, archived]
+      wp:
+        standard:
+          initial: [draft, ready]
+          active: [in_progress, blocked, review]
+          complete: [done]
+          terminal: [cancelled, archived]
+      standard:
+        standard:
+          initial: [ready]
+          active: []
+          complete: [done]
+          terminal: [archived]

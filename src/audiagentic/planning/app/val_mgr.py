@@ -193,7 +193,7 @@ class Validator:
         for item in items:
             if item.data.get("deleted"):
                 continue
-            if item.data.get("state") == "archived":
+            if item.data.get("state") == self.config.archived_state():
                 continue
 
             errors.extend(self._validate_reference_targets(item, items))
@@ -204,7 +204,7 @@ class Validator:
                 has_child = any(
                     child.kind == child_kind
                     and not child.data.get("deleted")
-                    and child.data.get("state") != "archived"
+                    and child.data.get("state") != self.config.archived_state()
                     and self._child_refs_parent(child, item.kind, item.data["id"])
                     for child in items
                 )
