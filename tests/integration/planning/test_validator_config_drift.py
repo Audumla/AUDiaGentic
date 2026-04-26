@@ -32,7 +32,7 @@ def test_validate_allows_plan_reference_fields_and_legacy_ref_lists(tmp_path: Pa
     api = PlanningAPI(tmp_path)
 
     request = api.new("request", label="R", summary="S", source="test")
-    spec = api.new("spec", label="S", summary="S", request_refs=[request.data["id"]])
+    spec = api.new("spec", label="S", summary="S", refs={"request_refs": [request.data["id"]]})
 
     plan_path = tmp_path / "docs" / "planning" / "plans" / "plan-1-test-plan.md"
     plan_path.write_text(
@@ -100,7 +100,7 @@ def test_validate_uses_configured_downstream_requirements(tmp_path: Path) -> Non
 
     api = PlanningAPI(tmp_path)
     request = api.new("request", label="R", summary="S", source="test")
-    api.new("spec", label="S", summary="S", request_refs=[request.data["id"]])
+    api.new("spec", label="S", summary="S", refs={"request_refs": [request.data["id"]]})
 
     errors = api.validate()
 
@@ -112,8 +112,8 @@ def test_validate_rel_list_string_entries_are_actionable(tmp_path: Path) -> None
     api = PlanningAPI(tmp_path)
 
     request = api.new("request", label="R", summary="S", source="test")
-    spec = api.new("spec", label="S", summary="S", request_refs=[request.data["id"]])
-    plan = api.new("plan", label="P", summary="S", spec=spec.data["id"])
+    spec = api.new("spec", label="S", summary="S", refs={"request_refs": [request.data["id"]]})
+    plan = api.new("plan", label="P", summary="S", refs={"spec": spec.data["id"]})
 
     wp_path = tmp_path / "docs" / "planning" / "work-packages" / "core" / "wp-999-bad.md"
     wp_path.write_text(

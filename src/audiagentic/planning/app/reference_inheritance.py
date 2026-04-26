@@ -90,14 +90,3 @@ def effective_references(
             _collect_inherited_reference_values(item, target_field, items_by_id, config)
         )
     )
-
-
-def effective_standard_refs(
-    item: ItemView,
-    items_by_id: dict[str, ItemView],
-    config: Config | None = None,
-) -> list[str]:
-    """Backward-compatible wrapper for effective_references(..., 'standard_refs')."""
-    if config is None:
-        raise ValueError("config is required for effective_standard_refs()")
-    return effective_references(item, config.standard_ref_field(), items_by_id, config)

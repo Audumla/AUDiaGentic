@@ -156,24 +156,27 @@ def test_tm_edit_integration():
     print("Testing tm_edit integration...")
 
     # Create a test request first (needed for task spec)
-    req_result = tm.new_request(
-        label="MCP Test Request",
-        summary="Request for testing MCP server",
+    req_result = tm.create(
+        "request",
+        "MCP Test Request",
+        "Request for testing MCP server",
         source="test",
     )
 
     # Create a task with proper spec reference
-    spec_result = tm.new_spec(
+    spec_result = tm.create(
+        "spec",
         label="MCP Test Spec",
         summary="Spec for testing MCP server",
-        request_refs=[req_result["id"]],
+        refs={"request_refs": [req_result["id"]]},
     )
 
     try:
-        result = tm.new_task(
+        result = tm.create(
+            "task",
             label="MCP Test Task",
             summary="Task for testing MCP server",
-            spec=spec_result["id"],
+            refs={"spec": spec_result["id"]},
             domain="core",
         )
         task_id = result["id"]
@@ -238,38 +241,37 @@ def test_tm_create():
     test_items = []
 
     # Test 1: Create request first (needed for task and spec)
-    req_result = tm.new_request(
-        label="Test Request",
-        summary="Test request summary",
+    req_result = tm.create(
+        "request",
+        "Test Request",
+        "Test request summary",
         source="mcp-test",
     )
     test_items.append(("request", req_result["id"]))
     print(f"  [OK] Created request: {req_result['id']}")
 
     # Test 2: Create spec with request_refs
-    spec_result = tm.new_spec(
-        label="Test Spec",
-        summary="Test spec summary",
-        request_refs=[req_result["id"]],
-    )
+    spec_result = tm.create("spec", label="Test Spec", summary="Test spec summary", refs={"request_refs": [req_result["id"]]})
     test_items.append(("spec", spec_result["id"]))
     print(f"  [OK] Created spec: {spec_result['id']}")
 
     # Test 3: Create task with spec
-    task_result = tm.new_task(
+    task_result = tm.create(
+        "task",
         label="Test Task",
         summary="Test summary",
-        spec=spec_result["id"],
+        refs={"spec": spec_result["id"]},
         domain="core",
     )
     test_items.append(("task", task_result["id"]))
     print(f"  [OK] Created task: {task_result['id']}")
 
     # Test 4: Create plan with spec
-    plan_result = tm.new_plan(
+    plan_result = tm.create(
+        "plan",
         label="Test Plan",
         summary="Test plan summary",
-        spec=spec_result["id"],
+        refs={"spec": spec_result["id"]},
     )
     test_items.append(("plan", plan_result["id"]))
     print(f"  [OK] Created plan: {plan_result['id']}")
@@ -287,24 +289,22 @@ def test_tm_get():
     print("Testing tm_get...")
 
     # Create a test request first (needed for task spec)
-    req_result = tm.new_request(
-        label="Get Test Request",
-        summary="Request for tm_get testing",
+    req_result = tm.create(
+        "request",
+        "Get Test Request",
+        "Request for tm_get testing",
         source="test",
     )
 
     # Create spec
-    spec_result = tm.new_spec(
-        label="Get Test Spec",
-        summary="Spec for tm_get",
-        request_refs=[req_result["id"]],
-    )
+    spec_result = tm.create("spec", label="Get Test Spec", summary="Spec for tm_get", refs={"request_refs": [req_result["id"]]})
 
     # Create test item with proper spec
-    result = tm.new_task(
+    result = tm.create(
+        "task",
         label="Get Test Task",
         summary="Test for tm_get",
-        spec=spec_result["id"],
+        refs={"spec": spec_result["id"]},
         domain="core",
     )
     task_id = result["id"]

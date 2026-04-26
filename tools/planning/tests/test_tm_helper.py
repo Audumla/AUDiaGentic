@@ -19,6 +19,7 @@ root = bootstrap()
 
 import tools.planning.tm_helper as tm
 from audiagentic.planning.app.api import PlanningAPI
+from tests.planning_testkit import seed_planning_config
 
 
 def test_validate_id():
@@ -37,16 +38,12 @@ def test_validate_id():
     print("[OK] _validate_id passed")
 
 
-def test_batch_atomicity():
+def test_batch_atomicity(tmp_path):
     print("Testing _execute_batch_operations atomicity...")
-    api = PlanningAPI(root)
-
-    # Find or create a request for the spec
-    request_files = list((root / "docs/planning/requests").glob("request-*.md"))
-    if not request_files:
-        print("FAILED: No request files found for test")
-        return
-    request_id = request_files[0].stem  # e.g., "request-0001"
+    seed_planning_config(tmp_path)
+    api = PlanningAPI(tmp_path)
+    request = api.new("request", "Atomicity Request", "Summary", source="test")
+    request_id = request.data["id"]
 
     # Find or create a spec (reuse existing "Test Spec" if it exists)
     spec_id = None
@@ -56,7 +53,7 @@ def test_batch_atomicity():
             break
 
     if not spec_id:
-        spec = api.new("spec", "Test Spec", "Test summary", request_refs=[request_id])
+        spec = api.new("spec", "Test Spec", "Test summary", refs={"request_refs": [request_id]})
         spec_id = spec.data["id"]
     else:
         spec = api._find(spec_id)
@@ -69,7 +66,7 @@ def test_batch_atomicity():
             break
 
     if not task_id:
-        task = api.new("task", "Atomicity Task", "Summary", spec=spec_id)
+        task = api.new("task", "Atomicity Task", "Summary", refs={"spec": spec_id})
         task_id = task.data["id"]
     else:
         task = api._find(task_id)
@@ -94,25 +91,40 @@ def test_batch_atomicity():
             print(f"FAILED: label was not restored. Got: {restored_item.data['label']}")
 
 
-def test_generic_create():
+def test_generic_create(tmp_path):
     print("Testing generic create dispatcher...")
-    api = PlanningAPI(root)
+    seed_planning_config(tmp_path)
+    tm.set_root(tmp_path)
+    api = PlanningAPI(tmp_path)
 
     # Test request creation
-    req = tm.create("request", "Generic Req", "Summary", source="test-agent")
-    if req["created"]:
+    req = tm.create(
+        "request",
+        "Generic Req",
+        "Summary",
+        source="test-agent",
+        check_duplicates=False,
+    )
+    if req["id"]:
         print("[OK] request create passed")
     else:
         print("INFO: request create found duplicate")
 
     # Test task creation
     # Need a spec first
-    spec = api.new("spec", "Generic Spec", "Summary", request_refs=[req["id"]])
-    task = tm.create("task", "Generic Task", "Summary", spec=spec.data["id"])
+    spec = api.new("spec", "Generic Spec", "Summary", refs={"request_refs": [req["id"]]}, check_duplicates=False)
+    task = tm.create(
+        "task",
+        "Generic Task",
+        "Summary",
+        refs={"spec": spec.data["id"]},
+        check_duplicates=False,
+    )
     if "id" in task:
         print("[OK] task create passed")
     else:
         print("FAILED: task create failed")
+    tm.set_root(root)
 
 
 def test_list_kind_multiple_kinds():

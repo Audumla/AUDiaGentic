@@ -42,9 +42,9 @@ def test_compact_fills_gap_and_is_idempotent(tmp_path: Path) -> None:
     api = PlanningAPI(tmp_path)
 
     request = api.new("request", label="Compact request", summary="S", source="test")
-    api.new("spec", label="Spec one", summary="S", request_refs=[request.data["id"]])
-    spec_two = api.new("spec", label="Spec two", summary="S", request_refs=[request.data["id"]])
-    task = api.new("task", label="Task two", summary="S", spec=spec_two.data["id"])
+    api.new("spec", label="Spec one", summary="S", refs={"request_refs": [request.data["id"]]})
+    spec_two = api.new("spec", label="Spec two", summary="S", refs={"request_refs": [request.data["id"]]})
+    task = api.new("task", label="Task two", summary="S", refs={"spec": spec_two.data["id"]})
 
     paths = Paths(tmp_path)
 

@@ -19,8 +19,38 @@ def _seed_helper_project(root: Path) -> None:
     for rel in ("ids", "indexes", "events", "claims", "meta"):
         (root / ".audiagentic" / "planning" / rel).mkdir(parents=True, exist_ok=True)
 
-    for d in ("requests", "specifications", "plans", "tasks/core", "work-packages/core", "standards"):
+    for d in (
+        "requests",
+        "specifications",
+        "plans",
+        "tasks/core",
+        "work-packages/core",
+        "standards",
+        "supporting",
+    ):
         (root / "docs" / "planning" / d).mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "references").mkdir(parents=True, exist_ok=True)
+    (
+        root / "docs" / "planning" / "supporting" / "support-0001-doc-surfaces-analysis.md"
+    ).write_text(
+        "---\n"
+        "id: support-0001\n"
+        "label: Documentation surfaces analysis\n"
+        "role: analysis\n"
+        "status: active\n"
+        "supports:\n"
+        "  - spec-0001\n"
+        "owner: wp-0001\n"
+        "used_by:\n"
+        "  - task-0001\n"
+        "---\n\n"
+        "# Analysis\n\nSeed support doc.\n",
+        encoding="utf-8",
+    )
+    (root / "docs" / "references" / "planning-guide.md").write_text(
+        "# Planning Guide\n",
+        encoding="utf-8",
+    )
 
 
 @pytest.fixture()
@@ -40,30 +70,20 @@ def test_tm_helper_lists_documentation_surfaces() -> None:
     assert any("seed_on_install" in surface for surface in surfaces)
 
 
-def test_tm_helper_lists_request_profiles() -> None:
-    profiles = tm.list_request_profiles()
-    assert {profile["id"] for profile in profiles} >= {"feature", "issue"}
-
-
-def test_tm_helper_lists_creation_profiles_alias() -> None:
+def test_tm_helper_lists_creation_profiles() -> None:
     profiles = tm.list_creation_profiles()
     assert {profile["id"] for profile in profiles} >= {"feature", "issue"}
 
 
-def test_tm_helper_get_request_profile() -> None:
-    profile = tm.get_request_profile("feature")
-    assert profile is not None
-    assert profile["label"] == "Feature request"
-
-
-def test_tm_helper_get_creation_profile_alias() -> None:
+def test_tm_helper_get_creation_profile() -> None:
     profile = tm.get_creation_profile("feature")
     assert profile is not None
     assert profile["label"] == "Feature request"
 
 
 def test_tm_helper_new_request_uses_profile_defaults(helper_project: Path) -> None:
-    request = tm.new_request(
+    request = tm.create(
+        "request",
         "Improve intake",
         "Create richer request templates",
         source="test",
@@ -81,7 +101,8 @@ def test_tm_helper_new_request_uses_profile_defaults(helper_project: Path) -> No
 
 
 def test_tm_helper_new_request_persists_source_and_context(helper_project: Path) -> None:
-    request = tm.new_request(
+    request = tm.create(
+        "request",
         "Trace helper request",
         "Capture provenance",
         source="helper",
@@ -94,7 +115,7 @@ def test_tm_helper_new_request_persists_source_and_context(helper_project: Path)
 
 
 def test_tm_helper_head_returns_lean_metadata(helper_project: Path) -> None:
-    request = tm.new_request("Lean head", "Return index-only metadata", source="test")
+    request = tm.create("request", "Lean head", "Return index-only metadata", source="test")
     result = tm.head(request["id"])
     assert result["id"] == request["id"]
     assert result["kind"] == "request"
@@ -102,8 +123,13 @@ def test_tm_helper_head_returns_lean_metadata(helper_project: Path) -> None:
 
 
 def test_tm_helper_extract_can_skip_body_and_disk_write(helper_project: Path) -> None:
-    request = tm.new_request("Extract request", "Support lean extract", source="test")
-    spec = tm.new_spec("Extract controls", "Support lean extract", [request["id"]])
+    request = tm.create("request", "Extract request", "Support lean extract", source="test")
+    spec = tm.create(
+        "spec",
+        "Extract controls",
+        "Support lean extract",
+        refs={"request_refs": [request["id"]]},
+    )
     tm.update_content(spec["id"], "# Purpose\n\nSpec body.\n", mode="replace")
     cache = helper_project / ".audiagentic" / "planning" / "extracts" / f"{spec['id']}.json"
     before = cache.stat().st_mtime_ns if cache.exists() else None
@@ -130,8 +156,15 @@ def test_tm_helper_lists_support_docs_and_references() -> None:
 
 
 def test_tm_helper_get_subsection_supports_dot_and_slash_paths(helper_project: Path) -> None:
-    request = tm.new_request("Section parsing request", "Supports helper task creation", source="test")
-    spec = tm.new_spec("Section parsing spec", "Supports helper task creation", [request["id"]])
+    request = tm.create(
+        "request", "Section parsing request", "Supports helper task creation", source="test"
+    )
+    spec = tm.create(
+        "spec",
+        "Section parsing spec",
+        "Supports helper task creation",
+        refs={"request_refs": [request["id"]]},
+    )
     content = """# Description
 
 Top level body.
@@ -149,7 +182,7 @@ Deep content.
         label="Nested subsection test",
         summary="Exercise subsection parsing",
         content=content,
-        spec=spec["id"],
+        refs={"spec": spec["id"]},
     )
 
     slash_result = tm.get_subsection(item["id"], "description/notes")
@@ -166,16 +199,16 @@ Deep content.
 
 def test_tm_helper_new_item_reference_validation_rejects_missing_refs(helper_project: Path) -> None:
     with pytest.raises(ValueError, match="requires 'request_refs' reference"):
-        tm.new_spec("Missing request spec", "Should fail")
+        tm.create("spec", "Missing request spec", "Should fail")
 
-    with pytest.raises(ValueError, match="spec 'spec-9999' does not exist"):
-        tm.new_plan("Missing spec plan", "Should fail", spec="spec-9999")
+    with pytest.raises(ValueError, match="Missing required reference: spec_refs"):
+        tm.create("plan", "Missing spec plan", "Should fail")
 
-    with pytest.raises(ValueError, match="spec 'spec-9999' does not exist"):
-        tm.new_task("Missing spec task", "Should fail", spec="spec-9999")
+    with pytest.raises(ValueError, match="requires 'spec' reference"):
+        tm.create("task", "Missing spec task", "Should fail")
 
-    with pytest.raises(ValueError, match="plan 'plan-9999' does not exist"):
-        tm.new_wp("Missing plan wp", "Should fail", plan="plan-9999")
+    with pytest.raises(ValueError, match="requires 'plan' reference"):
+        tm.create("wp", "Missing plan wp", "Should fail")
 
 
 def test_tm_helper_verify_structure_marks_optional_extensions_non_blocking(helper_project: Path) -> None:
@@ -204,17 +237,17 @@ def test_tm_helper_verify_structure_reports_required_failures_clearly(helper_pro
 
 
 def test_tm_helper_lists_and_gets_standards(helper_project: Path) -> None:
-    standard = tm.new_standard("Review findings standard", "Keeps review output consistent")
+    standard = tm.create("standard", "Review findings standard", "Keeps review output consistent")
     tm.update_content(
         standard["id"],
         "# Standard\n\n# Requirements\n\n1. Findings first.\n",
         mode="replace",
     )
 
-    standards = tm.list_standards()
+    standards = tm.list_kind("standard")
     assert any(item["id"] == standard["id"] for item in standards)
 
-    standard_doc = tm.get_standard(standard["id"])
+    standard_doc = tm.extract(standard["id"])
     assert standard_doc["item"]["kind"] == "standard"
     assert "Findings first." in standard_doc["body"]
 
@@ -222,14 +255,21 @@ def test_tm_helper_lists_and_gets_standards(helper_project: Path) -> None:
 def test_tm_helper_plan_and_task_request_refs_appear_in_trace_index(
     helper_project: Path,
 ) -> None:
-    request = tm.new_request("Trace request", "Track reverse refs", source="test")
-    spec = tm.new_spec("Trace spec", "Trace spec summary", [request["id"]])
-    plan = tm.new_plan("Trace plan", "Trace plan summary", spec["id"], [request["id"]])
-    task = tm.new_task(
+    request = tm.create("request", "Trace request", "Track reverse refs", source="test")
+    spec = tm.create(
+        "spec", "Trace spec", "Trace spec summary", refs={"request_refs": [request["id"]]}
+    )
+    plan = tm.create(
+        "plan",
+        "Trace plan",
+        "Trace plan summary",
+        refs={"spec": spec["id"], "request_refs": [request["id"]]},
+    )
+    task = tm.create(
+        "task",
         "Trace task",
         "Trace task summary",
-        spec["id"],
-        request_refs=[request["id"]],
+        refs={"spec": spec["id"], "request_refs": [request["id"]]},
     )
 
     trace = json.loads(
@@ -246,8 +286,13 @@ def test_tm_helper_plan_and_task_request_refs_appear_in_trace_index(
 
 
 def test_tm_helper_new_spec_updates_request_spec_refs(helper_project: Path) -> None:
-    request = tm.new_request("Spec backref request", "Track spec refs on request", source="test")
-    spec = tm.new_spec("Spec backref spec", "Trace back to request", [request["id"]])
+    request = tm.create("request", "Spec backref request", "Track spec refs on request", source="test")
+    spec = tm.create(
+        "spec",
+        "Spec backref spec",
+        "Trace back to request",
+        refs={"request_refs": [request["id"]]},
+    )
 
     shown = tm.show(request["id"])
 
@@ -255,9 +300,9 @@ def test_tm_helper_new_spec_updates_request_spec_refs(helper_project: Path) -> N
 
 
 def test_tm_helper_delete_and_list_include_deleted(helper_project: Path) -> None:
-    request = tm.new_request("Delete request", "Delete summary", source="test")
-    spec = tm.new_spec("Delete spec", "Delete summary", [request["id"]])
-    task = tm.new_task("Delete task", "Delete summary", spec["id"])
+    request = tm.create("request", "Delete request", "Delete summary", source="test")
+    spec = tm.create("spec", "Delete spec", "Delete summary", refs={"request_refs": [request["id"]]})
+    task = tm.create("task", "Delete task", "Delete summary", refs={"spec": spec["id"]})
 
     result = tm.delete(task["id"], reason="test cleanup")
     assert result["hard_delete"] is False
@@ -274,9 +319,9 @@ def test_tm_helper_delete_and_list_include_deleted(helper_project: Path) -> None
 def test_tm_helper_state_supports_archive_metadata_and_list_filtering(
     helper_project: Path,
 ) -> None:
-    request = tm.new_request("Archive request", "Archive summary", source="test")
-    spec = tm.new_spec("Archive spec", "Archive summary", [request["id"]])
-    task = tm.new_task("Archive task", "Archive summary", spec["id"])
+    request = tm.create("request", "Archive request", "Archive summary", source="test")
+    spec = tm.create("spec", "Archive spec", "Archive summary", refs={"request_refs": [request["id"]]})
+    task = tm.create("task", "Archive task", "Archive summary", refs={"spec": spec["id"]})
 
     archived = tm.state(task["id"], "archived", reason="superseded", actor="tester")
     shown = tm.show(task["id"])

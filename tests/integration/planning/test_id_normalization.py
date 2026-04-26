@@ -56,10 +56,10 @@ def _request_20(api):
 
 def _full_hierarchy(api):
     req = _new_request(api, "Request 1")
-    spec = api.new("spec", label="Spec 1", summary="Spec summary", request_refs=[req.data["id"]])
-    plan = api.new("plan", label="Plan 1", summary="Plan summary", spec=spec.data["id"])
-    task = api.new("task", label="Task 1", summary="Task summary", spec=spec.data["id"])
-    wp = api.new("wp", label="WP 1", summary="WP summary", plan=plan.data["id"])
+    spec = api.new("spec", label="Spec 1", summary="Spec summary", refs={"request_refs": [req.data["id"]]})
+    plan = api.new("plan", label="Plan 1", summary="Plan summary", refs={"spec": spec.data["id"]})
+    task = api.new("task", label="Task 1", summary="Task summary", refs={"spec": spec.data["id"]})
+    wp = api.new("wp", label="WP 1", summary="WP summary", refs={"plan": plan.data["id"]})
     return req, spec, plan, task, wp
 
 
@@ -149,7 +149,7 @@ class TestErrorMessages:
 
         error_msg = str(exc_info.value)
         assert "Available" in error_msg
-        assert "tm_list kind=request" in error_msg
+        assert "tm_list with the relevant kind" in error_msg
         assert "request-20" in error_msg
 
     def test_error_no_longer_reports_normalized_id_attempt(self, pr):

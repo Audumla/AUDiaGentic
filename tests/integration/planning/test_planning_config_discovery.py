@@ -56,7 +56,7 @@ def test_compact_task_has_domain_and_spec_ref(tmp_path: Path) -> None:
     assert task["has_domain"] is True
     assert "spec" in task["required_refs"]
     assert "domain='<domain>'" in task["usage"]
-    assert "spec='<id>'" in task["usage"]
+    assert "refs={'spec': '<id>'}" in task["usage"]
 
 
 def test_compact_request_no_domain_no_required_refs(tmp_path: Path) -> None:
@@ -96,11 +96,11 @@ def test_full_includes_relationship_rules(tmp_path: Path) -> None:
         assert "relationship_rules" in entry, f"{k} missing relationship_rules in full mode"
 
 
-def test_full_includes_standard_defaults(tmp_path: Path) -> None:
+def test_full_includes_default_references(tmp_path: Path) -> None:
     root = _seed_root(tmp_path)
     result = tm.planning_config_summary(mode="full", root=root)
     for k, entry in result["kinds"].items():
-        assert "standard_defaults" in entry, f"{k} missing standard_defaults in full mode"
+        assert "default_references" in entry, f"{k} missing default_references in full mode"
 
 
 def test_full_includes_template_sections(tmp_path: Path) -> None:

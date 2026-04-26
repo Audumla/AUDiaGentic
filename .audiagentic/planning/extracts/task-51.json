@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-51",
+    "label": "[PKT-LFC-011](task-0053): Installable Baseline Inventory and Sync-Mode Classification",
+    "state": "draft",
+    "summary": "Create installable baseline inventory and classify sync modes",
+    "spec_ref": "spec-0009",
+    "kind": "task",
+    "path": "docs/planning/tasks/lifecycle/task-51-pkt-lfc-011-task-0053-installable-baseline-inventory-and-sync-mode-classification.md",
+    "archive_reason": null,
+    "archived_at": null,
+    "archived_by": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-LFC-011](task-0043): Installable Baseline Inventory and Sync-Mode Classification\n\n## Purpose\n\nCreate installable baseline inventory and classify sync modes.\n\n## Scope\n\n- Baseline inventory\n- Sync mode classification\n- Asset tracking\n\n## Implementation\n\n1. Create inventory\n2. Classify sync modes\n3. Track assets\n\n## Acceptance Criteria\n\n1. Inventory complete\n2. Modes classified\n3. Assets tracked\n"
+}

@@ -35,8 +35,8 @@ def planning_api(tmp_path: Path) -> PlanningAPI:
 
 def _make_request_spec_plan(api: PlanningAPI) -> tuple[str, str, str]:
     request = api.new("request", label="Req", summary="Req", source="test")
-    spec = api.new("spec", label="Spec", summary="Spec", request_refs=[request.data["id"]])
-    plan = api.new("plan", label="Plan", summary="Plan", spec=spec.data["id"])
+    spec = api.new("spec", label="Spec", summary="Spec", refs={"request_refs": [request.data["id"]]})
+    plan = api.new("plan", label="Plan", summary="Plan", refs={"spec": spec.data["id"]})
     return request.data["id"], spec.data["id"], plan.data["id"]
 
 
@@ -51,8 +51,7 @@ def test_task_parent_must_reference_task(planning_api: PlanningAPI) -> None:
             "task",
             label="Bad Parent",
             summary="Bad Parent",
-            spec=spec_id,
-            parent=request_id,
+            refs={"spec": spec_id, "parent": request_id},
         )
 
 
@@ -67,14 +66,13 @@ def test_standard_refs_must_reference_standard(planning_api: PlanningAPI) -> Non
             "spec",
             label="Bad Standard Ref",
             summary="Bad Standard Ref",
-            request_refs=[request_id],
-            standard_refs=[request_id],
+            refs={"request_refs": [request_id], "standard_refs": [request_id]},
         )
 
 
 def test_wp_create_still_allows_deferred_task_linking(planning_api: PlanningAPI) -> None:
     _, _, plan_id = _make_request_spec_plan(planning_api)
 
-    wp = planning_api.new("wp", label="Loose WP", summary="Loose WP", plan=plan_id)
+    wp = planning_api.new("wp", label="Loose WP", summary="Loose WP", refs={"plan": plan_id})
 
     assert wp.data["id"].startswith("wp-")

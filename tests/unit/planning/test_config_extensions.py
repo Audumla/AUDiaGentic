@@ -29,8 +29,7 @@ def test_config_optional_files_may_be_absent(tmp_path: Path) -> None:
     root = _seed_base_config(tmp_path, include_optional=False)
     cfg = Config(root)
     assert cfg.documentation == {}
-    assert "request_profiles" in cfg.request_profiles
-    assert cfg.request_profiles["request_profiles"] != {}
+    assert cfg.creation_profiles() != {}
     assert cfg.profile_packs == {}
     assert cfg.validate() == []
 
@@ -39,7 +38,7 @@ def test_config_loads_optional_files_when_present(tmp_path: Path) -> None:
     root = _seed_base_config(tmp_path, include_optional=True)
     cfg = Config(root)
     assert cfg.documentation["planning"]["documentation"]["enabled"] is True
-    assert "feature" in cfg.request_profiles["request_profiles"]
+    assert "feature" in cfg.creation_profiles()
     assert "standard" in cfg.profile_packs
     assert cfg.profile_packs["standard"]["profile_pack"]["id"] == "standard"
 
@@ -79,11 +78,11 @@ def test_guidance_level_semantics(tmp_path: Path) -> None:
         assert "expectations" in semantics
 
 
-def test_creation_profiles_generic_accessor_matches_legacy_alias(tmp_path: Path) -> None:
+def test_creation_profiles_accessor_loads_profiles(tmp_path: Path) -> None:
     root = _seed_base_config(tmp_path, include_optional=True)
     cfg = Config(root)
-    assert cfg.creation_profiles() == cfg.request_profiles["request_profiles"]
-    assert cfg.creation_profile_for("feature") == cfg.profile_for("feature")
+    assert cfg.creation_profiles()
+    assert cfg.creation_profile_for("feature")["label"] == "Feature request"
 
 
 def test_default_guidance(tmp_path: Path) -> None:
@@ -195,12 +194,16 @@ def test_reference_field_shape_reads_config_override(tmp_path: Path) -> None:
     assert cfg.reference_field_shape("spec_refs") == "scalar_ref_list"
 
 
-def test_state_cascades_are_loaded_from_config(tmp_path: Path) -> None:
+def test_lifecycle_actions_are_loaded_from_config(tmp_path: Path) -> None:
     root = _seed_base_config(tmp_path, include_optional=True)
     cfg = Config(root)
-    assert cfg.state_cascades("request", "archived") == {"spec": "archived", "task": "archived"}
-    assert cfg.state_cascades("request", "superseded") == {"spec": "superseded"}
-    assert cfg.state_cascades("spec", "archived") == {"plan": "archived", "task": "archived"}
+    archive = cfg.lifecycle_action("archive")
+    supersede = cfg.lifecycle_action("supersede")
+    assert archive["transition_to"] == "archived"
+    assert archive["cascade"]["by_kind"]["request"] == {"spec": "archived", "task": "archived"}
+    assert archive["cascade"]["by_kind"]["spec"] == {"plan": "archived", "task": "archived"}
+    assert supersede["transition_to"] == "superseded"
+    assert supersede["cascade"]["by_kind"]["request"] == {"spec": "superseded"}
 
 
 def test_lifecycle_state_sets_load_per_kind_and_workflow(tmp_path: Path) -> None:
@@ -211,6 +214,61 @@ def test_lifecycle_state_sets_load_per_kind_and_workflow(tmp_path: Path) -> None
     assert cfg.states_in_set("task", "initial", "review_heavy") == ["draft", "review", "ready"]
     assert cfg.state_in_set("task", "archived", "terminal")
     assert not cfg.state_in_set("task", "in_progress", "terminal")
+
+
+def test_lifecycle_state_priority_derives_from_semantic_sets(tmp_path: Path) -> None:
+    root = _seed_base_config(tmp_path, include_optional=True)
+    cfg = Config(root)
+    assert cfg.state_priority("task", "ready") == 10
+    assert cfg.state_priority("task", "in_progress") == 20
+    assert cfg.state_priority("task", "blocked") == 50
+    assert cfg.state_priority("task", "done") == 90
+    assert cfg.state_priority("task", "archived") == 100
+
+
+def test_reference_field_targets_read_config_overrides(tmp_path: Path) -> None:
+    root = _seed_base_config(tmp_path, include_optional=True)
+    cfg = Config(root)
+    assert cfg.reference_field_targets("parent_task_ref") == ["task"]
+    assert cfg.reference_field_targets("work_package_refs") == ["wp"]
+
+
+def test_core_state_and_reference_names_are_config_owned(tmp_path: Path) -> None:
+    root = _seed_base_config(tmp_path, include_optional=True)
+    cfg = Config(root)
+    assert cfg.lifecycle_action_state("archive") == "archived"
+    assert cfg.lifecycle_action_state("supersede") == "superseded"
+    assert cfg.standard_ref_field() == "standard_refs"
+
+
+def test_planning_schema_requires_standard_ref_field(tmp_path: Path) -> None:
+    root = _seed_base_config(tmp_path, include_optional=True)
+    planning_path = root / ".audiagentic" / "planning" / "config" / "planning.yaml"
+    payload = yaml.safe_load(planning_path.read_text(encoding="utf-8"))
+    del payload["planning"]["standard_ref_field"]
+    planning_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    cfg = Config(root)
+    errors = cfg.validate()
+    assert any(
+        "planning.yaml" in error and "'standard_ref_field' is a required property" in error
+        for error in errors
+    )
+
+
+def test_planning_schema_requires_lifecycle_semantic_keys(tmp_path: Path) -> None:
+    root = _seed_base_config(tmp_path, include_optional=True)
+    planning_path = root / ".audiagentic" / "planning" / "config" / "planning.yaml"
+    payload = yaml.safe_load(planning_path.read_text(encoding="utf-8"))
+    del payload["planning"]["lifecycle"]["state_set_priority"]
+    planning_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    cfg = Config(root)
+    errors = cfg.validate()
+    assert any(
+        "planning.yaml" in error and "'state_set_priority' is a required property" in error
+        for error in errors
+    )
 
 
 def test_kind_aliases_are_loaded_from_config(tmp_path: Path) -> None:
@@ -224,7 +282,9 @@ def test_kind_aliases_are_loaded_from_config(tmp_path: Path) -> None:
 def test_reference_inheritance_generic_accessor_supports_standard_refs(tmp_path: Path) -> None:
     root = _seed_base_config(tmp_path, include_optional=True)
     cfg = Config(root)
-    assert cfg.reference_inheritance("task", "standard_refs") == cfg.standard_refs_inheritance("task")
+    rules = cfg.reference_inheritance("task", "standard_refs")
+    assert rules
+    assert rules[0]["field"] == "spec_ref"
 
 
 def test_planning_schema_rejects_unknown_top_level_keys(tmp_path: Path) -> None:
@@ -339,6 +399,18 @@ def test_documentation_schema_rejects_unknown_surface_keys(tmp_path: Path) -> No
     doc_path = root / ".audiagentic" / "planning" / "config" / "documentation.yaml"
     payload = yaml.safe_load(doc_path.read_text(encoding="utf-8"))
     payload["planning"]["documentation"]["surfaces"][0]["typo_flag"] = True
+    doc_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    cfg = Config(root)
+    errors = cfg.validate()
+    assert any("documentation.yaml" in error and "typo_flag" in error for error in errors)
+
+
+def test_documentation_schema_rejects_unknown_collection_keys(tmp_path: Path) -> None:
+    root = _seed_base_config(tmp_path, include_optional=True)
+    doc_path = root / ".audiagentic" / "planning" / "config" / "documentation.yaml"
+    payload = yaml.safe_load(doc_path.read_text(encoding="utf-8"))
+    payload["planning"]["documentation"]["collections"][0]["typo_flag"] = True
     doc_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
     cfg = Config(root)

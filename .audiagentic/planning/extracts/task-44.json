@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-44",
+    "label": "[PKT-LFC-002](task-0046): Lifecycle Manifest and Checkpoint Writer",
+    "state": "draft",
+    "summary": "Create lifecycle manifest and checkpoint writer",
+    "spec_ref": "spec-0009",
+    "kind": "task",
+    "path": "docs/planning/tasks/lifecycle/task-44-pkt-lfc-002-task-0046-lifecycle-manifest-and-checkpoint-writer.md",
+    "archive_reason": null,
+    "archived_at": null,
+    "archived_by": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-LFC-002](task-0036): Lifecycle Manifest and Checkpoint Writer\n\n## Purpose\n\nCreate lifecycle manifest and checkpoint writer.\n\n## Scope\n\n- Manifest format\n- Checkpoint writing\n- Version tracking\n\n## Implementation\n\n1. Define manifest format\n2. Implement writer\n3. Add version tracking\n\n## Acceptance Criteria\n\n1. Manifest written correctly\n2. Checkpoints deterministic\n3. Version tracked\n"
+}

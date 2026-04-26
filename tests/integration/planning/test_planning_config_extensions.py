@@ -23,5 +23,5 @@ def test_config_extensions_available_in_seeded_project(tmp_path: Path) -> None:
     cfg = Config(root)
     assert cfg.validate() == []
     assert cfg.documentation["planning"]["documentation"]["surfaces"]
-    assert cfg.request_profiles["request_profiles"]["feature"]["label"] == "Feature request"
+    assert cfg.creation_profile_for("feature")["label"] == "Feature request"
     assert cfg.profile_packs["standard"]["profile_pack"]["documentation"]["required_updates"]["task"] == ["changelog"]
