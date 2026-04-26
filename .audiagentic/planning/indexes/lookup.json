@@ -1,6 +1,6 @@
 {
   "convention_version": 1,
-  "generated_at": "2026-04-22T10:28:38.324303+00:00",
+  "generated_at": "2026-04-26T11:33:02.891310+00:00",
   "items": {
     "plan-1": {
       "id": "plan-1",
@@ -288,7 +288,7 @@
       "state": "superseded",
       "path": "docs/planning/requests/request-2-add-archive-functionality-to-planning-core.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "request-20": {
       "id": "request-20",
@@ -297,7 +297,7 @@
       "state": "superseded",
       "path": "docs/planning/requests/request-20-auto-state-propagation-with-event-subscription.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "request-21": {
       "id": "request-21",
@@ -306,7 +306,7 @@
       "state": "superseded",
       "path": "docs/planning/requests/request-21-refactor-knowledge-component-hooks-to-use-event-driven-architecture.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "request-22": {
       "id": "request-22",
@@ -324,16 +324,7 @@
       "state": "superseded",
       "path": "docs/planning/requests/request-23-mcp-test-request.md",
       "deleted": false,
-      "archived": false
-    },
-    "request-24": {
-      "id": "request-24",
-      "kind": "request",
-      "label": "Get Test Request",
-      "state": "superseded",
-      "path": "docs/planning/requests/request-24-get-test-request.md",
-      "deleted": false,
-      "archived": false
+      "archived": true
     },
     "request-25": {
       "id": "request-25",
@@ -342,7 +333,7 @@
       "state": "superseded",
       "path": "docs/planning/requests/request-25-generic-req.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "request-26": {
       "id": "request-26",
@@ -441,7 +432,7 @@
       "state": "superseded",
       "path": "docs/planning/requests/request-8-add-audience-level-profile-system-to-control-planning-depth-of-detail.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "request-9": {
       "id": "request-9",
@@ -477,7 +468,7 @@
       "state": "cancelled",
       "path": "docs/planning/specifications/spec-11-multi-item-batch-updates-and-bulk-operations-for-planning-mcp.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "spec-12": {
       "id": "spec-12",
@@ -531,7 +522,7 @@
       "state": "cancelled",
       "path": "docs/planning/specifications/spec-17-integrate-knowledge-component-v7-4-specification.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "spec-18": {
       "id": "spec-18",
@@ -576,7 +567,7 @@
       "state": "cancelled",
       "path": "docs/planning/specifications/spec-21-planning-module-critical-fixes-specification.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "spec-22": {
       "id": "spec-22",
@@ -621,7 +612,7 @@
       "state": "cancelled",
       "path": "docs/planning/specifications/spec-26-auto-state-propagation-with-event-subscription-implementation-specification.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "spec-27": {
       "id": "spec-27",
@@ -702,7 +693,7 @@
       "state": "cancelled",
       "path": "docs/planning/specifications/spec-34-mcp-test-request-specification.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "spec-35": {
       "id": "spec-35",
@@ -711,7 +702,7 @@
       "state": "cancelled",
       "path": "docs/planning/specifications/spec-35-mcp-test-spec.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "spec-36": {
       "id": "spec-36",
@@ -783,7 +774,7 @@
       "state": "cancelled",
       "path": "docs/planning/specifications/spec-42-get-test-request-specification.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "spec-43": {
       "id": "spec-43",
@@ -792,7 +783,7 @@
       "state": "cancelled",
       "path": "docs/planning/specifications/spec-43-get-test-spec.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "spec-44": {
       "id": "spec-44",
@@ -819,7 +810,7 @@
       "state": "cancelled",
       "path": "docs/planning/specifications/spec-46-generic-req-specification.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "spec-47": {
       "id": "spec-47",
@@ -828,7 +819,7 @@
       "state": "cancelled",
       "path": "docs/planning/specifications/spec-47-generic-spec.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "spec-48": {
       "id": "spec-48",
@@ -1188,7 +1179,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-1-remove-hooks-py-from-knowledge-component.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-10": {
       "id": "task-10",
@@ -1584,7 +1575,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-2-remove-hooks-yml-and-update-cli.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-20": {
       "id": "task-20",
@@ -1638,7 +1629,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-204-extend-tm-batch-update-to-support-multi-item-operations.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-205": {
       "id": "task-205",
@@ -1647,7 +1638,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-205-implement-tm-bulk-state-for-state-transitions.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-206": {
       "id": "task-206",
@@ -1656,7 +1647,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-206-add-summary-only-flag-to-individual-operations.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-207": {
       "id": "task-207",
@@ -1665,7 +1656,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-207-expose-bulk-operations-in-mcp-and-tm-helper.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-208": {
       "id": "task-208",
@@ -1674,7 +1665,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-208-write-tests-for-bulk-operations-and-backward-compatibility.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-209": {
       "id": "task-209",
@@ -1917,7 +1908,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-232-validate-documentation.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-233": {
       "id": "task-233",
@@ -2016,7 +2007,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-242-add-cycle-detection-to-standards-cascade.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-243": {
       "id": "task-243",
@@ -2151,7 +2142,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-256-add-cli-commands-and-diagnostics-for-event-layer.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-257": {
       "id": "task-257",
@@ -2160,7 +2151,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-257-validate-event-layer-performance-targets.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-258": {
       "id": "task-258",
@@ -2268,7 +2259,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-268-review-get-task-by-id-function-reference.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-269": {
       "id": "task-269",
@@ -2358,7 +2349,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-277-spec-60.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-278": {
       "id": "task-278",
@@ -2367,7 +2358,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-278-spec-65.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-279": {
       "id": "task-279",
@@ -2376,7 +2367,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-279-std-0010.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-28": {
       "id": "task-28",
@@ -2394,7 +2385,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-280-std-0011.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-281": {
       "id": "task-281",
@@ -2403,7 +2394,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-281-plan-17.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-282": {
       "id": "task-282",
@@ -2412,7 +2403,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-282-plan-18.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-283": {
       "id": "task-283",
@@ -2421,7 +2412,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-283-plan-19.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-284": {
       "id": "task-284",
@@ -2430,7 +2421,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-284-plan-20.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-285": {
       "id": "task-285",
@@ -2439,7 +2430,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-285-plan-21.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-286": {
       "id": "task-286",
@@ -2448,7 +2439,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-286-plan-22.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-287": {
       "id": "task-287",
@@ -2457,7 +2448,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-287-wp-22.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-288": {
       "id": "task-288",
@@ -2466,7 +2457,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-288-wp-21.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-289": {
       "id": "task-289",
@@ -2475,7 +2466,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-289-wp-22.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-29": {
       "id": "task-29",
@@ -2493,7 +2484,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-290-wp-23.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-291": {
       "id": "task-291",
@@ -2502,7 +2493,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-291-wp-24.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-292": {
       "id": "task-292",
@@ -2511,7 +2502,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-292-wp-25.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-293": {
       "id": "task-293",
@@ -2520,7 +2511,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-293-req-0032.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-294": {
       "id": "task-294",
@@ -2529,7 +2520,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-294-req-0033.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-295": {
       "id": "task-295",
@@ -2538,7 +2529,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-295-req-0034.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-296": {
       "id": "task-296",
@@ -2547,7 +2538,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-296-req-0035.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-297": {
       "id": "task-297",
@@ -2556,7 +2547,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-297-req-0036.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-298": {
       "id": "task-298",
@@ -2565,7 +2556,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-298-req-0037.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-299": {
       "id": "task-299",
@@ -2574,7 +2565,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-299-req-0038.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-3": {
       "id": "task-3",
@@ -2583,7 +2574,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-3-remove-hook-config-file-from-config-py.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-300": {
       "id": "task-300",
@@ -2592,7 +2583,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-300-req-0039.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-301": {
       "id": "task-301",
@@ -2601,7 +2592,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-301-req-0040.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-302": {
       "id": "task-302",
@@ -2610,7 +2601,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-302-req-0041.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-303": {
       "id": "task-303",
@@ -2619,7 +2610,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-303-req-0042.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-304": {
       "id": "task-304",
@@ -2628,7 +2619,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-304-req-0043.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-305": {
       "id": "task-305",
@@ -2655,7 +2646,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-307-docs.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-308": {
       "id": "task-308",
@@ -2664,7 +2655,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-308-docs2.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-309": {
       "id": "task-309",
@@ -2673,7 +2664,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-309-extracts.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-310": {
       "id": "task-310",
@@ -2691,7 +2682,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-311-standard-8-python-impl-impl.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-312": {
       "id": "task-312",
@@ -2700,7 +2691,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-312-standard-9-planning-enhancement-impl.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-313": {
       "id": "task-313",
@@ -2709,7 +2700,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-313-standard-0010-mcp-server-impl.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-314": {
       "id": "task-314",
@@ -2718,7 +2709,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-314-standard-11-component-arch-impl.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-326": {
       "id": "task-326",
@@ -2781,7 +2772,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-332-updated-test-task.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-333": {
       "id": "task-333",
@@ -2862,7 +2853,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-341-generic-task.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-342": {
       "id": "task-342",
@@ -2880,7 +2871,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-343-atomicity-task.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-344": {
       "id": "task-344",
@@ -2907,7 +2898,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-4-update-events-py-to-remove-hooks-dependency.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-5": {
       "id": "task-5",
@@ -2916,7 +2907,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/core/task-5-update-documentation-and-remove-hooks-references.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-6": {
       "id": "task-6",
@@ -2952,7 +2943,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/discord/task-155-pkt-dsc-001-task-0158-event-subscriber.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-156": {
       "id": "task-156",
@@ -2961,7 +2952,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/discord/task-156-pkt-dsc-002-task-0159-release-summary-publishing.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-157": {
       "id": "task-157",
@@ -2970,7 +2961,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/discord/task-157-pkt-dsc-003-task-0160-approval-publishing-response-handling.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-158": {
       "id": "task-158",
@@ -2979,7 +2970,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/discord/task-158-pkt-dsc-004-task-0161-lifecycle-migration-notices.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-165": {
       "id": "task-165",
@@ -3366,7 +3357,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-102-pkt-prv-027-task-0104-provider-message-queue.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-103": {
       "id": "task-103",
@@ -3384,7 +3375,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-104-pkt-prv-029-task-0106-provider-batch-processing.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-105": {
       "id": "task-105",
@@ -3447,7 +3438,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-111-pkt-prv-036-task-0113-provider-bulkhead.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-112": {
       "id": "task-112",
@@ -3465,7 +3456,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-113-pkt-prv-038-task-0115-provider-connection-pooling.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-114": {
       "id": "task-114",
@@ -3519,7 +3510,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-119-pkt-prv-044-task-0122-provider-policy-enforcement.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-120": {
       "id": "task-120",
@@ -3537,7 +3528,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-121-pkt-prv-046-task-0124-provider-data-masking.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-122": {
       "id": "task-122",
@@ -3861,7 +3852,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-78-pkt-prv-003-task-0080-provider-selection.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-79": {
       "id": "task-79",
@@ -3906,7 +3897,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-83-pkt-prv-008-task-0085-provider-documentation.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-84": {
       "id": "task-84",
@@ -4005,7 +3996,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-94-pkt-prv-019-task-0096-provider-tracing.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-95": {
       "id": "task-95",
@@ -4023,7 +4014,7 @@
       "state": "cancelled",
       "path": "docs/planning/tasks/providers/task-96-pkt-prv-021-task-0098-provider-discovery.md",
       "deleted": false,
-      "archived": false
+      "archived": true
     },
     "task-97": {
       "id": "task-97",

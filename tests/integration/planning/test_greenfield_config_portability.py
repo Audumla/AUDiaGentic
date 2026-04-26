@@ -5,6 +5,9 @@ import sys
 from pathlib import Path
 from textwrap import dedent
 
+import pytest
+import yaml
+
 ROOT = Path(__file__).resolve().parents[3]
 for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:
@@ -58,9 +61,6 @@ def _seed_greenfield_project(root: Path) -> None:
                 require_source: true
                 extra_fields:
                   source_field: origin
-              state_cascades:
-                frozen:
-                  sketch: retired
               required_fields: [id, label, state, summary]
               optional_fields: [origin, standard_refs]
             sketch:
@@ -73,9 +73,6 @@ def _seed_greenfield_project(root: Path) -> None:
                 extra_fields:
                   guidance_field: guidance
               reference_inheritance: {}
-              state_cascades:
-                retired:
-                  action: retired
               required_fields: [id, label, state, summary]
               optional_fields: [guidance, signal_refs, standard_refs]
             action:
@@ -92,6 +89,43 @@ def _seed_greenfield_project(root: Path) -> None:
               optional_fields: [sketch_ref, sketch_refs, standard_refs]
           reference_field_shapes:
             sketch_refs: rel_list
+          standard_ref_field: standard_refs
+          lifecycle:
+            state_set_priority:
+              initial: 10
+              active: 20
+              complete: 90
+              terminal: 100
+            state_sets:
+              signal:
+                channel:
+                  initial: [inbox]
+                  active: [triaged]
+                  complete: [filed]
+                  terminal: [frozen]
+              sketch:
+                studio:
+                  initial: [shaping]
+                  complete: [approved]
+                  terminal: [retired]
+              action:
+                runway:
+                  initial: [queued]
+                  active: [active]
+                  terminal: [retired]
+            actions:
+              freeze:
+                transition_to: frozen
+                cascade:
+                  by_kind:
+                    signal:
+                      sketch: retired
+              retire:
+                transition_to: retired
+                cascade:
+                  by_kind:
+                    sketch:
+                      action: retired
           dirs:
             base: records/atlas
             attachments: records/assets
@@ -101,6 +135,8 @@ def _seed_greenfield_project(root: Path) -> None:
             events: .audiagentic/planning/events
             claims: .audiagentic/planning/claims
             cache: .audiagentic/planning/cache
+          base_required_fields: [id, label, state, summary]
+          base_optional_fields: [meta, deleted, deleted_at, deletion_reason]
         """,
     )
     _write(
@@ -326,6 +362,83 @@ def test_greenfield_config_cascades_custom_states_between_custom_kinds(tmp_path:
     assert api._find(signal.data["id"]).data["state"] == "frozen"
     assert api._find(sketch.data["id"]).data["state"] == "retired"
     assert api._find(action.data["id"]).data["state"] == "retired"
+
+
+def test_greenfield_config_supports_custom_replacement_and_ref_validation(
+    tmp_path: Path,
+) -> None:
+    _seed_greenfield_project(tmp_path)
+    planning_path = tmp_path / ".audiagentic" / "planning" / "config" / "planning.yaml"
+    workflows_path = tmp_path / ".audiagentic" / "planning" / "config" / "workflows.yaml"
+
+    planning = yaml.safe_load(planning_path.read_text(encoding="utf-8"))
+    planning_cfg = planning["planning"]
+    planning_cfg["kinds"]["signal"]["creation"]["refinement_source_prefix"] = "replaces:"
+    planning_cfg["kinds"]["signal"]["creation"]["refinement_action"] = "replace"
+    planning_cfg["kinds"]["sketch"]["creation"] = {
+        "validate_ref_fields": ["signal_refs"],
+        "seed_reference_fields": {"signal_refs": "signals"},
+    }
+    planning_cfg.setdefault("reference_field_targets", {})["signal_refs"] = "signal"
+    planning_cfg["lifecycle"]["state_sets"]["signal"]["channel"]["terminal"].append("replaced")
+    planning_cfg["lifecycle"]["actions"]["replace"] = {
+        "transition_to": "replaced",
+        "extensions": {
+            "planning_supersede": {
+                "superseded_by_field": "replaced_by",
+                "supersedes_field": "replaces",
+                "reason_template": "Replaced by {new_id}",
+                "body_note_template": "\n\n**Replaced by** `{new_id}` on {date}",
+                "body_note_section": "# History",
+            },
+        },
+    }
+    planning_path.write_text(yaml.safe_dump(planning, sort_keys=False), encoding="utf-8")
+
+    workflows = yaml.safe_load(workflows_path.read_text(encoding="utf-8"))
+    channel = workflows["planning"]["workflows"]["signal"]["named"]["channel"]
+    channel["values"].append("replaced")
+    channel["transitions"]["inbox"].append("replaced")
+    channel["transitions"]["triaged"].append("replaced")
+    channel["transitions"]["filed"].append("replaced")
+    channel["transitions"]["replaced"] = []
+    workflows_path.write_text(yaml.safe_dump(workflows, sort_keys=False), encoding="utf-8")
+
+    cfg = Config(tmp_path)
+    assert cfg.validate() == []
+    api = PlanningAPI(tmp_path)
+
+    old_signal = api.new("signal", label="Old signal", summary="Old", source="brief-old")
+    new_signal = api.new(
+        "signal",
+        label="New signal",
+        summary="New",
+        source=f"replaces:{old_signal.data['id']}",
+    )
+
+    old = api._find(old_signal.data["id"])
+    new = api._find(new_signal.data["id"])
+    assert old.data["state"] == "replaced"
+    assert old.data["meta"]["replaced_by"] == new.data["id"]
+    assert new.data["meta"]["replaces"] == old.data["id"]
+    assert "# History" in old.body
+
+    sketch = api.new(
+        "sketch",
+        label="Validated sketch",
+        summary="Uses signal",
+        refs={"signals": [old.data["id"]]},
+    )
+    assert sketch.data["signal_refs"] == [old.data["id"]]
+
+    wrong_kind = api.new("action", label="Wrong kind", summary="Not signal", domain="lab")
+    with pytest.raises(ValueError, match="expected \\['signal'\\]"):
+        api.new(
+            "sketch",
+            label="Invalid sketch",
+            summary="Wrong ref kind",
+            refs={"signals": [wrong_kind.data["id"]]},
+        )
 
 
 def test_greenfield_config_exercises_extracts_indexing_and_maintenance_paths(tmp_path: Path) -> None:

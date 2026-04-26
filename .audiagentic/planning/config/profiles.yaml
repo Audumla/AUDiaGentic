@@ -99,6 +99,9 @@ planning:
         - kind: request
         - kind: spec
           label_suffix: " — Specification"
+          summary_template: "Specification for {source_summary}"
+          refs:
+            request_refs: ["{source_id}"]
       allow_plan_overlay: true
       # Request defaults
       defaults:
@@ -117,6 +120,9 @@ planning:
         - kind: request
         - kind: spec
           label_suffix: " — Specification"
+          summary_template: "Specification for {source_summary}"
+          refs:
+            request_refs: ["{source_id}"]
       allow_plan_overlay: false
       defaults:
         meta:
@@ -134,7 +140,10 @@ planning:
         - kind: request
         - kind: task
           label_suffix: " — Task"
+          summary_template: "Task for {source_summary}"
           domain: core
+          refs:
+            request_refs: ["{source_id}"]
       allow_plan_overlay: false
       defaults:
         meta:
@@ -152,7 +161,10 @@ planning:
         - kind: request
         - kind: task
           label_suffix: " — Task"
+          summary_template: "Task for {source_summary}"
           domain: core
+          refs:
+            request_refs: ["{source_id}"]
       allow_plan_overlay: false
       defaults:
         meta:
@@ -162,19 +174,24 @@ planning:
           - What is the expected correction?
           - What should be verified after the fix?
       suggested_sections: [Problem, Correction, Verification]
-  standard_defaults:
+  default_references:
     spec:
-      - standard-0006  # Planning structure and record quality
-      - standard-0005  # Verification and test evidence
+      standard_refs:
+        - standard-0006  # Planning structure and record quality
+        - standard-0005  # Verification and test evidence
     task:
-      - standard-0005  # Verification and test evidence (what counts as done)
-      - standard-0006  # Planning structure (acceptance criteria clarity)
+      standard_refs:
+        - standard-0005  # Verification and test evidence (what counts as done)
+        - standard-0006  # Planning structure (acceptance criteria clarity)
     plan:
-      - standard-0006  # Planning structure (decomposition, sequencing)
+      standard_refs:
+        - standard-0006  # Planning structure (decomposition, sequencing)
     wp:
-      - standard-0006  # Planning structure
+      standard_refs:
+        - standard-0006  # Planning structure
     request:
-      - standard-0001  # Planning documentation and maintenance
+      standard_refs:
+        - standard-0001  # Planning documentation and maintenance
   object_profiles:
     spec_precise:
       applies_to: spec

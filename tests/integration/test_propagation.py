@@ -147,17 +147,6 @@ kinds:
         rule: none
         new_state: null
 
-terminal_states:
-  - done
-  - archived
-
-state_priority:
-  archived: 100
-  done: 90
-  blocked: 50
-  in_progress: 20
-  ready: 10
-
 rules:
   none:
     enabled: true
@@ -216,7 +205,10 @@ def _create_request_and_spec(planning_api: PlanningAPI) -> tuple[str, str]:
     )
     request_id = request.data["id"]
     spec = planning_api.new(
-        "spec", label="Test Spec", summary="Test specification", request_refs=[request_id]
+        "spec",
+        label="Test Spec",
+        summary="Test specification",
+        refs={"request_refs": [request_id]},
     )
     return request_id, spec.data["id"]
 
@@ -224,11 +216,11 @@ def _create_request_and_spec(planning_api: PlanningAPI) -> tuple[str, str]:
 def _create_task_hierarchy(planning_api: PlanningAPI) -> tuple[str, str, str, str, str]:
     """Create valid request -> spec -> plan -> wp -> task chain."""
     request_id, spec_id = _create_request_and_spec(planning_api)
-    plan = planning_api.new("plan", label="Test Plan", summary="Test plan", spec=spec_id)
+    plan = planning_api.new("plan", label="Test Plan", summary="Test plan", refs={"spec": spec_id})
     plan_id = plan.data["id"]
-    wp = planning_api.new("wp", label="Test WP", summary="Test work package", plan=plan_id)
+    wp = planning_api.new("wp", label="Test WP", summary="Test work package", refs={"plan": plan_id})
     wp_id = wp.data["id"]
-    task = planning_api.new("task", label="Test Task", summary="Test task", spec=spec_id)
+    task = planning_api.new("task", label="Test Task", summary="Test task", refs={"spec": spec_id})
     task_id = task.data["id"]
     planning_api.relink(wp_id, "task_refs", task_id)
     return request_id, spec_id, plan_id, wp_id, task_id
@@ -301,7 +293,7 @@ class TestStatePropagationIntegration:
         """Test Plan state propagation to Spec."""
         _, planning_api = planning_root
         _, spec_id = _create_request_and_spec(planning_api)
-        plan = planning_api.new("plan", label="Test Plan", summary="Test plan", spec=spec_id)
+        plan = planning_api.new("plan", label="Test Plan", summary="Test plan", refs={"spec": spec_id})
         plan_id = plan.data["id"]
         # Transition spec to ready first (required for trigger_parent_if_ready rule)
         planning_api.state(spec_id, "ready", metadata={})
@@ -377,8 +369,6 @@ global:
   max_depth: 10
   default_mode: sync
 kinds: {}
-terminal_states: [done, archived]
-state_priority: {}
 """)
         planning_api = PlanningAPI(tmp_path)
         _, _, _, wp_id, task_id = _create_task_hierarchy(planning_api)
@@ -419,7 +409,7 @@ state_priority: {}
         config["global"]["max_depth"] = 2
         planning_api._propagation_engine._config = config
         _, spec_id = _create_request_and_spec(planning_api)
-        plan = planning_api.new("plan", label="Test Plan", summary="Test plan", spec=spec_id)
+        plan = planning_api.new("plan", label="Test Plan", summary="Test plan", refs={"spec": spec_id})
         plan_id = plan.data["id"]
         # Transition spec to ready first
         planning_api.state(spec_id, "ready", metadata={})

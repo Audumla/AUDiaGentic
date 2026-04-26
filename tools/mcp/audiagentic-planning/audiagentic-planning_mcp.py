@@ -260,10 +260,9 @@ def tm_edit(id: str, operations: list[dict[str, Any]]) -> dict[str, Any]:
 
 @mcp.tool(
     description=(
-        "Create a planning item. kind: request|spec|plan|task|wp|standard. "
-        "Provide content for initial markdown body. "
-        "Kind requirements: spec needs request_refs; task needs spec; wp needs plan. "
-        "Request extras: profile, source, context, current_understanding, open_questions."
+        "Create a planning item. Use tm_docs(op='config') first to discover configured kinds, "
+        "required refs, and create-time fields. Pass refs as a map keyed by configured "
+        "creation inputs."
     )
 )
 def tm_create(
@@ -272,23 +271,17 @@ def tm_create(
     summary: str,
     content: str | None = None,
     source: str | None = None,
-    domain: str = "core",
-    spec: str | None = None,
-    plan: str | None = None,
-    parent: str | None = None,
-    target: str | None = None,
+    domain: str | None = None,
     workflow: str | None = None,
-    request_refs: list[str] | None = None,
+    refs: dict[str, Any] | None = None,
+    fields: dict[str, Any] | None = None,
     check_duplicates: bool = True,
     profile: str | None = None,
     current_understanding: str | None = None,
     open_questions: list[str] | None = None,
     context: str | None = None,
 ) -> dict[str, Any]:
-    """Create a planning item. kind: request|spec|plan|task|wp|standard.
-    Provide content for initial markdown body.
-    Kind requirements: spec needs request_refs; task needs spec; wp needs plan.
-    Request extras: profile, source, context, current_understanding, open_questions."""
+    """Create a configured planning item."""
     try:
         return tm.create(
             kind=kind,
@@ -297,12 +290,9 @@ def tm_create(
             content=content,
             source=source,
             domain=domain,
-            spec=spec,
-            plan=plan,
-            parent=parent,
-            target=target,
             workflow=workflow,
-            request_refs=request_refs,
+            refs=refs,
+            fields=fields,
             check_duplicates=check_duplicates,
             profile=profile,
             current_understanding=current_understanding,
@@ -392,8 +382,8 @@ def tm_get(
     description=(
         "Query planning items. "
         "mode: list (items, default) | count (kind×state summary) | next (unclaimed items for agent work queue). "
-        "kind: request|spec|plan|task|wp|standard — omit for all (list/count) or defaults to task (next). "
-        "state: filter by state (list) or target state (next, defaults to ready). "
+        "kind: omit for all (list/count) or use configured queue default (next). "
+        "state: filter by state (list) or use configured queue default (next). "
         "domain: domain filter (next only). "
         "query: optional text search within item content (list mode only)."
     )
@@ -416,7 +406,7 @@ def tm_list(
     if mode == "count":
         return tm.status()
     elif mode == "next":
-        result = tm.next_items(kind or "task", state or "ready", domain)
+        result = tm.next_items(kind, state, domain)
         return result if result is not None else []
     else:  # list
         items = tm.list_kind(
@@ -516,40 +506,46 @@ def tm_relink(
         raise PlanningError(str(e))
 
 
-@mcp.tool(description="Group Tasks into a new WorkPackage within a Plan")
-def tm_package(
-    plan: str, tasks: list[str], label: str, summary: str, domain: str = "core"
+@mcp.tool(description="Group configured child items into a configured workflow action target")
+def tm_group(
+    parent: str, items: list[str], label: str, summary: str, domain: str | None = None
 ) -> dict[str, Any]:
     try:
-        return tm.package(plan, tasks, label, summary, domain)
+        return tm.package(parent, items, label, summary, domain)
     except ValueError as e:
         raise PlanningError(str(e))
 
 
 # ---------------------------------------------------------------------------
-# 10. STANDARDS
+# 10. REFERENCE RESOLUTION
 # ---------------------------------------------------------------------------
 
 
 @mcp.tool(
     description=(
-        "Standards lookup. "
-        "Omit id → list all standards. "
-        "id=standard-XXXX → get that standard with body. "
-        "id=task-XXXX (or any non-standard item) → list applicable standards for that item."
+        "Configured reference lookup. "
+        "Omit id to list the configured default reference collection. "
+        "Pass a default-reference item id to get that item, or any other item id to list effective refs."
     )
 )
-def tm_standards(
+def tm_refs(
     id: str | None = None,
+    field: str | None = None,
     with_related: bool = False,
     with_resources: bool = False,
 ) -> Any:
+    api = tm._get_api()
+    ref_field = field or api.config.standard_ref_field()
+    target_kinds = api.config.reference_field_targets(ref_field)
+    if not target_kinds:
+        raise PlanningError(f"reference field {ref_field!r} has no configured targets")
+    default_target_kind = target_kinds[0]
     if id is None:
-        return tm.list_standards()
-    elif id.startswith("standard-"):
-        return tm.get_standard(id, with_related, with_resources)
-    else:
-        return tm.standards(id)
+        return tm.list_kind(default_target_kind)
+    kind = api.config.kind_for_id(id)
+    if kind == default_target_kind:
+        return tm.extract(id, with_related=with_related, with_resources=with_resources)
+    return tm.effective_refs(id, field=ref_field)
 
 
 # ---------------------------------------------------------------------------
@@ -642,9 +638,9 @@ def tm_docs(
     elif op == "refs":
         return tm.list_reference_docs()
     elif op == "profiles":
-        return tm.list_request_profiles()
+        return tm.list_creation_profiles()
     elif op == "profile":
-        return tm.get_request_profile(id)
+        return tm.get_creation_profile(id)
     elif op == "support":
         return tm.list_support_docs(id, role)
     elif op == "sync_req":

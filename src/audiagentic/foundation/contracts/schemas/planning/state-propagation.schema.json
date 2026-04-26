@@ -39,6 +39,29 @@
                     { "type": "string" },
                     { "type": "null" }
                   ]
+                },
+                "when": {
+                  "type": "object",
+                  "properties": {
+                    "state_set": { "type": "string" }
+                  },
+                  "additionalProperties": false,
+                  "required": ["state_set"]
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "action": { "type": "string" },
+                      "parent_field": { "type": "string" },
+                      "required_state_set": { "type": "string" },
+                      "parent_blocking_set": { "type": "string" },
+                      "target_state": { "type": "string" }
+                    },
+                    "additionalProperties": false,
+                    "required": ["action"]
+                  }
                 }
               },
               "required": ["rule", "new_state"]
@@ -69,21 +92,23 @@
         }
       }
     },
-    "terminal_states": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
-    "state_priority": {
-      "type": "object",
-      "additionalProperties": { "type": "integer" }
-    },
     "workflows": {
       "type": "object",
       "additionalProperties": true
     },
     "validation": {
       "type": "object",
-      "additionalProperties": true
+      "additionalProperties": false,
+      "properties": {
+        "required_fields": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "required_rules": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
     },
     "healing": {
       "type": "object",

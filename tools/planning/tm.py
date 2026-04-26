@@ -64,7 +64,7 @@ def _append_propagation_audit_log(root: Path, entries: list[dict]) -> Path:
 
 
 def _run_audit(api, root: Path, *, auto_fix: bool, verbose: bool) -> tuple[dict, int]:
-    auditable_kinds = {"task", "wp", "plan", "spec"}
+    auditable_kinds = set(api.config.all_kinds())
     findings = []
     log_entries = []
 
@@ -160,12 +160,13 @@ def main():
     p_new.add_argument("--label", required=True)
     p_new.add_argument("--summary", required=True)
     p_new.add_argument("--domain")
-    p_new.add_argument("--spec")
-    p_new.add_argument("--plan")
-    p_new.add_argument("--parent")
-    p_new.add_argument("--target")
     p_new.add_argument("--workflow")
-    p_new.add_argument("--request-ref", action="append", dest="request_refs")
+    p_new.add_argument(
+        "--ref",
+        action="append",
+        default=[],
+        help="Creation ref as input=value. Repeat for list refs.",
+    )
     p_new.add_argument(
         "--profile",
         default=None,
@@ -269,8 +270,8 @@ def main():
     p_events = sp.add_parser("events")
     p_events.add_argument("--tail", type=int, default=20)
     p_next = sp.add_parser("next")
-    p_next.add_argument("kind", nargs="?", default="task")
-    p_next.add_argument("--state", default="ready")
+    p_next.add_argument("kind", nargs="?")
+    p_next.add_argument("--state")
     p_next.add_argument("--domain")
     p_stds = sp.add_parser("standards")
     p_stds.add_argument("id")
@@ -282,17 +283,23 @@ def main():
     args = p.parse_args()
 
     if args.cmd == "new":
+        refs: dict[str, object] = {}
+        for entry in args.ref:
+            if "=" not in entry:
+                raise SystemExit("--ref must be input=value")
+            key, value = entry.split("=", 1)
+            if key in refs:
+                existing = refs[key]
+                refs[key] = [*existing, value] if isinstance(existing, list) else [existing, value]
+            else:
+                refs[key] = value
         item = api.new(
             args.kind,
             label=args.label,
             summary=args.summary,
             domain=args.domain,
-            spec=args.spec,
-            plan=args.plan,
-            parent=args.parent,
-            target=args.target,
             workflow=args.workflow,
-            request_refs=args.request_refs,
+            refs=refs,
             profile=args.profile,
             guidance=args.guidance,
             current_understanding=args.current_understanding,
@@ -352,9 +359,11 @@ def main():
         if not args.include_deleted:
             items = [i for i in items if not i.data.get("deleted")]
         if not args.include_archived:
-            items = [i for i in items if i.data.get("state") != "archived"]
+            archive_state = api.config.lifecycle_action_state("archive")
+            items = [i for i in items if i.data.get("state") != archive_state]
         if not args.include_superseded:
-            items = [i for i in items if i.data.get("state") != "superseded"]
+            supersede_state = api.config.lifecycle_action_state("supersede")
+            items = [i for i in items if i.data.get("state") != supersede_state]
         print_json(
             [
                 {
@@ -362,7 +371,9 @@ def main():
                     "kind": i.kind,
                     "label": i.data["label"],
                     "state": i.data["state"],
-                    "superseded": i.data.get("state") == "superseded",
+                    "terminal": api.config.state_in_set(
+                        i.kind, i.data.get("state"), "terminal", i.data.get("workflow")
+                    ),
                 }
                 for i in items
             ]
@@ -415,9 +426,16 @@ def main():
             lines = p2.read_text(encoding="utf-8").strip().splitlines()[-args.tail :]
             print_json([json.loads(x) for x in lines if x.strip()])
     elif args.cmd == "next":
-        print_json(api.next_items(args.kind, args.state, args.domain))
+        defaults = api.config.queue_defaults()
+        print_json(
+            api.next_items(
+                args.kind or defaults["kind"],
+                args.state or defaults["state"],
+                args.domain,
+            )
+        )
     elif args.cmd == "standards":
-        print_json(api.standards(args.id))
+        print_json(api.effective_refs(args.id))
     elif args.cmd == "hooks":
         print_json(api.hooks_info())
     elif args.cmd == "sync-counters":

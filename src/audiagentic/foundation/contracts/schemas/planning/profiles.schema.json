@@ -27,7 +27,9 @@
                   "properties": {
                     "kind": { "type": "string" },
                     "label_suffix": { "type": "string" },
-                    "domain": { "type": "string" }
+                    "summary_template": { "type": "string" },
+                    "domain": { "type": "string" },
+                    "refs": { "type": "object" }
                   },
                   "required": ["kind"]
                 }
@@ -52,9 +54,15 @@
             "required": ["applies_to"]
           }
         },
-        "standard_defaults": {
+        "default_references": {
           "type": "object",
-          "additionalProperties": { "type": "array", "items": { "type": "string" } }
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
         },
         "document_templates": {
           "$ref": "#/$defs/document_templates"

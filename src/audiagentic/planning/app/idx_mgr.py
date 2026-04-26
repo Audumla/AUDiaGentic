@@ -36,7 +36,12 @@ class Indexer:
                 "state": item.data["state"],
                 "path": rel_path,
                 "deleted": bool(item.data.get("deleted", False)),
-                "archived": item.data.get("state") == self.config.archived_state(),
+                "archived": self.config.state_in_set(
+                    item.kind,
+                    item.data.get("state"),
+                    "terminal",
+                    item.data.get("workflow"),
+                ),
             }
         if self.test_mode:
             idx_root = self.root / "test" / ".audiagentic/planning/indexes"
