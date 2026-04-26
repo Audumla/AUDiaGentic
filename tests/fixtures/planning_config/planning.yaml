@@ -33,28 +33,24 @@ planning:
       creation:
         duplicate_check: true
         require_source: true
-        validate_request_refs: false
+        validate_ref_fields: []
         refinement_source_prefix: refinement-of-
+        refinement_action: supersede
         seed_reference_fields:
           spec_refs: request_refs
         extra_fields:
           use_profile_defaults: true
           use_guidance_defaults: true
+          use_required_sections: true
+          use_profile_sections: true
           source_field: source
           guidance_field: guidance
           context_field: context
           understanding_field: current_understanding
           open_questions_field: open_questions
           meta_field: meta
-      state_cascades:
-        archived:
-          spec: archived
-          task: archived
-        superseded:
-          spec: superseded
-      required_fields: [id, label, state, summary]
-      optional_fields: [profile, source, context, current_understanding, open_questions, guidance, spec_refs, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
-      filename_pattern: "{id}-{slug}.md"
+      required_fields: []
+      optional_fields: [profile, source, context, current_understanding, open_questions, guidance, spec_refs, standard_refs]
       
     spec:
       dir: specifications
@@ -65,14 +61,11 @@ planning:
       reference_inheritance: {}
       creation:
         duplicate_check: true
-        validate_request_refs: true
-      state_cascades:
-        archived:
-          plan: archived
-          task: archived
-      required_fields: [id, label, state, summary, request_refs]
-      optional_fields: [workflow, task_refs, standard_refs, spec_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
-      filename_pattern: "{id}-{slug}.md"
+        validate_ref_fields: [request_refs]
+        seed_reference_fields:
+          request_refs: request_refs
+      required_fields: [request_refs]
+      optional_fields: [workflow, task_refs, standard_refs, spec_refs]
       
     plan:
       dir: plans
@@ -82,10 +75,12 @@ planning:
       required_refs: []
       reference_inheritance: {}
       creation:
-        validate_request_refs: true
-      required_fields: [id, label, state, summary]
-      optional_fields: [workflow, spec_refs, request_refs, work_package_refs, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
-      filename_pattern: "{id}-{slug}.md"
+        validate_ref_fields: [request_refs]
+        seed_reference_fields:
+          request_refs: request_refs
+          spec_refs: spec
+      required_fields: []
+      optional_fields: [workflow, spec_refs, request_refs, work_package_refs, standard_refs]
       
     task:
       dir: tasks
@@ -100,10 +95,15 @@ planning:
           - field: parent_task_ref
             type: direct
       creation:
-        validate_request_refs: true
-      required_fields: [id, label, state, summary]
-      optional_fields: [workflow, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by, spec_ref, parent_task_ref, target, packet_ref, request_refs]
-      filename_pattern: "{id}-{slug}.md"
+        validate_ref_fields: [request_refs]
+        seed_reference_fields:
+          parent_task_ref: parent
+          packet_ref: target
+          request_refs: request_refs
+          spec_ref: spec
+          standard_refs: standard_refs
+      required_fields: []
+      optional_fields: [workflow, standard_refs, spec_ref, parent_task_ref, target, packet_ref, request_refs]
       
     wp:
       dir: work-packages
@@ -123,9 +123,13 @@ planning:
                 type: direct
                 sub_inheritance:
                   - field: standard_refs
-      required_fields: [id, label, state, summary, plan_ref]
-      optional_fields: [workflow, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by, task_refs]
-      filename_pattern: "{id}-{slug}.md"
+      creation:
+        seed_reference_fields:
+          plan_ref: plan
+          standard_refs: standard_refs
+          task_refs: task_refs
+      required_fields: [plan_ref]
+      optional_fields: [workflow, standard_refs, task_refs]
       
     standard:
       dir: standards
@@ -134,9 +138,13 @@ planning:
       has_domain: false
       required_refs: []
       reference_inheritance: {}
-      required_fields: [id, label, state, summary]
-      optional_fields: [request_refs, task_refs, standard_refs, meta, deleted, deleted_at, deletion_reason, archived_at, archived_by, archive_reason, restored_at, restored_by]
-      filename_pattern: "{id}-{slug}.md"
+      creation:
+        seed_reference_fields:
+          request_refs: request_refs
+          standard_refs: standard_refs
+          task_refs: task_refs
+      required_fields: []
+      optional_fields: [request_refs, task_refs, standard_refs]
       
   dirs:
     base: docs/planning
@@ -147,13 +155,65 @@ planning:
     events: .audiagentic/planning/events
     claims: .audiagentic/planning/claims
     cache: .audiagentic/planning/cache
+  base_required_fields: [id, label, state, summary]
+  base_optional_fields: [meta, deleted, deleted_at, deletion_reason]
   reference_field_shapes:
     task_refs: rel_list
     work_package_refs: rel_list
+  reference_field_targets:
+    parent_task_ref: task
+    work_package_refs: wp
+  standard_ref_field: standard_refs
+  workflow_actions:
+    plan_overlay:
+      defaults:
+        domain: core
+      creates:
+        plan:
+          kind: plan
+          label: "{label}"
+          summary: "{summary}"
+          refs:
+            spec: "{spec_id}"
+            request_refs: "{request_refs}"
+        package:
+          kind: wp
+          domain: "{domain_or_default}"
+          label: "{label}"
+          summary: "{summary}"
+          refs:
+            plan: "{plan_id}"
+            task_refs: "{task_ids}"
+      result_keys:
+        plan: plan
+        wp: package
+    package:
+      defaults:
+        domain: core
+      creates:
+        package:
+          kind: wp
+          domain: "{domain_or_default}"
+          label: "{label}"
+          summary: "{summary}"
+          workflow: "{workflow}"
+          refs:
+            plan: "{parent_id}"
+            task_refs: "{item_ids}"
+      updates:
+        - target: "{parent_id}"
+          ref_field: work_package_refs
+          child_id_from: package
+  queue_defaults:
+    kind: task
+    state: ready
   lifecycle:
-    archived_state: archived
-    superseded_state: superseded
-    terminal_states: [archived, superseded, deleted]
+    state_set_priority:
+      initial: 10
+      active: 20
+      blocked: 50
+      complete: 90
+      terminal: 100
     state_sets:
       request:
         standard:
@@ -165,29 +225,34 @@ planning:
         standard:
           initial: [draft, ready]
           active: [in_progress, blocked]
+          blocked: [blocked]
           complete: [done]
           terminal: [cancelled, archived]
       plan:
         standard:
           initial: [draft, ready]
           active: [in_progress, blocked]
+          blocked: [blocked]
           complete: [done]
           terminal: [cancelled, archived]
       task:
         standard:
           initial: [draft, ready]
           active: [in_progress, blocked]
+          blocked: [blocked]
           complete: [done]
           terminal: [cancelled, archived]
         review_heavy:
           initial: [draft, review, ready]
           active: [in_progress, blocked]
+          blocked: [blocked]
           complete: [done]
           terminal: [cancelled, archived]
       wp:
         standard:
           initial: [draft, ready]
           active: [in_progress, blocked, review]
+          blocked: [blocked]
           complete: [done]
           terminal: [cancelled, archived]
       standard:
@@ -196,3 +261,41 @@ planning:
           active: []
           complete: [done]
           terminal: [archived]
+    actions:
+      archive:
+        transition_to: archived
+        metadata:
+          archived_at: now
+          archived_by: actor_or_system
+          archive_reason: reason_or_empty
+          restored_at: null
+          restored_by: null
+        event_suffix: archived
+        cascade:
+          by_kind:
+            request:
+              spec: archived
+              task: archived
+            spec:
+              plan: archived
+              task: archived
+      restore:
+        from_state: archived
+        metadata:
+          restored_at: now
+          restored_by: actor_or_system
+        event_suffix: restored
+      supersede:
+        transition_to: superseded
+        event_suffix: superseded
+        extensions:
+          planning_supersede:
+            superseded_by_field: superseded_by
+            supersedes_field: supersedes
+            reason_template: "Auto-superseded by {new_id}"
+            body_note_template: "\n\n**Superseded by** `{new_id}` on {date}"
+            body_note_section: "# Notes"
+        cascade:
+          by_kind:
+            request:
+              spec: superseded

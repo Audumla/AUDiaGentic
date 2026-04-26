@@ -8,6 +8,7 @@ implemented in phases 1-4 of plan-0014.
 import os
 import sys
 from pathlib import Path
+import tempfile
 import pytest
 
 
@@ -26,6 +27,7 @@ root = bootstrap()
 
 from audiagentic.planning.app.config import Config
 from audiagentic.planning.app.api import PlanningAPI
+from tests.planning_testkit import seed_planning_config
 
 
 class TestConfigRequiredSections:
@@ -296,7 +298,7 @@ class TestConfigRelationshipRules:
         """Test wp required refs."""
         refs = self.config.required_refs("wp")
         assert "plan_ref" in refs
-        assert "task_refs" in refs
+        assert "task_refs" not in refs
 
 
 class TestConfigGuidanceLevels:
@@ -346,36 +348,36 @@ class TestConfigGuidanceLevels:
         assert default in ["feature", "issue", "fix", "enhancement"]
 
 
-class TestConfigStandardDefaults:
-    """Test Config.standard_defaults_for() method."""
+class TestConfigDefaultReferences:
+    """Test Config.default_reference_values() method."""
 
     def setup_method(self):
         """Set up test fixtures."""
         self.config = Config(root)
 
-    def test_standard_defaults_spec(self):
-        """Test spec standard defaults."""
-        defaults = self.config.standard_defaults_for("spec")
+    def test_default_references_spec(self):
+        """Test spec default references."""
+        defaults = self.config.default_reference_values("spec", "standard_refs")
         assert isinstance(defaults, list)
         assert "standard-0006" in defaults
         assert "standard-0005" in defaults
 
-    def test_standard_defaults_task(self):
-        """Test task standard defaults."""
-        defaults = self.config.standard_defaults_for("task")
+    def test_default_references_task(self):
+        """Test task default references."""
+        defaults = self.config.default_reference_values("task", "standard_refs")
         assert isinstance(defaults, list)
         assert "standard-0005" in defaults
         assert "standard-0006" in defaults
 
-    def test_standard_defaults_plan(self):
-        """Test plan standard defaults."""
-        defaults = self.config.standard_defaults_for("plan")
+    def test_default_references_plan(self):
+        """Test plan default references."""
+        defaults = self.config.default_reference_values("plan", "standard_refs")
         assert isinstance(defaults, list)
         assert "standard-0006" in defaults
 
-    def test_standard_defaults_wp(self):
-        """Test wp standard defaults."""
-        defaults = self.config.standard_defaults_for("wp")
+    def test_default_references_wp(self):
+        """Test wp default references."""
+        defaults = self.config.default_reference_values("wp", "standard_refs")
         assert isinstance(defaults, list)
         assert "standard-0006" in defaults
 
@@ -385,8 +387,14 @@ class TestManagerIntegration:
 
     def setup_method(self):
         """Set up test fixtures."""
-        self.api = PlanningAPI(root, test_mode=True)
-        self.config = Config(root)
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        seed_planning_config(self.root)
+        self.api = PlanningAPI(self.root, test_mode=True)
+        self.config = Config(self.root)
+
+    def teardown_method(self):
+        self._tmp.cleanup()
 
     def test_create_spec_uses_config_template(self):
         """Test spec creation uses config template."""
@@ -399,7 +407,7 @@ class TestManagerIntegration:
             "spec",
             "Test Spec",
             "Test summary",
-            request_refs=[request.data["id"]],
+            refs={"request_refs": [request.data["id"]]},
             check_duplicates=False,
         )
 
@@ -416,9 +424,20 @@ class TestManagerIntegration:
         # Get template from config
         template = self.config.document_template("task", "standard")
 
-        # Create a task
+        request = self.api.new("request", "Task Request", "Test summary", source="test")
+        spec = self.api.new(
+            "spec",
+            "Task Spec",
+            "Test summary",
+            refs={"request_refs": [request.data["id"]]},
+            check_duplicates=False,
+        )
         task = self.api.new(
-            "task", "Test Task", "Test summary", spec="spec-0001", check_duplicates=False
+            "task",
+            "Test Task",
+            "Test summary",
+            refs={"spec": spec.data["id"]},
+            check_duplicates=False,
         )
 
         # Verify task was created
@@ -434,9 +453,20 @@ class TestManagerIntegration:
         # Get template from config
         template = self.config.document_template("plan", "standard")
 
-        # Create a plan (use spec parameter, not spec_refs)
+        request = self.api.new("request", "Plan Request", "Test summary", source="test")
+        spec = self.api.new(
+            "spec",
+            "Plan Spec",
+            "Test summary",
+            refs={"request_refs": [request.data["id"]]},
+            check_duplicates=False,
+        )
         plan = self.api.new(
-            "plan", "Test Plan", "Test summary", spec="spec-0001", check_duplicates=False
+            "plan",
+            "Test Plan",
+            "Test summary",
+            refs={"spec": spec.data["id"]},
+            check_duplicates=False,
         )
 
         # Verify plan was created
@@ -452,13 +482,26 @@ class TestManagerIntegration:
         # Get template from config
         template = self.config.document_template("wp", "standard")
 
-        # Create a wp (use plan and parent parameters)
+        request = self.api.new("request", "WP Request", "Test summary", source="test")
+        spec = self.api.new(
+            "spec",
+            "WP Spec",
+            "Test summary",
+            refs={"request_refs": [request.data["id"]]},
+            check_duplicates=False,
+        )
+        plan = self.api.new(
+            "plan",
+            "WP Plan",
+            "Test summary",
+            refs={"spec": spec.data["id"]},
+            check_duplicates=False,
+        )
         wp = self.api.new(
             "wp",
             "Test WP",
             "Test summary",
-            plan="plan-0001",
-            parent="task-0001",
+            refs={"plan": plan.data["id"]},
             check_duplicates=False,
         )
 
@@ -492,8 +535,14 @@ class TestBackwardCompatibility:
 
     def setup_method(self):
         """Set up test fixtures."""
-        self.api = PlanningAPI(root, test_mode=True)
-        self.config = Config(root)
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        seed_planning_config(self.root)
+        self.api = PlanningAPI(self.root, test_mode=True)
+        self.config = Config(self.root)
+
+    def teardown_method(self):
+        self._tmp.cleanup()
 
     def test_existing_documents_remain_valid(self):
         """Test that existing documents can still be read."""
@@ -522,16 +571,20 @@ class TestBackwardCompatibility:
                 assert spec_data.get("id", "").startswith("spec-")
 
     def test_manager_api_signatures_unchanged(self):
-        """Test that manager create() signatures are unchanged."""
-        # These should all work with the same signature
-        # (we tested this in TestManagerIntegration, but verify no breaking changes)
-
-        # Create minimal documents to verify API compatibility
+        """Test generic create refs contract."""
+        request = self.api.new("request", "API Contract Request", "Summary", source="test")
+        spec = self.api.new(
+            "spec",
+            "API Contract Spec",
+            "Summary",
+            refs={"request_refs": [request.data["id"]]},
+            check_duplicates=False,
+        )
         task = self.api.new(
             "task",
-            "API Compatibility Test",
-            "Testing API signature compatibility",
-            spec="spec-0001",
+            "API Contract Test",
+            "Testing generic API refs contract",
+            refs={"spec": spec.data["id"]},
             check_duplicates=False,
         )
 

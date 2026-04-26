@@ -302,10 +302,13 @@ class StatePropagationEngine:
         if self._config is None:
             self.load_workflow_config()
 
-        state_priority = self._config.get("state_priority", {})
-        if state_priority:
-            current_priority = state_priority.get(current_state, 0)
-            target_priority = state_priority.get(target_state, 0)
+        if cfg and target_kind:
+            current_priority = cfg.state_priority(
+                target_kind, current_state, target_view.data.get("workflow")
+            )
+            target_priority = cfg.state_priority(
+                target_kind, target_state, target_view.data.get("workflow")
+            )
 
             if target_priority < current_priority:
                 logger.debug(
@@ -688,7 +691,9 @@ class StatePropagationEngine:
             return ids
         return []
 
-    def _linked_child_ids(self, parent_id: str, parent_kind: str, child_kind: str, parent_field: str) -> list[str]:
+    def _linked_child_ids(
+        self, parent_id: str, parent_kind: str, child_kind: str, parent_field: str
+    ) -> list[str]:
         """Resolve all child IDs linked to a parent across direct and reverse ref styles."""
         child_ids: list[str] = []
         seen: set[str] = set()
@@ -870,36 +875,28 @@ class StatePropagationEngine:
             if rule_name not in rules:
                 errors.append(f"Missing required rule: {rule_name}")
 
-        # Check valid states in state_rules
-        valid_states = validation_rules.get("valid_states")
-        if not valid_states and self.config:
-            # Build valid states from all configured kinds' workflows
-            all_states = set()
-            for kind_name in config.get("kinds", {}).keys():
+        # Derive valid states from workflow config
+        kinds = config.get("kinds", {})
+        if self.config:
+            all_states: set[str] = set()
+            for kind_name in kinds.keys():
                 try:
                     all_states.update(self.config.workflow_states(kind_name))
                 except (KeyError, TypeError):
                     pass
-            valid_states = list(all_states) if all_states else []
-        if not valid_states:
-            valid_states = []
-        kinds = config.get("kinds", {})
-        for kind_name, kind_config in kinds.items():
-            state_rules = kind_config.get("state_rules", {})
-            for state in state_rules.keys():
-                if state not in valid_states:
-                    errors.append(f"Invalid state '{state}' in kind '{kind_name}'")
+            for kind_name, kind_config in kinds.items():
+                state_rules = kind_config.get("state_rules", {})
+                for state in state_rules.keys():
+                    if state not in all_states:
+                        errors.append(f"Invalid state '{state}' in kind '{kind_name}'")
 
-        # Check valid rules in state_rules
-        valid_rules = validation_rules.get(
-            "valid_rules",
-            ["none", "parent_in_set", "all_children_in_set", "parent_not_in_set"],
-        )
+        # Validate rules in state_rules against configured rules registry
+        configured_rules = set(config.get("rules", {}).keys())
         for kind_name, kind_config in kinds.items():
             state_rules = kind_config.get("state_rules", {})
             for state, state_config in state_rules.items():
                 rule = state_config.get("rule")
-                if rule and rule not in valid_rules:
+                if rule and rule not in configured_rules:
                     errors.append(
                         f"Invalid rule '{rule}' for state '{state}' in kind '{kind_name}'"
                     )
@@ -959,8 +956,8 @@ class StatePropagationEngine:
             parent_is_complete = self.config.state_in_set(
                 found_parent_kind, parent_state, "complete", parent_workflow
             )
-            parent_is_initial = self.config.state_in_set(
-                found_parent_kind, parent_state, "initial", parent_workflow
+            parent_is_initial = parent_state == self.config.initial_state(
+                found_parent_kind, parent_workflow
             )
             item_is_active = self.config.state_in_set(kind, item_state, "active", item_workflow)
             item_is_complete = self.config.state_in_set(kind, item_state, "complete", item_workflow)
@@ -974,7 +971,9 @@ class StatePropagationEngine:
                     ref_id = ref.get("ref") if isinstance(ref, dict) else ref
                     child_view = self._planning_api.lookup(ref_id)
                     if child_view and child_view.data:
-                        child_kind = getattr(child_view, "kind", None) or child_view.data.get("kind")
+                        child_kind = getattr(child_view, "kind", None) or child_view.data.get(
+                            "kind"
+                        )
                         child_workflow = child_view.data.get("workflow")
                         child_state = child_view.data.get(
                             "state",
@@ -1100,20 +1099,46 @@ class StatePropagationEngine:
                 parent_view = self._planning_api.lookup(parent_id)
                 if parent_view and parent_view.data:
                     parent_workflow = parent_view.data.get("workflow")
-                    initial_states = self.config.states_in_set(
-                        parent_view.kind, "initial", parent_workflow
-                    )
                     current_state = parent_view.data.get("state")
-                    for candidate in initial_states:
-                        if candidate != current_state:
+                    workflow = self.config.workflow_for(parent_view.kind, parent_workflow)
+                    next_states = workflow.get("transitions", {}).get(current_state, [])
+                    active_states = set(
+                        self.config.states_in_set(parent_view.kind, "active", parent_workflow)
+                    )
+                    blocked_states = set(
+                        self.config.states_in_set(parent_view.kind, "blocked", parent_workflow)
+                    )
+                    for candidate in next_states:
+                        if candidate in active_states and candidate not in blocked_states:
                             target_state = candidate
                             break
                     if target_state is None:
-                        target_state = self.config.initial_state(parent_view.kind, parent_workflow)
+                        for candidate in self.config.states_in_set(
+                            parent_view.kind, "initial", parent_workflow
+                        ):
+                            if candidate != current_state and candidate in next_states:
+                                target_state = candidate
+                                break
+                    if target_state is None and next_states:
+                        target_state = next_states[0]
+                    if target_state is None:
+                        for candidate in self.config.states_in_set(
+                            parent_view.kind, "initial", parent_workflow
+                        ):
+                            if candidate != current_state:
+                                target_state = candidate
+                                break
+                    if target_state is None:
+                        for candidate in self.config.states_in_set(
+                            parent_view.kind, "active", parent_workflow
+                        ):
+                            if candidate != current_state:
+                                target_state = candidate
+                                break
 
             return {
                 "error": error,
-                "suggestion": "Move parent within initial states",
+                "suggestion": "Advance parent toward active state",
                 "target_id": parent_id,
                 "target_state": target_state,
                 "can_auto_fix": bool(target_state),  # Safe when a target is available

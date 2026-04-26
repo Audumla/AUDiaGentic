@@ -80,11 +80,6 @@ class Paths:
         pattern = kind_cfg.get("filename_pattern") or naming.get("default_pattern", "{id}-{slug}.md")
         return pattern.format(id=id_, slug=slugify(label))
 
-    def support_dir(self, name: str) -> Path:
-        if self.test_dir:
-            return self.root / self.test_dir / self.dirs[name]
-        return self.root / self.dirs[name]
-
     def get_kind_config(self, kind: str) -> dict:
         """Get configuration for a kind.
 

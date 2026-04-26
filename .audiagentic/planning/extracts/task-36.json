@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-36",
+    "label": "[PKT-FND-007](task-0038): Schema Validator Script",
+    "state": "draft",
+    "summary": "Create schema validator script",
+    "spec_ref": "spec-0004",
+    "kind": "task",
+    "path": "docs/planning/tasks/contracts-scaffolding/task-36-pkt-fnd-007-task-0038-schema-validator-script.md",
+    "archive_reason": null,
+    "archived_at": null,
+    "archived_by": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nCreate schema validator script.\n\n# [PKT-FND-007](task-0028): Schema Validator Script\n\n## Purpose\n\nCreate the schema validator script.\n\n## Scope\n\n- Schema validation\n- Fixture testing\n- Error reporting\n\n## Implementation\n\n1. Define validation logic\n2. Implement fixture testing\n3. Add error reporting\n\n## Acceptance Criteria\n\n1. Validator checks all schemas\n2. Fixtures tested correctly\n3. Errors reported clearly\n"
+}

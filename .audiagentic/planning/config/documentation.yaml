@@ -28,3 +28,50 @@ planning:
         profile: references_index
         update_policy: optional
         seed_on_install: true
+    collections:
+      - id: references
+        path: docs/references
+        include: "*.md"
+        format: path
+        output:
+          path:
+            source: relative_path
+          label:
+            source: stem
+      - id: support
+        path: docs/planning/supporting
+        include: "*.md"
+        format: frontmatter
+        output:
+          id:
+            source: frontmatter
+            key: id
+          label:
+            source: frontmatter
+            key: label
+          role:
+            source: frontmatter
+            key: role
+          supports:
+            source: frontmatter
+            key: supports
+          status:
+            source: frontmatter
+            key: status
+          owner:
+            source: frontmatter
+            key: owner
+          used_by:
+            source: frontmatter
+            key: used_by
+          path:
+            source: relative_path
+        filters:
+          supports_id:
+            source: frontmatter
+            key: supports
+            mode: contains
+          role:
+            source: frontmatter
+            key: role
+            mode: equals

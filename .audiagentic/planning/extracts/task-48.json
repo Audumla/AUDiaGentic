@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-48",
+    "label": "[PKT-LFC-006](task-0050): Uninstall Current AUDiaGentic",
+    "state": "draft",
+    "summary": "Uninstall current AUDiaGentic installation",
+    "spec_ref": "spec-0009",
+    "kind": "task",
+    "path": "docs/planning/tasks/lifecycle/task-48-pkt-lfc-006-task-0050-uninstall-current-audiagentic.md",
+    "archive_reason": null,
+    "archived_at": null,
+    "archived_by": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-LFC-006](task-0040): Uninstall Current AUDiaGentic\n\n## Purpose\n\nUninstall current AUDiaGentic installation.\n\n## Scope\n\n- Detect installation\n- Remove files\n- Clean state\n\n## Implementation\n\n1. Detect installation\n2. Remove files\n3. Clean state\n\n## Acceptance Criteria\n\n1. Installation detected\n2. Files removed\n3. State cleaned\n"
+}

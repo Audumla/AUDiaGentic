@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-38",
+    "label": "[PKT-FND-009](task-0040): Fixture Generator",
+    "state": "draft",
+    "summary": "Create fixture generator for testing",
+    "spec_ref": "spec-0004",
+    "kind": "task",
+    "path": "docs/planning/tasks/contracts-scaffolding/task-38-pkt-fnd-009-task-0040-fixture-generator.md",
+    "archive_reason": null,
+    "archived_at": null,
+    "archived_by": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nCreate fixture generator for testing.\n\n# [PKT-FND-009](task-0030): Fixture Generator\n\n## Purpose\n\nCreate the fixture generator for testing.\n\n## Scope\n\n- Valid fixtures\n- Invalid fixtures\n- Generation logic\n\n## Implementation\n\n1. Define fixture templates\n2. Implement generator\n3. Test output\n\n## Acceptance Criteria\n\n1. Valid fixtures generated\n2. Invalid fixtures generated\n3. Output is deterministic\n"
+}

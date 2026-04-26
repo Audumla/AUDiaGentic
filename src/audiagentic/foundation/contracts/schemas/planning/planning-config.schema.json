@@ -44,6 +44,8 @@
       "properties": {
         "use_profile_defaults": { "type": "boolean" },
         "use_guidance_defaults": { "type": "boolean" },
+        "use_required_sections": { "type": "boolean" },
+        "use_profile_sections": { "type": "boolean" },
         "source_field": { "type": "string" },
         "guidance_field": { "type": "string" },
         "context_field": { "type": "string" },
@@ -58,8 +60,12 @@
       "properties": {
         "duplicate_check": { "type": "boolean" },
         "require_source": { "type": "boolean" },
-        "validate_request_refs": { "type": "boolean" },
+        "validate_ref_fields": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "refinement_source_prefix": { "type": "string" },
+        "refinement_action": { "type": "string" },
         "seed_reference_fields": {
           "type": "object",
           "additionalProperties": {
@@ -68,6 +74,111 @@
         },
         "extra_fields": {
           "$ref": "#/$defs/creationExtraFields"
+        }
+      },
+      "dependentRequired": {
+        "refinement_source_prefix": ["refinement_action"]
+      }
+    },
+    "workflowActionCreateSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string" },
+        "label": { "type": "string" },
+        "summary": { "type": "string" },
+        "domain": { "type": ["string", "null"] },
+        "workflow": { "type": ["string", "null"] },
+        "refs": { "type": "object" },
+        "fields": { "type": "object" },
+        "check_duplicates": { "type": "boolean" }
+      },
+      "required": ["kind"]
+    },
+    "workflowActionUpdateSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target": { "type": "string" },
+        "ref_field": { "type": "string" },
+        "child_id_from": { "type": "string" }
+      },
+      "required": ["target", "ref_field", "child_id_from"]
+    },
+    "workflowAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "defaults": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "creates": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/workflowActionCreateSpec"
+          }
+        },
+        "updates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/workflowActionUpdateSpec" }
+        },
+        "result_keys": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "required": ["creates"]
+    },
+    "queueDefaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string" },
+        "state": { "type": "string" }
+      },
+      "required": ["kind", "state"]
+    },
+    "lifecycleActionMetadata": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string" },
+          { "type": "null" },
+          { "type": "boolean" },
+          { "type": "number" }
+        ]
+      }
+    },
+    "lifecycleActionCascade": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "by_kind": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          }
+        }
+      },
+      "required": ["by_kind"]
+    },
+    "lifecycleAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "transition_to": { "type": "string" },
+        "from_state": { "type": "string" },
+        "metadata": { "$ref": "#/$defs/lifecycleActionMetadata" },
+        "event_suffix": { "type": "string" },
+        "cascade": { "$ref": "#/$defs/lifecycleActionCascade" },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": true
+          }
         }
       }
     }
@@ -78,10 +189,16 @@
       "additionalProperties": false,
       "required": [
         "convention_version",
+        "default_profile",
+        "default_guidance",
         "naming",
         "dirs",
         "kinds",
-        "reference_field_shapes"
+        "base_required_fields",
+        "base_optional_fields",
+        "reference_field_shapes",
+        "standard_ref_field",
+        "lifecycle"
       ],
       "properties": {
         "convention_version": {
@@ -132,6 +249,14 @@
             "type": "string"
           }
         },
+        "base_required_fields": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "base_optional_fields": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "reference_field_shapes": {
           "type": "object",
           "additionalProperties": {
@@ -139,15 +264,43 @@
             "enum": ["scalar_ref", "scalar_ref_list", "rel_list"]
           }
         },
+        "reference_field_targets": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            ]
+          }
+        },
+        "standard_ref_field": {
+          "type": "string"
+        },
+        "workflow_actions": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/workflowAction"
+          }
+        },
+        "queue_defaults": {
+          "$ref": "#/$defs/queueDefaults"
+        },
         "lifecycle": {
           "type": "object",
           "additionalProperties": false,
+          "required": [
+            "state_set_priority",
+            "state_sets"
+          ],
           "properties": {
-            "archived_state": { "type": "string" },
-            "superseded_state": { "type": "string" },
-            "terminal_states": {
-              "type": "array",
-              "items": { "type": "string" }
+            "state_set_priority": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer"
+              }
             },
             "state_sets": {
               "type": "object",
@@ -179,6 +332,12 @@
                     }
                   }
                 }
+              }
+            },
+            "actions": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/lifecycleAction"
               }
             }
           }
@@ -220,12 +379,6 @@
                   "type": "string"
                 }
               },
-              "standard_refs_inheritance": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/inheritanceRule"
-                }
-              },
               "reference_inheritance": {
                 "type": "object",
                 "additionalProperties": {
@@ -237,15 +390,6 @@
               },
               "creation": {
                 "$ref": "#/$defs/creation"
-              },
-              "state_cascades": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "string"
-                  }
-                }
               },
               "filename_pattern": {
                 "type": "string"

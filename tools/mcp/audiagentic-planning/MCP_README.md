@@ -186,15 +186,15 @@ Delete an item. `hard=False` (default) soft-deletes; `hard=True` removes the fil
 
 Convenience helper for adding or setting references. Prefer `tm_edit` with `field` ops when you need to remove stale refs, replace a whole ref list, or batch reference surgery with other mutations.
 
-### `tm_package(plan, tasks, label, summary, domain)` — group tasks
+### `tm_group(parent, items, label, summary, domain)` — group items
 
-Group Tasks into a new WorkPackage within a Plan.
+Group configured child items into a configured workflow action target.
 
-### `tm_standards(id, with_related)` — standards lookup
+### `tm_refs(id, field, with_related)` — configured reference lookup
 
-- Omit `id` → list all standards.
-- `id=standard-XXXX` → get that standard with body.
-- `id=task-XXXX` (any non-standard item) → list applicable standards for that item.
+- Omit `id` → list configured default-reference collection for `field`.
+- `id=<reference-item>` → get that item with body.
+- `id=<other-item>` → list effective refs for that item and field.
 
 ### `tm_claim(op, id, kind, holder, ttl)` — ownership claims
 

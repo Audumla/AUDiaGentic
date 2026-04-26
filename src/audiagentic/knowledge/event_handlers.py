@@ -6,6 +6,7 @@ handles planning state change events.
 
 from __future__ import annotations
 
+import logging
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,8 @@ from .models import EventRecord
 from .registry import load_event_action_registry, resolve_registry_handler
 from .sync import mark_pages_stale
 from .utils import load_yaml_file, now_utc
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_PLANNING_AFFECTED_PAGES = [
     "system-planning",
@@ -79,7 +82,16 @@ def process_events(
         action_name = str(
             handler_config.get("action", adapter.get("action", "generate_sync_proposal"))
         )
-        handler, defaults = resolve_registry_handler(action_registry, action_name)
+        try:
+            handler, defaults = resolve_registry_handler(action_registry, action_name)
+        except ValueError:
+            logger.warning(
+                "Skipping knowledge event %s: missing action registry entry %s",
+                event.event_id,
+                action_name,
+            )
+            processed.add(event.event_id)
+            continue
         runtime_action = {
             **defaults,
             **handler_config.get("action_args", {}),
@@ -337,7 +349,15 @@ def _process_runtime_planning_event(config: KnowledgeConfig, event: EventRecord)
     adapter = _select_runtime_planning_adapter(config, event.event_name)
     handler_config = _match_event_handler(event, handlers_config)
     action_name = str(handler_config.get("action", "generate_sync_proposal"))
-    handler, defaults = resolve_registry_handler(action_registry, action_name)
+    try:
+        handler, defaults = resolve_registry_handler(action_registry, action_name)
+    except ValueError:
+        logger.warning(
+            "Skipping runtime planning knowledge event %s: missing action registry entry %s",
+            event.event_id,
+            action_name,
+        )
+        return {"handled": [event.event_id], "generated_proposals": [], "marked_stale_pages": []}
     runtime_action = {
         **defaults,
         **(handler_config.get("action_args", {}) if isinstance(handler_config, dict) else {}),

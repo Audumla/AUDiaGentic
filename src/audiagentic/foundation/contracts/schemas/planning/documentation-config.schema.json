@@ -63,11 +63,78 @@
                   }
                 }
               }
+            },
+            "collections": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "path",
+                  "format",
+                  "output"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "include": {
+                    "type": "string"
+                  },
+                  "format": {
+                    "enum": [
+                      "path",
+                      "frontmatter"
+                    ]
+                  },
+                  "output": {
+                    "$ref": "#/$defs/value_map"
+                  },
+                  "filters": {
+                    "$ref": "#/$defs/value_map"
+                  }
+                }
+              }
             }
           }
         }
       }
     }
   },
-  "required": ["planning"]
+  "required": ["planning"],
+  "$defs": {
+    "value_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source"],
+      "properties": {
+        "source": {
+          "enum": [
+            "relative_path",
+            "stem",
+            "frontmatter"
+          ]
+        },
+        "key": {
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "equals",
+            "contains"
+          ]
+        }
+      }
+    },
+    "value_map": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/value_spec"
+      }
+    }
+  }
 }

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import yaml
 
+from audiagentic.knowledge.config import load_config
 from audiagentic.knowledge.events import on_planning_state_change
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -118,3 +119,24 @@ def test_replay_opt_in_processes_event(tmp_path: Path, monkeypatch) -> None:
         (tmp_path / "docs" / "knowledge" / "data" / "proposals").glob("*-event-review.yml")
     )
     assert proposals
+
+
+def test_missing_action_registry_entry_is_skipped(tmp_path: Path, monkeypatch) -> None:
+    _seed_knowledge_project(tmp_path)
+    registry_path = load_config(tmp_path).action_registry_file
+    registry = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    registry["event_actions"].pop("generate_sync_proposal", None)
+    registry["event_actions"].pop("mark_stale_and_generate_sync_proposal", None)
+    registry_path.write_text(yaml.safe_dump(registry, sort_keys=False), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    on_planning_state_change(
+        "planning.item.state.changed",
+        {"id": "task-0005", "old_state": "in_progress", "new_state": "done"},
+        {"subject": {"kind": "task", "id": "task-0005"}},
+    )
+
+    proposals = list(
+        (tmp_path / "docs" / "knowledge" / "data" / "proposals").glob("*-event-review.yml")
+    )
+    assert not proposals
