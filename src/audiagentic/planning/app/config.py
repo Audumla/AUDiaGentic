@@ -29,10 +29,6 @@ class Config:
         self.automations = self._read_required_yaml("automations.yaml")
         self.documentation = self._read_optional_yaml("documentation.yaml")
         self.propagation = self._read_optional_yaml("state_propagation.yaml")
-        # Backward-compatible alias; primary abstraction is now generic creation profiles.
-        self.request_profiles = {
-            "request_profiles": self.profiles.get("planning", {}).get("profiles", {})
-        }
         self.profile_packs = self._read_profile_packs()
 
     def kind_aliases(self) -> dict[str, str]:
@@ -94,7 +90,6 @@ class Config:
             ("workflows.yaml", "state-model.schema.json", True),
             ("automations.yaml", "automations.schema.json", True),
             ("documentation.yaml", "documentation-config.schema.json", False),
-            ("request-profiles.yaml", "request-profiles.schema.json", False),
             ("state_propagation.yaml", "state-propagation.schema.json", False),
         ]:
             errors.extend(self._validate_yaml_file(file, schema, required=required))
@@ -120,31 +115,24 @@ class Config:
         wf = self.workflow_for(kind, workflow)
         return wf["initial"]
 
-    def archived_state(self) -> str:
-        """Get configured archived state name."""
-        return self.planning["planning"].get("lifecycle", {}).get("archived_state", "archived")
-
-    def superseded_state(self) -> str:
-        """Get configured superseded state name."""
-        return self.planning["planning"].get("lifecycle", {}).get("superseded_state", "superseded")
-
     def standard_ref_field(self) -> str:
         """Get configured standard-reference field name."""
-        return self.planning.get("planning", {}).get("standard_ref_field", "standard_refs")
+        return self.planning["planning"]["standard_ref_field"]
 
-    def terminal_states(self) -> list[str]:
-        """Get configured terminal states list.
+    def standard_kind(self) -> str:
+        """Get kind targeted by the configured standard-reference field."""
+        targets = self.reference_field_targets(self.standard_ref_field())
+        if not targets:
+            raise ValueError("planning.standard_ref_field must target a configured kind")
+        return targets[0]
 
-        Checks propagation config first (for propagation-blocking states),
-        then falls back to lifecycle terminal states from planning.yaml.
-        """
-        prop_terminals = self.propagation.get("terminal_states", [])
-        if prop_terminals:
-            return list(prop_terminals)
-        lifecycle = self.planning["planning"].get("lifecycle", {})
-        if "terminal_states" in lifecycle:
-            return list(lifecycle["terminal_states"])
-        return [self.archived_state(), self.superseded_state()]
+    def kind_for_id(self, id_: str) -> str | None:
+        """Infer configured kind from an item id prefix."""
+        for kind in self.all_kinds():
+            prefix = self.kind_id_prefix(kind)
+            if id_ == prefix or id_.startswith(f"{prefix}-"):
+                return kind
+        return None
 
     def default_workflow_name(self, kind: str) -> str:
         """Get the default workflow name for a kind."""
@@ -171,8 +159,6 @@ class Config:
         sets = self.state_sets(kind, workflow)
         if set_name in sets:
             return list(sets.get(set_name, []) or [])
-        if set_name == "terminal":
-            return self.terminal_states()
         return []
 
     def state_in_set(
@@ -182,6 +168,72 @@ class Config:
         if not state:
             return False
         return state in self.states_in_set(kind, set_name, workflow)
+
+    def state_set_priority(self, set_name: str) -> int:
+        """Get configured semantic priority for a state set."""
+        lifecycle = self.planning.get("planning", {}).get("lifecycle", {})
+        priorities = lifecycle.get("state_set_priority", {})
+        return int(priorities.get(set_name, 0))
+
+    def state_priority(self, kind: str, state: str | None, workflow: str | None = None) -> int:
+        """Derive state priority from configured semantic state sets."""
+        if not state:
+            return 0
+
+        priorities = [
+            self.state_set_priority(set_name)
+            for set_name in self.state_sets(kind, workflow).keys()
+            if self.state_in_set(kind, state, set_name, workflow)
+        ]
+        return max(priorities, default=0)
+
+    def lifecycle_actions(self) -> dict[str, dict]:
+        """Get configured lifecycle actions."""
+        lifecycle = self.planning.get("planning", {}).get("lifecycle", {})
+        actions = lifecycle.get("actions", {})
+        return actions if isinstance(actions, dict) else {}
+
+    def lifecycle_action(self, name: str) -> dict:
+        """Get one lifecycle action."""
+        actions = self.lifecycle_actions()
+        if name not in actions:
+            raise ValueError(f"lifecycle action '{name}' is not configured")
+        return dict(actions[name])
+
+    def lifecycle_action_state(self, name: str) -> str:
+        """Get transition target state for a lifecycle action."""
+        action = self.lifecycle_action(name)
+        state = action.get("transition_to")
+        if not isinstance(state, str) or not state:
+            raise ValueError(f"lifecycle action '{name}' has no transition_to state")
+        return state
+
+    def lifecycle_metadata_fields(self) -> list[str]:
+        """Get all metadata fields managed by lifecycle actions."""
+        fields: set[str] = set()
+        for action in self.lifecycle_actions().values():
+            metadata = action.get("metadata", {})
+            if isinstance(metadata, dict):
+                fields.update(metadata.keys())
+        return sorted(fields)
+
+    def lifecycle_action_for_transition(
+        self,
+        kind: str,
+        old_state: str,
+        new_state: str,
+        workflow: str | None = None,
+    ) -> tuple[str, dict] | tuple[None, None]:
+        """Find lifecycle action matching state transition."""
+        for name, action in self.lifecycle_actions().items():
+            if action.get("transition_to") == new_state:
+                return name, dict(action)
+            if action.get("from_state") == old_state:
+                return name, dict(action)
+            from_set = action.get("from_state_set")
+            if from_set and self.state_in_set(kind, old_state, from_set, workflow):
+                return name, dict(action)
+        return None, None
 
     def creation_profiles(self) -> dict[str, dict]:
         """Get all configured creation profiles."""
@@ -194,21 +246,11 @@ class Config:
             raise ValueError(f"profile '{name}' not found")
         return profiles[name]
 
-    def profile_for(self, name: str) -> dict:
-        """Backward-compatible alias for creation_profile_for()."""
-        return self.creation_profile_for(name)
-
-    def standard_defaults_for(self, kind: str) -> list[str]:
-        """Get default standards for a planning kind.
-
-        Args:
-            kind: Planning kind ('spec', 'task', 'plan', 'wp', 'request')
-
-        Returns:
-            List of standard IDs to apply by default (e.g. ['standard-0006', 'standard-0005'])
-        """
-        defaults = self.profiles.get("planning", {}).get("standard_defaults", {})
-        return defaults.get(kind, [])
+    def default_reference_values(self, kind: str, field: str) -> list[str]:
+        """Get default reference values for a kind/field pair."""
+        defaults = self.profiles.get("planning", {}).get("default_references", {})
+        kind_defaults = defaults.get(kind, {})
+        return list(kind_defaults.get(field, []) or [])
 
     def guidance_levels(self) -> dict:
         """Get all guidance levels.
@@ -241,7 +283,10 @@ class Config:
         Returns:
             Default guidance level name
         """
-        return self.planning.get("planning", {}).get("default_guidance", "standard")
+        planning = self.planning.get("planning", {})
+        if "default_guidance" not in planning:
+            raise ValueError("planning.default_guidance is required")
+        return planning["default_guidance"]
 
     def default_profile(self) -> str:
         """Get the default profile from planning.yaml.
@@ -249,7 +294,10 @@ class Config:
         Returns:
             Default profile name
         """
-        return self.planning.get("planning", {}).get("default_profile", "feature")
+        planning = self.planning.get("planning", {})
+        if "default_profile" not in planning:
+            raise ValueError("planning.default_profile is required")
+        return planning["default_profile"]
 
     def guidance_sections_for(self, guidance: str, kind: str) -> dict:
         """Get guidance-driven section config for a kind.
@@ -290,7 +338,7 @@ class Config:
                 if default_template_path.exists():
                     return default_template_path.read_text(encoding="utf-8")
 
-        # Backward-compatible fallback for inline legacy templates.
+        # Inline templates are allowed for compact greenfield configs.
         templates = self.profiles.get("planning", {}).get("document_templates", {})
         kind_config = templates.get(kind, {})
 
@@ -314,12 +362,13 @@ class Config:
         include extra sections by default.
         """
         sections = _SECTION_HEADING_RE.findall(self.document_template(kind, guidance))
-        if kind != "request":
+        extra = self.creation_rules(kind).get("extra_fields", {})
+        if not extra:
             return sections
 
         profile_cfg = self.creation_profile_for(profile) if profile else {}
-        profile_sections = profile_cfg.get("suggested_sections", [])
-        required_sections = self.required_sections(kind) or []
+        profile_sections = profile_cfg.get("suggested_sections", []) if extra.get("use_profile_sections") else []
+        required_sections = self.required_sections(kind) if extra.get("use_required_sections") else []
         ordered: list[str] = []
         for section in [*sections, *required_sections, *profile_sections]:
             if section and section not in ordered:
@@ -484,12 +533,6 @@ class Config:
         """Get create-time behavior rules for a kind."""
         return self.kind_config(kind).get("creation", {})
 
-    def state_cascades(self, kind: str, state: str) -> dict[str, str]:
-        """Get configured child-kind -> target-state cascade rules for a state change."""
-        cascades = self.kind_config(kind).get("state_cascades", {})
-        rules = cascades.get(state, {})
-        return rules if isinstance(rules, dict) else {}
-
     def all_kinds(self) -> list[str]:
         """Get all defined kind names from config.
 
@@ -570,12 +613,22 @@ class Config:
         else:
             return []
 
-        special_targets = {
-            "parent_task": "task",
-            "work_package": "wp",
-        }
-        normalized = special_targets.get(target_name, self.normalize_kind(target_name))
+        normalized = self.normalize_kind(target_name)
         return [normalized] if normalized in self.all_kinds() else []
+
+    def workflow_action(self, name: str) -> dict:
+        """Get config for a named workflow action."""
+        actions = self.planning.get("planning", {}).get("workflow_actions", {})
+        if name not in actions:
+            raise ValueError(f"workflow action '{name}' is not configured")
+        return dict(actions[name])
+
+    def queue_defaults(self) -> dict:
+        """Get default kind/state for queue listing."""
+        defaults = self.planning.get("planning", {}).get("queue_defaults", {})
+        if "kind" not in defaults or "state" not in defaults:
+            raise ValueError("planning.queue_defaults.kind/state must be configured")
+        return dict(defaults)
 
     def should_duplicate_check(self, kind: str) -> bool:
         return bool(self.creation_rules(kind).get("duplicate_check"))
@@ -583,11 +636,18 @@ class Config:
     def requires_source_on_create(self, kind: str) -> bool:
         return bool(self.creation_rules(kind).get("require_source"))
 
-    def validate_request_refs_on_create(self, kind: str) -> bool:
-        return bool(self.creation_rules(kind).get("validate_request_refs"))
+    def validate_ref_fields_on_create(self, kind: str) -> list[str]:
+        """Get list of ref fields to validate on create for a kind."""
+        fields = self.creation_rules(kind).get("validate_ref_fields", [])
+        return fields if isinstance(fields, list) else []
 
     def refinement_source_prefix(self, kind: str) -> str | None:
         value = self.creation_rules(kind).get("refinement_source_prefix")
+        return value if isinstance(value, str) and value else None
+
+    def refinement_action(self, kind: str) -> str | None:
+        """Get the lifecycle action name to apply when refinement is detected."""
+        value = self.creation_rules(kind).get("refinement_action")
         return value if isinstance(value, str) and value else None
 
     def profile_cascade_targets(self, profile: str | None) -> list[dict]:
@@ -631,23 +691,24 @@ class Config:
 
         defaults = {}
         if extra.get("use_profile_defaults") and profile:
-            try:
-                defaults = self.creation_profile_for(profile).get("defaults", {})
-            except ValueError:
-                defaults = {}
+            defaults = self.creation_profile_for(profile).get("defaults", {})
 
         guidance_defaults = {}
         if extra.get("use_guidance_defaults"):
-            guidance_defaults = self.guidance_levels().get(guidance, {}).get("defaults", {})
+            guidance_defaults = self.guidance_for(guidance).get("defaults", {})
 
         understanding_field = extra.get("understanding_field")
         if understanding_field:
-            fields[understanding_field] = (
+            understanding = (
                 current_understanding
                 or defaults.get("current_understanding")
                 or guidance_defaults.get("current_understanding")
-                or f"Initial request intake captured: {summary}"
             )
+            if understanding is None:
+                raise ValueError(
+                    f"creation.extra_fields.{understanding_field} requires configured default"
+                )
+            fields[understanding_field] = understanding
 
         open_questions_field = extra.get("open_questions_field")
         if open_questions_field:
@@ -705,15 +766,7 @@ class Config:
         """Get generic inheritance rules for a reference field on a kind."""
         kind_cfg = self.kind_config(kind)
         generic = kind_cfg.get("reference_inheritance", {}) or {}
-        if target_field in generic:
-            return generic.get(target_field, []) or []
-        if target_field == self.standard_ref_field():
-            return kind_cfg.get("standard_refs_inheritance", [])
-        return []
-
-    def standard_refs_inheritance(self, kind: str) -> list[dict]:
-        """Backward-compatible alias for standard_refs inheritance rules."""
-        return self.reference_inheritance(kind, self.standard_ref_field())
+        return generic.get(target_field, []) or []
 
     def required_fields(self, kind: str) -> list[str]:
         """Get required fields for a kind.
@@ -725,7 +778,10 @@ class Config:
             List of required field names
         """
         kind_cfg = self.kind_config(kind)
-        return kind_cfg.get("required_fields", [])
+        base = self.planning["planning"].get("base_required_fields", [])
+        fields = list(base)
+        fields.extend(field for field in kind_cfg.get("required_fields", []) if field not in fields)
+        return fields
 
     def optional_fields(self, kind: str) -> list[str]:
         """Get optional fields for a kind.
@@ -737,4 +793,8 @@ class Config:
             List of optional field names
         """
         kind_cfg = self.kind_config(kind)
-        return kind_cfg.get("optional_fields", [])
+        base = self.planning["planning"].get("base_optional_fields", [])
+        fields = list(base)
+        fields.extend(field for field in kind_cfg.get("optional_fields", []) if field not in fields)
+        fields.extend(field for field in self.lifecycle_metadata_fields() if field not in fields)
+        return fields

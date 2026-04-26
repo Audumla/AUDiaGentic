@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-50",
+    "label": "[PKT-LFC-010](task-0052): Preserve Provider Auto-Install Policy Fields",
+    "state": "draft",
+    "summary": "Preserve provider auto-install policy fields across lifecycle commands",
+    "spec_ref": "spec-0009",
+    "kind": "task",
+    "path": "docs/planning/tasks/lifecycle/task-50-pkt-lfc-010-task-0052-preserve-provider-auto-install-policy-fields.md",
+    "archive_reason": null,
+    "archived_at": null,
+    "archived_by": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_standard_refs": [],
+  "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-LFC-010](task-0042): Preserve Provider Auto-Install Policy Fields\n\n## Purpose\n\nPreserve provider auto-install policy fields across lifecycle commands.\n\n## Scope\n\n- Policy field detection\n- Preservation logic\n- Validation\n\n## Implementation\n\n1. Detect policy fields\n2. Implement preservation\n3. Validate\n\n## Acceptance Criteria\n\n1. Policy fields detected\n2. Preserved correctly\n3. Validated\n"
+}

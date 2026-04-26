@@ -164,20 +164,6 @@ actions:
     description: "Complete parent when all related children are in configured state set"
     logic: "audiagentic.planning.app.propagation_rules.action_complete_parent"
 
-# Terminal states (states that block further propagation)
-terminal_states:
-  - done
-  - archived
-
-# Conflict resolution (state priority when multiple rules apply)
-# Higher number = higher priority
-state_priority:
-  archived: 100  # Terminal state, highest priority
-  done: 90       # Terminal state
-  blocked: 50    # Blocking state
-  in_progress: 20
-  ready: 10      # Default state
-
 # Workflow-specific configurations
 # Each workflow can override global/kind settings for specific use cases
 workflows:
@@ -249,17 +235,6 @@ validation:
     - kinds.plan.parent_kind
     - kinds.spec.parent_kind
   required_rules:
-    - none
-    - parent_in_set
-    - all_children_in_set
-    - parent_not_in_set
-  valid_states:
-    - ready
-    - in_progress
-    - done
-    - blocked
-    - archived
-  valid_rules:
     - none
     - parent_in_set
     - all_children_in_set
