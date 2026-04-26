@@ -6,9 +6,9 @@
     "summary": "Default standard for Python implementation work in AUDiaGentic-based projects, covering code quality, tests, change boundaries, and MCP server development.",
     "kind": "standard",
     "path": "docs/planning/standards/standard-8-python-implementation-standard.md",
+    "archive_reason": null,
     "archived_at": null,
     "archived_by": null,
-    "archive_reason": null,
     "restored_at": null,
     "restored_by": null
   },

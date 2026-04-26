@@ -193,7 +193,9 @@ class Validator:
         for item in items:
             if item.data.get("deleted"):
                 continue
-            if item.data.get("state") == self.config.archived_state():
+            if self.config.state_in_set(
+                item.kind, item.data.get("state"), "terminal", item.data.get("workflow")
+            ):
                 continue
 
             errors.extend(self._validate_reference_targets(item, items))
@@ -204,7 +206,12 @@ class Validator:
                 has_child = any(
                     child.kind == child_kind
                     and not child.data.get("deleted")
-                    and child.data.get("state") != self.config.archived_state()
+                    and not self.config.state_in_set(
+                        child.kind,
+                        child.data.get("state"),
+                        "terminal",
+                        child.data.get("workflow"),
+                    )
                     and self._child_refs_parent(child, item.kind, item.data["id"])
                     for child in items
                 )

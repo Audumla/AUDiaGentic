@@ -10,11 +10,12 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 
 from ..fs.scan import scan_items
 from ..fs.write import dump_markdown
-from .id_gen import _load_counters, _save_counters
+from .config import Config
 from .paths import Paths
 from .val_mgr import Validator
 
@@ -64,7 +65,7 @@ class Compactor:
         2. Build remap: sort by current numeric ID, assign 1, 2, 3, ... per kind.
         3. Rewrite all frontmatter in-place (updates id field + all ref fields).
         4. Rename files via temp staging to avoid path collisions.
-        5. Update counters.json.
+        5. Update configured per-kind counter files.
         6. Run full validate; collect errors that need human/AI attention.
         """
         items = list(scan_items(self.root))
@@ -234,11 +235,17 @@ class Compactor:
 
         counters_updated: dict[str, int] = {}
         if not rewrite_errors and not rename_errors:
-            counters = _load_counters(self.root)
+            config = Config(self.root)
             for kind, entries in by_kind.items():
-                counters[kind] = len(entries)
-            _save_counters(self.root, counters)
-            counters_updated = dict(sorted(counters.items()))
+                counter_file = config.kind_counter_file(kind)
+                counter_path = self.root / ".audiagentic" / "planning" / "meta" / counter_file
+                counter_path.parent.mkdir(parents=True, exist_ok=True)
+                counter_path.write_text(
+                    json.dumps({"counter": len(entries)}, indent=2),
+                    encoding="utf-8",
+                )
+                counters_updated[kind] = len(entries)
+            counters_updated = dict(sorted(counters_updated.items()))
 
         validation_errors = Validator(self.root).validate_all()
         cannot_repair = (

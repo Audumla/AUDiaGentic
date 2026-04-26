@@ -168,10 +168,12 @@ def action_complete_parent(
     required_state_set = action_config.get("required_state_set")
     parent_field = action_config.get("parent_field")
     target_state = action_config.get("target_state")
-    parent_blocking_set = action_config.get("parent_blocking_set", "terminal")
+    parent_blocking_set = action_config.get("parent_blocking_set")
 
     if not required_state_set or not parent_field or not target_state:
         return []
+    if not parent_blocking_set:
+        raise ValueError("action_complete_parent requires parent_blocking_set")
 
     if not engine.config.state_in_set(
         source_kind, source_view.data.get("state"), required_state_set, source_view.data.get("workflow")
