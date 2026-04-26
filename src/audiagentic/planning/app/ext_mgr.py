@@ -6,7 +6,7 @@ from pathlib import Path
 import yaml
 
 from .api_types import ItemView
-from .standards import effective_references
+from .reference_inheritance import effective_references
 
 
 class Extracts:
@@ -44,13 +44,7 @@ class Extracts:
         out = dict(item.data)
         out["kind"] = item.kind
         out["path"] = item.path.relative_to(self.root).as_posix()
-        for field in (
-            "archived_at",
-            "archived_by",
-            "archive_reason",
-            "restored_at",
-            "restored_by",
-        ):
+        for field in self._api().config.lifecycle_metadata_fields():
             out.setdefault(field, None)
         return out
 

@@ -163,22 +163,25 @@ def test_tm_edit():
     print("=" * 60)
 
     # Create test task (needs spec)
-    req_result = tm.new_request(
-        label="Test Request",
-        summary="Test request",
+    req_result = tm.create(
+        "request",
+        "Test Request",
+        "Test request",
         source="mcp-test",
     )
 
-    spec_result = tm.new_spec(
+    spec_result = tm.create(
+        "spec",
         label="Test Spec",
         summary="Test spec",
-        request_refs=[req_result["id"]],
+        refs={"request_refs": [req_result["id"]]},
     )
 
-    task_result = tm.new_task(
+    task_result = tm.create(
+        "task",
         label="MCP Test Task",
         summary="Task for testing",
-        spec=spec_result["id"],
+        refs={"spec": spec_result["id"]},
         domain="core",
     )
     task_id = task_result["id"]
@@ -250,47 +253,52 @@ def test_tm_create():
     test_items = []
 
     # Test 1: Create request
-    result = tm.new_request(
-        label="Test Request",
-        summary="Test request summary",
+    result = tm.create(
+        "request",
+        "Test Request",
+        "Test request summary",
         source="mcp-test",
     )
     test_items.append(("request", result["id"]))
     print(f"[OK] Created request: {result['id']}")
 
     # Test 2: Create spec
-    spec_result = tm.new_spec(
+    spec_result = tm.create(
+        "spec",
         label="Test Spec",
         summary="Test spec summary",
-        request_refs=[result["id"]],
+        refs={"request_refs": [result["id"]]},
     )
     test_items.append(("spec", spec_result["id"]))
     print(f"[OK] Created spec: {spec_result['id']}")
 
     # Test 3: Create task
-    task_result = tm.new_task(
+    task_result = tm.create(
+        "task",
         label="Test Task",
         summary="Test task summary",
-        spec=spec_result["id"],
+        refs={"spec": spec_result["id"]},
         domain="core",
     )
     test_items.append(("task", task_result["id"]))
     print(f"[OK] Created task: {task_result['id']}")
 
     # Test 4: Create plan
-    plan_result = tm.new_plan(
+    plan_result = tm.create(
+        "plan",
         label="Test Plan",
         summary="Test plan summary",
-        spec=spec_result["id"],
+        refs={"spec": spec_result["id"]},
     )
     test_items.append(("plan", plan_result["id"]))
     print(f"[OK] Created plan: {plan_result['id']}")
 
     # Test 5: Create WP
-    wp_result = tm.new_wp(
+    wp_result = tm.create(
+        "wp",
         label="Test WP",
         summary="Test WP summary",
-        plan=plan_result["id"],
+        refs={"plan": plan_result["id"]},
         domain="core",
     )
     test_items.append(("wp", wp_result["id"]))
@@ -311,9 +319,10 @@ def test_tm_get():
     print("=" * 60)
 
     # Create test item
-    req_result = tm.new_request(
-        label="Get Test Request",
-        summary="Test for tm_get",
+    req_result = tm.create(
+        "request",
+        "Get Test Request",
+        "Test for tm_get",
         source="mcp-test",
     )
     req_id = req_result["id"]
@@ -398,20 +407,23 @@ def test_tm_claim():
     print("=" * 60)
 
     # Create test task
-    req_result = tm.new_request(
-        label="Claim Test Request",
-        summary="Test for claims",
+    req_result = tm.create(
+        "request",
+        "Claim Test Request",
+        "Test for claims",
         source="mcp-test",
     )
-    spec_result = tm.new_spec(
+    spec_result = tm.create(
+        "spec",
         label="Claim Test Spec",
         summary="Test spec",
-        request_refs=[req_result["id"]],
+        refs={"request_refs": [req_result["id"]]},
     )
-    task_result = tm.new_task(
+    task_result = tm.create(
+        "task",
         label="Claim Test Task",
         summary="Test task",
-        spec=spec_result["id"],
+        refs={"spec": spec_result["id"]},
         domain="core",
     )
     task_id = task_result["id"]

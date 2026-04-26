@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Thin planning helper with documentation-surface support.
-
-Support docs are surfaced here as structured sidecar docs rather than core
-planning kinds in this phase.
-"""
+"""Thin planning helper with config-driven documentation support."""
 
 from __future__ import annotations
 
@@ -70,8 +66,6 @@ for _p in (str(_ROOT), str(_ROOT / "src")):
 from audiagentic.planning.app.api import PlanningAPI
 from audiagentic.planning.app.config import Config
 from audiagentic.planning.app.docs_mgr import DocumentationManager
-from audiagentic.planning.app.refs_mgr import ReferencesManager
-from audiagentic.planning.app.support_mgr import SupportingDocsManager
 from audiagentic.planning.app.section_registry import split_section_path
 from audiagentic.planning.fs.read import parse_markdown
 from audiagentic.planning.fs.write import dump_markdown
@@ -121,7 +115,7 @@ def set_root(root: Path) -> None:
 
     Usage:
         tm.set_root(Path("/path/to/project"))
-        task = tm.new_task("Label", "Summary", "spec-0001")
+        task = tm.create("task", "Label", "Summary", refs={"spec": "spec-0001"})
     """
     global _current_root, _api
     _current_root = root
@@ -229,7 +223,7 @@ def new_test_spec(
         "spec",
         label=prefixed_label,
         summary=summary,
-        request_refs=request_refs,
+        refs={"request_refs": request_refs},
         check_duplicates=kwargs.get("check_duplicates", True),
     )
     return {
@@ -269,12 +263,14 @@ def new_test_task(
         "task",
         label=prefixed_label,
         summary=summary,
-        spec=spec,
+        refs={
+            "spec": spec,
+            "target": kwargs.get("target"),
+            "parent": kwargs.get("parent"),
+            "request_refs": kwargs.get("request_refs") or [],
+        },
         domain=domain,
-        target=kwargs.get("target"),
-        parent=kwargs.get("parent"),
         workflow=kwargs.get("workflow"),
-        request_refs=kwargs.get("request_refs"),
     )
     return {"id": item.data["id"], "path": str(item.path.relative_to(project_root))}
 
@@ -349,293 +345,6 @@ def _docs_manager(root: Path | None = None) -> DocumentationManager:
     project_root = root or _get_root()
     cfg = _load_yaml(project_root, ".audiagentic/planning/config/documentation.yaml")
     return DocumentationManager(project_root, cfg)
-
-
-def new_request(
-    label: str,
-    summary: str,
-    source: str,
-    profile: str | None = None,
-    guidance: str | None = None,
-    current_understanding: str | None = None,
-    open_questions: list[str] | None = None,
-    context: str | None = None,
-    root: Path | None = None,
-    check_duplicates: bool = True,
-) -> dict[str, Any]:
-    """Create a new Request planning document with optional duplicate detection.
-
-    Args:
-        label: Request label
-        summary: Request summary
-        source: Identifier of the agent or user who created this request (e.g., 'claude', 'codex',
-            'user@example.com'). MUST be a creator identifier, not a process description.
-        profile: Optional request profile such as feature or issue.
-        guidance: Optional guidance level (light, standard, deep). Defaults to project default.
-        current_understanding: Optional initial understanding text.
-        open_questions: Optional initial open-question list.
-        context: Optional extra context for where this request came from.
-        root: Optional project root. If None, uses current root.
-        check_duplicates: If True, check for existing requests with same label/summary
-
-    Returns:
-        Dict with id, path, and created flag (False if duplicate found)
-    """
-    project_root = root or _get_root()
-    api = PlanningAPI(project_root)
-
-    # Apply default profile if not specified
-    if profile is None:
-        profile = api.config.default_profile()
-
-    # Validate profile
-    profiles = api.config.profile_for(profile)
-    if not profiles:
-        raise ValueError(
-            f"Invalid profile '{profile}'. Must be one of: {list(api.config.profiles.get('planning', {}).get('profiles', {}).keys())}"
-        )
-
-    # Apply default guidance if not specified
-    if guidance is None:
-        guidance = api.config.default_guidance()
-
-    # Validate guidance level
-    levels = api.config.guidance_levels()
-    if guidance not in levels:
-        raise ValueError(
-            f"Invalid guidance level '{guidance}'. Must be one of: {list(levels.keys())}"
-        )
-
-    if check_duplicates:
-        existing = [i for i in api._scan() if i.kind == "request"]
-        label_lower = label.lower().strip()
-
-        for item in existing:
-            existing_label = item.data.get("label", "").lower().strip()
-            if existing_label == label_lower:
-                return {
-                    "id": item.data["id"],
-                    "path": str(item.path.relative_to(project_root)),
-                    "created": False,
-                    "duplicate_of": item.data["id"],
-                    "message": f"Request already exists: {item.data['id']}",
-                }
-
-    item = api.new(
-        "request",
-        label=label,
-        summary=summary,
-        profile=profile,
-        guidance=guidance,
-        current_understanding=current_understanding,
-        open_questions=open_questions,
-        source=source,
-        context=context,
-        check_duplicates=check_duplicates,
-    )
-    return {
-        "id": item.data["id"],
-        "path": str(item.path.relative_to(project_root)),
-        "created": True,
-    }
-
-
-def new_spec(
-    label: str,
-    summary: str,
-    request_refs: list[str] | None = None,
-    root: Path | None = None,
-    check_duplicates: bool = True,
-) -> dict[str, Any]:
-    """Create a new Specification planning document with optional duplicate detection.
-
-    Args:
-        label: Spec label
-        summary: Spec summary
-        request_refs: Required list of request IDs to reference
-        root: Optional project root. If None, uses current root.
-        check_duplicates: If True, check for existing specs with same label/summary
-
-    Returns:
-        Dict with id, path, and created flag (False if duplicate found)
-    """
-    project_root = root or _get_root()
-    api = PlanningAPI(project_root)
-
-    if check_duplicates:
-        existing = [i for i in api._scan() if i.kind == "spec"]
-        label_lower = label.lower().strip()
-
-        for item in existing:
-            existing_label = item.data.get("label", "").lower().strip()
-            if existing_label == label_lower:
-                return {
-                    "id": item.data["id"],
-                    "path": str(item.path.relative_to(project_root)),
-                    "created": False,
-                    "duplicate_of": item.data["id"],
-                    "message": f"Specification already exists: {item.data['id']}",
-                }
-
-    item = api.new(
-        "spec",
-        label=label,
-        summary=summary,
-        request_refs=request_refs,
-        check_duplicates=check_duplicates,
-    )
-    return {
-        "id": item.data["id"],
-        "path": str(item.path.relative_to(project_root)),
-        "created": True,
-    }
-
-
-def _validate_reference(ref_id: str, ref_type: str, root: Path | None = None) -> None:
-    """Validate that a referenced planning item exists.
-
-    Args:
-        ref_id: Planning item ID to validate
-        ref_type: Type of reference (e.g., 'spec', 'plan') for error message
-        root: Optional project root. If None, uses current root.
-
-    Raises:
-        ValueError: If reference does not exist
-    """
-    project_root = root or _get_root()
-    api = PlanningAPI(project_root)
-    try:
-        api._find(ref_id)
-    except KeyError:
-        raise ValueError(f"{ref_type} '{ref_id}' does not exist")
-
-
-def new_plan(
-    label: str,
-    summary: str,
-    spec: str | None = None,
-    request_refs: list[str] | None = None,
-    root: Path | None = None,
-) -> dict[str, Any]:
-    """Create a new Plan planning document.
-
-    Args:
-        label: Plan label
-        summary: Plan summary
-        spec: Optional spec ID to link
-        request_refs: Optional request IDs to link for traceability.
-        root: Optional project root. If None, uses current root.
-
-    Returns:
-        Dict with id and path
-    """
-    project_root = root or _get_root()
-    if spec:
-        _validate_reference(spec, "spec", project_root)
-    for req_id in request_refs or []:
-        _validate_reference(req_id, "request", project_root)
-    api = PlanningAPI(project_root)
-    item = api.new(
-        "plan",
-        label=label,
-        summary=summary,
-        spec=spec,
-        request_refs=request_refs,
-    )
-    return {"id": item.data["id"], "path": str(item.path.relative_to(project_root))}
-
-
-def new_task(
-    label: str,
-    summary: str,
-    spec: str,
-    domain: str = "core",
-    target: str | None = None,
-    parent: str | None = None,
-    workflow: str | None = None,
-    request_refs: list[str] | None = None,
-    root: Path | None = None,
-) -> dict[str, Any]:
-    """Create a new Task planning document.
-
-    Args:
-        label: Task label
-        summary: Task summary
-        spec: Spec ID (required)
-        domain: Task domain (default: core)
-        target: Optional target ID
-        parent: Optional parent ID
-        workflow: Optional workflow ID
-        request_refs: Optional request IDs to link for traceability.
-        root: Optional project root. If None, uses current root.
-
-    Returns:
-        Dict with id and path
-    """
-    project_root = root or _get_root()
-    _validate_reference(spec, "spec", project_root)
-    if parent:
-        _validate_reference(parent, "parent", project_root)
-    for req_id in request_refs or []:
-        _validate_reference(req_id, "request", project_root)
-    api = PlanningAPI(project_root)
-    item = api.new(
-        "task",
-        label=label,
-        summary=summary,
-        spec=spec,
-        domain=domain,
-        target=target,
-        parent=parent,
-        workflow=workflow,
-        request_refs=request_refs,
-    )
-    return {"id": item.data["id"], "path": str(item.path.relative_to(project_root))}
-
-
-def new_wp(
-    label: str,
-    summary: str,
-    plan: str,
-    domain: str = "core",
-    workflow: str | None = None,
-    root: Path | None = None,
-) -> dict[str, Any]:
-    """Create a new WorkPackage planning document.
-
-    Args:
-        label: WP label
-        summary: WP summary
-        plan: Plan ID (required)
-        domain: WP domain (default: core)
-        workflow: Optional workflow ID
-        root: Optional project root. If None, uses current root.
-
-    Returns:
-        Dict with id and path
-    """
-    project_root = root or _get_root()
-    _validate_reference(plan, "plan", project_root)
-    api = PlanningAPI(project_root)
-    item = api.new("wp", label=label, summary=summary, plan=plan, domain=domain, workflow=workflow)
-    return {"id": item.data["id"], "path": str(item.path.relative_to(project_root))}
-
-
-def new_standard(label: str, summary: str, root: Path | None = None) -> dict[str, Any]:
-    """Create a new Standard planning document.
-
-    Args:
-        label: Standard label
-        summary: Standard summary
-        root: Optional project root. If None, uses current root.
-
-    Returns:
-        Dict with id and path
-    """
-    project_root = root or _get_root()
-    api = PlanningAPI(project_root)
-    item = api.new("standard", label=label, summary=summary)
-    return {"id": item.data["id"], "path": str(item.path.relative_to(project_root))}
 
 
 def state(
@@ -1016,30 +725,24 @@ def create_with_content(
     summary: str,
     content: str,
     source: str | None = None,
-    domain: str = "core",
-    spec: str | None = None,
-    plan: str | None = None,
-    parent: str | None = None,
-    target: str | None = None,
+    domain: str | None = None,
     workflow: str | None = None,
-    request_refs: list[str] | None = None,
+    refs: dict[str, object] | None = None,
+    fields: dict[str, object] | None = None,
     root: Path | None = None,
 ) -> dict[str, Any]:
     """Create a new planning document with initial content.
 
     Args:
-        kind: Item kind (request, spec, plan, task, wp, standard)
+        kind: Configured item kind
         label: Item label
         summary: Item summary
         content: Initial markdown content
         source: Optional provenance/source for request creation
-        domain: Item domain (default: core)
-        spec: Optional spec ID
-        plan: Optional plan ID
-        parent: Optional parent ID
-        target: Optional target ID
+        domain: Optional item domain
         workflow: Optional workflow ID
-        request_refs: Optional list of request IDs
+        refs: Create refs keyed by configured creation sources
+        fields: Extra frontmatter fields
         root: Optional project root. If None, uses current root.
 
     Returns:
@@ -1054,12 +757,9 @@ def create_with_content(
         content,
         source=source,
         domain=domain,
-        spec=spec,
-        plan=plan,
-        parent=parent,
-        target=target,
         workflow=workflow,
-        request_refs=request_refs,
+        refs=refs,
+        fields=fields,
     )
     return {"id": item.data["id"], "path": str(item.path.relative_to(project_root))}
 
@@ -1138,13 +838,10 @@ def create(
     summary: str,
     content: str | None = None,
     source: str | None = None,
-    domain: str = "core",
-    spec: str | None = None,
-    plan: str | None = None,
-    parent: str | None = None,
-    target: str | None = None,
+    domain: str | None = None,
     workflow: str | None = None,
-    request_refs: list[str] | None = None,
+    refs: dict[str, object] | None = None,
+    fields: dict[str, object] | None = None,
     check_duplicates: bool = True,
     profile: str | None = None,
     current_understanding: str | None = None,
@@ -1152,67 +849,50 @@ def create(
     context: str | None = None,
     root: Path | None = None,
 ) -> dict[str, Any]:
-    """Generic create helper that dispatches to specific item creators.
+    """Generic create helper backed by live planning config.
 
     Args:
-        kind: Item kind (request, spec, plan, task, wp, standard)
-        ... (other args)
+        kind: Configured item kind.
+        refs: Create refs keyed by planning.creation.seed_reference_fields sources.
+        fields: Extra frontmatter fields.
         root: Optional project root.
 
     Returns:
         Dict with id and path
     """
-    if content is not None:
-        return create_with_content(
-            kind,
-            label,
-            summary,
-            content,
-            source,
-            domain,
-            spec,
-            plan,
-            parent,
-            target,
-            workflow,
-            request_refs,
-            root=root,
-        )
+    project_root = root or _get_root()
+    api = PlanningAPI(project_root)
 
-    if kind == "request":
-        return new_request(
-            label,
-            summary,
-            source=source or "unknown",
+    if content is not None:
+        item = api.create_with_content(
+            kind=kind,
+            label=label,
+            summary=summary,
+            content=content,
+            source=source,
+            domain=domain,
+            workflow=workflow,
+            refs=refs,
+            fields=fields,
+            check_duplicates=check_duplicates,
+        )
+    else:
+        item = api.new(
+            kind,
+            label=label,
+            summary=summary,
+            domain=domain,
+            workflow=workflow,
+            refs=refs,
+            fields=fields,
             profile=profile,
             current_understanding=current_understanding,
             open_questions=open_questions,
+            source=source,
             context=context,
-            root=root,
             check_duplicates=check_duplicates,
         )
-    elif kind == "spec":
-        return new_spec(label, summary, request_refs, root=root, check_duplicates=check_duplicates)
-    elif kind == "plan":
-        return new_plan(label, summary, spec, request_refs, root=root)
-    elif kind == "task":
-        return new_task(
-            label,
-            summary,
-            spec,
-            domain=domain,
-            target=target,
-            parent=parent,
-            workflow=workflow,
-            request_refs=request_refs,
-            root=root,
-        )
-    elif kind == "wp":
-        return new_wp(label, summary, plan, domain=domain, workflow=workflow, root=root)
-    elif kind == "standard":
-        return new_standard(label, summary, root=root)
-    else:
-        raise ValueError(f"Unknown kind: {kind!r}. Must be request|spec|plan|task|wp|standard")
+    return {"id": item.data["id"], "path": str(item.path.relative_to(project_root))}
     """Delete a planning item.
 
     Soft delete is the default; hard delete removes the file and syncs counters.
@@ -1372,10 +1052,12 @@ def list_kind(
 
     if not include_deleted:
         items = [i for i in items if not i.data.get("deleted")]
-    if not include_archived:
-        items = [i for i in items if i.data.get("state") != "archived"]
-    if not include_superseded:
-        items = [i for i in items if i.data.get("state") != "superseded"]
+    archive_state = api.config.lifecycle_action_state("archive")
+    supersede_state = api.config.lifecycle_action_state("supersede")
+    if not include_archived and archive_state:
+        items = [i for i in items if i.data.get("state") != archive_state]
+    if not include_superseded and supersede_state:
+        items = [i for i in items if i.data.get("state") != supersede_state]
 
     # Normalize state to list
     state_list = [state] if isinstance(state, str) else state if state else None
@@ -1389,24 +1071,24 @@ def list_kind(
             "label": i.data["label"],
             "state": i.data["state"],
             "deleted": bool(i.data.get("deleted")),
-            "archived": i.data.get("state") == "archived",
-            "superseded": i.data.get("state") == "superseded",
+            "archived": i.data.get("state") == archive_state,
+            "superseded": i.data.get("state") == supersede_state,
         }
         for i in items
     ]
 
 
 def next_items(
-    kind: str = "task",
-    state: str = "ready",
+    kind: str | list[str] | None = None,
+    state: str | list[str] | None = None,
     domain: str | None = None,
     root: Path | None = None,
 ) -> list[dict[str, Any]]:
     """List items of a given kind in a given state.
 
     Args:
-        kind: Item kind (default: task)
-        state: Item state (default: ready)
+        kind: Item kind. Defaults come from planning.queue_defaults.
+        state: Item state. Defaults come from planning.queue_defaults.
         domain: Optional domain filter
         root: Optional project root. If None, uses current root.
 
@@ -1416,22 +1098,6 @@ def next_items(
     project_root = root or _get_root()
     api = PlanningAPI(project_root)
     return api.next_items(kind, state, domain)
-
-
-def next_tasks(
-    state: str = "ready", domain: str | None = None, root: Path | None = None
-) -> list[dict[str, Any]]:
-    """List Tasks in a given state.
-
-    Args:
-        state: Task state (default: ready)
-        domain: Optional domain filter
-        root: Optional project root. If None, uses current root.
-
-    Returns:
-        List of next tasks
-    """
-    return next_items("task", state, domain, root)
 
 
 def claim(
@@ -1484,63 +1150,22 @@ def claims(kind: str | None = None, root: Path | None = None) -> list[dict[str, 
     return api.claims(kind)
 
 
-def standards(id_: str, root: Path | None = None) -> list[str]:
-    """List applicable standards for a planning item.
+def effective_refs(
+    id_: str, field: str | None = None, root: Path | None = None
+) -> list[str]:
+    """List effective reference values for a planning item.
 
     Args:
         id_: Item ID
+        field: Reference field to resolve. If None, uses configured standard_ref_field.
         root: Optional project root. If None, uses current root.
 
     Returns:
-        List of standard IDs
+        List of referenced item IDs
     """
     project_root = root or _get_root()
     api = PlanningAPI(project_root)
-    return api.standards(id_)
-
-
-def list_standards(root: Path | None = None) -> list[dict[str, Any]]:
-    """List all standard planning documents.
-
-    Args:
-        root: Optional project root. If None, uses current root.
-
-    Returns:
-        List of standards
-    """
-    return list_kind("standard", root=root)
-
-
-def get_standard(
-    standard_id: str,
-    with_related: bool = False,
-    with_resources: bool = False,
-    root: Path | None = None,
-) -> dict[str, Any]:
-    """Get a standard planning document with body and metadata.
-
-    Args:
-        standard_id: Standard ID
-        with_related: Include related items
-        with_resources: Include resource references
-        root: Optional project root. If None, uses current root.
-
-    Returns:
-        Standard data
-
-    Raises:
-        ValueError: If the requested item exists but is not a standard
-    """
-    data = extract(
-        standard_id,
-        with_related=with_related,
-        with_resources=with_resources,
-        root=root,
-    )
-    item = data.get("item", {})
-    if item.get("kind") != "standard":
-        raise ValueError(f"{standard_id} is not a standard")
-    return data
+    return api.effective_refs(id_, field=field)
 
 
 def events(tail: int = 20, root: Path | None = None) -> list[dict[str, Any]]:
@@ -1671,10 +1296,10 @@ def list_reference_docs(root: Path | None = None) -> list[dict[str, str]]:
         List of {path, label} dicts for each reference doc
     """
     project_root = root or _get_root()
-    return ReferencesManager(project_root).list_reference_docs()
+    return _docs_manager(project_root).list_collection("references")
 
 
-def list_request_profiles(root: Path | None = None) -> list[dict[str, Any]]:
+def list_creation_profiles(root: Path | None = None) -> list[dict[str, Any]]:
     """List all creation profiles.
 
     Args:
@@ -1695,7 +1320,7 @@ def list_request_profiles(root: Path | None = None) -> list[dict[str, Any]]:
     return out
 
 
-def get_request_profile(profile_id: str, root: Path | None = None) -> dict[str, Any] | None:
+def get_creation_profile(profile_id: str, root: Path | None = None) -> dict[str, Any] | None:
     """Get a creation profile by ID.
 
     Args:
@@ -1716,16 +1341,6 @@ def get_request_profile(profile_id: str, root: Path | None = None) -> dict[str, 
     return row
 
 
-def list_creation_profiles(root: Path | None = None) -> list[dict[str, Any]]:
-    """Generic alias for list_request_profiles()."""
-    return list_request_profiles(root=root)
-
-
-def get_creation_profile(profile_id: str, root: Path | None = None) -> dict[str, Any] | None:
-    """Generic alias for get_request_profile()."""
-    return get_request_profile(profile_id, root=root)
-
-
 def list_support_docs(
     supports_id: str | None = None, role: str | None = None, root: Path | None = None
 ) -> list[dict[str, Any]]:
@@ -1740,7 +1355,11 @@ def list_support_docs(
         List of support doc dicts
     """
     project_root = root or _get_root()
-    return SupportingDocsManager(project_root).list_support_docs(supports_id, role)
+    return _docs_manager(project_root).list_collection(
+        "support",
+        supports_id=supports_id,
+        role=role,
+    )
 
 
 def _find_section(
@@ -2074,7 +1693,7 @@ def _verify_structure_impl(root: Path | None = None) -> dict[str, Any]:
     required_dirs = [
         ".audiagentic/planning",
         ".audiagentic/planning/config",
-        ".audiagentic/planning/ids",
+        ".audiagentic/planning/meta",
         ".audiagentic/planning/indexes",
         ".audiagentic/planning/events",
     ]
@@ -2293,18 +1912,26 @@ def planning_config_summary(
             "optional_fields": cfg.optional_fields(k),
             "required_refs": cfg.kind_required_refs(k),
             "required_sections": cfg.required_sections(k) or [],
-            "state_on_create": wf.get("initial_state", "draft"),
+            "state_on_create": cfg.initial_state(k),
             "usage": (
                 f"tm_create(kind='{k}'"
                 + (", domain='<domain>'" if cfg.kind_has_domain(k) else "")
-                + "".join(f", {r}='<id>'" for r in cfg.kind_required_refs(k))
+                + (
+                    ", refs={"
+                    + ", ".join(f"'{r}': '<id>'" for r in cfg.kind_required_refs(k))
+                    + "}"
+                    if cfg.kind_required_refs(k)
+                    else ""
+                )
                 + ", label='...')"
             ),
         }
         if mode == "full":
             entry["relationship_rules"] = cfg.relationship_rules(k)
             entry["workflow_states"] = list(wf.get("states", {}).keys())
-            entry["standard_defaults"] = cfg.standard_defaults_for(k)
+            entry["default_references"] = cfg.profiles.get("planning", {}).get(
+                "default_references", {}
+            ).get(k, {})
             template = cfg.document_template(k)
             import re as _re
             entry["template_sections"] = _re.findall(r"^## (.+)$", template, _re.MULTILINE)

@@ -93,17 +93,6 @@ kinds:
     parent_kind: null
     state_rules: {}
 
-terminal_states:
-  - done
-  - archived
-
-state_priority:
-  archived: 100
-  done: 90
-  blocked: 50
-  in_progress: 20
-  ready: 10
-
 healing:
   enabled: true
   auto_fix: true
@@ -190,9 +179,7 @@ def test_validate_parent_complete_child_not_complete(tmp_path: Path) -> None:
     # Validate should detect inconsistency
     errors = planning_api._propagation_engine.validate_hierarchy(task_id)
     assert len(errors) > 0
-    assert any(
-        "Parent is complete but child is not complete" in e.get("error", "") for e in errors
-    )
+    assert any("Parent is complete but child is not complete" in e.get("error", "") for e in errors)
 
 
 def test_heal_does_not_auto_fix_dangerous(tmp_path: Path) -> None:
@@ -281,17 +268,6 @@ kinds:
     parent_kind: spec
     parent_field: spec_refs
     state_rules: {}
-
-terminal_states:
-  - done
-  - archived
-
-state_priority:
-  archived: 100
-  done: 90
-  blocked: 50
-  in_progress: 20
-  ready: 10
 
 rules:
   parent_in_set:

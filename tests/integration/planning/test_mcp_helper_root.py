@@ -51,7 +51,7 @@ class TestMCPHelperRootConfigurability:
         try:
             tm.set_root(tmp_path)
 
-            task = tm.new_task(label="Test", summary="Test", spec="spec-1")
+            task = tm.create(kind="task", label="Test", summary="Test", refs={"spec": "spec-1"})
 
             isolated_file = tmp_path / Path(task["path"])
             assert isolated_file.exists()
@@ -66,7 +66,7 @@ class TestMCPHelperRootConfigurability:
 
         _seed_test_project(tmp_path)
 
-        task = tm.new_task(label="Test", summary="Test", spec="spec-1", root=tmp_path)
+        task = tm.create(kind="task", label="Test", summary="Test", refs={"spec": "spec-1"}, root=tmp_path)
 
         isolated_file = tmp_path / Path(task["path"])
         assert isolated_file.exists()

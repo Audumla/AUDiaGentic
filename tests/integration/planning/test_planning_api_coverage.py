@@ -56,7 +56,7 @@ def pr(tmp_path: Path):
 # Shorthand helpers inside tests
 def _spec_and_task(api):
     spec = _new_spec(api)
-    task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+    task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
     return spec, task
 
 
@@ -66,15 +66,15 @@ def _new_request(api, label: str = "R", summary: str = "S"):
 
 def _new_spec(api, label: str = "S", summary: str = "S"):
     request = _new_request(api, label=f"{label} request", summary=summary)
-    return api.new("spec", label=label, summary=summary, request_refs=[request.data["id"]])
+    return api.new("spec", label=label, summary=summary, refs={"request_refs": [request.data["id"]]})
 
 
 def _full_hierarchy(api):
     req = api.new("request", label="R", summary="R", source="test")
-    spec = api.new("spec", label="S", summary="S", request_refs=[req.data["id"]])
-    plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
-    task = api.new("task", label="T", summary="T", spec=spec.data["id"])
-    wp = api.new("wp", label="W", summary="W", plan=plan.data["id"])
+    spec = api.new("spec", label="S", summary="S", refs={"request_refs": [req.data["id"]]})
+    plan = api.new("plan", label="P", summary="P", refs={"spec": spec.data["id"]})
+    task = api.new("task", label="T", summary="T", refs={"spec": spec.data["id"]})
+    wp = api.new("wp", label="W", summary="W", refs={"plan": plan.data["id"]})
     return req, spec, plan, task, wp
 
 
@@ -224,7 +224,7 @@ class TestCreateWithContent:
             label="S",
             summary="S",
             content=content,
-            request_refs=[req.data["id"]],
+            refs={"request_refs": [req.data["id"]]},
         )
         assert "New spec." in api.get_content(item.data["id"])
 
@@ -233,17 +233,17 @@ class TestCreateWithContent:
         spec = _new_spec(api, label="SP", summary="SP")
         content = "# Description\n\nTask detail.\n"
         item = api.create_with_content(
-            "task", label="T", summary="S", content=content, spec=spec.data["id"]
+            "task", label="T", summary="S", content=content, refs={"spec": spec.data["id"]}
         )
         assert "Task detail." in api.get_content(item.data["id"])
 
     def test_create_wp_with_content(self, pr):
         _, api = pr
         spec = _new_spec(api, label="SP", summary="SP")
-        plan = api.new("plan", label="PL", summary="PL", spec=spec.data["id"])
+        plan = api.new("plan", label="PL", summary="PL", refs={"spec": spec.data["id"]})
         content = "# Objective\n\nWP detail.\n"
         item = api.create_with_content(
-            "wp", label="W", summary="S", content=content, plan=plan.data["id"]
+            "wp", label="W", summary="S", content=content, refs={"plan": plan.data["id"]}
         )
         assert "WP detail." in api.get_content(item.data["id"])
 
@@ -270,7 +270,7 @@ class TestMove:
     def test_move_task_to_contrib(self, pr):
         root, api = pr
         spec = _new_spec(api)
-        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
         moved = api.move(task.data["id"], "contrib")
         assert "contrib" in str(moved.path)
         assert moved.path.exists()
@@ -279,8 +279,8 @@ class TestMove:
     def test_move_wp_to_contrib(self, pr):
         root, api = pr
         spec = _new_spec(api)
-        plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
-        wp = api.new("wp", label="W", summary="S", plan=plan.data["id"])
+        plan = api.new("plan", label="P", summary="P", refs={"spec": spec.data["id"]})
+        wp = api.new("wp", label="W", summary="S", refs={"plan": plan.data["id"]})
         moved = api.move(wp.data["id"], "contrib")
         assert "contrib" in str(moved.path)
         assert moved.path.exists()
@@ -288,19 +288,19 @@ class TestMove:
     def test_move_request_raises(self, pr):
         _, api = pr
         req = api.new("request", label="R", summary="S", source="test")
-        with pytest.raises(ValueError, match="only task/wp"):
+        with pytest.raises(ValueError, match="configured domain kinds"):
             api.move(req.data["id"], "contrib")
 
     def test_move_spec_raises(self, pr):
         _, api = pr
         spec = _new_spec(api)
-        with pytest.raises(ValueError, match="only task/wp"):
+        with pytest.raises(ValueError, match="configured domain kinds"):
             api.move(spec.data["id"], "contrib")
 
     def test_move_preserves_content(self, pr):
         _, api = pr
         spec = _new_spec(api)
-        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
         original_label = task.data["label"]
         moved = api.move(task.data["id"], "contrib")
         assert moved.data["label"] == original_label
@@ -331,24 +331,24 @@ class TestRelink:
         _, api = pr
         spec1 = _new_spec(api, label="S1")
         spec2 = _new_spec(api, label="S2")
-        task = api.new("task", label="T", summary="S", spec=spec1.data["id"])
+        task = api.new("task", label="T", summary="S", refs={"spec": spec1.data["id"]})
         result = api.relink(task.data["id"], "spec_ref", spec2.data["id"])
         assert result.data["spec_ref"] == spec2.data["id"]
 
     def test_relink_sets_parent_task_ref(self, pr):
         _, api = pr
         spec = _new_spec(api)
-        parent = api.new("task", label="Parent", summary="S", spec=spec.data["id"])
-        child = api.new("task", label="Child", summary="S", spec=spec.data["id"])
+        parent = api.new("task", label="Parent", summary="S", refs={"spec": spec.data["id"]})
+        child = api.new("task", label="Child", summary="S", refs={"spec": spec.data["id"]})
         result = api.relink(child.data["id"], "parent_task_ref", parent.data["id"])
         assert result.data["parent_task_ref"] == parent.data["id"]
 
     def test_relink_task_refs_with_seq(self, pr):
         _, api = pr
         spec = _new_spec(api)
-        plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
-        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
-        wp = api.new("wp", label="W", summary="S", plan=plan.data["id"])
+        plan = api.new("plan", label="P", summary="P", refs={"spec": spec.data["id"]})
+        task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
+        wp = api.new("wp", label="W", summary="S", refs={"plan": plan.data["id"]})
         result = api.relink(wp.data["id"], "task_refs", task.data["id"], seq=100, display="T.1")
         refs = result.data.get("task_refs", [])
         assert any(r.get("ref") == task.data["id"] for r in refs)
@@ -422,7 +422,7 @@ class TestStateTransitions:
     def test_state_plan_draft_to_ready(self, pr):
         _, api = pr
         spec = _new_spec(api)
-        plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
+        plan = api.new("plan", label="P", summary="P", refs={"spec": spec.data["id"]})
         assert plan.data["state"] == "draft"
         result = api.state(plan.data["id"], "ready")
         assert result.data["state"] == "ready"
@@ -430,8 +430,8 @@ class TestStateTransitions:
     def test_state_wp_draft_to_ready(self, pr):
         _, api = pr
         spec = _new_spec(api)
-        plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
-        wp = api.new("wp", label="W", summary="S", plan=plan.data["id"])
+        plan = api.new("plan", label="P", summary="P", refs={"spec": spec.data["id"]})
+        wp = api.new("wp", label="W", summary="S", refs={"plan": plan.data["id"]})
         assert wp.data["state"] == "draft"
         result = api.state(wp.data["id"], "ready")
         assert result.data["state"] == "ready"
@@ -532,7 +532,7 @@ class TestShowExtract:
     def test_show_request_includes_spec_refs_when_present(self, pr):
         _, api = pr
         req = api.new("request", label="R", summary="S", source="test")
-        spec = api.new("spec", label="S", summary="S", request_refs=[req.data["id"]])
+        spec = api.new("spec", label="S", summary="S", refs={"request_refs": [req.data["id"]]})
         shown = api.extracts.show(req.data["id"])
         assert spec.data["id"] in shown.get("spec_refs", [])
 
@@ -547,7 +547,7 @@ class TestShowExtract:
     def test_extract_with_related_includes_fields(self, pr):
         _, api = pr
         req = api.new("request", label="R", summary="S", source="test")
-        spec = api.new("spec", label="S", summary="S", request_refs=[req.data["id"]])
+        spec = api.new("spec", label="S", summary="S", refs={"request_refs": [req.data["id"]]})
         result = api.extracts.extract(spec.data["id"], with_related=True)
         assert "related" in result
         assert "request_refs" in result["related"]
@@ -591,30 +591,30 @@ class TestShowExtract:
 
 
 # ===========================================================================
-# standards()
+# effective_refs()
 # ===========================================================================
 
 
-class TestStandards:
-    def test_standards_returns_list_for_item_without_refs(self, pr):
+class TestEffectiveRefs:
+    def test_effective_refs_returns_list_for_item_without_refs(self, pr):
         _, api = pr
         spec = _new_spec(api)
-        refs = api.standards(spec.data["id"])
+        refs = api.effective_refs(spec.data["id"])
         assert isinstance(refs, list)
 
-    def test_standards_includes_inherited_refs(self, pr):
+    def test_effective_refs_includes_inherited_refs(self, pr):
         _, api = pr
         std = api.new("standard", label="Naming conventions", summary="S")
         spec = _new_spec(api)
         api.relink(spec.data["id"], "standard_refs", std.data["id"])
-        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
-        refs = api.standards(task.data["id"])
+        task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
+        refs = api.effective_refs(task.data["id"])
         assert std.data["id"] in refs
 
-    def test_standards_for_unknown_item_raises(self, pr):
+    def test_effective_refs_for_unknown_item_raises(self, pr):
         _, api = pr
         with pytest.raises(KeyError):
-            api.standards("nonexistent-0001")
+            api.effective_refs("nonexistent-0001")
 
 
 # ===========================================================================
@@ -626,26 +626,34 @@ class TestSyncIdCounters:
     def test_sync_creates_counter_files_for_all_kinds(self, pr):
         root, api = pr
         api.sync_id_counters()
-        counters_file = root / ".audiagentic" / "planning" / "ids" / "counters.json"
-        assert counters_file.exists()
-        counters = json.loads(counters_file.read_text(encoding="utf-8"))["counters"]
-        for kind in ("request", "spec", "plan", "task", "wp", "standard"):
-            assert kind in counters, f"Missing counter for {kind}"
+        for kind in api.config.all_kinds():
+            counter_file = (
+                root
+                / ".audiagentic"
+                / "planning"
+                / "meta"
+                / api.config.kind_counter_file(kind)
+            )
+            assert counter_file.exists(), f"Missing counter for {kind}"
+            assert "counter" in json.loads(counter_file.read_text(encoding="utf-8"))
 
     def test_sync_sets_counter_from_existing_docs(self, pr):
         root, api = pr
         api.new("request", label="R1", summary="S", source="test")
         api.new("request", label="R2", summary="S", source="test")
         # Corrupt the counter
-        counter_file = root / ".audiagentic" / "planning" / "ids" / "counters.json"
-        counter_file.write_text(
-            json.dumps({"version": 1, "counters": {"request": 0}}, indent=2),
-            encoding="utf-8",
+        counter_file = (
+            root
+            / ".audiagentic"
+            / "planning"
+            / "meta"
+            / api.config.kind_counter_file("request")
         )
+        counter_file.write_text(json.dumps({"counter": 0}, indent=2), encoding="utf-8")
         # Sync should repair it
         api.sync_id_counters()
-        counters = json.loads(counter_file.read_text(encoding="utf-8"))["counters"]
-        assert counters["request"] >= 2
+        counter = json.loads(counter_file.read_text(encoding="utf-8"))["counter"]
+        assert counter >= 2
 
 
 # ===========================================================================
@@ -657,10 +665,10 @@ class TestNextItems:
     def test_next_items_domain_filter(self, pr):
         _, api = pr
         spec = _new_spec(api)
-        plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
-        core_task = api.new("task", label="Core", summary="S", spec=spec.data["id"], domain="core")
+        plan = api.new("plan", label="P", summary="P", refs={"spec": spec.data["id"]})
+        core_task = api.new("task", label="Core", summary="S", refs={"spec": spec.data["id"]}, domain="core")
         contrib_task = api.new(
-            "task", label="Contrib", summary="S", spec=spec.data["id"], domain="contrib"
+            "task", label="Contrib", summary="S", refs={"spec": spec.data["id"]}, domain="contrib"
         )
         api.state(core_task.data["id"], "ready")
         api.state(contrib_task.data["id"], "ready")
@@ -675,7 +683,7 @@ class TestNextItems:
     def test_next_items_excludes_deleted(self, pr):
         _, api = pr
         spec = _new_spec(api)
-        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
         api.state(task.data["id"], "ready")
         api.delete(task.data["id"], reason="test")
         items = api.next_items("task", "ready")
@@ -684,8 +692,8 @@ class TestNextItems:
     def test_next_items_wp_kind(self, pr):
         _, api = pr
         spec = _new_spec(api)
-        plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
-        wp = api.new("wp", label="W", summary="S", plan=plan.data["id"])
+        plan = api.new("plan", label="P", summary="P", refs={"spec": spec.data["id"]})
+        wp = api.new("wp", label="W", summary="S", refs={"plan": plan.data["id"]})
         api.state(wp.data["id"], "ready")
         items = api.next_items("wp", "ready")
         assert any(i["id"] == wp.data["id"] for i in items)
@@ -706,7 +714,7 @@ class TestClaimsTTL:
         """
         _, api = pr
         spec = _new_spec(api)
-        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
         api.state(task.data["id"], "ready")
         # Claim with 1-second TTL
         api.claim("task", task.data["id"], holder="agent-1", ttl=1)
@@ -725,7 +733,7 @@ class TestClaimsTTL:
         """
         _, api = pr
         spec = _new_spec(api)
-        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
         api.claim("task", task.data["id"], holder="agent-exp", ttl=1)
         time.sleep(1.5)
         active = api.claims("task")
@@ -812,7 +820,7 @@ class TestValidationCoverage:
     def test_validate_task_missing_description_reported(self, pr):
         _, api = pr
         spec = _new_spec(api)
-        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
         # Wipe the body so Description section is absent
         from audiagentic.planning.fs.read import parse_markdown
         from audiagentic.planning.fs.write import dump_markdown
@@ -825,7 +833,7 @@ class TestValidationCoverage:
     def test_validate_done_task_requires_state_configured_sections(self, pr):
         _, api = pr
         spec = _new_spec(api)
-        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
         api.state(task.data["id"], "ready")
         api.state(task.data["id"], "in_progress")
         api.state(task.data["id"], "done")
@@ -846,7 +854,7 @@ class TestValidationCoverage:
             label="T",
             summary="S",
             content=task_body,
-            spec=spec.data["id"],
+            refs={"spec": spec.data["id"]},
         )
         api.state(task.data["id"], "ready")
         api.state(task.data["id"], "in_progress")
@@ -871,7 +879,7 @@ class TestValidationCoverage:
     def test_validate_wrong_filename_for_task(self, pr):
         root, api = pr
         spec = _new_spec(api)
-        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
         # Rename to wrong filename
         bad_path = task.path.parent / "task-9999-wrong.md"
         task.path.rename(bad_path)
@@ -900,7 +908,7 @@ class TestBatchOperations:
         tm.set_root(pr[0])
         try:
             spec = _new_spec(pr[1])
-            task = pr[1].new("task", label="Old Label", summary="S", spec=spec.data["id"])
+            task = pr[1].new("task", label="Old Label", summary="S", refs={"spec": spec.data["id"]})
             pr[1].state(task.data["id"], "ready")
             result = tm.update(
                 task.data["id"],
@@ -921,7 +929,7 @@ class TestBatchOperations:
         import tools.planning.tm_helper as tm
 
         spec = _new_spec(pr[1])
-        task = pr[1].new("task", label="T", summary="S", spec=spec.data["id"])
+        task = pr[1].new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
         result = tm.update(
             task.data["id"],
             root=pr[0],
@@ -934,7 +942,7 @@ class TestBatchOperations:
         import tools.planning.tm_helper as tm
 
         spec = _new_spec(pr[1])
-        task = pr[1].new("task", label="T", summary="S", spec=spec.data["id"])
+        task = pr[1].new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
         result = tm.update(
             task.data["id"],
             root=pr[0],
@@ -956,7 +964,7 @@ class TestStatusAndEvents:
         root, api = pr
         api.new("request", label="R", summary="S", source="test")
         spec = _new_spec(api)
-        api.new("task", label="T", summary="S", spec=spec.data["id"])
+        api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
         result = tm.status(root=root)
         # Check singular keys (not plural)
         assert "request" in result
@@ -998,10 +1006,10 @@ class TestPackage:
     def test_package_multiple_tasks(self, pr):
         _, api = pr
         spec = _new_spec(api)
-        plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
-        t1 = api.new("task", label="T1", summary="S", spec=spec.data["id"])
-        t2 = api.new("task", label="T2", summary="S", spec=spec.data["id"])
-        t3 = api.new("task", label="T3", summary="S", spec=spec.data["id"])
+        plan = api.new("plan", label="P", summary="P", refs={"spec": spec.data["id"]})
+        t1 = api.new("task", label="T1", summary="S", refs={"spec": spec.data["id"]})
+        t2 = api.new("task", label="T2", summary="S", refs={"spec": spec.data["id"]})
+        t3 = api.new("task", label="T3", summary="S", refs={"spec": spec.data["id"]})
         wp = api.package(
             plan.data["id"],
             [t1.data["id"], t2.data["id"], t3.data["id"]],
@@ -1016,9 +1024,9 @@ class TestPackage:
     def test_package_assigns_sequential_seq(self, pr):
         _, api = pr
         spec = _new_spec(api)
-        plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
-        t1 = api.new("task", label="T1", summary="S", spec=spec.data["id"])
-        t2 = api.new("task", label="T2", summary="S", spec=spec.data["id"])
+        plan = api.new("plan", label="P", summary="P", refs={"spec": spec.data["id"]})
+        t1 = api.new("task", label="T1", summary="S", refs={"spec": spec.data["id"]})
+        t2 = api.new("task", label="T2", summary="S", refs={"spec": spec.data["id"]})
         wp = api.package(plan.data["id"], [t1.data["id"], t2.data["id"]], label="W", summary="S")
         seqs = [r["seq"] for r in wp.data["task_refs"]]
         assert seqs[0] < seqs[1]
@@ -1026,8 +1034,8 @@ class TestPackage:
     def test_package_in_contrib_domain(self, pr):
         root, api = pr
         spec = _new_spec(api)
-        plan = api.new("plan", label="P", summary="P", spec=spec.data["id"])
-        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        plan = api.new("plan", label="P", summary="P", refs={"spec": spec.data["id"]})
+        task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
         (root / "docs" / "planning" / "work-packages" / "contrib").mkdir(
             parents=True, exist_ok=True
         )
@@ -1053,7 +1061,7 @@ class TestDelete:
     def test_soft_delete_excluded_from_next_items(self, pr):
         _, api = pr
         spec = _new_spec(api)
-        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
         api.state(task.data["id"], "ready")
         api.delete(task.data["id"])
         available = api.next_items("task", "ready")
@@ -1137,7 +1145,7 @@ class TestGuidanceSectionVariation:
             "spec",
             label="Guidance test spec",
             summary="S",
-            request_refs=[req.data["id"]],
+            refs={"request_refs": [req.data["id"]]},
             guidance="deep",
         )
         body = api.get_content(spec.data["id"])
@@ -1156,12 +1164,12 @@ class TestRequiredRefEnforcement:
     def test_spec_without_request_refs_rejected(self, pr):
         _, api = pr
         with pytest.raises((ValueError, Exception)):
-            api.new("spec", label="Orphan spec", summary="S", request_refs=[])
+            api.new("spec", label="Orphan spec", summary="S", refs={"request_refs": []})
 
     def test_spec_with_request_refs_succeeds(self, pr):
         _, api = pr
         req = api.new("request", label="R", summary="S", source="test")
-        spec = api.new("spec", label="S", summary="S", request_refs=[req.data["id"]])
+        spec = api.new("spec", label="S", summary="S", refs={"request_refs": [req.data["id"]]})
         assert spec.data["id"].startswith("spec-")
 
     def test_plan_without_spec_rejected(self, pr):
@@ -1172,14 +1180,14 @@ class TestRequiredRefEnforcement:
     def test_plan_with_spec_succeeds(self, pr):
         _, api = pr
         req = api.new("request", label="R", summary="S", source="test")
-        spec = api.new("spec", label="S", summary="S", request_refs=[req.data["id"]])
-        plan = api.new("plan", label="P", summary="S", spec=spec.data["id"])
+        spec = api.new("spec", label="S", summary="S", refs={"request_refs": [req.data["id"]]})
+        plan = api.new("plan", label="P", summary="S", refs={"spec": spec.data["id"]})
         assert plan.data["id"].startswith("plan-")
 
     def test_task_without_spec_ref_succeeds(self, pr):
         _, api = pr
         # task has required_for_children: [] in RelationshipConfig
         req = api.new("request", label="R", summary="S", source="test")
-        spec = api.new("spec", label="S", summary="S", request_refs=[req.data["id"]])
-        task = api.new("task", label="T", summary="S", spec=spec.data["id"])
+        spec = api.new("spec", label="S", summary="S", refs={"request_refs": [req.data["id"]]})
+        task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
         assert task.data["id"].startswith("task-")
