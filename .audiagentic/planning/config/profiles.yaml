@@ -102,7 +102,6 @@ planning:
           summary_template: "Specification for {source_summary}"
           refs:
             request_refs: ["{source_id}"]
-      allow_plan_overlay: true
       # Request defaults
       defaults:
         meta:
@@ -123,7 +122,6 @@ planning:
           summary_template: "Specification for {source_summary}"
           refs:
             request_refs: ["{source_id}"]
-      allow_plan_overlay: false
       defaults:
         meta:
           request_type: feature
@@ -144,7 +142,6 @@ planning:
           domain: core
           refs:
             request_refs: ["{source_id}"]
-      allow_plan_overlay: false
       defaults:
         meta:
           request_type: issue
@@ -165,7 +162,6 @@ planning:
           domain: core
           refs:
             request_refs: ["{source_id}"]
-      allow_plan_overlay: false
       defaults:
         meta:
           request_type: fix

@@ -100,9 +100,12 @@ def _call_tool(
         "method": "tools/call",
         "params": {"name": tool_name, "arguments": arguments or {}},
     }
-    responses, _ = _exchange(_INIT_MSG, _INITIALIZED_MSG, call_msg, cwd=cwd, timeout=timeout)
+    responses, stderr = _exchange(_INIT_MSG, _INITIALIZED_MSG, call_msg, cwd=cwd, timeout=timeout)
     call_resp = next((r for r in responses if r.get("id") == 2), None)
-    assert call_resp is not None, f"No response for tools/call to {tool_name}"
+    assert call_resp is not None, (
+        f"No response for tools/call to {tool_name}; "
+        f"responses={responses!r}; stderr={stderr!r}"
+    )
     if "error" in call_resp:
         raise RuntimeError(f"JSON-RPC error calling {tool_name}: {call_resp['error']}")
     result = call_resp["result"]
@@ -137,7 +140,8 @@ def _call_tool_raw(
         "method": "tools/call",
         "params": {"name": tool_name, "arguments": arguments or {}},
     }
-    responses, _ = _exchange(_INIT_MSG, _INITIALIZED_MSG, call_msg, cwd=cwd, timeout=timeout)
+    responses, stderr = _exchange(_INIT_MSG, _INITIALIZED_MSG, call_msg, cwd=cwd, timeout=timeout)
+    assert responses or not stderr, f"No MCP response; stderr={stderr!r}"
     return next((r for r in responses if r.get("id") == 2), {})
 
 
@@ -437,12 +441,12 @@ class TestReadOnlyTools:
         assert isinstance(result, list)
 
     def test_tm_docs_sync_req(self):
-        result = _call_tool("tm_docs", {"op": "sync_req", "kind": "task"})
+        result = _call_tool("tm_docs", {"op": "sync_req", "kind": "task", "profile_pack": "standard"})
         assert isinstance(result, dict)
         assert "required_updates" in result
 
     def test_tm_docs_pending(self):
-        result = _as_list(_call_tool("tm_docs", {"op": "pending", "kind": "task"}))
+        result = _as_list(_call_tool("tm_docs", {"op": "pending", "kind": "task", "profile_pack": "standard"}))
         assert isinstance(result, list)
 
 
@@ -825,9 +829,9 @@ class TestMCPMutationIsolated:
         assert isinstance(result, list)
 
     def test_tm_docs_sync_req(self, isolated_project):
-        result = _mcall("tm_docs", {"op": "sync_req", "kind": "task"}, cwd=isolated_project)
+        result = _mcall("tm_docs", {"op": "sync_req", "kind": "task", "profile_pack": "standard"}, cwd=isolated_project)
         assert isinstance(result, dict)
 
     def test_tm_docs_pending(self, isolated_project):
-        result = _as_list(_mcall("tm_docs", {"op": "pending", "kind": "task"}, cwd=isolated_project))
+        result = _as_list(_mcall("tm_docs", {"op": "pending", "kind": "task", "profile_pack": "standard"}, cwd=isolated_project))
         assert isinstance(result, list)

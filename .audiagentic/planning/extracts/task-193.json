@@ -13,6 +13,6 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
+  "effective_refs": [],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nEnsure MCP tools returning empty lists or `None` still emit a usable response payload instead of disappearing into zero content blocks.\n\n# Acceptance Criteria\n\n1. Empty-list MCP tools return a stable wrapped payload\n2. `None` results are distinguishable from void/error responses\n3. Affected planning MCP tools are protected by a consistent wrapper\n\n# Notes\n\n- Implemented via the `tool_with_empty_list_fix` wrapper in `tools/mcp/audiagentic-planning/audiagentic-planning_mcp.py`\n- Covered by the passing MCP tool-call suite\n"
 }

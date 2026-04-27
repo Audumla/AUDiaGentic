@@ -33,7 +33,7 @@ class MaintenanceService:
         rebuilt = 0
         skipped = []
         for item in items:
-            if not item.data.get("deleted"):
+            if not self.api.config.is_soft_deleted(item.data):
                 try:
                     self.api.extracts.extract(
                         item.data["id"],

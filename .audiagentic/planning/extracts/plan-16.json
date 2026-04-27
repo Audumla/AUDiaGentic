@@ -22,7 +22,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-6"
   ],
   "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n# Objectives\n\n\n# Delivery Approach\n\n\n# Dependencies\n\n# Notes\n\nMarked done on 2026-04-17 to align the plan record with the already-completed implementation slice for `request-16`.\n"

@@ -13,7 +13,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-9"
   ],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-001](task-0046): Fragment Capture\n\n## Purpose\n\nCapture release fragments.\n\n## Scope\n\n- Fragment detection\n- Capture logic\n- Storage\n\n## Implementation\n\n1. Detect fragments\n2. Implement capture\n3. Store\n\n## Acceptance Criteria\n\n1. Fragments detected\n2. Captured correctly\n3. Stored\n"
