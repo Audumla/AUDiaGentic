@@ -5,7 +5,7 @@ class PolicyService:
     def __init__(self, api):
         self.api = api
 
-    def assert_not_archived(self, item, action: str) -> None:
+    def assert_not_terminal(self, item, action: str) -> None:
         if self.api.config.state_in_set(
             item.kind,
             item.data.get("state"),
@@ -49,7 +49,7 @@ class PolicyService:
     def check_duplicate(self, kind: str, label: str, summary: str) -> None:
         label_key = label.strip().lower()
         for item in self.api._scan():
-            if item.kind != kind or item.data.get("deleted"):
+            if item.kind != kind or self.api.config.is_soft_deleted(item.data):
                 continue
             existing_label = str(item.data.get("label", "")).strip().lower()
             if existing_label == label_key:

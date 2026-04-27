@@ -142,24 +142,6 @@ class PlanningAPI:
             check_duplicates=check_duplicates,
         )
 
-    def apply_plan_overlay(
-        self,
-        label: str,
-        summary: str,
-        spec_id: str,
-        task_ids: list[str],
-        request_refs: list[str] | None = None,
-        domain: str | None = None,
-    ):
-        return self.workflow_actions.apply_plan_overlay(
-            label=label,
-            summary=summary,
-            spec_id=spec_id,
-            task_ids=task_ids,
-            request_refs=request_refs,
-            domain=domain,
-        )
-
     def create_with_content(
         self,
         kind: str,
@@ -249,23 +231,8 @@ class PlanningAPI:
     ):
         return self.relationships.relink(src_id, field, dst_id, seq=seq, display=display)
 
-    def package(
-        self,
-        plan_ref: str,
-        task_ids: list[str],
-        label: str,
-        summary: str,
-        domain: str | None = None,
-        workflow: str | None = None,
-    ):
-        return self.workflow_actions.package(
-            plan_ref=plan_ref,
-            task_ids=task_ids,
-            label=label,
-            summary=summary,
-            domain=domain,
-            workflow=workflow,
-        )
+    def run_workflow_action(self, action_name: str, context: dict):
+        return self.workflow_actions.execute_action(action_name, context)
 
     def claim(self, kind: str, id_: str, holder: str, ttl: int | None = None):
         return self.queue.claim(kind, id_, holder, ttl)

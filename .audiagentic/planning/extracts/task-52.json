@@ -13,6 +13,6 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
+  "effective_refs": [],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-LFC-012](task-0044): Shared Baseline Sync Engine for Lifecycle and Bootstrap\n\n## Purpose\n\nCreate shared baseline sync engine for lifecycle and bootstrap.\n\n## Scope\n\n- Sync engine\n- Lifecycle integration\n- Bootstrap integration\n\n## Implementation\n\n1. Build sync engine\n2. Integrate lifecycle\n3. Integrate bootstrap\n\n## Acceptance Criteria\n\n1. Engine functional\n2. Lifecycle integrated\n3. Bootstrap integrated\n"
 }

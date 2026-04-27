@@ -20,6 +20,6 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
+  "effective_refs": [],
   "body": "\n\n\n\n\n\n\n\n\n# Understanding\n\nInitial intake captured; requirements are understood well enough to proceed.\n\n# Open Questions\n\n- What exact outcome is required?\n- What constraints or non-goals apply?\n- How will success be verified?\n# Notes\nAssessment on 2026-04-17: superseded by the current knowledge-component design adopted in `request-14`. Repository still intentionally uses knowledge hooks (`src/audiagentic/knowledge/hooks.py`, `.audiagentic/knowledge/sync/hooks.yml`, related docs), so this removal request is no longer the active direction.\n"
 }
