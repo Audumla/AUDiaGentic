@@ -1,6 +1,0 @@
-profile_pack:
-  id: standard
-  documentation:
-    required_updates:
-      task: [changelog]
-      wp: [changelog, readme]
