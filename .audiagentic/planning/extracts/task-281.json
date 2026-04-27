@@ -15,6 +15,6 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
+  "effective_refs": [],
   "body": "\n\n\n\n\n\n\n\n\n# Description\n\nRefactor plan-010 knowledge integration\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n\n# Cancellation Reason\n\nTask cancelled: plan-17 does not exist. Task was a placeholder without actionable content.\n"
 }

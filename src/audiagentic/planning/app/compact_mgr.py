@@ -8,9 +8,9 @@ IDs exist, the run aborts before mutating files and returns a repair report.
 """
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from datetime import datetime, timezone
-import json
 from pathlib import Path
 
 from ..fs.scan import scan_items

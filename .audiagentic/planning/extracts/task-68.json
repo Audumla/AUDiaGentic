@@ -13,7 +13,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-9"
   ],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-004](task-0060): Packet Runner\n\n## Purpose\n\nImplement packet runner.\n\n## Scope\n\n- Runner logic\n- Execution\n- Error handling\n\n## Implementation\n\n1. Implement runner\n2. Add execution\n3. Handle errors\n\n## Acceptance Criteria\n\n1. Runner works\n2. Executes packets\n3. Errors handled\n"

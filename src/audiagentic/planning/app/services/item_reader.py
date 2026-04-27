@@ -29,7 +29,7 @@ class ItemReaderService:
             "label": item.data["label"],
             "state": item.data["state"],
             "path": item.path.relative_to(self.api.root).as_posix(),
-            "deleted": bool(item.data.get("deleted", False)),
+            "deleted": self.api.config.is_soft_deleted(item.data),
         }
 
     def normalize_id(self, id_: str) -> str:
@@ -49,7 +49,7 @@ class ItemReaderService:
 
         similar = []
         for item in self.api._scan():
-            if item.kind == kind and not item.data.get("deleted", False):
+            if item.kind == kind and not self.api.config.is_soft_deleted(item.data):
                 similar.append(item.data["id"])
 
         def extract_num(id_str: str) -> int:

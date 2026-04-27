@@ -69,7 +69,7 @@ def _run_audit(api, root: Path, *, auto_fix: bool, verbose: bool) -> tuple[dict,
     log_entries = []
 
     for item in api._scan():
-        if item.kind not in auditable_kinds or item.data.get("deleted"):
+        if item.kind not in auditable_kinds or api.config.is_soft_deleted(item.data):
             continue
         errors = api._propagation_engine.validate_hierarchy(item.data["id"])
         if not errors:
@@ -129,7 +129,7 @@ def _run_audit(api, root: Path, *, auto_fix: bool, verbose: bool) -> tuple[dict,
 
     payload = {
         "ok": remaining == 0,
-        "items_scanned": len([i for i in api._scan() if i.kind in auditable_kinds and not i.data.get("deleted")]),
+        "items_scanned": len([i for i in api._scan() if i.kind in auditable_kinds and not api.config.is_soft_deleted(i.data)]),
         "findings": findings,
         "issues_found": sum(len(f["errors"]) for f in findings),
         "remaining_issues": remaining,
@@ -174,7 +174,6 @@ def main():
     )
     p_new.add_argument(
         "--guidance",
-        choices=["light", "standard", "deep"],
         help="Guidance level for content depth (light, standard, deep). Defaults to project default.",
     )
     p_new.add_argument("--understanding", dest="current_understanding")
@@ -206,31 +205,13 @@ def main():
     p_rel.add_argument("dst")
     p_rel.add_argument("--seq", type=int)
     p_rel.add_argument("--display")
-    p_pkg = sp.add_parser("package")
-    p_pkg.add_argument("--plan", required=True)
-    p_pkg.add_argument("--task", action="append", required=True, dest="tasks")
-    p_pkg.add_argument("--label", required=True)
-    p_pkg.add_argument("--summary", required=True)
-    p_pkg.add_argument("--domain", default="core")
-    p_pkg.add_argument("--workflow")
-    p_overlay = sp.add_parser("overlay-plan")
-    p_overlay.add_argument("--spec", required=True, help="Specification ID")
-    p_overlay.add_argument(
-        "--task",
-        action="append",
+    p_action = sp.add_parser("action")
+    p_action.add_argument("action")
+    p_action.add_argument(
+        "--context",
         required=True,
-        dest="tasks",
-        help="Task ID(s) to include",
+        help="JSON object passed to the configured workflow action",
     )
-    p_overlay.add_argument("--label", required=True, help="Plan/WP label")
-    p_overlay.add_argument("--summary", default="", help="Plan/WP summary")
-    p_overlay.add_argument(
-        "--request-ref",
-        action="append",
-        dest="request_refs",
-        help="Request reference(s)",
-    )
-    p_overlay.add_argument("--domain", default="core", help="Domain for WP")
     sp.add_parser("validate")
     p_ls = sp.add_parser("list")
     p_ls.add_argument("kind", nargs="?")
@@ -322,30 +303,13 @@ def main():
     elif args.cmd == "relink":
         item = api.relink(args.src, args.field, args.dst, args.seq, args.display)
         print_json({"id": item.data["id"], "field": args.field})
-    elif args.cmd == "package":
-        item = api.package(
-            args.plan, args.tasks, args.label, args.summary, args.domain, args.workflow
-        )
-        print_json({"id": item.data["id"], "path": str(item.path.relative_to(root))})
-    elif args.cmd == "overlay-plan":
-        result = api.apply_plan_overlay(
-            args.label,
-            args.summary,
-            args.spec,
-            args.tasks,
-            args.request_refs,
-            args.domain,
-        )
+    elif args.cmd == "action":
+        context = json.loads(args.context)
+        result = api.run_workflow_action(args.action, context)
         print_json(
             {
-                "plan": {
-                    "id": result["plan"].data["id"],
-                    "path": str(result["plan"].path.relative_to(root)),
-                },
-                "wp": {
-                    "id": result["wp"].data["id"],
-                    "path": str(result["wp"].path.relative_to(root)),
-                },
+                key: {"id": item.data["id"], "path": str(item.path.relative_to(root))}
+                for key, item in result.items()
             }
         )
     elif args.cmd == "validate":
@@ -357,7 +321,7 @@ def main():
         if args.kind:
             items = [i for i in items if i.kind == args.kind]
         if not args.include_deleted:
-            items = [i for i in items if not i.data.get("deleted")]
+            items = [i for i in items if not api.config.is_soft_deleted(i.data)]
         if not args.include_archived:
             archive_state = api.config.lifecycle_action_state("archive")
             items = [i for i in items if i.data.get("state") != archive_state]

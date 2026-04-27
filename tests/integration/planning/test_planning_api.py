@@ -266,7 +266,15 @@ def test_package_creates_wp_with_task_refs(planning_root):
     spec = api.new("spec", label="S", summary="S", refs={"request_refs": [request.data["id"]]})
     plan = api.new("plan", label="P", summary="P", refs={"spec": spec.data["id"]})
     task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
-    wp = api.package(plan.data["id"], [task.data["id"]], label="WP", summary="S")
+    wp = api.run_workflow_action(
+        "group",
+        {
+            "parent_id": plan.data["id"],
+            "item_ids": [task.data["id"]],
+            "label": "WP",
+            "summary": "S",
+        },
+    )["group"]
     assert any(r["ref"] == task.data["id"] for r in wp.data["task_refs"])
 
 
@@ -393,12 +401,15 @@ def test_package_tasks_to_existing_wp_not_duplicate(planning_root):
     task2 = api.new("task", label="T2", summary="S", refs={"spec": spec.data["id"]})
 
     # Package tasks to the existing WP
-    result = api.package(
-        plan.data["id"],
-        [task1.data["id"], task2.data["id"]],
-        label="Test WP",
-        summary="Test",
-    )
+    result = api.run_workflow_action(
+        "group",
+        {
+            "parent_id": plan.data["id"],
+            "item_ids": [task1.data["id"], task2.data["id"]],
+            "label": "Test WP",
+            "summary": "Test",
+        },
+    )["group"]
 
     # Should return the existing WP, not create a new one
     assert result.data["id"] == wp_id

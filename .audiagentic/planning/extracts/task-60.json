@@ -13,7 +13,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-9"
   ],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-007](task-0052): Release Please Config Management\n\n## Purpose\n\nManage Release Please configuration.\n\n## Scope\n\n- Config format\n- Management logic\n- Validation\n\n## Implementation\n\n1. Define config format\n2. Implement management\n3. Add validation\n\n## Acceptance Criteria\n\n1. Config format defined\n2. Management works\n3. Validated\n"

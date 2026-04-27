@@ -37,9 +37,12 @@ def _seed_greenfield_project(root: Path) -> None:
         config_dir / "planning.yaml",
         """
         planning:
-          convention_version: 1
           default_profile: atelier
           default_guidance: spark
+          conventions:
+            ref_field_suffixes:
+              _ref: scalar_ref
+              _refs: scalar_ref_list
           naming:
             numeric_format: preserve_id
             slug_policy: always
@@ -89,7 +92,7 @@ def _seed_greenfield_project(root: Path) -> None:
               optional_fields: [sketch_ref, sketch_refs, standard_refs]
           reference_field_shapes:
             sketch_refs: rel_list
-          standard_ref_field: standard_refs
+          default_reference_field: standard_refs
           lifecycle:
             state_set_priority:
               initial: 10
@@ -136,7 +139,11 @@ def _seed_greenfield_project(root: Path) -> None:
             claims: .audiagentic/planning/claims
             cache: .audiagentic/planning/cache
           base_required_fields: [id, label, state, summary]
-          base_optional_fields: [meta, deleted, deleted_at, deletion_reason]
+          base_optional_fields: [meta]
+          soft_delete:
+            flag_field: deleted
+            timestamp_field: deleted_at
+            reason_field: deletion_reason
         """,
     )
     _write(
@@ -160,7 +167,6 @@ def _seed_greenfield_project(root: Path) -> None:
               description: Greenfield creative flow
               label: Atelier
               on_create: []
-              allow_plan_overlay: false
               defaults: {}
               suggested_sections: []
           document_templates:
@@ -310,7 +316,7 @@ def test_greenfield_config_supports_custom_kinds_workflows_templates_and_refs(tm
     assert extracted["related"]["sketch_refs"] == [
         {"ref": sketch.data["id"], "seq": 10, "display": "lead"}
     ]
-    assert extracted["effective_standard_refs"] == ["playbook-1"]
+    assert extracted["effective_refs"] == ["playbook-1"]
 
     api.state(signal.data["id"], "triaged")
     api.state(signal.data["id"], "filed")
@@ -548,3 +554,53 @@ def test_greenfield_config_validation_reports_custom_semantic_failures(tmp_path:
     assert any("sketch in 'approved' state has no action references" in error for error in errors)
     assert any("sketch_ref references non-existent sketch 'sketch-999'" in error for error in errors)
     assert any("action must be under moves/<domain>/" in error for error in errors)
+
+
+def test_greenfield_soft_delete_uses_configured_field_names(tmp_path: Path) -> None:
+    """Soft-delete writes configured field names, not hardcoded 'deleted'/'deleted_at'."""
+    _seed_greenfield_project(tmp_path)
+    planning_path = tmp_path / ".audiagentic" / "planning" / "config" / "planning.yaml"
+    planning = yaml.safe_load(planning_path.read_text(encoding="utf-8"))
+    planning["planning"]["soft_delete"] = {
+        "flag_field": "removed",
+        "timestamp_field": "removed_at",
+        "reason_field": "removal_reason",
+    }
+    planning_path.write_text(yaml.safe_dump(planning, sort_keys=False), encoding="utf-8")
+
+    api = PlanningAPI(tmp_path)
+    signal = api.new("signal", label="To remove", summary="Drop later", source="brief-1")
+
+    result = api.delete(signal.data["id"], reason="no longer needed")
+
+    assert result["hard_delete"] is False
+    assert "removed_at" in result
+    assert "deleted_at" not in result
+
+    raw, _ = parse_markdown(api.lookup(signal.data["id"]).path)
+    assert raw["removed"] is True
+    assert "removed_at" in raw
+    assert raw["removal_reason"] == "no longer needed"
+    assert "deleted" not in raw
+    assert "deleted_at" not in raw
+
+
+def test_greenfield_cascade_skipped_when_no_cascade_config(tmp_path: Path) -> None:
+    """Lifecycle action without cascade config does not cascade — no hardcoded fallback."""
+    _seed_greenfield_project(tmp_path)
+    planning_path = tmp_path / ".audiagentic" / "planning" / "config" / "planning.yaml"
+    planning = yaml.safe_load(planning_path.read_text(encoding="utf-8"))
+    # Strip cascade from freeze action; keep transition_to
+    planning["planning"]["lifecycle"]["actions"]["freeze"] = {"transition_to": "frozen"}
+    planning_path.write_text(yaml.safe_dump(planning, sort_keys=False), encoding="utf-8")
+
+    api = PlanningAPI(tmp_path)
+    signal = api.new("signal", label="Lone signal", summary="Standalone", source="solo-1")
+    sketch = api.new("sketch", label="Linked sketch", summary="Refs signal")
+    api.relink(sketch.data["id"], "signal_refs", signal.data["id"])
+
+    api.state(signal.data["id"], "frozen")
+
+    assert api._find(signal.data["id"]).data["state"] == "frozen"
+    # No cascade config -> sketch state unchanged (NOT auto-retired)
+    assert api._find(sketch.data["id"]).data["state"] == "shaping"
