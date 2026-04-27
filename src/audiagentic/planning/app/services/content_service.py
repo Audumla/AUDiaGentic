@@ -20,7 +20,7 @@ class ContentService:
         body_append: str | None = None,
     ):
         item = self.api._find(id_)
-        self.api.policy.assert_not_archived(item, "update")
+        self.api.policy.assert_not_terminal(item, "update")
         data, body = parse_markdown(item.path)
         if label:
             data["label"] = label
@@ -53,7 +53,7 @@ class ContentService:
         position: int | None = None,
     ):
         item = self.api._find(id_)
-        self.api.policy.assert_not_archived(item, "update content for")
+        self.api.policy.assert_not_terminal(item, "update content for")
         data, body = parse_markdown(item.path)
 
         if mode == "replace":
@@ -97,7 +97,7 @@ class ContentService:
 
     def move(self, id_: str, domain: str):
         item = self.api._find(id_)
-        self.api.policy.assert_not_archived(item, "move")
+        self.api.policy.assert_not_terminal(item, "move")
         if not self.api.config.kind_has_domain(item.kind):
             domain_kinds = [
                 kind for kind in self.api.config.all_kinds() if self.api.config.kind_has_domain(kind)
@@ -131,17 +131,24 @@ class ContentService:
                 "counter_sync": True,
             }
         else:
+            flag_field = self.api.config.soft_delete_flag_field()
+            timestamp_field = self.api.config.soft_delete_timestamp_field()
+            reason_field = self.api.config.soft_delete_reason_field()
+            if not flag_field or not timestamp_field:
+                raise ValueError(
+                    "soft delete requires soft_delete.flag_field and soft_delete.timestamp_field config"
+                )
             data, body = parse_markdown(item.path)
-            data["deleted"] = True
-            data["deleted_at"] = datetime.now(timezone.utc).isoformat()
-            if reason:
-                data["deletion_reason"] = reason
+            data[flag_field] = True
+            data[timestamp_field] = datetime.now(timezone.utc).isoformat()
+            if reason and reason_field:
+                data[reason_field] = reason
             dump_markdown(item.path, data, body)
             self.api.index()
             result = {
                 "id": id_,
                 "hard_delete": False,
-                "deleted_at": data["deleted_at"],
+                timestamp_field: data[timestamp_field],
                 "counter_sync": False,
             }
         self.api._publish_event(

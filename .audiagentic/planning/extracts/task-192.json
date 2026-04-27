@@ -13,6 +13,6 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
+  "effective_refs": [],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nNormalize `tm.status()` so callers receive stable kind counts with the expected `{request, spec, plan, task, wp}` keys.\n\n# Acceptance Criteria\n\n1. Status payload contains the expected kind keys\n2. Key names are stable across helper and MCP usage\n3. Regression coverage proves the expected shape\n\n# Notes\n\n- Verified by status assertions in the MCP and planning coverage tests\n"
 }

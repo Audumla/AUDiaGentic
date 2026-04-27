@@ -26,18 +26,15 @@ class Extracts:
             cache[id_] = self._api().lookup(id_)
         return cache[id_]
 
-    def _effective_standard_refs(self, item: ItemView) -> list[str]:
+    def _effective_default_refs(self, item: ItemView) -> list[str]:
         api = self._api()
         items_by_id = {entry.data["id"]: entry for entry in api._scan()}
         items_by_id[item.data["id"]] = item
-        return effective_references(item, api.config.standard_ref_field(), items_by_id, api.config)
+        return effective_references(item, api.config.default_reference_field(), items_by_id, api.config)
 
     def _attachments_root(self) -> Path:
         api = self._api()
-        attachments = (
-            api.config.planning.get("planning", {}).get("dirs", {}).get("attachments", "docs/planning/attachments")
-        )
-        return self.root / attachments
+        return self.root / api.config.attachments_dir()
 
     def show(self, id_: str) -> dict:
         item = self._api().lookup(id_)
@@ -59,7 +56,7 @@ class Extracts:
         item = self._api().lookup(id_)
         out = {
             "item": self.show(id_),
-            "effective_standard_refs": self._effective_standard_refs(item),
+            "effective_refs": self._effective_default_refs(item),
         }
         if include_body:
             out["body"] = item.body

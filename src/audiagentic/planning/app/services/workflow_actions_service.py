@@ -17,84 +17,41 @@ class WorkflowActionsService:
 
     def execute_action(self, action_name: str, context: dict):
         """Execute a configured workflow action with the given typed context."""
-        return self.executor.execute(action_name, context)
-
-    def apply_plan_overlay(
-        self,
-        label: str,
-        summary: str,
-        spec_id: str,
-        task_ids: list[str],
-        request_refs: list[str] | None = None,
-        domain: str | None = None,
-    ):
-        return self.executor.execute(
-            "plan_overlay",
-            {
-                "label": label,
-                "summary": summary,
-                "spec_id": spec_id,
-                "task_ids": task_ids,
-                "request_refs": request_refs or [],
-                "domain": domain,
-            },
-        )
-
-    def package(
-        self,
-        plan_ref: str,
-        task_ids: list[str],
-        label: str,
-        summary: str,
-        domain: str | None = None,
-        workflow: str | None = None,
-    ):
-        existing = self._find_existing_package(plan_ref, task_ids, label, summary, domain, workflow)
+        action = self.api.config.workflow_action(action_name)
+        existing = self._find_existing_action(action, context)
         if existing is not None:
             return existing
+        return self.executor.execute(action_name, context)
 
-        result = self.executor.execute(
-            "package",
-            {
-                "parent_id": plan_ref,
-                "item_ids": task_ids,
-                "label": label,
-                "summary": summary,
-                "domain": domain,
-                "workflow": workflow,
-            },
-        )
-        keys = list(result.keys())
-        return result[keys[0]] if len(keys) == 1 else result
+    def _find_existing_action(self, action: dict, context: dict) -> dict | None:
+        find_cfg = action.get("find_existing")
+        if not find_cfg:
+            return None
 
-    def _find_existing_package(
-        self,
-        parent_id: str,
-        item_ids: list[str],
-        label: str,
-        summary: str,
-        domain: str | None,
-        workflow: str | None,
-    ):
-        action = self.api.config.workflow_action("package")
-        create_key, spec = next(iter(action.get("creates", {}).items()))
-        context = self._action_context(action, {
-            "parent_id": parent_id,
-            "item_ids": item_ids,
-            "label": label,
-            "summary": summary,
-            "domain": domain,
-            "workflow": workflow,
-        })
-        kind = render(spec["kind"], context)
-        refs = render(spec.get("refs", {}), context) or {}
+        create_key_name = find_cfg.get("create_key")
+        if create_key_name:
+            spec = action.get("creates", {}).get(create_key_name)
+            if spec is None:
+                raise ValueError(f"find_existing create_key '{create_key_name}' is not configured")
+            create_key = create_key_name
+        else:
+            create_key, spec = next(iter(action.get("creates", {}).items()))
+
+        parent_id = context.get(find_cfg["parent_context"])
+        item_ids = context.get(find_cfg["items_context"]) or []
+        label = context.get(find_cfg["label_context"])
+        domain_context = find_cfg.get("domain_context")
+        domain = context.get(domain_context) if domain_context else None
+        full_context = self._action_context(action, context)
+        kind = render(spec["kind"], full_context)
+        refs = render(spec.get("refs", {}), full_context) or {}
         frontmatter = self.api.frontmatter_builder.build(
             kind=kind,
             id_="match-candidate",
             label=label,
-            summary=summary,
-            domain=render(spec.get("domain"), context),
-            workflow=render(spec.get("workflow"), context),
+            summary=context.get(find_cfg.get("summary_context", "summary")),
+            domain=render(spec.get("domain"), full_context),
+            workflow=render(spec.get("workflow"), full_context),
             refs=refs,
             fields=None,
             profile=None,
@@ -117,7 +74,7 @@ class WorkflowActionsService:
             return None
 
         for item in self.api._scan():
-            if item.kind != kind or item.data.get("deleted"):
+            if item.kind != kind or self.api.config.is_soft_deleted(item.data):
                 continue
             if item.data.get("label") != label:
                 continue
@@ -125,7 +82,15 @@ class WorkflowActionsService:
                 continue
             if all(item.data.get(field) == frontmatter.get(field) for field in parent_fields):
                 self.api.relationships.merge_rel_refs(item.data["id"], child_fields[0], item_ids)
-                return self.api._find(item.data["id"])
+                found = self.api._find(item.data["id"])
+                result_keys = action.get("result_keys", {})
+                if not result_keys:
+                    return {create_key: found}
+                return {
+                    result_key: found
+                    for result_key, mapped_create_key in result_keys.items()
+                    if mapped_create_key == create_key
+                }
         return None
 
     @staticmethod
@@ -154,7 +119,7 @@ class WorkflowActionsService:
         }
         return effective_references(
             items[id_],
-            field or self.api.config.standard_ref_field(),
+            field or self.api.config.default_reference_field(),
             items,
             self.api.config,
         )

@@ -13,6 +13,6 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
+  "effective_refs": [],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nPersist `meta` batch-update operations into frontmatter instead of silently discarding them during batch execution.\n\n# Acceptance Criteria\n\n1. Batch `meta` operations write the requested field/value\n2. Updated metadata survives a subsequent read/show operation\n3. Regression coverage proves the operation is not ignored\n\n# Notes\n\n- Verified by the passing planning coverage suite and current batch-update behavior\n- This closes the gap where metadata operations were accepted but not persisted\n"
 }

@@ -1,7 +1,10 @@
 planning:
-  convention_version: 1
   default_profile: feature
   default_guidance: standard
+  conventions:
+    ref_field_suffixes:
+      _ref: scalar_ref
+      _refs: scalar_ref_list
   naming:
     # numeric_format: preserve_id means filenames use the ID exactly as stored in frontmatter.
     # New items use raw integers (request-1, spec-5, task-12) — no zero padding.
@@ -156,14 +159,18 @@ planning:
     claims: .audiagentic/planning/claims
     cache: .audiagentic/planning/cache
   base_required_fields: [id, label, state, summary]
-  base_optional_fields: [meta, deleted, deleted_at, deletion_reason]
+  base_optional_fields: [meta]
+  soft_delete:
+    flag_field: deleted
+    timestamp_field: deleted_at
+    reason_field: deletion_reason
   reference_field_shapes:
     task_refs: rel_list
     work_package_refs: rel_list
   reference_field_targets:
     parent_task_ref: task
     work_package_refs: wp
-  standard_ref_field: standard_refs
+  default_reference_field: standard_refs
   workflow_actions:
     plan_overlay:
       defaults:
@@ -187,23 +194,33 @@ planning:
       result_keys:
         plan: plan
         wp: package
-    package:
+    group:
+      find_existing:
+        create_key: item
+        parent_context: parent_id
+        items_context: item_ids
+        label_context: label
+        summary_context: summary
+        domain_context: domain
       defaults:
         domain: core
+        workflow:
       creates:
-        package:
+        item:
           kind: wp
           domain: "{domain_or_default}"
           label: "{label}"
           summary: "{summary}"
-          workflow: "{workflow}"
+          workflow: "{workflow_or_default}"
           refs:
             plan: "{parent_id}"
             task_refs: "{item_ids}"
       updates:
         - target: "{parent_id}"
           ref_field: work_package_refs
-          child_id_from: package
+          child_id_from: item
+      result_keys:
+        group: item
   queue_defaults:
     kind: task
     state: ready

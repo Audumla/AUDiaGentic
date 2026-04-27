@@ -13,6 +13,6 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
+  "effective_refs": [],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-LFC-005](task-0039): Legacy Cutover\n\n## Purpose\n\nHandle legacy cutover from old installations.\n\n## Scope\n\n- Detect legacy\n- Perform cutover\n- Validate cutover\n\n## Implementation\n\n1. Detect legacy state\n2. Perform cutover\n3. Validate\n\n## Acceptance Criteria\n\n1. Legacy detected\n2. Cutover completes\n3. Validated\n"
 }

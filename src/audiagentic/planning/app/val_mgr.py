@@ -191,7 +191,7 @@ class Validator:
 
         # Referential integrity checks
         for item in items:
-            if item.data.get("deleted"):
+            if self.config.is_soft_deleted(item.data):
                 continue
             if self.config.state_in_set(
                 item.kind, item.data.get("state"), "terminal", item.data.get("workflow")
@@ -205,7 +205,7 @@ class Validator:
                     continue
                 has_child = any(
                     child.kind == child_kind
-                    and not child.data.get("deleted")
+                    and not self.config.is_soft_deleted(child.data)
                     and not self.config.state_in_set(
                         child.kind,
                         child.data.get("state"),

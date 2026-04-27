@@ -13,7 +13,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-9"
   ],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-002](task-0058): State Machine\n\n## Purpose\n\nImplement job state machine.\n\n## Scope\n\n- States\n- Transitions\n- Validation\n\n## Implementation\n\n1. Define states\n2. Implement transitions\n3. Add validation\n\n## Acceptance Criteria\n\n1. States defined\n2. Transitions work\n3. Validated\n"

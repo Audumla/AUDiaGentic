@@ -13,7 +13,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-9"
   ],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-009](task-0054): Audit Trail\n\n## Purpose\n\nCreate audit trail for releases.\n\n## Scope\n\n- Trail format\n- Logging\n- Retention\n\n## Implementation\n\n1. Define trail format\n2. Implement logging\n3. Set retention\n\n## Acceptance Criteria\n\n1. Trail format defined\n2. Logging works\n3. Retention set\n"

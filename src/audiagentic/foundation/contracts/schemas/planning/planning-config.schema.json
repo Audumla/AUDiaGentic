@@ -105,6 +105,19 @@
       },
       "required": ["target", "ref_field", "child_id_from"]
     },
+    "workflowActionFindExisting": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create_key": { "type": "string" },
+        "parent_context": { "type": "string" },
+        "items_context": { "type": "string" },
+        "label_context": { "type": "string" },
+        "summary_context": { "type": "string" },
+        "domain_context": { "type": "string" }
+      },
+      "required": ["parent_context", "items_context", "label_context"]
+    },
     "workflowAction": {
       "type": "object",
       "additionalProperties": false,
@@ -126,6 +139,9 @@
         "result_keys": {
           "type": "object",
           "additionalProperties": { "type": "string" }
+        },
+        "find_existing": {
+          "$ref": "#/$defs/workflowActionFindExisting"
         }
       },
       "required": ["creates"]
@@ -188,7 +204,6 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "convention_version",
         "default_profile",
         "default_guidance",
         "naming",
@@ -197,13 +212,10 @@
         "base_required_fields",
         "base_optional_fields",
         "reference_field_shapes",
-        "standard_ref_field",
+        "default_reference_field",
         "lifecycle"
       ],
       "properties": {
-        "convention_version": {
-          "type": "integer"
-        },
         "default_profile": {
           "type": "string"
         },
@@ -214,6 +226,16 @@
           "type": "object",
           "additionalProperties": {
             "type": "string"
+          }
+        },
+        "conventions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ref_field_suffixes": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            }
           }
         },
         "naming": {
@@ -257,6 +279,10 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "soft_delete": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
         "reference_field_shapes": {
           "type": "object",
           "additionalProperties": {
@@ -276,7 +302,7 @@
             ]
           }
         },
-        "standard_ref_field": {
+        "default_reference_field": {
           "type": "string"
         },
         "workflow_actions": {

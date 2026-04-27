@@ -508,10 +508,15 @@ def tm_relink(
 
 @mcp.tool(description="Group configured child items into a configured workflow action target")
 def tm_group(
-    parent: str, items: list[str], label: str, summary: str, domain: str | None = None
+    parent: str,
+    items: list[str],
+    label: str,
+    summary: str,
+    domain: str | None = None,
+    action: str = "group",
 ) -> dict[str, Any]:
     try:
-        return tm.package(parent, items, label, summary, domain)
+        return tm.group(parent, items, label, summary, domain, action)
     except ValueError as e:
         raise PlanningError(str(e))
 
@@ -535,7 +540,7 @@ def tm_refs(
     with_resources: bool = False,
 ) -> Any:
     api = tm._get_api()
-    ref_field = field or api.config.standard_ref_field()
+    ref_field = field or api.config.default_reference_field()
     target_kinds = api.config.reference_field_targets(ref_field)
     if not target_kinds:
         raise PlanningError(f"reference field {ref_field!r} has no configured targets")
@@ -611,7 +616,7 @@ def tm_docs(
     op: str,
     id: str | None = None,
     kind: str | None = None,
-    profile_pack: str = "standard",
+    profile_pack: str | None = None,
     role: str | None = None,
     mode: str = "compact",
 ) -> Any:

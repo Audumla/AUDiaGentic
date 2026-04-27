@@ -255,7 +255,9 @@ class StatePropagationEngine:
 
         target_kind = getattr(target_view, "kind", None) or target_view.data.get("kind")
         cfg = self.config
-        default_state = cfg.initial_state(target_kind) if cfg else "ready"
+        if cfg is None:
+            raise ValueError("State propagation requires Config")
+        default_state = cfg.initial_state(target_kind)
         current_state = target_view.data.get("state", default_state)
 
         # Skip if already in target state

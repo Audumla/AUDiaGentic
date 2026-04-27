@@ -34,7 +34,7 @@ class QueueService:
         for item in items:
             if item.data["id"] in claimed:
                 continue
-            if item.data.get("deleted"):
+            if self.api.config.is_soft_deleted(item.data):
                 continue
             if domain and item.path.parent.name != domain:
                 continue

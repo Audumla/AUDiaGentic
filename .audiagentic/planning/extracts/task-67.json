@@ -13,7 +13,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-9"
   ],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-003](task-0059): Workflow Profiles\n\n## Purpose\n\nCreate workflow profiles.\n\n## Scope\n\n- Profile format\n- Profile loading\n- Validation\n\n## Implementation\n\n1. Define format\n2. Implement loading\n3. Add validation\n\n## Acceptance Criteria\n\n1. Format defined\n2. Loading works\n3. Validated\n"

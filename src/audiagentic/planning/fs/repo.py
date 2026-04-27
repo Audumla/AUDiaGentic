@@ -14,13 +14,11 @@ class Repo:
         self.config = Config(root)
 
     def iter_docs(self) -> Iterable[Item]:
-        base_dir = self.config.planning.get("planning", {}).get("dirs", {}).get("base", "docs/planning")
+        base_dir = self.config.dir_path("base")
         docs_root = self.root / Path(base_dir)
         if not docs_root.exists():
             return
-        attachments_dir = self.config.planning.get("planning", {}).get("dirs", {}).get(
-            "attachments", "docs/planning/attachments"
-        )
+        attachments_dir = self.config.attachments_dir()
         attachments_parts = tuple(Path(attachments_dir).parts)
         for path in sorted(docs_root.rglob('*.md')):
             if 'templates' in path.parts:

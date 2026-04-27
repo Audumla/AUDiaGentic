@@ -43,7 +43,7 @@ def main() -> None:
             sys.path.insert(0, value)
 
     server_path = (
-        project_root / "tools" / "mcp" / "audiagentic-planning" / "audiagentic-planning_mcp.py"
+        project_root / "tools" / "mcp" / "audiagentic-planning" / "audiagentic_planning_mcp_v2.py"
     )
     runpy.run_path(str(server_path), run_name="__main__")
 

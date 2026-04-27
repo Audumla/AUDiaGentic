@@ -13,6 +13,6 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
+  "effective_refs": [],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nCancelled by the 2026-04 pre-ACP archive pass. The Discord overlay line was superseded and archived.\n\n\n# [PKT-DSC-003](task-0149): Approval Publishing/Response Handling\n\n## Purpose\n\nImplement Discord approval publishing and response handling.\n\n## Scope\n\n- Approval format\n- Publishing logic\n- Response handling\n\n## Implementation\n\n1. Define format\n2. Implement publishing\n3. Add response handling\n\n## Acceptance Criteria\n\n1. Format defined\n2. Publishing works\n3. Responses handled\n"
 }

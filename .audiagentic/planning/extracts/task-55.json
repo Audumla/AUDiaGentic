@@ -13,7 +13,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-9"
   ],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-002](task-0047): Sync with Locking and Idempotency\n\n## Purpose\n\nImplement sync with locking and idempotency.\n\n## Scope\n\n- Locking mechanism\n- Sync logic\n- Idempotency\n\n## Implementation\n\n1. Implement locking\n2. Add sync\n3. Ensure idempotency\n\n## Acceptance Criteria\n\n1. Locking works\n2. Sync functional\n3. Idempotent\n"

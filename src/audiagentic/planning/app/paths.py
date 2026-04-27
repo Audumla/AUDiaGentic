@@ -44,7 +44,7 @@ class Paths:
         if not kind_config:
             raise ValueError(f"Unknown kind '{kind}'. Defined kinds: {list(self.kinds.keys())}")
 
-        base_dir = self.dirs.get("base", "docs/planning")
+        base_dir = self.dirs["base"]
         kind_dir_name = kind_config["dir"]
 
         if self.test_dir:
@@ -56,6 +56,13 @@ class Paths:
             p = p / domain
 
         return p
+
+    def attachments_dir(self) -> Path:
+        """Get configured attachments directory."""
+        attachments = self.dirs["attachments"]
+        if self.test_dir:
+            return self.root / self.test_dir / attachments
+        return self.root / attachments
 
     def kind_file(self, kind: str, id_: str, label: str, domain: str | None = None) -> Path:
         """Get full file path for a planning item.

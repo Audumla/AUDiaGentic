@@ -6,7 +6,7 @@ from .config import Config
 
 
 def list_sections(
-    kind: str, guidance_level: str = "standard", root: Path | None = None
+    kind: str, guidance_level: str | None = None, root: Path | None = None
 ) -> list[str]:
     """List sections for a document kind based on guidance level.
 
@@ -15,6 +15,8 @@ def list_sections(
     if root is None:
         root = Path(".")
     config = Config(root)
+    if guidance_level is None:
+        guidance_level = config.default_guidance()
     template = config.document_template(kind, guidance_level)
 
     if not template:

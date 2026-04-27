@@ -13,6 +13,6 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
+  "effective_refs": [],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nLazily purge expired claims on read so stale claims do not appear in planning queries or block work selection.\n\n# Acceptance Criteria\n\n1. Expired claims are filtered out during claim loads/reads\n2. `claims()` and `next_items()` ignore stale claims\n3. Coverage proves expired claims no longer block workflows\n\n# Notes\n\n- Implemented in `src/audiagentic/planning/app/claims.py`\n- Verified by the passing planning coverage suite\n"
 }

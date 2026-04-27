@@ -2,6 +2,7 @@
 /opencode.json
 /.vscode
 /.audiagentic/runtime/
+/test/planning/
 __pycache__/
 .py[cod]
 **/*.pyc

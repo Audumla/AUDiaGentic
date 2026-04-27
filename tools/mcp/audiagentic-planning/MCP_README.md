@@ -1,6 +1,6 @@
 # audiagentic-planning MCP
 
-Planning MCP server for AUDiaGentic. Single entry point for all MCP clients — 13 tools.
+Planning MCP server for AUDiaGentic. Config-driven introspection — tools, kinds, states, and operations are discovered from the PlanningAPI at startup.
 
 ## Install
 
@@ -11,7 +11,7 @@ pip install mcp pydantic
 ## Server
 
 ```bash
-python tools/mcp/audiagentic-planning/audiagentic-planning_mcp.py
+python tools/mcp/audiagentic-planning/audiagentic_planning_mcp_v2.py
 ```
 
 ## Environment Variables
@@ -25,7 +25,7 @@ python tools/mcp/audiagentic-planning/audiagentic-planning_mcp.py
   "mcpServers": {
     "audiagentic-planning": {
       "command": "python",
-      "args": ["tools/mcp/audiagentic-planning/audiagentic-planning_mcp.py"]
+      "args": ["tools/mcp/audiagentic-planning/audiagentic_planning_mcp_v2.py"]
     }
   }
 }
@@ -38,7 +38,7 @@ With explicit root:
   "mcpServers": {
     "audiagentic-planning": {
       "command": "python",
-      "args": ["tools/mcp/audiagentic-planning/audiagentic-planning_mcp.py"],
+      "args": ["tools/mcp/audiagentic-planning/audiagentic_planning_mcp_v2.py"],
       "env": {
         "AUDIAGENTIC_ROOT": "/path/to/project"
       }

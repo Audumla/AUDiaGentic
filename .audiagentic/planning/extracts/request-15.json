@@ -33,7 +33,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-1"
   ],
   "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n# Understanding\n\nKnowledge component integrated successfully but has gaps: zero tests, events.py too large (413 lines), naive search, no lifecycle for proposals/jobs, 28 MCP tools too many. README updated, bootstrap idempotency verified, config paths verified. Need to track improvements.\n\n# Open Questions\n1. What is the priority order for adding tests?\n**Answered:** Tests first (R1 is HIGH priority, foundation for safe refactoring).\n\n2. Should MCP consolidation happen before or after tests?\n**Answered:** MCP consolidation already implemented via grouped knowledge MCP operations (28\u219216 tools). Marked as stale-complete.\n\n3. What search enhancement approach: BM25 vs fuzzy matching?\n**Answered:** spec-16 R3 includes both stemming and fuzzy matching as in-scope. Evaluation deferred to Phase 2 of plan-11.\n# Problem\n\n\n\n# Desired Outcome\n\n\n\n# Constraints\n\n\n# Notes\nAssessment on 2026-04-17: request remains valid and open, but its remaining scope is narrower than originally described. Real remaining work is tests, `events.py` refactor, search improvements, and lifecycle cleanup. MCP consolidation is already implemented via grouped knowledge MCP operations, so that task was closed as stale-complete.\n"

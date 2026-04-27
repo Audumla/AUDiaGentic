@@ -583,11 +583,11 @@ class TestShowExtract:
         cache = root / ".audiagentic" / "planning" / "extracts" / f"{req.data['id']}.json"
         assert not cache.exists()
 
-    def test_extract_effective_standard_refs_field_present(self, pr):
+    def test_extract_effective_refs_field_present(self, pr):
         _, api = pr
         spec = _new_spec(api)
         result = api.extracts.extract(spec.data["id"])
-        assert "effective_standard_refs" in result
+        assert "effective_refs" in result
 
 
 # ===========================================================================
@@ -1010,12 +1010,15 @@ class TestPackage:
         t1 = api.new("task", label="T1", summary="S", refs={"spec": spec.data["id"]})
         t2 = api.new("task", label="T2", summary="S", refs={"spec": spec.data["id"]})
         t3 = api.new("task", label="T3", summary="S", refs={"spec": spec.data["id"]})
-        wp = api.package(
-            plan.data["id"],
-            [t1.data["id"], t2.data["id"], t3.data["id"]],
-            label="Big WP",
-            summary="S",
-        )
+        wp = api.run_workflow_action(
+            "group",
+            {
+                "parent_id": plan.data["id"],
+                "item_ids": [t1.data["id"], t2.data["id"], t3.data["id"]],
+                "label": "Big WP",
+                "summary": "S",
+            },
+        )["group"]
         refs = [r["ref"] for r in wp.data["task_refs"]]
         assert t1.data["id"] in refs
         assert t2.data["id"] in refs
@@ -1027,7 +1030,15 @@ class TestPackage:
         plan = api.new("plan", label="P", summary="P", refs={"spec": spec.data["id"]})
         t1 = api.new("task", label="T1", summary="S", refs={"spec": spec.data["id"]})
         t2 = api.new("task", label="T2", summary="S", refs={"spec": spec.data["id"]})
-        wp = api.package(plan.data["id"], [t1.data["id"], t2.data["id"]], label="W", summary="S")
+        wp = api.run_workflow_action(
+            "group",
+            {
+                "parent_id": plan.data["id"],
+                "item_ids": [t1.data["id"], t2.data["id"]],
+                "label": "W",
+                "summary": "S",
+            },
+        )["group"]
         seqs = [r["seq"] for r in wp.data["task_refs"]]
         assert seqs[0] < seqs[1]
 
@@ -1039,9 +1050,16 @@ class TestPackage:
         (root / "docs" / "planning" / "work-packages" / "contrib").mkdir(
             parents=True, exist_ok=True
         )
-        wp = api.package(
-            plan.data["id"], [task.data["id"]], label="W", summary="S", domain="contrib"
-        )
+        wp = api.run_workflow_action(
+            "group",
+            {
+                "parent_id": plan.data["id"],
+                "item_ids": [task.data["id"]],
+                "label": "W",
+                "summary": "S",
+                "domain": "contrib",
+            },
+        )["group"]
         assert "contrib" in str(wp.path)
 
 
@@ -1056,7 +1074,7 @@ class TestDelete:
         req = api.new("request", label="R", summary="S", source="test")
         api.delete(req.data["id"], reason="superseded")
         item = api._find(req.data["id"])
-        assert item.data.get("deleted") is True
+        assert api.config.is_soft_deleted(item.data) is True
 
     def test_soft_delete_excluded_from_next_items(self, pr):
         _, api = pr

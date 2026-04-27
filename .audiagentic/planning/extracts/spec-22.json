@@ -20,7 +20,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-6",
     "standard-5"
   ],

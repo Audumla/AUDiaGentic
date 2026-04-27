@@ -13,6 +13,6 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
+  "effective_refs": [],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nFix work-package moves so they resolve the correct domain path and behave the same way as task moves.\n\n# Acceptance Criteria\n\n1. Work-packages can move to `contrib`\n2. The returned path points at the moved work-package\n3. Regression coverage proves wp moves no longer fail\n\n# Notes\n\n- Verified by the passing `move()` coverage tests for work-packages\n- Current implementation uses `Paths.kind_dir()` in `PlanningAPI.move()`\n"
 }

@@ -13,7 +13,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-9"
   ],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-007](task-0063): Job Validation\n\n## Purpose\n\nValidate jobs.\n\n## Scope\n\n- Validation rules\n- Check logic\n- Error reporting\n\n## Implementation\n\n1. Define rules\n2. Implement checks\n3. Report errors\n\n## Acceptance Criteria\n\n1. Rules defined\n2. Checks work\n3. Errors reported\n"

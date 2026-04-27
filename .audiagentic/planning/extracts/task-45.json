@@ -13,6 +13,6 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
+  "effective_refs": [],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-LFC-003](task-0037): Fresh Install Apply/Validate\n\n## Purpose\n\nApply fresh install and validate.\n\n## Scope\n\n- Install apply\n- Validation\n- Error handling\n\n## Implementation\n\n1. Implement apply\n2. Add validation\n3. Handle errors\n\n## Acceptance Criteria\n\n1. Install applies correctly\n2. Validation passes\n3. Errors handled\n"
 }

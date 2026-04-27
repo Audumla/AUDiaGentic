@@ -13,6 +13,6 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
+  "effective_refs": [],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nCreate lifecycle CLI stub and checkpoint writer.\n\n# [PKT-FND-004](task-0025): Lifecycle CLI Stub\n\n## Purpose\n\nCreate the lifecycle CLI stub and checkpoint writer.\n\n## Scope\n\n- CLI interface\n- Checkpoint writing\n- Lifecycle commands\n\n## Implementation\n\n1. Define CLI commands\n2. Implement checkpoint writer\n3. Add lifecycle commands\n\n## Acceptance Criteria\n\n1. CLI stub functional\n2. Checkpoints written correctly\n3. All commands work\n"
 }

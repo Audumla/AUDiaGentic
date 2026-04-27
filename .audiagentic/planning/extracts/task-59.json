@@ -13,7 +13,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-9"
   ],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-006](task-0051): Release Please Baseline Workflow\n\n## Purpose\n\nCreate Release Please baseline workflow.\n\n## Scope\n\n- Workflow definition\n- Configuration\n- Integration\n\n## Implementation\n\n1. Define workflow\n2. Configure\n3. Integrate\n\n## Acceptance Criteria\n\n1. Workflow defined\n2. Configured\n3. Integrated\n"

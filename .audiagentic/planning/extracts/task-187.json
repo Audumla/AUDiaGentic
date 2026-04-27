@@ -13,6 +13,6 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
+  "effective_refs": [],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nFix section-mode updates so replacing a named section does not corrupt neighboring sections and appends cleanly when the section is missing.\n\n# Acceptance Criteria\n\n1. Replacing a section updates only the targeted section body\n2. Missing sections are appended in a stable format\n3. Regression coverage proves sibling sections remain intact\n\n# Notes\n\n- Verified by the passing section-mode coverage tests in `tests/integration/planning/test_planning_api_coverage.py`\n- Current implementation lives in `PlanningAPI.update_content()`\n"
 }
