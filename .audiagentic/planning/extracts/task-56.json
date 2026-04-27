@@ -13,7 +13,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-9"
   ],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-003](task-0048): Current Release Summary\n\n## Purpose\n\nGenerate current release summary.\n\n## Scope\n\n- Summary generation\n- Data collection\n- Formatting\n\n## Implementation\n\n1. Collect data\n2. Generate summary\n3. Format output\n\n## Acceptance Criteria\n\n1. Data collected\n2. Summary generated\n3. Formatted\n"

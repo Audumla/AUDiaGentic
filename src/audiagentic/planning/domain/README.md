@@ -1,24 +1,27 @@
 # planning/domain/
 
 ## Purpose
-Domain model layer for planning. Defines the types, state machines, and relationship rules for planning items — independent of storage or API concerns.
+
+Generic in-memory representation of planning items. Independent of storage or API concerns.
+
+The engine is config-driven — kinds, states, and reference rules are defined in
+`.audiagentic/planning/config/` and interpreted by `app/`. This module holds only the
+neutral container type carried between layers.
 
 ## Ownership
-- Planning item type definitions (Request, Spec, Plan, Task, WorkPackage, Standard)
-- Item state definitions and valid state transitions
-- Relationship rules (parent-child, dependency, link types)
+
+- Generic `Item` dataclass: kind, path, frontmatter dict, body string
 
 ## Must NOT Own
-- File I/O (→ `fs/`)
-- API surface or HTTP/MCP concerns (→ `app/`)
-- Execution or job launching (→ `execution/`)
 
-## Allowed Dependencies
-- `foundation/contracts` — canonical error types and schema validation
+- Kind-specific type definitions (kinds are config, not Python types)
+- State machine definitions (live in `workflows.yaml`)
+- Relationship rules (live in `profiles.yaml` / `planning.yaml`)
+- File I/O (→ `fs/`)
+- API surface or MCP concerns (→ `app/`)
 
 ## Key Modules
-| Module | Responsibility |
-|--------|---------------|
-| `models.py` | Core planning item type definitions |
-| `states.py` | Valid states and transition rules per item type |
-| `rels.py` | Relationship definitions and linking rules |
+
+| Module      | Responsibility            |
+| ----------- | ------------------------- |
+| `models.py` | Generic `Item` dataclass  |

@@ -13,7 +13,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-9"
   ],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-006](task-0062): Release Bridge\n\n## Purpose\n\nCreate release bridge from jobs to scripts.\n\n## Scope\n\n- Bridge logic\n- Script invocation\n- Error handling\n\n## Implementation\n\n1. Implement bridge\n2. Add script invocation\n3. Handle errors\n\n## Acceptance Criteria\n\n1. Bridge works\n2. Scripts invoked\n3. Errors handled\n"

@@ -27,7 +27,7 @@ class ItemCreatorService:
 
     def _creation_refs(self, kind: str, refs: dict[str, object] | None) -> dict[str, object]:
         values = dict(refs or {})
-        standard_field = self.api.config.standard_ref_field()
+        standard_field = self.api.config.default_reference_field()
         if standard_field not in values and kind in self.api.config.all_kinds():
             defaults = self.api.config.default_reference_values(kind, standard_field)
             if defaults:

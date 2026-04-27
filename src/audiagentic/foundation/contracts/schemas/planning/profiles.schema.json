@@ -34,7 +34,6 @@
                   "required": ["kind"]
                 }
               },
-              "allow_plan_overlay": { "type": "boolean" },
               "defaults": { "type": "object" },
               "suggested_sections": { "type": "array", "items": { "type": "string" } }
             },

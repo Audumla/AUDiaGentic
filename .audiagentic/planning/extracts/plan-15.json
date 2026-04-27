@@ -22,7 +22,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-6"
   ],
   "body": "\n\n\n\n\n\n\n\n\n\n# Objectives\n1. Add comprehensive test coverage for knowledge component \u2014 partial: 4 test files exist (~580 lines), missing event_handlers, event_scanner, sync, validation\n2. Split events.py sub-modules into < 150-line modules \u2014 partial: split into 3 modules (385, 422, 210 lines), further decomposition needed\n3. Enhance search from token-based to fuzzy/BM25 approach \u2014 pending verification\n4. Implement lifecycle tracking for proposals and jobs \u2014 pending verification\n# Delivery Approach\n1. **Phase 1 (Immediate)**: Complete test coverage for remaining modules\n   - Tests for event_handlers (385 lines), event_scanner (422 lines), sync (642 lines), validation (156 lines)\n   - Further decompose event sub-modules to < 150 lines each\n\n2. **Phase 2 (Follow-up)**: Search enhancement + lifecycle verification\n   - Verify/search enhancement implementation status\n   - Verify/lifecycle management implementation status\n   - Complete any missing functionality\n\n3. **Phase 3 (Polish)**: MCP consolidation + integration tests\n   - Consolidate 16 MCP tools to 7-8 top-level tools\n   - End-to-end test flows\n   - Integration tests for patches.py with planning system\n# Dependencies\n\n- spec-16 (Knowledge Component Improvements Specification) for detailed requirements\n- standard-6 for test structure/coverage expectations\n- No blocking external dependencies\n"

@@ -15,6 +15,6 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
+  "effective_refs": [],
   "body": "\n\n\n\n\n\n\n\n\n# Description\n\nRefactor wp-014 integration\n\n# Acceptance Criteria\n\n- Files reviewed and organized\n- Dependencies documented\n\n# Notes\n\nPart of request-19 code standards compliance cleanup.\n"
 }
