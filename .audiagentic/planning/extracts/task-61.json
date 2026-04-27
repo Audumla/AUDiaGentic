@@ -13,7 +13,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-9"
   ],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-008](task-0053): Ledger Integration\n\n## Purpose\n\nIntegrate ledger with release system.\n\n## Scope\n\n- Ledger format\n- Integration logic\n- Data flow\n\n## Implementation\n\n1. Define ledger format\n2. Implement integration\n3. Ensure data flow\n\n## Acceptance Criteria\n\n1. Ledger format defined\n2. Integrated\n3. Data flows\n"

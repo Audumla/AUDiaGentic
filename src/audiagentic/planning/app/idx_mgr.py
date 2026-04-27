@@ -35,8 +35,8 @@ class Indexer:
                 "label": item.data["label"],
                 "state": item.data["state"],
                 "path": rel_path,
-                "deleted": bool(item.data.get("deleted", False)),
-                "archived": self.config.state_in_set(
+                "deleted": self.config.is_soft_deleted(item.data),
+                "terminal": self.config.state_in_set(
                     item.kind,
                     item.data.get("state"),
                     "terminal",
@@ -48,7 +48,7 @@ class Indexer:
         else:
             idx_root = self.root / ".audiagentic/planning/indexes"
         idx_root.mkdir(parents=True, exist_ok=True)
-        meta = {"convention_version": 1, "generated_at": now_iso()}
+        meta = {"generated_at": now_iso()}
         for kind in self.config.all_kinds():
             name = self.config.kind_dir_name(kind)
             payload = {**meta, "items": by_kind.get(kind, [])}

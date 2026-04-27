@@ -13,6 +13,6 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
+  "effective_refs": [],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-NOD-002](task-0155): Node-Local Status Persistence\n\n## Purpose\n\nImplement node-local status persistence.\n\n## Scope\n\n- Persistence format\n- Storage logic\n- Recovery\n\n## Implementation\n\n1. Define format\n2. Implement storage\n3. Add recovery\n\n## Acceptance Criteria\n\n1. Format defined\n2. Storage works\n3. Recovery works\n"
 }

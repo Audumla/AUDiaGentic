@@ -13,7 +13,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-9"
   ],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-004](task-0049): Audit/Check-in Summary Generation\n\n## Purpose\n\nGenerate audit/check-in summary.\n\n## Scope\n\n- Audit data collection\n- Summary generation\n- Check-in tracking\n\n## Implementation\n\n1. Collect audit data\n2. Generate summary\n3. Track check-ins\n\n## Acceptance Criteria\n\n1. Audit data collected\n2. Summary generated\n3. Check-ins tracked\n"

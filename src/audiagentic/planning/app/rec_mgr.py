@@ -32,7 +32,7 @@ class Reconcile:
                     "to": desired_name,
                 })
         ids = {i.data['id'] for i in items}
-        attach_root = self.root / 'docs/planning/attachments'
+        attach_root = self.paths.attachments_dir()
         orphans = []
         if attach_root.exists():
             for p in attach_root.iterdir():

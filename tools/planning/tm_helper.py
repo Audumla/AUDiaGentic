@@ -151,172 +151,6 @@ def set_test_mode(enabled: bool = True) -> None:
     _api = PlanningAPI(_get_root(), test_mode=enabled)
 
 
-def new_test_request(
-    label: str,
-    summary: str,
-    source: str = "test",
-    prefix: str = "test",
-    **kwargs,
-) -> dict[str, Any]:
-    """Create a test request with optional prefix.
-
-    Args:
-        label: Request label
-        summary: Request summary
-        source: Creator identifier (default: test)
-        prefix: Prefix for test ID (default: test)
-        **kwargs: Additional arguments passed to new_request
-
-    Returns:
-        Dict with id, path, and created flag
-    """
-    project_root = kwargs.get("root") or _get_root()
-    api = _get_api(test_mode=True)
-
-    # Override label to include prefix
-    prefixed_label = f"[{prefix.upper()}] {label}" if prefix else label
-
-    item = api.new(
-        "request",
-        label=prefixed_label,
-        summary=summary,
-        profile=kwargs.get("profile"),
-        guidance=kwargs.get("guidance"),
-        current_understanding=kwargs.get("current_understanding"),
-        open_questions=kwargs.get("open_questions"),
-        source=source,
-        context=kwargs.get("context"),
-        check_duplicates=kwargs.get("check_duplicates", True),
-    )
-    return {
-        "id": item.data["id"],
-        "path": str(item.path.relative_to(project_root)),
-        "created": True,
-    }
-
-
-def new_test_spec(
-    label: str,
-    summary: str,
-    request_refs: list[str],
-    prefix: str = "test",
-    **kwargs,
-) -> dict[str, Any]:
-    """Create a test spec with optional prefix.
-
-    Args:
-        label: Spec label
-        summary: Spec summary
-        request_refs: Required list of request IDs
-        prefix: Prefix for test ID (default: test)
-        **kwargs: Additional arguments passed to new_spec
-
-    Returns:
-        Dict with id, path, and created flag
-    """
-    project_root = kwargs.get("root") or _get_root()
-    api = _get_api(test_mode=True)
-
-    prefixed_label = f"[{prefix.upper()}] {label}" if prefix else label
-
-    item = api.new(
-        "spec",
-        label=prefixed_label,
-        summary=summary,
-        refs={"request_refs": request_refs},
-        check_duplicates=kwargs.get("check_duplicates", True),
-    )
-    return {
-        "id": item.data["id"],
-        "path": str(item.path.relative_to(project_root)),
-        "created": True,
-    }
-
-
-def new_test_task(
-    label: str,
-    summary: str,
-    spec: str,
-    domain: str = "core",
-    prefix: str = "test",
-    **kwargs,
-) -> dict[str, Any]:
-    """Create a test task with optional prefix.
-
-    Args:
-        label: Task label
-        summary: Task summary
-        spec: Spec ID
-        domain: Task domain (default: core)
-        prefix: Prefix for test ID (default: test)
-        **kwargs: Additional arguments passed to new_task
-
-    Returns:
-        Dict with id and path
-    """
-    project_root = kwargs.get("root") or _get_root()
-    api = _get_api(test_mode=True)
-
-    prefixed_label = f"[{prefix.upper()}] {label}" if prefix else label
-
-    item = api.new(
-        "task",
-        label=prefixed_label,
-        summary=summary,
-        refs={
-            "spec": spec,
-            "target": kwargs.get("target"),
-            "parent": kwargs.get("parent"),
-            "request_refs": kwargs.get("request_refs") or [],
-        },
-        domain=domain,
-        workflow=kwargs.get("workflow"),
-    )
-    return {"id": item.data["id"], "path": str(item.path.relative_to(project_root))}
-
-
-def update_task_status(
-    id_: str,
-    state: str,
-    notes: str,
-    section: str = "description",
-    root: Path | None = None,
-) -> dict[str, Any]:
-    """Update task state and append implementation notes in a single call.
-
-    This is a convenience wrapper that combines state transition with documentation
-    updates, making it more efficient than separate state() and append_section() calls.
-
-    Args:
-        id_: Task ID to update
-        state: New state value (draft, ready, in_progress, done)
-        notes: Implementation notes to append
-        section: Section to append notes to (default: description)
-        root: Optional project root. If None, uses current root.
-
-    Returns:
-        Dict with id, state, and path
-
-    Usage:
-        tm.update_task_status("task-0001", "done", "All implementation complete:\\n- Item 1\\n- Item 2")
-    """
-    project_root = root or _get_root()
-    api = PlanningAPI(project_root)
-
-    # Update state
-    item = api.state(id_, state)
-
-    # Append notes to specified section
-    notes_content = f"\n\n**Status: {state.upper()}**\n\n{notes}"
-    append_section(id_, section, notes_content, project_root)
-
-    return {
-        "id": item.data["id"],
-        "state": item.data["state"],
-        "path": str(item.path.relative_to(project_root)),
-    }
-
-
 def _load_yaml(root: Path, path: str) -> dict[str, Any]:
     """Load YAML file relative to root.
 
@@ -526,7 +360,7 @@ def _execute_batch_operations(
                     mode = op.get("mode", "set")
                     item_curr = api._find(id_)
                     data, body = parse_markdown(item_curr.path)
-                    _apply_frontmatter_field_op(data, field, mode, value)
+                    _apply_frontmatter_field_op(api, data, field, mode, value)
                     dump_markdown(item_curr.path, data, body)
                     results.append(
                         {
@@ -579,6 +413,7 @@ def _execute_batch_operations(
 
 
 def _apply_frontmatter_field_op(
+    api: PlanningAPI,
     data: dict[str, Any],
     field: str,
     mode: str,
@@ -587,12 +422,12 @@ def _apply_frontmatter_field_op(
     """Apply add/remove/replace/set to a top-level frontmatter field.
 
     Supported shapes:
-    - scalar fields (`spec_ref`, `plan_ref`, `parent_task_ref`, etc.)
-    - list[str] fields (`spec_refs`, `request_refs`, `standard_refs`)
-    - list[dict] relationship fields (`task_refs`, `work_package_refs`) where each entry
-      contains at minimum `ref`
+    - scalar reference fields
+    - list[str] reference fields
+    - list[dict] relationship fields where each entry contains at minimum `ref`
     """
-    relationship_list_fields = {"task_refs", "work_package_refs"}
+    field_shape = api.config.reference_field_shape(field)
+    is_relationship_list = field_shape == "rel_list"
 
     if mode in {"set", "replace"}:
         data[field] = value
@@ -602,7 +437,7 @@ def _apply_frontmatter_field_op(
 
     if current is None:
         if mode == "add":
-            if field in relationship_list_fields:
+            if is_relationship_list:
                 current = []
             else:
                 current = []
@@ -613,7 +448,7 @@ def _apply_frontmatter_field_op(
     if not isinstance(data.get(field), list):
         raise ValueError(f"field '{field}' is not a list; use mode='set' for scalar fields")
 
-    if field in relationship_list_fields:
+    if is_relationship_list:
         _apply_relationship_list_op(data, field, mode, value)
     else:
         _apply_scalar_list_op(data, field, mode, value)
@@ -791,22 +626,24 @@ def relink(
     return {"id": item.data["id"], "field": field}
 
 
-def package(
-    plan: str,
-    tasks: list[str],
+def group(
+    parent: str,
+    items: list[str],
     label: str,
     summary: str,
-    domain: str = "core",
+    domain: str | None = None,
+    action: str = "group",
     root: Path | None = None,
 ) -> dict[str, Any]:
-    """Group multiple Tasks into a new WorkPackage within a Plan.
+    """Run a configured grouping workflow action.
 
     Args:
-        plan: Plan ID
-        tasks: List of task IDs
-        label: WP label
-        summary: WP summary
-        domain: WP domain (default: core)
+        parent: Parent item ID
+        items: Child item IDs
+        label: Group label
+        summary: Group summary
+        domain: Optional domain
+        action: Configured workflow action name
         root: Optional project root. If None, uses current root.
 
     Returns:
@@ -814,8 +651,38 @@ def package(
     """
     project_root = root or _get_root()
     api = PlanningAPI(project_root)
-    item = api.package(plan, tasks, label, summary, domain)
+    result = api.run_workflow_action(
+        action,
+        {
+            "parent_id": parent,
+            "item_ids": items,
+            "label": label,
+            "summary": summary,
+            "domain": domain,
+        },
+    )
+    if len(result) != 1:
+        return {
+            "items": [
+                {"id": item.data["id"], "path": str(item.path.relative_to(project_root))}
+                for item in result.values()
+            ]
+        }
+    item = next(iter(result.values()))
     return {"id": item.data["id"], "path": str(item.path.relative_to(project_root))}
+
+
+def run_workflow_action(
+    action: str, context: dict[str, Any], root: Path | None = None
+) -> dict[str, Any]:
+    """Run a configured workflow action by name."""
+    project_root = root or _get_root()
+    api = PlanningAPI(project_root)
+    result = api.run_workflow_action(action, context)
+    return {
+        key: {"id": item.data["id"], "path": str(item.path.relative_to(project_root))}
+        for key, item in result.items()
+    }
 
 
 def validate(root: Path | None = None) -> list[str]:
@@ -1051,7 +918,7 @@ def list_kind(
         items = [i for i in items if i.kind in kind_list]
 
     if not include_deleted:
-        items = [i for i in items if not i.data.get("deleted")]
+        items = [i for i in items if not api.config.is_soft_deleted(i.data)]
     archive_state = api.config.lifecycle_action_state("archive")
     supersede_state = api.config.lifecycle_action_state("supersede")
     if not include_archived and archive_state:
@@ -1070,7 +937,7 @@ def list_kind(
             "kind": i.kind,
             "label": i.data["label"],
             "state": i.data["state"],
-            "deleted": bool(i.data.get("deleted")),
+            "deleted": api.config.is_soft_deleted(i.data),
             "archived": i.data.get("state") == archive_state,
             "superseded": i.data.get("state") == supersede_state,
         }
@@ -1157,7 +1024,7 @@ def effective_refs(
 
     Args:
         id_: Item ID
-        field: Reference field to resolve. If None, uses configured standard_ref_field.
+        field: Reference field to resolve. If None, uses configured default_reference_field.
         root: Optional project root. If None, uses current root.
 
     Returns:
@@ -1523,7 +1390,7 @@ def get_subsection(id_: str, section_path: str, root: Path | None = None) -> dic
     return {"id": id_, "section_path": section_path, "content": text, "found": True}
 
 
-def _validate_profile_pack(profile_pack: str, root: Path | None = None) -> None:
+def _validate_profile_pack(profile_pack: str | None, root: Path | None = None) -> None:
     """Validate that a profile pack exists and is loadable.
 
     Args:
@@ -1533,6 +1400,8 @@ def _validate_profile_pack(profile_pack: str, root: Path | None = None) -> None:
     Raises:
         ValueError: If profile pack doesn't exist or is invalid
     """
+    if not profile_pack:
+        raise ValueError("profile_pack is required")
     project_root = root or _get_root()
     path = project_root / f".audiagentic/planning/config/profile-packs/{profile_pack}.yaml"
     if not path.exists():
@@ -1550,13 +1419,13 @@ def _validate_profile_pack(profile_pack: str, root: Path | None = None) -> None:
 
 
 def get_doc_sync_requirements(
-    kind: str, profile_pack: str = "standard", root: Path | None = None
+    kind: str, profile_pack: str | None, root: Path | None = None
 ) -> dict[str, Any]:
     """Get documentation sync requirements for a kind and profile pack.
 
     Args:
         kind: Work kind (task, wp, etc.)
-        profile_pack: Profile pack name (default: standard)
+        profile_pack: Profile pack name
         root: Optional project root. If None, uses current root.
 
     Returns:
@@ -1577,13 +1446,13 @@ def get_doc_sync_requirements(
 
 
 def pending_doc_updates(
-    kind: str, profile_pack: str = "standard", root: Path | None = None
+    kind: str, profile_pack: str | None, root: Path | None = None
 ) -> list[str]:
     """List pending documentation updates for a kind and profile pack.
 
     Args:
         kind: Work kind (task, wp, etc.)
-        profile_pack: Profile pack name (default: standard)
+        profile_pack: Profile pack name
         root: Optional project root. If None, uses current root.
 
     Returns:
@@ -1617,13 +1486,13 @@ def verify_structure(root: Path | None = None) -> dict[str, Any]:
 
 
 def get_doc_sync_requirements(
-    kind: str, profile_pack: str = "standard", root: Path | None = None
+    kind: str, profile_pack: str | None, root: Path | None = None
 ) -> dict[str, Any]:
     """Get documentation sync requirements for a kind and profile pack.
 
     Args:
         kind: Work kind (task, wp, etc.)
-        profile_pack: Profile pack name (default: standard)
+        profile_pack: Profile pack name
         root: Optional project root. If None, uses current root.
 
     Returns:
@@ -1644,13 +1513,13 @@ def get_doc_sync_requirements(
 
 
 def pending_doc_updates(
-    kind: str, profile_pack: str = "standard", root: Path | None = None
+    kind: str, profile_pack: str | None, root: Path | None = None
 ) -> list[str]:
     """List pending documentation updates for a kind and profile pack.
 
     Args:
         kind: Work kind (task, wp, etc.)
-        profile_pack: Profile pack name (default: standard)
+        profile_pack: Profile pack name
         root: Optional project root. If None, uses current root.
 
     Returns:

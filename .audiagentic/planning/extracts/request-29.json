@@ -26,7 +26,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-0001"
   ],
   "body": "\n\n\n\n\n\n\n\n# Problem\n\n\n# Desired Outcome\n\n\n# Constraints\n"

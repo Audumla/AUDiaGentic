@@ -13,7 +13,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-9"
   ],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-RLS-005](task-0050): Finalization with Exactly-Once Historical Append\n\n## Purpose\n\nFinalize with exactly-once historical append.\n\n## Scope\n\n- Finalization logic\n- Historical append\n- Exactly-once guarantee\n\n## Implementation\n\n1. Implement finalization\n2. Add historical append\n3. Ensure exactly-once\n\n## Acceptance Criteria\n\n1. Finalization works\n2. Historical appended\n3. Exactly-once verified\n"

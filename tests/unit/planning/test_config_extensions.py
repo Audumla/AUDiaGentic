@@ -238,20 +238,20 @@ def test_core_state_and_reference_names_are_config_owned(tmp_path: Path) -> None
     cfg = Config(root)
     assert cfg.lifecycle_action_state("archive") == "archived"
     assert cfg.lifecycle_action_state("supersede") == "superseded"
-    assert cfg.standard_ref_field() == "standard_refs"
+    assert cfg.default_reference_field() == "standard_refs"
 
 
-def test_planning_schema_requires_standard_ref_field(tmp_path: Path) -> None:
+def test_planning_schema_requires_default_reference_field(tmp_path: Path) -> None:
     root = _seed_base_config(tmp_path, include_optional=True)
     planning_path = root / ".audiagentic" / "planning" / "config" / "planning.yaml"
     payload = yaml.safe_load(planning_path.read_text(encoding="utf-8"))
-    del payload["planning"]["standard_ref_field"]
+    del payload["planning"]["default_reference_field"]
     planning_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
     cfg = Config(root)
     errors = cfg.validate()
     assert any(
-        "planning.yaml" in error and "'standard_ref_field' is a required property" in error
+        "planning.yaml" in error and "'default_reference_field' is a required property" in error
         for error in errors
     )
 

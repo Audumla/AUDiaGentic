@@ -35,6 +35,38 @@ class Config:
         """Get configured kind aliases."""
         return self.planning.get("planning", {}).get("kind_aliases", {})
 
+    def conventions(self) -> dict:
+        """Get the conventions block (opt-in shorthand patterns)."""
+        cfg = self.planning.get("planning", {}).get("conventions", {})
+        return cfg if isinstance(cfg, dict) else {}
+
+    def ref_field_suffixes(self) -> dict[str, str]:
+        """Get configured ref-field suffix → default-shape mapping.
+
+        Empty if no convention configured (then refs must be declared explicitly
+        in reference_field_shapes / reference_field_targets).
+        """
+        suffixes = self.conventions().get("ref_field_suffixes", {})
+        return suffixes if isinstance(suffixes, dict) else {}
+
+    def match_ref_suffix(self, field: str) -> tuple[str, str] | None:
+        """Return (suffix, default_shape) if field ends with a configured ref suffix.
+
+        Longest suffix wins so '_refs' matches before '_ref'.
+        """
+        suffixes = self.ref_field_suffixes()
+        for suffix in sorted(suffixes.keys(), key=len, reverse=True):
+            if field.endswith(suffix):
+                return suffix, suffixes[suffix]
+        return None
+
+    def list_ref_suffix(self) -> str | None:
+        """Get the configured suffix whose default shape is a list (for back-refs)."""
+        for suffix, shape in self.ref_field_suffixes().items():
+            if shape in ("scalar_ref_list", "rel_list"):
+                return suffix
+        return None
+
     def normalize_kind(self, kind: str) -> str:
         """Normalize alias or long-form kind name to canonical config kind."""
         return self.kind_aliases().get(kind, kind)
@@ -115,15 +147,15 @@ class Config:
         wf = self.workflow_for(kind, workflow)
         return wf["initial"]
 
-    def standard_ref_field(self) -> str:
-        """Get configured standard-reference field name."""
-        return self.planning["planning"]["standard_ref_field"]
+    def default_reference_field(self) -> str:
+        """Get configured default-reference field name."""
+        return self.planning["planning"]["default_reference_field"]
 
-    def standard_kind(self) -> str:
-        """Get kind targeted by the configured standard-reference field."""
-        targets = self.reference_field_targets(self.standard_ref_field())
+    def default_reference_kind(self) -> str:
+        """Get kind targeted by the configured default-reference field."""
+        targets = self.reference_field_targets(self.default_reference_field())
         if not targets:
-            raise ValueError("planning.standard_ref_field must target a configured kind")
+            raise ValueError("planning.default_reference_field must target a configured kind")
         return targets[0]
 
     def kind_for_id(self, id_: str) -> str | None:
@@ -299,6 +331,17 @@ class Config:
             raise ValueError("planning.default_profile is required")
         return planning["default_profile"]
 
+    def dir_path(self, name: str) -> str:
+        """Get a required configured planning directory path."""
+        dirs = self.planning.get("planning", {}).get("dirs", {})
+        if name not in dirs:
+            raise ValueError(f"planning.dirs.{name} is required")
+        return dirs[name]
+
+    def attachments_dir(self) -> str:
+        """Get the configured attachments directory path."""
+        return self.dir_path("attachments")
+
     def guidance_sections_for(self, guidance: str, kind: str) -> dict:
         """Get guidance-driven section config for a kind.
 
@@ -429,15 +472,13 @@ class Config:
             return None
 
         forward_ref_field = parent_refs[child_kind]
-        target_name = forward_ref_field
-        if target_name.endswith("_refs"):
-            target_name = target_name[: -len("_refs")]
-        elif target_name.endswith("_ref"):
-            target_name = target_name[: -len("_ref")]
-        else:
+        if self.match_ref_suffix(forward_ref_field) is None:
             return None
 
-        return f"{child_kind}_refs"
+        list_suffix = self.list_ref_suffix()
+        if list_suffix is None:
+            return None
+        return f"{child_kind}{list_suffix}"
 
     def requires_children(self, kind: str) -> dict[str, list[str]]:
         """Get configured downstream-child requirements for a kind.
@@ -559,11 +600,23 @@ class Config:
         return kind_cfg["dir"]
 
     def reference_fields(self, kind: str) -> list[str]:
-        """Get configured reference-like frontmatter fields for a kind."""
+        """Get configured reference-like frontmatter fields for a kind.
+
+        A field is treated as a reference field when:
+        - it has an explicit entry in reference_field_shapes, OR
+        - it has an explicit entry in reference_field_targets, OR
+        - it matches a configured conventions.ref_field_suffixes suffix.
+        """
         fields = set(self.required_fields(kind) + self.optional_fields(kind))
         fields.update(self.kind_required_refs(kind))
+        configured_shapes = self.planning.get("planning", {}).get("reference_field_shapes", {})
+        configured_targets = self.planning.get("planning", {}).get("reference_field_targets", {})
         return sorted(
-            field for field in fields if field.endswith("_ref") or field.endswith("_refs")
+            field
+            for field in fields
+            if field in configured_shapes
+            or field in configured_targets
+            or self.match_ref_suffix(field) is not None
         )
 
     def seeded_reference_fields(self, kind: str) -> dict[str, str]:
@@ -588,10 +641,9 @@ class Config:
         configured = self.planning.get("planning", {}).get("reference_field_shapes", {})
         if field in configured:
             return configured[field]
-        if field.endswith("_ref"):
-            return "scalar_ref"
-        if field.endswith("_refs"):
-            return "scalar_ref_list"
+        match = self.match_ref_suffix(field)
+        if match is not None:
+            return match[1]
         raise ValueError(f"field '{field}' is not a reference field")
 
     def reference_field_targets(self, field: str) -> list[str]:
@@ -605,14 +657,11 @@ class Config:
                 return [entry for entry in target if entry in self.all_kinds()]
             return []
 
-        target_name = field
-        if target_name.endswith("_refs"):
-            target_name = target_name[: -len("_refs")]
-        elif target_name.endswith("_ref"):
-            target_name = target_name[: -len("_ref")]
-        else:
+        match = self.match_ref_suffix(field)
+        if match is None:
             return []
-
+        suffix, _ = match
+        target_name = field[: -len(suffix)]
         normalized = self.normalize_kind(target_name)
         return [normalized] if normalized in self.all_kinds() else []
 
@@ -795,6 +844,36 @@ class Config:
         kind_cfg = self.kind_config(kind)
         base = self.planning["planning"].get("base_optional_fields", [])
         fields = list(base)
+        fields.extend(field for field in self.soft_delete_field_names() if field not in fields)
         fields.extend(field for field in kind_cfg.get("optional_fields", []) if field not in fields)
         fields.extend(field for field in self.lifecycle_metadata_fields() if field not in fields)
         return fields
+
+    def soft_delete_config(self) -> dict:
+        """Get soft-delete config block, empty if not configured."""
+        cfg = self.planning.get("planning", {}).get("soft_delete", {})
+        return cfg if isinstance(cfg, dict) else {}
+
+    def soft_delete_field_names(self) -> list[str]:
+        """Get all soft-delete field names defined in config."""
+        cfg = self.soft_delete_config()
+        return [v for v in cfg.values() if isinstance(v, str)]
+
+    def soft_delete_flag_field(self) -> str | None:
+        """Get the soft-delete flag (boolean) field name."""
+        return self.soft_delete_config().get("flag_field")
+
+    def soft_delete_timestamp_field(self) -> str | None:
+        """Get the soft-delete timestamp field name."""
+        return self.soft_delete_config().get("timestamp_field")
+
+    def soft_delete_reason_field(self) -> str | None:
+        """Get the soft-delete reason field name."""
+        return self.soft_delete_config().get("reason_field")
+
+    def is_soft_deleted(self, data: dict) -> bool:
+        """Check if an item is soft-deleted using the configured flag field."""
+        flag_field = self.soft_delete_flag_field()
+        if not flag_field:
+            return False
+        return bool(data.get(flag_field, False))

@@ -13,6 +13,6 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [],
+  "effective_refs": [],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-LFC-011](task-0043): Installable Baseline Inventory and Sync-Mode Classification\n\n## Purpose\n\nCreate installable baseline inventory and classify sync modes.\n\n## Scope\n\n- Baseline inventory\n- Sync mode classification\n- Asset tracking\n\n## Implementation\n\n1. Create inventory\n2. Classify sync modes\n3. Track assets\n\n## Acceptance Criteria\n\n1. Inventory complete\n2. Modes classified\n3. Assets tracked\n"
 }

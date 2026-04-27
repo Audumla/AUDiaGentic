@@ -118,7 +118,7 @@ class RelationshipService:
         display: str | None = None,
     ):
         item = self.api._find(src_id)
-        self.api.policy.assert_not_archived(item, "relink")
+        self.api.policy.assert_not_terminal(item, "relink")
         data, body = parse_markdown(item.path)
         if field not in self.api.config.reference_fields(item.kind):
             raise ValueError(f"unsupported field {field}")

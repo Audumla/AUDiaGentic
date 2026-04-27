@@ -13,7 +13,7 @@
     "restored_at": null,
     "restored_by": null
   },
-  "effective_standard_refs": [
+  "effective_refs": [
     "standard-9"
   ],
   "body": "\n\n\n\n\n\n\n\n# Description\n\nImplement this task.\n\n\n# [PKT-JOB-005](task-0061): Approval Handling\n\n## Purpose\n\nHandle approvals inside jobs.\n\n## Scope\n\n- Approval logic\n- State transitions\n- Notifications\n\n## Implementation\n\n1. Implement approval logic\n2. Add state transitions\n3. Add notifications\n\n## Acceptance Criteria\n\n1. Approval logic works\n2. Transitions correct\n3. Notifications sent\n"
