@@ -15,7 +15,7 @@ def _npm() -> str:
 def install_to(target: Path) -> int:
     pi_node = target / "node"
 
-    for path in (pi_node, target / "home", target / "sessions", target / "logs"):
+    for path in (pi_node, target / "agent", target / "sessions", target / "logs"):
         path.mkdir(parents=True, exist_ok=True)
 
     npm = _npm()
