@@ -3,12 +3,13 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from audiagentic.foundation.workflow import body_has_section
+
 from ..fs.scan import scan_items
 from .config import Config
 from .paths import Paths
-from .util import body_has_section
 
-_ID_PATTERN = re.compile(r'^[a-z]+-([1-9]\d*|0)$')
+_ID_PATTERN = re.compile(r"^[a-z]+-([1-9]\d*|0)$")
 
 
 class Validator:
@@ -126,9 +127,7 @@ class Validator:
                             errors.append(f"{item.path}: {field}[{i}] missing required 'ref' field")
                 elif not isinstance(value, str):
                     if shape == "rel_list":
-                        errors.append(
-                            f"{item.path}: {field} must be a list of objects with 'ref'"
-                        )
+                        errors.append(f"{item.path}: {field} must be a list of objects with 'ref'")
                     else:
                         errors.append(
                             f"{item.path}: {field} must be a string, list of strings, or list of ref objects"
@@ -150,7 +149,9 @@ class Validator:
             # Validate ID format: kind-integer with no padding
             item_id = item.data["id"]
             if not _ID_PATTERN.match(item_id):
-                errors.append(f"{item.path}: id '{item_id}' does not match format '<kind>-<integer>'")
+                errors.append(
+                    f"{item.path}: id '{item_id}' does not match format '<kind>-<integer>'"
+                )
 
             # Validate against config-driven field rules
             errors.extend(self._validate_item_against_config(item))

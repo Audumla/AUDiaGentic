@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from audiagentic.foundation.workflow import Relationships
+
 from ...fs.read import parse_markdown
 from ...fs.write import dump_markdown
-from ..rel_mgr import Relationships
 
 
 class RelationshipService:
@@ -71,7 +72,9 @@ class RelationshipService:
                 continue
             self.sync_back_ref(id_, kind, target_kinds[0], parent_ids)
 
-    def sync_relink_back_ref(self, child_id: str, child_kind: str, field: str, parent_id: str) -> None:
+    def sync_relink_back_ref(
+        self, child_id: str, child_kind: str, field: str, parent_id: str
+    ) -> None:
         parent_kind = self.api.config.reference_field_targets(field)
         if not parent_kind:
             return

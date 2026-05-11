@@ -48,7 +48,7 @@ def planning_api():
 @pytest.fixture
 def event_store():
     """Create event store instance."""
-    from audiagentic.interoperability.store import FileEventStore
+    from audiagentic.foundation.event.store import FileEventStore
 
     with tempfile.TemporaryDirectory() as tmpdir:
         store = FileEventStore(Path(tmpdir) / "events")
@@ -73,7 +73,7 @@ class TestReplaySafety:
 
     def test_replay_no_duplicate_changes(self, planning_api, event_store):
         """Test that replayed events don't cause duplicate state changes."""
-        from audiagentic.interoperability.replay import ReplayService
+        from audiagentic.foundation.event.replay import ReplayService
 
         # Create request and task
         request = planning_api.new("request", "Test Request", "Test request", source="test")
@@ -89,7 +89,7 @@ class TestReplaySafety:
         planning_api.state(task.data["id"], "done")
 
         # Get event bus and store events
-        from audiagentic.interoperability import get_bus
+        from audiagentic.foundation.event import get_bus
 
         events = event_store.query()
 

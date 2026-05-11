@@ -16,6 +16,8 @@ All other layers in AUDiaGentic depend on foundation; foundation depends on noth
 
 - `contracts/`: Schemas, error types, canonical IDs, glossary
 - `config/`: Provider registry, catalog, and configuration loaders
+- `event/`: Generic pub/sub event bus, envelope, persistence, replay (swappable transport)
+- `workflow/`: State machine, config-driven propagation engine, lifecycle actions, frontmatter builder
 
 ## Must not own
 
@@ -43,6 +45,12 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 # Correct: Load provider configuration
 from audiagentic.foundation.config.provider_registry import load_provider_registry
+
+# Correct: Use event bus
+from audiagentic.foundation.event import EventBus, EventEnvelope, EventService
+
+# Correct: Use state propagation engine
+from audiagentic.foundation.workflow import StatePropagationEngine, StateMachine
 ```
 
 ## Anti-examples
@@ -53,6 +61,10 @@ from audiagentic.foundation.execution.jobs import ...  # BAD
 
 # WRONG: foundation should not manage provider adapters
 # That belongs in interoperability/providers/
+
+# WRONG: event bus should not subscribe on behalf of components
+from audiagentic.foundation.event import get_bus
+get_bus().subscribe("planning.*", some_handler)  # Owner component registers its own handlers
 ```
 
 ## Migration notes
@@ -60,3 +72,5 @@ from audiagentic.foundation.execution.jobs import ...  # BAD
 - Moved from `contracts/` and `config/` roots (2026-04-12)
 - All imports updated to `audiagentic.foundation.contracts.*` and `audiagentic.foundation.config.*`
 - Relative path updates in `planning/app/config.py` to locate schemas at foundation/contracts/schemas/
+- `event/` moved from `planning/events/` to `foundation/event/` — generic, swappable event layer
+- `workflow/` moved from `planning/workflow/` to `foundation/workflow/` — generic state machine and propagation engine
