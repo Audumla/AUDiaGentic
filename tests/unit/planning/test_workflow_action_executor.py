@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from audiagentic.planning.app.services.workflow_action_executor import render
+from audiagentic.foundation.workflow import render
 
 
 def test_render_preserves_typed_placeholder_values() -> None:

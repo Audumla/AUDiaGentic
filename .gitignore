@@ -2,6 +2,12 @@
 /opencode.json
 /.vscode
 /.audiagentic/runtime/
+/.audiagentic-dev/
+/.audiagentic/provisioning/goose/bin/
+/.audiagentic/provisioning/rig/embedded/bin/
+/.audiagentic/provisioning/rig/embedded/build/
+/dist/
+/.audiagentic/provisioning/build-cache/
 /test/planning/
 __pycache__/
 .py[cod]

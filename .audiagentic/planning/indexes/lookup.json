@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-26T23:58:11.762207+00:00",
+  "generated_at": "2026-04-27T11:48:17.543804+00:00",
   "items": {
     "plan-1": {
       "id": "plan-1",
@@ -116,6 +116,15 @@
       "state": "draft",
       "path": "docs/planning/plans/plan-20-test-plan.md",
       "deleted": true,
+      "terminal": false
+    },
+    "plan-22": {
+      "id": "plan-22",
+      "kind": "plan",
+      "label": "Refactor planning engine to foundation/workflow",
+      "state": "draft",
+      "path": "docs/planning/plans/plan-22-refactor-planning-engine-to-foundation-workflow.md",
+      "deleted": false,
       "terminal": false
     },
     "plan-3": {
@@ -388,12 +397,66 @@
       "deleted": false,
       "terminal": false
     },
+    "request-36": {
+      "id": "request-36",
+      "kind": "request",
+      "label": "Move planning engine to foundation/workflow for reusable workflow configurations",
+      "state": "captured",
+      "path": "docs/planning/requests/request-36-move-planning-engine-to-foundation-workflow-for-reusable-workflow-configurations.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "request-38": {
+      "id": "request-38",
+      "kind": "request",
+      "label": "Improve intake",
+      "state": "captured",
+      "path": "docs/planning/requests/request-38-improve-intake.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "request-39": {
+      "id": "request-39",
+      "kind": "request",
+      "label": "Trace helper request",
+      "state": "captured",
+      "path": "docs/planning/requests/request-39-trace-helper-request.md",
+      "deleted": false,
+      "terminal": false
+    },
     "request-4": {
       "id": "request-4",
       "kind": "request",
       "label": "Archive functionality for planning items",
       "state": "closed",
       "path": "docs/planning/requests/request-4-archive-functionality-for-planning-items.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "request-40": {
+      "id": "request-40",
+      "kind": "request",
+      "label": "Lean head",
+      "state": "captured",
+      "path": "docs/planning/requests/request-40-lean-head.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "request-41": {
+      "id": "request-41",
+      "kind": "request",
+      "label": "Extract request",
+      "state": "captured",
+      "path": "docs/planning/requests/request-41-extract-request.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "request-42": {
+      "id": "request-42",
+      "kind": "request",
+      "label": "Section parsing request",
+      "state": "captured",
+      "path": "docs/planning/requests/request-42-section-parsing-request.md",
       "deleted": false,
       "terminal": false
     },
@@ -871,6 +934,42 @@
       "label": "Test Request \u2014 Specification",
       "state": "draft",
       "path": "docs/planning/specifications/spec-52-test-request-specification.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "spec-55": {
+      "id": "spec-55",
+      "kind": "spec",
+      "label": "Generic workflow engine in foundation/workflow",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-55-generic-workflow-engine-in-foundation-workflow.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "spec-56": {
+      "id": "spec-56",
+      "kind": "spec",
+      "label": "Improve intake \u2014 Specification",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-56-improve-intake-specification.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "spec-57": {
+      "id": "spec-57",
+      "kind": "spec",
+      "label": "Extract controls",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-57-extract-controls.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "spec-58": {
+      "id": "spec-58",
+      "kind": "spec",
+      "label": "Section parsing spec",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-58-section-parsing-spec.md",
       "deleted": false,
       "terminal": false
     },
@@ -2929,9 +3028,9 @@
     "task-9": {
       "id": "task-9",
       "kind": "task",
-      "label": "Refactor events.py into modular handlers",
-      "state": "done",
-      "path": "docs/planning/tasks/core/task-9-refactor-events-py-into-modular-handlers.md",
+      "label": "Nested subsection test",
+      "state": "draft",
+      "path": "docs/planning/tasks/task-9-nested-subsection-test.md",
       "deleted": false,
       "terminal": false
     },

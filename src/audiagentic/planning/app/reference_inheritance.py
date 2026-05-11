@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from .api_types import ItemView
+from audiagentic.foundation.workflow import ItemView
+
 from .config import Config
 
 
@@ -55,6 +56,8 @@ def _collect_inherited_reference_values(
 
                     if sub_type == "direct":
                         sub_ref_id = ref_item.data.get(sub_field)
+                        if isinstance(sub_ref_id, list):
+                            continue  # direct type expects scalar, skip lists
                         if sub_ref_id and sub_ref_id in items_by_id:
                             sub_ref_item = items_by_id[sub_ref_id]
                             _extend_unique(
@@ -86,7 +89,5 @@ def effective_references(
 ) -> list[str]:
     """Compute effective values for a reference field, including inherited refs."""
     return list(
-        dict.fromkeys(
-            _collect_inherited_reference_values(item, target_field, items_by_id, config)
-        )
+        dict.fromkeys(_collect_inherited_reference_values(item, target_field, items_by_id, config))
     )
