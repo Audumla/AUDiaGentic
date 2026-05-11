@@ -49,10 +49,10 @@ where = ["src"]
     # Pi harness config
     "provisioning/harness/pi/config/*.yaml",
     # Pi home templates — explicit paths because setuptools skips hidden dirs (.pi) with globs
-    "provisioning/harness/pi/templates/pi-home/.pi/agent/mcp.json",
-    "provisioning/harness/pi/templates/pi-home/.pi/agent/models.json",
-    "provisioning/harness/pi/templates/pi-home/.pi/agent/SYSTEM.md",
-    "provisioning/harness/pi/templates/pi-home/.pi/agent/APPEND_SYSTEM.md",
+    "provisioning/harness/pi/templates/pi-home/.audiagentic/agent/mcp.json",
+    "provisioning/harness/pi/templates/pi-home/.audiagentic/agent/models.json",
+    "provisioning/harness/pi/templates/pi-home/.audiagentic/agent/SYSTEM.md",
+    "provisioning/harness/pi/templates/pi-home/.audiagentic/agent/APPEND_SYSTEM.md",
     # Embedded rig model profiles
     "provisioning/rig/embedded/models.json",
 ]
