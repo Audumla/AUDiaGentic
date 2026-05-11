@@ -16,6 +16,6 @@ def audiagentic_home() -> Path:
     return Path(custom) if custom else Path.home() / ".audiagentic"
 
 
-def global_pi_runtime() -> Path:
-    """Pi TUI runtime directory inside audiagentic_home()."""
-    return audiagentic_home() / "pi"
+def global_harness_runtime() -> Path:
+    """TUI runtime directory inside audiagentic_home()."""
+    return audiagentic_home() / "harness"

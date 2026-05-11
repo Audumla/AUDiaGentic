@@ -20,7 +20,7 @@ from audiagentic.provisioning.harness.pi.runner import (
     env_flag,
     run_pi,
 )
-from audiagentic.tui.global_runtime import global_pi_runtime
+from audiagentic.tui.global_runtime import global_harness_runtime
 
 
 def _cmd_install(target: Path) -> int:
@@ -28,8 +28,9 @@ def _cmd_install(target: Path) -> int:
     rc = install_to(target)
     if rc == 0:
         print("\nInstall complete. Run 'audiagentic' from any project directory.")
-        if target != global_pi_runtime():
+        if target != global_harness_runtime():
             print(f"Set AUDIAGENTIC_HOME={target.parent} to use this location.")
+
     return rc
 
 
@@ -38,16 +39,16 @@ def _cmd_launch(project_root: Path, pi_args: list[str]) -> int:
         print(f"Project root does not exist: {project_root}", file=sys.stderr)
         return 1
 
-    pi_runtime = global_pi_runtime()
+        harness_runtime = global_harness_runtime()
 
-    if not (pi_runtime / "node" / "node_modules" / ".bin").exists():
-        print("Pi TUI not installed. Run: audiagentic install", file=sys.stderr)
+    if not (harness_runtime / "node" / "node_modules" / ".bin").exists():
+        print("TUI not installed. Run: audiagentic install", file=sys.stderr)
         return 1
 
     enable_mcp = env_flag("AUDIAGENTIC_PI_ENABLE_MCP")
     ctx = build_global_context(
         project_root=project_root,
-        pi_runtime=pi_runtime,
+        pi_runtime=harness_runtime,
         enable_mcp=enable_mcp,
     )
     try:
@@ -76,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
         "--target",
         metavar="PATH",
         default=None,
-        help="Install location (default: ~/.audiagentic/pi, override with AUDIAGENTIC_HOME)",
+        help="Install location (default: ~/.audiagentic/harness, override with AUDIAGENTIC_HOME)",
     )
 
     # parse_known_args so remaining args pass through to Pi
@@ -85,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
     project_root = Path(args.project).resolve() if args.project else Path.cwd()
 
     if args.command == "install":
-        target = Path(args.target).resolve() if args.target else global_pi_runtime()
+        target = Path(args.target).resolve() if args.target else global_harness_runtime()
         return _cmd_install(target)
 
     return _cmd_launch(project_root, remaining)
