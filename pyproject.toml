@@ -36,10 +36,26 @@ dev = [
 ]
 
 [project.scripts]
-audiagentic = "audiagentic.channels.cli.main:main"
+audiagentic = "audiagentic.tui.launcher:main"
+audiagentic-mcp-project = "audiagentic.provisioning.mcp.project_server:main"
+audiagentic-mcp-planning = "audiagentic.provisioning.mcp.planning_server:main"
+audiagentic-mcp-providers = "audiagentic.provisioning.mcp.providers_server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"audiagentic" = [
+    # Pi harness config
+    "provisioning/harness/pi/config/*.yaml",
+    # Pi home templates — explicit paths because setuptools skips hidden dirs (.pi) with globs
+    "provisioning/harness/pi/templates/pi-home/.pi/agent/mcp.json",
+    "provisioning/harness/pi/templates/pi-home/.pi/agent/models.json",
+    "provisioning/harness/pi/templates/pi-home/.pi/agent/SYSTEM.md",
+    "provisioning/harness/pi/templates/pi-home/.pi/agent/APPEND_SYSTEM.md",
+    # Embedded rig model profiles
+    "provisioning/rig/embedded/models.json",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
