@@ -36,7 +36,7 @@ dev = [
 ]
 
 [project.scripts]
-audiagentic = "audiagentic.tui.launcher:main"
+audiagentic = "audiagentic.launcher:main"
 audiagentic-mcp-project = "audiagentic.provisioning.mcp.project_server:main"
 audiagentic-mcp-planning = "audiagentic.provisioning.mcp.planning_server:main"
 audiagentic-mcp-providers = "audiagentic.provisioning.mcp.providers_server:main"
