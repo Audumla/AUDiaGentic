@@ -1,0 +1,62 @@
+{
+  "settings": {
+    "toolPrefix": "mcp",
+    "idleTimeout": 10,
+    "directTools": false
+  },
+  "mcpServers": {
+    "audiagentic-provisioning": {
+      "command": "__AUDIAGENTIC_PYTHON__",
+      "args": [
+        "-m",
+        "audiagentic.provisioning.mcp.server",
+        "--readonly",
+        "--smoke-only"
+      ],
+      "env": {
+        "PYTHONPATH": "__AUDIAGENTIC_REPO_ROOT__/src",
+        "AUDIAGENTIC_REPO_ROOT": "__AUDIAGENTIC_REPO_ROOT__"
+      },
+      "lifecycle": "lazy",
+      "directTools": [
+        "audiagentic_smoke_status"
+      ]
+    },
+    "audiagentic-project": {
+      "command": "__AUDIAGENTIC_PYTHON__",
+      "args": [
+        "-m",
+        "audiagentic.provisioning.mcp.project_server"
+      ],
+      "env": {
+        "PYTHONPATH": "__AUDIAGENTIC_REPO_ROOT__/src",
+        "AUDIAGENTIC_REPO_ROOT": "__AUDIAGENTIC_REPO_ROOT__"
+      },
+      "lifecycle": "lazy"
+    },
+    "audiagentic-planning": {
+      "command": "__AUDIAGENTIC_PYTHON__",
+      "args": [
+        "-m",
+        "audiagentic.provisioning.mcp.planning_server"
+      ],
+      "env": {
+        "PYTHONPATH": "__AUDIAGENTIC_REPO_ROOT__/src",
+        "AUDIAGENTIC_REPO_ROOT": "__AUDIAGENTIC_REPO_ROOT__"
+      },
+      "lifecycle": "lazy"
+    },
+    "audiagentic-providers": {
+      "command": "__AUDIAGENTIC_PYTHON__",
+      "args": [
+        "-m",
+        "audiagentic.provisioning.mcp.providers_server"
+      ],
+      "env": {
+        "PYTHONPATH": "__AUDIAGENTIC_REPO_ROOT__/src",
+        "AUDIAGENTIC_REPO_ROOT": "__AUDIAGENTIC_REPO_ROOT__"
+      },
+      "lifecycle": "lazy"
+    }
+  }
+}
