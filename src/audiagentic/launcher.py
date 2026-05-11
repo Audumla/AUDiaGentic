@@ -1,15 +1,16 @@
-"""audiagentic — global entry point for the AUDiaGentic TUI.
+"""audiagentic — entry point for the AUDiaGentic harness.
 
 Usage
 -----
-  audiagentic install [--target PATH]   Install Pi TUI (once per machine / shared folder)
-  audiagentic [PI_ARGS...]              Launch Pi TUI from the current project directory
-  audiagentic --project PATH [PI_ARGS]  Launch with an explicit project root
+  audiagentic install [--target PATH]   Install harness (once per machine / shared folder)
+  audiagentic [ARGS...]                 Launch from the current project directory
+  audiagentic --project PATH [ARGS]     Launch with an explicit project root
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -20,29 +21,36 @@ from audiagentic.provisioning.harness.pi.runner import (
     env_flag,
     run_pi,
 )
-from audiagentic.tui.global_runtime import global_harness_runtime
+
+
+def _audiagentic_home() -> Path:
+    custom = os.environ.get("AUDIAGENTIC_HOME")
+    return Path(custom) if custom else Path.home() / ".audiagentic"
+
+
+def global_harness_runtime() -> Path:
+    return _audiagentic_home() / "harness"
 
 
 def _cmd_install(target: Path) -> int:
-    print(f"Installing AUDiaGentic TUI into {target}")
+    print(f"Installing AUDiaGentic harness into {target}")
     rc = install_to(target)
     if rc == 0:
         print("\nInstall complete. Run 'audiagentic' from any project directory.")
         if target != global_harness_runtime():
             print(f"Set AUDIAGENTIC_HOME={target.parent} to use this location.")
-
     return rc
 
 
-def _cmd_launch(project_root: Path, pi_args: list[str]) -> int:
+def _cmd_launch(project_root: Path, args: list[str]) -> int:
     if not project_root.exists():
         print(f"Project root does not exist: {project_root}", file=sys.stderr)
         return 1
 
-        harness_runtime = global_harness_runtime()
+    harness_runtime = global_harness_runtime()
 
     if not (harness_runtime / "node" / "node_modules" / ".bin").exists():
-        print("TUI not installed. Run: audiagentic install", file=sys.stderr)
+        print("Harness not installed. Run: audiagentic install", file=sys.stderr)
         return 1
 
     enable_mcp = env_flag("AUDIAGENTIC_PI_ENABLE_MCP")
@@ -52,7 +60,7 @@ def _cmd_launch(project_root: Path, pi_args: list[str]) -> int:
         enable_mcp=enable_mcp,
     )
     try:
-        return run_pi(ctx, pi_args, smoke=False)
+        return run_pi(ctx, args, smoke=False)
     finally:
         cleanup_rig(ctx.rig_pid)
 
@@ -60,7 +68,7 @@ def _cmd_launch(project_root: Path, pi_args: list[str]) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="audiagentic",
-        description="AUDiaGentic TUI",
+        description="AUDiaGentic",
         add_help=True,
     )
     parser.add_argument(
@@ -72,7 +80,7 @@ def main(argv: list[str] | None = None) -> int:
 
     subparsers = parser.add_subparsers(dest="command")
 
-    install_parser = subparsers.add_parser("install", help="Install Pi TUI globally")
+    install_parser = subparsers.add_parser("install", help="Install harness globally")
     install_parser.add_argument(
         "--target",
         metavar="PATH",
@@ -80,7 +88,6 @@ def main(argv: list[str] | None = None) -> int:
         help="Install location (default: ~/.audiagentic/harness, override with AUDIAGENTIC_HOME)",
     )
 
-    # parse_known_args so remaining args pass through to Pi
     args, remaining = parser.parse_known_args(argv)
 
     project_root = Path(args.project).resolve() if args.project else Path.cwd()
