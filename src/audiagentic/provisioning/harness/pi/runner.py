@@ -102,7 +102,7 @@ def _materialize_ui(ctx: PiContext) -> None:
             ctx.pi_runtime
             / "node"
             / "node_modules"
-            / "@mariozechner"
+            / "@earendil-works"
             / "pi-coding-agent"
             / "dist"
             / "modes"
