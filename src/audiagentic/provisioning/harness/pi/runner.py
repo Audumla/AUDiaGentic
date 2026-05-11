@@ -21,7 +21,7 @@ TRUTHY = {"1", "true", "yes", "on"}
 # Package-relative paths — work in both dev layout (src/) and pip-installed layout.
 _PI_DIR = Path(__file__).parent                         # .../harness/pi/
 _PROVISIONING_DIR = Path(__file__).parents[2]           # .../provisioning/
-_TEMPLATES_DIR = _PI_DIR / "templates" / "pi-home"
+_TEMPLATES_DIR = _PI_DIR / "templates" / "harness-home"
 _MODELS_JSON = _PROVISIONING_DIR / "rig" / "embedded" / "models.json"
 
 
@@ -231,8 +231,8 @@ def build_global_context(*, project_root: Path, pi_runtime: Path, enable_mcp: bo
     return PiContext(
         project_root=project_root,
         pi_runtime=pi_runtime,
-        pi_home=pi_runtime / "home",
-        pi_agent_dir=pi_runtime / "home" / ".audiagentic" / "agent",
+        pi_home=pi_runtime,
+        pi_agent_dir=pi_runtime / "agent",
         pi_bin=resolve_pi_bin(pi_runtime),
         pi_work=project_root,
         pi_log_dir=project_root / ".audiagentic" / "logs" / "tui",
