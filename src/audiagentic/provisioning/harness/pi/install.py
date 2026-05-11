@@ -20,7 +20,7 @@ def install_to(target: Path) -> int:
 
     npm = _npm()
     print(f"Installing Pi into {pi_node}")
-    subprocess.run([npm, "install", "--prefix", str(pi_node), "@mariozechner/pi-coding-agent"], check=True)
+    subprocess.run([npm, "install", "--prefix", str(pi_node), "@earendil-works/pi-coding-agent"], check=True)
     print(f"Installing Pi MCP adapter into {pi_node}")
     subprocess.run([npm, "install", "--prefix", str(pi_node), "pi-mcp-adapter"], check=True)
     return 0
