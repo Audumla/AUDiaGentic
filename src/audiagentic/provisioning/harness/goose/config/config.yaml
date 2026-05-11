@@ -1,0 +1,17 @@
+# Goose harness config for AUDiaGentic.
+# Defaults to the embedded rig (llamafile at 127.0.0.1:42001).
+# Override OPENAI_HOST + GOOSE_MODEL in shell to use external rig.
+# Do not place secrets here.
+
+# Active rig: embedded | external
+rig: embedded
+
+GOOSE_PROVIDER: openai
+GOOSE_MODEL: qwen3.5-2b
+GOOSE_MODE: chat
+GOOSE_MAX_TURNS: 20
+GOOSE_TEMPERATURE: 0.1
+GOOSE_CLI_SHOW_COST: false
+GOOSE_TELEMETRY_ENABLED: false
+
+extensions: {}

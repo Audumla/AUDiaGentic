@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from audiagentic.foundation.workflow import ItemView, WorkflowActionExecutor, render
+
 from ...fs.read import parse_markdown
 from ...fs.write import dump_markdown
-from ..api_types import ItemView
 from ..reference_inheritance import effective_references
-from .workflow_action_executor import WorkflowActionExecutor, render
 
 
 class WorkflowActionsService:
@@ -63,12 +63,16 @@ class WorkflowActionsService:
         )
 
         parent_fields = [
-            field for field in self.api.config.reference_fields(kind)
+            field
+            for field in self.api.config.reference_fields(kind)
             if parent_id in self.api.relationships.iter_ref_ids(frontmatter.get(field))
         ]
         child_fields = [
-            field for field in self.api.config.reference_fields(kind)
-            if set(item_ids).issubset(set(self.api.relationships.iter_ref_ids(frontmatter.get(field))))
+            field
+            for field in self.api.config.reference_fields(kind)
+            if set(item_ids).issubset(
+                set(self.api.relationships.iter_ref_ids(frontmatter.get(field)))
+            )
         ]
         if not parent_fields or not child_fields:
             return None

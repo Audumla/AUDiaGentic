@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-26T23:58:11.762207+00:00",
+  "generated_at": "2026-04-27T11:48:17.543804+00:00",
   "items": [
     {
       "id": "request-1",
@@ -140,10 +140,46 @@
       "path": "docs\\planning\\requests\\request-35-cfg-body-probe.md"
     },
     {
+      "id": "request-36",
+      "label": "Move planning engine to foundation/workflow for reusable workflow configurations",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-36-move-planning-engine-to-foundation-workflow-for-reusable-workflow-configurations.md"
+    },
+    {
+      "id": "request-38",
+      "label": "Improve intake",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-38-improve-intake.md"
+    },
+    {
+      "id": "request-39",
+      "label": "Trace helper request",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-39-trace-helper-request.md"
+    },
+    {
       "id": "request-4",
       "label": "Archive functionality for planning items",
       "state": "closed",
       "path": "docs\\planning\\requests\\request-4-archive-functionality-for-planning-items.md"
+    },
+    {
+      "id": "request-40",
+      "label": "Lean head",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-40-lean-head.md"
+    },
+    {
+      "id": "request-41",
+      "label": "Extract request",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-41-extract-request.md"
+    },
+    {
+      "id": "request-42",
+      "label": "Section parsing request",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-42-section-parsing-request.md"
     },
     {
       "id": "request-5",

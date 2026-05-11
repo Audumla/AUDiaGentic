@@ -1,0 +1,19 @@
+# Shared local LLM provider config for AUDiaGentic harnesses.
+# All TUI/agent shells (Goose, OpenCode, etc.) read from here.
+# Do not place secrets here.
+
+provider: openai
+
+# llama-swap proxy endpoint
+host: http://10.10.200.52:13305/v1
+api_key: dummy
+
+# Default model for agent tasks. Override with GOOSE_MODEL / LLM_MODEL env var.
+# Available models: qwen3.5-2b, gemma4-E4B, gemma4-E2B
+default_model: qwen3.5-2b
+
+# Recommended model per role
+models:
+  smoke:   qwen3.5-2b   # lightweight, smoke tests only
+  agent:   gemma4-E4B   # primary agent tasks
+  fast:    gemma4-E2B   # fast/parallel tasks

@@ -4,8 +4,9 @@ import json
 import warnings
 from pathlib import Path
 
+from audiagentic.foundation.workflow import ItemView
+
 from ...fs.read import parse_markdown
-from ..api_types import ItemView
 
 
 class ItemReaderService:

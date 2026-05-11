@@ -15,7 +15,8 @@ for _p in (str(ROOT), str(ROOT / "src")):
 
 from tests.planning_testkit import seed_planning_config
 
-from audiagentic.planning.app.id_gen import _format_id, _next_id_config_mode, next_id, sync_counter
+from audiagentic.foundation.workflow.id_gen import _format_id, _next_id_config_mode, next_id
+from audiagentic.planning.app.id_gen import sync_counter
 
 ID_PATTERN = re.compile(r"^[a-z]+-([1-9]\d*|0)$")
 
