@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {
-    pi.on("ready", (_event, ctx) => {
+    pi.on("session_start", async (_event, ctx) => {
         ctx.ui.setFooter((_tui, _theme, _footerData) => ({
             dispose: () => {},
             invalidate() {},
