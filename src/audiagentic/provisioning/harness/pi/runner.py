@@ -297,9 +297,6 @@ def build_pi_command(ctx: PiContext, *, smoke: bool) -> list[str]:
 
     command = [str(ctx.pi_bin)]
 
-    if ext_cfg.get("no_auto_discovery", True):
-        command.append("--no-extensions")
-
     command.extend(["--provider", ctx.provider, "--model", ctx.model])
 
     if smoke:
@@ -332,6 +329,13 @@ def build_pi_command(ctx: PiContext, *, smoke: bool) -> list[str]:
 
         for flag in cfg.get("extra_flags", []):
             command.append(flag)
+
+    if not smoke:
+        # Block auto-discovery then explicitly load our extensions.
+        command.append("--no-extensions")
+        command.extend(["--extension", str(ctx.pi_agent_dir / "extensions" / "footer.ts")])
+        for ext in ext_cfg.get("load", []):
+            command.extend(["--extension", str(ext)])
 
     if ctx.enable_mcp:
         command.extend([
