@@ -2,6 +2,8 @@
 /opencode.json
 /.vscode
 /.audiagentic/runtime/
+/.audiagentic/logs/
+/.audiagentic/provisioning/logs/
 /.audiagentic/provisioning/goose/bin/
 /.audiagentic/provisioning/rig/embedded/bin/
 /.audiagentic/provisioning/rig/embedded/build/
