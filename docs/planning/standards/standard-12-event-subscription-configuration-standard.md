@@ -20,7 +20,7 @@ Standard format for event subscription and publication configuration in AUDiaGen
 # Source Basis
 
 This standard is derived from:
-- spec-19 (Interoperability event layer specification) — event protocol and envelope format
+- spec-23 (Interoperability event layer specification) — event protocol, envelope format, namespace convention
 - standard-11 (Component architecture standard) — config-driven design requirements
 - Existing knowledge event adapter patterns — practical implementation experience
 
@@ -215,12 +215,32 @@ All filters are ANDed together. Any filter section (equals, in, etc.) is ORed wi
 
 # Event Type Patterns
 
-Event types follow spec-019 dot-notation: `{component}.{noun}.{verb}`
+Event types follow spec-23 dot-notation: `{component}.{noun}.{verb}` or `{component}.{noun}.{subnoun}.{verb}` for compound actions.
+
+**Canonical planning events:**
+- `planning.item.created` — item created
+- `planning.item.updated` — item content or metadata updated
+- `planning.item.deleted` — item soft or hard deleted
+- `planning.item.state.changed` — state transition
+- `planning.item.moved` — domain changed
+- `planning.item.claimed` — ownership claimed
+- `planning.item.unclaimed` — ownership released
+- `planning.item.archived` — item archived
+- `planning.item.restored` — item restored from archive
+- `planning.item.superseded` — item superseded
+- `planning.maintain.completed` — maintenance cycle completed
+- `planning.reconcile.completed` — reconciliation completed
+
+**Non-canonical (legacy, migrate when touched):**
+- `<kind>.claimed` → `planning.<kind>.claimed`
+- `planning.unclaimed` → `planning.item.unclaimed`
+- `<kind>.after_create` → `planning.<kind>.created`
+- `<kind>.after_state_change` → `planning.<kind>.state.changed`
 
 Pattern matching rules:
 - Exact match: `planning.item.state.changed`
-- Single-segment wildcard: `planning.item.*` matches `planning.item.state.changed` but not `planning.item.sub.changed`
-- Legacy compatibility: `*.after_state_change` matches `task.after_state_change`
+- Single-segment wildcard: `planning.item.*` matches `planning.item.created` but not `planning.item.state.changed`
+- Multi-segment wildcard: `planning.**` matches all planning events
 
 # Component-Specific Extensions
 
@@ -354,7 +374,7 @@ adapters:
 
 # Related Documents
 
-- spec-19: Interoperability event layer specification
+- spec-23: Interoperability event layer specification
 - standard-11: Component architecture standard
 - docs/knowledge/events/adapters.yml: Knowledge event adapters (example)
 - docs/knowledge/events/handlers.yml: Knowledge event handlers (example)

@@ -29,7 +29,7 @@ def setup_event_subscriptions() -> None:
     if _knowledge_subscription_handle is not None:
         return
     try:
-        from audiagentic.interoperability import get_bus
+        from audiagentic.foundation.event import get_bus
 
         from .events import on_planning_state_change
 

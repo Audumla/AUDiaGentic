@@ -1,0 +1,9 @@
+title: "AUDiaGentic Goose Local LLM Smoke Test"
+description: "Verifies Goose can call the repo-configured local LLM endpoint."
+
+instructions: |
+  You are running the AUDiaGentic Stage 0 Goose/local-LLM smoke test.
+  Do not edit files or run tools. Keep responses minimal.
+
+prompt: |
+  Respond with exactly: audiagentic-goose-local-ok

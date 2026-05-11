@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from audiagentic.foundation.workflow import now_iso
+
 from ..fs.scan import scan_items
 from .claims import Claims
 from .config import Config
-from .util import now_iso
 
 
 class Indexer:

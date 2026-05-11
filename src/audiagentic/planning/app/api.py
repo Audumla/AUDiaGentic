@@ -2,23 +2,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from audiagentic.foundation.event import EventLog, EventService
+from audiagentic.foundation.workflow import FrontmatterBuilder, ItemView, StateMachine
+
 from ..fs.scan import scan_items
-from .api_types import ItemView
 from .claims import Claims
 from .compact_mgr import Compactor
 from .config import Config
-from .events import EventLog
 from .ext_mgr import Extracts
 from .idx_mgr import Indexer
 from .paths import Paths
 from .rec_mgr import Reconcile
 from .rel_config import RelationshipConfig
 from .services.content_service import ContentService
-from .services.event_service import EventService
-from .services.frontmatter_builder import FrontmatterBuilder
 from .services.item_creator import ItemCreatorService
 from .services.item_reader import ItemReaderService
-from .services.lifecycle_service import LifecycleService
 from .services.maintenance_service import MaintenanceService
 from .services.planning_supersede import PlanningSupersedeService
 from .services.policy_service import PolicyService
@@ -47,16 +45,40 @@ class PlanningAPI:
         self.frontmatter_builder = FrontmatterBuilder(self.config)
         self.creator = ItemCreatorService(self)
         self.relationships = RelationshipService(self)
-        self.lifecycle = LifecycleService(self)
+        self.lifecycle = StateMachine(self)
         self.policy = PolicyService(self)
         self.planning_supersede = PlanningSupersedeService(self)
         self.content = ContentService(self)
         self.queue = QueueService(self)
         self.workflow_actions = WorkflowActionsService(self)
-        self.event_service = EventService(self)
-        self.event_service.initialize()
-        self._propagation_engine = self.event_service.propagation_engine
-        self._propagation_subscription = self.event_service.propagation_subscription
+        # Event infrastructure - generic, from foundation/event
+        self.event_service = EventService(self.events)
+        # Planning-specific propagation subscriber
+        self._propagation_engine = None
+        self._propagation_subscription = None
+        self._init_propagation()
+
+    def _init_propagation(self) -> None:
+        """Initialize planning-specific state propagation subscriber."""
+        try:
+            from audiagentic.foundation.event import get_bus
+            from audiagentic.foundation.workflow import StatePropagationEngine
+
+            config_path = (
+                self.root / ".audiagentic" / "planning" / "config" / "state_propagation.yaml"
+            )
+            self._propagation_engine = StatePropagationEngine(
+                ctx=self,
+                enabled=True,
+                config_path=config_path,
+            )
+            bus = get_bus()
+            self._propagation_subscription = bus.subscribe(
+                "planning.item.state.changed",
+                self._on_state_change_for_propagation,
+            )
+        except Exception:
+            pass  # Propagation is optional; log warning in production
 
     def _scan(self):
         return scan_items(self.root)
@@ -68,7 +90,7 @@ class PlanningAPI:
         metadata: dict | None = None,
         mode=None,
     ) -> None:
-        self.event_service.publish_event(event_type, payload, metadata=metadata, mode=mode)
+        self.event_service.publish(event_type, payload, metadata=metadata, mode=mode)
 
     def _on_state_change_for_propagation(
         self,
@@ -76,7 +98,30 @@ class PlanningAPI:
         payload: dict,
         metadata: dict,
     ) -> None:
-        self.event_service.on_state_change_for_propagation(event_type, payload, metadata)
+        """Handle state change events for propagation."""
+        if not self._propagation_engine:
+            return
+        item_id = payload.get("id")
+        new_state = payload.get("new_state")
+        if not item_id or not new_state:
+            return
+        propagation_depth = metadata.get("propagation_depth", 0)
+        max_depth = 10
+        if self._propagation_engine._config:
+            max_depth = self._propagation_engine._config.get("global", {}).get("max_depth", 10)
+        if propagation_depth >= max_depth:
+            return
+        propagations = self._propagation_engine.propagate(item_id, new_state, metadata)
+        if not propagations:
+            return
+        for target_id, target_kind, target_state in propagations:
+            self._propagation_engine.apply_propagation(
+                target_id=target_id,
+                target_state=target_state,
+                source_id=item_id,
+                source_state=new_state,
+                metadata=metadata,
+            )
 
     def lookup(self, id_: str) -> ItemView:
         return self.reader.lookup(id_)
