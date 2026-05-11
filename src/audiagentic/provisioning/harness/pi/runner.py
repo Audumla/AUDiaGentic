@@ -131,6 +131,8 @@ def _materialize_ui(ctx: PiContext) -> None:
     if "editor_padding_x" in ui:
         settings["editorPaddingX"] = int(ui["editor_padding_x"])
 
+    settings["extensions"] = ["extensions/footer.ts"]
+
     settings_path = ctx.pi_agent_dir / "settings.json"
     existing: dict[str, object] = {}
     if settings_path.exists():
