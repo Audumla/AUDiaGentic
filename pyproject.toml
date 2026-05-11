@@ -49,6 +49,7 @@ where = ["src"]
     # Pi harness config
     "provisioning/harness/pi/config/*.yaml",
     # TUI home templates
+    "provisioning/harness/pi/templates/harness-home/agent/extensions/footer.ts",
     "provisioning/harness/pi/templates/harness-home/agent/mcp.json",
     "provisioning/harness/pi/templates/harness-home/agent/models.json",
     "provisioning/harness/pi/templates/harness-home/agent/SYSTEM.md",
