@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from audiagentic.foundation.workflow import next_id
+
 from ...fs.write import dump_markdown
-from ..id_gen import next_id
 
 
 class ItemCreatorService:

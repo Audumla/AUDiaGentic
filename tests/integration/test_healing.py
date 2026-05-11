@@ -104,15 +104,15 @@ rules:
   parent_in_set:
     enabled: true
     description: "Set parent to new_state when parent is in configured state set"
-    logic: "audiagentic.planning.app.propagation_rules.rule_parent_in_set"
+    logic: "audiagentic.foundation.workflow.propagation_rules.rule_parent_in_set"
   all_children_in_set:
     enabled: true
     description: "Set to target state when all children are in configured state set"
-    logic: "audiagentic.planning.app.propagation_rules.rule_all_children_in_set"
+    logic: "audiagentic.foundation.workflow.propagation_rules.rule_all_children_in_set"
   none:
     enabled: true
     description: "No state propagation"
-    logic: "audiagentic.planning.app.propagation_rules.rule_none"
+    logic: "audiagentic.foundation.workflow.propagation_rules.rule_none"
 """)
 
 
@@ -273,11 +273,11 @@ rules:
   parent_in_set:
     enabled: true
     description: "Set parent to new_state when parent is in configured state set"
-    logic: "audiagentic.planning.app.propagation_rules.rule_parent_in_set"
+    logic: "audiagentic.foundation.workflow.propagation_rules.rule_parent_in_set"
   none:
     enabled: true
     description: "No state propagation"
-    logic: "audiagentic.planning.app.propagation_rules.rule_none"
+    logic: "audiagentic.foundation.workflow.propagation_rules.rule_none"
 
 healing:
   enabled: true

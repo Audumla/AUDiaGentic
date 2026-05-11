@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-26T23:58:11.762207+00:00",
+  "generated_at": "2026-04-27T11:48:17.543804+00:00",
   "items": [
     {
       "id": "task-30",
@@ -2070,6 +2070,12 @@
       "label": "Bad Parent Task",
       "state": "draft",
       "path": "docs\\planning\\tasks\\task-7-bad-parent-task.md"
+    },
+    {
+      "id": "task-9",
+      "label": "Nested subsection test",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\task-9-nested-subsection-test.md"
     }
   ]
 }

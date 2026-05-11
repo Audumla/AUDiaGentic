@@ -1,7 +1,5 @@
-import os
 import sys
 from pathlib import Path
-import shutil
 
 
 # Bootstrap project root to import audiagentic
@@ -18,8 +16,9 @@ def bootstrap():
 root = bootstrap()
 
 import tools.planning.tm_helper as tm
-from audiagentic.planning.app.api import PlanningAPI
 from tests.planning_testkit import seed_planning_config
+
+from audiagentic.planning.app.api import PlanningAPI
 
 
 def test_validate_id():
