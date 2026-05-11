@@ -86,8 +86,8 @@ ui:
   #   The extension receives (ui, theme) and must return a TUI component.
   #   Added to extensions.load automatically when set.
   #   Example: "path/to/my-header.js"
-  quiet_startup: false
-  collapse_changelog: false
+  quiet_startup: true
+  collapse_changelog: true
   custom_header_extension: null
 
   # --- Runner startup block ---
@@ -102,7 +102,7 @@ ui:
   #       ╔══════════════════════════╗
   #       ║   AUDiaGentic  Stage 0   ║
   #       ╚══════════════════════════╝
-  show_startup_info: true
+  show_startup_info: false
   startup_banner: null
 
   # Hide <think> blocks in the conversation view.
