@@ -1,0 +1,31 @@
+{
+  "event": "launch_requested",
+  "binary": "H:\\development\\projects\\AUDia\\AUDiaGentic\\.audiagentic\\provisioning\\rig\\embedded\\bin\\llama-server\\windows\\llama-server.exe",
+  "working_dir": "H:\\development\\projects\\AUDia\\AUDiaGentic\\.audiagentic\\provisioning\\rig\\embedded\\bin\\llama-server\\windows",
+  "command": [
+    "H:\\development\\projects\\AUDia\\AUDiaGentic\\.audiagentic\\provisioning\\rig\\embedded\\bin\\llama-server\\windows\\llama-server.exe",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "42064",
+    "--device",
+    "Vulkan0",
+    "--gpu-layers",
+    "all",
+    "--model",
+    "../../models/Qwen_Qwen3.5-2B-Q4_K_S.gguf",
+    "--ctx-size",
+    "262144",
+    "--parallel",
+    "2",
+    "--fit",
+    "on",
+    "--no-mmap",
+    "--reasoning",
+    "off"
+  ],
+  "host": "127.0.0.1",
+  "port": 42064,
+  "model": "Qwen_Qwen3.5-2B-Q4_K_S.gguf"
+}
+{"event": "launch_ready", "pid": 85560, "base_url": "http://127.0.0.1:42064/v1", "model": "Qwen_Qwen3.5-2B-Q4_K_S.gguf"}

@@ -3458,3 +3458,31 @@
 {"ts": "2026-04-22T07:34:54.186966+00:00", "event": "planning.compacted", "remapped": 0, "renames": 0, "repair_count": 466, "aborted": false}
 {"ts": "2026-04-22T10:07:41.121604+00:00", "event": "planning.compacted", "remapped": 0, "renames": 0, "repair_count": 132, "aborted": false}
 {"ts": "2026-04-22T10:28:38.142059+00:00", "event": "planning.item.created", "id": "request-35", "kind": "request", "path": "docs\\planning\\requests\\request-35-cfg-body-probe.md"}
+{"ts": "2026-04-27T08:22:39.339540+00:00", "event": "planning.item.created", "id": "request-2", "kind": "request", "path": "docs\\planning\\requests\\request-2-move-planning-engine-to-foundation-workflow-for-reusable-workflow-configurations.md"}
+{"ts": "2026-04-27T08:24:20.292561+00:00", "event": "planning.item.updated", "id": "spec-2", "kind": "spec"}
+{"ts": "2026-04-27T08:28:03.037972+00:00", "event": "planning.item.updated", "id": "spec-54", "kind": "spec"}
+{"ts": "2026-04-27T08:29:57.232281+00:00", "event": "planning.item.created", "id": "spec-55", "kind": "spec", "path": "docs\\planning\\specifications\\spec-55-generic-workflow-engine-in-foundation-workflow.md"}
+{"ts": "2026-04-27T08:30:05.571169+00:00", "event": "planning.item.updated", "id": "spec-55", "kind": "spec"}
+{"ts": "2026-04-27T08:32:37.595064+00:00", "event": "planning.item.updated", "id": "spec-55", "kind": "spec"}
+{"ts": "2026-04-27T08:34:07.331735+00:00", "event": "planning.maintained", "renames": 0, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 468, "extracts_skipped": 0}
+{"ts": "2026-04-27T08:34:07.331959+00:00", "event": "planning.reconciled", "renames": 0, "orphans": ["spec-0021"]}
+{"ts": "2026-04-27T08:34:18.993008+00:00", "event": "planning.item.created", "id": "plan-22", "kind": "plan", "path": "docs\\planning\\plans\\plan-22-refactor-planning-engine-to-foundation-workflow.md"}
+{"ts": "2026-04-27T08:34:46.025232+00:00", "event": "planning.item.updated", "id": "plan-22", "kind": "plan"}
+{"ts": "2026-04-27T08:36:16.572597+00:00", "event": "planning.maintained", "renames": 0, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 469, "extracts_skipped": 0}
+{"ts": "2026-04-27T08:36:16.572810+00:00", "event": "planning.reconciled", "renames": 0, "orphans": ["spec-0021"]}
+{"ts": "2026-04-27T10:28:00.280403+00:00", "event": "planning.item.updated", "id": "spec-55", "kind": "spec"}
+{"ts": "2026-04-27T10:29:30.085741+00:00", "event": "planning.maintained", "renames": 0, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 469, "extracts_skipped": 0}
+{"ts": "2026-04-27T10:29:30.085955+00:00", "event": "planning.reconciled", "renames": 0, "orphans": ["spec-0021"]}
+{"ts": "2026-04-27T10:34:07.288023+00:00", "event": "planning.maintained", "renames": 0, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 469, "extracts_skipped": 0}
+{"ts": "2026-04-27T11:11:29.236582+00:00", "event": "test.event", "test": true}
+{"ts": "2026-04-27T11:46:23.838194+00:00", "event": "planning.item.created", "id": "request-38", "kind": "request", "path": "docs\\planning\\requests\\request-38-improve-intake.md"}
+{"ts": "2026-04-27T11:46:24.793145+00:00", "event": "planning.item.created", "id": "request-39", "kind": "request", "path": "docs\\planning\\requests\\request-39-trace-helper-request.md"}
+{"ts": "2026-04-27T11:46:25.615760+00:00", "event": "planning.item.created", "id": "request-40", "kind": "request", "path": "docs\\planning\\requests\\request-40-lean-head.md"}
+{"ts": "2026-04-27T11:46:26.452071+00:00", "event": "planning.item.created", "id": "request-41", "kind": "request", "path": "docs\\planning\\requests\\request-41-extract-request.md"}
+{"ts": "2026-04-27T11:46:27.799282+00:00", "event": "planning.item.created", "id": "spec-57", "kind": "spec", "path": "docs\\planning\\specifications\\spec-57-extract-controls.md"}
+{"ts": "2026-04-27T11:46:28.141330+00:00", "event": "planning.item.updated", "id": "spec-57", "kind": "spec"}
+{"ts": "2026-04-27T11:48:10.773107+00:00", "event": "planning.maintained", "renames": 0, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 475, "extracts_skipped": 0}
+{"ts": "2026-04-27T11:48:10.773439+00:00", "event": "planning.reconciled", "renames": 0, "orphans": ["spec-0021"]}
+{"ts": "2026-04-27T11:48:12.661029+00:00", "event": "planning.item.created", "id": "request-42", "kind": "request", "path": "docs\\planning\\requests\\request-42-section-parsing-request.md"}
+{"ts": "2026-04-27T11:48:15.756601+00:00", "event": "planning.item.created", "id": "spec-58", "kind": "spec", "path": "docs\\planning\\specifications\\spec-58-section-parsing-spec.md"}
+{"ts": "2026-04-27T11:48:16.522969+00:00", "event": "planning.item.updated", "id": "task-9", "kind": "task"}

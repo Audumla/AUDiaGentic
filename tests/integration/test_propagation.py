@@ -151,28 +151,28 @@ rules:
   none:
     enabled: true
     description: "No state propagation"
-    logic: "audiagentic.planning.app.propagation_rules.rule_none"
+    logic: "audiagentic.foundation.workflow.propagation_rules.rule_none"
 
   parent_in_set:
     enabled: true
     description: "Set parent to new_state when parent is in configured state set"
-    logic: "audiagentic.planning.app.propagation_rules.rule_parent_in_set"
+    logic: "audiagentic.foundation.workflow.propagation_rules.rule_parent_in_set"
 
   all_children_in_set:
     enabled: true
     description: "Set parent to new_state when all sibling children are in configured state set"
-    logic: "audiagentic.planning.app.propagation_rules.rule_all_children_in_set"
+    logic: "audiagentic.foundation.workflow.propagation_rules.rule_all_children_in_set"
 
   parent_not_in_set:
     enabled: true
     description: "Set parent to new_state when parent is not in configured state set"
-    logic: "audiagentic.planning.app.propagation_rules.rule_parent_not_in_set"
+    logic: "audiagentic.foundation.workflow.propagation_rules.rule_parent_not_in_set"
 
 actions:
   complete_parent:
     enabled: true
     description: "Complete parent when all related children are in configured state set"
-    logic: "audiagentic.planning.app.propagation_rules.action_complete_parent"
+    logic: "audiagentic.foundation.workflow.propagation_rules.action_complete_parent"
 """)
 
 
@@ -183,7 +183,7 @@ def _wait_for_propagation(planning_api: PlanningAPI, timeout: float = 5.0) -> No
         planning_api: PlanningAPI instance
         timeout: Maximum time to wait in seconds
     """
-    from audiagentic.interoperability.queue import AsyncQueue
+    from audiagentic.foundation.event.queue import AsyncQueue
 
     queue = AsyncQueue.get_instance()
     start_time = time.time()
@@ -218,7 +218,9 @@ def _create_task_hierarchy(planning_api: PlanningAPI) -> tuple[str, str, str, st
     request_id, spec_id = _create_request_and_spec(planning_api)
     plan = planning_api.new("plan", label="Test Plan", summary="Test plan", refs={"spec": spec_id})
     plan_id = plan.data["id"]
-    wp = planning_api.new("wp", label="Test WP", summary="Test work package", refs={"plan": plan_id})
+    wp = planning_api.new(
+        "wp", label="Test WP", summary="Test work package", refs={"plan": plan_id}
+    )
     wp_id = wp.data["id"]
     task = planning_api.new("task", label="Test Task", summary="Test task", refs={"spec": spec_id})
     task_id = task.data["id"]
@@ -232,7 +234,7 @@ class TestStatePropagationIntegration:
     @pytest.fixture(autouse=True)
     def reset_event_bus(self):
         """Reset event bus singleton before each test for isolation."""
-        from audiagentic.interoperability import get_bus, reset_bus
+        from audiagentic.foundation.event import get_bus, reset_bus
 
         reset_bus()
         # Create a fresh bus for this test
@@ -244,7 +246,7 @@ class TestStatePropagationIntegration:
     def planning_root(self, tmp_path: Path):
         """Create a temporary project directory with planning items."""
         # Reset bus before creating PlanningAPI so they share the same instance
-        from audiagentic.interoperability import reset_bus
+        from audiagentic.foundation.event import reset_bus
 
         reset_bus()
         _seed_planning_project(tmp_path)
@@ -293,7 +295,9 @@ class TestStatePropagationIntegration:
         """Test Plan state propagation to Spec."""
         _, planning_api = planning_root
         _, spec_id = _create_request_and_spec(planning_api)
-        plan = planning_api.new("plan", label="Test Plan", summary="Test plan", refs={"spec": spec_id})
+        plan = planning_api.new(
+            "plan", label="Test Plan", summary="Test plan", refs={"spec": spec_id}
+        )
         plan_id = plan.data["id"]
         # Transition spec to ready first (required for trigger_parent_if_ready rule)
         planning_api.state(spec_id, "ready", metadata={})
@@ -409,7 +413,9 @@ kinds: {}
         config["global"]["max_depth"] = 2
         planning_api._propagation_engine._config = config
         _, spec_id = _create_request_and_spec(planning_api)
-        plan = planning_api.new("plan", label="Test Plan", summary="Test plan", refs={"spec": spec_id})
+        plan = planning_api.new(
+            "plan", label="Test Plan", summary="Test plan", refs={"spec": spec_id}
+        )
         plan_id = plan.data["id"]
         # Transition spec to ready first
         planning_api.state(spec_id, "ready", metadata={})

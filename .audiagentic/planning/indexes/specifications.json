@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-26T23:58:11.762207+00:00",
+  "generated_at": "2026-04-27T11:48:17.543804+00:00",
   "items": [
     {
       "id": "spec-1",
@@ -294,6 +294,30 @@
       "label": "Test Request \u2014 Specification",
       "state": "draft",
       "path": "docs\\planning\\specifications\\spec-52-test-request-specification.md"
+    },
+    {
+      "id": "spec-55",
+      "label": "Generic workflow engine in foundation/workflow",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-55-generic-workflow-engine-in-foundation-workflow.md"
+    },
+    {
+      "id": "spec-56",
+      "label": "Improve intake \u2014 Specification",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-56-improve-intake-specification.md"
+    },
+    {
+      "id": "spec-57",
+      "label": "Extract controls",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-57-extract-controls.md"
+    },
+    {
+      "id": "spec-58",
+      "label": "Section parsing spec",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-58-section-parsing-spec.md"
     },
     {
       "id": "spec-6",

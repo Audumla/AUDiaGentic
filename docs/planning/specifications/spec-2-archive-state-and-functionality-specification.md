@@ -13,126 +13,70 @@ standard_refs:
 task_refs: []
 ---
 
-
-
-
-
-
-
-
-
-
-
 # Purpose
 
-Define archive state workflow and functionality for planning items to enable archiving
-older or redundant items while maintaining historical records and queryability.
+Move the planning engine from src/audiagentic/planning/app/ to src/audiagentic/foundation/workflow/ as a generic, configurable workflow engine. Planning becomes one configured instance. Other workflows (deployments, CI, etc.) can reuse the same engine.
 
 # Scope
 
-- Archive state for all planning item kinds (request, spec, plan, task, wp, standard)
-- State-based archive and restore behavior in the planning core
-- Archive filtering in tm_list()
-- Archive validation rules in tm_validate()
-- Archive metadata in tm_show()
+## In Scope
+- Create foundation/workflow/ module with generic WorkflowAPI
+- Move EventLog, EventService to foundation/workflow/
+- Build automation engine that connects automations.yaml to EventBus
+- Make Config accept workflow_name parameter
+- Keep PlanningAPI as backward-compat wrapper
+- Per-workflow config directories (.audiagentic/<workflow>/config/)
+
+## Out of Scope
+- Changing the planning config structure (planning.yaml, workflows.yaml stay as-is for now)
+- Creating new workflow instances (deployments, etc.) - that comes after
+- MCP server changes beyond updating import paths
 
 # Requirements
 
-## State Machine
+## 1. Generic WorkflowAPI
 
-1. Add "archived" state to all planning item kinds
-2. Define valid transitions:
-   - draft → archived
-   - ready → archived
-   - in_progress → archived
-   - done → archived
-   - archived → a valid active state for that item kind, as allowed by the configured workflow
-3. Archived items cannot be modified except through allowed state restoration and explicitly-supported archive metadata updates.
-4. Archive behavior should remain canonical in workflow/core planning logic; MCP may expose convenience affordances later, but should not define separate archive semantics.
+WorkflowAPI.__init__ accepts:
+- root: Path - project root
+- workflow: str - workflow name (directory under .audiagentic/)
+- test_mode: bool - test mode flag
 
-## State-Based Archive Transition
+## 2. Configurable Config
 
-```python
-def tm_state(
-    id_: str,
-    new_state: str,
-    reason: str | None = None,
-    actor: str | None = None,
-    root: Path | None = None,
-) -> dict[str, Any]:
-    """Change planning item state, including archive/restore transitions."""
-```
+Config class reads from `.audiagentic/<workflow>/config/` instead of hardcoded `.audiagentic/planning/config/`.
 
-Requirements:
-- Transition item to `archived` when the requested state is archive
-- Record archive metadata (archived_at, archived_by or actor, reason)
-- Log archive event
-- Return archive result
+## 3. Working Automation Engine
 
-## State-Based Restore Transition
+The automation engine reads automations.yaml and subscribes to EventBus events. When an event matches an automation rule, the configured actions execute.
 
-```python
-def tm_state(
-    id_: str,
-    new_state: str,
-    actor: str | None = None,
-    root: Path | None = None,
-) -> dict[str, Any]:
-    """Change planning item state, including archive/restore transitions."""
-```
+Action types (initial):
+- `emit_event` - emit an event to EventBus
+- `validate` - run validation on the item
+- `note_stub`, `review_stub`, `report_stub` - logging actions
+- `subprocess` - run a subprocess command (future)
+- `webhook` - call a webhook URL (future)
 
-Requirements:
-- Transition item from `archived` back to a valid non-archived state for that item kind
-- Record restore metadata (restored_at, restored_by or actor)
-- Log restore event
-- Return restore result
+## 4. Event System in Foundation
 
-## tm_list()
+Move EventLog and EventService from planning/app/ to foundation/workflow/. They are generic and should not be planning-specific.
 
-```python
-def tm_list(
-    kind: str | None = None,
-    include_archived: bool = False,
-    root: Path | None = None,
-) -> list[dict[str, Any]]:
-    """List planning items with archive filtering."""
-```
+## 5. Backward Compatibility
 
-Requirements:
-- Exclude archived items by default (include_archived=False)
-- Include archived items when requested (include_archived=True)
-- Archive state included in item metadata
-
-## tm_validate()
-
-Requirements:
-- Archived items skip cross-reference validation
-- Archived items still validate required fields
-- Report archived items separately in validation output
-
-## tm_show()
-
-Requirements:
-- Include archive metadata for archived items
-- Include restore metadata for restored items
-- Show None for archive fields on non-archived items
+PlanningAPI remains as a thin wrapper around WorkflowAPI.
 
 # Constraints
 
-1. Archive metadata stored in YAML frontmatter
-2. Archive events logged to events.jsonl
-3. Archived items remain queryable
-4. No automatic archive policies (manual archive only)
-5. No bulk archive operations in this phase
-6. Future workflow triggers may act on archived state later, but this phase only requires the core state semantics and directly related read/validation behavior
+- Each workflow instance has its own automations config - not a singular config
+- EventBus stays in audiagentic.interoperability (already generic)
+- The automation engine is generic, the config is per-workflow
+- Existing planning tests must continue to pass
 
 # Acceptance Criteria
 
-1. Archived state is defined for all planning kinds
-2. State transitions are validated correctly
-3. State-driven archive transitions move items to `archived` with metadata
-4. State-driven restore transitions move items back to a valid active state with metadata
-5. tm_list() excludes archived items by default
-6. tm_validate() skips cross-ref validation for archived items
-7. tm_show() includes archive metadata
-8. Archive events are logged
+1. WorkflowAPI(root, workflow="planning") works identically to current PlanningAPI(root)
+2. Config reads from .audiagentic/<workflow>/config/ based on workflow name
+3. Automation engine executes actions from automations.yaml when events fire
+4. EventLog, EventService live in foundation/workflow/
+5. PlanningAPI is a thin wrapper around WorkflowAPI
+6. All existing planning tests pass
+7. Import paths updated in v2 MCP server

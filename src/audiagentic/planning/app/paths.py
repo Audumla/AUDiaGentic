@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from .util import slugify
+from audiagentic.foundation.workflow import slugify
 
 
 class Paths:
@@ -84,7 +84,9 @@ class Paths:
         """Render canonical filename for a planning item from config."""
         kind_cfg = self.get_kind_config(kind)
         naming = self.planning_cfg["planning"].get("naming", {})
-        pattern = kind_cfg.get("filename_pattern") or naming.get("default_pattern", "{id}-{slug}.md")
+        pattern = kind_cfg.get("filename_pattern") or naming.get(
+            "default_pattern", "{id}-{slug}.md"
+        )
         return pattern.format(id=id_, slug=slugify(label))
 
     def get_kind_config(self, kind: str) -> dict:

@@ -5,10 +5,10 @@ Validates TemplateEngine, RelationshipConfig, Config methods, and manager refact
 implemented in phases 1-4 of plan-0014.
 """
 
-import os
 import sys
-from pathlib import Path
 import tempfile
+from pathlib import Path
+
 import pytest
 
 
@@ -25,9 +25,10 @@ def bootstrap():
 
 root = bootstrap()
 
-from audiagentic.planning.app.config import Config
-from audiagentic.planning.app.api import PlanningAPI
 from tests.planning_testkit import seed_planning_config
+
+from audiagentic.planning.app.api import PlanningAPI
+from audiagentic.planning.app.config import Config
 
 
 class TestConfigRequiredSections:

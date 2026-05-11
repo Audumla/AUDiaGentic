@@ -5,8 +5,8 @@ from pathlib import Path
 import yaml
 
 
-def test_interoperability_config_imports_and_loads(tmp_path: Path) -> None:
-    config_dir = tmp_path / ".audiagentic" / "interoperability"
+def test_event_config_imports_and_loads(tmp_path: Path) -> None:
+    config_dir = tmp_path / ".audiagentic" / "event"
     config_dir.mkdir(parents=True, exist_ok=True)
     config_dir.joinpath("config.yaml").write_text(
         yaml.safe_dump(
@@ -21,7 +21,7 @@ def test_interoperability_config_imports_and_loads(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    from audiagentic.interoperability.config import load_config
+    from audiagentic.foundation.event.config import load_config
 
     config = load_config(tmp_path)
     assert config.event_store.enabled is False
