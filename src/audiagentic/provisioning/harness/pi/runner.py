@@ -344,6 +344,9 @@ def run_pi(ctx: PiContext, pi_args: list[str], *, smoke: bool) -> int:
     if not ctx.pi_bin.exists():
         raise SystemExit("Pi not found. Run: audiagentic install")
 
+    if not smoke:
+        print("\033[2J\033[H", end="", flush=True)
+
     ctx.pi_work.mkdir(parents=True, exist_ok=True)
     ctx.pi_log_dir.mkdir(parents=True, exist_ok=True)
     materialize_config(ctx)
