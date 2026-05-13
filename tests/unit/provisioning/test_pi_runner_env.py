@@ -11,22 +11,22 @@ for _p in (str(ROOT), str(SRC)):
         sys.path.insert(0, _p)
 
 from audiagentic.provisioning.harness.pi.runner import (
-    PiContext,
+    AgentContext,
     _build_run_env,
     launch_rig_if_needed,
 )
 
 
-def _make_ctx(*, rig_pid: int | None, profile_name: str = "qwen3.5-9b-flash") -> PiContext:
-    base = Path("/tmp/pi-test")
-    return PiContext(
+def _make_ctx(*, rig_pid: int | None, profile_name: str = "qwen3.5-9b-flash") -> AgentContext:
+    base = Path("/tmp/agent-test")
+    return AgentContext(
         project_root=base,
-        pi_runtime=base / "runtime",
-        pi_home=base / "home",
-        pi_agent_dir=base / "runtime" / "agent",
-        pi_bin=base / "bin" / "pi",
-        pi_work=base,
-        pi_log_dir=base / "logs",
+        agent_runtime=base / "runtime",
+        agent_home=base / "home",
+        agent_dir=base / "runtime" / "agent",
+        agent_bin=base / "bin" / "pi",
+        agent_work=base,
+        agent_log_dir=base / "logs",
         endpoint="http://127.0.0.1:42001/v1",
         model="qwen3.5-9b-flash",
         model_profile={},
