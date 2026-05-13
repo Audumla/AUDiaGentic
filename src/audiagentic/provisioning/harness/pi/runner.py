@@ -12,7 +12,7 @@ from pathlib import Path
 import yaml
 
 DEFAULT_MODEL = "Qwen_Qwen3.5-2B-Q4_K_S.gguf"
-DEFAULT_PROVIDER = "llamaswap"
+DEFAULT_PROVIDER = "audiagentic"
 DEFAULT_API_KEY = "dummy"
 DEFAULT_BASE_URL = "http://127.0.0.1:42001/v1"
 DEFAULT_SMOKE_TIMEOUT = 60.0
@@ -21,7 +21,8 @@ TRUTHY = {"1", "true", "yes", "on"}
 # Package-relative paths — work in both dev layout (src/) and pip-installed layout.
 _PI_DIR = Path(__file__).parent                         # .../harness/pi/
 _PROVISIONING_DIR = Path(__file__).parents[2]           # .../provisioning/
-_TEMPLATES_DIR = _PI_DIR / "templates" / "harness-home"
+_SRC_DIR = Path(__file__).parents[4]                    # .../src/
+_TEMPLATES_DIR = _PI_DIR / "templates" / "home"
 _MODELS_JSON = _PROVISIONING_DIR / "rig" / "embedded" / "models.json"
 
 
@@ -37,6 +38,7 @@ class PiContext:
     endpoint: str
     model: str
     model_profile: dict[str, object]
+    profile_name: str
     provider: str
     rig_pid: int | None
     enable_mcp: bool
@@ -154,7 +156,8 @@ def materialize_config(ctx: PiContext) -> None:
         "__AUDIAGENTIC_PI_MODEL__": ctx.model,
         "__AUDIAGENTIC_PI_FALLBACK_MODEL__": os.environ.get("AUDIAGENTIC_PI_FALLBACK_MODEL", ctx.model),
         "__AUDIAGENTIC_REPO_ROOT__": str(ctx.project_root).replace("\\", "/"),
-        "__AUDIAGENTIC_PYTHON__": os.environ.get("AUDIAGENTIC_PI_PYTHON", "python").replace("\\", "/"),
+        "__AUDIAGENTIC_SRC__": str(_SRC_DIR).replace("\\", "/"),
+        "__AUDIAGENTIC_PYTHON__": sys.executable.replace("\\", "/"),
     }
 
     for path in (ctx.pi_agent_dir / "models.json", ctx.pi_agent_dir / "mcp.json"):
@@ -198,9 +201,11 @@ def materialize_config(ctx: PiContext) -> None:
             mcp_path.write_text(json.dumps(mcp_config, indent=2) + "\n", encoding="utf-8")
 
 
-def launch_rig_if_needed(model: str, profile_name: str) -> tuple[str, str, int | None]:
+def launch_rig_if_needed(model: str, profile_name: str, model_profile: dict[str, object]) -> tuple[str, str, int | None]:
     endpoint = os.environ.get("AUDIAGENTIC_PI_BASE_URL", DEFAULT_BASE_URL)
     if os.environ.get("AUDIAGENTIC_PI_BASE_URL"):
+        return endpoint, model, None
+    if not model_profile.get("model_file"):
         return endpoint, model, None
 
     env = env_with_pythonpath()
@@ -227,7 +232,7 @@ def build_global_context(*, project_root: Path, pi_runtime: Path, enable_mcp: bo
     harness_cfg = load_harness_config()
     requested_model = os.environ.get("AUDIAGENTIC_PI_MODEL", harness_cfg.get("model", DEFAULT_MODEL))
     profile_name, model_profile = load_model_profile(None, requested_model)
-    endpoint, model, rig_pid = launch_rig_if_needed(requested_model, profile_name)
+    endpoint, model, rig_pid = launch_rig_if_needed(requested_model, profile_name, model_profile)
     provider = os.environ.get("AUDIAGENTIC_PI_PROVIDER", DEFAULT_PROVIDER)
     resolved_enable_mcp = enable_mcp or bool(harness_cfg.get("mcp", {}).get("enabled", False))
     return PiContext(
@@ -241,6 +246,7 @@ def build_global_context(*, project_root: Path, pi_runtime: Path, enable_mcp: bo
         endpoint=endpoint,
         model=model,
         model_profile=model_profile,
+        profile_name=profile_name,
         provider=provider,
         rig_pid=rig_pid,
         enable_mcp=resolved_enable_mcp,
@@ -294,6 +300,7 @@ def build_pi_command(ctx: PiContext, *, smoke: bool) -> list[str]:
     tools_cfg = cfg.get("tools", {})
     ext_cfg = cfg.get("extensions", {})
     sandbox_cfg = cfg.get("sandbox", {})
+    lockdown_cfg = cfg.get("lockdown", {})
 
     command = [str(ctx.pi_bin)]
 
@@ -327,6 +334,13 @@ def build_pi_command(ctx: PiContext, *, smoke: bool) -> list[str]:
             if sandbox_path:
                 command.extend(["--sandbox-config", str(sandbox_path)])
 
+        if lockdown_cfg.get("no_skills", True):
+            command.append("--no-skills")
+        if lockdown_cfg.get("no_prompt_templates", True):
+            command.append("--no-prompt-templates")
+        if lockdown_cfg.get("no_context_files", True):
+            command.append("--no-context-files")
+
         for flag in cfg.get("extra_flags", []):
             command.append(flag)
 
@@ -346,6 +360,19 @@ def build_pi_command(ctx: PiContext, *, smoke: bool) -> list[str]:
     return command
 
 
+def _build_run_env(ctx: PiContext) -> dict[str, str]:
+    env = env_with_pythonpath()
+    env["HOME"] = str(ctx.pi_home)
+    env["PI_CODING_AGENT_DIR"] = str(ctx.pi_agent_dir)
+    env["PI_CODING_AGENT_SESSION_DIR"] = str(ctx.pi_runtime / "sessions")
+    env["AUDIAGENTIC_REPO_ROOT"] = str(ctx.project_root)
+    env["AUDIAGENTIC_PI_BASE_URL"] = ctx.endpoint
+    env["AUDIAGENTIC_PI_MODEL"] = ctx.model
+    env["AUDIAGENTIC_RIG_TYPE"] = "embedded" if ctx.rig_pid is not None else "external"
+    env["AUDIAGENTIC_RIG_PROFILE"] = ctx.profile_name
+    return env
+
+
 def run_pi(ctx: PiContext, pi_args: list[str], *, smoke: bool) -> int:
     if not ctx.pi_bin.exists():
         raise SystemExit("Pi not found. Run: audiagentic install")
@@ -357,13 +384,7 @@ def run_pi(ctx: PiContext, pi_args: list[str], *, smoke: bool) -> int:
     ctx.pi_log_dir.mkdir(parents=True, exist_ok=True)
     materialize_config(ctx)
 
-    env = env_with_pythonpath()
-    env["HOME"] = str(ctx.pi_home)
-    env["PI_CODING_AGENT_DIR"] = str(ctx.pi_agent_dir)
-    env["PI_CODING_AGENT_SESSION_DIR"] = str(ctx.pi_runtime / "sessions")
-    env["AUDIAGENTIC_REPO_ROOT"] = str(ctx.project_root)
-    env["AUDIAGENTIC_PI_BASE_URL"] = ctx.endpoint
-    env["AUDIAGENTIC_PI_MODEL"] = ctx.model
+    env = _build_run_env(ctx)
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     mode = "smoke" if smoke else "run"
