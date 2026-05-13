@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-27T11:48:17.543804+00:00",
+  "generated_at": "2026-05-13T12:11:01.445160+00:00",
   "items": [
     {
       "id": "plan-1",
@@ -81,6 +81,12 @@
     },
     {
       "id": "plan-22",
+      "kind": "plan",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "plan-25",
       "kind": "plan",
       "state": "draft",
       "claimed": false
@@ -303,6 +309,30 @@
     },
     {
       "id": "request-42",
+      "kind": "request",
+      "state": "captured",
+      "claimed": false
+    },
+    {
+      "id": "request-43",
+      "kind": "request",
+      "state": "captured",
+      "claimed": false
+    },
+    {
+      "id": "request-44",
+      "kind": "request",
+      "state": "captured",
+      "claimed": false
+    },
+    {
+      "id": "request-45",
+      "kind": "request",
+      "state": "captured",
+      "claimed": false
+    },
+    {
+      "id": "request-46",
       "kind": "request",
       "state": "captured",
       "claimed": false
@@ -656,9 +686,33 @@
       "claimed": false
     },
     {
+      "id": "spec-59",
+      "kind": "spec",
+      "state": "draft",
+      "claimed": false
+    },
+    {
       "id": "spec-6",
       "kind": "spec",
       "state": "in_progress",
+      "claimed": false
+    },
+    {
+      "id": "spec-60",
+      "kind": "spec",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "spec-61",
+      "kind": "spec",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "spec-62",
+      "kind": "spec",
+      "state": "draft",
       "claimed": false
     },
     {
@@ -722,7 +776,37 @@
       "claimed": false
     },
     {
+      "id": "standard-17",
+      "kind": "standard",
+      "state": "ready",
+      "claimed": false
+    },
+    {
+      "id": "standard-18",
+      "kind": "standard",
+      "state": "ready",
+      "claimed": false
+    },
+    {
+      "id": "standard-19",
+      "kind": "standard",
+      "state": "ready",
+      "claimed": false
+    },
+    {
       "id": "standard-2",
+      "kind": "standard",
+      "state": "ready",
+      "claimed": false
+    },
+    {
+      "id": "standard-20",
+      "kind": "standard",
+      "state": "ready",
+      "claimed": false
+    },
+    {
+      "id": "standard-21",
       "kind": "standard",
       "state": "ready",
       "claimed": false
@@ -2831,6 +2915,24 @@
       "id": "task-64",
       "kind": "task",
       "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-10",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-11",
+      "kind": "task",
+      "state": "draft",
+      "claimed": false
+    },
+    {
+      "id": "task-12",
+      "kind": "task",
+      "state": "archived",
       "claimed": false
     },
     {

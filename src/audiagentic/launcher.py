@@ -19,7 +19,7 @@ from audiagentic.provisioning.harness.pi.runner import (
     build_global_context,
     cleanup_rig,
     env_flag,
-    run_pi,
+    run_agent,
 )
 
 
@@ -33,12 +33,12 @@ def global_harness_runtime() -> Path:
 
 
 def _cmd_install(target: Path) -> int:
-    print(f"Installing AUDiaGentic harness into {target}")
+    print(f"Installing AUDiaGentic harness into {target}", flush=True)
     rc = install_to(target)
     if rc == 0:
-        print("\nInstall complete. Run 'audiagentic' from any project directory.")
+        print("\nInstall complete. Run 'audiagentic' from any project directory.", flush=True)
         if target != global_harness_runtime():
-            print(f"Set AUDIAGENTIC_HOME={target.parent} to use this location.")
+            print(f"Set AUDIAGENTIC_HOME={target.parent} to use this location.", flush=True)
     return rc
 
 
@@ -49,18 +49,18 @@ def _cmd_launch(project_root: Path, args: list[str]) -> int:
 
     harness_runtime = global_harness_runtime()
 
-    if not (harness_runtime / "node" / "node_modules" / ".bin").exists():
+    if not (harness_runtime / "cli" / "node_modules" / ".bin").exists():
         print("Harness not installed. Run: audiagentic install", file=sys.stderr)
         return 1
 
     enable_mcp = env_flag("AUDIAGENTIC_PI_ENABLE_MCP")
     ctx = build_global_context(
         project_root=project_root,
-        pi_runtime=harness_runtime,
+        agent_runtime=harness_runtime,
         enable_mcp=enable_mcp,
     )
     try:
-        return run_pi(ctx, args, smoke=False)
+        return run_agent(ctx, args, smoke=False)
     finally:
         cleanup_rig(ctx.rig_pid)
 
