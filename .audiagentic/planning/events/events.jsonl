@@ -3522,3 +3522,5 @@
 {"ts": "2026-05-13T12:13:33.761378+00:00", "event": "planning.reconciled", "renames": 0, "orphans": ["spec-0021"]}
 {"ts": "2026-05-13T12:15:57.975907+00:00", "event": "planning.item.created", "id": "standard-22", "kind": "standard", "path": "docs\\planning\\standards\\standard-22-review-findings-standard.md"}
 {"ts": "2026-05-13T12:15:58.349607+00:00", "event": "planning.item.updated", "id": "standard-22", "kind": "standard"}
+{"ts": "2026-05-13T12:17:37.505654+00:00", "event": "planning.maintained", "renames": 0, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 496, "extracts_skipped": 0}
+{"ts": "2026-05-13T12:17:37.505833+00:00", "event": "planning.reconciled", "renames": 0, "orphans": ["spec-0021"]}

@@ -1,6 +1,4 @@
 {
-  "enabledMcpjsonServers": [
-    "audiagentic-planning"
-  ],
-  "enableAllProjectMcpServers": true
+  "enabledMcpjsonServers": [],
+  "enableAllProjectMcpServers": false
 }
