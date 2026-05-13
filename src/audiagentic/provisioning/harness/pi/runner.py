@@ -451,7 +451,7 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
         handle.write(json.dumps({
             "event": "agent_run_started", "project_root": str(ctx.project_root),
             "provider": ctx.provider, "model": ctx.model,
-            "endpoint": ctx.endpoint, "mcp": ctx.enable_mcp, "args": pi_args,
+            "endpoint": ctx.endpoint, "mcp": ctx.enable_mcp, "args": agent_args,
         }, indent=2) + "\n")
 
     completed = subprocess.run(command, cwd=ctx.agent_work, env=env, check=False)
