@@ -27,14 +27,14 @@ _MODELS_JSON = _PROVISIONING_DIR / "rig" / "embedded" / "models.json"
 
 
 @dataclass
-class PiContext:
+class AgentContext:
     project_root: Path
-    pi_runtime: Path
-    pi_home: Path
-    pi_agent_dir: Path
-    pi_bin: Path
-    pi_work: Path
-    pi_log_dir: Path
+    agent_runtime: Path
+    agent_home: Path
+    agent_dir: Path
+    agent_bin: Path
+    agent_work: Path
+    agent_log_dir: Path
     endpoint: str
     model: str
     model_profile: dict[str, object]
@@ -56,8 +56,8 @@ def env_with_pythonpath() -> dict[str, str]:
     return os.environ.copy()
 
 
-def resolve_pi_bin(pi_runtime: Path) -> Path:
-    return pi_runtime / "node" / "node_modules" / ".bin" / ("pi.cmd" if os.name == "nt" else "pi")
+def resolve_agent_bin(agent_runtime: Path) -> Path:
+    return agent_runtime / "cli" / "node_modules" / ".bin" / ("pi.cmd" if os.name == "nt" else "pi")
 
 
 def load_model_profile(requested: str | None, model: str) -> tuple[str, dict[str, object]]:
@@ -91,7 +91,7 @@ def env_flag(name: str, default: bool = False) -> bool:
     return value.strip().lower() in TRUTHY
 
 
-def _materialize_ui(ctx: PiContext) -> None:
+def _materialize_ui(ctx: AgentContext) -> None:
     ui = ctx.harness_cfg.get("ui", {})
     if not ui:
         return
@@ -101,8 +101,8 @@ def _materialize_ui(ctx: PiContext) -> None:
 
     if theme_colors:
         base_theme_dir = (
-            ctx.pi_runtime
-            / "node"
+            ctx.agent_runtime
+            / "cli"
             / "node_modules"
             / "@earendil-works"
             / "pi-coding-agent"
@@ -114,7 +114,7 @@ def _materialize_ui(ctx: PiContext) -> None:
         base_path = base_theme_dir / f"{theme_name}.json"
         base = json.loads(base_path.read_text(encoding="utf-8")) if base_path.exists() else {"vars": {}, "colors": {}, "export": {}}
         base.setdefault("colors", {}).update(theme_colors)
-        themes_dir = ctx.pi_agent_dir / "themes"
+        themes_dir = ctx.agent_dir / "themes"
         themes_dir.mkdir(parents=True, exist_ok=True)
         custom_theme_path = themes_dir / "audiagentic.json"
         custom_theme_path.write_text(json.dumps(base, indent=2) + "\n", encoding="utf-8")
@@ -135,7 +135,7 @@ def _materialize_ui(ctx: PiContext) -> None:
 
     settings["extensions"] = ["extensions/footer.ts"]
 
-    settings_path = ctx.pi_agent_dir / "settings.json"
+    settings_path = ctx.agent_dir / "settings.json"
     existing: dict[str, object] = {}
     if settings_path.exists():
         try:
@@ -146,9 +146,9 @@ def _materialize_ui(ctx: PiContext) -> None:
     settings_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
 
 
-def materialize_config(ctx: PiContext) -> None:
-    ctx.pi_home.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(_TEMPLATES_DIR, ctx.pi_home, dirs_exist_ok=True)
+def materialize_config(ctx: AgentContext) -> None:
+    ctx.agent_home.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(_TEMPLATES_DIR, ctx.agent_home, dirs_exist_ok=True)
 
     replacements = {
         "__AUDIAGENTIC_PI_BASE_URL__": ctx.endpoint,
@@ -160,29 +160,29 @@ def materialize_config(ctx: PiContext) -> None:
         "__AUDIAGENTIC_PYTHON__": sys.executable.replace("\\", "/"),
     }
 
-    for path in (ctx.pi_agent_dir / "models.json", ctx.pi_agent_dir / "mcp.json"):
+    for path in (ctx.agent_dir / "models.json", ctx.agent_dir / "mcp.json"):
         text = path.read_text(encoding="utf-8")
         for needle, value in replacements.items():
             text = text.replace(needle, value)
         path.write_text(text, encoding="utf-8")
 
-    pi_profile = ctx.model_profile.get("pi", {})
-    if isinstance(pi_profile, dict):
-        models_path = ctx.pi_agent_dir / "models.json"
+    agent_profile = ctx.model_profile.get("pi", {})
+    if isinstance(agent_profile, dict):
+        models_path = ctx.agent_dir / "models.json"
         models_config = json.loads(models_path.read_text(encoding="utf-8"))
         provider_config = models_config["providers"][ctx.provider]
         for model_config in provider_config.get("models", []):
-            model_config["contextWindow"] = int(pi_profile.get("context_window", model_config["contextWindow"]))
-            model_config["maxTokens"] = int(pi_profile.get("max_tokens", model_config["maxTokens"]))
-            model_config["reasoning"] = bool(pi_profile.get("reasoning", model_config.get("reasoning", False)))
-            if isinstance(pi_profile.get("compat"), dict):
-                provider_config["compat"] = pi_profile["compat"]
+            model_config["contextWindow"] = int(agent_profile.get("context_window", model_config["contextWindow"]))
+            model_config["maxTokens"] = int(agent_profile.get("max_tokens", model_config["maxTokens"]))
+            model_config["reasoning"] = bool(agent_profile.get("reasoning", model_config.get("reasoning", False)))
+            if isinstance(agent_profile.get("compat"), dict):
+                provider_config["compat"] = agent_profile["compat"]
         models_path.write_text(json.dumps(models_config, indent=2) + "\n", encoding="utf-8")
 
     _materialize_ui(ctx)
 
     if not ctx.enable_mcp:
-        (ctx.pi_agent_dir / "mcp.json").write_text(
+        (ctx.agent_dir / "mcp.json").write_text(
             json.dumps(
                 {"settings": {"toolPrefix": "mcp", "idleTimeout": 10, "directTools": False}, "mcpServers": {}},
                 indent=2,
@@ -193,7 +193,7 @@ def materialize_config(ctx: PiContext) -> None:
     else:
         extra_server_args = ctx.harness_cfg.get("mcp", {}).get("extra_server_args", [])
         if extra_server_args:
-            mcp_path = ctx.pi_agent_dir / "mcp.json"
+            mcp_path = ctx.agent_dir / "mcp.json"
             mcp_config = json.loads(mcp_path.read_text(encoding="utf-8"))
             for server in mcp_config.get("mcpServers", {}).values():
                 server.setdefault("args", [])
@@ -228,21 +228,21 @@ def launch_rig_if_needed(model: str, profile_name: str, model_profile: dict[str,
     return endpoint, model, int(payload["pid"])
 
 
-def build_global_context(*, project_root: Path, pi_runtime: Path, enable_mcp: bool) -> PiContext:
+def build_global_context(*, project_root: Path, agent_runtime: Path, enable_mcp: bool) -> AgentContext:
     harness_cfg = load_harness_config()
     requested_model = os.environ.get("AUDIAGENTIC_PI_MODEL", harness_cfg.get("model", DEFAULT_MODEL))
     profile_name, model_profile = load_model_profile(None, requested_model)
     endpoint, model, rig_pid = launch_rig_if_needed(requested_model, profile_name, model_profile)
     provider = os.environ.get("AUDIAGENTIC_PI_PROVIDER", DEFAULT_PROVIDER)
     resolved_enable_mcp = enable_mcp or bool(harness_cfg.get("mcp", {}).get("enabled", False))
-    return PiContext(
+    return AgentContext(
         project_root=project_root,
-        pi_runtime=pi_runtime,
-        pi_home=pi_runtime,
-        pi_agent_dir=pi_runtime / "agent",
-        pi_bin=resolve_pi_bin(pi_runtime),
-        pi_work=project_root,
-        pi_log_dir=project_root / ".audiagentic" / "logs" / "tui",
+        agent_runtime=agent_runtime,
+        agent_home=agent_runtime,
+        agent_dir=agent_runtime / "agent",
+        agent_bin=resolve_agent_bin(agent_runtime),
+        agent_work=project_root,
+        agent_log_dir=project_root / ".audiagentic" / "logs" / "tui",
         endpoint=endpoint,
         model=model,
         model_profile=model_profile,
@@ -255,14 +255,14 @@ def build_global_context(*, project_root: Path, pi_runtime: Path, enable_mcp: bo
 
 
 
-def check_endpoint(ctx: PiContext) -> None:
+def check_endpoint(ctx: AgentContext) -> None:
     import urllib.request
     with urllib.request.urlopen(f"{ctx.endpoint}/models", timeout=15) as response:
         if response.status != 200:
             raise SystemExit(f"Endpoint health failed: {ctx.endpoint}/models -> {response.status}")
 
 
-def direct_mcp_smoke(ctx: PiContext, env: dict[str, str]) -> None:
+def direct_mcp_smoke(ctx: AgentContext, env: dict[str, str]) -> None:
     completed = subprocess.run(
         [sys.executable, "-m", "audiagentic.provisioning.mcp.server", "--readonly", "--smoke-only", "--direct-smoke"],
         cwd=ctx.project_root,
@@ -295,14 +295,14 @@ def cleanup_process_tree(pid: int) -> None:
         pass
 
 
-def build_pi_command(ctx: PiContext, *, smoke: bool) -> list[str]:
+def build_agent_command(ctx: AgentContext, *, smoke: bool) -> list[str]:
     cfg = ctx.harness_cfg
     tools_cfg = cfg.get("tools", {})
     ext_cfg = cfg.get("extensions", {})
     sandbox_cfg = cfg.get("sandbox", {})
     lockdown_cfg = cfg.get("lockdown", {})
 
-    command = [str(ctx.pi_bin)]
+    command = [str(ctx.agent_bin)]
 
     command.extend(["--provider", ctx.provider, "--model", ctx.model])
 
@@ -312,7 +312,7 @@ def build_pi_command(ctx: PiContext, *, smoke: bool) -> list[str]:
             "--no-skills", "--no-prompt-templates", "--no-themes",
             "--thinking", "off",
             "--system-prompt", "Return only the exact requested string. No markdown. No explanation.",
-            "-p", "Return only this exact ASCII string, no punctuation, no markdown: audiagentic-pi-local-ok",
+            "-p", "Return only this exact ASCII string, no punctuation, no markdown: audiagentic-agent-local-ok",
         ])
     else:
         if tools_cfg.get("no_all", False):
@@ -347,24 +347,24 @@ def build_pi_command(ctx: PiContext, *, smoke: bool) -> list[str]:
     if not smoke:
         # Block auto-discovery then explicitly load our extensions.
         command.append("--no-extensions")
-        command.extend(["--extension", str(ctx.pi_agent_dir / "extensions" / "footer.ts")])
+        command.extend(["--extension", str(ctx.agent_dir / "extensions" / "footer.ts")])
         for ext in ext_cfg.get("load", []):
             command.extend(["--extension", str(ext)])
 
     if ctx.enable_mcp:
         command.extend([
-            "--extension", str(ctx.pi_runtime / "node" / "node_modules" / "pi-mcp-adapter"),
-            "--mcp-config", str(ctx.pi_agent_dir / "mcp.json"),
+            "--extension", str(ctx.agent_runtime / "cli" / "node_modules" / "pi-mcp-adapter"),
+            "--mcp-config", str(ctx.agent_dir / "mcp.json"),
         ])
 
     return command
 
 
-def _build_run_env(ctx: PiContext) -> dict[str, str]:
+def _build_run_env(ctx: AgentContext) -> dict[str, str]:
     env = env_with_pythonpath()
-    env["HOME"] = str(ctx.pi_home)
-    env["PI_CODING_AGENT_DIR"] = str(ctx.pi_agent_dir)
-    env["PI_CODING_AGENT_SESSION_DIR"] = str(ctx.pi_runtime / "sessions")
+    env["HOME"] = str(ctx.agent_home)
+    env["PI_CODING_AGENT_DIR"] = str(ctx.agent_dir)
+    env["PI_CODING_AGENT_SESSION_DIR"] = str(ctx.agent_runtime / "sessions")
     env["AUDIAGENTIC_REPO_ROOT"] = str(ctx.project_root)
     env["AUDIAGENTIC_PI_BASE_URL"] = ctx.endpoint
     env["AUDIAGENTIC_PI_MODEL"] = ctx.model
@@ -373,22 +373,22 @@ def _build_run_env(ctx: PiContext) -> dict[str, str]:
     return env
 
 
-def run_pi(ctx: PiContext, pi_args: list[str], *, smoke: bool) -> int:
-    if not ctx.pi_bin.exists():
-        raise SystemExit("Pi not found. Run: audiagentic install")
+def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
+    if not ctx.agent_bin.exists():
+        raise SystemExit("AudiaGentic agent not found. Run: audiagentic install")
 
     if not smoke:
         print("\033[2J\033[H", end="", flush=True)
 
-    ctx.pi_work.mkdir(parents=True, exist_ok=True)
-    ctx.pi_log_dir.mkdir(parents=True, exist_ok=True)
+    ctx.agent_work.mkdir(parents=True, exist_ok=True)
+    ctx.agent_log_dir.mkdir(parents=True, exist_ok=True)
     materialize_config(ctx)
 
     env = _build_run_env(ctx)
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     mode = "smoke" if smoke else "run"
-    log_path = ctx.pi_log_dir / f"{mode}-{stamp}.log"
+    log_path = ctx.agent_log_dir / f"{mode}-{stamp}.log"
 
     if smoke:
         print(f"Checking local LLM endpoint: {ctx.endpoint}/models")
@@ -398,7 +398,7 @@ def run_pi(ctx: PiContext, pi_args: list[str], *, smoke: bool) -> int:
             direct_mcp_smoke(ctx, env)
         else:
             print("MCP disabled")
-        print(f"Writing Pi smoke log: {log_path}")
+        print(f"Writing AudiaGentic smoke log: {log_path}")
     else:
         ui_cfg = ctx.harness_cfg.get("ui", {})
         tools_cfg = ctx.harness_cfg.get("tools", {})
@@ -421,11 +421,11 @@ def run_pi(ctx: PiContext, pi_args: list[str], *, smoke: bool) -> int:
             elif tools_cfg.get("allow") is not None:
                 print(f"  Tools:    {','.join(tools_cfg['allow'])}")
             else:
-                print("  Tools:    Pi defaults")
+                print("  Tools:    AudiaGentic defaults")
             print(f"  Log:      {log_path}")
             print()
 
-    command = build_pi_command(ctx, smoke=smoke)
+    command = build_agent_command(ctx, smoke=smoke)
 
     if smoke:
         smoke_timeout = float(
@@ -433,7 +433,7 @@ def run_pi(ctx: PiContext, pi_args: list[str], *, smoke: bool) -> int:
                            ctx.harness_cfg.get("smoke", {}).get("timeout", DEFAULT_SMOKE_TIMEOUT))
         )
         with log_path.open("w", encoding="utf-8") as handle:
-            process = subprocess.Popen(command, cwd=ctx.pi_work, env=env,
+            process = subprocess.Popen(command, cwd=ctx.agent_work, env=env,
                                        stdout=handle, stderr=subprocess.STDOUT, text=True)
             try:
                 returncode = process.wait(timeout=smoke_timeout)
@@ -442,22 +442,22 @@ def run_pi(ctx: PiContext, pi_args: list[str], *, smoke: bool) -> int:
                 handle.write(f"\nSmoke timed out after {smoke_timeout:.1f}s\n")
                 return 124
         sys.stdout.write(log_path.read_text(encoding="utf-8"))
-        if returncode == 0 and "audiagentic-pi-local-ok" not in log_path.read_text(encoding="utf-8"):
+        if returncode == 0 and "audiagentic-agent-local-ok" not in log_path.read_text(encoding="utf-8"):
             return 1
         return int(returncode)
 
-    command.extend(pi_args)
+    command.extend(agent_args)
     with log_path.open("w", encoding="utf-8") as handle:
         handle.write(json.dumps({
-            "event": "pi_run_started", "project_root": str(ctx.project_root),
+            "event": "agent_run_started", "project_root": str(ctx.project_root),
             "provider": ctx.provider, "model": ctx.model,
             "endpoint": ctx.endpoint, "mcp": ctx.enable_mcp, "args": pi_args,
         }, indent=2) + "\n")
 
-    completed = subprocess.run(command, cwd=ctx.project_root, env=env, check=False)
+    completed = subprocess.run(command, cwd=ctx.agent_work, env=env, check=False)
 
     with log_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps({"event": "pi_run_finished", "returncode": int(completed.returncode)}) + "\n")
+        handle.write(json.dumps({"event": "agent_run_finished", "returncode": int(completed.returncode)}) + "\n")
     return int(completed.returncode)
 
 
