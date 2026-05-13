@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-13T12:11:01.445160+00:00",
+  "generated_at": "2026-05-13T12:15:58.788055+00:00",
   "items": [
     {
       "id": "plan-1",
@@ -807,6 +807,12 @@
     },
     {
       "id": "standard-21",
+      "kind": "standard",
+      "state": "ready",
+      "claimed": false
+    },
+    {
+      "id": "standard-22",
       "kind": "standard",
       "state": "ready",
       "claimed": false
