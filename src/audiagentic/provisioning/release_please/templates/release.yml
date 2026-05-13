@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     branches:
-      - main
+      - __BRANCH__
 
 permissions:
   contents: write
@@ -32,7 +32,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "__PYTHON_VERSION__"
 
       - name: Install build tools
         run: pip install build
