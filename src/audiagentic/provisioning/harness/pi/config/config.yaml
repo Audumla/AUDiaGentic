@@ -1,13 +1,11 @@
 # Pi harness config for AUDiaGentic.
-# Defaults to embedded rig. Override via AUDIAGENTIC_PI_* environment variables.
+# Override via AUDIAGENTIC_PI_* environment variables.
 # Do not place secrets here.
 
-# Active rig: embedded | external
-rig: embedded
-
 # Model default. Overridden by AUDIAGENTIC_PI_MODEL env var.
-# Provider is resolved from the rig setting; override via AUDIAGENTIC_PI_PROVIDER.
-model: Qwen_Qwen3.5-2B-Q4_K_S.gguf
+# Rig type (embedded vs external) is determined by whether the model profile
+# in models.json has a model_file field.
+model: qwen3.5-9b-flash
 
 # Smoke test settings.
 smoke:
@@ -64,6 +62,37 @@ sandbox:
   enabled: false
   config_path: null
 
+# --- Lockdown ---
+#
+# Restricts the slash-command surface exposed to the user.
+#
+# no_skills:           Disable skill-based /commands. Default: true.
+# no_prompt_templates: Disable prompt-template /commands. Default: true.
+# no_context_files:    Stop Pi auto-loading CLAUDE.md / AGENTS.md from the
+#                      project tree. Default: true.
+# block_builtin_commands: Pi built-in commands to remove at install time.
+#   Applied by audiagentic install — removes both autocomplete entries and
+#   the handler blocks so the commands do not execute.
+#   Available: settings, model, scoped-models, export, import, share, copy,
+#              name, session, changelog, hotkeys, fork, clone, tree, login,
+#              logout, new, compact, reload, debug, quit, arminsayshi,
+#              dementedelves
+lockdown:
+  no_skills: true
+  no_prompt_templates: true
+  no_context_files: true
+  block_builtin_commands:
+    - settings
+    - model
+    - scoped-models
+    - login
+    - logout
+    - share
+    - reload
+    - debug
+    - arminsayshi
+    - dementedelves
+
 # Extra Pi CLI flags appended verbatim to every non-smoke invocation.
 # Use sparingly; prefer the structured options above.
 extra_flags: []
@@ -114,18 +143,11 @@ ui:
   # Horizontal padding for the input editor (0–3 characters).
   editor_padding_x: 0
 
-  # --- Footer metrics ---
-  # Pi always renders the footer. These control what appears in it via a footer extension.
-  # Token counts (↑ input / ↓ output / R cache-read / W cache-write) are always shown.
-  show_cost: true          # USD cost ticker
-  show_context_pct: true   # context window % used
-  show_model: true         # model id / provider label
-
   # --- Custom theme colors ---
   # Override individual color tokens from the base theme.
   # All 51 tokens are available; only set what you want to change.
   # Values: hex "#RRGGBB", 256-color integer (0-255), or "" for terminal default.
-  # See .audiagentic-dev/pi/node/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme-schema.json
+  # See .audiagentic/harness/node/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme-schema.json
   # for the full token list.
   #
   # Example (change accent + heading color):

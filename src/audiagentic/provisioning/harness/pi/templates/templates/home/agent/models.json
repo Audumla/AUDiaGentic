@@ -1,6 +1,6 @@
 {
   "providers": {
-    "llamaswap": {
+    "audiagentic": {
       "baseUrl": "__AUDIAGENTIC_PI_BASE_URL__",
       "api": "openai-completions",
       "apiKey": "__AUDIAGENTIC_PI_API_KEY__",
