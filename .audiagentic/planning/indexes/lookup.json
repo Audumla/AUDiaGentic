@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-13T12:11:01.445160+00:00",
+  "generated_at": "2026-05-13T12:15:58.788055+00:00",
   "items": {
     "plan-1": {
       "id": "plan-1",
@@ -1204,6 +1204,15 @@
       "label": "Review findings standard",
       "state": "ready",
       "path": "docs/planning/standards/standard-21-review-findings-standard.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "standard-22": {
+      "id": "standard-22",
+      "kind": "standard",
+      "label": "Review findings standard",
+      "state": "ready",
+      "path": "docs/planning/standards/standard-22-review-findings-standard.md",
       "deleted": false,
       "terminal": false
     },
