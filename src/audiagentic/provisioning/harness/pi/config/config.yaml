@@ -23,7 +23,7 @@ smoke:
 # Priority: no_all > no_builtin > allow
 tools:
   allow: null
-  no_builtin: false
+  no_builtin: true
   no_all: false
 
 # --- Extension loading ---
@@ -44,7 +44,7 @@ extensions:
 #                    The template already passes --readonly --smoke-only; add extras here.
 #                    Example: [--verbose]
 mcp:
-  enabled: false
+  enabled: true
   extra_server_args: []
 
 # --- Sandbox (OS-level filesystem restriction) ---
@@ -92,6 +92,20 @@ lockdown:
     - debug
     - arminsayshi
     - dementedelves
+    - export
+    - import
+    - copy
+    - name
+    - session
+    - changelog
+    - hotkeys
+    - fork
+    - clone
+    - tree
+    - new
+    - compact
+    - resume
+    - quit
 
 # Extra Pi CLI flags appended verbatim to every non-smoke invocation.
 # Use sparingly; prefer the structured options above.
