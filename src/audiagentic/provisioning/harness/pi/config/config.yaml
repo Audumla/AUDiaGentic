@@ -149,7 +149,7 @@ ui:
   startup_banner: null
 
   # Hide <think> blocks in the conversation view.
-  hide_thinking_block: false
+  hide_thinking_block: true
 
   # Default thinking level: off | minimal | low | medium | high | xhigh
   thinking: off
