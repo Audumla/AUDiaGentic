@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-27T11:48:17.543804+00:00",
+  "generated_at": "2026-05-13T12:11:01.445160+00:00",
   "items": [
     {
       "id": "standard-1",
@@ -44,10 +44,40 @@
       "path": "docs\\planning\\standards\\standard-15-test-standard.md"
     },
     {
+      "id": "standard-17",
+      "label": "Review findings standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-17-review-findings-standard.md"
+    },
+    {
+      "id": "standard-18",
+      "label": "Review findings standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-18-review-findings-standard.md"
+    },
+    {
+      "id": "standard-19",
+      "label": "Review findings standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-19-review-findings-standard.md"
+    },
+    {
       "id": "standard-2",
       "label": "Documentation surface and content organization standard",
       "state": "ready",
       "path": "docs\\planning\\standards\\standard-2-documentation-surface-and-content-organization-standard.md"
+    },
+    {
+      "id": "standard-20",
+      "label": "Review findings standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-20-review-findings-standard.md"
+    },
+    {
+      "id": "standard-21",
+      "label": "Review findings standard",
+      "state": "ready",
+      "path": "docs\\planning\\standards\\standard-21-review-findings-standard.md"
     },
     {
       "id": "standard-3",

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-27T11:48:17.543804+00:00",
+  "generated_at": "2026-05-13T12:11:01.445160+00:00",
   "items": [
     {
       "id": "spec-1",
@@ -320,10 +320,34 @@
       "path": "docs\\planning\\specifications\\spec-58-section-parsing-spec.md"
     },
     {
+      "id": "spec-59",
+      "label": "Trace spec",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-59-trace-spec.md"
+    },
+    {
       "id": "spec-6",
       "label": "Fix planning API and MCP gaps revealed by coverage tests",
       "state": "in_progress",
       "path": "docs\\planning\\specifications\\spec-6-fix-planning-api-and-mcp-gaps-revealed-by-coverage-tests.md"
+    },
+    {
+      "id": "spec-60",
+      "label": "Spec backref spec",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-60-spec-backref-spec.md"
+    },
+    {
+      "id": "spec-61",
+      "label": "Delete spec",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-61-delete-spec.md"
+    },
+    {
+      "id": "spec-62",
+      "label": "Archive spec",
+      "state": "draft",
+      "path": "docs\\planning\\specifications\\spec-62-archive-spec.md"
     },
     {
       "id": "spec-7",
