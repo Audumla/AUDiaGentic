@@ -5,7 +5,7 @@
 # Model default. Overridden by AUDIAGENTIC_PI_MODEL env var.
 # Rig type (embedded vs external) is determined by whether the model profile
 # in models.json has a model_file field.
-model: qwen3.5-9b-flash
+model: qwen3.5-2b-q4_k_s
 
 # Smoke test settings.
 smoke:
