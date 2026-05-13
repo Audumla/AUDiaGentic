@@ -1,0 +1,18 @@
+{
+  "item": {
+    "id": "task-17",
+    "label": "Update tm_show to include archive metadata",
+    "state": "draft",
+    "summary": "Add archive_metadata field to tm_show output for archived objects",
+    "spec_ref": "standard-1",
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-17-update-tm-show-to-include-archive-metadata.md",
+    "archive_reason": null,
+    "archived_at": null,
+    "archived_by": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_refs": [],
+  "body": "\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+}
