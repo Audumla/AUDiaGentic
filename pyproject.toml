@@ -36,10 +36,11 @@ dev = [
 ]
 
 [project.scripts]
+# Only the user-facing CLI is a public entry point.
+# MCP servers are internal modules invoked via `python -m` within the Pi
+# harness session only. They must not appear on PATH or be discoverable
+# by other tools.
 audiagentic = "audiagentic.launcher:main"
-audiagentic-mcp-project = "audiagentic.provisioning.mcp.project_server:main"
-audiagentic-mcp-planning = "audiagentic.provisioning.mcp.planning_server:main"
-audiagentic-mcp-providers = "audiagentic.provisioning.mcp.providers_server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -48,14 +49,19 @@ where = ["src"]
 "audiagentic" = [
     # Pi harness config
     "provisioning/harness/pi/config/*.yaml",
-    # TUI home templates
-    "provisioning/harness/pi/templates/harness-home/agent/extensions/footer.ts",
-    "provisioning/harness/pi/templates/harness-home/agent/mcp.json",
-    "provisioning/harness/pi/templates/harness-home/agent/models.json",
-    "provisioning/harness/pi/templates/harness-home/agent/SYSTEM.md",
-    "provisioning/harness/pi/templates/harness-home/agent/APPEND_SYSTEM.md",
+    # Pi harness home templates
+    "provisioning/harness/pi/templates/home/agent/extensions/footer.ts",
+    "provisioning/harness/pi/templates/home/agent/mcp.json",
+    "provisioning/harness/pi/templates/home/agent/models.json",
+    "provisioning/harness/pi/templates/home/agent/SYSTEM.md",
+    "provisioning/harness/pi/templates/home/agent/APPEND_SYSTEM.md",
+    # Pi lockdown patches
+    "provisioning/harness/pi/patches/*.patch",
     # Embedded rig model profiles
     "provisioning/rig/embedded/models.json",
+    # Release-please provisioning templates
+    "provisioning/release_please/templates/*.json",
+    "provisioning/release_please/templates/*.yml",
 ]
 
 [tool.pytest.ini_options]

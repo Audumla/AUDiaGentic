@@ -14,7 +14,7 @@
         "--smoke-only"
       ],
       "env": {
-        "PYTHONPATH": "__AUDIAGENTIC_REPO_ROOT__/src",
+        "PYTHONPATH": "__AUDIAGENTIC_SRC__",
         "AUDIAGENTIC_REPO_ROOT": "__AUDIAGENTIC_REPO_ROOT__"
       },
       "lifecycle": "lazy",
@@ -29,7 +29,7 @@
         "audiagentic.provisioning.mcp.project_server"
       ],
       "env": {
-        "PYTHONPATH": "__AUDIAGENTIC_REPO_ROOT__/src",
+        "PYTHONPATH": "__AUDIAGENTIC_SRC__",
         "AUDIAGENTIC_REPO_ROOT": "__AUDIAGENTIC_REPO_ROOT__"
       },
       "lifecycle": "lazy"
@@ -41,7 +41,7 @@
         "audiagentic.provisioning.mcp.planning_server"
       ],
       "env": {
-        "PYTHONPATH": "__AUDIAGENTIC_REPO_ROOT__/src",
+        "PYTHONPATH": "__AUDIAGENTIC_SRC__",
         "AUDIAGENTIC_REPO_ROOT": "__AUDIAGENTIC_REPO_ROOT__"
       },
       "lifecycle": "lazy"
@@ -53,7 +53,19 @@
         "audiagentic.provisioning.mcp.providers_server"
       ],
       "env": {
-        "PYTHONPATH": "__AUDIAGENTIC_REPO_ROOT__/src",
+        "PYTHONPATH": "__AUDIAGENTIC_SRC__",
+        "AUDIAGENTIC_REPO_ROOT": "__AUDIAGENTIC_REPO_ROOT__"
+      },
+      "lifecycle": "lazy"
+    },
+    "audiagentic-release-please": {
+      "command": "__AUDIAGENTIC_PYTHON__",
+      "args": [
+        "-m",
+        "audiagentic.provisioning.mcp.release_please_server"
+      ],
+      "env": {
+        "PYTHONPATH": "__AUDIAGENTIC_SRC__",
         "AUDIAGENTIC_REPO_ROOT": "__AUDIAGENTIC_REPO_ROOT__"
       },
       "lifecycle": "lazy"
