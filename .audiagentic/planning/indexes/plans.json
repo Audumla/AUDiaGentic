@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-27T11:48:17.543804+00:00",
+  "generated_at": "2026-05-13T12:11:01.445160+00:00",
   "items": [
     {
       "id": "plan-1",
@@ -84,6 +84,12 @@
       "label": "Refactor planning engine to foundation/workflow",
       "state": "draft",
       "path": "docs\\planning\\plans\\plan-22-refactor-planning-engine-to-foundation-workflow.md"
+    },
+    {
+      "id": "plan-25",
+      "label": "Trace plan",
+      "state": "draft",
+      "path": "docs\\planning\\plans\\plan-25-trace-plan.md"
     },
     {
       "id": "plan-3",

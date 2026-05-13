@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-27T11:48:17.543804+00:00",
+  "generated_at": "2026-05-13T12:11:01.445160+00:00",
   "items": [
     {
       "id": "request-1",
@@ -180,6 +180,30 @@
       "label": "Section parsing request",
       "state": "captured",
       "path": "docs\\planning\\requests\\request-42-section-parsing-request.md"
+    },
+    {
+      "id": "request-43",
+      "label": "Trace request",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-43-trace-request.md"
+    },
+    {
+      "id": "request-44",
+      "label": "Spec backref request",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-44-spec-backref-request.md"
+    },
+    {
+      "id": "request-45",
+      "label": "Delete request",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-45-delete-request.md"
+    },
+    {
+      "id": "request-46",
+      "label": "Archive request",
+      "state": "captured",
+      "path": "docs\\planning\\requests\\request-46-archive-request.md"
     },
     {
       "id": "request-5",

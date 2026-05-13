@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-27T11:48:17.543804+00:00",
+  "generated_at": "2026-05-13T12:11:01.445160+00:00",
   "items": {
     "plan-1": {
       "id": "plan-1",
@@ -124,6 +124,15 @@
       "label": "Refactor planning engine to foundation/workflow",
       "state": "draft",
       "path": "docs/planning/plans/plan-22-refactor-planning-engine-to-foundation-workflow.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "plan-25": {
+      "id": "plan-25",
+      "kind": "plan",
+      "label": "Trace plan",
+      "state": "draft",
+      "path": "docs/planning/plans/plan-25-trace-plan.md",
       "deleted": false,
       "terminal": false
     },
@@ -457,6 +466,42 @@
       "label": "Section parsing request",
       "state": "captured",
       "path": "docs/planning/requests/request-42-section-parsing-request.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "request-43": {
+      "id": "request-43",
+      "kind": "request",
+      "label": "Trace request",
+      "state": "captured",
+      "path": "docs/planning/requests/request-43-trace-request.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "request-44": {
+      "id": "request-44",
+      "kind": "request",
+      "label": "Spec backref request",
+      "state": "captured",
+      "path": "docs/planning/requests/request-44-spec-backref-request.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "request-45": {
+      "id": "request-45",
+      "kind": "request",
+      "label": "Delete request",
+      "state": "captured",
+      "path": "docs/planning/requests/request-45-delete-request.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "request-46": {
+      "id": "request-46",
+      "kind": "request",
+      "label": "Archive request",
+      "state": "captured",
+      "path": "docs/planning/requests/request-46-archive-request.md",
       "deleted": false,
       "terminal": false
     },
@@ -973,12 +1018,48 @@
       "deleted": false,
       "terminal": false
     },
+    "spec-59": {
+      "id": "spec-59",
+      "kind": "spec",
+      "label": "Trace spec",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-59-trace-spec.md",
+      "deleted": false,
+      "terminal": false
+    },
     "spec-6": {
       "id": "spec-6",
       "kind": "spec",
       "label": "Fix planning API and MCP gaps revealed by coverage tests",
       "state": "in_progress",
       "path": "docs/planning/specifications/spec-6-fix-planning-api-and-mcp-gaps-revealed-by-coverage-tests.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "spec-60": {
+      "id": "spec-60",
+      "kind": "spec",
+      "label": "Spec backref spec",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-60-spec-backref-spec.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "spec-61": {
+      "id": "spec-61",
+      "kind": "spec",
+      "label": "Delete spec",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-61-delete-spec.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "spec-62": {
+      "id": "spec-62",
+      "kind": "spec",
+      "label": "Archive spec",
+      "state": "draft",
+      "path": "docs/planning/specifications/spec-62-archive-spec.md",
       "deleted": false,
       "terminal": false
     },
@@ -1072,12 +1153,57 @@
       "deleted": false,
       "terminal": false
     },
+    "standard-17": {
+      "id": "standard-17",
+      "kind": "standard",
+      "label": "Review findings standard",
+      "state": "ready",
+      "path": "docs/planning/standards/standard-17-review-findings-standard.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "standard-18": {
+      "id": "standard-18",
+      "kind": "standard",
+      "label": "Review findings standard",
+      "state": "ready",
+      "path": "docs/planning/standards/standard-18-review-findings-standard.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "standard-19": {
+      "id": "standard-19",
+      "kind": "standard",
+      "label": "Review findings standard",
+      "state": "ready",
+      "path": "docs/planning/standards/standard-19-review-findings-standard.md",
+      "deleted": false,
+      "terminal": false
+    },
     "standard-2": {
       "id": "standard-2",
       "kind": "standard",
       "label": "Documentation surface and content organization standard",
       "state": "ready",
       "path": "docs/planning/standards/standard-2-documentation-surface-and-content-organization-standard.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "standard-20": {
+      "id": "standard-20",
+      "kind": "standard",
+      "label": "Review findings standard",
+      "state": "ready",
+      "path": "docs/planning/standards/standard-20-review-findings-standard.md",
+      "deleted": false,
+      "terminal": false
+    },
+    "standard-21": {
+      "id": "standard-21",
+      "kind": "standard",
+      "label": "Review findings standard",
+      "state": "ready",
+      "path": "docs/planning/standards/standard-21-review-findings-standard.md",
       "deleted": false,
       "terminal": false
     },
@@ -1282,29 +1408,29 @@
     "task-10": {
       "id": "task-10",
       "kind": "task",
-      "label": "Enhance search with fuzzy matching or BM25",
-      "state": "done",
-      "path": "docs/planning/tasks/core/task-10-enhance-search-with-fuzzy-matching-or-bm25.md",
+      "label": "Trace task",
+      "state": "draft",
+      "path": "docs/planning/tasks/task-10-trace-task.md",
       "deleted": false,
       "terminal": false
     },
     "task-11": {
       "id": "task-11",
       "kind": "task",
-      "label": "Implement lifecycle tracking for proposals and jobs",
-      "state": "done",
-      "path": "docs/planning/tasks/core/task-11-implement-lifecycle-tracking-for-proposals-and-jobs.md",
+      "label": "Delete task",
+      "state": "draft",
+      "path": "docs/planning/tasks/task-11-delete-task.md",
       "deleted": false,
       "terminal": false
     },
     "task-12": {
       "id": "task-12",
       "kind": "task",
-      "label": "Implement archive state in planning core",
-      "state": "draft",
-      "path": "docs/planning/tasks/core/task-12-implement-archive-state-in-planning-core.md",
+      "label": "Archive task",
+      "state": "archived",
+      "path": "docs/planning/tasks/task-12-archive-task.md",
       "deleted": false,
-      "terminal": false
+      "terminal": true
     },
     "task-13": {
       "id": "task-13",
