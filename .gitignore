@@ -3,9 +3,6 @@
 /.vscode
 /.audiagentic/runtime/
 /.audiagentic/logs/
-/.audiagentic/planning/extracts/
-/.audiagentic/planning/indexes/
-/.audiagentic/planning/meta/
 /.audiagentic/provisioning/logs/
 /.audiagentic/provisioning/goose/bin/
 /.audiagentic/provisioning/rig/embedded/bin/
