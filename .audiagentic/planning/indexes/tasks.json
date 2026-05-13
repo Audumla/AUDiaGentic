@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-27T11:48:17.543804+00:00",
+  "generated_at": "2026-05-13T12:11:01.445160+00:00",
   "items": [
     {
       "id": "task-30",
@@ -2064,6 +2064,24 @@
       "label": "[PKT-RLS-011](task-0066): Release Documentation",
       "state": "draft",
       "path": "docs\\planning\\tasks\\release\\task-64-pkt-rls-011-task-0066-release-documentation.md"
+    },
+    {
+      "id": "task-10",
+      "label": "Trace task",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\task-10-trace-task.md"
+    },
+    {
+      "id": "task-11",
+      "label": "Delete task",
+      "state": "draft",
+      "path": "docs\\planning\\tasks\\task-11-delete-task.md"
+    },
+    {
+      "id": "task-12",
+      "label": "Archive task",
+      "state": "archived",
+      "path": "docs\\planning\\tasks\\task-12-archive-task.md"
     },
     {
       "id": "task-7",

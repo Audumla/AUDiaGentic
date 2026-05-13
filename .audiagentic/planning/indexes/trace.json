@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-27T11:48:17.543804+00:00",
+  "generated_at": "2026-05-13T12:11:01.445160+00:00",
   "refs": [
     {
       "src": "plan-1",
@@ -222,6 +222,21 @@
     },
     {
       "src": "plan-22",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "plan-25",
+      "dst": "request-43",
+      "field": "request_refs"
+    },
+    {
+      "src": "plan-25",
+      "dst": "spec-59",
+      "field": "spec_refs"
+    },
+    {
+      "src": "plan-25",
       "dst": "standard-0006",
       "field": "standard_refs"
     },
@@ -667,6 +682,46 @@
     },
     {
       "src": "request-42",
+      "dst": "standard-0001",
+      "field": "standard_refs"
+    },
+    {
+      "src": "request-43",
+      "dst": "spec-59",
+      "field": "spec_refs"
+    },
+    {
+      "src": "request-43",
+      "dst": "standard-0001",
+      "field": "standard_refs"
+    },
+    {
+      "src": "request-44",
+      "dst": "spec-60",
+      "field": "spec_refs"
+    },
+    {
+      "src": "request-44",
+      "dst": "standard-0001",
+      "field": "standard_refs"
+    },
+    {
+      "src": "request-45",
+      "dst": "spec-61",
+      "field": "spec_refs"
+    },
+    {
+      "src": "request-45",
+      "dst": "standard-0001",
+      "field": "standard_refs"
+    },
+    {
+      "src": "request-46",
+      "dst": "spec-62",
+      "field": "spec_refs"
+    },
+    {
+      "src": "request-46",
       "dst": "standard-0001",
       "field": "standard_refs"
     },
@@ -1452,6 +1507,21 @@
       "field": "standard_refs"
     },
     {
+      "src": "spec-59",
+      "dst": "request-43",
+      "field": "request_refs"
+    },
+    {
+      "src": "spec-59",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "spec-59",
+      "dst": "standard-0005",
+      "field": "standard_refs"
+    },
+    {
       "src": "spec-6",
       "dst": "request-7",
       "field": "request_refs"
@@ -1462,6 +1532,51 @@
       "field": "task_refs",
       "seq": null,
       "display": null
+    },
+    {
+      "src": "spec-60",
+      "dst": "request-44",
+      "field": "request_refs"
+    },
+    {
+      "src": "spec-60",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "spec-60",
+      "dst": "standard-0005",
+      "field": "standard_refs"
+    },
+    {
+      "src": "spec-61",
+      "dst": "request-45",
+      "field": "request_refs"
+    },
+    {
+      "src": "spec-61",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "spec-61",
+      "dst": "standard-0005",
+      "field": "standard_refs"
+    },
+    {
+      "src": "spec-62",
+      "dst": "request-46",
+      "field": "request_refs"
+    },
+    {
+      "src": "spec-62",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "spec-62",
+      "dst": "standard-0005",
+      "field": "standard_refs"
     },
     {
       "src": "spec-7",
@@ -4712,6 +4827,56 @@
       "src": "task-64",
       "dst": "spec-13",
       "field": "spec_ref"
+    },
+    {
+      "src": "task-10",
+      "dst": "request-43",
+      "field": "request_refs"
+    },
+    {
+      "src": "task-10",
+      "dst": "spec-59",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-10",
+      "dst": "standard-0005",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-10",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-11",
+      "dst": "spec-61",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-11",
+      "dst": "standard-0005",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-11",
+      "dst": "standard-0006",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-12",
+      "dst": "spec-62",
+      "field": "spec_ref"
+    },
+    {
+      "src": "task-12",
+      "dst": "standard-0005",
+      "field": "standard_refs"
+    },
+    {
+      "src": "task-12",
+      "dst": "standard-0006",
+      "field": "standard_refs"
     },
     {
       "src": "task-7",

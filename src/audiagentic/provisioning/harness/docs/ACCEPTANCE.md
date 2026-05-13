@@ -2,28 +2,30 @@
 
 ## Local LLM endpoint
 
+Port is auto-selected at launch. Check the footer or runner output for the active URL.
+
 ```bash
-curl http://127.0.0.1:42001/v1/models
+curl http://127.0.0.1:<port>/v1/models
 ```
 
 ## Pi installs repo-locally
 
 ```text
-python -m audiagentic.provisioning.harness.pi.install
+audiagentic install
 ```
 
 Expected files:
 
 ```text
-.audiagentic-dev/pi/node/node_modules/.bin/pi
-.audiagentic-dev/pi/home/.pi/agent/models.json
-.audiagentic-dev/pi/home/.pi/agent/mcp.json
+.audiagentic/harness/node/node_modules/.bin/pi
+.audiagentic/harness/agent/models.json
+.audiagentic/harness/agent/mcp.json
 ```
 
 ## Pi launches local model
 
 ```text
-python -m audiagentic.provisioning.harness.pi.runner
+audiagentic
 ```
 
 Prompt:
@@ -37,7 +39,7 @@ Respond with exactly: audiagentic-pi-local-ok
 MCP is opt-in.
 
 ```text
-python -m audiagentic.provisioning.harness.pi.runner --smoke --enable-mcp
+audiagentic --smoke --enable-mcp
 ```
 
 Prompt Pi:
