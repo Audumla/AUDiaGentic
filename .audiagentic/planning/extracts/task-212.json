@@ -1,0 +1,27 @@
+{
+  "item": {
+    "id": "task-212",
+    "label": "Implement audience profile system in config and API",
+    "state": "draft",
+    "summary": "Add audience_profiles to profiles.yaml, implement profile_for() with audience support, add --audience CLI parameter",
+    "spec_ref": "spec-13",
+    "request_refs": [],
+    "standard_refs": [
+      "standard-5",
+      "standard-6"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-212-implement-audience-profile-system-in-config-and-api.md",
+    "archive_reason": null,
+    "archived_at": null,
+    "archived_by": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_refs": [
+    "standard-5",
+    "standard-6",
+    "standard-9"
+  ],
+  "body": "\n\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n"
+}

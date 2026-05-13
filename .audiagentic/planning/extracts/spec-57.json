@@ -1,0 +1,27 @@
+{
+  "item": {
+    "id": "spec-57",
+    "label": "Extract controls",
+    "state": "draft",
+    "summary": "Support lean extract",
+    "request_refs": [
+      "request-41"
+    ],
+    "standard_refs": [
+      "standard-0006",
+      "standard-0005"
+    ],
+    "kind": "spec",
+    "path": "docs/planning/specifications/spec-57-extract-controls.md",
+    "archive_reason": null,
+    "archived_at": null,
+    "archived_by": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_refs": [
+    "standard-0006",
+    "standard-0005"
+  ],
+  "body": "\n# Purpose\n\nSpec body.\n"
+}

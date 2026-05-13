@@ -1,0 +1,29 @@
+{
+  "item": {
+    "id": "task-224",
+    "label": "Update workflows.yaml with unified states",
+    "state": "done",
+    "summary": "Align workflow states across request/spec/plan/task/wp with consistent transitions",
+    "spec_ref": "spec-15",
+    "request_refs": [
+      "request-12"
+    ],
+    "standard_refs": [
+      "standard-5",
+      "standard-6"
+    ],
+    "kind": "task",
+    "path": "docs/planning/tasks/core/task-224-update-workflows-yaml-with-unified-states.md",
+    "archive_reason": null,
+    "archived_at": null,
+    "archived_by": null,
+    "restored_at": null,
+    "restored_by": null
+  },
+  "effective_refs": [
+    "standard-5",
+    "standard-6",
+    "standard-9"
+  ],
+  "body": "\n\n\n\n\n\n\n\n\n\n\n\n\n# Description\n\n\n# Acceptance Criteria\n\n\n# Notes\n\n# State\n\ndone\n"
+}
