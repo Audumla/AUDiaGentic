@@ -15,13 +15,11 @@ from urllib.request import urlopen
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 42001
-DEFAULT_MODEL_ARG = Path("..") / ".." / "models" / "Qwen_Qwen3.5-2B-Q4_K_S.gguf"
 DEFAULT_CONTEXT = 262144
 DEFAULT_PARALLEL = 2
 DEFAULT_GPU_LAYERS = "all"
 DEFAULT_FIT = "on"
 DEFAULT_REASONING = "off"
-DEFAULT_MODEL_PROFILE = "qwen3.5-2b-q4_k_s"
 
 
 @dataclass
@@ -67,7 +65,7 @@ def provisioning_log_dir(root: Path, component: str) -> Path:
 def load_model_profiles(root: Path) -> dict[str, object]:
     path = model_profiles_path(root)
     if not path.exists():
-        return {"default": DEFAULT_MODEL_PROFILE, "models": {}}
+        raise SystemExit(f"Model profiles config not found: {path}")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -87,7 +85,9 @@ def resolve_model_profile(root: Path, requested: str | None, model_file: str | N
             if model_name == raw_profile.get("model_file") or model_name in aliases:
                 target = str(name)
                 break
-    target = target or str(data.get("default") or DEFAULT_MODEL_PROFILE)
+    target = target or str(data.get("default") or "")
+    if not target:
+        raise SystemExit(f"No model profile specified and no default set in {model_profiles_path(root)}")
 
     raw = models.get(target)
     if raw is None:
@@ -162,31 +162,17 @@ def find_server_bin(bin_dir: Path, override: str | None) -> Path:
     raise SystemExit(f"Local rig binary not found under {bin_dir}")
 
 
-def default_model_path(server_dir: Path) -> tuple[Path, str]:
-    model_relative = "../../models/Qwen_Qwen3.5-2B-Q4_K_S.gguf"
-    return (server_dir / DEFAULT_MODEL_ARG).resolve(), model_relative
-
-
 def resolve_model(bin_dir: Path, server_dir: Path, override: str | None) -> tuple[Path, str]:
-    if override:
-        candidate = resolve_under(repo_root(), override, base=server_dir)
-        assert candidate is not None
-        ensure_under(candidate, bin_dir, "AUDIAGENTIC_RIG_MODEL_FILE")
-        if not candidate.exists():
-            raise SystemExit(f"Model not found: {candidate}")
-        if Path(override).is_absolute():
-            return candidate, str(candidate)
-        return candidate, override
-
-    candidate, model_arg = default_model_path(server_dir)
-    if candidate.exists():
-        return candidate, model_arg
-
-    fallback = bin_dir / "models" / "Qwen_Qwen3.5-2B-Q4_K_S.gguf"
-    if fallback.exists():
-        return fallback, str(fallback)
-
-    raise SystemExit(f"Local rig model not found under {bin_dir / 'models'}")
+    if not override:
+        raise SystemExit("No model file specified. Set --model-file or AUDIAGENTIC_RIG_MODEL_FILE, or add model_file to the profile.")
+    candidate = resolve_under(repo_root(), override, base=server_dir)
+    assert candidate is not None
+    ensure_under(candidate, bin_dir, "AUDIAGENTIC_RIG_MODEL_FILE")
+    if not candidate.exists():
+        raise SystemExit(f"Model not found: {candidate}")
+    if Path(override).is_absolute():
+        return candidate, str(candidate)
+    return candidate, override
 
 
 def choose_free_port(host: str) -> int:
@@ -317,9 +303,7 @@ def launch_background(args: argparse.Namespace) -> int:
     server_dir = binary.parent
     model_override = args.model_file or os.environ.get("AUDIAGENTIC_RIG_MODEL_FILE") or profile.model_file
     model_path, model_arg = resolve_model(bin_dir, server_dir, model_override)
-    device = args.device
-    if device is None and sys.platform == "win32":
-        device = "Vulkan0"
+    device = args.device or os.environ.get("AUDIAGENTIC_RIG_DEVICE")
     last_error: str | None = None
 
     for port in candidate_ports(args.host, args.port):
@@ -418,9 +402,7 @@ def launch_foreground(args: argparse.Namespace) -> int:
     server_dir = binary.parent
     model_override = args.model_file or os.environ.get("AUDIAGENTIC_RIG_MODEL_FILE") or profile.model_file
     model_path, model_arg = resolve_model(bin_dir, server_dir, model_override)
-    device = args.device
-    if device is None and sys.platform == "win32":
-        device = "Vulkan0"
+    device = args.device or os.environ.get("AUDIAGENTIC_RIG_DEVICE")
 
     command = build_command(
         binary=binary,
@@ -458,7 +440,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--server-bin")
     parser.add_argument("--model-file")
     parser.add_argument("--model-profile")
-    parser.add_argument("--device", default=None, help="Pass through to llama-server. Windows default is 'Vulkan0'.")
+    parser.add_argument("--device", default=None, help="Pass through to llama-server. Falls back to AUDIAGENTIC_RIG_DEVICE env var.")
     parser.add_argument("--gpu-layers", default=os.environ.get("AUDIAGENTIC_RIG_GPU_LAYERS"))
     parser.add_argument("--context", type=int, default=int(os.environ["AUDIAGENTIC_RIG_CONTEXT"]) if os.environ.get("AUDIAGENTIC_RIG_CONTEXT") else None)
     parser.add_argument("--parallel", type=int, default=int(os.environ["AUDIAGENTIC_RIG_PARALLEL"]) if os.environ.get("AUDIAGENTIC_RIG_PARALLEL") else None)
