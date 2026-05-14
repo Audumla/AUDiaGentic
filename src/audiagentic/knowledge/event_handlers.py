@@ -394,7 +394,7 @@ def _dispatch_on_replay_enabled(root: Path) -> bool:
     """Check interoperability replay config without importing the runtime module."""
     from .utils import load_yaml_file
 
-    raw = load_yaml_file(root / ".audiagentic" / "interoperability" / "config.yaml", {})
+    raw = load_yaml_file(root / ".audiagentic" / "config" / "interoperability" / "config.yaml", {})
     if not isinstance(raw, dict):
         return False
     return bool(raw.get("runtime", {}).get("replay", {}).get("dispatch_on_replay", False))

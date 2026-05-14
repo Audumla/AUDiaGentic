@@ -1,8 +1,0 @@
-{
-  "event": "pi_run_started",
-  "provider": "llamaswap",
-  "model": "Qwen_Qwen3.5-2B-Q4_K_S.gguf",
-  "endpoint": "http://127.0.0.1:31570/v1",
-  "cwd": "H:\\development\\projects\\AUDia\\AUDiaGentic",
-  "args": []
-}

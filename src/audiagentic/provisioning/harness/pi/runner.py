@@ -2,28 +2,23 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-import yaml
-
 DEFAULT_MODEL = "Qwen_Qwen3.5-2B-Q4_K_S.gguf"
 DEFAULT_PROVIDER = "audiagentic"
-DEFAULT_API_KEY = "dummy"
-DEFAULT_BASE_URL = "http://127.0.0.1:42001/v1"
+DEFAULT_RIG_PORT = 42001
 DEFAULT_SMOKE_TIMEOUT = 60.0
 TRUTHY = {"1", "true", "yes", "on"}
 
 # Package-relative paths — work in both dev layout (src/) and pip-installed layout.
-_PI_DIR = Path(__file__).parent                         # .../harness/pi/
-_PROVISIONING_DIR = Path(__file__).parents[2]           # .../provisioning/
-_SRC_DIR = Path(__file__).parents[4]                    # .../src/
-_TEMPLATES_DIR = _PI_DIR / "templates" / "home"
-_MODELS_JSON = _PROVISIONING_DIR / "rig" / "embedded" / "models.json"
+_AGENT_DIR = Path(__file__).parent                              # .../harness/pi/
+_PKG_ROOT = Path(__file__).parents[3]                          # .../audiagentic/
+_MODELS_JSON = _PKG_ROOT / "provisioning" / "rig" / "embedded" / "models.json"
+_HARNESS_CONFIG = _PKG_ROOT / "config" / "harness" / "ag.yaml"
 
 
 @dataclass
@@ -41,15 +36,18 @@ class AgentContext:
     profile_name: str
     provider: str
     rig_pid: int | None
+    manages_rig: bool           # True when connected to embedded rig (started or reused)
     enable_mcp: bool
     harness_cfg: dict = field(default_factory=dict)
 
 
-def load_harness_config() -> dict:
-    config_path = _PI_DIR / "config" / "config.yaml"
-    if not config_path.exists():
-        return {}
-    return yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+def load_harness_config(project_root: Path | None = None) -> dict:
+    from audiagentic.provisioning.config_loader import load_layered_config
+    return load_layered_config(
+        pkg_default_path=_HARNESS_CONFIG,
+        project_root=project_root,
+        namespace="harness/ag",
+    )
 
 
 def env_with_pythonpath() -> dict[str, str]:
@@ -65,12 +63,16 @@ def load_model_profile(requested: str | None, model: str) -> tuple[str, dict[str
     models = data.get("models", {})
     if not isinstance(models, dict):
         raise SystemExit(f"Invalid model profile file: {_MODELS_JSON}")
-    target = requested or os.environ.get("AUDIAGENTIC_RIG_MODEL_PROFILE") or os.environ.get("AUDIAGENTIC_PI_MODEL_PROFILE")
+    target = requested or os.environ.get("AUDIAGENTIC_RIG_MODEL_PROFILE") or os.environ.get("AUDIAGENTIC_AG_MODEL_PROFILE")
     if not target:
-        for name, raw_profile in models.items():
-            if isinstance(raw_profile, dict) and model in raw_profile.get("aliases", []):
-                target = str(name)
-                break
+        # Direct key match first, then alias search, then default.
+        if model in models:
+            target = model
+        else:
+            for name, raw_profile in models.items():
+                if isinstance(raw_profile, dict) and model in raw_profile.get("aliases", []):
+                    target = str(name)
+                    break
     target = target or str(data.get("default"))
     raw = models.get(target)
     if raw is None:
@@ -91,149 +93,71 @@ def env_flag(name: str, default: bool = False) -> bool:
     return value.strip().lower() in TRUTHY
 
 
-def _materialize_ui(ctx: AgentContext) -> None:
-    ui = ctx.harness_cfg.get("ui", {})
-    if not ui:
-        return
-
-    theme_name = ui.get("theme", "dark")
-    theme_colors = ui.get("theme_colors") or {}
-
-    if theme_colors:
-        base_theme_dir = (
-            ctx.agent_runtime
-            / "cli"
-            / "node_modules"
-            / "@earendil-works"
-            / "pi-coding-agent"
-            / "dist"
-            / "modes"
-            / "interactive"
-            / "theme"
-        )
-        base_path = base_theme_dir / f"{theme_name}.json"
-        base = json.loads(base_path.read_text(encoding="utf-8")) if base_path.exists() else {"vars": {}, "colors": {}, "export": {}}
-        base.setdefault("colors", {}).update(theme_colors)
-        themes_dir = ctx.agent_dir / "themes"
-        themes_dir.mkdir(parents=True, exist_ok=True)
-        custom_theme_path = themes_dir / "audiagentic.json"
-        custom_theme_path.write_text(json.dumps(base, indent=2) + "\n", encoding="utf-8")
-        theme_name = str(custom_theme_path)
-
-    settings: dict[str, object] = {}
-    settings["theme"] = theme_name
-    if "quiet_startup" in ui:
-        settings["quietStartup"] = bool(ui["quiet_startup"])
-    if "collapse_changelog" in ui:
-        settings["collapseChangelog"] = bool(ui["collapse_changelog"])
-    if "hide_thinking_block" in ui:
-        settings["hideThinkingBlock"] = bool(ui["hide_thinking_block"])
-    if "thinking" in ui:
-        settings["defaultThinkingLevel"] = str(ui["thinking"])
-    if "editor_padding_x" in ui:
-        settings["editorPaddingX"] = int(ui["editor_padding_x"])
-
-    settings["extensions"] = ["extensions/footer.ts"]
-
-    settings_path = ctx.agent_dir / "settings.json"
-    existing: dict[str, object] = {}
-    if settings_path.exists():
-        try:
-            existing = json.loads(settings_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            pass
-    existing.update(settings)
-    settings_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
 
 
-def materialize_config(ctx: AgentContext) -> None:
-    ctx.agent_home.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(_TEMPLATES_DIR, ctx.agent_home, dirs_exist_ok=True)
+def launch_rig_if_needed(
+    model: str,
+    profile_name: str,
+    model_profile: dict[str, object],
+    rig_port: int = DEFAULT_RIG_PORT,
+) -> tuple[str, str, int | None, bool]:
+    """Return (endpoint, model, rig_pid, manages_rig).
 
-    replacements = {
-        "__AUDIAGENTIC_PI_BASE_URL__": ctx.endpoint,
-        "__AUDIAGENTIC_PI_API_KEY__": os.environ.get("AUDIAGENTIC_PI_API_KEY", DEFAULT_API_KEY),
-        "__AUDIAGENTIC_PI_MODEL__": ctx.model,
-        "__AUDIAGENTIC_PI_FALLBACK_MODEL__": os.environ.get("AUDIAGENTIC_PI_FALLBACK_MODEL", ctx.model),
-        "__AUDIAGENTIC_REPO_ROOT__": str(ctx.project_root).replace("\\", "/"),
-        "__AUDIAGENTIC_SRC__": str(_SRC_DIR).replace("\\", "/"),
-        "__AUDIAGENTIC_PYTHON__": sys.executable.replace("\\", "/"),
-    }
-
-    for path in (ctx.agent_dir / "models.json", ctx.agent_dir / "mcp.json"):
-        text = path.read_text(encoding="utf-8")
-        for needle, value in replacements.items():
-            text = text.replace(needle, value)
-        path.write_text(text, encoding="utf-8")
-
-    agent_profile = ctx.model_profile.get("pi", {})
-    if isinstance(agent_profile, dict):
-        models_path = ctx.agent_dir / "models.json"
-        models_config = json.loads(models_path.read_text(encoding="utf-8"))
-        provider_config = models_config["providers"][ctx.provider]
-        for model_config in provider_config.get("models", []):
-            model_config["contextWindow"] = int(agent_profile.get("context_window", model_config["contextWindow"]))
-            model_config["maxTokens"] = int(agent_profile.get("max_tokens", model_config["maxTokens"]))
-            model_config["reasoning"] = bool(agent_profile.get("reasoning", model_config.get("reasoning", False)))
-            if isinstance(agent_profile.get("compat"), dict):
-                provider_config["compat"] = agent_profile["compat"]
-        models_path.write_text(json.dumps(models_config, indent=2) + "\n", encoding="utf-8")
-
-    _materialize_ui(ctx)
-
-    if not ctx.enable_mcp:
-        (ctx.agent_dir / "mcp.json").write_text(
-            json.dumps(
-                {"settings": {"toolPrefix": "mcp", "idleTimeout": 10, "directTools": False}, "mcpServers": {}},
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-    else:
-        extra_server_args = ctx.harness_cfg.get("mcp", {}).get("extra_server_args", [])
-        if extra_server_args:
-            mcp_path = ctx.agent_dir / "mcp.json"
-            mcp_config = json.loads(mcp_path.read_text(encoding="utf-8"))
-            for server in mcp_config.get("mcpServers", {}).values():
-                server.setdefault("args", [])
-                server["args"].extend(extra_server_args)
-            mcp_path.write_text(json.dumps(mcp_config, indent=2) + "\n", encoding="utf-8")
-
-
-def launch_rig_if_needed(model: str, profile_name: str, model_profile: dict[str, object]) -> tuple[str, str, int | None]:
-    endpoint = os.environ.get("AUDIAGENTIC_PI_BASE_URL", DEFAULT_BASE_URL)
-    if os.environ.get("AUDIAGENTIC_PI_BASE_URL"):
-        return endpoint, model, None
+    manages_rig is True when connected to an embedded rig (started now or reused).
+    rig_pid is set only when *this* call started the rig; None means reused or external.
+    """
+    if os.environ.get("AUDIAGENTIC_AG_BASE_URL"):
+        return os.environ["AUDIAGENTIC_AG_BASE_URL"], model, None, False
     if not model_profile.get("model_file"):
-        return endpoint, model, None
+        return f"http://127.0.0.1:{rig_port}/v1", model, None, False
 
-    env = env_with_pythonpath()
-    completed = subprocess.run(
-        [sys.executable, "-m", "audiagentic.provisioning.rig.embedded.launch",
-         "--model-profile", profile_name, "--port", "0", "--background", "--json"],
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if completed.returncode != 0:
-        raise SystemExit(completed.stderr.strip() or completed.stdout.strip() or "Failed to launch embedded rig.")
+    from audiagentic.provisioning.rig.registry import StartupLock, read_rig_state, write_rig_state
 
-    payload = json.loads(completed.stdout.strip())
-    endpoint = payload["base_url"]
-    model = os.environ.get("AUDIAGENTIC_PI_MODEL", payload["model"])
-    os.environ["AUDIAGENTIC_PI_BASE_URL"] = endpoint
-    os.environ.setdefault("AUDIAGENTIC_PI_MODEL", model)
-    return endpoint, model, int(payload["pid"])
+    with StartupLock():
+        # Reuse a running rig if one already exists.
+        state = read_rig_state()
+        if state is not None:
+            endpoint = str(state["endpoint"])
+            reused_model = os.environ.get("AUDIAGENTIC_AG_MODEL", str(state.get("model", model)))
+            os.environ["AUDIAGENTIC_AG_BASE_URL"] = endpoint
+            os.environ.setdefault("AUDIAGENTIC_AG_MODEL", reused_model)
+            return endpoint, reused_model, None, True
+
+        # Start a new embedded rig.
+        env = env_with_pythonpath()
+        completed = subprocess.run(
+            [sys.executable, "-m", "audiagentic.provisioning.rig.embedded.launch",
+             "--model-profile", profile_name, "--port", str(rig_port), "--background", "--json"],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise SystemExit(
+                completed.stderr.strip() or completed.stdout.strip() or "Failed to launch embedded rig."
+            )
+
+        payload = json.loads(completed.stdout.strip())
+        endpoint = payload["base_url"]
+        pid = int(payload["pid"])
+        model = os.environ.get("AUDIAGENTIC_AG_MODEL", payload["model"])
+        write_rig_state(pid, rig_port, endpoint, model)
+        os.environ["AUDIAGENTIC_AG_BASE_URL"] = endpoint
+        os.environ.setdefault("AUDIAGENTIC_AG_MODEL", model)
+        return endpoint, model, pid, True
 
 
 def build_global_context(*, project_root: Path, agent_runtime: Path, enable_mcp: bool) -> AgentContext:
-    harness_cfg = load_harness_config()
-    requested_model = os.environ.get("AUDIAGENTIC_PI_MODEL", harness_cfg.get("model", DEFAULT_MODEL))
+    harness_cfg = load_harness_config(project_root=project_root)
+    requested_model = os.environ.get("AUDIAGENTIC_AG_MODEL", harness_cfg.get("model", DEFAULT_MODEL))
     profile_name, model_profile = load_model_profile(None, requested_model)
-    endpoint, model, rig_pid = launch_rig_if_needed(requested_model, profile_name, model_profile)
-    provider = os.environ.get("AUDIAGENTIC_PI_PROVIDER", DEFAULT_PROVIDER)
+    rig_port = int(harness_cfg.get("rig", {}).get("port", DEFAULT_RIG_PORT))
+    endpoint, model, rig_pid, manages_rig = launch_rig_if_needed(
+        requested_model, profile_name, model_profile, rig_port=rig_port
+    )
+    model = query_server_model(endpoint) or model
+    provider = os.environ.get("AUDIAGENTIC_AG_PROVIDER", DEFAULT_PROVIDER)
     resolved_enable_mcp = enable_mcp or bool(harness_cfg.get("mcp", {}).get("enabled", False))
     return AgentContext(
         project_root=project_root,
@@ -242,17 +166,33 @@ def build_global_context(*, project_root: Path, agent_runtime: Path, enable_mcp:
         agent_dir=agent_runtime / "agent",
         agent_bin=resolve_agent_bin(agent_runtime),
         agent_work=project_root,
-        agent_log_dir=project_root / ".audiagentic" / "logs" / "tui",
+        agent_log_dir=project_root / ".audiagentic" / "logs" / "cli",
         endpoint=endpoint,
         model=model,
         model_profile=model_profile,
         profile_name=profile_name,
         provider=provider,
         rig_pid=rig_pid,
+        manages_rig=manages_rig,
         enable_mcp=resolved_enable_mcp,
         harness_cfg=harness_cfg,
     )
 
+
+
+def query_server_model(endpoint: str, timeout: float = 10.0) -> str | None:
+    """Query the server's /models endpoint and return the first model ID, or None on failure."""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"{endpoint}/models", timeout=timeout) as response:
+            if response.status == 200:
+                data = json.loads(response.read())
+                models = data.get("data", [])
+                if models:
+                    return str(models[0]["id"])
+    except Exception:
+        pass
+    return None
 
 
 def check_endpoint(ctx: AgentContext) -> None:
@@ -364,10 +304,10 @@ def _build_run_env(ctx: AgentContext) -> dict[str, str]:
     env = env_with_pythonpath()
     env["HOME"] = str(ctx.agent_home)
     env["PI_CODING_AGENT_DIR"] = str(ctx.agent_dir)
-    env["PI_CODING_AGENT_SESSION_DIR"] = str(ctx.agent_runtime / "sessions")
+    env["PI_CODING_AGENT_SESSION_DIR"] = str(ctx.project_root / ".audiagentic" / "sessions")
     env["AUDIAGENTIC_REPO_ROOT"] = str(ctx.project_root)
-    env["AUDIAGENTIC_PI_BASE_URL"] = ctx.endpoint
-    env["AUDIAGENTIC_PI_MODEL"] = ctx.model
+    env["AUDIAGENTIC_AG_BASE_URL"] = ctx.endpoint
+    env["AUDIAGENTIC_AG_MODEL"] = ctx.model
     env["AUDIAGENTIC_RIG_TYPE"] = "embedded" if ctx.rig_pid is not None else "external"
     env["AUDIAGENTIC_RIG_PROFILE"] = ctx.profile_name
     return env
@@ -382,7 +322,7 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
 
     ctx.agent_work.mkdir(parents=True, exist_ok=True)
     ctx.agent_log_dir.mkdir(parents=True, exist_ok=True)
-    materialize_config(ctx)
+    (ctx.project_root / ".audiagentic" / "sessions").mkdir(parents=True, exist_ok=True)
 
     env = _build_run_env(ctx)
 
@@ -429,7 +369,7 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
 
     if smoke:
         smoke_timeout = float(
-            os.environ.get("AUDIAGENTIC_PI_SMOKE_TIMEOUT",
+            os.environ.get("AUDIAGENTIC_AG_SMOKE_TIMEOUT",
                            ctx.harness_cfg.get("smoke", {}).get("timeout", DEFAULT_SMOKE_TIMEOUT))
         )
         with log_path.open("w", encoding="utf-8") as handle:
