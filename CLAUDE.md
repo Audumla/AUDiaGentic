@@ -25,7 +25,7 @@ shared launch grammar unchanged.
 
 ## Tag shortcuts and aliases
 
-Tag and provider aliases are centralized in `.audiagentic/prompt-syntax.yaml` and work in all surfaces:
+Tag and provider aliases are centralized in `.audiagentic/config/execution/prompt-syntax.yaml` and work in all surfaces:
 
 Canonical tags:
 

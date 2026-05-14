@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _provider_summary(project_root: Path) -> dict[str, str]:
-    provider_path = project_root / ".audiagentic" / "providers.yaml"
+    provider_path = project_root / ".audiagentic" / "config" / "runtime" / "providers.yaml"
     if not provider_path.exists():
         return {}
     payload = yaml.safe_load(provider_path.read_text(encoding="utf-8")) or {}

@@ -1,6 +1,34 @@
 {
   "permissions": {
-    "allow": ["*"]
+    "allow": [
+      "*",
+      "PowerShell(Get-Command audiagentic)",
+      "PowerShell(& \"C:\\\\Users\\\\mgs\\\\AppData\\\\Local\\\\Packages\\\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\\\LocalCache\\\\local-packages\\\\Python313\\\\Scripts\\\\python\" -c \"import audiagentic.provisioning.harness.pi.runner as r; print\\(r._PI_DIR\\)\")",
+      "PowerShell(python -c \"import audiagentic.provisioning.harness.pi.runner as r; print\\(r._PI_DIR\\)\")",
+      "PowerShell(nvidia-smi --query-compute-apps=pid,name,used_memory --format=csv,noheader 2>&1)",
+      "Read(//c/Windows/System32/**)",
+      "Read(//c/Program Files/**)",
+      "PowerShell(Stop-Process -Id 40672 -Force)",
+      "PowerShell($env:AUDIAGENTIC_PI_MODEL; $env:AUDIAGENTIC_PI_BASE_URL)",
+      "PowerShell($env:AUDIAGENTIC_PI_MODEL)",
+      "PowerShell($env:AUDIAGENTIC_PI_BASE_URL)",
+      "PowerShell(Get-Process | Where-Object { $_.Name -match \"llama|llama-swap|llama-server\" } | Select-Object Id, Name, CPU | Format-Table -AutoSize)",
+      "PowerShell(Get-Process -Id 26780)",
+      "PowerShell(Stop-Process -Id 26780 -Force)",
+      "PowerShell(Stop-Process -Id 6772 -Force)",
+      "PowerShell(Get-Process -Name \"llama-server\" -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Force)",
+      "PowerShell(Stop-Process -Id 29832 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Process | Where-Object { $_.Name -match \"llama|node|audiagentic\" } | Select-Object Id, Name, StartTime)",
+      "PowerShell(head -50)",
+      "PowerShell(try { Invoke-WebRequest \"http://127.0.0.1:42001/v1/models\" -TimeoutSec 3 | Select-Object -ExpandProperty Content } catch { $_.Exception.Message })",
+      "PowerShell(if \\(-not $?\\) { \"dir not found\" })",
+      "Read(//h/development/**)",
+      "PowerShell(Copy-Item \"h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\.audiagentic\\\\provisioning\\\\rig\\\\embedded\\\\bin\\\\llama-server\\\\windows\\\\llama-server.exe\" \"C:\\\\Users\\\\mgs\\\\.audiagentic\\\\harness\\\\rig\\\\bin\\\\llama-server\\\\windows\\\\llama-server.exe\" -Force)"
+    ],
+    "additionalDirectories": [
+      "\\dev"
+    ]
   },
   "hooks": {
     "UserPromptSubmit": [
@@ -26,7 +54,6 @@
       },
       {
         "matcher": "Bash",
-        "if": "Bash(git commit *)",
         "hooks": [
           {
             "type": "command",

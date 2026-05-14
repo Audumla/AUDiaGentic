@@ -10,7 +10,7 @@ LEGACY_MARKERS = (
 
 AUDIAGENTIC_MARKERS = (
     Path(".audiagentic/installed.json"),
-    Path(".audiagentic/project.yaml"),
+    Path(".audiagentic/config/project.yaml"),
 )
 
 

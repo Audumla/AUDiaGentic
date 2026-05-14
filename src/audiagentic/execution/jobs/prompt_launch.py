@@ -54,7 +54,7 @@ def _write_atomic(path: Path, payload: dict[str, Any]) -> Path:
 
 
 def load_project_config(project_root: Path) -> dict[str, Any]:
-    path = project_root / ".audiagentic" / "project.yaml"
+    path = project_root / ".audiagentic" / "config" / "project.yaml"
     if not path.exists():
         return {}
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}

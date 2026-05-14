@@ -50,7 +50,7 @@ def validate_prompt_surface(provider_id: str, provider_cfg: dict[str, Any]) -> l
 
 
 def load_provider_config(project_root: Path) -> dict[str, Any]:
-    path = project_root / ".audiagentic" / "providers.yaml"
+    path = project_root / ".audiagentic" / "config" / "runtime" / "providers.yaml"
     try:
         payload = _load_yaml(path)
     except Exception as exc:  # noqa: BLE001

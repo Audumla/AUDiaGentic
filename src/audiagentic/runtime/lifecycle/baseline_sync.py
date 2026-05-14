@@ -29,10 +29,10 @@ class BaselineAsset:
 
 
 BASELINE_ASSETS: tuple[BaselineAsset, ...] = (
-    BaselineAsset(".audiagentic/project.yaml", ".audiagentic/project.yaml", MODE_CREATE_IF_MISSING),
-    BaselineAsset(".audiagentic/components.yaml", ".audiagentic/components.yaml", MODE_CREATE_IF_MISSING),
-    BaselineAsset(".audiagentic/providers.yaml", ".audiagentic/providers.yaml", MODE_CREATE_IF_MISSING),
-    BaselineAsset(".audiagentic/prompt-syntax.yaml", ".audiagentic/prompt-syntax.yaml", MODE_CREATE_IF_MISSING),
+    BaselineAsset(".audiagentic/config/project.yaml", ".audiagentic/config/project.yaml", MODE_CREATE_IF_MISSING),
+    BaselineAsset(".audiagentic/config/components.yaml", ".audiagentic/config/components.yaml", MODE_CREATE_IF_MISSING),
+    BaselineAsset(".audiagentic/config/runtime/providers.yaml", ".audiagentic/config/runtime/providers.yaml", MODE_CREATE_IF_MISSING),
+    BaselineAsset(".audiagentic/config/execution/prompt-syntax.yaml", ".audiagentic/config/execution/prompt-syntax.yaml", MODE_CREATE_IF_MISSING),
     BaselineAsset(".audiagentic/prompts", ".audiagentic/prompts", MODE_REQUIRED_MANAGED, recursive=True),
     BaselineAsset("AGENTS.md", "AGENTS.md", MODE_REQUIRED_MANAGED),
     BaselineAsset("CLAUDE.md", "CLAUDE.md", MODE_REQUIRED_MANAGED),

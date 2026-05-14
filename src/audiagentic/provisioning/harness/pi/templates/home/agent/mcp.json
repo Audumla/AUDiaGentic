@@ -2,7 +2,7 @@
   "settings": {
     "toolPrefix": "mcp",
     "idleTimeout": 10,
-    "directTools": false
+    "directTools": true
   },
   "mcpServers": {
     "audiagentic-provisioning": {
@@ -19,7 +19,7 @@
       },
       "lifecycle": "lazy",
       "directTools": [
-        "audiagentic_smoke_status"
+        "audiagentic_provisioning_audiagentic_smoke_status"
       ]
     },
     "audiagentic-project": {

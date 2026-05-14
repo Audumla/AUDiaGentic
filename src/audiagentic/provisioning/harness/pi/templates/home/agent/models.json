@@ -1,16 +1,16 @@
 {
   "providers": {
     "audiagentic": {
-      "baseUrl": "__AUDIAGENTIC_PI_BASE_URL__",
+      "baseUrl": "__AUDIAGENTIC_AG_BASE_URL__",
       "api": "openai-completions",
-      "apiKey": "__AUDIAGENTIC_PI_API_KEY__",
+      "apiKey": "__AUDIAGENTIC_AG_API_KEY__",
       "compat": {
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false
       },
       "models": [
         {
-          "id": "__AUDIAGENTIC_PI_MODEL__",
+          "id": "__AUDIAGENTIC_AG_MODEL__",
           "name": "AUDiaGentic local planner",
           "reasoning": false,
           "input": ["text"],
@@ -24,7 +24,7 @@
           }
         },
         {
-          "id": "__AUDIAGENTIC_PI_FALLBACK_MODEL__",
+          "id": "__AUDIAGENTIC_AG_FALLBACK_MODEL__",
           "name": "AUDiaGentic local planner fallback",
           "reasoning": false,
           "input": ["text"],

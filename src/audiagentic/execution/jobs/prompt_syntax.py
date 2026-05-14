@@ -128,7 +128,7 @@ def load_prompt_syntax(project_root: Path | None, profile_name: str | None = Non
     if project_root is None:
         return syntax
 
-    syntax_path = project_root / ".audiagentic" / "prompt-syntax.yaml"
+    syntax_path = project_root / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml"
     if not syntax_path.exists():
         return syntax
 

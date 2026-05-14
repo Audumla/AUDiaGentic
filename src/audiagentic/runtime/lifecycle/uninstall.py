@@ -14,9 +14,12 @@ WORKFLOW_FILES = (
 )
 
 CONFIG_FILES = (
-    Path(".audiagentic/project.yaml"),
-    Path(".audiagentic/components.yaml"),
-    Path(".audiagentic/providers.yaml"),
+    Path(".audiagentic/config/project.yaml"),
+    Path(".audiagentic/config/components.yaml"),
+    Path(".audiagentic/config/runtime/providers.yaml"),
+    Path(".audiagentic/config/execution/prompt-syntax.yaml"),
+    Path(".audiagentic/config/interoperability/config.yaml"),
+    Path(".audiagentic/config/interoperability/events.yaml"),
 )
 
 STATE_FILES = (Path(".audiagentic/installed.json"),)
