@@ -35,8 +35,8 @@ _COMPONENTS: dict[str, dict[str, Any]] = {
     },
     "release": {
         "description": "Release management and audit ledger",
-        "detect": lambda root: (root / ".audiagentic" / "release").exists(),
-        "runtime_dir": ".audiagentic/release",
+        "detect": lambda root: (root / ".audiagentic" / "runtime" / "ledger" / "fragments").exists(),
+        "runtime_dir": ".audiagentic/runtime/ledger",
     },
 }
 
