@@ -50,7 +50,7 @@ def render(
         "before planning starts. If the hook surface is partial, fall back to the bridge and keep the\n"
         "shared launch grammar unchanged.\n\n"
         "## Tag shortcuts and aliases\n\n"
-        "Tag and provider aliases are centralized in `.audiagentic/prompt-syntax.yaml` and work in all surfaces:\n\n"
+        "Tag and provider aliases are centralized in `.audiagentic/config/execution/prompt-syntax.yaml` and work in all surfaces:\n\n"
         "Canonical tags:\n\n"
         f"{canonical_lines}\n\n"
         f"{tag_examples}\n\n"

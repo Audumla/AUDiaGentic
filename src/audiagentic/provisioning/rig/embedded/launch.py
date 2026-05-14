@@ -13,13 +13,10 @@ from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
 
+import yaml
+
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 42001
-DEFAULT_CONTEXT = 262144
-DEFAULT_PARALLEL = 2
-DEFAULT_GPU_LAYERS = "all"
-DEFAULT_FIT = "on"
-DEFAULT_REASONING = "off"
 
 
 @dataclass
@@ -37,43 +34,94 @@ class LaunchResult:
 class ModelProfile:
     name: str
     model_file: str | None
-    context: int
-    parallel: int
-    gpu_layers: str
-    fit: str
-    reasoning: str
-    sampling: dict[str, object]
-    chat_template_kwargs: dict[str, object]
+    server_cfg: dict[str, object]            # merged rig.yaml defaults + model overrides
+    chat_template_kwargs: dict[str, object]  # serialised as --chat-template-kwargs JSON
+    tool_call_proxy: str | None              # "pythonic" → start reformat proxy
 
 
-def repo_root() -> Path:
-    return Path(__file__).resolve().parents[5]
+# Maps rig.yaml keys → (llama-server flag, kind)
+# kind "value": --flag <val>   kind "flag": --flag  (boolean, emitted only when true)
+_LLAMA_ARG_MAP: list[tuple[str, str, str]] = [
+    ("ctx_size",          "--ctx-size",            "value"),
+    ("parallel",          "--parallel",            "value"),
+    ("gpu_layers",        "--gpu-layers",          "value"),
+    ("fit",               "--fit",                 "value"),
+    ("reasoning",         "--reasoning",           "value"),
+    ("threads",           "--threads",             "value"),
+    ("batch_size",        "--batch-size",          "value"),
+    ("ubatch_size",       "--ubatch-size",         "value"),
+    ("cache_type_k",      "--cache-type-k",        "value"),
+    ("cache_type_v",      "--cache-type-v",        "value"),
+    ("jinja",             "--jinja",               "flag"),
+    ("no_mmap",           "--no-mmap",             "flag"),
+    ("mlock",             "--mlock",               "flag"),
+    ("flash_attn",        "--flash-attn",          "value"),
+    ("temp",              "--temp",                "value"),
+    ("top_p",             "--top-p",               "value"),
+    ("top_k",             "--top-k",               "value"),
+    ("min_p",             "--min-p",               "value"),
+    ("top_a",             "--top-a",               "value"),
+    ("presence_penalty",  "--presence-penalty",    "value"),
+    ("frequency_penalty", "--frequency-penalty",   "value"),
+    ("repeat_penalty",    "--repeat-penalty",      "value"),
+]
 
 
-def runtime_bin_dir(root: Path) -> Path:
-    return root / ".audiagentic" / "provisioning" / "rig" / "embedded" / "bin"
+_PKG_DIR = Path(__file__).parent           # .../rig/embedded/
+_PKG_ROOT = Path(__file__).parents[3]      # .../audiagentic/
 
 
-def model_profiles_path(root: Path) -> Path:
-    return root / "src" / "audiagentic" / "provisioning" / "rig" / "embedded" / "models.json"
+def runtime_bin_dir() -> Path:
+    from audiagentic.provisioning.home import global_harness_runtime
+    return global_harness_runtime() / "rig" / "bin"
 
 
-def provisioning_log_dir(root: Path, component: str) -> Path:
-    return root / ".audiagentic" / "provisioning" / "logs" / component
+def model_profiles_path() -> Path:
+    return _PKG_DIR / "models.json"
 
 
-def load_model_profiles(root: Path) -> dict[str, object]:
-    path = model_profiles_path(root)
+def rig_config_path() -> Path:
+    return _PKG_ROOT / "config" / "rig" / "rig.yaml"
+
+
+def load_rig_config(profile_name: str) -> tuple[dict[str, object], dict[str, object], str | None]:
+    """Load rig.yaml and merge defaults with per-model overrides.
+
+    Returns (server_cfg, chat_template_kwargs, tool_call_proxy).
+    server_cfg contains llama-server args only.
+    tool_call_proxy is e.g. "pythonic" or None.
+    """
+    path = rig_config_path()
+    if not path.exists():
+        return {}, {}, None
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    merged: dict[str, object] = dict(data.get("defaults", {}))
+    model_overrides = data.get("models", {}).get(profile_name, {})
+    if isinstance(model_overrides, dict):
+        merged.update(model_overrides)
+    chat_template_kwargs: dict[str, object] = {}
+    raw_ctkw = merged.pop("chat_template_kwargs", None)
+    if isinstance(raw_ctkw, dict):
+        chat_template_kwargs = raw_ctkw
+    tool_call_proxy: str | None = merged.pop("tool_call_proxy", None)  # type: ignore[assignment]
+    if not isinstance(tool_call_proxy, str):
+        tool_call_proxy = None
+    return merged, chat_template_kwargs, tool_call_proxy
+
+
+
+def load_model_profiles(_profiles_path: Path | None = None) -> dict[str, object]:
+    path = _profiles_path or model_profiles_path()
     if not path.exists():
         raise SystemExit(f"Model profiles config not found: {path}")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def resolve_model_profile(root: Path, requested: str | None, model_file: str | None) -> ModelProfile:
-    data = load_model_profiles(root)
+def resolve_model_profile(requested: str | None, model_file: str | None, _profiles_path: Path | None = None) -> ModelProfile:
+    data = load_model_profiles(_profiles_path)
     models = data.get("models", {})
     if not isinstance(models, dict):
-        raise SystemExit(f"Invalid model profile file: {model_profiles_path(root)}")
+        raise SystemExit(f"Invalid model profile file: {model_profiles_path()}")
 
     target = requested or os.environ.get("AUDIAGENTIC_RIG_MODEL_PROFILE")
     if not target and model_file:
@@ -87,7 +135,7 @@ def resolve_model_profile(root: Path, requested: str | None, model_file: str | N
                 break
     target = target or str(data.get("default") or "")
     if not target:
-        raise SystemExit(f"No model profile specified and no default set in {model_profiles_path(root)}")
+        raise SystemExit(f"No model profile specified and no default set in {model_profiles_path()}")
 
     raw = models.get(target)
     if raw is None:
@@ -99,16 +147,13 @@ def resolve_model_profile(root: Path, requested: str | None, model_file: str | N
     if not isinstance(raw, dict):
         raise SystemExit(f"Model profile not found: {target}")
 
+    server_cfg, chat_template_kwargs, tool_call_proxy = load_rig_config(target)
     return ModelProfile(
         name=target,
         model_file=raw.get("model_file") if isinstance(raw.get("model_file"), str) else None,
-        context=int(raw.get("context", DEFAULT_CONTEXT)),
-        parallel=int(raw.get("parallel", DEFAULT_PARALLEL)),
-        gpu_layers=str(raw.get("gpu_layers", DEFAULT_GPU_LAYERS)),
-        fit=str(raw.get("fit", DEFAULT_FIT)),
-        reasoning=str(raw.get("reasoning", DEFAULT_REASONING)),
-        sampling=raw.get("sampling", {}) if isinstance(raw.get("sampling"), dict) else {},
-        chat_template_kwargs=raw.get("chat_template_kwargs", {}) if isinstance(raw.get("chat_template_kwargs"), dict) else {},
+        server_cfg=server_cfg,
+        chat_template_kwargs=chat_template_kwargs,
+        tool_call_proxy=tool_call_proxy,
     )
 
 
@@ -139,7 +184,7 @@ def ensure_under(path: Path, root: Path, label: str) -> Path:
 def find_server_bin(bin_dir: Path, override: str | None) -> Path:
     server_dir, llamafile_dir = resolve_platform_dirs(bin_dir)
     if override:
-        candidate = ensure_under(resolve_under(repo_root(), override) or Path(), bin_dir, "AUDIAGENTIC_RIG_SERVER_BIN")
+        candidate = ensure_under(resolve_under(bin_dir, override) or Path(), bin_dir, "AUDIAGENTIC_RIG_SERVER_BIN")
         if not candidate.exists():
             raise SystemExit(f"Rig binary not found: {candidate}")
         return candidate
@@ -165,7 +210,7 @@ def find_server_bin(bin_dir: Path, override: str | None) -> Path:
 def resolve_model(bin_dir: Path, server_dir: Path, override: str | None) -> tuple[Path, str]:
     if not override:
         raise SystemExit("No model file specified. Set --model-file or AUDIAGENTIC_RIG_MODEL_FILE, or add model_file to the profile.")
-    candidate = resolve_under(repo_root(), override, base=server_dir)
+    candidate = resolve_under(bin_dir, override, base=server_dir)
     assert candidate is not None
     ensure_under(candidate, bin_dir, "AUDIAGENTIC_RIG_MODEL_FILE")
     if not candidate.exists():
@@ -209,44 +254,25 @@ def build_command(
     host: str,
     port: int,
     device: str | None,
-    gpu_layers: str,
-    context: int,
-    parallel: int,
-    fit: str,
-    reasoning: str,
-    sampling: dict[str, object],
+    server_cfg: dict[str, object],
     chat_template_kwargs: dict[str, object],
 ) -> list[str]:
     args: list[str] = []
     if binary.name.startswith("llamafile"):
         args.append("--server")
-    args.extend(["--host", host, "--port", str(port)])
+    args.extend(["--host", host, "--port", str(port), "--model", model_arg])
     if device:
         args.extend(["--device", device])
-    args.extend(["--gpu-layers", str(gpu_layers), "--model", model_arg])
-    if "temperature" in sampling:
-        args.extend(["--temp", str(sampling["temperature"])])
-    if "top_p" in sampling:
-        args.extend(["--top-p", str(sampling["top_p"])])
-    if "top_k" in sampling:
-        args.extend(["--top-k", str(sampling["top_k"])])
-    if "presence_penalty" in sampling:
-        args.extend(["--presence-penalty", str(sampling["presence_penalty"])])
+    for key, flag, kind in _LLAMA_ARG_MAP:
+        val = server_cfg.get(key)
+        if val is None:
+            continue
+        if kind == "value":
+            args.extend([flag, str(val)])
+        elif kind == "flag" and val:
+            args.append(flag)
     if chat_template_kwargs:
         args.extend(["--chat-template-kwargs", json.dumps(chat_template_kwargs, separators=(",", ":"))])
-    args.extend(
-        [
-            "--ctx-size",
-            str(context),
-            "--parallel",
-            str(parallel),
-            "--fit",
-            fit,
-            "--no-mmap",
-            "--reasoning",
-            reasoning,
-        ]
-    )
     return [str(binary), *args]
 
 
@@ -292,18 +318,35 @@ def print_result(result: LaunchResult, as_json: bool) -> None:
         print(f"  Log:      {result.log_path}")
 
 
+def _apply_cli_overrides(server_cfg: dict[str, object], args: argparse.Namespace) -> dict[str, object]:
+    """Return a copy of server_cfg with any explicit CLI / env overrides applied."""
+    cfg = dict(server_cfg)
+    if args.gpu_layers:
+        cfg["gpu_layers"] = args.gpu_layers
+    if args.context is not None:
+        cfg["ctx_size"] = args.context
+    if args.parallel is not None:
+        cfg["parallel"] = args.parallel
+    if args.fit:
+        cfg["fit"] = args.fit
+    if args.reasoning:
+        cfg["reasoning"] = args.reasoning
+    return cfg
+
+
 def launch_background(args: argparse.Namespace) -> int:
-    root = repo_root()
-    bin_dir = runtime_bin_dir(root)
-    log_dir = provisioning_log_dir(root, "rig")
+    bin_dir = runtime_bin_dir()
+    from audiagentic.provisioning.home import global_harness_runtime
+    log_dir = global_harness_runtime() / "logs" / "rig"
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    profile = resolve_model_profile(root, args.model_profile, args.model_file or os.environ.get("AUDIAGENTIC_RIG_MODEL_FILE"))
+    profile = resolve_model_profile(args.model_profile, args.model_file or os.environ.get("AUDIAGENTIC_RIG_MODEL_FILE"))
     binary = find_server_bin(bin_dir, args.server_bin or os.environ.get("AUDIAGENTIC_RIG_SERVER_BIN"))
     server_dir = binary.parent
     model_override = args.model_file or os.environ.get("AUDIAGENTIC_RIG_MODEL_FILE") or profile.model_file
     model_path, model_arg = resolve_model(bin_dir, server_dir, model_override)
     device = args.device or os.environ.get("AUDIAGENTIC_RIG_DEVICE")
+    server_cfg = _apply_cli_overrides(profile.server_cfg, args)
     last_error: str | None = None
 
     for port in candidate_ports(args.host, args.port):
@@ -316,12 +359,7 @@ def launch_background(args: argparse.Namespace) -> int:
             host=args.host,
             port=port,
             device=device,
-            gpu_layers=args.gpu_layers or profile.gpu_layers,
-            context=args.context if args.context is not None else profile.context,
-            parallel=args.parallel if args.parallel is not None else profile.parallel,
-            fit=args.fit or profile.fit,
-            reasoning=args.reasoning or profile.reasoning,
-            sampling=profile.sampling,
+            server_cfg=server_cfg,
             chat_template_kwargs=profile.chat_template_kwargs,
         )
         meta_path.write_text(
@@ -335,7 +373,7 @@ def launch_background(args: argparse.Namespace) -> int:
                     "port": port,
                     "model": model_path.name,
                     "model_profile": profile.name,
-                    "sampling": profile.sampling,
+                    "server_cfg": server_cfg,
                     "chat_template_kwargs": profile.chat_template_kwargs,
                 },
                 indent=2,
@@ -395,14 +433,14 @@ def launch_background(args: argparse.Namespace) -> int:
 
 
 def launch_foreground(args: argparse.Namespace) -> int:
-    root = repo_root()
-    bin_dir = runtime_bin_dir(root)
-    profile = resolve_model_profile(root, args.model_profile, args.model_file or os.environ.get("AUDIAGENTIC_RIG_MODEL_FILE"))
+    bin_dir = runtime_bin_dir()
+    profile = resolve_model_profile(args.model_profile, args.model_file or os.environ.get("AUDIAGENTIC_RIG_MODEL_FILE"))
     binary = find_server_bin(bin_dir, args.server_bin or os.environ.get("AUDIAGENTIC_RIG_SERVER_BIN"))
     server_dir = binary.parent
     model_override = args.model_file or os.environ.get("AUDIAGENTIC_RIG_MODEL_FILE") or profile.model_file
     model_path, model_arg = resolve_model(bin_dir, server_dir, model_override)
     device = args.device or os.environ.get("AUDIAGENTIC_RIG_DEVICE")
+    server_cfg = _apply_cli_overrides(profile.server_cfg, args)
 
     command = build_command(
         binary=binary,
@@ -410,12 +448,7 @@ def launch_foreground(args: argparse.Namespace) -> int:
         host=args.host,
         port=args.port,
         device=device,
-        gpu_layers=args.gpu_layers or profile.gpu_layers,
-        context=args.context if args.context is not None else profile.context,
-        parallel=args.parallel if args.parallel is not None else profile.parallel,
-        fit=args.fit or profile.fit,
-        reasoning=args.reasoning or profile.reasoning,
-        sampling=profile.sampling,
+        server_cfg=server_cfg,
         chat_template_kwargs=profile.chat_template_kwargs,
     )
 
