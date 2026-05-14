@@ -10,31 +10,22 @@ Usage
 from __future__ import annotations
 
 import argparse
-import os
+import signal
 import sys
 from pathlib import Path
 
 from audiagentic.provisioning.harness.pi.install import install_to
 from audiagentic.provisioning.harness.pi.runner import (
     build_global_context,
-    cleanup_rig,
     env_flag,
     run_agent,
 )
+from audiagentic.provisioning.home import global_harness_runtime
 
 
-def _audiagentic_home() -> Path:
-    custom = os.environ.get("AUDIAGENTIC_HOME")
-    return Path(custom) if custom else Path.home() / ".audiagentic"
-
-
-def global_harness_runtime() -> Path:
-    return _audiagentic_home() / "harness"
-
-
-def _cmd_install(target: Path) -> int:
+def _cmd_install(target: Path, project_root: Path) -> int:
     print(f"Installing AUDiaGentic harness into {target}", flush=True)
-    rc = install_to(target)
+    rc = install_to(target, project_root=project_root)
     if rc == 0:
         print("\nInstall complete. Run 'audiagentic' from any project directory.", flush=True)
         if target != global_harness_runtime():
@@ -53,16 +44,33 @@ def _cmd_launch(project_root: Path, args: list[str]) -> int:
         print("Harness not installed. Run: audiagentic install", file=sys.stderr)
         return 1
 
-    enable_mcp = env_flag("AUDIAGENTIC_PI_ENABLE_MCP")
+    enable_mcp = env_flag("AUDIAGENTIC_AG_ENABLE_MCP")
     ctx = build_global_context(
         project_root=project_root,
         agent_runtime=harness_runtime,
         enable_mcp=enable_mcp,
     )
-    try:
+
+    if ctx.manages_rig:
+        from audiagentic.provisioning.rig.registry import register_client, shutdown_rig_if_last
+
+        register_client()
+
+        def _sigterm_handler(sig: int, frame: object) -> None:
+            shutdown_rig_if_last()
+            sys.exit(0)
+
+        try:
+            signal.signal(signal.SIGTERM, _sigterm_handler)
+        except (OSError, ValueError):
+            pass
+
+        try:
+            return run_agent(ctx, args, smoke=False)
+        finally:
+            shutdown_rig_if_last()
+    else:
         return run_agent(ctx, args, smoke=False)
-    finally:
-        cleanup_rig(ctx.rig_pid)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -94,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "install":
         target = Path(args.target).resolve() if args.target else global_harness_runtime()
-        return _cmd_install(target)
+        return _cmd_install(target, project_root=project_root)
 
     return _cmd_launch(project_root, remaining)
 

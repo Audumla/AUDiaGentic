@@ -47,8 +47,9 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "audiagentic" = [
-    # Pi harness config
-    "provisioning/harness/pi/config/*.yaml",
+    # Package-default configs (mirror runtime .audiagentic/config/ structure)
+    "config/harness/ag.yaml",
+    "config/rig/rig.yaml",
     # Pi harness home templates
     "provisioning/harness/pi/templates/home/agent/extensions/footer.ts",
     "provisioning/harness/pi/templates/home/agent/mcp.json",
@@ -57,7 +58,7 @@ where = ["src"]
     "provisioning/harness/pi/templates/home/agent/APPEND_SYSTEM.md",
     # Pi lockdown patches
     "provisioning/harness/pi/patches/*.patch",
-    # Embedded rig model profiles
+    # Embedded rig model profiles registry (machine-only, not user config)
     "provisioning/rig/embedded/models.json",
     # Release-please provisioning templates
     "provisioning/release_please/templates/*.json",

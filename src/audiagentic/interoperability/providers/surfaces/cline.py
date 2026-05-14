@@ -43,10 +43,10 @@ def render(
         "- do not invent provider-specific alternate tags\n"
         "- preserve raw prompt text in provenance metadata\n"
         "- route tagged prompts through the shared bridge when a native hook path is not stable\n"
-        "- canonical names are config-managed in `.audiagentic/prompt-syntax.yaml`; run\n"
+        "- canonical names are config-managed in `.audiagentic/config/execution/prompt-syntax.yaml`; run\n"
         "  `python tools/regenerate_tag_surfaces.py --project-root .` after renaming tags or aliases\n\n"
         "## Tag aliases and shortcuts\n\n"
-        "Centralized in `.audiagentic/prompt-syntax.yaml`. All of these are equivalent:\n\n"
+        "Centralized in `.audiagentic/config/execution/prompt-syntax.yaml`. All of these are equivalent:\n\n"
         + "\n".join(tag_alias_examples(syntax))
         + "\n\n"
         + "\n".join(provider_alias_examples(syntax))
