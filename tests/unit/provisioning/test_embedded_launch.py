@@ -42,12 +42,12 @@ MINIMAL_MODELS = {
 
 def test_load_model_profiles_raises_when_file_missing(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="not found"):
-        load_model_profiles(tmp_path)
+        load_model_profiles(tmp_path / "missing.json")
 
 
 def test_load_model_profiles_returns_dict(tmp_path: Path) -> None:
-    _write_models(tmp_path, MINIMAL_MODELS)
-    data = load_model_profiles(tmp_path)
+    p = _write_models(tmp_path, MINIMAL_MODELS)
+    data = load_model_profiles(p)
     assert data["default"] == "fast"
 
 
@@ -56,40 +56,40 @@ def test_load_model_profiles_returns_dict(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def test_resolve_model_profile_uses_config_default(tmp_path: Path) -> None:
-    _write_models(tmp_path, MINIMAL_MODELS)
-    profile = resolve_model_profile(tmp_path, None, None)
+    p = _write_models(tmp_path, MINIMAL_MODELS)
+    profile = resolve_model_profile(None, None, p)
     assert profile.name == "fast"
 
 
 def test_resolve_model_profile_by_explicit_name(tmp_path: Path) -> None:
-    _write_models(tmp_path, MINIMAL_MODELS)
-    profile = resolve_model_profile(tmp_path, "fast", None)
+    p = _write_models(tmp_path, MINIMAL_MODELS)
+    profile = resolve_model_profile("fast", None, p)
     assert profile.name == "fast"
 
 
 def test_resolve_model_profile_by_alias(tmp_path: Path) -> None:
-    _write_models(tmp_path, MINIMAL_MODELS)
-    profile = resolve_model_profile(tmp_path, "quick", None)
+    p = _write_models(tmp_path, MINIMAL_MODELS)
+    profile = resolve_model_profile("quick", None, p)
     assert profile.name == "fast"
 
 
 def test_resolve_model_profile_by_model_file_alias(tmp_path: Path) -> None:
-    _write_models(tmp_path, MINIMAL_MODELS)
-    profile = resolve_model_profile(tmp_path, None, "fast-alias")
+    p = _write_models(tmp_path, MINIMAL_MODELS)
+    profile = resolve_model_profile(None, "fast-alias", p)
     assert profile.name == "fast"
 
 
 def test_resolve_model_profile_raises_when_no_default(tmp_path: Path) -> None:
     data = {"models": MINIMAL_MODELS["models"]}
-    _write_models(tmp_path, data)
+    p = _write_models(tmp_path, data)
     with pytest.raises(SystemExit, match="No model profile specified"):
-        resolve_model_profile(tmp_path, None, None)
+        resolve_model_profile(None, None, p)
 
 
 def test_resolve_model_profile_raises_on_unknown_name(tmp_path: Path) -> None:
-    _write_models(tmp_path, MINIMAL_MODELS)
+    p = _write_models(tmp_path, MINIMAL_MODELS)
     with pytest.raises(SystemExit, match="not found"):
-        resolve_model_profile(tmp_path, "nonexistent", None)
+        resolve_model_profile("nonexistent", None, p)
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +118,7 @@ def test_resolve_model_returns_path_for_existing_file(tmp_path: Path) -> None:
 # helpers
 # ---------------------------------------------------------------------------
 
-def _write_models(root: Path, data: dict) -> None:
-    models_dir = root / "src" / "audiagentic" / "provisioning" / "rig" / "embedded"
-    models_dir.mkdir(parents=True, exist_ok=True)
-    (models_dir / "models.json").write_text(json.dumps(data), encoding="utf-8")
+def _write_models(root: Path, data: dict) -> Path:
+    path = root / "models.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return path

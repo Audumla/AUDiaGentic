@@ -19,7 +19,6 @@ for _p in (str(ROOT), str(SRC)):
 from audiagentic.provisioning.harness.pi.runner import launch_rig_if_needed, load_model_profile
 from audiagentic.provisioning.rig.embedded.launch import (
     ensure_under,
-    repo_root,
     resolve_under,
     runtime_bin_dir,
 )
@@ -47,34 +46,49 @@ def test_2b_profile_has_model_file() -> None:
 # ---------------------------------------------------------------------------
 
 def test_9b_flash_attempts_embedded_launch(monkeypatch) -> None:
-    monkeypatch.delenv("AUDIAGENTIC_PI_BASE_URL", raising=False)
+    monkeypatch.delenv("AUDIAGENTIC_AG_BASE_URL", raising=False)
     _, profile = load_model_profile("qwen3.5-9b-flash", "qwen3.5-9b-flash")
     fake_payload = {"base_url": "http://127.0.0.1:9999/v1", "model": "Qwen3.5-9B.gguf", "pid": 77}
-    with patch("audiagentic.provisioning.harness.pi.runner.subprocess.run") as mock_run:
+    with patch("audiagentic.provisioning.rig.registry.StartupLock") as mock_lock, \
+         patch("audiagentic.provisioning.rig.registry.read_rig_state", return_value=None), \
+         patch("audiagentic.provisioning.rig.registry.write_rig_state"), \
+         patch("audiagentic.provisioning.harness.pi.runner.subprocess.run") as mock_run:
+        mock_lock.return_value.__enter__ = lambda s: s
+        mock_lock.return_value.__exit__ = lambda s, *a: None
         mock_run.return_value.returncode = 0
         mock_run.return_value.stdout = json.dumps(fake_payload)
-        _, _, rig_pid = launch_rig_if_needed("qwen3.5-9b-flash", "qwen3.5-9b-flash", profile)
+        _, _, rig_pid, _ = launch_rig_if_needed("qwen3.5-9b-flash", "qwen3.5-9b-flash", profile)
     mock_run.assert_called_once()
     assert rig_pid == 77
 
 
 def test_2b_profile_attempts_embedded_launch(monkeypatch) -> None:
-    monkeypatch.delenv("AUDIAGENTIC_PI_BASE_URL", raising=False)
+    monkeypatch.delenv("AUDIAGENTIC_AG_BASE_URL", raising=False)
     _, profile = load_model_profile("qwen3.5-2b-q4_k_s", "qwen3.5-2b-q4_k_s")
     fake_payload = {"base_url": "http://127.0.0.1:9999/v1", "model": "Qwen.gguf", "pid": 99}
-    with patch("audiagentic.provisioning.harness.pi.runner.subprocess.run") as mock_run:
+    with patch("audiagentic.provisioning.rig.registry.StartupLock") as mock_lock, \
+         patch("audiagentic.provisioning.rig.registry.read_rig_state", return_value=None), \
+         patch("audiagentic.provisioning.rig.registry.write_rig_state"), \
+         patch("audiagentic.provisioning.harness.pi.runner.subprocess.run") as mock_run:
+        mock_lock.return_value.__enter__ = lambda s: s
+        mock_lock.return_value.__exit__ = lambda s, *a: None
         mock_run.return_value.returncode = 0
         mock_run.return_value.stdout = json.dumps(fake_payload)
-        _, _, rig_pid = launch_rig_if_needed("qwen3.5-2b-q4_k_s", "qwen3.5-2b-q4_k_s", profile)
+        _, _, rig_pid, _ = launch_rig_if_needed("qwen3.5-2b-q4_k_s", "qwen3.5-2b-q4_k_s", profile)
     mock_run.assert_called_once()
     assert rig_pid == 99
 
 
 def test_2b_launch_command_passes_model_profile(monkeypatch) -> None:
-    monkeypatch.delenv("AUDIAGENTIC_PI_BASE_URL", raising=False)
+    monkeypatch.delenv("AUDIAGENTIC_AG_BASE_URL", raising=False)
     _, profile = load_model_profile("qwen3.5-2b-q4_k_s", "qwen3.5-2b-q4_k_s")
     fake_payload = {"base_url": "http://127.0.0.1:9999/v1", "model": "Qwen.gguf", "pid": 99}
-    with patch("audiagentic.provisioning.harness.pi.runner.subprocess.run") as mock_run:
+    with patch("audiagentic.provisioning.rig.registry.StartupLock") as mock_lock, \
+         patch("audiagentic.provisioning.rig.registry.read_rig_state", return_value=None), \
+         patch("audiagentic.provisioning.rig.registry.write_rig_state"), \
+         patch("audiagentic.provisioning.harness.pi.runner.subprocess.run") as mock_run:
+        mock_lock.return_value.__enter__ = lambda s: s
+        mock_lock.return_value.__exit__ = lambda s, *a: None
         mock_run.return_value.returncode = 0
         mock_run.return_value.stdout = json.dumps(fake_payload)
         launch_rig_if_needed("qwen3.5-2b-q4_k_s", "qwen3.5-2b-q4_k_s", profile)
@@ -88,13 +102,12 @@ def test_2b_launch_command_passes_model_profile(monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 
 def _assert_model_file_within_bin_dir(profile_name: str) -> None:
-    root = repo_root()
-    bin_dir = runtime_bin_dir(root)
+    bin_dir = runtime_bin_dir()
     _, profile = load_model_profile(profile_name, profile_name)
     model_file = profile["model_file"]
     assert isinstance(model_file, str)
     server_dir = bin_dir / "llama-server" / "windows"
-    candidate = resolve_under(root, model_file, base=server_dir)
+    candidate = resolve_under(bin_dir, model_file, base=server_dir)
     assert candidate is not None
     result = ensure_under(candidate, bin_dir, "model_file")
     assert result == candidate

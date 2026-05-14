@@ -1,0 +1,70 @@
+# Rig server configuration — AUDiaGentic embedded llama-server.
+#
+# defaults: applied to every model launch.
+# models.<profile-name>: deep-merged over defaults; model wins on conflict.
+#
+# Key naming: underscore_separated → maps to --hyphen-separated llama-server arg.
+# Value flags:   key: <value>   →  --key <value>
+# Boolean flags: key: true      →  --key          (false / absent = omit flag)
+#
+# Any llama-server arg can be expressed here. Unknown keys are passed verbatim.
+
+defaults:
+  # --- Context and throughput ---
+  ctx_size: 131072
+  parallel: 2
+  gpu_layers: all
+  fit: "on"
+
+  # --- Memory ---
+  no_mmap: true
+
+  # --- Attention ---
+  flash_attn: "on"
+
+  # --- Reasoning ---
+  # "off" = standard generation  |  "think" = chain-of-thought  |  "on" = always reason
+  reasoning: "off"
+
+  # --- Sampling — Qwen3.5 HF model card baseline ---
+  # https://huggingface.co/Qwen/Qwen3.5-0.8B
+  # Non-thinking mode: temp=0.6, top_p=0.95, top_k=20
+  # Thinking mode:     temp=0.6, top_p=0.95, top_k=20, min_p=0 (same base)
+  temp: 0.6
+  top_p: 0.95
+  top_k: 20
+  min_p: 0.0
+
+# --- Per-model overrides ---
+# Keys here deep-merge over defaults; omit keys that match the default.
+
+models:
+  lfm2.5-1.2b-q8:
+    ctx_size: 32768
+    parallel: 4
+    flash_attn: "off"   # SSM architecture — flash attention not applicable
+    # LiquidAI recommended sampling (HF model card)
+    temp: 0.1
+    top_k: 50
+    top_p: 0.1
+    min_p: 0.0
+    repeat_penalty: 1.05
+    # Proxy rewrites Pythonic tool calls to OpenAI JSON before Pi sees them.
+    # Values: "pythonic" | null
+    tool_call_proxy: pythonic
+
+  qwen3.5-0.8b-q8:
+    ctx_size: 131072
+    parallel: 1          # tiny model — run more slots
+    chat_template_kwargs:
+      preserve_thinking: true
+
+  qwen3.5-2b-q4_k_s:
+    ctx_size: 262144
+    parallel: 1
+    chat_template_kwargs:
+      preserve_thinking: true
+
+  qwen3.5-9b-flash:
+    ctx_size: 131072
+    parallel: 1

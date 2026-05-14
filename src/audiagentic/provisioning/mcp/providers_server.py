@@ -45,7 +45,7 @@ def _project_root() -> Path:
 
 
 def _providers_config_path(project_root: Path) -> Path:
-    return project_root / ".audiagentic" / "providers.yaml"
+    return project_root / ".audiagentic" / "config" / "runtime" / "providers.yaml"
 
 
 def _read_providers_yaml(project_root: Path) -> dict[str, Any] | None:
