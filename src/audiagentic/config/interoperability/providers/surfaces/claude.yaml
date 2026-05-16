@@ -1,0 +1,20 @@
+contract-version: v1
+component-id: provider-surface-claude
+display-name: Claude Surface
+description: Claude Code surface — project instructions, rules, and skills
+detection-marker: .audiagentic/components/provider-surface-claude.yaml
+files:
+  - path: .audiagentic/components/provider-surface-claude.yaml
+    lifecycle: create-if-missing
+    description: Installation marker
+  - path: CLAUDE.md
+    lifecycle: required-managed
+    description: Claude Code project instructions
+  - path: .claude/rules
+    lifecycle: required-managed
+    recursive: true
+    description: Claude Code prompt-tag rules
+  - path: .claude/skills
+    lifecycle: required-managed
+    recursive: true
+    description: Claude Code skill definitions

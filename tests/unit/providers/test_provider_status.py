@@ -1,22 +1,16 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
-SRC = ROOT / "src"
-for path in (str(ROOT), str(SRC)):
-    if path not in sys.path:
-        sys.path.insert(0, path)
-
+from audiagentic.interoperability.providers.descriptors import registry as descriptor_registry
 from audiagentic.interoperability.providers.status import build_provider_status
 
 
 def test_provider_status_reports_cli_and_catalog(tmp_path: Path) -> None:
     project_root = tmp_path
     audi_root = project_root / ".audiagentic"
-    audi_root.mkdir()
-    (audi_root / "providers.yaml").write_text(
+    (audi_root / "config" / "runtime").mkdir(parents=True)
+    (audi_root / "config" / "runtime" / "providers.yaml").write_text(
         "\n".join(
             [
                 "contract-version: v1",
@@ -72,8 +66,46 @@ def test_provider_status_reports_cli_and_catalog(tmp_path: Path) -> None:
     assert payload["ok"] is True
     assert provider["provider-id"] == "codex"
     assert provider["access-mode"] == "cli"
+    assert provider["installation"]["cli"]["applicable"] is True
+    assert provider["installation"]["cli"]["installed"] in {True, False}
+    assert provider["cli-installed"] == provider["installation"]["cli"]["installed"]
+    assert provider["installation"]["vscode-extension"]["project"] is False
+    assert provider["installation"]["vscode-extension"]["installed"] is None
     assert provider["prompt-surface"]["enabled"] is True
     assert provider["prompt-surface"]["supported-modes"] == ["wrapper-normalize", "extension-normalize"]
     assert provider["catalog-present"] is True
     assert provider["catalog-model-count"] == 1
     assert provider["resolved-model"] == "gpt-5.4-mini"
+
+
+def test_provider_status_reports_vscode_extension_installation(monkeypatch, tmp_path: Path) -> None:
+    project_root = tmp_path
+    (project_root / ".vscode").mkdir()
+    runtime_config = project_root / ".audiagentic" / "config" / "runtime"
+    runtime_config.mkdir(parents=True)
+    (runtime_config / "providers.yaml").write_text(
+        "\n".join(
+            [
+                "contract-version: v1",
+                "providers:",
+                "  cline:",
+                "    enabled: true",
+                "    install-mode: external-configured",
+                "    access-mode: cli",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        descriptor_registry,
+        "_list_vscode_extensions",
+        lambda: ["saoudrizwan.claude-dev"],
+    )
+
+    payload = build_provider_status(project_root, provider_id="cline")
+    provider = payload["providers"][0]
+
+    assert provider["installation"]["vscode-extension"]["project"] is True
+    assert provider["installation"]["vscode-extension"]["applicable"] is True
+    assert provider["installation"]["vscode-extension"]["installed"] is True
+    assert provider["vscode-extension-installed"] is True

@@ -3,6 +3,5 @@
   "mode": "apply",
   "status": "done",
   "completed-operations": [],
-  "warnings": [],
-  "checkpoint-dir": ".audiagentic/runtime/lifecycle/checkpoints"
+  "warnings": []
 }

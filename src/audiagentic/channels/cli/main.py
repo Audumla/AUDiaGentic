@@ -1,4 +1,5 @@
 """Main CLI entrypoint."""
+# ruff: noqa: E402
 
 from __future__ import annotations
 
@@ -26,6 +27,8 @@ from audiagentic.execution.jobs import control as job_control_tool
 from audiagentic.execution.jobs import prompt_launch as prompt_launch_tool
 from audiagentic.execution.jobs import prompt_trigger_bridge as prompt_trigger_bridge_tool
 from audiagentic.execution.jobs.prompt_parser import parse_prompt_launch_request
+from audiagentic.interoperability.providers import provisioning as provider_cli_provisioning
+from audiagentic.interoperability.providers.surfaces import manager as provider_surface_manager
 from audiagentic.release import bootstrap as release_bootstrap
 from audiagentic.runtime.state import jobs_store as job_store
 from audiagentic.runtime.state import session_input_store as session_input_tool
@@ -170,6 +173,17 @@ def main(argv: list[str] | None = None) -> int:
     status_parser.add_argument("--project-root", required=True)
     status_parser.add_argument("--provider-id")
 
+    provider_cli_parser = subparsers.add_parser("provider-cli")
+    provider_cli_parser.add_argument("--action", required=True, choices=["install", "uninstall", "repair"])
+    provider_cli_parser.add_argument("--provider-id")
+    provider_cli_parser.add_argument("--dry-run", action="store_true")
+    provider_cli_parser.add_argument("--timeout", type=int, default=300)
+
+    provider_surfaces_parser = subparsers.add_parser("provider-surfaces")
+    provider_surfaces_parser.add_argument("--action", required=True, choices=["plan", "apply"])
+    provider_surfaces_parser.add_argument("--project-root", default=".")
+    provider_surfaces_parser.add_argument("--provider-id")
+
     job_control_parser = subparsers.add_parser("job-control")
     job_control_parser.add_argument("--project-root", required=True)
     job_control_parser.add_argument("--job-id", required=True)
@@ -282,6 +296,50 @@ def main(argv: list[str] | None = None) -> int:
         if args.provider_id:
             status_args.extend(["--provider-id", args.provider_id])
         return provider_status_tool.run(status_args)
+    if args.command == "provider-cli":
+        if args.provider_id:
+            if args.action == "install":
+                result = provider_cli_provisioning.install_provider_cli(
+                    args.provider_id,
+                    dry_run=args.dry_run,
+                    timeout=args.timeout,
+                    project_root=Path.cwd(),
+                )
+            elif args.action == "uninstall":
+                result = provider_cli_provisioning.uninstall_provider_cli(
+                    args.provider_id,
+                    dry_run=args.dry_run,
+                    timeout=args.timeout,
+                    project_root=Path.cwd(),
+                )
+            else:
+                result = provider_cli_provisioning.repair_provider_cli(
+                    args.provider_id,
+                    dry_run=args.dry_run,
+                    timeout=args.timeout,
+                    project_root=Path.cwd(),
+                )
+        else:
+            result = provider_cli_provisioning.provision_all_provider_clis(
+                args.action,
+                dry_run=args.dry_run,
+                timeout=args.timeout,
+                project_root=Path.cwd(),
+            )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result.get("ok", result.get("status") not in {"failed"}) else 1
+    if args.command == "provider-surfaces":
+        project_root = Path(args.project_root).resolve()
+        if args.action == "apply":
+            result = provider_surface_manager.apply_provider_surfaces(
+                project_root, provider_id=args.provider_id
+            )
+        else:
+            result = provider_surface_manager.plan_provider_surfaces(
+                project_root, provider_id=args.provider_id
+            )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result.get("ok") else 1
     if args.command == "job-control":
         request = job_control_tool.build_job_control_request(
             job_id=args.job_id,

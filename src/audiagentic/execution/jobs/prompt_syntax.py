@@ -44,6 +44,28 @@ DEFAULT_PROMPT_SYNTAX: dict[str, Any] = {
         "audit": "ag-audit",
         "check-in-prep": "ag-check-in-prep",
     },
+    "skill-surfaces": {
+        "claude": {
+            "renderer": "claude",
+            "path": ".claude/skills/{tag}/SKILL.md",
+        },
+        "cline": {
+            "renderer": "cline",
+            "path": ".clinerules/skills/{tag}.md",
+        },
+        "gemini": {
+            "renderer": "gemini",
+            "path": ".gemini/commands/{tag}.md",
+        },
+        "opencode": {
+            "renderer": "opencode",
+            "path": ".opencode/skills/{tag}/SKILL.md",
+        },
+        "codex": {
+            "renderer": "codex",
+            "path": ".agents/skills/{tag}/SKILL.md",
+        },
+    },
     "provider-aliases": {
         "local-openai": "local-openai",
         "lo": "local-openai",

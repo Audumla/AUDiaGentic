@@ -1,0 +1,35 @@
+contract-version: v1
+component-id: agent-jobs
+display-name: Agent Jobs
+description: Execution/jobs layer — ag-* workflow tags, skill sources, job records, and session artifacts
+detection-marker: .audiagentic/components/agent-jobs.yaml
+depends-on:
+  - core-lifecycle
+config: execution/jobs/agent-jobs.yaml
+files:
+  - path: .audiagentic/components/agent-jobs.yaml
+    lifecycle: create-if-missing
+    description: Installation marker
+  - path: .audiagentic/skills/ag-plan/skill.md
+    lifecycle: required-managed
+    description: ag-plan skill source
+  - path: .audiagentic/skills/ag-implement/skill.md
+    lifecycle: required-managed
+    description: ag-implement skill source
+  - path: .audiagentic/skills/ag-review/skill.md
+    lifecycle: required-managed
+    description: ag-review skill source
+  - path: .audiagentic/skills/ag-audit/skill.md
+    lifecycle: required-managed
+    description: ag-audit skill source
+  - path: .audiagentic/skills/ag-check-in-prep/skill.md
+    lifecycle: required-managed
+    description: ag-check-in-prep skill source
+  - path: .audiagentic/runtime/jobs
+    lifecycle: runtime-only
+    recursive: true
+    description: Job records and artifacts
+  - path: .audiagentic/runtime/sessions
+    lifecycle: runtime-only
+    recursive: true
+    description: Agent session input and review state

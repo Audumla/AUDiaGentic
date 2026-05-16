@@ -1,18 +1,9 @@
 from __future__ import annotations
 
-import json
-import sys
 from pathlib import Path
 
 import yaml
 from jsonschema import Draft202012Validator
-
-ROOT = Path(__file__).resolve().parents[3]
-SRC = ROOT / "src"
-for path in (str(ROOT), str(SRC)):
-    if path not in sys.path:
-        sys.path.insert(0, path)
-
 from tests.helpers import sandbox as sandbox_helper
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -29,31 +20,35 @@ def test_fresh_install_creates_scaffold_and_manifest(tmp_path: Path) -> None:
     try:
         result = apply_fresh_install(sandbox.repo)
         assert result["status"] == "success"
-        assert (sandbox.repo / ".audiagentic" / "project.yaml").is_file()
-        assert (sandbox.repo / ".audiagentic" / "components.yaml").is_file()
-        assert (sandbox.repo / ".audiagentic" / "providers.yaml").is_file()
-        assert (sandbox.repo / ".audiagentic" / "prompt-syntax.yaml").is_file()
+        assert (sandbox.repo / ".audiagentic" / "config" / "project.yaml").is_file()
+        assert (sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml").is_file()
+        assert (
+            sandbox.repo / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml"
+        ).is_file()
         assert (sandbox.repo / ".audiagentic" / "prompts" / "ag-review" / "default.md").is_file()
         assert (sandbox.repo / "AGENTS.md").is_file()
-        assert (sandbox.repo / ".audiagentic" / "installed.json").is_file()
-        assert result["baseline-sync-report"]["excluded-paths"] == [".audiagentic/runtime/**"]
+        # Component markers are the new install record
+        assert (sandbox.repo / ".audiagentic" / "components" / "core-lifecycle.yaml").is_file()
+        assert any(
+            path.startswith(".audiagentic/runtime/")
+            for path in result["baseline-sync-report"]["excluded-paths"]
+        )
 
-        project_cfg = _load_yaml(sandbox.repo / ".audiagentic" / "project.yaml")
-        component_cfg = _load_yaml(sandbox.repo / ".audiagentic" / "components.yaml")
-        provider_cfg = _load_yaml(sandbox.repo / ".audiagentic" / "providers.yaml")
+        project_cfg = _load_yaml(sandbox.repo / ".audiagentic" / "config" / "project.yaml")
+        provider_cfg = _load_yaml(
+            sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml"
+        )
 
         validator = Draft202012Validator(read_schema("project-config"))
         assert not list(validator.iter_errors(project_cfg))
-        validator = Draft202012Validator(read_schema("component-config"))
-        assert not list(validator.iter_errors(component_cfg))
         validator = Draft202012Validator(read_schema("provider-config"))
         assert not list(validator.iter_errors(provider_cfg))
 
-        manifest_payload = json.loads(
-            (sandbox.repo / ".audiagentic" / "installed.json").read_text(encoding="utf-8")
-        )
-        validator = Draft202012Validator(read_schema("installed-state"))
-        assert not list(validator.iter_errors(manifest_payload))
+        # core-lifecycle marker has expected fields
+        marker = _load_yaml(sandbox.repo / ".audiagentic" / "components" / "core-lifecycle.yaml")
+        assert marker["component-id"] == "core-lifecycle"
+        assert marker["enabled"] is True
+        assert marker["installation-kind"] == "fresh"
     finally:
         sandbox.cleanup()
 
@@ -62,12 +57,16 @@ def test_fresh_install_rejects_existing_state(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "fresh-install-existing")
     try:
         (sandbox.repo / ".audiagentic").mkdir(parents=True)
-        (sandbox.repo / ".audiagentic" / "project.yaml").write_text("contract-version: v1", encoding="utf-8")
+        config_dir = sandbox.repo / ".audiagentic" / "config"
+        config_dir.mkdir()
+        (config_dir / "project.yaml").write_text("contract-version: v1", encoding="utf-8")
         try:
             apply_fresh_install(sandbox.repo)
         except AudiaGenticError as exc:
             assert exc.kind == "business-rule"
-            assert (sandbox.repo / ".audiagentic" / "project.yaml").read_text(encoding="utf-8") == "contract-version: v1"
+            assert (
+                sandbox.repo / ".audiagentic" / "config" / "project.yaml"
+            ).read_text(encoding="utf-8") == "contract-version: v1"
         else:
             raise AssertionError("expected business-rule error")
     finally:

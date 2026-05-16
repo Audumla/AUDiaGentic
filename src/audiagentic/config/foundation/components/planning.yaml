@@ -1,0 +1,33 @@
+contract-version: v1
+component-id: planning
+display-name: Planning
+description: Structured planning system — requests, specs, plans, tasks, work-packages
+detection-marker: .audiagentic/components/planning.yaml
+files:
+  - path: .audiagentic/components/planning.yaml
+    lifecycle: create-if-missing
+    description: Installation marker
+  - path: .audiagentic/planning/config
+    lifecycle: create-if-missing
+    recursive: true
+    description: Planning configuration — profiles, automations, templates
+  - path: .audiagentic/planning/claims
+    lifecycle: runtime-only
+    recursive: true
+    description: Planning item claim state
+  - path: .audiagentic/planning/events
+    lifecycle: runtime-only
+    recursive: true
+    description: Planning event log
+  - path: .audiagentic/planning/extracts
+    lifecycle: runtime-only
+    recursive: true
+    description: Extracted planning item JSON records
+  - path: .audiagentic/planning/ids
+    lifecycle: runtime-only
+    recursive: true
+    description: ID sequence counters
+  - path: .audiagentic/planning/indexes
+    lifecycle: runtime-only
+    recursive: true
+    description: Planning index files

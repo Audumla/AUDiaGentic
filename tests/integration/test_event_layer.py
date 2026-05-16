@@ -5,17 +5,10 @@ Tests the full propagation chain from task to spec through events.
 
 from __future__ import annotations
 
-import sys
 import tempfile
 from pathlib import Path
 
 import pytest
-
-ROOT = Path(__file__).resolve().parents[2]
-for _p in (str(ROOT), str(ROOT / "src")):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
 from tests.planning_testkit import seed_planning_config
 
 

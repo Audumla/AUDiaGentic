@@ -24,10 +24,28 @@
       "PowerShell(try { Invoke-WebRequest \"http://127.0.0.1:42001/v1/models\" -TimeoutSec 3 | Select-Object -ExpandProperty Content } catch { $_.Exception.Message })",
       "PowerShell(if \\(-not $?\\) { \"dir not found\" })",
       "Read(//h/development/**)",
-      "PowerShell(Copy-Item \"h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\.audiagentic\\\\provisioning\\\\rig\\\\embedded\\\\bin\\\\llama-server\\\\windows\\\\llama-server.exe\" \"C:\\\\Users\\\\mgs\\\\.audiagentic\\\\harness\\\\rig\\\\bin\\\\llama-server\\\\windows\\\\llama-server.exe\" -Force)"
+      "PowerShell(Copy-Item \"h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\.audiagentic\\\\provisioning\\\\rig\\\\embedded\\\\bin\\\\llama-server\\\\windows\\\\llama-server.exe\" \"C:\\\\Users\\\\mgs\\\\.audiagentic\\\\harness\\\\rig\\\\bin\\\\llama-server\\\\windows\\\\llama-server.exe\" -Force)",
+      "PowerShell(Copy-Item \"h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\.audiagentic\\\\provisioning\\\\rig\\\\embedded\\\\bin\\\\models\\\\Qwen_Qwen3.5-2B-Q4_K_S.gguf\" \"C:\\\\Users\\\\mgs\\\\.audiagentic\\\\harness\\\\rig\\\\bin\\\\models\\\\Qwen_Qwen3.5-2B-Q4_K_S.gguf\" -Force)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\mgs\\\\.audiagentic\\\\harness\\\\logs\\\\rig\\\\\" | Sort-Object LastWriteTime | Select-Object -Last 3 | ForEach-Object { Write-Output $_.Name; Get-Content $_.FullName -Tail 15 })",
+      "PowerShell(tree \"H:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\src\\\\audiagentic\\\\interoperability\\\\providers\" -L 3)",
+      "PowerShell(Get-ChildItem -Path \"h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\.audiagentic\\\\config\" -Force -Recurse | Select-Object FullName | ForEach-Object { $_.FullName.Replace\\('h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\', ''\\) })",
+      "PowerShell(Get-ChildItem -Path \"h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\.audiagentic\\\\runtime\" -Force -Recurse 2>$null | Select-Object FullName | ForEach-Object { $_.FullName.Replace\\('h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\', ''\\) })",
+      "PowerShell(Get-ChildItem -Path \"h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\.audiagentic\\\\planning\" -Force -Recurse 2>$null | Select-Object FullName | ForEach-Object { $_.FullName.Replace\\('h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\', ''\\) })",
+      "PowerShell(Get-ChildItem -Path \"h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\.audiagentic\\\\runtime\\\\ledger\" -Force -Recurse 2>$null | Select-Object -First 20 | ForEach-Object { $_.FullName.Replace\\('h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\', ''\\) })",
+      "PowerShell(Get-ChildItem -Path \"h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\.audiagentic\\\\runtime\\\\providers\" -Force -Recurse 2>$null | Select-Object FullName | ForEach-Object { $_.FullName.Replace\\('h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\', ''\\) } | Select-Object -First 30)",
+      "PowerShell(Get-ChildItem -Path \"h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\.audiagentic\\\\runtime\\\\interoperability\" -Force -Recurse 2>$null | Select-Object FullName | ForEach-Object { $_.FullName.Replace\\('h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\', ''\\) })",
+      "PowerShell(Get-ChildItem \"h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\.audiagentic\" -Force | Where-Object { $_.PSIsContainer })",
+      "PowerShell(Get-ChildItem -Path \"h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\.audiagentic\\\\interoperability\" -Force | ForEach-Object { $_.FullName.Replace\\('h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\', ''\\) })",
+      "PowerShell(Get-ChildItem -Path \"h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\.audiagentic\\\\provisioning\" -Force -Recurse | Select-Object FullName | ForEach-Object { $_.FullName.Replace\\('h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\', ''\\) })",
+      "PowerShell(Get-ChildItem -Path \"h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\.audiagentic\\\\runtime\" -Force | ForEach-Object { if \\($_.PSIsContainer\\) { $_.Name + \" \\(dir\\)\" } else { $_.Name } })",
+      "PowerShell(Get-ChildItem -Path \"h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\.audiagentic\\\\skills\" -Force -Recurse 2>$null | Select-Object -First 15 | ForEach-Object { $_.FullName.Replace\\('h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\', ''\\) })",
+      "PowerShell(Get-ChildItem -Path \"h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\.audiagentic\\\\runtime\\\\jobs\" -Force | Select-Object -First 5 | ForEach-Object { $_.Name })",
+      "PowerShell(*)",
+      "Bash(*)"
     ],
     "additionalDirectories": [
-      "\\dev"
+      "\\dev",
+      "h:\\development\\projects\\AUDia\\AUDiaGentic\\.audiagentic\\provisioning\\rig\\embedded\\bin\\llama-server\\windows"
     ]
   },
   "hooks": {

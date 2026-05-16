@@ -6,6 +6,7 @@ Provider-facing surface definitions: the rendered instruction content, skill def
 ## Ownership
 - `SkillDefinition` and surface base types
 - Per-provider surface renderers (how skills and instructions are rendered for each provider's format)
+- Component surface contributions (provider-neutral rules, skills, and MCP intents)
 - Surface registry (maps provider IDs to their renderer)
 
 ## Must NOT Own
@@ -22,6 +23,8 @@ Provider-facing surface definitions: the rendered instruction content, skill def
 |--------|---------------|
 | `base.py` | `SkillDefinition` dataclass and base surface interface |
 | `registry.py` | Load and resolve the renderer registry by provider ID |
+| `contributions.py` | Load provider-neutral component surface contributions |
+| `manager.py` | Build/apply provider surface plans through registered provider renderers |
 | `claude.py` | Claude-specific skill/surface rendering |
 | `cline.py` | Cline-specific skill/surface rendering |
 | `codex.py` | Codex-specific skill/surface rendering |
@@ -33,3 +36,8 @@ Provider-facing surface definitions: the rendered instruction content, skill def
 ## Relationship to adapters/
 - **adapters/** = how to run a provider (execution wiring)
 - **surfaces/** = what to show a provider (instruction content and skill definitions)
+
+Provider modules own provider-specific rendering. Generic surface code loads neutral
+component contributions, calls registered provider renderers, and applies managed
+blocks. It must not hard-code provider file paths such as `CLAUDE.md`, `.clinerules`,
+or `GEMINI.md`.

@@ -1,16 +1,9 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
-
-ROOT = Path(__file__).resolve().parents[4]
-SRC = ROOT / "src"
-for _p in (str(ROOT), str(SRC)):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 from audiagentic.provisioning.rig.embedded.launch import (
     load_model_profiles,

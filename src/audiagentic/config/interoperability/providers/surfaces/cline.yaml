@@ -1,0 +1,13 @@
+contract-version: v1
+component-id: provider-surface-cline
+display-name: Cline Surface
+description: Cline VS Code extension surface — rules and skill definitions
+detection-marker: .audiagentic/components/provider-surface-cline.yaml
+files:
+  - path: .audiagentic/components/provider-surface-cline.yaml
+    lifecycle: create-if-missing
+    description: Installation marker
+  - path: .clinerules
+    lifecycle: required-managed
+    recursive: true
+    description: Cline rules and skill files
