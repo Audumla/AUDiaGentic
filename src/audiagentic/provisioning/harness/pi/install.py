@@ -21,7 +21,7 @@ _PKG_ROOT = _AGENT_DIR.parents[2]         # .../audiagentic/
 _SRC_DIR = _AGENT_DIR.parents[3]          # src/
 _REPO_ROOT = _AGENT_DIR.parents[4]        # repo root (dev layout)
 _MODELS_JSON = _PKG_ROOT / "provisioning" / "rig" / "embedded" / "models.json"
-_HARNESS_CONFIG = _PKG_ROOT / "config" / "harness" / "ag.yaml"
+_HARNESS_CONFIG = _PKG_ROOT / "config" / "provisioning" / "harness" / "ag.yaml"
 
 DEFAULT_PROVIDER = "audiagentic"
 DEFAULT_API_KEY = "dummy"
@@ -294,9 +294,6 @@ def materialize_agent_config(target: Path, harness_cfg: dict) -> None:
 def install_to(target: Path, project_root: Path | None = None) -> int:
     npm_dir = target / "cli"
 
-    from audiagentic.provisioning.home import audiagentic_home
-    ag_home = audiagentic_home()
-
     for path in (npm_dir, target / "agent", target / "logs"):
         path.mkdir(parents=True, exist_ok=True)
 
@@ -329,4 +326,16 @@ def install_to(target: Path, project_root: Path | None = None) -> int:
 
     harness_cfg = _load_config(project_root=project_root)
     materialize_agent_config(target, harness_cfg)
+    return 0
+
+
+def uninstall_from(target: Path) -> int:
+    """Remove the Pi harness CLI and generated agent config.
+
+    Rig binaries, models, and logs are left in place because they may be large
+    user-managed assets or useful diagnostics.
+    """
+    for path in (target / "cli", target / "agent"):
+        if path.exists():
+            shutil.rmtree(path)
     return 0

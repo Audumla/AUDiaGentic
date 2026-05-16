@@ -1,0 +1,28 @@
+contract-version: v1
+component-id: core-lifecycle
+display-name: Core Lifecycle
+description: Core project scaffold — config, prompts, and workflow files
+detection-marker: .audiagentic/components/core-lifecycle.yaml
+files:
+  - path: .audiagentic/components/core-lifecycle.yaml
+    lifecycle: create-if-missing
+    description: Installation marker
+  - path: .audiagentic/config/project.yaml
+    lifecycle: create-if-missing
+    description: Project identity and workflow config
+  - path: .audiagentic/config/execution/prompt-syntax.yaml
+    lifecycle: create-if-missing
+    description: Canonical prompt tag aliases
+  - path: .audiagentic/config/interoperability/config.yaml
+    lifecycle: create-if-missing
+    description: Event bus and interoperability runtime config
+  - path: .audiagentic/config/interoperability/events.yaml
+    lifecycle: create-if-missing
+    description: Project event definitions
+  - path: .audiagentic/prompts
+    lifecycle: required-managed
+    recursive: true
+    description: Managed prompt templates
+  - path: .github/workflows/release-please.audiagentic.yml
+    lifecycle: required-managed
+    description: AUDiaGentic release workflow

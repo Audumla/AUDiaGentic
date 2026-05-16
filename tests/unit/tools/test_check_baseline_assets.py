@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from audiagentic.paths import REPO_ROOT
 
 
 def test_check_baseline_assets_managed_headers() -> None:

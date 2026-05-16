@@ -1,16 +1,11 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[3]
-SRC = ROOT / "src"
-for path in (str(ROOT), str(SRC)):
-    if path not in sys.path:
-        sys.path.insert(0, path)
+from audiagentic.paths import REPO_ROOT
 
 CoreServiceBoundary = pytest.importorskip(
     "audiagentic.channels.server.service_boundary",
@@ -26,7 +21,7 @@ def test_service_boundary_runs_job_in_process(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "server-seam")
     try:
         request = json.loads(
-            (ROOT / "docs" / "examples" / "fixtures" / "server-seam.request.json").read_text(
+            (REPO_ROOT / "docs" / "examples" / "fixtures" / "server-seam.request.json").read_text(
                 encoding="utf-8"
             )
         )

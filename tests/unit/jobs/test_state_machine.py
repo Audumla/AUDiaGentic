@@ -1,14 +1,7 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[3]
-SRC = ROOT / "src"
-for path in (str(ROOT), str(SRC)):
-    if path not in sys.path:
-        sys.path.insert(0, path)
 
 from tests.helpers import sandbox as sandbox_helper
 
@@ -19,12 +12,13 @@ from audiagentic.execution.jobs.state_machine import (
     transition_job,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.paths import REPO_ROOT
 from audiagentic.runtime.state.jobs_store import read_job_record, write_job_record
 
 
 def _fixture_job(state: str = "created") -> dict:
     fixture = json.loads(
-        (ROOT / "docs" / "examples" / "fixtures" / "job-record.valid.json").read_text(
+        (REPO_ROOT / "docs" / "examples" / "fixtures" / "job-record.valid.json").read_text(
             encoding="utf-8"
         )
     )

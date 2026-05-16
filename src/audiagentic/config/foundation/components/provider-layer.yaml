@@ -1,0 +1,16 @@
+contract-version: v1
+component-id: provider-layer
+display-name: Provider Layer
+description: AI provider configuration and runtime model catalogs
+detection-marker: .audiagentic/components/provider-layer.yaml
+files:
+  - path: .audiagentic/components/provider-layer.yaml
+    lifecycle: create-if-missing
+    description: Installation marker
+  - path: .audiagentic/config/runtime/providers.yaml
+    lifecycle: create-if-missing
+    description: Provider configuration — models, access mode, execution policy
+  - path: .audiagentic/runtime/providers
+    lifecycle: runtime-only
+    recursive: true
+    description: Runtime provider catalogs and session state

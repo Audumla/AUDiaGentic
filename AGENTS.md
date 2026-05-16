@@ -2,109 +2,82 @@
 
 # AGENTS.md
 
-This repository uses canonical prompt tags to launch AUDiaGentic workflow jobs.
+This repository uses AUDiaGentic workflow jobs.
 
-## Canonical rule
+## Bridge
 
-- Do not reinterpret `@ag-plan`, `@ag-implement`, `@ag-review`, `@ag-audit`, `@ag-check-in-prep`.
-- Route the raw tagged prompt through the repo-owned bridge instead of inventing a separate
-  workflow semantics layer.
+When a prompt begins with a workflow tag, route it through the repo-owned bridge:
+
+```powershell
+python tools/codex_prompt_trigger_bridge.py --project-root .
+```
+
+If a hook or instruction surface is partial, fall back to the bridge and keep the shared
+launch grammar unchanged.
+
+## Prompt tag doctrine
+
+- Parse only the first non-empty line for the workflow tag.
+- Keep tag semantics identical to the shared AUDiaGentic launch contract.
+- Do not invent provider-specific alternate tags.
+- Preserve raw prompt text in provenance metadata.
 - Keep provenance visible: provider id, surface, and session id should survive normalization.
-- Canonical names are config-managed in `.audiagentic/prompt-syntax.yaml`; run
-  `python tools/regenerate_tag_surfaces.py --project-root .` after renaming tags or aliases.
 
-## Prompt-calling protocol
+<!-- AUDIAGENTIC:BEGIN agent-jobs/canonical-rule -->
+## Canonical workflow tags
 
-If a prompt begins with a canonical tag, treat it as a workflow launch request, not ordinary
-chat.
+Canonical tags:
 
-## Bridge mechanics
-
-The bridge is the execution boundary for tagged prompts.
-
-- Read the raw tagged prompt, including the first non-empty line and the prompt body.
-- Normalize the tag, provider shorthand, and argument aliases using
-  `.audiagentic/prompt-syntax.yaml`.
-- Preserve provenance fields through normalization: provider id, surface, and session id.
-- Apply project defaults when the prompt omits `id`, `context`, `output`, or `template`.
-- Treat the canonical action tags as workflow selectors, not as free-form instructions:
 - `@ag-plan`
 - `@ag-implement`
 - `@ag-review`
 - `@ag-audit`
 - `@ag-check-in-prep`
-- Treat provider shorthands as provider selectors that still route through the same normalized
-  launch contract.
-- If the prompt is tagged but no explicit subject is supplied, let the bridge create the default
-  generic subject/job identity rather than inventing ad hoc semantics.
-- Stream or capture provider output through AUDiaGentic-owned runtime artifacts; the provider
-  should not own persistence policy.
 
-The Codex launch path is:
+Rules:
 
-```powershell
-python tools/codex_prompt_trigger_bridge.py --project-root .
-```
+- Do not reinterpret these tags — route the raw tagged prompt through the repo-owned bridge.
+- Keep tag semantics identical to the shared AUDiaGentic launch contract.
+- Keep provenance visible: provider id, surface, and session id should survive normalization.
+- Canonical names are config-managed in `.audiagentic/config/execution/prompt-syntax.yaml`;
+  run `python tools/regenerate_tag_surfaces.py --project-root .` after renaming tags or aliases.
+<!-- AUDIAGENTIC:END agent-jobs/canonical-rule -->
 
-The shared bridge normalizes the raw prompt and forwards it into `prompt-launch`, so the
-tagged prompt becomes a job request with preserved provenance and project defaults.
+<!-- AUDIAGENTIC:BEGIN agent-jobs/planning-item-policy -->
+## Planning item creation policy
 
-## Codex path
+Planning items (requests, specs, plans, tasks) can only be created with explicit user approval.
 
-Codex should use the shared prompt-trigger bridge:
+- Do not autonomously create planning items during analysis, review, or exploration work.
+- If analysis suggests a new request or spec is needed, report findings and ask for approval.
+- Use the canonical tags (`@ag-plan`) to signal planning work that requires user direction.
+- Only create planning items in response to explicit user instruction or approved workflow prompts.
+<!-- AUDIAGENTIC:END agent-jobs/planning-item-policy -->
 
-```powershell
-python tools/codex_prompt_trigger_bridge.py --project-root .
-```
+<!-- AUDIAGENTIC:BEGIN agent-jobs/review-doctrine -->
+## Review doctrine
 
-If a hook or instruction surface is partial, fall back to the bridge and keep the shared launch
-grammar unchanged.
+- Review prompts should stay read-focused unless the normalized request explicitly allows more.
+- Do not broaden review into implementation work.
+- Keep tracked docs and release artifacts synchronized with the job record.
+<!-- AUDIAGENTIC:END agent-jobs/review-doctrine -->
 
-## Standard prompt shape
+<!-- AUDIAGENTIC:BEGIN agent-jobs/tag-shortcuts -->
+## Tag shortcuts and aliases
 
-Prefer the short, defaults-first form:
+Tag and provider aliases are centralized in `.audiagentic/config/execution/prompt-syntax.yaml`
+and work in all surfaces.
 
-```text
-@ag-review provider=codex id=job_001 ctx=documentation t=review-default
-Review the current project state and call out any gaps.
-```
-
-When a provider/tag default template exists under `.audiagentic/prompts/<tag>/`, the shortest
-form is also valid:
-
-```text
-@ag-review
-```
-
-In that case the bridge should:
-- resolve the provider from the suffix
-- load the provider or shared default template
-- create the default job/subject identity if none is supplied
-- preserve provenance through normalization
-
-The bridge should accept the long-form canonical names as well:
-
-- `provider`
-- `id`
-- `context`
-- `output`
-- `template`
-
-and the common aliases:
-
-- `ctx` -> `context`
-- `out` -> `output`
-- `t` -> `template`
-
-## Tag and provider aliases
-
-Centralized in `.audiagentic/prompt-syntax.yaml`. Available shortcuts:
+Tag aliases:
 
 - `agp` -> `ag-plan`
 - `agi` -> `ag-implement`
 - `agr` -> `ag-review`
 - `aga` -> `ag-audit`
 - `agc` -> `ag-check-in-prep`
+
+Provider aliases:
+
 - `cx` -> `codex`
 - `cld` -> `claude`
 - `cln` -> `cline`
@@ -112,22 +85,25 @@ Centralized in `.audiagentic/prompt-syntax.yaml`. Available shortcuts:
 - `opc` -> `opencode`
 - `cp` -> `copilot`
 
-## Skills
+All of these are equivalent:
 
-- `ag-plan`
-- `ag-implement`
-- `ag-review`
-- `ag-audit`
-- `ag-check-in-prep`
+```text
+@ag-review provider=cline
+@agr provider=cline
+@review provider=cline
+@r provider=cline
+@ag-review-cline
+@r-cline
+```
+<!-- AUDIAGENTIC:END agent-jobs/tag-shortcuts -->
 
-## MCP Tool Usage
+<!-- AUDIAGENTIC:BEGIN release-audit-ledger.process -->
+## Release audit ledger process
 
-- **Planning activities** (requests, specs, tasks, plans, standards, workpackages) must use the `audiagentic-planning` MCP server for all planning item operations (tm_list, tm_create, tm_edit, tm_get, tm_delete, tm_standards, tm_docs, tm_relink, tm_claim, tm_move, tm_package, tm_section)
-- **Context searching** (project documentation) must use the `audiagentic-knowledge` MCP server for knowledge operations (search_pages, knowledge_get_page, scaffold_page, scan_drift, doctor, validate, status)
-- These MCPs provide the execution layer for planning work - agents should not implement these capabilities directly
+For release-affecting work, follow AUDiaGentic release ledger process.
 
-## Review doctrine
-
-- review prompts should stay read-focused unless the normalized request explicitly allows more
-- do not broaden review into implementation work
-- keep tracked docs and release artifacts synchronized with the job record
+- Check release ledger state before changing release notes, changelog fragments, or release workflow files.
+- Keep release artifacts and job records synchronized with implementation and review outcomes.
+- Add or update the release ledger fragment when behavior, public workflow, or generated release output changes.
+- Do not bypass ledger updates by editing generated release outputs only.
+<!-- AUDIAGENTIC:END release-audit-ledger.process -->

@@ -32,6 +32,7 @@ _KNOWN_PROVIDERS = (
     "copilot",
     "gemini",
     "opencode",
+    "pi",
     "qwen",
     "local-openai",
 )
@@ -135,6 +136,45 @@ def build_server() -> FastMCP:
             "catalog": catalog,
             "catalog_stale": catalog_is_stale(catalog, max_age_hours=24) if catalog else None,
         }
+
+    @mcp.tool(
+        description=(
+            "Interrogate a provider: check CLI availability, VS Code extension install status, "
+            "permissions model, and which agent files are present in the project."
+        )
+    )
+    def interrogate_provider(provider_id: str) -> dict[str, Any]:
+        from audiagentic.interoperability.providers.descriptors import interrogate
+        project_root = _project_root()
+        return interrogate(provider_id, project_root)
+
+    @mcp.tool(description="List all registered provider descriptors (static metadata).")
+    def list_provider_descriptors() -> list[dict[str, Any]]:
+        from audiagentic.interoperability.providers.descriptors import all_descriptors
+        return [
+            {
+                "provider_id": d.provider_id,
+                "display_name": d.display_name,
+                "has_cli": d.cli_probe is not None,
+                "cli_probe": d.cli_probe,
+                "vscode_extensions": [
+                    {"extension_id": e.extension_id, "display_name": e.display_name}
+                    for e in d.vscode_extensions
+                ],
+                "permissions": {
+                    "can_write_files": d.permissions.can_write_files,
+                    "can_execute_shell": d.permissions.can_execute_shell,
+                    "can_browse_web": d.permissions.can_browse_web,
+                    "can_read_env": d.permissions.can_read_env,
+                    "notes": d.permissions.notes,
+                },
+                "agent_files": [
+                    {"rel_path": f.rel_path, "managed": f.managed, "description": f.description}
+                    for f in d.agent_files
+                ],
+            }
+            for d in sorted(all_descriptors().values(), key=lambda x: x.provider_id)
+        ]
 
     @mcp.tool(description="List model IDs from a provider's runtime catalog.")
     def list_provider_models(provider_id: str) -> dict[str, Any]:

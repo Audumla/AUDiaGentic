@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 
-from tests.helpers import sandbox as sandbox_helper
+from tests.helpers import sandbox as sandbox_helper  # noqa: E402
 
 
 def _write_project_and_provider_config(sandbox) -> None:
@@ -36,8 +37,8 @@ def _write_project_and_provider_config(sandbox) -> None:
             f"# {skill_name}\n\nCanonical {skill_name} skill.\n",
             encoding="utf-8",
         )
-    (sandbox.repo / ".audiagentic").mkdir(parents=True, exist_ok=True)
-    (sandbox.repo / ".audiagentic" / "project.yaml").write_text(
+    (sandbox.repo / ".audiagentic" / "config" / "runtime").mkdir(parents=True, exist_ok=True)
+    (sandbox.repo / ".audiagentic" / "config" / "project.yaml").write_text(
         "\n".join(
             [
                 "contract-version: v1",
@@ -58,7 +59,7 @@ def _write_project_and_provider_config(sandbox) -> None:
         ),
         encoding="utf-8",
     )
-    (sandbox.repo / ".audiagentic" / "providers.yaml").write_text(
+    (sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml").write_text(
         "\n".join(
             [
                 "contract-version: v1",
@@ -155,13 +156,25 @@ def _write_fake_cline_command(bin_root: Path) -> None:
         + "\r\n",
         encoding="utf-8",
     )
+    cline_sh = bin_root / "cline"
+    cline_sh.write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env sh",
+                f"exec {sys.executable} \"$(dirname \"$0\")/cline-fake.py\" \"$@\"",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cline_sh.chmod(cline_sh.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
 def test_codex_prompt_trigger_bridge_requires_codex_assets(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "codex-prompt-trigger-bridge-missing-assets")
     try:
-        (sandbox.repo / ".audiagentic").mkdir(parents=True, exist_ok=True)
-        (sandbox.repo / ".audiagentic" / "project.yaml").write_text(
+        (sandbox.repo / ".audiagentic" / "config" / "runtime").mkdir(parents=True, exist_ok=True)
+        (sandbox.repo / ".audiagentic" / "config" / "project.yaml").write_text(
             "\n".join(
                 [
                     "contract-version: v1",
@@ -178,7 +191,7 @@ def test_codex_prompt_trigger_bridge_requires_codex_assets(tmp_path: Path) -> No
             ),
             encoding="utf-8",
         )
-        (sandbox.repo / ".audiagentic" / "providers.yaml").write_text(
+        (sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml").write_text(
             "\n".join(
                 [
                     "contract-version: v1",

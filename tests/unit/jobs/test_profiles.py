@@ -1,14 +1,5 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[3]
-SRC = ROOT / "src"
-for path in (str(ROOT), str(SRC)):
-    if path not in sys.path:
-        sys.path.insert(0, path)
-
 from audiagentic.execution.jobs.profiles import (
     BUILTIN_PROFILES,
     apply_overrides,
@@ -17,6 +8,7 @@ from audiagentic.execution.jobs.profiles import (
     validate_profile,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.paths import REPO_ROOT
 
 
 def test_builtin_profiles_validate() -> None:
@@ -61,7 +53,7 @@ def test_profile_override_idempotent() -> None:
 
 def test_load_workflow_overrides_yaml() -> None:
     overrides = load_workflow_overrides(
-        ROOT / "docs" / "examples" / "fixtures" / "workflow-overrides.valid.yaml"
+        REPO_ROOT / "docs" / "examples" / "fixtures" / "workflow-overrides.valid.yaml"
     )
     assert overrides["summary"]["enabled"] is False
 
@@ -69,7 +61,7 @@ def test_load_workflow_overrides_yaml() -> None:
 def test_load_workflow_overrides_invalid_yaml() -> None:
     try:
         load_workflow_overrides(
-            ROOT / "docs" / "examples" / "fixtures" / "workflow-overrides.invalid.yaml"
+            REPO_ROOT / "docs" / "examples" / "fixtures" / "workflow-overrides.invalid.yaml"
         )
     except AudiaGenticError as exc:
         assert exc.kind == "validation"

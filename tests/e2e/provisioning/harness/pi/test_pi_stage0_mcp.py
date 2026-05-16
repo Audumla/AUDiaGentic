@@ -4,10 +4,8 @@ import json
 import os
 import subprocess
 import sys
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[5]
-
+from audiagentic.paths import REPO_ROOT as ROOT
 
 INIT_MSG = {
     "jsonrpc": "2.0",

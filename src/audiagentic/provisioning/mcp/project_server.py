@@ -1,9 +1,8 @@
 """AUDiaGentic project component MCP server.
 
-Exposes project status and available component inventory to the Pi TUI.
+Thin MCP layer — delegates all work to runtime/lifecycle and foundation.
 Reads AUDIAGENTIC_REPO_ROOT from env to locate the target project.
 """
-
 from __future__ import annotations
 
 import json
@@ -18,27 +17,19 @@ except ImportError:
     print("Error: mcp package not installed. Run: pip install mcp", file=sys.stderr)
     sys.exit(1)
 
-from audiagentic.runtime.lifecycle.detector import detect_installed_state
-from audiagentic.runtime.lifecycle.manifest import read_manifest
+import yaml
 
-# Components that can be installed into a project and how to detect them.
-_COMPONENTS: dict[str, dict[str, Any]] = {
-    "planning": {
-        "description": "Structured planning system (requests, specs, tasks, plans, work-packages)",
-        "detect": lambda root: (root / ".audiagentic" / "planning" / "config" / "planning.yaml").exists(),
-        "docs_dir": "docs/planning",
-    },
-    "providers": {
-        "description": "AI provider runtime configuration and model catalogs",
-        "detect": lambda root: (root / ".audiagentic" / "runtime" / "providers").exists(),
-        "runtime_dir": ".audiagentic/runtime/providers",
-    },
-    "release": {
-        "description": "Release management and audit ledger",
-        "detect": lambda root: (root / ".audiagentic" / "runtime" / "ledger" / "fragments").exists(),
-        "runtime_dir": ".audiagentic/runtime/ledger",
-    },
-}
+from audiagentic.foundation.components import all_descriptors, is_enabled, is_installed
+from audiagentic.foundation.components.loader import register_all_components
+from audiagentic.runtime.lifecycle.components import (
+    disable_component,
+    enable_component,
+    install_component,
+    uninstall_component,
+)
+from audiagentic.runtime.lifecycle.detector import detect_installed_state
+
+register_all_components()
 
 
 def _project_root() -> Path:
@@ -48,20 +39,13 @@ def _project_root() -> Path:
     return Path(repo_root)
 
 
-def _detect_components(project_root: Path) -> dict[str, str]:
-    return {
-        name: ("installed" if meta["detect"](project_root) else "not-installed")
-        for name, meta in _COMPONENTS.items()
-    }
-
-
 def build_server() -> FastMCP:
     mcp = FastMCP(
         "audiagentic-project",
         instructions=(
             "AUDiaGentic project component server. "
             "Use project_status to inspect the target project, "
-            "list_components to see what can be installed."
+            "list_components to see all registered components and their status."
         ),
     )
 
@@ -69,52 +53,70 @@ def build_server() -> FastMCP:
     def project_status() -> dict[str, Any]:
         project_root = _project_root()
         state = detect_installed_state(project_root)
-        components = _detect_components(project_root)
-
-        manifest: dict[str, Any] | None = None
-        if state.state == "audiagentic-current":
+        components = {
+            cid: {
+                "status": "installed" if is_installed(cid, project_root) else "not-installed",
+                "enabled": is_enabled(cid, project_root),
+            }
+            for cid in all_descriptors()
+        }
+        version_info: dict[str, Any] | None = None
+        if state.state == "installed":
             try:
-                m = read_manifest(project_root)
-                manifest = {
-                    "current_version": m.current_version,
-                    "installation_kind": m.installation_kind,
-                    "components": m.components,
-                    "providers": m.providers,
-                    "last_lifecycle_action": m.last_lifecycle_action,
-                    "updated_at": m.updated_at,
-                }
+                marker_path = project_root / ".audiagentic" / "components" / "core-lifecycle.yaml"
+                if marker_path.exists():
+                    marker_data = yaml.safe_load(marker_path.read_text(encoding="utf-8")) or {}
+                    version_info = {
+                        "version": marker_data.get("version"),
+                        "installation_kind": marker_data.get("installation-kind"),
+                        "last_lifecycle_action": marker_data.get("last-lifecycle-action"),
+                        "installed_at": marker_data.get("installed-at"),
+                    }
             except Exception as exc:  # noqa: BLE001
-                manifest = {"error": str(exc)}
-
+                version_info = {"error": str(exc)}
         return {
             "project_root": str(project_root),
             "install_state": state.state,
             "audiagentic_markers": state.audiagentic_markers,
-            "legacy_markers": state.legacy_markers,
             "components": components,
-            "manifest": manifest,
+            "version_info": version_info,
         }
 
-    @mcp.tool(description="List all available AUDiaGentic components with install status.")
+    @mcp.tool(description="List all registered AUDiaGentic components with install and enabled status.")
     def list_components() -> list[dict[str, Any]]:
         project_root = _project_root()
-        result = []
-        for name, meta in _COMPONENTS.items():
-            installed = meta["detect"](project_root)
-            entry: dict[str, Any] = {
-                "name": name,
-                "description": meta["description"],
-                "status": "installed" if installed else "not-installed",
+        return [
+            {
+                "component_id": d.component_id,
+                "display_name": d.display_name,
+                "description": d.description,
+                "status": "installed" if is_installed(d.component_id, project_root) else "not-installed",
+                "enabled": is_enabled(d.component_id, project_root),
+                "detection_marker": d.detection_marker,
+                "file_count": len(d.files),
             }
-            for key in ("docs_dir", "runtime_dir"):
-                if key in meta:
-                    entry[key] = meta[key]
-            result.append(entry)
-        return result
+            for d in all_descriptors().values()
+        ]
+
+    @mcp.tool(description="Install a component into the target project.")
+    def install_component_tool(component_id: str) -> dict[str, Any]:
+        return install_component(component_id, _project_root())
+
+    @mcp.tool(description="Uninstall a component from the target project.")
+    def uninstall_component_tool(component_id: str, remove_configs: bool = False) -> dict[str, Any]:
+        deleted = uninstall_component(component_id, _project_root(), remove_configs=remove_configs)
+        return {"ok": True, "component_id": component_id, "deleted": [str(p) for p in deleted]}
+
+    @mcp.tool(description="Enable a component in the target project.")
+    def enable_component_tool(component_id: str) -> dict[str, Any]:
+        return enable_component(component_id, _project_root())
+
+    @mcp.tool(description="Disable a component in the target project.")
+    def disable_component_tool(component_id: str) -> dict[str, Any]:
+        return disable_component(component_id, _project_root())
 
     @mcp.tool(description="Read a file inside the project .audiagentic directory (read-only).")
     def read_project_file(relative_path: str) -> dict[str, Any]:
-        """relative_path is relative to the project root, must start with .audiagentic/."""
         project_root = _project_root()
         rel = Path(relative_path)
         if not rel.parts or rel.parts[0] != ".audiagentic":
@@ -122,8 +124,7 @@ def build_server() -> FastMCP:
         target = project_root / rel
         try:
             target = target.resolve()
-            project_root_resolved = project_root.resolve()
-            target.relative_to(project_root_resolved)  # containment check
+            target.relative_to(project_root.resolve())
         except ValueError:
             return {"error": "path escapes project root"}
         if not target.exists():

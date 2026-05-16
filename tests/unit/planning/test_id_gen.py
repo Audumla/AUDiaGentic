@@ -4,14 +4,8 @@ from __future__ import annotations
 
 import json
 import re
-import sys
 import threading
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[3]
-for _p in (str(ROOT), str(ROOT / "src")):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 from tests.planning_testkit import seed_planning_config
 

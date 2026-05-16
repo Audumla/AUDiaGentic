@@ -3,13 +3,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.lifecycle.baseline_sync import ensure_project_layout, sync_managed_baseline
-from audiagentic.runtime.lifecycle.checkpoints import write_checkpoint
+from audiagentic.runtime.lifecycle.components import DEFAULT_VERSION, install_component
 from audiagentic.runtime.lifecycle.detector import detect_installed_state
-from audiagentic.runtime.lifecycle.manifest import build_manifest, write_manifest
-
-DEFAULT_VERSION = "0.1.0"
 
 
 def apply_fresh_install(project_root: Path) -> dict:
@@ -22,29 +20,24 @@ def apply_fresh_install(project_root: Path) -> dict:
             details={"state": state.state},
         )
 
-    write_checkpoint(project_root, "planned", {"action": "fresh-install"})
-    write_checkpoint(project_root, "pre-destructive", {"action": "fresh-install"})
+    register_all_components()
 
     ensure_project_layout(project_root)
     sync_report = sync_managed_baseline(project_root)
 
-    manifest_payload = build_manifest(
-        installation_kind="fresh",
-        current_version=DEFAULT_VERSION,
-        previous_version=None,
-        components={"core-lifecycle": "installed", "release-audit-ledger": "installed"},
-        providers={"local-openai": "configured"},
-        last_lifecycle_action="fresh-install",
-    )
-    write_manifest(project_root, manifest_payload)
+    from audiagentic.foundation.components.registry import all_descriptors
+    for component_id in all_descriptors():
+        kwargs: dict = {"version": DEFAULT_VERSION}
+        if component_id == "core-lifecycle":
+            kwargs["installation_kind"] = "fresh"
+            kwargs["last_lifecycle_action"] = "fresh-install"
+        install_component(component_id, project_root, **kwargs)
 
-    write_checkpoint(project_root, "post-cleanup", {"action": "fresh-install"})
     return {
         "contract-version": "v1",
         "mode": "apply",
         "status": "success",
-        "completed-operations": ["ensure-project-layout", "sync-managed-baseline", "write-manifest"],
+        "completed-operations": ["ensure-project-layout", "sync-managed-baseline", "write-component-markers"],
         "baseline-sync-report": sync_report,
         "warnings": [],
-        "checkpoint-dir": ".audiagentic/runtime/lifecycle/checkpoints",
     }

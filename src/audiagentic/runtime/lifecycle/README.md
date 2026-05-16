@@ -1,7 +1,7 @@
 # runtime/lifecycle/
 
 ## Purpose
-Project lifecycle management — everything that happens when AUDiaGentic is installed into, updated in, or queried about a project.
+Greenfield project lifecycle management: install, baseline sync, uninstall, and installed-state detection.
 
 ## Ownership
 - Project layout creation (`.audiagentic/` directory structure)
@@ -9,11 +9,13 @@ Project lifecycle management — everything that happens when AUDiaGentic is ins
 - Installed-state detection and reporting
 - Component manifest (read/write `installed.json`)
 - Fresh installation bootstrapping
+- Component-owned uninstall behavior
 
 ## Must NOT Own
 - Job execution or prompt launching (→ `execution`)
 - Durable job state (→ `runtime/state`)
 - Release audit generation (→ `release`)
+- Legacy upgrade paths
 
 ## Allowed Dependencies
 - `foundation/contracts` — schema validation, error types
@@ -26,6 +28,7 @@ Project lifecycle management — everything that happens when AUDiaGentic is ins
 | `detector.py` | Detect and report current installed state |
 | `fresh_install.py` | Bootstrap a fresh project installation |
 | `manifest.py` | Build, read, and write the component manifest (`installed.json`) |
+| `uninstall.py` | Remove runtime and component-owned files |
 
 ## Related Domains
 - `release` — calls lifecycle after install to bootstrap release workflow

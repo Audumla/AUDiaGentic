@@ -23,8 +23,16 @@ CANONICAL_COMPONENT_IDS = (
     "release-audit-ledger",
     "agent-jobs",
     "provider-layer",
+    "planning",
     "discord-overlay",
     "optional-server",
+    "provider-surface-claude",
+    "provider-surface-codex",
+    "provider-surface-gemini",
+    "provider-surface-cline",
+    "provider-surface-opencode",
+    "provider-surface-copilot",
+    "provider-surface-qwen",
 )
 
 CANONICAL_SCHEMA_IDS = (
@@ -33,7 +41,6 @@ CANONICAL_SCHEMA_IDS = (
     "component-config",
     "error-envelope",
     "event-envelope",
-    "installed-state",
     "job-record",
     "lifecycle-plan",
     "lifecycle-result",

@@ -10,12 +10,11 @@ import yaml
 from audiagentic.knowledge.config import load_config
 from audiagentic.knowledge.models import KnowledgePage, Section
 from audiagentic.knowledge.search import _build_snippet, filter_by_metadata, search_pages
-
-ROOT = Path(__file__).resolve().parents[3]
+from audiagentic.paths import REPO_ROOT
 
 
 def _seed_project(root: Path) -> None:
-    shutil.copytree(ROOT / ".audiagentic" / "knowledge", root / ".audiagentic" / "knowledge", dirs_exist_ok=True)
+    shutil.copytree(REPO_ROOT / ".audiagentic" / "knowledge", root / ".audiagentic" / "knowledge", dirs_exist_ok=True)
 
 
 def _write_page(root: Path, page_id: str, title: str, page_type: str, tags: list[str], body: str) -> None:

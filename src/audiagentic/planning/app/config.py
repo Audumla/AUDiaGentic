@@ -7,14 +7,12 @@ from pathlib import Path
 import yaml
 from jsonschema import Draft202012Validator
 
-# Schemas are bundled with the audiagentic package, not in the project root.
-# From app/config.py: parents[2] = src/audiagentic/
+from audiagentic.paths import REPO_ROOT, SRC_ROOT
+
 _PLANNING_SCHEMA_DIR = (
-    Path(__file__).resolve().parents[2] / "foundation" / "contracts" / "schemas" / "planning"
+    SRC_ROOT / "audiagentic" / "foundation" / "contracts" / "schemas" / "planning"
 )
-_REPO_TEMPLATE_DIR = (
-    Path(__file__).resolve().parents[4] / ".audiagentic" / "planning" / "config" / "templates"
-)
+_REPO_TEMPLATE_DIR = REPO_ROOT / ".audiagentic" / "planning" / "config" / "templates"
 _SECTION_HEADING_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 
 

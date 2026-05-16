@@ -3,8 +3,9 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-TEST_PLANNING_CONFIG_SRC = ROOT / "tests" / "fixtures" / "planning_config"
+from audiagentic.paths import REPO_ROOT
+
+TEST_PLANNING_CONFIG_SRC = REPO_ROOT / "tests" / "fixtures" / "planning_config"
 
 
 def seed_planning_config(

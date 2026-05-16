@@ -10,7 +10,7 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.interoperability.providers.adapters import gemini
+from audiagentic.interoperability.providers.gemini import adapter as gemini
 
 
 def test_gemini_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:

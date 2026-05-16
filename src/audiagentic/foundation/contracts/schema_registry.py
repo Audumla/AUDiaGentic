@@ -6,7 +6,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-AUDIAGENTIC_ROOT = Path(__file__).resolve().parents[2]  # src/audiagentic/
+from audiagentic.paths import SRC_ROOT
+
+AUDIAGENTIC_ROOT = SRC_ROOT / "audiagentic"
 SCHEMA_DIR = AUDIAGENTIC_ROOT / "foundation" / "contracts" / "schemas"
 PLANNING_SCHEMA_DIR = SCHEMA_DIR / "planning"
 

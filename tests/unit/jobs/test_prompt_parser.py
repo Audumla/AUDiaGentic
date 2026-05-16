@@ -1,13 +1,6 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[3]
-SRC = ROOT / "src"
-for path in (str(ROOT), str(SRC)):
-    if path not in sys.path:
-        sys.path.insert(0, path)
 
 from audiagentic.execution.jobs.prompt_parser import parse_prompt_launch_request
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -156,8 +149,8 @@ def test_parse_prompt_launch_request_rejects_majority_pass_in_mvp() -> None:
 
 def test_parse_prompt_launch_request_uses_configurable_syntax_aliases(tmp_path: Path) -> None:
     project_root = tmp_path / "project"
-    (project_root / ".audiagentic").mkdir(parents=True, exist_ok=True)
-    (project_root / ".audiagentic" / "prompt-syntax.yaml").write_text(
+    (project_root / ".audiagentic" / "config" / "execution").mkdir(parents=True, exist_ok=True)
+    (project_root / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml").write_text(
         "\n".join(
             [
                 "contract-version: v1",

@@ -1,0 +1,18 @@
+contract-version: v1
+component-id: release-audit-ledger
+display-name: Release Audit Ledger
+description: Release management — changelog fragments, sync state, and release docs
+detection-marker: .audiagentic/components/release-audit-ledger.yaml
+config: release/release-audit-ledger.yaml
+files:
+  - path: .audiagentic/components/release-audit-ledger.yaml
+    lifecycle: create-if-missing
+    description: Installation marker
+  - path: docs/releases
+    lifecycle: generated-managed
+    recursive: true
+    description: Generated release notes and changelog
+  - path: .audiagentic/runtime/ledger
+    lifecycle: runtime-only
+    recursive: true
+    description: Release ledger — fragments, sync state

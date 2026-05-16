@@ -7,18 +7,17 @@ import yaml
 
 from audiagentic.knowledge.config import load_config
 from audiagentic.knowledge.events import on_planning_state_change
-
-ROOT = Path(__file__).resolve().parents[2]
+from audiagentic.paths import REPO_ROOT
 
 
 def _seed_knowledge_project(root: Path) -> None:
     shutil.copytree(
-        ROOT / ".audiagentic" / "knowledge",
+        REPO_ROOT / ".audiagentic" / "knowledge",
         root / ".audiagentic" / "knowledge",
         dirs_exist_ok=True,
     )
     shutil.copytree(
-        ROOT / ".audiagentic" / "interoperability",
+        REPO_ROOT / ".audiagentic" / "interoperability",
         root / ".audiagentic" / "interoperability",
         dirs_exist_ok=True,
     )

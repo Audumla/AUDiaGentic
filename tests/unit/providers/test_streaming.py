@@ -2,14 +2,7 @@ from __future__ import annotations
 
 import io
 import json
-import sys
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[3]
-SRC = ROOT / "src"
-for path in (str(ROOT), str(SRC)):
-    if path not in sys.path:
-        sys.path.insert(0, path)
 
 from audiagentic.interoperability.protocols.streaming import provider_streaming as streaming
 from audiagentic.interoperability.protocols.streaming.sinks import ConsoleSink, InMemorySink

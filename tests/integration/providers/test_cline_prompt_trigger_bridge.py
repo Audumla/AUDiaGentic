@@ -11,8 +11,8 @@ from tests.helpers import sandbox as sandbox_helper
 
 
 def _write_project_and_provider_config(sandbox) -> None:
-    (sandbox.repo / ".audiagentic").mkdir(parents=True, exist_ok=True)
-    (sandbox.repo / ".audiagentic" / "project.yaml").write_text(
+    (sandbox.repo / ".audiagentic" / "config" / "runtime").mkdir(parents=True, exist_ok=True)
+    (sandbox.repo / ".audiagentic" / "config" / "project.yaml").write_text(
         "\n".join(
             [
                 "contract-version: v1",
@@ -33,7 +33,7 @@ def _write_project_and_provider_config(sandbox) -> None:
         ),
         encoding="utf-8",
     )
-    (sandbox.repo / ".audiagentic" / "providers.yaml").write_text(
+    (sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml").write_text(
         "\n".join(
             [
                 "contract-version: v1",

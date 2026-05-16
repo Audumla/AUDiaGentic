@@ -6,12 +6,11 @@ import shutil
 from pathlib import Path
 
 from audiagentic.knowledge.config import KnowledgeConfig, load_config
-
-ROOT = Path(__file__).resolve().parents[3]
+from audiagentic.paths import REPO_ROOT
 
 
 def _seed_project(root: Path) -> None:
-    shutil.copytree(ROOT / ".audiagentic" / "knowledge", root / ".audiagentic" / "knowledge", dirs_exist_ok=True)
+    shutil.copytree(REPO_ROOT / ".audiagentic" / "knowledge", root / ".audiagentic" / "knowledge", dirs_exist_ok=True)
 
 
 def test_load_config_returns_knowledge_config(tmp_path: Path) -> None:

@@ -2,18 +2,19 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 
-from tests.helpers import sandbox as sandbox_helper
+from tests.helpers import sandbox as sandbox_helper  # noqa: E402
 
 
 def _write_project_and_provider_config(sandbox) -> None:
-    (sandbox.repo / ".audiagentic").mkdir(parents=True, exist_ok=True)
-    (sandbox.repo / ".audiagentic" / "project.yaml").write_text(
+    (sandbox.repo / ".audiagentic" / "config" / "runtime").mkdir(parents=True, exist_ok=True)
+    (sandbox.repo / ".audiagentic" / "config" / "project.yaml").write_text(
         "\n".join(
             [
                 "contract-version: v1",
@@ -34,7 +35,7 @@ def _write_project_and_provider_config(sandbox) -> None:
         ),
         encoding="utf-8",
     )
-    (sandbox.repo / ".audiagentic" / "providers.yaml").write_text(
+    (sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml").write_text(
         "\n".join(
             [
                 "contract-version: v1",
@@ -86,6 +87,18 @@ def _write_fake_gemini_command(bin_root: Path) -> None:
         + "\r\n",
         encoding="utf-8",
     )
+    gemini_sh = bin_root / "gemini"
+    gemini_sh.write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env sh",
+                f"exec {sys.executable} \"$(dirname \"$0\")/gemini-fake.py\" \"$@\"",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gemini_sh.chmod(gemini_sh.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
 def test_gemini_prompt_trigger_bridge_script_launches_job(tmp_path: Path) -> None:

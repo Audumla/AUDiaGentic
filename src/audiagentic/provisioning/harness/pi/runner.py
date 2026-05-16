@@ -18,7 +18,7 @@ TRUTHY = {"1", "true", "yes", "on"}
 _AGENT_DIR = Path(__file__).parent                              # .../harness/pi/
 _PKG_ROOT = Path(__file__).parents[3]                          # .../audiagentic/
 _MODELS_JSON = _PKG_ROOT / "provisioning" / "rig" / "embedded" / "models.json"
-_HARNESS_CONFIG = _PKG_ROOT / "config" / "harness" / "ag.yaml"
+_HARNESS_CONFIG = _PKG_ROOT / "config" / "provisioning" / "harness" / "ag.yaml"
 
 
 @dataclass
