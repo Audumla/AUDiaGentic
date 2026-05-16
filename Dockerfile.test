@@ -4,6 +4,7 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV AUDIAGENTIC_DOCKER_TESTS=1
+ENV AUDIAGENTIC_REPO_ROOT=/app
 
 COPY pyproject.toml README.md ./
 COPY src ./src
@@ -16,10 +17,12 @@ COPY .audiagentic/skills ./.audiagentic/skills
 COPY .audiagentic/planning/config ./.audiagentic/planning/config
 COPY .claude ./.claude
 COPY .gemini ./.gemini
-COPY .github/workflows/release-please.audiagentic.yml ./.github/workflows/release-please.audiagentic.yml
+COPY .github/workflows ./.github/workflows
 COPY .opencode ./.opencode
 COPY AGENTS.md CLAUDE.md GEMINI.md ./
 
-RUN pip install --no-cache-dir -e ".[test]"
+RUN pip install --no-cache-dir --no-compile setuptools wheel build
+RUN python -m build --wheel --no-isolation --outdir /dist
+RUN pip install --no-cache-dir --no-compile /dist/*.whl pytest pytest-asyncio mcp
 
-CMD ["pytest", "tests/unit/lifecycle", "tests/integration/lifecycle", "tests/e2e/lifecycle", "tests/unit/providers", "tests/integration/providers", "tests/integration/release", "tests/e2e/release", "-q"]
+CMD ["pytest", "tests/unit/lifecycle", "tests/integration/lifecycle", "tests/e2e/lifecycle", "tests/unit/providers", "tests/integration/providers", "tests/integration/release", "tests/e2e/release", "tests/e2e/cli", "-q"]

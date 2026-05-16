@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.paths import SRC_ROOT
-
 from .base import ComponentDescriptor, ComponentFile
 from .registry import register
 
-_COMPONENTS_CONFIG_DIR = SRC_ROOT / "audiagentic" / "config" / "foundation" / "components"
-_PROVIDER_SURFACES_CONFIG_DIR = SRC_ROOT / "audiagentic" / "config" / "interoperability" / "providers" / "surfaces"
+# Resolve relative to the installed package — works in both editable installs and wheels.
+_PACKAGE_DIR = Path(__file__).resolve().parents[2]  # audiagentic/
+_COMPONENTS_CONFIG_DIR = _PACKAGE_DIR / "config" / "foundation" / "components"
+_PROVIDER_SURFACES_CONFIG_DIR = _PACKAGE_DIR / "config" / "interoperability" / "providers" / "surfaces"
 _ALL_COMPONENT_CONFIG_DIRS = [_COMPONENTS_CONFIG_DIR, _PROVIDER_SURFACES_CONFIG_DIR]
 
 
