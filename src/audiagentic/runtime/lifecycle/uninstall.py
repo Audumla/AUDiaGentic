@@ -10,7 +10,7 @@ from audiagentic.runtime.lifecycle.components import uninstall_all_components
 from audiagentic.runtime.lifecycle.detector import detect_installed_state
 
 WORKFLOW_FILES = (
-    Path(".github/workflows/release-please.audiagentic.yml"),
+    Path(".github/workflows/release.yml"),
 )
 
 

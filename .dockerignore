@@ -24,6 +24,8 @@
 !.audiagentic/config/**
 !.audiagentic/prompts/
 !.audiagentic/prompts/**
+!.audiagentic/skills/
+!.audiagentic/skills/**
 !.audiagentic/planning/
 !.audiagentic/planning/config/
 !.audiagentic/planning/config/**
@@ -39,6 +41,13 @@
 !.gemini/**
 !.github/
 !.github/workflows/
-!.github/workflows/release-please.audiagentic.yml
+!.github/workflows/**
 !.opencode/
 !.opencode/**
+.opencode/node_modules
+.opencode/node_modules/**
+**/node_modules
+**/node_modules/**
+**/__pycache__
+**/__pycache__/**
+**/*.pyc
