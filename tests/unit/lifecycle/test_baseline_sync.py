@@ -14,7 +14,7 @@ def test_sync_managed_baseline_copies_managed_assets_and_excludes_runtime(tmp_pa
     assert ".audiagentic/config/project.yaml" in report["created-files"]
     assert ".audiagentic/prompts/ag-review/default.md" in report["created-files"]
     assert "AGENTS.md" in report["created-files"]
-    assert ".github/workflows/release-please.audiagentic.yml" in report["created-files"]
+    assert ".github/workflows/release.yml" in report["created-files"]
     assert any("runtime" in p for p in report["excluded-paths"])
     assert (target / ".audiagentic" / "runtime").exists() is False
     assert (target / "docs" / "releases" / "CURRENT_RELEASE.md").exists() is False
