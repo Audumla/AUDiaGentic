@@ -47,10 +47,13 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "audiagentic" = [
-    # Component descriptors — all YAML configs live under config/components/
-    "config/components/*.yaml",
-    "config/components/**/*.yaml",
-    # Package-default configs (mirror runtime .audiagentic/config/ structure)
+    # Foundation component descriptors
+    "config/foundation/components/*.yaml",
+    "config/foundation/components/**/*.yaml",
+    # Provider surface component descriptors
+    "config/interoperability/providers/surfaces/*.yaml",
+    "config/interoperability/providers/surfaces/**/*.yaml",
+    # Package-default configs
     "config/harness/ag.yaml",
     "config/rig/rig.yaml",
     # Pi harness home templates
