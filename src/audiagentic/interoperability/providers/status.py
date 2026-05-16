@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -14,59 +12,14 @@ from audiagentic.foundation.config.provider_catalog import (
 )
 from audiagentic.foundation.config.provider_config import load_provider_config
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.interoperability.providers.descriptors import interrogate as _interrogate
+from audiagentic.interoperability.providers.descriptors.registry import (
+    all_descriptors,
+    get_descriptor,
+)
 from audiagentic.interoperability.providers.health import health_check
 from audiagentic.interoperability.providers.models import resolve_model_selection
-
-CLI_PROBES: dict[str, list[str]] = {
-    "codex": ["codex", "--version"],
-    "claude": ["claude", "--version"],
-    "gemini": ["gemini", "--version"],
-    "qwen": ["qwen", "--version"],
-    "copilot": ["gh", "copilot", "--help"],
-    "continue": ["continue", "--version"],
-    "cline": ["cline", "--version"],
-    "opencode": ["opencode", "--version"],
-}
-
-
-def _probe_cli(command: list[str]) -> dict[str, Any]:
-    executable = shutil.which(command[0])
-    if executable is None:
-        return {
-            "available": False,
-            "command": command,
-            "executable": None,
-            "returncode": None,
-            "stdout": "",
-            "stderr": "command not found",
-        }
-    try:
-        command_line = subprocess.list2cmdline(command)
-        completed = subprocess.run(
-            command_line,
-            shell=True,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {
-            "available": False,
-            "command": command,
-            "executable": executable,
-            "returncode": None,
-            "stdout": "",
-            "stderr": str(exc),
-        }
-    return {
-        "available": completed.returncode == 0,
-        "command": command,
-        "executable": executable,
-        "returncode": completed.returncode,
-        "stdout": completed.stdout.strip(),
-        "stderr": completed.stderr.strip(),
-    }
+from audiagentic.interoperability.providers.provisioning import _probe_provider_cli
 
 
 def _provider_entry(
@@ -118,11 +71,36 @@ def _provider_entry(
     entry["catalog-model-count"] = None
     entry["catalog-source"] = None
 
-    if provider_cfg.get("access-mode") == "cli":
-        probe = CLI_PROBES.get(provider_id, [provider_id, "--version"])
-        entry["cli-check"] = _probe_cli(probe)
-    else:
-        entry["cli-check"] = None
+    descriptor = get_descriptor(provider_id)
+    cli_probe = descriptor.cli_probe if descriptor and descriptor.cli_probe else None
+    entry["cli-check"] = _probe_provider_cli(descriptor) if descriptor else None
+
+    interrogation = _interrogate(provider_id, project_root)
+    entry["interrogation"] = interrogation
+    vscode_extensions = interrogation.get("vscode_extensions", [])
+    vscode_applicable = bool(interrogation.get("vscode_project") and vscode_extensions)
+    vscode_installed = None
+    if vscode_applicable:
+        installed_values = [ext.get("installed") for ext in vscode_extensions]
+        if all(value is True for value in installed_values):
+            vscode_installed = True
+        elif any(value is False for value in installed_values):
+            vscode_installed = False
+    entry["installation"] = {
+        "cli": {
+            "applicable": cli_probe is not None,
+            "installed": entry["cli-check"].get("available") if entry["cli-check"] else None,
+            "probe": entry["cli-check"],
+        },
+        "vscode-extension": {
+            "project": bool(interrogation.get("vscode_project")),
+            "applicable": vscode_applicable,
+            "installed": vscode_installed,
+            "extensions": vscode_extensions,
+        },
+    }
+    entry["cli-installed"] = entry["installation"]["cli"]["installed"]
+    entry["vscode-extension-installed"] = vscode_installed
 
     if entry["catalog-present"]:
         try:
@@ -182,8 +160,9 @@ def build_provider_status(
 ) -> dict[str, Any]:
     provider_config = load_provider_config(project_root)
     providers = provider_config.get("providers", {})
+    descriptors = all_descriptors()
     if provider_id is not None:
-        if provider_id not in providers:
+        if provider_id not in providers and provider_id not in descriptors:
             raise AudiaGenticError(
                 code="PRV-VALIDATION-010",
                 kind="validation",
@@ -192,7 +171,7 @@ def build_provider_status(
             )
         provider_ids = [provider_id]
     else:
-        provider_ids = sorted(providers)
+        provider_ids = sorted(set(providers) | set(descriptors))
     return {
         "contract-version": "v1",
         "ok": True,
@@ -200,7 +179,7 @@ def build_provider_status(
         "providers": [
             _provider_entry(
                 provider_id=item,
-                provider_cfg=providers[item],
+                provider_cfg=providers.get(item, {"enabled": False, "access-mode": "none"}),
                 project_root=project_root,
                 now_fn=now_fn,
             )

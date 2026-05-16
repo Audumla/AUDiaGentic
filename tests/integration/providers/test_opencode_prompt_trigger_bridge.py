@@ -35,8 +35,8 @@ def _write_project_and_provider_config(sandbox) -> None:
             f"# {skill_name}\n\nCanonical {skill_name} skill.\n",
             encoding="utf-8",
         )
-    (sandbox.repo / ".audiagentic").mkdir(parents=True, exist_ok=True)
-    (sandbox.repo / ".audiagentic" / "project.yaml").write_text(
+    (sandbox.repo / ".audiagentic" / "config" / "runtime").mkdir(parents=True, exist_ok=True)
+    (sandbox.repo / ".audiagentic" / "config" / "project.yaml").write_text(
         "\n".join(
             [
                 "contract-version: v1",
@@ -53,7 +53,7 @@ def _write_project_and_provider_config(sandbox) -> None:
         ),
         encoding="utf-8",
     )
-    (sandbox.repo / ".audiagentic" / "providers.yaml").write_text(
+    (sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml").write_text(
         "\n".join(
             [
                 "contract-version: v1",
@@ -72,9 +72,9 @@ def _write_project_and_provider_config(sandbox) -> None:
 def test_opencode_prompt_trigger_bridge_requires_assets(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "opencode-prompt-trigger-bridge-missing-assets")
     try:
-        (sandbox.repo / ".audiagentic").mkdir(parents=True, exist_ok=True)
-        (sandbox.repo / ".audiagentic" / "project.yaml").write_text("contract-version: v1\nproject-id: sample-project\nproject-name: Sample Project\nworkflow-profile: standard\ntracked-docs-root: docs\nruntime-root: .audiagentic/runtime\nrelease-strategy: release-please\nprompt-launch:\n  syntax: prefix-token-v1\n  allow-adhoc-target: false\n", encoding="utf-8")
-        (sandbox.repo / ".audiagentic" / "providers.yaml").write_text("contract-version: v1\nproviders:\n  opencode:\n    enabled: true\n    install-mode: external-configured\n    access-mode: cli\n    default-model: openai/gpt-5\n", encoding="utf-8")
+        (sandbox.repo / ".audiagentic" / "config" / "runtime").mkdir(parents=True, exist_ok=True)
+        (sandbox.repo / ".audiagentic" / "config" / "project.yaml").write_text("contract-version: v1\nproject-id: sample-project\nproject-name: Sample Project\nworkflow-profile: standard\ntracked-docs-root: docs\nruntime-root: .audiagentic/runtime\nrelease-strategy: release-please\nprompt-launch:\n  syntax: prefix-token-v1\n  allow-adhoc-target: false\n", encoding="utf-8")
+        (sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml").write_text("contract-version: v1\nproviders:\n  opencode:\n    enabled: true\n    install-mode: external-configured\n    access-mode: cli\n    default-model: openai/gpt-5\n", encoding="utf-8")
 
         result = subprocess.run(
             [

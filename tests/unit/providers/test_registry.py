@@ -1,21 +1,14 @@
 from __future__ import annotations
 
 import json
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[3]
-SRC = ROOT / "src"
-for path in (str(ROOT), str(SRC)):
-    if path not in sys.path:
-        sys.path.insert(0, path)
 
 from audiagentic.foundation.config.provider_registry import load_provider_registry
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.paths import REPO_ROOT
 
 
 def _load_fixture(name: str) -> dict:
-    return json.loads((ROOT / "docs" / "examples" / "fixtures" / name).read_text(encoding="utf-8"))
+    return json.loads((REPO_ROOT / "docs" / "examples" / "fixtures" / name).read_text(encoding="utf-8"))
 
 
 def test_registry_loads_valid_descriptor() -> None:

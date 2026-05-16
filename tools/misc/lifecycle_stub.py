@@ -8,13 +8,12 @@ from pathlib import Path
 
 # Bootstrap: make tools.lib importable, then use robust multi-fallback root discovery.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from tools.lib.repo_paths import REPO_ROOT, SRC_ROOT
+from tools.lib.repo_paths import SRC_ROOT
 
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError, to_error_envelope
-from audiagentic.runtime.lifecycle.checkpoints import write_checkpoint
 
 
 def _plan_payload() -> dict:
@@ -35,7 +34,6 @@ def _apply_payload() -> dict:
         "status": "success",
         "completed-operations": ["noop"],
         "warnings": [],
-        "checkpoint-dir": ".audiagentic/runtime/lifecycle/checkpoints",
     }
 
 
@@ -50,14 +48,9 @@ def _validate_payload() -> dict:
 
 def run_stub(mode: str, project_root: Path) -> dict:
     if mode == "plan":
-        payload = _plan_payload()
-        write_checkpoint(project_root, "detected", payload)
-        return payload
+        return _plan_payload()
     if mode == "apply":
-        payload = _apply_payload()
-        write_checkpoint(project_root, "planned", payload)
-        write_checkpoint(project_root, "pre-destructive", payload)
-        return payload
+        return _apply_payload()
     if mode == "validate":
         return _validate_payload()
     raise AudiaGenticError(

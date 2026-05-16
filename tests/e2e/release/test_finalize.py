@@ -1,21 +1,15 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[3]
-SRC = ROOT / "src"
-for path in (str(ROOT), str(SRC)):
-    if path not in sys.path:
-        sys.path.insert(0, path)
 
 from tests.helpers import sandbox as sandbox_helper
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.paths import REPO_ROOT
 from audiagentic.release.finalize import finalize_release
 
-FIXTURES = ROOT / "docs" / "examples" / "fixtures"
+FIXTURES = REPO_ROOT / "docs" / "examples" / "fixtures"
 
 
 def _load_event(event_id: str, summary: str) -> dict:

@@ -1,0 +1,9 @@
+contract-version: v1
+component-id: discord-overlay
+display-name: Discord Overlay
+description: Discord bot overlay for job notifications and status reporting
+detection-marker: .audiagentic/components/discord-overlay.yaml
+files:
+  - path: .audiagentic/components/discord-overlay.yaml
+    lifecycle: create-if-missing
+    description: Installation marker

@@ -11,15 +11,19 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 ProviderRunner = Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]
 
 _ADAPTER_MODULES: dict[str, str] = {
-    "codex": "audiagentic.interoperability.providers.adapters.codex",
-    "claude": "audiagentic.interoperability.providers.adapters.claude",
-    "gemini": "audiagentic.interoperability.providers.adapters.gemini",
-    "copilot": "audiagentic.interoperability.providers.adapters.copilot",
-    "continue": "audiagentic.interoperability.providers.adapters.continue_",
-    "cline": "audiagentic.interoperability.providers.adapters.cline",
-    "local-openai": "audiagentic.interoperability.providers.adapters.local_openai",
-    "qwen": "audiagentic.interoperability.providers.adapters.qwen",
-    "opencode": "audiagentic.interoperability.providers.adapters.opencode",
+    "aider": "audiagentic.interoperability.providers.aider.adapter",
+    "codex": "audiagentic.interoperability.providers.codex.adapter",
+    "claude": "audiagentic.interoperability.providers.claude.adapter",
+    "gemini": "audiagentic.interoperability.providers.gemini.adapter",
+    "goose": "audiagentic.interoperability.providers.goose.adapter",
+    "copilot": "audiagentic.interoperability.providers.copilot.adapter",
+    "continue": "audiagentic.interoperability.providers.continue_.adapter",
+    "cline": "audiagentic.interoperability.providers.cline.adapter",
+    "local-openai": "audiagentic.interoperability.providers.local_openai.adapter",
+    "qwen": "audiagentic.interoperability.providers.qwen.adapter",
+    "opencode": "audiagentic.interoperability.providers.opencode.adapter",
+    "openhands": "audiagentic.interoperability.providers.openhands.adapter",
+    "roo": "audiagentic.interoperability.providers.roo.adapter",
 }
 
 

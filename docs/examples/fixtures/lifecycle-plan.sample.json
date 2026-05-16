@@ -1,15 +1,13 @@
 {
   "contract-version": "v1",
-  "operation": "legacy-cutover",
+  "operation": "fresh-install",
   "mode": "plan",
   "project-id": "my-project",
-  "state-detected": "legacy-only",
-  "warnings": [
-    "Legacy Release Please workflow will be renamed and replaced with AUDiaGentic baseline workflow."
-  ],
+  "state-detected": "none",
+  "warnings": [],
   "actions": [
-    "create .audiagentic/",
-    "migrate release history",
-    "install baseline workflow"
+    "create project layout",
+    "sync managed baseline",
+    "write installed manifest"
   ]
 }

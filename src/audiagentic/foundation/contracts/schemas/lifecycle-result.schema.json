@@ -6,8 +6,7 @@
     "mode",
     "status",
     "completed-operations",
-    "warnings",
-    "checkpoint-dir"
+    "warnings"
   ],
   "properties": {
     "contract-version": {
@@ -18,7 +17,6 @@
       "enum": [
         "apply",
         "update",
-        "cutover",
         "uninstall"
       ]
     },
@@ -41,9 +39,6 @@
       "items": {
         "type": "string"
       }
-    },
-    "checkpoint-dir": {
-      "type": "string"
     }
   }
 }

@@ -7,17 +7,10 @@ from __future__ import annotations
 
 import json
 import logging
-import sys
 import time
 from pathlib import Path
 
 import pytest
-
-ROOT = Path(__file__).resolve().parents[2]
-for _p in (str(ROOT), str(ROOT / "src")):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
 from tests.planning_testkit import seed_planning_config
 
 from audiagentic.planning.app.api import PlanningAPI
