@@ -1,0 +1,18 @@
+component-id: release-audit-ledger
+
+surface-contributions:
+  - id: release-audit-ledger.process
+    owner: release-audit-ledger
+    kind: rule
+    title: Release audit ledger process
+    preferred-targets:
+      - skill
+      - instruction
+    content:
+      body: |
+        For release-affecting work, follow AUDiaGentic release ledger process.
+
+        - Check release ledger state before changing release notes, changelog fragments, or release workflow files.
+        - Keep release artifacts and job records synchronized with implementation and review outcomes.
+        - Add or update the release ledger fragment when behavior, public workflow, or generated release output changes.
+        - Do not bypass ledger updates by editing generated release outputs only.

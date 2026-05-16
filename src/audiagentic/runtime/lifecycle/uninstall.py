@@ -4,25 +4,14 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.runtime.lifecycle.checkpoints import write_checkpoint
+from audiagentic.runtime.lifecycle.components import uninstall_all_components
 from audiagentic.runtime.lifecycle.detector import detect_installed_state
 
 WORKFLOW_FILES = (
-    Path(".github/workflows/release-please.yml"),
-    Path(".github/workflows/release-please.legacy.yml"),
+    Path(".github/workflows/release-please.audiagentic.yml"),
 )
-
-CONFIG_FILES = (
-    Path(".audiagentic/config/project.yaml"),
-    Path(".audiagentic/config/components.yaml"),
-    Path(".audiagentic/config/runtime/providers.yaml"),
-    Path(".audiagentic/config/execution/prompt-syntax.yaml"),
-    Path(".audiagentic/config/interoperability/config.yaml"),
-    Path(".audiagentic/config/interoperability/events.yaml"),
-)
-
-STATE_FILES = (Path(".audiagentic/installed.json"),)
 
 
 def apply_uninstall(
@@ -31,44 +20,37 @@ def apply_uninstall(
     remove_configs: bool = False,
     remove_workflows: bool = False,
 ) -> dict:
+    register_all_components()
+
     state = detect_installed_state(project_root)
-    if state.state != "audiagentic-current":
+    if state.state != "installed":
         raise AudiaGenticError(
             code="LFC-BUSINESS-004",
             kind="business-rule",
-            message="uninstall requires audiagentic-current state",
+            message="uninstall requires installed state",
             details={"state": state.state},
         )
 
-    write_checkpoint(project_root, "planned", {"action": "uninstall"})
-    write_checkpoint(project_root, "pre-destructive", {"action": "uninstall"})
+    removed = uninstall_all_components(project_root, remove_configs=remove_configs)
+    deleted = [str(p.relative_to(project_root)) for p in removed]
 
+    # Safety sweep: remove any runtime state not covered by a component declaration.
     runtime_dir = project_root / ".audiagentic" / "runtime"
     if runtime_dir.exists():
         shutil.rmtree(runtime_dir)
-
-    for path in STATE_FILES:
-        full = project_root / path
-        if full.exists():
-            full.unlink()
-
-    if remove_configs:
-        for path in CONFIG_FILES:
-            full = project_root / path
-            if full.exists():
-                full.unlink()
 
     if remove_workflows:
         for path in WORKFLOW_FILES:
             full = project_root / path
             if full.exists():
                 full.unlink()
+                deleted.append(str(path))
 
     return {
         "contract-version": "v1",
         "mode": "apply",
         "status": "success",
-        "completed-operations": ["remove-runtime"],
+        "completed-operations": ["remove-runtime", "remove-component-files"],
+        "deleted-files": deleted,
         "warnings": [],
-        "checkpoint-dir": ".audiagentic/runtime/lifecycle/checkpoints",
     }

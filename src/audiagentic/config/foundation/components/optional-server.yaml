@@ -1,0 +1,9 @@
+contract-version: v1
+component-id: optional-server
+display-name: Optional Server
+description: Optional embedded MCP server for tooling integrations
+detection-marker: .audiagentic/components/optional-server.yaml
+files:
+  - path: .audiagentic/components/optional-server.yaml
+    lifecycle: create-if-missing
+    description: Installation marker

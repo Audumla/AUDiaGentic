@@ -11,15 +11,15 @@ for path in (str(ROOT), str(SRC)):
 
 from tests.helpers import sandbox as sandbox_helper
 
-from audiagentic.interoperability.providers.adapters import gemini
+from audiagentic.interoperability.providers.gemini import adapter as gemini
 
 
 def test_gemini_adapter_recognizes_tag(monkeypatch, tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "gemini-tag")
     try:
         # Write project config
-        (sandbox.repo / ".audiagentic").mkdir(parents=True, exist_ok=True)
-        (sandbox.repo / ".audiagentic" / "project.yaml").write_text(
+        (sandbox.repo / ".audiagentic" / "config" / "runtime").mkdir(parents=True, exist_ok=True)
+        (sandbox.repo / ".audiagentic" / "config" / "project.yaml").write_text(
             "project-id: test-project\nprompt-launch:\n  allow-adhoc-target: true\n",
             encoding="utf-8",
         )

@@ -12,13 +12,12 @@ from audiagentic.knowledge.lifecycle import (
     get_proposal,
     reject_proposal,
 )
-
-ROOT = Path(__file__).resolve().parents[2]
+from audiagentic.paths import REPO_ROOT
 
 
 def _seed_knowledge_project(root: Path) -> None:
     shutil.copytree(
-        ROOT / ".audiagentic" / "knowledge",
+        REPO_ROOT / ".audiagentic" / "knowledge",
         root / ".audiagentic" / "knowledge",
         dirs_exist_ok=True,
     )

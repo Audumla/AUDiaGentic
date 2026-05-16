@@ -81,7 +81,7 @@ def model_profiles_path() -> Path:
 
 
 def rig_config_path() -> Path:
-    return _PKG_ROOT / "config" / "rig" / "rig.yaml"
+    return _PKG_ROOT / "config" / "provisioning" / "rig" / "rig.yaml"
 
 
 def load_rig_config(profile_name: str) -> tuple[dict[str, object], dict[str, object], str | None]:

@@ -17,12 +17,11 @@ from audiagentic.knowledge.event_state import (
     prune_event_state,
     save_event_state,
 )
-
-ROOT = Path(__file__).resolve().parents[3]
+from audiagentic.paths import REPO_ROOT
 
 
 def _seed_project(root: Path) -> None:
-    shutil.copytree(ROOT / ".audiagentic" / "knowledge", root / ".audiagentic" / "knowledge", dirs_exist_ok=True)
+    shutil.copytree(REPO_ROOT / ".audiagentic" / "knowledge", root / ".audiagentic" / "knowledge", dirs_exist_ok=True)
     state_dir = root / "docs" / "knowledge" / "state"
     state_dir.mkdir(parents=True, exist_ok=True)
     (state_dir / "event-state.yml").write_text(

@@ -1,0 +1,12 @@
+contract-version: v1
+component-id: provider-surface-qwen
+display-name: Qwen Surface
+description: Qwen / Tongyi Lingma surface — project instructions
+detection-marker: .audiagentic/components/provider-surface-qwen.yaml
+files:
+  - path: .audiagentic/components/provider-surface-qwen.yaml
+    lifecycle: create-if-missing
+    description: Installation marker
+  - path: QWEN.md
+    lifecycle: required-managed
+    description: Qwen project instructions

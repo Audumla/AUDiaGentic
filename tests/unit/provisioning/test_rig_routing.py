@@ -6,15 +6,7 @@ Root-cause test: qwen3.5-9b-flash has no model_file → must not launch embedded
 from __future__ import annotations
 
 import json
-import sys
-from pathlib import Path
 from unittest.mock import patch
-
-ROOT = Path(__file__).resolve().parents[4]
-SRC = ROOT / "src"
-for _p in (str(ROOT), str(SRC)):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 from audiagentic.provisioning.harness.pi.runner import launch_rig_if_needed, load_model_profile
 from audiagentic.provisioning.rig.embedded.launch import (

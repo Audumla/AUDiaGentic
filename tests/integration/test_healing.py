@@ -5,13 +5,7 @@ Tests validation and auto-healing of state inconsistencies.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[2]
-for _p in (str(ROOT), str(ROOT / "src")):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 from tests.planning_testkit import seed_planning_config
 

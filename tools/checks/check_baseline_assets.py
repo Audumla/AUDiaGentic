@@ -4,94 +4,64 @@ import argparse
 import sys
 from pathlib import Path
 
-# Use the shared repo-root helper so this tool works regardless of cwd.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from tools.lib.repo_paths import REPO_ROOT
+_here = Path(__file__).resolve()
+for _candidate in [_here, *_here.parents]:
+    if (_candidate / "src" / "audiagentic").is_dir() and (_candidate / "tests").is_dir():
+        if str(_candidate / "src") not in sys.path:
+            sys.path.insert(0, str(_candidate / "src"))
+        break
+
+from audiagentic.foundation.components.base import MODE_REQUIRED_MANAGED
+from audiagentic.foundation.components.loader import register_all_components
+from audiagentic.foundation.components.registry import all_descriptors
+from audiagentic.paths import REPO_ROOT
 
 MANAGED_MARKDOWN_HEADER = "<!-- MANAGED_BY_AUDIAGENTIC: do not edit directly. -->"
-REQUIRED_PATHS = [
-    ".audiagentic/project.yaml",
-    ".audiagentic/components.yaml",
-    ".audiagentic/providers.yaml",
-    ".audiagentic/prompt-syntax.yaml",
-    ".audiagentic/prompts/ag-review/default.md",
-    ".audiagentic/prompts/ag-plan/default.md",
-    ".audiagentic/prompts/ag-implement/default.md",
-    ".audiagentic/prompts/ag-audit/default.md",
-    ".audiagentic/prompts/ag-check-in-prep/default.md",
-    "AGENTS.md",
-    "CLAUDE.md",
-    "GEMINI.md",
-    ".clinerules/prompt-tags.md",
-    ".claude/rules/prompt-tags.md",
-    ".agents/skills/ag-plan/SKILL.md",
-    ".agents/skills/ag-implement/SKILL.md",
-    ".agents/skills/ag-review/SKILL.md",
-    ".agents/skills/ag-audit/SKILL.md",
-    ".agents/skills/ag-check-in-prep/SKILL.md",
-    ".claude/skills/ag-plan/SKILL.md",
-    ".claude/skills/ag-implement/SKILL.md",
-    ".claude/skills/ag-review/SKILL.md",
-    ".claude/skills/ag-audit/SKILL.md",
-    ".claude/skills/ag-check-in-prep/SKILL.md",
-    ".clinerules/skills/ag-plan.md",
-    ".clinerules/skills/ag-implement.md",
-    ".clinerules/skills/ag-review.md",
-    ".clinerules/skills/ag-audit.md",
-    ".clinerules/skills/ag-check-in-prep.md",
-    ".gemini/commands/ag-plan.md",
-    ".gemini/commands/ag-implement.md",
-    ".gemini/commands/ag-review.md",
-    ".gemini/commands/ag-audit.md",
-    ".gemini/commands/ag-check-in-prep.md",
-    ".opencode/skills/ag-plan/SKILL.md",
-    ".opencode/skills/ag-implement/SKILL.md",
-    ".opencode/skills/ag-review/SKILL.md",
-    ".opencode/skills/ag-audit/SKILL.md",
-    ".opencode/skills/ag-check-in-prep/SKILL.md",
-    "tools/misc/regenerate_tag_surfaces.py",
-    ".github/workflows/release-please.audiagentic.yml",
-    "tools/misc/seed_example_project.py",
-    "src/audiagentic/runtime/lifecycle/baseline_sync.py",
-    "src/audiagentic/release/bootstrap.py",
-    ".audiagentic/planning/config/planning.yaml",
-    ".audiagentic/planning/config/profiles.yaml",
-    ".audiagentic/planning/config/workflows.yaml",
-    ".audiagentic/planning/config/automations.yaml",
-    ".audiagentic/planning/config/hooks.yaml",
-]
-MANAGED_HEADER_PATHS = [
-    "AGENTS.md",
-    "CLAUDE.md",
-    "GEMINI.md",
-    ".clinerules/prompt-tags.md",
-    ".claude/rules/prompt-tags.md",
-    ".agents/skills/ag-plan/SKILL.md",
-    ".agents/skills/ag-implement/SKILL.md",
-    ".agents/skills/ag-review/SKILL.md",
-    ".agents/skills/ag-audit/SKILL.md",
-    ".agents/skills/ag-check-in-prep/SKILL.md",
-    ".claude/skills/ag-plan/SKILL.md",
-    ".claude/skills/ag-implement/SKILL.md",
-    ".claude/skills/ag-review/SKILL.md",
-    ".claude/skills/ag-audit/SKILL.md",
-    ".claude/skills/ag-check-in-prep/SKILL.md",
-    ".clinerules/skills/ag-plan.md",
-    ".clinerules/skills/ag-implement.md",
-    ".clinerules/skills/ag-review.md",
-    ".clinerules/skills/ag-audit.md",
-    ".clinerules/skills/ag-check-in-prep.md",
-    ".gemini/commands/ag-plan.md",
-    ".gemini/commands/ag-implement.md",
-    ".gemini/commands/ag-review.md",
-    ".gemini/commands/ag-audit.md",
-    ".gemini/commands/ag-check-in-prep.md",
-    ".opencode/skills/ag-plan/SKILL.md",
-    ".opencode/skills/ag-implement/SKILL.md",
-    ".opencode/skills/ag-review/SKILL.md",
-    ".opencode/skills/ag-audit/SKILL.md",
-    ".opencode/skills/ag-check-in-prep/SKILL.md",
-]
+
+
+def _build_skill_surface_paths() -> list[str]:
+    """Expand skill-surfaces config over canonical tags to get expected paths."""
+    try:
+        from audiagentic.execution.jobs.prompt_syntax import load_prompt_syntax
+    except ImportError:
+        return []
+    syntax = load_prompt_syntax(REPO_ROOT)
+    canonical_tags = syntax.get("canonical-tags") or []
+    skill_surfaces = syntax.get("skill-surfaces") or {}
+    paths: list[str] = []
+    for _provider, config in skill_surfaces.items():
+        path_template = config.get("path", "")
+        if not path_template:
+            continue
+        for tag in canonical_tags:
+            if isinstance(tag, str) and tag:
+                paths.append(path_template.format(tag=tag).replace("\\", "/"))
+    return paths
+
+
+def _build_required_paths() -> list[str]:
+    """Required paths = non-recursive required-managed files + skill surface paths.
+
+    Recursive directories are checked for existence but NOT scanned file-by-file
+    to avoid catching generated subdirectories (e.g. node_modules).
+    """
+    register_all_components()
+    paths: list[str] = []
+
+    for descriptor in all_descriptors().values():
+        for cf in descriptor.files:
+            if cf.lifecycle != MODE_REQUIRED_MANAGED:
+                continue
+            if not cf.recursive:
+                paths.append(cf.rel_path.replace("\\", "/"))
+
+    paths.extend(_build_skill_surface_paths())
+    return sorted(set(paths))
+
+
+def _build_managed_header_paths() -> list[str]:
+    """Managed header check applies only to skill surface files generated by the renderer."""
+    return sorted(set(_build_skill_surface_paths()))
 
 
 def parse_args() -> argparse.Namespace:
@@ -99,20 +69,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--check-gitignore",
         action="store_true",
-        help="Also verify that .gitignore excludes .audiagentic/runtime/.",
+        help="Verify that .gitignore excludes .audiagentic/runtime/.",
     )
     parser.add_argument(
         "--check-managed-headers",
         action="store_true",
-        help="Also verify that managed markdown surfaces carry the AUDiaGentic managed header.",
+        help="Verify that managed markdown surfaces carry the AUDiaGentic managed header.",
     )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    missing = [path for path in REQUIRED_PATHS if not (REPO_ROOT / path).exists()]
+    required_paths = _build_required_paths()
+
     issues = []
+    missing = [p for p in required_paths if not (REPO_ROOT / p).exists()]
     if missing:
         issues.extend(f"missing required asset: {path}" for path in missing)
 
@@ -130,13 +102,13 @@ def main() -> int:
                 issues.append(".gitignore does not explicitly exclude .audiagentic/runtime/")
 
     if args.check_managed_headers:
-        for rel_path in MANAGED_HEADER_PATHS:
+        for rel_path in _build_managed_header_paths():
             path = REPO_ROOT / rel_path
             if not path.exists():
                 issues.append(f"missing managed file for header check: {rel_path}")
                 continue
             text = path.read_text(encoding="utf-8")
-            if not text.startswith(MANAGED_MARKDOWN_HEADER):
+            if MANAGED_MARKDOWN_HEADER not in text:
                 issues.append(f"managed header missing: {rel_path}")
 
     if issues:

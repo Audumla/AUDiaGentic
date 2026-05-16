@@ -18,6 +18,23 @@ class SkillDefinition:
     dont: list[str]
 
 
+@dataclass(frozen=True)
+class SurfaceContribution:
+    contribution_id: str
+    owner_component: str
+    kind: str
+    title: str
+    body: str
+    preferred_targets: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class SurfaceBlock:
+    path: Path
+    block_id: str
+    content: str
+
+
 class ProviderSurfaceRenderer(Protocol):
     def render(
         self,
@@ -30,11 +47,49 @@ class ProviderSurfaceRenderer(Protocol):
         ...
 
 
+class ProviderContributionRenderer(Protocol):
+    def __call__(
+        self,
+        *,
+        project_root: Path,
+        contributions: list[SurfaceContribution],
+    ) -> list[SurfaceBlock]:
+        ...
+
+
 def apply_managed_header(text: str) -> str:
     body = text.lstrip()
     if body.startswith(MANAGED_MARKDOWN_HEADER):
         return text
     return f"{MANAGED_MARKDOWN_HEADER}\n\n{text}"
+
+
+def managed_block(block_id: str, content: str) -> str:
+    body = content.strip()
+    return (
+        f"<!-- AUDIAGENTIC:BEGIN {block_id} -->\n"
+        f"{body}\n"
+        f"<!-- AUDIAGENTIC:END {block_id} -->"
+    )
+
+
+def apply_managed_blocks(existing: str, blocks: list[SurfaceBlock]) -> str:
+    text = existing.rstrip()
+    for block in blocks:
+        rendered = managed_block(block.block_id, block.content)
+        begin = f"<!-- AUDIAGENTIC:BEGIN {block.block_id} -->"
+        end = f"<!-- AUDIAGENTIC:END {block.block_id} -->"
+        start = text.find(begin)
+        if start == -1:
+            text = f"{text}\n\n{rendered}" if text else rendered
+            continue
+        finish = text.find(end, start)
+        if finish == -1:
+            text = f"{text}\n\n{rendered}" if text else rendered
+            continue
+        finish += len(end)
+        text = f"{text[:start].rstrip()}\n\n{rendered}\n\n{text[finish:].lstrip()}".strip()
+    return text.rstrip() + "\n"
 
 
 def canonical_tags(syntax: dict[str, Any]) -> list[str]:
