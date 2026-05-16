@@ -3,13 +3,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.state.jobs_store import validate_job_record
-
-REPO_ROOT = Path(__file__).resolve().parents[4]
 
 
 @dataclass(frozen=True)

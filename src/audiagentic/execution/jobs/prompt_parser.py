@@ -18,8 +18,6 @@ from audiagentic.foundation.config.provider_config import load_provider_config
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import read_schema
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-
 SHORT_TAG_PROVIDER_SEPARATOR = "-"
 DEFAULT_TARGET_KIND = "adhoc"
 # Fallback used before a project root is available; overridden per-call from config.

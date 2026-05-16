@@ -47,6 +47,9 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "audiagentic" = [
+    # Component descriptors — all YAML configs live under config/components/
+    "config/components/*.yaml",
+    "config/components/**/*.yaml",
     # Package-default configs (mirror runtime .audiagentic/config/ structure)
     "config/harness/ag.yaml",
     "config/rig/rig.yaml",
@@ -67,7 +70,10 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
-testpaths = ["tests"]
+testpaths = ["tests/unit", "tests/integration", "tests/e2e", "tests/deferred"]
+markers = [
+    "dev: exercises local filesystem state; not collected in CI/release (run explicitly: pytest tests/dev/)",
+]
 
 [tool.ruff]
 src = ["src"]

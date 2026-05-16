@@ -10,7 +10,7 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.interoperability.providers.adapters import claude
+from audiagentic.interoperability.providers.claude import adapter as claude
 
 
 def test_claude_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:

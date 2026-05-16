@@ -11,13 +11,12 @@ from audiagentic.knowledge.event_handlers import on_planning_state_change, proce
 from audiagentic.knowledge.event_scanner import _write_event_proposal, scan_events
 from audiagentic.knowledge.event_state import prune_event_state
 from audiagentic.knowledge.models import EventRecord
-
-ROOT = Path(__file__).resolve().parents[2]
+from audiagentic.paths import REPO_ROOT
 
 
 def _seed_knowledge_project(root: Path) -> None:
     shutil.copytree(
-        ROOT / ".audiagentic" / "knowledge",
+        REPO_ROOT / ".audiagentic" / "knowledge",
         root / ".audiagentic" / "knowledge",
         dirs_exist_ok=True,
     )

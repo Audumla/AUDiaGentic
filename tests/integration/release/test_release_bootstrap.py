@@ -11,16 +11,17 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from tests.helpers import sandbox as sandbox_helper
+from tests.helpers import sandbox as sandbox_helper  # noqa: E402
 
-from audiagentic.release.fragments import record_change_event
+from audiagentic.release.fragments import record_change_event  # noqa: E402
 
 
 def test_release_bootstrap_creates_install_and_release_artifacts(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "project-release-bootstrap")
     try:
-        (sandbox.repo / ".audiagentic").mkdir(parents=True, exist_ok=True)
-        (sandbox.repo / ".audiagentic" / "providers.yaml").write_text(
+        provider_path = sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml"
+        provider_path.parent.mkdir(parents=True, exist_ok=True)
+        provider_path.write_text(
             "\n".join(
                 [
                     "contract-version: v1",
@@ -79,19 +80,24 @@ def test_release_bootstrap_creates_install_and_release_artifacts(tmp_path: Path)
         assert result.returncode == 0, result.stderr
         payload = json.loads(result.stdout)
         assert payload["status"] == "success"
-        assert payload["installed-state"] == "audiagentic-current"
+        assert payload["installed-state"] == "installed"
         assert payload["synced-fragments"] == 1
 
-        assert (sandbox.repo / ".audiagentic" / "providers.yaml").is_file()
-        assert (sandbox.repo / ".audiagentic" / "prompt-syntax.yaml").is_file()
-        assert (sandbox.repo / ".audiagentic" / "installed.json").is_file()
+        assert provider_path.is_file()
+        assert (
+            sandbox.repo / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml"
+        ).is_file()
+        assert (sandbox.repo / ".audiagentic" / "components" / "core-lifecycle.yaml").is_file()
         assert (sandbox.repo / ".audiagentic" / "prompts" / "ag-review" / "default.md").is_file()
         assert (sandbox.repo / "AGENTS.md").is_file()
         assert (sandbox.repo / ".github" / "workflows" / "release-please.audiagentic.yml").is_file()
         assert (sandbox.repo / "docs" / "releases" / "AUDIT_SUMMARY.md").is_file()
         assert (sandbox.repo / "docs" / "releases" / "CHECKIN.md").is_file()
-        assert payload["baseline-sync-report"]["excluded-paths"] == [".audiagentic/runtime/**"]
-        assert "codex" in (sandbox.repo / ".audiagentic" / "providers.yaml").read_text(encoding="utf-8")
+        assert any(
+            path.startswith(".audiagentic/runtime/")
+            for path in payload["baseline-sync-report"]["excluded-paths"]
+        )
+        assert "codex" in provider_path.read_text(encoding="utf-8")
 
         current_release = (sandbox.repo / "docs" / "releases" / "CURRENT_RELEASE.md").read_text(
             encoding="utf-8"

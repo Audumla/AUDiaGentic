@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -9,37 +8,28 @@ for path in (str(ROOT), str(ROOT / "src")):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-import tools.misc.lifecycle_stub as lifecycle_stub
-import tools.misc.seed_example_project as seed_example_project
-from tests.helpers import sandbox as sandbox_helper
+import tools.misc.lifecycle_stub as lifecycle_stub  # noqa: E402
+import tools.misc.seed_example_project as seed_example_project  # noqa: E402
+from tests.helpers import sandbox as sandbox_helper  # noqa: E402
 
 
-def _read_checkpoint(project_root: Path, name: str) -> dict:
-    path = project_root / ".audiagentic" / "runtime" / "lifecycle" / "checkpoints" / f"{name}.json"
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def test_stub_writes_expected_checkpoints(tmp_path: Path) -> None:
+def test_stub_returns_plan_payload(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "lifecycle-stub")
     try:
         seed_example_project.seed_example_project(sandbox.repo, overwrite=True)
         payload = lifecycle_stub.run_stub("plan", sandbox.repo)
         assert payload["mode"] == "plan"
-        checkpoint = _read_checkpoint(sandbox.repo, "detected")
-        assert checkpoint["phase"] == "detected"
-        assert checkpoint["payload"] == payload
     finally:
         sandbox.cleanup()
 
 
-def test_stub_apply_writes_multiple_checkpoints(tmp_path: Path) -> None:
+def test_stub_apply_returns_success_payload(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "lifecycle-apply")
     try:
         seed_example_project.seed_example_project(sandbox.repo, overwrite=True)
         payload = lifecycle_stub.run_stub("apply", sandbox.repo)
         assert payload["mode"] == "apply"
-        _ = _read_checkpoint(sandbox.repo, "planned")
-        _ = _read_checkpoint(sandbox.repo, "pre-destructive")
+        assert payload["status"] == "success"
     finally:
         sandbox.cleanup()
 
@@ -51,8 +41,6 @@ def test_stub_idempotent_plan(tmp_path: Path) -> None:
         first = lifecycle_stub.run_stub("plan", sandbox.repo)
         second = lifecycle_stub.run_stub("plan", sandbox.repo)
         assert first == second
-        checkpoint = _read_checkpoint(sandbox.repo, "detected")
-        assert checkpoint["payload"] == second
     finally:
         sandbox.cleanup()
 

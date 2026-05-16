@@ -2,6 +2,9 @@
 
 See spec 50 for the required-managed/create-if-missing/generated-managed/runtime-only
 contract that this inventory enforces.
+
+The asset inventory is derived from the foundation component registry — each component
+declares the files it owns. This file owns the sync logic only.
 """
 from __future__ import annotations
 
@@ -11,13 +14,14 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-DEFAULT_DOC_DIRS: tuple[str, ...] = ("specifications", "implementation", "releases", "decisions")
+from audiagentic.foundation.components.base import (
+    MODE_CREATE_IF_MISSING,
+    MODE_GENERATED_MANAGED,
+    MODE_RUNTIME_ONLY,
+)
+from audiagentic.paths import REPO_ROOT
 
-MODE_REQUIRED_MANAGED = "required-managed"
-MODE_CREATE_IF_MISSING = "create-if-missing"
-MODE_GENERATED_MANAGED = "generated-managed"
-MODE_RUNTIME_ONLY = "runtime-only"
+DEFAULT_DOC_DIRS: tuple[str, ...] = ("specifications", "implementation", "releases", "decisions")
 
 
 @dataclass(frozen=True)
@@ -28,34 +32,15 @@ class BaselineAsset:
     recursive: bool = False
 
 
-BASELINE_ASSETS: tuple[BaselineAsset, ...] = (
-    BaselineAsset(".audiagentic/config/project.yaml", ".audiagentic/config/project.yaml", MODE_CREATE_IF_MISSING),
-    BaselineAsset(".audiagentic/config/components.yaml", ".audiagentic/config/components.yaml", MODE_CREATE_IF_MISSING),
-    BaselineAsset(".audiagentic/config/runtime/providers.yaml", ".audiagentic/config/runtime/providers.yaml", MODE_CREATE_IF_MISSING),
-    BaselineAsset(".audiagentic/config/execution/prompt-syntax.yaml", ".audiagentic/config/execution/prompt-syntax.yaml", MODE_CREATE_IF_MISSING),
-    BaselineAsset(".audiagentic/prompts", ".audiagentic/prompts", MODE_REQUIRED_MANAGED, recursive=True),
-    BaselineAsset("AGENTS.md", "AGENTS.md", MODE_REQUIRED_MANAGED),
-    BaselineAsset("CLAUDE.md", "CLAUDE.md", MODE_REQUIRED_MANAGED),
-    BaselineAsset("GEMINI.md", "GEMINI.md", MODE_REQUIRED_MANAGED),
-    BaselineAsset(".gemini", ".gemini", MODE_REQUIRED_MANAGED, recursive=True),
-    BaselineAsset(".clinerules", ".clinerules", MODE_REQUIRED_MANAGED, recursive=True),
-    BaselineAsset(".claude", ".claude", MODE_REQUIRED_MANAGED, recursive=True),
-    BaselineAsset(".agents/skills", ".agents/skills", MODE_REQUIRED_MANAGED, recursive=True),
-    BaselineAsset(".opencode", ".opencode", MODE_REQUIRED_MANAGED, recursive=True),
-    BaselineAsset(
-        ".github/workflows/release-please.audiagentic.yml",
-        ".github/workflows/release-please.audiagentic.yml",
-        MODE_REQUIRED_MANAGED,
-    ),
-    BaselineAsset("docs/releases", "docs/releases", MODE_GENERATED_MANAGED, recursive=True),
-    BaselineAsset(".audiagentic/runtime", ".audiagentic/runtime", MODE_RUNTIME_ONLY, recursive=True),
-    BaselineAsset(
-        ".audiagentic/planning/config",
-        ".audiagentic/planning/config",
-        MODE_CREATE_IF_MISSING,
-        recursive=True,
-    ),
-)
+def _iter_component_assets(component_ids: set[str] | None = None) -> Iterable[BaselineAsset]:
+    from audiagentic.foundation.components import all_descriptors
+    from audiagentic.foundation.components.loader import register_all_components
+    register_all_components()
+    for descriptor in all_descriptors().values():
+        if component_ids is not None and descriptor.component_id not in component_ids:
+            continue
+        for cf in descriptor.files:
+            yield BaselineAsset(cf.rel_path, cf.rel_path, cf.lifecycle, cf.recursive)
 
 
 def list_baseline_assets() -> list[dict[str, object]]:
@@ -66,7 +51,7 @@ def list_baseline_assets() -> list[dict[str, object]]:
             "mode": asset.mode,
             "recursive": asset.recursive,
         }
-        for asset in BASELINE_ASSETS
+        for asset in _iter_component_assets()
     ]
 
 
@@ -107,6 +92,7 @@ def sync_managed_baseline(
     target_root: Path,
     *,
     source_root: Path | None = None,
+    component_ids: set[str] | None = None,
 ) -> dict[str, object]:
     source_root = (source_root or REPO_ROOT).resolve()
     target_root = target_root.resolve()
@@ -123,7 +109,7 @@ def sync_managed_baseline(
         "warnings": [],
     }
 
-    for asset in BASELINE_ASSETS:
+    for asset in _iter_component_assets(component_ids):
         if asset.mode == MODE_RUNTIME_ONLY:
             cast = report["excluded-paths"]
             assert isinstance(cast, list)

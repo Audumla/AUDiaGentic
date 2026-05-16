@@ -1,24 +1,18 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
-
-ROOT = Path(__file__).resolve().parents[3]
-SRC = ROOT / "src"
-for path in (str(ROOT), str(SRC)):
-    if path not in sys.path:
-        sys.path.insert(0, path)
 
 from audiagentic.foundation.contracts.errors import (
     ERROR_ENVELOPE_SCHEMA,
     AudiaGenticError,
     to_error_envelope,
 )
+from audiagentic.paths import REPO_ROOT
 
-FIXTURES = ROOT / "docs" / "examples" / "fixtures"
+FIXTURES = REPO_ROOT / "docs" / "examples" / "fixtures"
 
 
 def _load(path: Path) -> dict:
