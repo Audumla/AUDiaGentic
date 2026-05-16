@@ -58,7 +58,7 @@ One set per project, committed or gitignored as appropriate.
 ├── planning/                          ← planning system data
 ├── runtime/                           ← jobs, ledger
 ├── knowledge/                         ← knowledge base
-└── installed.json                     ← installation manifest (machine-written)
+└── components/                        ← component marker files (machine-written, one per installed component)
 ```
 
 ---
