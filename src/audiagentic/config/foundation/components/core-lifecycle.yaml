@@ -23,6 +23,6 @@ files:
     lifecycle: required-managed
     recursive: true
     description: Managed prompt templates
-  - path: .github/workflows/release-please.audiagentic.yml
+  - path: .github/workflows/release.yml
     lifecycle: required-managed
     description: AUDiaGentic release workflow
