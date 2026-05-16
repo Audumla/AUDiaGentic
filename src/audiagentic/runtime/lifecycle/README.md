@@ -7,7 +7,7 @@ Greenfield project lifecycle management: install, baseline sync, uninstall, and 
 - Project layout creation (`.audiagentic/` directory structure)
 - Baseline asset synchronization from template to project
 - Installed-state detection and reporting
-- Component manifest (read/write `installed.json`)
+- Component marker files (read/write `.audiagentic/components/{id}.yaml`)
 - Fresh installation bootstrapping
 - Component-owned uninstall behavior
 
@@ -25,9 +25,9 @@ Greenfield project lifecycle management: install, baseline sync, uninstall, and 
 | Module | Responsibility |
 |--------|---------------|
 | `baseline_sync.py` | Sync managed baseline assets from repo template to project |
+| `components.py` | Install, uninstall, enable, disable components; read/write `.audiagentic/components/{id}.yaml` markers |
 | `detector.py` | Detect and report current installed state |
 | `fresh_install.py` | Bootstrap a fresh project installation |
-| `manifest.py` | Build, read, and write the component manifest (`installed.json`) |
 | `uninstall.py` | Remove runtime and component-owned files |
 
 ## Related Domains
