@@ -98,7 +98,7 @@ def test_all_provider_cli_dry_run_covers_installable_providers() -> None:
     assert providers["claude"]["package-name"] == "@anthropic-ai/claude-code"
     assert providers["cline"]["package-name"] == "cline"
     assert providers["continue"]["package-name"] == "@continuedev/cli"
-    assert providers["copilot"]["package-manager"] == "gh-extension"
+    assert providers["copilot"]["package-name"] == "@github/copilot"
     assert providers["gemini"]["package-name"] == "@google/gemini-cli"
     assert providers["goose"]["package-manager"] == "brew"
     assert providers["openhands"]["package-manager"] == "uv-tool"

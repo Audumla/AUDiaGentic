@@ -73,6 +73,24 @@ def managed_block(block_id: str, content: str) -> str:
     )
 
 
+def prune_managed_blocks(existing: str, active_ids: set[str]) -> str:
+    """Remove fenced blocks whose block_id is not in active_ids.
+
+    Leaves all other content untouched. Returns the pruned text.
+    """
+    import re
+    pattern = re.compile(
+        r"\n*<!-- AUDIAGENTIC:BEGIN (?P<id>[^>]+) -->.*?<!-- AUDIAGENTIC:END (?P=id) -->\n*",
+        re.DOTALL,
+    )
+
+    def _replace(match: re.Match) -> str:
+        return "" if match.group("id") not in active_ids else match.group(0)
+
+    pruned = pattern.sub(_replace, existing)
+    return pruned.rstrip() + "\n" if pruned.strip() else ""
+
+
 def apply_managed_blocks(existing: str, blocks: list[SurfaceBlock]) -> str:
     text = existing.rstrip()
     for block in blocks:
