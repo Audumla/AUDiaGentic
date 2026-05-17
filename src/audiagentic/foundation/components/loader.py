@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .base import ComponentDescriptor, ComponentFile
+from .base import SCOPE_PROJECT, ComponentDescriptor, ComponentFile
 from .registry import register
 
 # Resolve relative to the installed package — works in both editable installs and wheels.
@@ -35,6 +35,7 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
         files=files,
         depends_on=tuple(data.get("depends-on") or []),
         config_path=data.get("config") or None,
+        scope=data.get("scope", SCOPE_PROJECT),
     )
     register(descriptor)
     return descriptor
