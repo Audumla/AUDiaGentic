@@ -1,3 +1,5 @@
+from audiagentic.foundation.invoke.toolchains import npm
+
 from ..descriptors.base import (
     AgentFile,
     CliInstallRecipe,
@@ -11,7 +13,13 @@ register(ProviderDescriptor(
     provider_id="claude",
     display_name="Claude (Anthropic)",
     cli_probe=["claude", "--version"],
-    cli_install=CliInstallRecipe("npm", "@anthropic-ai/claude-code", "claude"),
+    cli_install=CliInstallRecipe(
+        package_manager="npm",
+        package_name="@anthropic-ai/claude-code",
+        executable="claude",
+        install=npm.install("@anthropic-ai/claude-code"),
+        uninstall=npm.uninstall("@anthropic-ai/claude-code"),
+    ),
     vscode_extensions=(
         VsCodeExtension("anthropics.claude-code", "Claude Code"),
     ),

@@ -1,3 +1,5 @@
+from audiagentic.foundation.invoke.toolchains import npm
+
 from ..descriptors.base import (
     AgentFile,
     CliInstallRecipe,
@@ -11,7 +13,13 @@ register(ProviderDescriptor(
     provider_id="cline",
     display_name="Cline",
     cli_probe=["cline", "--version"],
-    cli_install=CliInstallRecipe("npm", "cline", "cline"),
+    cli_install=CliInstallRecipe(
+        package_manager="npm",
+        package_name="cline",
+        executable="cline",
+        install=npm.install("cline"),
+        uninstall=npm.uninstall("cline"),
+    ),
     vscode_extensions=(
         VsCodeExtension("saoudrizwan.claude-dev", "Cline"),
     ),
