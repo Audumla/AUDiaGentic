@@ -6,6 +6,7 @@ import audiagentic.interoperability.providers  # noqa: F401
 from audiagentic.interoperability.providers.surfaces.base import (
     SurfaceBlock,
     apply_managed_blocks,
+    prune_managed_blocks,
 )
 from audiagentic.interoperability.providers.surfaces.contributions import (
     load_surface_contributions,
@@ -14,6 +15,7 @@ from audiagentic.interoperability.providers.surfaces.manager import (
     apply_provider_surfaces,
     build_provider_surface_blocks,
     plan_provider_surfaces,
+    prune_provider_surfaces,
 )
 
 
@@ -76,3 +78,87 @@ def test_plan_provider_surfaces_reports_changes(tmp_path: Path) -> None:
     block_ids = result["files"][0]["block-ids"]
     assert "release-audit-ledger.process" in block_ids
     assert "agent-jobs/canonical-rule" in block_ids
+
+
+def test_prune_managed_blocks_removes_inactive_blocks() -> None:
+    doc = (
+        "# Rules\n\n"
+        "User text.\n\n"
+        "<!-- AUDIAGENTIC:BEGIN block-a -->\nContent A\n<!-- AUDIAGENTIC:END block-a -->\n\n"
+        "More text.\n\n"
+        "<!-- AUDIAGENTIC:BEGIN block-b -->\nContent B\n<!-- AUDIAGENTIC:END block-b -->\n"
+    )
+    result = prune_managed_blocks(doc, active_ids={"block-a"})
+
+    assert "block-a" in result
+    assert "Content A" in result
+    assert "block-b" not in result
+    assert "Content B" not in result
+    assert "User text." in result
+    assert "More text." in result
+
+
+def test_prune_managed_blocks_keeps_all_when_all_active() -> None:
+    doc = (
+        "<!-- AUDIAGENTIC:BEGIN x -->\nX\n<!-- AUDIAGENTIC:END x -->\n\n"
+        "<!-- AUDIAGENTIC:BEGIN y -->\nY\n<!-- AUDIAGENTIC:END y -->\n"
+    )
+    result = prune_managed_blocks(doc, active_ids={"x", "y"})
+
+    assert "x" in result
+    assert "y" in result
+
+
+def test_prune_managed_blocks_removes_all_when_none_active() -> None:
+    doc = (
+        "Preamble.\n\n"
+        "<!-- AUDIAGENTIC:BEGIN block-a -->\nContent A\n<!-- AUDIAGENTIC:END block-a -->\n"
+    )
+    result = prune_managed_blocks(doc, active_ids=set())
+
+    assert "block-a" not in result
+    assert "Content A" not in result
+    assert "Preamble." in result
+
+
+def test_prune_managed_blocks_empty_doc_returns_empty() -> None:
+    assert prune_managed_blocks("", active_ids=set()) == ""
+
+
+def test_prune_provider_surfaces_removes_stale_blocks(tmp_path: Path) -> None:
+    # Write surfaces so blocks exist on disk
+    apply_provider_surfaces(tmp_path, provider_id="cline")
+    target = tmp_path / ".clinerules" / "audiagentic.md"
+    assert target.exists()
+    content_before = target.read_text(encoding="utf-8")
+    assert "AUDIAGENTIC:BEGIN" in content_before
+
+    # Inject a fake stale block directly
+    stale = (
+        "\n\n<!-- AUDIAGENTIC:BEGIN stale-block -->\n"
+        "Stale content\n"
+        "<!-- AUDIAGENTIC:END stale-block -->\n"
+    )
+    target.write_text(content_before + stale, encoding="utf-8")
+
+    # Prune — stale-block has no active contribution, should be removed
+    result = prune_provider_surfaces(tmp_path, provider_id="cline")
+
+    assert result["ok"] is True
+    assert str(target) in result["pruned"]
+    pruned_text = target.read_text(encoding="utf-8")
+    assert "stale-block" not in pruned_text
+    assert "Stale content" not in pruned_text
+
+
+def test_prune_provider_surfaces_leaves_active_blocks(tmp_path: Path) -> None:
+    apply_provider_surfaces(tmp_path, provider_id="cline")
+    target = tmp_path / ".clinerules" / "audiagentic.md"
+    content_before = target.read_text(encoding="utf-8")
+
+    result = prune_provider_surfaces(tmp_path, provider_id="cline")
+
+    # No stale blocks — nothing should be rewritten
+    assert result["ok"] is True
+    assert result["pruned"] == []
+    assert target.read_text(encoding="utf-8") == content_before
