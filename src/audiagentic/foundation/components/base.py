@@ -7,6 +7,10 @@ MODE_CREATE_IF_MISSING = "create-if-missing"
 MODE_GENERATED_MANAGED = "generated-managed"
 MODE_RUNTIME_ONLY = "runtime-only"
 
+# Component scopes
+SCOPE_PROJECT = "project"   # installed into project_root/.audiagentic/
+SCOPE_HARNESS = "harness"   # installed into audiagentic_home() — shared across all projects
+
 __all__ = [
     "ComponentFile",
     "ComponentDescriptor",
@@ -14,6 +18,8 @@ __all__ = [
     "MODE_CREATE_IF_MISSING",
     "MODE_GENERATED_MANAGED",
     "MODE_RUNTIME_ONLY",
+    "SCOPE_PROJECT",
+    "SCOPE_HARNESS",
 ]
 
 
@@ -30,7 +36,8 @@ class ComponentDescriptor:
     component_id: str
     display_name: str
     description: str
-    detection_marker: str   # rel_path proving component is installed
+    detection_marker: str   # rel_path proving component is installed (relative to component_root)
     files: tuple[ComponentFile, ...] = ()
     depends_on: tuple[str, ...] = ()
     config_path: str | None = None  # path relative to config/ for detailed component config
+    scope: str = SCOPE_PROJECT      # SCOPE_PROJECT | SCOPE_HARNESS
