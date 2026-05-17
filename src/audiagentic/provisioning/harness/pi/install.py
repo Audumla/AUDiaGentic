@@ -140,6 +140,26 @@ def _patch_update_notification(npm_dir: Path) -> None:
     target.write_text(source, encoding="utf-8")
 
 
+def _patch_mcp_oauth_callback_host(npm_dir: Path) -> None:
+    """Force MCP OAuth callback server to bind on 127.0.0.1 instead of 'localhost'.
+
+    On Windows, Node resolves 'localhost' to ::1 (IPv6 loopback) first.  If IPv6
+    loopback is unavailable the bind fails with EACCES.  We never use HTTP MCP
+    servers so the OAuth server is unused, but the initialisation error is noisy.
+    Binding on 127.0.0.1 avoids the failure entirely.
+    """
+    target = npm_dir / "node_modules" / "pi-mcp-adapter" / "mcp-callback-server.ts"
+    if not target.exists():
+        return
+    source = target.read_text(encoding="utf-8")
+    patched = source.replace(
+        'candidateServer.listen(candidatePort, "localhost", () => {',
+        'candidateServer.listen(candidatePort, "127.0.0.1", () => {',
+    )
+    if patched != source:
+        target.write_text(patched, encoding="utf-8")
+
+
 def _apply_lockdown_patches(npm_dir: Path, project_root: Path | None = None) -> None:
     cfg = _load_config(project_root=project_root)
     blocked = cfg.get("lockdown", {}).get("block_builtin_commands", [])
@@ -152,6 +172,8 @@ def _apply_lockdown_patches(npm_dir: Path, project_root: Path | None = None) -> 
         _print("Patched AudiaGentic agent: MCP tool call blocks hidden")
     _patch_update_notification(npm_dir)
     _print("Patched AudiaGentic agent: update notifications suppressed")
+    _patch_mcp_oauth_callback_host(npm_dir)
+    _print("Patched MCP adapter: OAuth callback server bound to 127.0.0.1")
 
 
 # ---------------------------------------------------------------------------
