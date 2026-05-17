@@ -18,8 +18,8 @@ from audiagentic.interoperability.providers.descriptors.registry import (
     get_descriptor,
 )
 from audiagentic.interoperability.providers.health import health_check
+from audiagentic.interoperability.providers.lifecycle import _probe_provider_cli
 from audiagentic.interoperability.providers.models import resolve_model_selection
-from audiagentic.interoperability.providers.provisioning import _probe_provider_cli
 
 
 def _provider_entry(

@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 
 from audiagentic.interoperability.providers.descriptors.registry import all_descriptors
-from audiagentic.interoperability.providers.provisioning import (
+from audiagentic.interoperability.providers.lifecycle import (
     install_provider_cli,
     provider_cli_plan,
     provision_all_provider_clis,
@@ -41,7 +41,8 @@ def test_pi_provider_cli_plan_uses_harness_recipe() -> None:
 
     assert plan["status"] == "planned"
     assert plan["package-manager"] == "pi-harness"
-    assert plan["command"] == ["audiagentic", "install"]
+    # Pi uses install_fn (callable hook), so command is None in the plan
+    assert plan["command"] is None
     assert plan["executable"] == "pi"
 
 
@@ -60,25 +61,14 @@ def test_provider_cli_uninstall_dry_run_does_not_touch_host() -> None:
 
 
 def test_pi_provider_cli_install_uses_harness_installer(monkeypatch) -> None:
-    import audiagentic.interoperability.providers.provisioning as provisioning
+    import audiagentic.interoperability.providers.lifecycle as lifecycle
+    import audiagentic.interoperability.providers.pi.descriptor as pi_descriptor
 
-    monkeypatch.setattr(
-        provisioning,
-        "_install_pi_harness",
-        lambda project_root: subprocess.CompletedProcess(["audiagentic", "install"], 0, "", ""),
-    )
-    monkeypatch.setattr(
-        provisioning,
-        "_probe_provider_cli",
-        lambda descriptor: {
-            "available": True,
-            "command": ["pi", "--version"],
-            "executable": "/tmp/pi",
-            "returncode": 0,
-            "stdout": "0.74.0",
-            "stderr": "",
-        },
-    )
+    monkeypatch.setattr(pi_descriptor, "_pi_install",
+        lambda project_root=None: subprocess.CompletedProcess(["audiagentic", "install"], 0, "", ""))
+    monkeypatch.setattr(lifecycle, "_probe_provider_cli",
+        lambda descriptor: {"available": True, "command": ["pi", "--version"],
+                            "executable": "/tmp/pi", "returncode": 0, "stdout": "0.74.0", "stderr": ""})
 
     result = install_provider_cli("pi")
 
@@ -87,25 +77,14 @@ def test_pi_provider_cli_install_uses_harness_installer(monkeypatch) -> None:
 
 
 def test_pi_provider_cli_uninstall_uses_harness_uninstaller(monkeypatch) -> None:
-    import audiagentic.interoperability.providers.provisioning as provisioning
+    import audiagentic.interoperability.providers.lifecycle as lifecycle
+    import audiagentic.interoperability.providers.pi.descriptor as pi_descriptor
 
-    monkeypatch.setattr(
-        provisioning,
-        "_uninstall_pi_harness",
-        lambda: subprocess.CompletedProcess(["audiagentic", "uninstall"], 0, "", ""),
-    )
-    monkeypatch.setattr(
-        provisioning,
-        "_probe_provider_cli",
-        lambda descriptor: {
-            "available": False,
-            "command": ["pi", "--version"],
-            "executable": None,
-            "returncode": None,
-            "stdout": "",
-            "stderr": "command not found",
-        },
-    )
+    monkeypatch.setattr(pi_descriptor, "_pi_uninstall",
+        lambda project_root=None: subprocess.CompletedProcess(["audiagentic", "uninstall"], 0, "", ""))
+    monkeypatch.setattr(lifecycle, "_probe_provider_cli",
+        lambda descriptor: {"available": False, "command": ["pi", "--version"],
+                            "executable": None, "returncode": None, "stdout": "", "stderr": "command not found"})
 
     result = uninstall_provider_cli("pi")
 
