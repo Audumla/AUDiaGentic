@@ -1,3 +1,5 @@
+from audiagentic.foundation.invoke.toolchains import npm
+
 from ..descriptors.base import (
     AgentFile,
     CliInstallRecipe,
@@ -11,7 +13,13 @@ register(ProviderDescriptor(
     provider_id="continue",
     display_name="Continue",
     cli_probe=["cn", "--version"],
-    cli_install=CliInstallRecipe("npm", "@continuedev/cli", "cn"),
+    cli_install=CliInstallRecipe(
+        package_manager="npm",
+        package_name="@continuedev/cli",
+        executable="cn",
+        install=npm.install("@continuedev/cli"),
+        uninstall=npm.uninstall("@continuedev/cli"),
+    ),
     vscode_extensions=(
         VsCodeExtension("Continue.continue", "Continue"),
     ),

@@ -1,3 +1,5 @@
+from audiagentic.foundation.invoke.toolchains import npm
+
 from ..descriptors.base import AgentFile, CliInstallRecipe, ProviderDescriptor, ProviderPermissions
 from ..descriptors.registry import register
 
@@ -5,7 +7,13 @@ register(ProviderDescriptor(
     provider_id="opencode",
     display_name="OpenCode",
     cli_probe=["opencode", "--version"],
-    cli_install=CliInstallRecipe("npm", "opencode-ai", "opencode"),
+    cli_install=CliInstallRecipe(
+        package_manager="npm",
+        package_name="opencode-ai",
+        executable="opencode",
+        install=npm.install("opencode-ai"),
+        uninstall=npm.uninstall("opencode-ai"),
+    ),
     vscode_extensions=(),
     permissions=ProviderPermissions(
         can_write_files=True,
