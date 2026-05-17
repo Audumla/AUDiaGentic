@@ -24,18 +24,11 @@ from audiagentic.foundation.config.provider_catalog import (
     runtime_catalog_root,
 )
 
-# Known provider IDs — derived from surfaces registry without importing it at server init.
-_KNOWN_PROVIDERS = (
-    "claude",
-    "codex",
-    "cline",
-    "copilot",
-    "gemini",
-    "opencode",
-    "pi",
-    "qwen",
-    "local-openai",
-)
+
+def _descriptor_ids() -> frozenset[str]:
+    """Return provider IDs from the descriptor registry (lazy import, avoids init cost)."""
+    from audiagentic.interoperability.providers.descriptors.registry import all_descriptors
+    return frozenset(all_descriptors())
 
 
 def _project_root() -> Path:
@@ -94,14 +87,15 @@ def build_server() -> FastMCP:
         if catalogs_dir.exists():
             catalog_ids = {p.name for p in catalogs_dir.iterdir() if p.is_dir()}
 
-        all_ids = set(_KNOWN_PROVIDERS) | configured_ids | catalog_ids
+        descriptor_ids = _descriptor_ids()
+        all_ids = descriptor_ids | configured_ids | catalog_ids
 
         result = []
         for provider_id in sorted(all_ids):
             catalog = _read_catalog(project_root, provider_id)
             entry: dict[str, Any] = {
                 "provider_id": provider_id,
-                "known": provider_id in _KNOWN_PROVIDERS,
+                "known": provider_id in descriptor_ids,
                 "configured": provider_id in configured_ids,
                 "has_catalog": catalog is not None,
             }
