@@ -1,3 +1,5 @@
+from audiagentic.foundation.invoke.toolchains import gh_extension
+
 from ..descriptors.base import (
     AgentFile,
     CliInstallRecipe,
@@ -12,10 +14,12 @@ register(ProviderDescriptor(
     display_name="GitHub Copilot",
     cli_probe=["gh", "copilot", "--help"],
     cli_install=CliInstallRecipe(
-        "gh-extension",
-        "github/gh-copilot",
-        "gh",
+        package_manager="gh-extension",
+        package_name="github/gh-copilot",
+        executable="gh",
         uninstall_name="copilot",
+        install=gh_extension.install("github/gh-copilot"),
+        uninstall=gh_extension.remove("copilot"),
     ),
     vscode_extensions=(
         VsCodeExtension("GitHub.copilot", "GitHub Copilot"),

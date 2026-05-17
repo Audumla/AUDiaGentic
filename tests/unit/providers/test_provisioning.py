@@ -11,10 +11,6 @@ from audiagentic.interoperability.providers.lifecycle import (
 )
 
 
-def _ok(command: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
-    return subprocess.CompletedProcess(command, 0, stdout="ok\n", stderr="")
-
-
 def test_provider_cli_plan_uses_descriptor_recipe() -> None:
     plan = provider_cli_plan("codex", "install")
 
@@ -47,14 +43,14 @@ def test_pi_provider_cli_plan_uses_harness_recipe() -> None:
 
 
 def test_provider_cli_install_dry_run_does_not_touch_host() -> None:
-    result = install_provider_cli("gemini", dry_run=True, runner=_ok)
+    result = install_provider_cli("gemini", dry_run=True)
 
     assert result["status"] == "planned"
     assert result["command"] == ["npm", "install", "-g", "@google/gemini-cli"]
 
 
 def test_provider_cli_uninstall_dry_run_does_not_touch_host() -> None:
-    result = uninstall_provider_cli("qwen", dry_run=True, runner=_ok)
+    result = uninstall_provider_cli("qwen", dry_run=True)
 
     assert result["status"] == "planned"
     assert result["command"] == ["npm", "uninstall", "-g", "@qwen-code/qwen-code"]
