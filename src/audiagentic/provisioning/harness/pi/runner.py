@@ -123,6 +123,10 @@ def launch_rig_if_needed(
             os.environ.setdefault("AUDIAGENTIC_AG_MODEL", reused_model)
             return endpoint, reused_model, None, True
 
+        # Kill any orphan rig processes left by force-killed sessions before starting fresh.
+        from audiagentic.provisioning.rig.registry import reap_orphan_rigs
+        reap_orphan_rigs()
+
         # Start a new embedded rig.
         env = env_with_pythonpath()
         completed = subprocess.run(
