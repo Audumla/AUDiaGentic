@@ -1,3 +1,5 @@
+from audiagentic.foundation.invoke.toolchains import npm
+
 from ..descriptors.base import (
     AgentFile,
     CliInstallRecipe,
@@ -11,7 +13,13 @@ register(ProviderDescriptor(
     provider_id="gemini",
     display_name="Gemini (Google)",
     cli_probe=["gemini", "--version"],
-    cli_install=CliInstallRecipe("npm", "@google/gemini-cli", "gemini"),
+    cli_install=CliInstallRecipe(
+        package_manager="npm",
+        package_name="@google/gemini-cli",
+        executable="gemini",
+        install=npm.install("@google/gemini-cli"),
+        uninstall=npm.uninstall("@google/gemini-cli"),
+    ),
     vscode_extensions=(
         VsCodeExtension("Google.gemini-code-assist", "Gemini Code Assist"),
     ),

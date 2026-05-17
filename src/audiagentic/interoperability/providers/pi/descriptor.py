@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import subprocess
 
+from audiagentic.foundation.invoke.recipes.callable_ import CallableRecipe
+
 from ..descriptors.base import AgentFile, CliInstallRecipe, ProviderDescriptor, ProviderPermissions
 from ..descriptors.registry import register
 
@@ -86,8 +88,8 @@ register(ProviderDescriptor(
         package_manager="pi-harness",
         package_name="audiagentic-pi-harness",
         executable="pi",
-        install_fn=_install_dispatch,
-        uninstall_fn=_uninstall_dispatch,
+        install=CallableRecipe(_install_dispatch, label="pi-harness install"),
+        uninstall=CallableRecipe(_uninstall_dispatch, label="pi-harness uninstall"),
         probe_fn=_probe_dispatch,
     ),
     vscode_extensions=(),

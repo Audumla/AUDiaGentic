@@ -1,3 +1,5 @@
+from audiagentic.foundation.invoke.toolchains import npm
+
 from ..descriptors.base import (
     CliInstallRecipe,
     ProviderDescriptor,
@@ -10,7 +12,13 @@ register(ProviderDescriptor(
     provider_id="qwen",
     display_name="Qwen (Alibaba)",
     cli_probe=["qwen", "--version"],
-    cli_install=CliInstallRecipe("npm", "@qwen-code/qwen-code", "qwen"),
+    cli_install=CliInstallRecipe(
+        package_manager="npm",
+        package_name="@qwen-code/qwen-code",
+        executable="qwen",
+        install=npm.install("@qwen-code/qwen-code"),
+        uninstall=npm.uninstall("@qwen-code/qwen-code"),
+    ),
     vscode_extensions=(
         VsCodeExtension("Alibaba-Cloud.tongyi-lingma", "Tongyi Lingma"),
     ),
