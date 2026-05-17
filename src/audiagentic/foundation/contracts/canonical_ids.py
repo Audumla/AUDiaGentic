@@ -19,6 +19,7 @@ CANONICAL_PROVIDER_IDS = (
 )
 
 CANONICAL_COMPONENT_IDS = (
+    "auto-update",
     "core-lifecycle",
     "release-audit-ledger",
     "agent-jobs",
