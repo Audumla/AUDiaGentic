@@ -45,6 +45,7 @@ def maybe_prompt_update(project_root: Path | None = None) -> None:
             skip_version(info["latest"])
             return
         if answer == "yes":
+            from .checker import record_failed_install
             from .runner import install_version
             result = install_version(info["latest"])
             if result.get("ok") == "scheduled":
@@ -53,8 +54,10 @@ def maybe_prompt_update(project_root: Path | None = None) -> None:
             elif result.get("ok"):
                 print(f"\n  Updated to {info['latest']}. Restart audiagentic to use the new version.\n")
                 sys.exit(0)
-            elif not result.get("locked"):
-                print(f"\n  Update failed: {result.get('error')}. Continuing with current version.\n")
+            else:
+                record_failed_install(info["latest"])
+                if not result.get("locked"):
+                    print(f"\n  Update failed: {result.get('error')}. Continuing with current version.\n")
     except Exception:  # noqa: BLE001
         pass
 
