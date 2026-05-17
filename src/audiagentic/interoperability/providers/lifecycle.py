@@ -10,6 +10,7 @@ from audiagentic.foundation.invoke.result import InvocationResult
 
 from .descriptors.base import CliInstallRecipe, ProviderDescriptor
 from .descriptors.registry import _probe_cli, all_descriptors, get_descriptor
+from .surfaces.manager import apply_provider_surfaces, prune_provider_surfaces
 
 
 def _descriptor(provider_id: str) -> ProviderDescriptor:
@@ -104,7 +105,10 @@ def install_provider_cli(
         return _result(provider_id=provider_id, action="install", status="planned", recipe=recipe, invocation=inv)
     probe = _probe_provider_cli(descriptor)
     status = "installed" if inv.status == "ok" and (probe is None or probe["available"]) else "failed"
-    return _result(provider_id=provider_id, action="install", status=status, recipe=recipe, invocation=inv, probe=probe)
+    result = _result(provider_id=provider_id, action="install", status=status, recipe=recipe, invocation=inv, probe=probe)
+    if status == "installed" and project_root is not None:
+        result["surfaces"] = apply_provider_surfaces(project_root, provider_id=provider_id)
+    return result
 
 
 def uninstall_provider_cli(
@@ -130,7 +134,10 @@ def uninstall_provider_cli(
         return _result(provider_id=provider_id, action="uninstall", status="planned", recipe=recipe, invocation=inv)
     probe = _probe_provider_cli(descriptor)
     status = "uninstalled" if inv.status == "ok" and (probe is None or not probe["available"]) else "failed"
-    return _result(provider_id=provider_id, action="uninstall", status=status, recipe=recipe, invocation=inv, probe=probe)
+    result = _result(provider_id=provider_id, action="uninstall", status=status, recipe=recipe, invocation=inv, probe=probe)
+    if status == "uninstalled" and project_root is not None:
+        result["surfaces"] = prune_provider_surfaces(project_root, provider_id=provider_id)
+    return result
 
 
 def repair_provider_cli(
