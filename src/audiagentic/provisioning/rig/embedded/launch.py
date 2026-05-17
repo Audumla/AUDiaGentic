@@ -256,11 +256,14 @@ def build_command(
     device: str | None,
     server_cfg: dict[str, object],
     chat_template_kwargs: dict[str, object],
+    alias: str | None = None,
 ) -> list[str]:
     args: list[str] = []
     if binary.name.startswith("llamafile"):
         args.append("--server")
     args.extend(["--host", host, "--port", str(port), "--model", model_arg])
+    if alias:
+        args.extend(["--alias", alias])
     if device:
         args.extend(["--device", device])
     for key, flag, kind in _LLAMA_ARG_MAP:
@@ -361,6 +364,7 @@ def launch_background(args: argparse.Namespace) -> int:
             device=device,
             server_cfg=server_cfg,
             chat_template_kwargs=profile.chat_template_kwargs,
+            alias=profile.name,
         )
         meta_path.write_text(
             json.dumps(
@@ -450,6 +454,7 @@ def launch_foreground(args: argparse.Namespace) -> int:
         device=device,
         server_cfg=server_cfg,
         chat_template_kwargs=profile.chat_template_kwargs,
+        alias=profile.name,
     )
 
     if not args.json:
