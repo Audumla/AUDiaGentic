@@ -32,11 +32,17 @@ from audiagentic.runtime.lifecycle.detector import detect_installed_state
 register_all_components()
 
 
+_PROJECT_ROOT: Path | None = None
+
+
 def _project_root() -> Path:
+    if _PROJECT_ROOT is not None:
+        return _PROJECT_ROOT
+    # Fallback for callers that don't pass --project-root
     repo_root = os.environ.get("AUDIAGENTIC_REPO_ROOT")
-    if not repo_root:
-        raise RuntimeError("AUDIAGENTIC_REPO_ROOT not set")
-    return Path(repo_root)
+    if repo_root:
+        return Path(repo_root)
+    raise RuntimeError("Pass --project-root or set AUDIAGENTIC_REPO_ROOT")
 
 
 def build_server() -> FastMCP:
@@ -143,6 +149,15 @@ def build_server() -> FastMCP:
 
 
 def main() -> int:
+    import argparse
+
+    global _PROJECT_ROOT
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--project-root", default=None)
+    args, _ = parser.parse_known_args()
+    if args.project_root:
+        _PROJECT_ROOT = Path(args.project_root).resolve()
+
     build_server().run()
     return 0
 

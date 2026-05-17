@@ -1,6 +1,7 @@
 /.pytest_cache
 /opencode.json
 /.vscode
+/.audiagentic/components/
 /.audiagentic/runtime/
 /.audiagentic/logs/
 /.audiagentic/planning/extracts/

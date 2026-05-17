@@ -9,6 +9,7 @@ Usage
   audiagentic component enable ID [--project PATH]
   audiagentic component disable ID [--project PATH]
   audiagentic component status ID [--project PATH]
+  audiagentic release-bootstrap [--project PATH] [--release-id ID]
   audiagentic [ARGS...]                            Launch agent from current project directory
   audiagentic --project PATH [ARGS]                Launch with explicit project root
 """
@@ -191,6 +192,9 @@ def main(argv: list[str] | None = None) -> int:
                 help="Also delete create-if-missing config files",
             )
 
+    rb_parser = subparsers.add_parser("release-bootstrap", help="Bootstrap release workflow for a project")
+    rb_parser.add_argument("--release-id", default="rel_0001", metavar="ID")
+
     args, remaining = parser.parse_known_args(argv)
 
     project_root = Path(args.project).resolve() if args.project else Path.cwd()
@@ -201,6 +205,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "component":
         return _cmd_component(args, project_root)
+
+    if args.command == "release-bootstrap":
+        from audiagentic.release import bootstrap as release_bootstrap
+        result = release_bootstrap.bootstrap_release_workflow(project_root, release_id=args.release_id)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
 
     return _cmd_launch(project_root, remaining)
 
