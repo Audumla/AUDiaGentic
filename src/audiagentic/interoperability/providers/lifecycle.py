@@ -1,5 +1,4 @@
-"""Provider CLI install, uninstall, and repair operations."""
-
+"""Provider CLI lifecycle operations — install, uninstall, repair."""
 from __future__ import annotations
 
 import shutil
@@ -32,8 +31,6 @@ def _recipe_command(recipe: CliInstallRecipe, action: str) -> list[str]:
             return ["brew", "install", recipe.package_name]
         if recipe.package_manager == "gh-extension":
             return ["gh", "extension", "install", recipe.package_name]
-        if recipe.package_manager == "pi-harness":
-            return ["audiagentic", "install"]
     if action == "uninstall":
         if recipe.uninstall_command:
             return list(recipe.uninstall_command)
@@ -45,8 +42,6 @@ def _recipe_command(recipe: CliInstallRecipe, action: str) -> list[str]:
             return ["brew", "uninstall", recipe.uninstall_name or recipe.package_name]
         if recipe.package_manager == "gh-extension":
             return ["gh", "extension", "remove", recipe.uninstall_name or recipe.package_name]
-        if recipe.package_manager == "pi-harness":
-            return ["audiagentic", "uninstall"]
     raise AudiaGenticError(
         code="PRV-VALIDATION-001",
         kind="validation",
@@ -71,77 +66,16 @@ def _descriptor(provider_id: str) -> ProviderDescriptor:
     return descriptor
 
 
-def _pi_executable() -> Path:
-    from audiagentic.provisioning.harness.pi.runner import resolve_agent_bin
-    from audiagentic.provisioning.home import global_harness_runtime
-
-    return resolve_agent_bin(global_harness_runtime())
-
-
 def _probe_provider_cli(descriptor: ProviderDescriptor) -> dict[str, Any] | None:
+    """Probe whether the provider CLI is available.
+
+    Dispatches to the recipe's probe_fn when present (custom provisioners),
+    otherwise falls back to running the descriptor's cli_probe command.
+    """
     recipe = descriptor.cli_install
-    if recipe and recipe.package_manager == "pi-harness":
-        command = [str(_pi_executable()), "--version"]
-        executable = _pi_executable()
-        if not executable.exists():
-            return {
-                "available": False,
-                "command": command,
-                "executable": None,
-                "returncode": None,
-                "stdout": "",
-                "stderr": "command not found",
-            }
-        try:
-            completed = subprocess.run(
-                command,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=15,
-            )
-        except Exception as exc:  # noqa: BLE001
-            return {
-                "available": False,
-                "command": command,
-                "executable": str(executable),
-                "returncode": None,
-                "stdout": "",
-                "stderr": str(exc),
-            }
-        return {
-            "available": completed.returncode == 0,
-            "command": command,
-            "executable": str(executable),
-            "returncode": completed.returncode,
-            "stdout": completed.stdout.strip(),
-            "stderr": completed.stderr.strip(),
-        }
+    if recipe and recipe.probe_fn:
+        return recipe.probe_fn(descriptor)
     return _probe_cli(descriptor.cli_probe) if descriptor.cli_probe else None
-
-
-def _install_pi_harness(project_root: Path | None) -> subprocess.CompletedProcess[str]:
-    from audiagentic.provisioning.harness.pi.install import install_to
-    from audiagentic.provisioning.home import global_harness_runtime
-
-    try:
-        returncode = install_to(global_harness_runtime(), project_root=project_root)
-    except SystemExit as exc:
-        return subprocess.CompletedProcess(["audiagentic", "install"], int(exc.code or 1), "", str(exc))
-    except Exception as exc:  # noqa: BLE001
-        return subprocess.CompletedProcess(["audiagentic", "install"], 1, "", str(exc))
-    return subprocess.CompletedProcess(["audiagentic", "install"], returncode, "", "")
-
-
-def _uninstall_pi_harness() -> subprocess.CompletedProcess[str]:
-    from audiagentic.provisioning.harness.pi.install import uninstall_from
-    from audiagentic.provisioning.home import global_harness_runtime
-
-    try:
-        returncode = uninstall_from(global_harness_runtime())
-    except Exception as exc:  # noqa: BLE001
-        return subprocess.CompletedProcess(["audiagentic", "uninstall"], 1, "", str(exc))
-    return subprocess.CompletedProcess(["audiagentic", "uninstall"], returncode, "", "")
 
 
 def _result(
@@ -190,12 +124,13 @@ def provider_cli_plan(provider_id: str, action: str) -> dict[str, Any]:
             recipe=None,
             reason="provider has no installable CLI recipe",
         )
+    command = None if recipe.install_fn else _recipe_command(recipe, action)
     return _result(
         provider_id=provider_id,
         action=action,
         status="planned",
         recipe=recipe,
-        command=_recipe_command(recipe, action),
+        command=command,
     )
 
 
@@ -211,11 +146,11 @@ def install_provider_cli(
     recipe = descriptor.cli_install
     if recipe is None:
         return provider_cli_plan(provider_id, "install")
-    command = _recipe_command(recipe, "install")
     if dry_run:
+        command = None if recipe.install_fn else _recipe_command(recipe, "install")
         return _result(provider_id=provider_id, action="install", status="planned", recipe=recipe, command=command)
-    if recipe.package_manager == "pi-harness":
-        completed = _install_pi_harness(project_root)
+    if recipe.install_fn:
+        completed = recipe.install_fn(project_root)
         probe = _probe_provider_cli(descriptor)
         status = "installed" if completed.returncode == 0 and (probe is None or probe["available"]) else "failed"
         return _result(
@@ -223,10 +158,11 @@ def install_provider_cli(
             action="install",
             status=status,
             recipe=recipe,
-            command=command,
+            command=None,
             completed=completed,
             probe=probe,
         )
+    command = _recipe_command(recipe, "install")
     manager = command[0]
     if shutil.which(manager) is None:
         return _result(
@@ -263,11 +199,11 @@ def uninstall_provider_cli(
     recipe = descriptor.cli_install
     if recipe is None:
         return provider_cli_plan(provider_id, "uninstall")
-    command = _recipe_command(recipe, "uninstall")
     if dry_run:
+        command = None if recipe.uninstall_fn else _recipe_command(recipe, "uninstall")
         return _result(provider_id=provider_id, action="uninstall", status="planned", recipe=recipe, command=command)
-    if recipe.package_manager == "pi-harness":
-        completed = _uninstall_pi_harness()
+    if recipe.uninstall_fn:
+        completed = recipe.uninstall_fn(project_root)
         probe = _probe_provider_cli(descriptor)
         status = "uninstalled" if completed.returncode == 0 and (probe is None or not probe["available"]) else "failed"
         return _result(
@@ -275,10 +211,11 @@ def uninstall_provider_cli(
             action="uninstall",
             status=status,
             recipe=recipe,
-            command=command,
+            command=None,
             completed=completed,
             probe=probe,
         )
+    command = _recipe_command(recipe, "uninstall")
     manager = command[0]
     if shutil.which(manager) is None:
         return _result(
@@ -313,16 +250,15 @@ def repair_provider_cli(
 ) -> dict[str, Any]:
     descriptor = _descriptor(provider_id)
     probe = _probe_provider_cli(descriptor)
-    if probe:
-        if probe["available"]:
-            return _result(
-                provider_id=provider_id,
-                action="repair",
-                status="ok",
-                recipe=descriptor.cli_install,
-                probe=probe,
-                reason="CLI already available",
-            )
+    if probe and probe["available"]:
+        return _result(
+            provider_id=provider_id,
+            action="repair",
+            status="ok",
+            recipe=descriptor.cli_install,
+            probe=probe,
+            reason="CLI already available",
+        )
     result = install_provider_cli(
         provider_id,
         dry_run=dry_run,
