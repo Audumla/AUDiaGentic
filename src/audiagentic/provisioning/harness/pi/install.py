@@ -110,7 +110,22 @@ def _patch_update_notification(npm_dir: Path) -> None:
     if not target.exists():
         raise SystemExit(f"AudiaGentic agent install incomplete — not found: {target}")
     source = target.read_text(encoding="utf-8")
-    old = (
+
+    # Suppress Pi self-version check — audiagentic controls which Pi version is installed.
+    old_version_check = (
+        "        // Start version check asynchronously\n"
+        "        checkForNewPiVersion(this.version).then((newVersion) => {\n"
+        "            if (newVersion) {\n"
+        "                this.showNewVersionNotification(newVersion);\n"
+        "            }\n"
+        "        });"
+    )
+    new_version_check = "        // Pi version check suppressed by AUDiaGentic harness — use 'audiagentic update' instead."
+    if new_version_check not in source and old_version_check in source:
+        source = source.replace(old_version_check, new_version_check, 1)
+
+    # Suppress Pi package update check.
+    old_pkg_check = (
         "        // Start package update check asynchronously\n"
         "        this.checkForPackageUpdates().then((updates) => {\n"
         "            if (updates.length > 0) {\n"
@@ -118,10 +133,11 @@ def _patch_update_notification(npm_dir: Path) -> None:
         "            }\n"
         "        });"
     )
-    new = "        // Package update notifications suppressed by AUDiaGentic harness."
-    if new not in source and old in source:
-        source = source.replace(old, new, 1)
-        target.write_text(source, encoding="utf-8")
+    new_pkg_check = "        // Package update notifications suppressed by AUDiaGentic harness."
+    if new_pkg_check not in source and old_pkg_check in source:
+        source = source.replace(old_pkg_check, new_pkg_check, 1)
+
+    target.write_text(source, encoding="utf-8")
 
 
 def _apply_lockdown_patches(npm_dir: Path, project_root: Path | None = None) -> None:
