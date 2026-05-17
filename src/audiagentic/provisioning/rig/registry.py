@@ -118,6 +118,68 @@ def _kill_pid(pid: int) -> None:
             pass
 
 
+def reap_orphan_rigs(keep_pid: int | None = None) -> list[int]:
+    """Kill any running llama-server/llamafile processes not tracked by rig.json.
+
+    Called before starting a fresh rig to prevent VRAM accumulation from sessions
+    that were force-killed (SIGKILL bypasses finally blocks).
+    Returns list of killed PIDs.
+    """
+    killed: list[int] = []
+    if os.name == "nt":
+        import subprocess
+        result = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq llama-server.exe", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True, check=False,
+        )
+        for line in result.stdout.splitlines():
+            parts = line.strip().strip('"').split('","')
+            if not parts or len(parts) < 2:
+                continue
+            try:
+                pid = int(parts[1])
+            except ValueError:
+                continue
+            if keep_pid and pid == keep_pid:
+                continue
+            _kill_pid(pid)
+            killed.append(pid)
+        # Also check llamafile
+        result2 = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq llamafile.exe", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True, check=False,
+        )
+        for line in result2.stdout.splitlines():
+            parts = line.strip().strip('"').split('","')
+            if not parts or len(parts) < 2:
+                continue
+            try:
+                pid = int(parts[1])
+            except ValueError:
+                continue
+            if keep_pid and pid == keep_pid:
+                continue
+            _kill_pid(pid)
+            killed.append(pid)
+    else:
+        import subprocess
+        for name in ("llama-server", "llamafile"):
+            result = subprocess.run(
+                ["pgrep", "-x", name],
+                capture_output=True, text=True, check=False,
+            )
+            for line in result.stdout.splitlines():
+                try:
+                    pid = int(line.strip())
+                except ValueError:
+                    continue
+                if keep_pid and pid == keep_pid:
+                    continue
+                _kill_pid(pid)
+                killed.append(pid)
+    return killed
+
+
 # ---------------------------------------------------------------------------
 # Startup lock — prevents two CLIs racing to start the rig simultaneously.
 # Uses O_CREAT|O_EXCL which is atomic on NTFS and POSIX.
