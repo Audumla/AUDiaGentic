@@ -72,11 +72,31 @@ def fetch_latest_version(timeout: int = 5) -> str | None:
         return None
 
 
+def record_failed_install(version: str) -> None:
+    """Record a failed install attempt to suppress re-prompting for 24h."""
+    cache = _read_cache()
+    failed: dict = cache.get("failed_installs", {})
+    failed[version] = datetime.now(timezone.utc).isoformat()
+    cache["failed_installs"] = failed
+    _write_cache(cache)
+
+
+def _is_install_failed_recently(version: str, cache: dict) -> bool:
+    failed_at = cache.get("failed_installs", {}).get(version)
+    if not failed_at:
+        return False
+    try:
+        return datetime.now(timezone.utc) - datetime.fromisoformat(failed_at) < _CHECK_INTERVAL
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def check_update(*, force: bool = False) -> dict | None:
     """Return update info if a newer version is available, else None.
 
     Respects the 24-hour check interval unless force=True.
-    Returns None if: within interval, network failure, up to date, or version skipped.
+    Returns None if: within interval, network failure, up to date, version skipped,
+    or a failed install attempt was recorded in the last 24h.
     Returns {"latest": "x.y.z", "current": "x.y.z"} when an update is available.
     """
     cache = _read_cache()
@@ -94,6 +114,8 @@ def check_update(*, force: bool = False) -> dict | None:
                         return None
                     if latest in cache.get("skipped_versions", []):
                         return None
+                    if _is_install_failed_recently(latest, cache):
+                        return None
                     if _version_tuple(latest) <= _version_tuple(current):
                         return None
                     return {"latest": latest, "current": current}
@@ -109,6 +131,8 @@ def check_update(*, force: bool = False) -> dict | None:
     if not latest:
         return None
     if latest in cache.get("skipped_versions", []):
+        return None
+    if _is_install_failed_recently(latest, cache):
         return None
     if _version_tuple(latest) <= _version_tuple(current):
         return None
