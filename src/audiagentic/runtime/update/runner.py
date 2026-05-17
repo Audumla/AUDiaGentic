@@ -21,8 +21,14 @@ def _wheel_url(version: str) -> str:
 
 
 def _download_wheel(url: str, version: str) -> Path:
-    """Download the wheel to a temp file and return its path."""
-    tmp = Path(tempfile.gettempdir()) / f"audiagentic-{version}.whl"
+    """Download the wheel to a temp file and return its path.
+
+    Wheel filename must carry all five tags (name-ver-py-abi-platform.whl)
+    so pip can validate and install it without raising 'wrong number of parts'.
+    """
+    safe_ver = version.replace("-", "_")
+    filename = f"audiagentic-{safe_ver}-py3-none-any.whl"
+    tmp = Path(tempfile.gettempdir()) / filename
     print(f"  Downloading audiagentic {version}...", flush=True)
     urllib.request.urlretrieve(url, tmp)
     return tmp

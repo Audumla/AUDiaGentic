@@ -140,24 +140,32 @@ def _patch_update_notification(npm_dir: Path) -> None:
     target.write_text(source, encoding="utf-8")
 
 
-def _patch_mcp_oauth_callback_host(npm_dir: Path) -> None:
-    """Force MCP OAuth callback server to bind on 127.0.0.1 instead of 'localhost'.
+def _patch_mcp_oauth_suppress(npm_dir: Path) -> None:
+    """Suppress the MCP OAuth callback server startup entirely.
 
-    On Windows, Node resolves 'localhost' to ::1 (IPv6 loopback) first.  If IPv6
-    loopback is unavailable the bind fails with EACCES.  We never use HTTP MCP
-    servers so the OAuth server is unused, but the initialisation error is noisy.
-    Binding on 127.0.0.1 avoids the failure entirely.
+    All our MCP servers are stdio-based so the OAuth callback server (which is
+    only needed for HTTP MCP servers) is never used.  On Windows, port 19876 can
+    fall in an excluded/reserved range and the bind fails with EACCES regardless
+    of address family, producing noisy startup errors.  We make initializeOAuth
+    a no-op to avoid this entirely.
     """
-    target = npm_dir / "node_modules" / "pi-mcp-adapter" / "mcp-callback-server.ts"
+    target = npm_dir / "node_modules" / "pi-mcp-adapter" / "mcp-auth-flow.ts"
     if not target.exists():
         return
     source = target.read_text(encoding="utf-8")
-    patched = source.replace(
-        'candidateServer.listen(candidatePort, "localhost", () => {',
-        'candidateServer.listen(candidatePort, "127.0.0.1", () => {',
+    old = (
+        "export async function initializeOAuth(): Promise<void> {\n"
+        "  await ensureCallbackServer()\n"
+        "}"
     )
-    if patched != source:
-        target.write_text(patched, encoding="utf-8")
+    new = (
+        "export async function initializeOAuth(): Promise<void> {\n"
+        "  // Suppressed by AUDiaGentic harness — stdio MCP servers do not need OAuth.\n"
+        "}"
+    )
+    if new not in source and old in source:
+        source = source.replace(old, new)
+        target.write_text(source, encoding="utf-8")
 
 
 def _apply_lockdown_patches(npm_dir: Path, project_root: Path | None = None) -> None:
@@ -172,8 +180,8 @@ def _apply_lockdown_patches(npm_dir: Path, project_root: Path | None = None) -> 
         _print("Patched AudiaGentic agent: MCP tool call blocks hidden")
     _patch_update_notification(npm_dir)
     _print("Patched AudiaGentic agent: update notifications suppressed")
-    _patch_mcp_oauth_callback_host(npm_dir)
-    _print("Patched MCP adapter: OAuth callback server bound to 127.0.0.1")
+    _patch_mcp_oauth_suppress(npm_dir)
+    _print("Patched MCP adapter: OAuth callback server suppressed (stdio servers only)")
 
 
 # ---------------------------------------------------------------------------
