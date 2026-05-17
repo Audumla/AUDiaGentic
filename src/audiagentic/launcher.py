@@ -35,6 +35,14 @@ def _cmd_install(target: Path, project_root: Path) -> int:
     print(f"Installing AUDiaGentic harness into {target}", flush=True)
     rc = install_to(target, project_root=project_root)
     if rc == 0:
+        # Auto-install the auto-update harness component
+        try:
+            from audiagentic.foundation.components.loader import register_all_components
+            from audiagentic.runtime.lifecycle.components import install_component
+            register_all_components()
+            install_component("auto-update", project_root)
+        except Exception:
+            pass
         print("\nInstall complete. Run 'audiagentic' from any project directory.", flush=True)
         if target != global_harness_runtime():
             print(f"Set AUDIAGENTIC_HOME={target.parent} to use this location.", flush=True)
@@ -114,6 +122,11 @@ def _cmd_component(args: argparse.Namespace, project_root: Path) -> int:
     return 1
 
 
+def _cmd_update() -> int:
+    from audiagentic.runtime.update.prompt import run_update_now
+    return run_update_now()
+
+
 def _cmd_launch(project_root: Path, args: list[str]) -> int:
     if not project_root.exists():
         print(f"Project root does not exist: {project_root}", file=sys.stderr)
@@ -124,6 +137,17 @@ def _cmd_launch(project_root: Path, args: list[str]) -> int:
     if not (harness_runtime / "cli" / "node_modules" / ".bin").exists():
         print("Harness not installed. Run: audiagentic install", file=sys.stderr)
         return 1
+
+    # Check for updates if the auto-update harness component is installed and enabled
+    try:
+        from audiagentic.foundation.components.loader import register_all_components
+        from audiagentic.foundation.components.registry import is_enabled, is_installed
+        register_all_components()
+        if is_installed("auto-update", project_root) and is_enabled("auto-update", project_root):
+            from audiagentic.runtime.update.prompt import maybe_prompt_update
+            maybe_prompt_update(project_root)
+    except Exception:
+        pass
 
     enable_mcp = env_flag("AUDIAGENTIC_AG_ENABLE_MCP")
     ctx = build_global_context(
@@ -192,6 +216,8 @@ def main(argv: list[str] | None = None) -> int:
                 help="Also delete create-if-missing config files",
             )
 
+    subparsers.add_parser("update", help="Check for a new audiagentic version and update")
+
     rb_parser = subparsers.add_parser("release-bootstrap", help="Bootstrap release workflow for a project")
     rb_parser.add_argument("--release-id", default="rel_0001", metavar="ID")
 
@@ -205,6 +231,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "component":
         return _cmd_component(args, project_root)
+
+    if args.command == "update":
+        return _cmd_update()
 
     if args.command == "release-bootstrap":
         from audiagentic.release import bootstrap as release_bootstrap
