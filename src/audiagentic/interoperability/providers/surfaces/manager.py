@@ -6,7 +6,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from .base import SurfaceBlock, apply_managed_blocks
+from .base import SurfaceBlock, apply_managed_blocks, prune_managed_blocks
 from .contributions import load_surface_contributions
 from .registry import load_contribution_renderer_registry
 
@@ -64,6 +64,47 @@ def _write_atomic(path: Path, text: str) -> None:
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
+
+
+def prune_provider_surfaces(
+    project_root: Path,
+    *,
+    provider_id: str | None = None,
+) -> dict[str, Any]:
+    """Remove managed blocks that no longer have an active contribution.
+
+    Scans all files that any registered renderer can write to. Blocks whose
+    ID appears in the current contribution set are kept; all others are pruned.
+    If provider_id is given, only files owned by that provider are touched.
+    """
+    contributions = load_surface_contributions()
+    active_ids = {c.contribution_id for c in contributions}
+    renderers = load_contribution_renderer_registry()
+    provider_ids = [provider_id] if provider_id else sorted(renderers)
+
+    # Discover candidate paths by running renderers with the real contribution list.
+    # Paths are determined by what contributions are present; an empty list returns
+    # no blocks and therefore no paths.
+    candidate_paths: set[Path] = set()
+    for pid in provider_ids:
+        renderer = renderers.get(pid)
+        if renderer is None:
+            continue
+        for block in renderer(project_root=project_root, contributions=contributions):
+            candidate_paths.add(block.path)
+
+    pruned: list[str] = []
+    for path in sorted(candidate_paths):
+        if not path.exists():
+            continue
+        current = path.read_text(encoding="utf-8")
+        desired = prune_managed_blocks(current, active_ids)
+        if current == desired:
+            continue
+        _write_atomic(path, desired)
+        pruned.append(str(path))
+
+    return {"ok": True, "pruned": pruned}
 
 
 def apply_provider_surfaces(

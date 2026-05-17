@@ -190,6 +190,82 @@ def build_server() -> FastMCP:
             "models": models,
         }
 
+    # --- lifecycle tools (write) ---
+
+    @mcp.tool(
+        description=(
+            "Install a provider CLI. Pass dry_run=true (default) to see what would run "
+            "without touching the host. Pass dry_run=false to execute."
+        )
+    )
+    def install_provider(provider_id: str, dry_run: bool = True) -> dict[str, Any]:
+        from audiagentic.interoperability.providers.lifecycle import install_provider_cli
+        project_root = _project_root()
+        return install_provider_cli(provider_id, dry_run=dry_run, project_root=project_root)
+
+    @mcp.tool(
+        description=(
+            "Uninstall a provider CLI. Pass dry_run=true (default) to see what would run "
+            "without touching the host. Pass dry_run=false to execute."
+        )
+    )
+    def uninstall_provider(provider_id: str, dry_run: bool = True) -> dict[str, Any]:
+        from audiagentic.interoperability.providers.lifecycle import uninstall_provider_cli
+        project_root = _project_root()
+        return uninstall_provider_cli(provider_id, dry_run=dry_run, project_root=project_root)
+
+    @mcp.tool(
+        description=(
+            "Repair a provider CLI: installs it if missing, no-op if already available. "
+            "Pass dry_run=true (default) to preview. Pass dry_run=false to execute."
+        )
+    )
+    def repair_provider(provider_id: str, dry_run: bool = True) -> dict[str, Any]:
+        from audiagentic.interoperability.providers.lifecycle import repair_provider_cli
+        project_root = _project_root()
+        return repair_provider_cli(provider_id, dry_run=dry_run, project_root=project_root)
+
+    @mcp.tool(
+        description=(
+            "Enable or disable a provider in providers.yaml. "
+            "Does not install or uninstall the CLI — use install_provider / uninstall_provider for that."
+        )
+    )
+    def set_provider_enabled(provider_id: str, enabled: bool) -> dict[str, Any]:
+        from audiagentic.foundation.config.provider_config import (
+            set_provider_enabled as _set_enabled,
+        )
+        project_root = _project_root()
+        _set_enabled(project_root, provider_id, enabled=enabled)
+        return {"provider_id": provider_id, "enabled": enabled, "ok": True}
+
+    @mcp.tool(
+        description=(
+            "Apply managed surface blocks (rules, skills, config) to a provider's agent files. "
+            "Idempotent — safe to run at any time. Omit provider_id to apply all providers."
+        )
+    )
+    def apply_provider_surfaces(provider_id: str | None = None) -> dict[str, Any]:
+        from audiagentic.interoperability.providers.surfaces.manager import (
+            apply_provider_surfaces as _apply,
+        )
+        project_root = _project_root()
+        return _apply(project_root, provider_id=provider_id)
+
+    @mcp.tool(
+        description=(
+            "Remove stale managed surface blocks from a provider's agent files — "
+            "blocks whose contributing component no longer exists. "
+            "Omit provider_id to scan all providers."
+        )
+    )
+    def prune_provider_surfaces(provider_id: str | None = None) -> dict[str, Any]:
+        from audiagentic.interoperability.providers.surfaces.manager import (
+            prune_provider_surfaces as _prune,
+        )
+        project_root = _project_root()
+        return _prune(project_root, provider_id=provider_id)
+
     return mcp
 
 
