@@ -1,3 +1,5 @@
+from audiagentic.foundation.invoke.toolchains import uv
+
 from ..descriptors.base import AgentFile, CliInstallRecipe, ProviderDescriptor, ProviderPermissions
 from ..descriptors.registry import register
 
@@ -6,11 +8,11 @@ register(ProviderDescriptor(
     display_name="Aider",
     cli_probe=["aider", "--version"],
     cli_install=CliInstallRecipe(
-        "uv-tool",
-        "aider-chat",
-        "aider",
-        install_command=("uv", "tool", "install", "--force", "--python", "python3.12", "--with", "pip", "aider-chat@latest"),
-        uninstall_command=("uv", "tool", "uninstall", "aider-chat"),
+        package_manager="uv-tool",
+        package_name="aider-chat",
+        executable="aider",
+        install=uv.install("aider-chat@latest", "--force", "--python", "python3.12", "--with", "pip"),
+        uninstall=uv.uninstall("aider-chat"),
     ),
     vscode_extensions=(),
     permissions=ProviderPermissions(

@@ -1,3 +1,5 @@
+from audiagentic.foundation.invoke.toolchains import brew
+
 from ..descriptors.base import AgentFile, CliInstallRecipe, ProviderDescriptor, ProviderPermissions
 from ..descriptors.registry import register
 
@@ -5,7 +7,13 @@ register(ProviderDescriptor(
     provider_id="goose",
     display_name="Goose (Block)",
     cli_probe=["goose", "--version"],
-    cli_install=CliInstallRecipe("brew", "block-goose-cli", "goose"),
+    cli_install=CliInstallRecipe(
+        package_manager="brew",
+        package_name="block-goose-cli",
+        executable="goose",
+        install=brew.install("block-goose-cli"),
+        uninstall=brew.uninstall("block-goose-cli"),
+    ),
     vscode_extensions=(),
     permissions=ProviderPermissions(
         can_write_files=True,

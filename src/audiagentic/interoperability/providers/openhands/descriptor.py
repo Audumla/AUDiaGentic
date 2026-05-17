@@ -1,3 +1,5 @@
+from audiagentic.foundation.invoke.toolchains import uv
+
 from ..descriptors.base import AgentFile, CliInstallRecipe, ProviderDescriptor, ProviderPermissions
 from ..descriptors.registry import register
 
@@ -6,11 +8,11 @@ register(ProviderDescriptor(
     display_name="OpenHands",
     cli_probe=["openhands", "--version"],
     cli_install=CliInstallRecipe(
-        "uv-tool",
-        "openhands",
-        "openhands",
-        install_command=("uv", "tool", "install", "openhands", "--python", "3.12"),
-        uninstall_command=("uv", "tool", "uninstall", "openhands"),
+        package_manager="uv-tool",
+        package_name="openhands",
+        executable="openhands",
+        install=uv.install("openhands", "--python", "3.12"),
+        uninstall=uv.uninstall("openhands"),
     ),
     vscode_extensions=(),
     permissions=ProviderPermissions(

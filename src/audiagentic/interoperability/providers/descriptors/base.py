@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
+
+from audiagentic.foundation.invoke.base import InvocationRecipe
 
 
 @dataclass(frozen=True)
@@ -35,23 +35,24 @@ class ProviderPermissions:
 class CliInstallRecipe:
     """How AUDiaGentic can provision a provider CLI.
 
-    For standard package managers (npm, brew, gh-extension, uv-tool) the
-    lifecycle module synthesises commands from package_manager + package_name.
+    install and uninstall are InvocationRecipe instances owned by the provider
+    descriptor. lifecycle.py dispatches through them without knowing internals.
 
-    For custom provisioners (e.g. pi-harness) set the optional callable hooks
-    instead — lifecycle.py dispatches through them without knowing the details:
-      install_fn(project_root: Path | None) -> subprocess.CompletedProcess
-      uninstall_fn(project_root: Path | None) -> subprocess.CompletedProcess
-      probe_fn(descriptor: ProviderDescriptor) -> dict[str, Any] | None
+    Standard package managers use toolchain factories from
+    foundation.invoke.toolchains (npm, uv, brew, gh_extension).
+
+    Custom provisioners (e.g. pi-harness) use CallableRecipe to wrap their
+    own install/uninstall logic.
+
+    probe_fn is kept as a callable returning a structured availability dict
+    because its semantics differ from install/uninstall (read-only, typed result).
     """
-    package_manager: str
-    package_name: str
+    package_manager: str        # metadata/display only
+    package_name: str           # metadata/display only
     executable: str
+    install: InvocationRecipe
+    uninstall: InvocationRecipe
     uninstall_name: str | None = None
-    install_command: tuple[str, ...] = ()
-    uninstall_command: tuple[str, ...] = ()
-    install_fn: Callable[[Path | None], subprocess.CompletedProcess[str]] | None = None
-    uninstall_fn: Callable[[Path | None], subprocess.CompletedProcess[str]] | None = None
     probe_fn: Callable[[Any], dict[str, Any] | None] | None = None
 
 
