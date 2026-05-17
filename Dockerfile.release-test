@@ -16,7 +16,7 @@ RUN pip install --no-cache-dir --no-compile setuptools wheel build \
 
 # Clean install from wheel in a fresh working dir
 WORKDIR /app
-RUN pip install --no-cache-dir /dist/*.whl pytest
+RUN pip install --no-cache-dir --no-compile /dist/*.whl "mcp>=1.0" pytest
 
 # Template root: managed files that baseline_sync reads from.
 # In production the user has these from an installed/extracted repo template.
