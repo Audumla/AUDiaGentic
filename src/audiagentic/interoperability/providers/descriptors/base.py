@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -29,13 +33,26 @@ class ProviderPermissions:
 
 @dataclass(frozen=True)
 class CliInstallRecipe:
-    """How AUDiaGentic can provision a provider CLI."""
+    """How AUDiaGentic can provision a provider CLI.
+
+    For standard package managers (npm, brew, gh-extension, uv-tool) the
+    lifecycle module synthesises commands from package_manager + package_name.
+
+    For custom provisioners (e.g. pi-harness) set the optional callable hooks
+    instead — lifecycle.py dispatches through them without knowing the details:
+      install_fn(project_root: Path | None) -> subprocess.CompletedProcess
+      uninstall_fn(project_root: Path | None) -> subprocess.CompletedProcess
+      probe_fn(descriptor: ProviderDescriptor) -> dict[str, Any] | None
+    """
     package_manager: str
     package_name: str
     executable: str
     uninstall_name: str | None = None
     install_command: tuple[str, ...] = ()
     uninstall_command: tuple[str, ...] = ()
+    install_fn: Callable[[Path | None], subprocess.CompletedProcess[str]] | None = None
+    uninstall_fn: Callable[[Path | None], subprocess.CompletedProcess[str]] | None = None
+    probe_fn: Callable[[Any], dict[str, Any] | None] | None = None
 
 
 @dataclass(frozen=True)
