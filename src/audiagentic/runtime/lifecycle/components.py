@@ -13,7 +13,12 @@ from audiagentic.foundation.components.base import (
     MODE_REQUIRED_MANAGED,
     MODE_RUNTIME_ONLY,  # uninstall logic only
 )
-from audiagentic.foundation.components.registry import all_descriptors, get_descriptor
+from audiagentic.foundation.components.registry import (
+    all_descriptors,
+    component_root,
+    get_descriptor,
+    marker_path,
+)
 
 from .baseline_sync import sync_managed_baseline
 
@@ -27,12 +32,22 @@ def _now_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _marker_path(component_id: str, project_root: Path) -> Path:
-    return project_root / ".audiagentic" / "components" / f"{component_id}.yaml"
+def _get_component_root(component_id: str, project_root: Path) -> Path:
+    descriptor = get_descriptor(component_id)
+    if descriptor is None:
+        return project_root
+    return component_root(descriptor, project_root)
+
+
+def _get_marker_path(component_id: str, project_root: Path) -> Path:
+    descriptor = get_descriptor(component_id)
+    root = _get_component_root(component_id, project_root)
+    scope = descriptor.scope if descriptor else "project"
+    return marker_path(component_id, root, scope)
 
 
 def _read_marker(component_id: str, project_root: Path) -> dict:
-    path = _marker_path(component_id, project_root)
+    path = _get_marker_path(component_id, project_root)
     if not path.exists():
         return {}
     try:
@@ -42,7 +57,7 @@ def _read_marker(component_id: str, project_root: Path) -> dict:
 
 
 def _write_marker(component_id: str, project_root: Path, data: dict) -> None:
-    path = _marker_path(component_id, project_root)
+    path = _get_marker_path(component_id, project_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.dump(data, default_flow_style=False, sort_keys=True), encoding="utf-8")
 
@@ -56,11 +71,12 @@ def get_owned_files(
     descriptor = get_descriptor(component_id)
     if descriptor is None:
         return []
+    root = component_root(descriptor, project_root)
     results: list[Path] = []
     for cf in descriptor.files:
         if lifecycle is not None and cf.lifecycle != lifecycle:
             continue
-        target = project_root / cf.rel_path
+        target = root / cf.rel_path
         if cf.recursive:
             if target.exists() and target.is_dir():
                 results.extend(sorted(p for p in target.rglob("*") if p.is_file()))
@@ -79,13 +95,18 @@ def install_component(
     installation_kind: str | None = None,
     last_lifecycle_action: str | None = None,
 ) -> dict:
-    if get_descriptor(component_id) is None:
+    descriptor = get_descriptor(component_id)
+    if descriptor is None:
         return {"ok": False, "error": f"unknown component: {component_id}"}
-    report = sync_managed_baseline(
-        project_root,
-        source_root=source_root,
-        component_ids={component_id},
-    )
+    root = component_root(descriptor, project_root)
+    # Harness-scoped components have no template files to sync
+    report: dict = {}
+    if descriptor.scope != "harness":
+        report = sync_managed_baseline(
+            project_root,
+            source_root=source_root,
+            component_ids={component_id},
+        )
     marker: dict = {
         "component-id": component_id,
         "enabled": True,
@@ -96,7 +117,7 @@ def install_component(
         marker["installation-kind"] = installation_kind or "fresh"
         marker["last-lifecycle-action"] = last_lifecycle_action or "fresh-install"
     _write_marker(component_id, project_root, marker)
-    return {"ok": True, "component_id": component_id, "sync": report}
+    return {"ok": True, "component_id": component_id, "root": str(root), "sync": report}
 
 
 def uninstall_component(
@@ -108,6 +129,7 @@ def uninstall_component(
     descriptor = get_descriptor(component_id)
     if descriptor is None:
         return []
+    root = component_root(descriptor, project_root)
     deleted: list[Path] = []
     for cf in descriptor.files:
         remove = cf.lifecycle in _REMOVE_ALWAYS or (
@@ -115,7 +137,7 @@ def uninstall_component(
         )
         if not remove:
             continue
-        target = project_root / cf.rel_path
+        target = root / cf.rel_path
         if cf.recursive:
             if target.exists() and target.is_dir():
                 shutil.rmtree(target)
@@ -125,11 +147,11 @@ def uninstall_component(
                 target.unlink()
                 deleted.append(target)
     # Always remove the marker — it is system-owned, not user config
-    marker = _marker_path(component_id, project_root)
-    if marker.exists():
-        marker.unlink()
-        if marker not in deleted:
-            deleted.append(marker)
+    mpath = _get_marker_path(component_id, project_root)
+    if mpath.exists():
+        mpath.unlink()
+        if mpath not in deleted:
+            deleted.append(mpath)
     return deleted
 
 
