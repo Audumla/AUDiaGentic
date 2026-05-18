@@ -23,7 +23,7 @@ register(ProviderDescriptor(
         uninstall=npm.uninstall("@anthropic-ai/claude-code"),
     ),
     vscode_extensions=(
-        VsCodeExtension("anthropics.claude-code", "Claude Code"),
+        VsCodeExtension("anthropic.claude-code", "Claude Code"),
     ),
     permissions=ProviderPermissions(
         can_write_files=True,

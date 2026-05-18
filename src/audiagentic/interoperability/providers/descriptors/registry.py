@@ -64,11 +64,11 @@ def _probe_cli(command: list[str]) -> dict[str, Any]:
 
 
 def _list_vscode_extensions(*, allow_probe: bool = True) -> list[str] | None:
-    """Return installed VS Code extension IDs (lowercase), or None if unavailable.
+    """Return installed VS Code extension IDs (lowercase) by reading ~/.vscode/extensions.
 
-    allow_probe=False returns the cache only — never spawns 'code'. Pass False
-    from any context that runs at launch or in a background process to avoid
-    inadvertently opening the VS Code GUI on Windows.
+    Reads the extensions directory directly — no subprocess, no risk of opening VS Code.
+    allow_probe=False returns the cache only (never reads disk). Pass False from launch
+    or background contexts.
     """
     global _vscode_ext_cache, _vscode_ext_probed
     if _vscode_ext_probed:
@@ -76,24 +76,25 @@ def _list_vscode_extensions(*, allow_probe: bool = True) -> list[str] | None:
     if not allow_probe:
         return None
     _vscode_ext_probed = True
-    if shutil.which("code") is None:
+    import re
+    ext_dir = Path.home() / ".vscode" / "extensions"
+    if not ext_dir.exists():
         _vscode_ext_cache = None
         return None
+    ids: list[str] = []
     try:
-        result = subprocess.run(
-            ["code", "--list-extensions"],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-    except Exception:  # noqa: BLE001
+        for p in ext_dir.iterdir():
+            if not p.is_dir() or p.name.startswith("."):
+                continue
+            # Directory names: publisher.name-version or publisher.name-version-platform-arch
+            # Extract just publisher.name by stopping at first hyphen-then-digit.
+            m = re.match(r"^([a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+?)(?:-\d+.*)?$", p.name)
+            if m:
+                ids.append(m.group(1).lower())
+    except OSError:
         _vscode_ext_cache = None
         return None
-    if result.returncode != 0:
-        _vscode_ext_cache = None
-        return None
-    _vscode_ext_cache = [line.strip().lower() for line in result.stdout.splitlines() if line.strip()]
+    _vscode_ext_cache = ids
     return _vscode_ext_cache
 
 

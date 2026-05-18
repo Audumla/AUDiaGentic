@@ -1,6 +1,12 @@
 from audiagentic.foundation.invoke.toolchains import npm
 
-from ..descriptors.base import AgentFile, CliInstallRecipe, ProviderDescriptor, ProviderPermissions
+from ..descriptors.base import (
+    AgentFile,
+    CliInstallRecipe,
+    ProviderDescriptor,
+    ProviderPermissions,
+    VsCodeExtension,
+)
 from ..descriptors.registry import register
 
 register(ProviderDescriptor(
@@ -16,7 +22,9 @@ register(ProviderDescriptor(
         install=npm.install("@openai/codex"),
         uninstall=npm.uninstall("@openai/codex"),
     ),
-    vscode_extensions=(),
+    vscode_extensions=(
+        VsCodeExtension("openai.chatgpt", "ChatGPT / OpenAI"),
+    ),
     permissions=ProviderPermissions(
         can_write_files=True,
         can_execute_shell=True,
