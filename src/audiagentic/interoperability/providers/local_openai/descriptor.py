@@ -6,6 +6,7 @@ register(ProviderDescriptor(
     display_name="Local OpenAI Bridge",
     description="Generic OpenAI-compatible REST endpoint. Points to any locally hosted model server (llama.cpp, Ollama, vLLM, etc.).",
     url="https://platform.openai.com/docs/api-reference",
+    access_mode="none",
     cli_probe=None,
     vscode_extensions=(),
     permissions=ProviderPermissions(
