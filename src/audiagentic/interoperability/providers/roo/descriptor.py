@@ -6,6 +6,7 @@ register(ProviderDescriptor(
     display_name="Roo Code",
     description="VS Code extension for AI-assisted coding with multi-model support and custom modes.",
     url="https://roocode.com",
+    access_mode="env",
     cli_probe=None,
     vscode_extensions=(
         VsCodeExtension("RooVeterinaryInc.roo-cline", "Roo Code"),
