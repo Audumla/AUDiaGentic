@@ -27,13 +27,6 @@ CANONICAL_COMPONENT_IDS = (
     "planning",
     "discord-overlay",
     "optional-server",
-    "provider-surface-claude",
-    "provider-surface-codex",
-    "provider-surface-gemini",
-    "provider-surface-cline",
-    "provider-surface-opencode",
-    "provider-surface-copilot",
-    "provider-surface-qwen",
 )
 
 CANONICAL_SCHEMA_IDS = (
