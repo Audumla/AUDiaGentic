@@ -163,6 +163,28 @@ def repair_provider_cli(
     return result
 
 
+def _seed_provider_config(
+    project_root: Path,
+    provider_id: str,
+    descriptor: ProviderDescriptor,
+    *,
+    enabled: bool,
+) -> None:
+    """Write a complete minimal config block for a provider being enabled for the first time.
+
+    Only writes fields that are absent — never overwrites existing values.
+    """
+    from audiagentic.foundation.config.provider_config import patch_provider_config
+
+    seed: dict[str, Any] = {
+        "enabled": enabled,
+        "install-mode": descriptor.install_mode,
+        "access-mode": descriptor.access_mode,
+    }
+    # Only patch — existing keys (default-model, prompt-surface, etc.) are preserved.
+    patch_provider_config(project_root, provider_id, seed)
+
+
 def reconcile_provider(
     provider_id: str,
     *,
@@ -200,7 +222,7 @@ def reconcile_provider(
     surfaces_result: dict[str, Any] | None = None
 
     if cli_available and not currently_enabled:
-        set_provider_enabled(project_root, provider_id, enabled=True)
+        _seed_provider_config(project_root, provider_id, descriptor, enabled=True)
         surfaces_result = apply_provider_surfaces(project_root, provider_id=provider_id)
         action_taken = "enabled"
     elif not cli_available and currently_enabled:
