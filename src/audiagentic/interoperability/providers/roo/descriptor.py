@@ -4,6 +4,8 @@ from ..descriptors.registry import register
 register(ProviderDescriptor(
     provider_id="roo",
     display_name="Roo Code",
+    description="VS Code extension for AI-assisted coding with multi-model support and custom modes.",
+    url="https://roocode.com",
     cli_probe=None,
     vscode_extensions=(
         VsCodeExtension("RooVeterinaryInc.roo-cline", "Roo Code"),

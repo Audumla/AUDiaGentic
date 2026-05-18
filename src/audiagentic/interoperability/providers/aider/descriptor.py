@@ -6,6 +6,8 @@ from ..descriptors.registry import register
 register(ProviderDescriptor(
     provider_id="aider",
     display_name="Aider",
+    description="AI pair programming in your terminal. Edit code directly in your git repo via chat.",
+    url="https://aider.chat",
     cli_probe=["aider", "--version"],
     cli_install=CliInstallRecipe(
         package_manager="uv-tool",

@@ -6,6 +6,8 @@ from ..descriptors.registry import register
 register(ProviderDescriptor(
     provider_id="goose",
     display_name="Goose (Block)",
+    description="Open-source AI agent by Block. Extensible toolkit of MCP extensions for dev workflows.",
+    url="https://block.github.io/goose",
     cli_probe=["goose", "--version"],
     cli_install=CliInstallRecipe(
         package_manager="brew",

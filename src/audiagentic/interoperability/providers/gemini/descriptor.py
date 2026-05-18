@@ -12,6 +12,8 @@ from ..descriptors.registry import register
 register(ProviderDescriptor(
     provider_id="gemini",
     display_name="Gemini (Google)",
+    description="Google's Gemini CLI. Agentic coding assistant with large context window and Google tool integrations.",
+    url="https://github.com/google-gemini/gemini-cli",
     cli_probe=["gemini", "--version"],
     cli_install=CliInstallRecipe(
         package_manager="npm",

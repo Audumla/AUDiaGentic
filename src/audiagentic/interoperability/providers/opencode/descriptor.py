@@ -6,6 +6,8 @@ from ..descriptors.registry import register
 register(ProviderDescriptor(
     provider_id="opencode",
     display_name="OpenCode",
+    description="Terminal-based AI coding assistant. Supports multiple LLM providers via a unified CLI.",
+    url="https://opencode.ai",
     cli_probe=["opencode", "--version"],
     cli_install=CliInstallRecipe(
         package_manager="npm",

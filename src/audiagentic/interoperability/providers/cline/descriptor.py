@@ -12,6 +12,8 @@ from ..descriptors.registry import register
 register(ProviderDescriptor(
     provider_id="cline",
     display_name="Cline",
+    description="Autonomous coding agent VS Code extension. Supports any model via OpenRouter, Anthropic, OpenAI and others.",
+    url="https://cline.bot",
     cli_probe=["cline", "--version"],
     cli_install=CliInstallRecipe(
         package_manager="npm",
