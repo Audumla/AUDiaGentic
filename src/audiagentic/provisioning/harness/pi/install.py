@@ -230,7 +230,11 @@ def _build_mcp_config(harness_cfg: dict) -> dict:
     src_dir = str(_SRC_DIR).replace("\\", "/")
     python = sys.executable.replace("\\", "/")
 
-    def _server(module: str, base_args: list[str] = [], direct_tools: list[str] = []) -> dict:
+    def _server(
+        module: str,
+        base_args: list[str] = [],
+        direct_tools: list[str] | bool = [],
+    ) -> dict:
         # AUDIAGENTIC_REPO_ROOT is deliberately omitted — inherited from Pi's env at launch.
         s: dict = {
             "command": python,
@@ -238,7 +242,7 @@ def _build_mcp_config(harness_cfg: dict) -> dict:
             "env": {"PYTHONPATH": src_dir},
             "lifecycle": "lazy",
         }
-        if direct_tools:
+        if direct_tools is True or direct_tools:
             s["directTools"] = direct_tools
         return s
 
@@ -252,7 +256,7 @@ def _build_mcp_config(harness_cfg: dict) -> dict:
             ),
             "audiagentic-project": _server("audiagentic.provisioning.mcp.project_server"),
             "audiagentic-planning": _server("audiagentic.provisioning.mcp.planning_server"),
-            "audiagentic-providers": _server("audiagentic.provisioning.mcp.providers_server"),
+            "audiagentic-providers": _server("audiagentic.provisioning.mcp.providers_server", direct_tools=True),
             "audiagentic-release-please": _server("audiagentic.provisioning.mcp.release_please_server"),
         },
     }
