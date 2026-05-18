@@ -18,9 +18,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import signal
 import sys
 from pathlib import Path
+
+
+def _status(msg: str) -> None:
+    """Print a startup status line to stderr. Set AUDIAGENTIC_STARTUP_STATUS=0 to suppress."""
+    if os.environ.get("AUDIAGENTIC_STARTUP_STATUS", "1") != "0":
+        print(f"[audiagentic] {msg}", file=sys.stderr, flush=True)
 
 from audiagentic.provisioning.harness.pi.install import install_to
 from audiagentic.provisioning.harness.pi.runner import (
@@ -139,6 +146,7 @@ def _cmd_launch(project_root: Path, args: list[str]) -> int:
         return 1
 
     # Check for updates if the auto-update harness component is installed and enabled
+    _status("checking for updates...")
     try:
         from audiagentic.foundation.components.loader import register_all_components
         from audiagentic.foundation.components.registry import is_enabled, is_installed
@@ -150,12 +158,19 @@ def _cmd_launch(project_root: Path, args: list[str]) -> int:
         pass
 
     # Sync providers.yaml with actual host state before launch.
+    _status("reconciling providers...")
     try:
         from audiagentic.interoperability.providers.lifecycle import reconcile_all_providers
-        reconcile_all_providers(project_root=project_root)
+
+        def _on_provider(provider_id: str, status: str) -> None:
+            if status in ("enabled", "disabled"):
+                _status(f"  {provider_id}: {status}")
+
+        reconcile_all_providers(project_root=project_root, on_provider=_on_provider)
     except Exception:
         pass
 
+    _status("starting agent...")
     enable_mcp = env_flag("AUDIAGENTIC_AG_ENABLE_MCP")
     ctx = build_global_context(
         project_root=project_root,

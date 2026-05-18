@@ -251,20 +251,32 @@ def reconcile_provider(
     return result
 
 
-def reconcile_all_providers(*, project_root: Path) -> dict[str, Any]:
+def reconcile_all_providers(
+    *,
+    project_root: Path,
+    on_provider: "Callable[[str, str], None] | None" = None,
+) -> dict[str, Any]:
     """Reconcile every registered provider against host state.
 
     VS Code extension providers (install_method='vscode') are skipped — their
     availability is determined by the VS Code host, not by subprocess probing,
     and running 'code' as a subprocess at launch time can inadvertently open
     the VS Code GUI on some platforms.
+
+    on_provider(provider_id, status) is called after each provider is reconciled.
+    status is "enabled", "disabled", or "ok".
     """
+    from collections.abc import Callable  # noqa: PLC0415
+
     descriptors = all_descriptors()
-    results = [
-        reconcile_provider(provider_id, project_root=project_root)
-        for provider_id, desc in sorted(descriptors.items())
-        if not (desc.cli_install and desc.cli_install.package_manager == "vscode")
-    ]
+    results = []
+    for provider_id, desc in sorted(descriptors.items()):
+        if desc.cli_install and desc.cli_install.package_manager == "vscode":
+            continue
+        result = reconcile_provider(provider_id, project_root=project_root)
+        results.append(result)
+        if on_provider is not None:
+            on_provider(provider_id, result.get("status", "ok"))
     return {
         "action": "reconcile",
         "ok": True,
