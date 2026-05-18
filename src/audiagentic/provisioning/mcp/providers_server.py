@@ -214,6 +214,7 @@ def build_server() -> FastMCP:
                 "url": d.url,
                 "has_cli": d.cli_probe is not None,
                 "cli_probe": d.cli_probe,
+                "supports_catalog_fetch": d.fetch_catalog_fn is not None,
                 "vscode_extensions": [
                     {"extension_id": e.extension_id, "display_name": e.display_name}
                     for e in d.vscode_extensions
@@ -242,16 +243,44 @@ def build_server() -> FastMCP:
         models = [
             {
                 "model_id": m.get("model-id", ""),
-                "label": m.get("label", ""),
+                "display_name": m.get("display-name", ""),
+                "status": m.get("status", ""),
+                "supports_structured_output": m.get("supports-structured-output", False),
                 "context_window": m.get("context-window", 0),
             }
             for m in catalog.get("models", [])
         ]
         return {
             "provider_id": provider_id,
-            "fetched_at": catalog.get("fetched-at"),
+            "fetched_at": catalog.get("fetched-at", ""),
             "models": models,
         }
+
+    @mcp.tool(
+        description=(
+            "Fetch and persist the live model catalog for a provider. "
+            "Requires the provider CLI to be installed and authenticated. "
+            "Not all providers support this — check 'supports_catalog_fetch' in list_provider_descriptors."
+        )
+    )
+    def refresh_provider_catalog(provider_id: str) -> dict[str, Any]:
+        from audiagentic.interoperability.providers.catalog import fetch_provider_catalog
+        project_root = _project_root()
+        try:
+            return fetch_provider_catalog(provider_id, project_root=project_root)
+        except Exception as exc:  # noqa: BLE001
+            return {"provider_id": provider_id, "ok": False, "error": str(exc)}
+
+    @mcp.tool(
+        description=(
+            "Fetch and persist model catalogs for all providers that support it. "
+            "Requires each provider CLI to be installed and authenticated."
+        )
+    )
+    def refresh_all_catalogs() -> dict[str, Any]:
+        from audiagentic.interoperability.providers.catalog import refresh_all_catalogs as _refresh
+        project_root = _project_root()
+        return _refresh(project_root=project_root)
 
     # --- lifecycle tools (write) ---
 

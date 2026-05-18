@@ -72,6 +72,10 @@ class ProviderDescriptor:
     # "env"  — accessed via environment / API key (no local binary)
     # "none" — passthrough bridge, no direct provider access
     access_mode: str = "cli"
+    # Optional: fetch live model list. Receives provider config dict; returns list
+    # of model dicts conforming to provider-model-catalog schema (model-id, display-name,
+    # status, supports-structured-output, context-window). None = not supported.
+    fetch_catalog_fn: Callable[[dict[str, Any]], list[dict[str, Any]]] | None = None
 
     @property
     def install_mode(self) -> str:
