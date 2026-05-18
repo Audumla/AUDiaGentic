@@ -93,16 +93,20 @@ def build_server() -> FastMCP:
         result = []
         for provider_id in sorted(all_ids):
             catalog = _read_catalog(project_root, provider_id)
+            cfg = providers_yaml.get("providers", {}).get(provider_id, {}) if providers_yaml else {}
             entry: dict[str, Any] = {
                 "provider_id": provider_id,
                 "known": provider_id in descriptor_ids,
                 "configured": provider_id in configured_ids,
+                "enabled": cfg.get("enabled", False),
+                "install_mode": cfg.get("install-mode", ""),
+                "access_mode": cfg.get("access-mode", ""),
+                "default_model": cfg.get("default-model", ""),
                 "has_catalog": catalog is not None,
+                "catalog_fetched_at": catalog.get("fetched-at", "") if catalog else "",
+                "catalog_model_count": len(catalog.get("models", [])) if catalog else 0,
+                "catalog_stale": catalog_is_stale(catalog, max_age_hours=24) if catalog else False,
             }
-            if catalog is not None:
-                entry["catalog_model_count"] = len(catalog.get("models", []))
-                entry["catalog_fetched_at"] = catalog.get("fetched-at")
-                entry["catalog_stale"] = catalog_is_stale(catalog, max_age_hours=24)
             result.append(entry)
 
         return {
@@ -126,9 +130,13 @@ def build_server() -> FastMCP:
             "provider_id": provider_id,
             "project_root": str(project_root),
             "configured": config is not None,
-            "config": config,
-            "catalog": catalog,
-            "catalog_stale": catalog_is_stale(catalog, max_age_hours=24) if catalog else None,
+            "enabled": config.get("enabled", False) if config else False,
+            "install_mode": config.get("install-mode", "") if config else "",
+            "access_mode": config.get("access-mode", "") if config else "",
+            "default_model": config.get("default-model", "") if config else "",
+            "config": config or {},
+            "catalog": catalog or {},
+            "catalog_stale": catalog_is_stale(catalog, max_age_hours=24) if catalog else False,
         }
 
     @mcp.tool(
@@ -180,9 +188,9 @@ def build_server() -> FastMCP:
             return {"provider_id": provider_id, "models": [], "error": "no catalog found"}
         models = [
             {
-                "model_id": m.get("model-id"),
-                "label": m.get("label"),
-                "context_window": m.get("context-window"),
+                "model_id": m.get("model-id", ""),
+                "label": m.get("label", ""),
+                "context_window": m.get("context-window", 0),
             }
             for m in catalog.get("models", [])
         ]
