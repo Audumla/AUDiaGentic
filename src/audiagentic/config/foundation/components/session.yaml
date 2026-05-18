@@ -1,0 +1,10 @@
+contract-version: v1
+scope: harness
+component-id: session
+display-name: Session MCP
+description: Exposes harness status and configuration via MCP tools (harness_info, harness_config)
+detection-marker: components/session.yaml
+files:
+  - path: components/session.yaml
+    lifecycle: create-if-missing
+    description: Component installation marker
