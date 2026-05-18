@@ -1,3 +1,6 @@
+import shutil
+import subprocess
+
 from audiagentic.foundation.invoke.toolchains import vscode
 
 from ..descriptors.base import (
@@ -10,6 +13,28 @@ from ..descriptors.base import (
 from ..descriptors.registry import register
 
 _EXTENSION_ID = "RooVeterinaryInc.roo-cline"
+
+
+def _roo_probe(descriptor) -> dict:
+    if shutil.which("code") is None:
+        return {"available": False, "command": ["code", "--list-extensions"],
+                "executable": None, "returncode": None, "stdout": "", "stderr": "code not found"}
+    command = ["code", "--list-extensions"]
+    try:
+        completed = subprocess.run(command, check=False, capture_output=True, text=True, timeout=15)
+    except Exception as exc:  # noqa: BLE001
+        return {"available": False, "command": command, "executable": "code",
+                "returncode": None, "stdout": "", "stderr": str(exc)}
+    installed = _EXTENSION_ID.lower() in completed.stdout.lower()
+    return {
+        "available": installed,
+        "command": command,
+        "executable": "code",
+        "returncode": completed.returncode,
+        "stdout": completed.stdout.strip(),
+        "stderr": completed.stderr.strip(),
+    }
+
 
 register(ProviderDescriptor(
     provider_id="roo",
@@ -24,6 +49,7 @@ register(ProviderDescriptor(
         executable="code",
         install=vscode.install(_EXTENSION_ID),
         uninstall=vscode.uninstall(_EXTENSION_ID),
+        probe_fn=_roo_probe,
     ),
     vscode_extensions=(
         VsCodeExtension(_EXTENSION_ID, "Roo Code"),

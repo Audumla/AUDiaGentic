@@ -292,3 +292,7 @@ providers:
     enabled: true
     install-mode: external-configured
     access-mode: cli
+  roo:
+    enabled: false
+    install-mode: external-configured
+    access-mode: env
