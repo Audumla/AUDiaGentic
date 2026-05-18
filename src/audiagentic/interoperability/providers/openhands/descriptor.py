@@ -6,6 +6,8 @@ from ..descriptors.registry import register
 register(ProviderDescriptor(
     provider_id="openhands",
     display_name="OpenHands",
+    description="Open-source autonomous AI agent (formerly OpenDevin). Runs tasks in sandboxed Docker containers with full shell, browser, and file access.",
+    url="https://www.all-hands.dev",
     cli_probe=["openhands", "--version"],
     cli_install=CliInstallRecipe(
         package_manager="uv-tool",
