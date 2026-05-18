@@ -98,7 +98,7 @@ def build_server() -> FastMCP:
         )
         descriptors = _all_desc()
         is_vscode_project = (project_root / ".vscode").exists()
-        installed_extensions: list[str] | None = _list_vscode_extensions() if is_vscode_project else None
+        installed_extensions: list[str] | None = _list_vscode_extensions(allow_probe=True) if is_vscode_project else None
 
         result = []
         for provider_id in sorted(all_ids):

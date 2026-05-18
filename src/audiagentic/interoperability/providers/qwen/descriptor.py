@@ -22,7 +22,7 @@ register(ProviderDescriptor(
         uninstall=npm.uninstall("@qwen-code/qwen-code"),
     ),
     vscode_extensions=(
-        VsCodeExtension("Alibaba-Cloud.tongyi-lingma", "Tongyi Lingma"),
+        VsCodeExtension("qwenlm.qwen-code-vscode-ide-companion", "Qwen Code Companion"),
     ),
     permissions=ProviderPermissions(
         can_write_files=True,
