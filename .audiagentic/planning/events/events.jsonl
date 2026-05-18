@@ -3528,3 +3528,7 @@
 {"ts": "2026-05-15T07:51:32.532836+00:00", "event": "planning.item.updated", "id": "standard-1", "kind": "standard"}
 {"ts": "2026-05-15T07:53:40.389120+00:00", "event": "planning.maintained", "renames": 0, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 497, "extracts_skipped": 0}
 {"ts": "2026-05-15T07:53:40.389306+00:00", "event": "planning.reconciled", "renames": 0, "orphans": ["spec-0021"]}
+{"ts": "2026-05-17T04:00:59.552503+00:00", "event": "planning.item.created", "id": "standard-2", "kind": "standard", "path": "docs\\planning\\standards\\standard-2-review-findings-standard.md"}
+{"ts": "2026-05-17T04:01:00.195171+00:00", "event": "planning.item.updated", "id": "standard-2", "kind": "standard"}
+{"ts": "2026-05-17T04:04:10.368133+00:00", "event": "planning.maintained", "renames": 0, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 498, "extracts_skipped": 0}
+{"ts": "2026-05-17T04:04:10.368330+00:00", "event": "planning.reconciled", "renames": 0, "orphans": ["spec-0021"]}
