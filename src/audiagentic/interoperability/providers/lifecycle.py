@@ -225,6 +225,12 @@ def reconcile_provider(
         _seed_provider_config(project_root, provider_id, descriptor, enabled=True)
         surfaces_result = apply_provider_surfaces(project_root, provider_id=provider_id)
         action_taken = "enabled"
+        if descriptor.fetch_catalog_fn is not None:
+            try:
+                from audiagentic.interoperability.providers.catalog import fetch_provider_catalog
+                fetch_provider_catalog(provider_id, project_root=project_root)
+            except Exception:  # noqa: BLE001
+                pass
     elif not cli_available and currently_enabled:
         set_provider_enabled(project_root, provider_id, enabled=False)
         surfaces_result = prune_provider_surfaces(project_root, provider_id=provider_id)
