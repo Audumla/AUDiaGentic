@@ -1,5 +1,15 @@
-from ..descriptors.base import AgentFile, ProviderDescriptor, ProviderPermissions, VsCodeExtension
+from audiagentic.foundation.invoke.toolchains import vscode
+
+from ..descriptors.base import (
+    AgentFile,
+    CliInstallRecipe,
+    ProviderDescriptor,
+    ProviderPermissions,
+    VsCodeExtension,
+)
 from ..descriptors.registry import register
+
+_EXTENSION_ID = "RooVeterinaryInc.roo-cline"
 
 register(ProviderDescriptor(
     provider_id="roo",
@@ -7,9 +17,16 @@ register(ProviderDescriptor(
     description="VS Code extension for AI-assisted coding with multi-model support and custom modes.",
     url="https://roocode.com",
     access_mode="env",
-    cli_probe=None,
+    cli_probe=["code", "--list-extensions"],
+    cli_install=CliInstallRecipe(
+        package_manager="vscode",
+        package_name=_EXTENSION_ID,
+        executable="code",
+        install=vscode.install(_EXTENSION_ID),
+        uninstall=vscode.uninstall(_EXTENSION_ID),
+    ),
     vscode_extensions=(
-        VsCodeExtension("RooVeterinaryInc.roo-cline", "Roo Code"),
+        VsCodeExtension(_EXTENSION_ID, "Roo Code"),
     ),
     permissions=ProviderPermissions(
         can_write_files=True,
