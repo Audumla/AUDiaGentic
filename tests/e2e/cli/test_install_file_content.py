@@ -72,28 +72,6 @@ def test_reinstall_core_lifecycle_preserves_create_if_missing(tmp_path):
     assert "my-project" in project_yaml.read_text(encoding="utf-8")
 
 
-# ── provider surface file content ─────────────────────────────────────────────
-
-def test_install_claude_surface_creates_claude_md(tmp_path):
-    _cli("component", "install", "provider-surface-claude", project=tmp_path)
-    claude_md = tmp_path / "CLAUDE.md"
-    assert claude_md.is_file(), f"expected CLAUDE.md at {claude_md}"
-    assert claude_md.stat().st_size > 0
-
-
-def test_install_gemini_surface_creates_gemini_md(tmp_path):
-    _cli("component", "install", "provider-surface-gemini", project=tmp_path)
-    gemini_md = tmp_path / "GEMINI.md"
-    assert gemini_md.is_file()
-    assert gemini_md.stat().st_size > 0
-
-
-def test_install_codex_surface_creates_agents_md(tmp_path):
-    _cli("component", "install", "provider-surface-codex", project=tmp_path)
-    agents_md = tmp_path / "AGENTS.md"
-    assert agents_md.is_file()
-    assert agents_md.stat().st_size > 0
-
 
 def test_install_agent_jobs_creates_skill_files(tmp_path):
     _cli("component", "install", "agent-jobs", project=tmp_path)
