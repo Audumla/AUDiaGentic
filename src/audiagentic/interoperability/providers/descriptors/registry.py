@@ -95,13 +95,12 @@ def _probe_extension(ext: VsCodeExtension, *, is_vscode_project: bool) -> dict[s
         "extension_id": ext.extension_id,
         "display_name": ext.display_name,
         "applicable": is_vscode_project,
-        "installed": None,
+        "installed": False,
     }
     if not is_vscode_project:
         return entry
     installed_list = _list_vscode_extensions()
     if installed_list is None:
-        entry["installed"] = None
         entry["probe_error"] = "code CLI unavailable"
     else:
         entry["installed"] = ext.extension_id.lower() in installed_list

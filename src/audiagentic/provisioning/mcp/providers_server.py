@@ -91,9 +91,14 @@ def build_server() -> FastMCP:
         all_ids = descriptor_ids | configured_ids | catalog_ids
 
         from audiagentic.interoperability.providers.descriptors.registry import (
+            _list_vscode_extensions,
+        )
+        from audiagentic.interoperability.providers.descriptors.registry import (
             all_descriptors as _all_desc,
         )
         descriptors = _all_desc()
+        is_vscode_project = (project_root / ".vscode").exists()
+        installed_extensions: list[str] | None = _list_vscode_extensions() if is_vscode_project else None
 
         result = []
         for provider_id in sorted(all_ids):
@@ -101,6 +106,19 @@ def build_server() -> FastMCP:
             cfg = providers_yaml.get("providers", {}).get(provider_id, {}) if providers_yaml else {}
             desc = descriptors.get(provider_id)
             install_method = (desc.cli_install.package_manager if desc and desc.cli_install else "") or ""
+
+            vscode_exts: list[dict[str, Any]] = []
+            if desc and desc.vscode_extensions and is_vscode_project:
+                for ext in desc.vscode_extensions:
+                    vscode_exts.append({
+                        "extension_id": ext.extension_id,
+                        "display_name": ext.display_name,
+                        "installed": (
+                            ext.extension_id.lower() in installed_extensions
+                            if installed_extensions is not None else False
+                        ),
+                    })
+
             entry: dict[str, Any] = {
                 "provider_id": provider_id,
                 "known": provider_id in descriptor_ids,
@@ -114,10 +132,13 @@ def build_server() -> FastMCP:
                 "catalog_model_count": len(catalog.get("models", [])) if catalog else 0,
                 "catalog_stale": catalog_is_stale(catalog, max_age_hours=24) if catalog else False,
             }
+            if vscode_exts:
+                entry["vscode_extensions"] = vscode_exts
             result.append(entry)
 
         return {
             "project_root": str(project_root),
+            "vscode_project": is_vscode_project,
             "providers_yaml_exists": providers_yaml is not None,
             "providers": result,
         }
@@ -133,13 +154,31 @@ def build_server() -> FastMCP:
 
         catalog = _read_catalog(project_root, provider_id)
 
-        from audiagentic.interoperability.providers.descriptors.registry import get_descriptor
+        from audiagentic.interoperability.providers.descriptors.registry import (
+            _list_vscode_extensions,
+            get_descriptor,
+        )
         desc = get_descriptor(provider_id)
         install_method = (desc.cli_install.package_manager if desc and desc.cli_install else "") or ""
+        is_vscode_project = (project_root / ".vscode").exists()
 
-        return {
+        vscode_exts: list[dict[str, Any]] = []
+        if desc and desc.vscode_extensions and is_vscode_project:
+            installed_extensions = _list_vscode_extensions()
+            for ext in desc.vscode_extensions:
+                vscode_exts.append({
+                    "extension_id": ext.extension_id,
+                    "display_name": ext.display_name,
+                    "installed": (
+                        ext.extension_id.lower() in installed_extensions
+                        if installed_extensions is not None else False
+                    ),
+                })
+
+        result: dict[str, Any] = {
             "provider_id": provider_id,
             "project_root": str(project_root),
+            "vscode_project": is_vscode_project,
             "configured": config is not None,
             "enabled": config.get("enabled", False) if config else False,
             "install_method": install_method,
@@ -149,6 +188,9 @@ def build_server() -> FastMCP:
             "catalog": catalog or {},
             "catalog_stale": catalog_is_stale(catalog, max_age_hours=24) if catalog else False,
         }
+        if vscode_exts:
+            result["vscode_extensions"] = vscode_exts
+        return result
 
     @mcp.tool(
         description=(
