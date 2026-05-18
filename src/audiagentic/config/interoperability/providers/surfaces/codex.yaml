@@ -2,7 +2,7 @@ contract-version: v1
 component-id: provider-surface-codex
 display-name: Codex Surface
 description: Codex surface — project instructions and agent skill definitions
-detection-marker: .audiagentic/components/provider-surface-codex.yaml
+detection-marker: AGENTS.md
 files:
   - path: .audiagentic/components/provider-surface-codex.yaml
     lifecycle: create-if-missing

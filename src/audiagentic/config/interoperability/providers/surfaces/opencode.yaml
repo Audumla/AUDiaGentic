@@ -2,7 +2,7 @@ contract-version: v1
 component-id: provider-surface-opencode
 display-name: OpenCode Surface
 description: OpenCode surface — skill definitions
-detection-marker: .audiagentic/components/provider-surface-opencode.yaml
+detection-marker: .opencode
 files:
   - path: .audiagentic/components/provider-surface-opencode.yaml
     lifecycle: create-if-missing
