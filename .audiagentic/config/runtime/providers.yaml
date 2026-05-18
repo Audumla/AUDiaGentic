@@ -1,7 +1,7 @@
 contract-version: v1
 providers:
   local-openai:
-    enabled: true
+    enabled: false
     install-mode: external-configured
     access-mode: none
     base-url: http://localhost:8000/v1
@@ -99,7 +99,7 @@ providers:
       target-type: default
       timeout-seconds: 300
   claude:
-    enabled: true
+    enabled: false
     install-mode: external-configured
     access-mode: cli
     default-model: sonnet
@@ -284,3 +284,11 @@ providers:
       ephemeral: false
       target-type: default
       timeout-seconds: 120
+  aider:
+    enabled: true
+    install-mode: external-configured
+    access-mode: cli
+  pi:
+    enabled: true
+    install-mode: external-configured
+    access-mode: cli

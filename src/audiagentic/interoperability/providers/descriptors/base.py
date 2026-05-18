@@ -67,3 +67,12 @@ class ProviderDescriptor:
     vscode_extensions: tuple[VsCodeExtension, ...] = field(default_factory=tuple)
     permissions: ProviderPermissions = field(default_factory=ProviderPermissions)
     agent_files: tuple[AgentFile, ...] = field(default_factory=tuple)
+    # access-mode written to providers.yaml when this provider is first enabled.
+    # "cli"  — invoked as a subprocess CLI tool
+    # "env"  — accessed via environment / API key (no local binary)
+    # "none" — passthrough bridge, no direct provider access
+    access_mode: str = "cli"
+
+    @property
+    def install_mode(self) -> str:
+        return "external-configured" if self.cli_install is not None else "unmanaged"
