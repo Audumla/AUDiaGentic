@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import signal
 import sys
 from pathlib import Path
@@ -42,12 +43,12 @@ def _cmd_install(target: Path, project_root: Path) -> int:
     print(f"Installing AUDiaGentic harness into {target}", flush=True)
     rc = install_to(target, project_root=project_root)
     if rc == 0:
-        # Auto-install the auto-update harness component
+        # Auto-install harness components
         try:
             from audiagentic.foundation.components.loader import register_all_components
             from audiagentic.runtime.lifecycle.components import install_component
             register_all_components()
-            install_component("auto-update", project_root)
+            install_component("session", project_root)
         except Exception:
             pass
         print("\nInstall complete. Run 'audiagentic' from any project directory.", flush=True)
@@ -79,12 +80,23 @@ def _cmd_component(args: argparse.Namespace, project_root: Path) -> int:
         rows = []
         for cid, desc in sorted(all_descriptors().items()):
             installed = is_installed(cid, project_root)
-            rows.append({
+            enabled = is_enabled(cid, project_root) if installed else None
+            state = "installed" if installed else "not-installed"
+            if installed and not enabled:
+                state = "disabled"
+            row = {
                 "component_id": cid,
                 "display_name": desc.display_name,
                 "installed": installed,
-                "enabled": is_enabled(cid, project_root) if installed else None,
-            })
+                "enabled": enabled,
+                "state": state,
+            }
+            if desc.scope == "project" and hasattr(desc, "cli_probe") and desc.cli_probe:
+                from audiagentic.interoperability.providers.descriptors.registry import get_descriptor as _prov_get
+                prov_desc = _prov_get(cid)
+                if prov_desc and prov_desc.cli_probe:
+                    row["cli_available"] = shutil.which(prov_desc.cli_probe[0]) is not None
+            rows.append(row)
         print(json.dumps(rows, indent=2))
         return 0
 
@@ -145,28 +157,30 @@ def _cmd_launch(project_root: Path, args: list[str]) -> int:
         print("Harness not installed. Run: audiagentic install", file=sys.stderr)
         return 1
 
-    # Check for updates if the auto-update harness component is installed and enabled
+    # Check for updates if auto-update is enabled
     _status("checking for updates...")
     try:
-        from audiagentic.foundation.components.loader import register_all_components
-        from audiagentic.foundation.components.registry import is_enabled, is_installed
-        register_all_components()
-        if is_installed("auto-update", project_root) and is_enabled("auto-update", project_root):
+        if os.environ.get("AUDIAGENTIC_AUTO_UPDATE_ENABLED", "true").lower() == "true":
             from audiagentic.runtime.update.prompt import maybe_prompt_update
             maybe_prompt_update(project_root)
     except Exception:
         pass
 
-    # Sync providers.yaml with actual host state before launch.
+    # Sync providers.yaml with actual host state on first run only.
+    # Subsequent reconciliations are available via the provider MCP server.
     _status("reconciling providers...")
     try:
-        from audiagentic.interoperability.providers.lifecycle import reconcile_all_providers
+        from audiagentic.foundation.config.provider_config import _providers_yaml_path
 
-        def _on_provider(provider_id: str, status: str) -> None:
-            if status in ("enabled", "disabled"):
-                _status(f"  {provider_id}: {status}")
+        providers_path = _providers_yaml_path(project_root)
+        if not providers_path.exists():
+            from audiagentic.interoperability.providers.lifecycle import reconcile_all_providers
 
-        reconcile_all_providers(project_root=project_root, on_provider=_on_provider)
+            def _on_provider(provider_id: str, status: str) -> None:
+                if status in ("enabled", "disabled"):
+                    _status(f"  {provider_id}: {status}")
+
+            reconcile_all_providers(project_root=project_root, on_provider=_on_provider)
     except Exception:
         pass
 
@@ -243,6 +257,8 @@ def main(argv: list[str] | None = None) -> int:
     rb_parser = subparsers.add_parser("release-bootstrap", help="Bootstrap release workflow for a project")
     rb_parser.add_argument("--release-id", default="rel_0001", metavar="ID")
 
+    binaries_parser = subparsers.add_parser("update-binaries", help="Update llama-server binaries to latest release")
+
     args, remaining = parser.parse_known_args(argv)
 
     project_root = Path(args.project).resolve() if args.project else Path.cwd()
@@ -261,6 +277,12 @@ def main(argv: list[str] | None = None) -> int:
         from audiagentic.release import bootstrap as release_bootstrap
         result = release_bootstrap.bootstrap_release_workflow(project_root, release_id=args.release_id)
         print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "update-binaries":
+        from audiagentic.provisioning.rig.embedded.update_binaries import update_binaries
+        harness = global_harness_runtime()
+        update_binaries(runtime_dir=harness)
         return 0
 
     return _cmd_launch(project_root, remaining)
