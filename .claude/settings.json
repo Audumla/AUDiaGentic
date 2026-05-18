@@ -41,7 +41,8 @@
       "PowerShell(Get-ChildItem -Path \"h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\.audiagentic\\\\skills\" -Force -Recurse 2>$null | Select-Object -First 15 | ForEach-Object { $_.FullName.Replace\\('h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\', ''\\) })",
       "PowerShell(Get-ChildItem -Path \"h:\\\\development\\\\projects\\\\AUDia\\\\AUDiaGentic\\\\.audiagentic\\\\runtime\\\\jobs\" -Force | Select-Object -First 5 | ForEach-Object { $_.Name })",
       "PowerShell(*)",
-      "Bash(*)"
+      "Bash(*)",
+      "WebFetch(domain:aider.chat)"
     ],
     "additionalDirectories": [
       "\\dev",
