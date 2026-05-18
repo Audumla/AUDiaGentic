@@ -12,7 +12,7 @@ def _print(msg: str) -> None:
     print(msg, flush=True)
 
 # Pinned Pi version. Update here and re-run `audiagentic install` to upgrade.
-AGENT_VERSION = "0.74.1"
+AGENT_VERSION = "0.75.1"
 AGENT_MCP_ADAPTER_VERSION = "latest"
 
 _AGENT_DIR = Path(__file__).parent
