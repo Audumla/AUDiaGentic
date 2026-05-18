@@ -63,11 +63,18 @@ def _probe_cli(command: list[str]) -> dict[str, Any]:
     }
 
 
-def _list_vscode_extensions() -> list[str] | None:
-    """Return installed VS Code extension IDs (lowercase), or None if unavailable."""
+def _list_vscode_extensions(*, allow_probe: bool = True) -> list[str] | None:
+    """Return installed VS Code extension IDs (lowercase), or None if unavailable.
+
+    allow_probe=False returns the cache only — never spawns 'code'. Pass False
+    from any context that runs at launch or in a background process to avoid
+    inadvertently opening the VS Code GUI on Windows.
+    """
     global _vscode_ext_cache, _vscode_ext_probed
     if _vscode_ext_probed:
         return _vscode_ext_cache
+    if not allow_probe:
+        return None
     _vscode_ext_probed = True
     if shutil.which("code") is None:
         _vscode_ext_cache = None
