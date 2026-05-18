@@ -23,7 +23,7 @@ register(ProviderDescriptor(
         uninstall=npm.uninstall("@google/gemini-cli"),
     ),
     vscode_extensions=(
-        VsCodeExtension("Google.gemini-code-assist", "Gemini Code Assist"),
+        VsCodeExtension("google.gemini-cli-vscode-ide-companion", "Gemini CLI Companion"),
     ),
     permissions=ProviderPermissions(
         can_write_files=True,
