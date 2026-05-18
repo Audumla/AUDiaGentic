@@ -149,6 +149,13 @@ def _cmd_launch(project_root: Path, args: list[str]) -> int:
     except Exception:
         pass
 
+    # Sync providers.yaml with actual host state before launch.
+    try:
+        from audiagentic.interoperability.providers.lifecycle import reconcile_all_providers
+        reconcile_all_providers(project_root=project_root)
+    except Exception:
+        pass
+
     enable_mcp = env_flag("AUDIAGENTIC_AG_ENABLE_MCP")
     ctx = build_global_context(
         project_root=project_root,

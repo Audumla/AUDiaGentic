@@ -60,6 +60,8 @@ class CliInstallRecipe:
 class ProviderDescriptor:
     provider_id: str
     display_name: str
+    description: str = ""
+    url: str = ""
     cli_probe: list[str] | None = None
     cli_install: CliInstallRecipe | None = None
     vscode_extensions: tuple[VsCodeExtension, ...] = field(default_factory=tuple)
