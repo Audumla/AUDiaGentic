@@ -254,7 +254,7 @@ def reconcile_provider(
 def reconcile_all_providers(
     *,
     project_root: Path,
-    on_provider: "Callable[[str, str], None] | None" = None,
+    on_provider: Callable[[str, str], None] | None = None,
 ) -> dict[str, Any]:
     """Reconcile every registered provider against host state.
 
@@ -266,7 +266,6 @@ def reconcile_all_providers(
     on_provider(provider_id, status) is called after each provider is reconciled.
     status is "enabled", "disabled", or "ok".
     """
-    from collections.abc import Callable  # noqa: PLC0415
 
     descriptors = all_descriptors()
     results = []

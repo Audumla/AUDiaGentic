@@ -99,7 +99,7 @@ providers:
       target-type: default
       timeout-seconds: 300
   claude:
-    enabled: false
+    enabled: true
     install-mode: external-configured
     access-mode: cli
     default-model: sonnet
