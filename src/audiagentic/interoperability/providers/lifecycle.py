@@ -246,10 +246,18 @@ def reconcile_provider(
 
 
 def reconcile_all_providers(*, project_root: Path) -> dict[str, Any]:
-    """Reconcile every registered provider against host state."""
+    """Reconcile every registered provider against host state.
+
+    VS Code extension providers (install_method='vscode') are skipped — their
+    availability is determined by the VS Code host, not by subprocess probing,
+    and running 'code' as a subprocess at launch time can inadvertently open
+    the VS Code GUI on some platforms.
+    """
+    descriptors = all_descriptors()
     results = [
         reconcile_provider(provider_id, project_root=project_root)
-        for provider_id in sorted(all_descriptors())
+        for provider_id, desc in sorted(descriptors.items())
+        if not (desc.cli_install and desc.cli_install.package_manager == "vscode")
     ]
     return {
         "action": "reconcile",
