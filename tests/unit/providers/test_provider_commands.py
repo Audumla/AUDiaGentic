@@ -58,6 +58,14 @@ def test_local_openai_has_no_cli_install() -> None:
     assert plan["status"] == "skipped"
 
 
-def test_roo_has_no_cli_install() -> None:
+def test_roo_installs_via_vscode_extension() -> None:
     plan = provider_cli_plan("roo", "install")
-    assert plan["status"] == "skipped"
+    assert plan["status"] == "planned"
+    assert plan["package-manager"] == "vscode"
+    assert plan["command"] == ["code", "--install-extension", "RooVeterinaryInc.roo-cline", "--force"]
+
+
+def test_roo_uninstalls_via_vscode_extension() -> None:
+    plan = provider_cli_plan("roo", "uninstall")
+    assert plan["status"] == "planned"
+    assert plan["command"] == ["code", "--uninstall-extension", "RooVeterinaryInc.roo-cline"]
