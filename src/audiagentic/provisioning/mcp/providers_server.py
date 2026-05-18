@@ -90,16 +90,23 @@ def build_server() -> FastMCP:
         descriptor_ids = _descriptor_ids()
         all_ids = descriptor_ids | configured_ids | catalog_ids
 
+        from audiagentic.interoperability.providers.descriptors.registry import (
+            all_descriptors as _all_desc,
+        )
+        descriptors = _all_desc()
+
         result = []
         for provider_id in sorted(all_ids):
             catalog = _read_catalog(project_root, provider_id)
             cfg = providers_yaml.get("providers", {}).get(provider_id, {}) if providers_yaml else {}
+            desc = descriptors.get(provider_id)
+            install_method = (desc.cli_install.package_manager if desc and desc.cli_install else "") or ""
             entry: dict[str, Any] = {
                 "provider_id": provider_id,
                 "known": provider_id in descriptor_ids,
                 "configured": provider_id in configured_ids,
                 "enabled": cfg.get("enabled", False),
-                "install_mode": cfg.get("install-mode", ""),
+                "install_method": install_method,
                 "access_mode": cfg.get("access-mode", ""),
                 "default_model": cfg.get("default-model", ""),
                 "has_catalog": catalog is not None,
@@ -126,12 +133,16 @@ def build_server() -> FastMCP:
 
         catalog = _read_catalog(project_root, provider_id)
 
+        from audiagentic.interoperability.providers.descriptors.registry import get_descriptor
+        desc = get_descriptor(provider_id)
+        install_method = (desc.cli_install.package_manager if desc and desc.cli_install else "") or ""
+
         return {
             "provider_id": provider_id,
             "project_root": str(project_root),
             "configured": config is not None,
             "enabled": config.get("enabled", False) if config else False,
-            "install_mode": config.get("install-mode", "") if config else "",
+            "install_method": install_method,
             "access_mode": config.get("access-mode", "") if config else "",
             "default_model": config.get("default-model", "") if config else "",
             "config": config or {},

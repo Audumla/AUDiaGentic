@@ -109,7 +109,7 @@ def test_all_provider_cli_dry_run_covers_installable_providers() -> None:
     assert providers["pi"]["package-manager"] == "pi-harness"
     assert providers["qwen"]["package-name"] == "@qwen-code/qwen-code"
     assert providers["local-openai"]["status"] == "skipped"
-    assert providers["roo"]["status"] == "skipped"
+    assert providers["roo"]["package-manager"] == "vscode"
 
 
 # --- reconcile tests ---
