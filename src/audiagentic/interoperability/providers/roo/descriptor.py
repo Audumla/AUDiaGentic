@@ -16,10 +16,17 @@ _EXTENSION_ID = "RooVeterinaryInc.roo-cline"
 
 
 def _roo_probe(descriptor) -> dict:
-    if shutil.which("code") is None:
-        return {"available": False, "command": ["code", "--list-extensions"],
-                "executable": None, "returncode": None, "stdout": "", "stderr": "code not found"}
     command = ["code", "--list-extensions"]
+    if shutil.which("code") is None:
+        return {"available": False, "command": command,
+                "executable": None, "returncode": None, "stdout": "", "stderr": "code not found"}
+    # Use cached extension list if available — avoids spawning VS Code when not needed.
+    from ..descriptors.registry import _list_vscode_extensions
+    exts = _list_vscode_extensions(allow_probe=False)
+    if exts is not None:
+        return {"available": _EXTENSION_ID.lower() in exts, "command": command,
+                "executable": "code", "returncode": 0, "stdout": "", "stderr": ""}
+    # No cache — only probe explicitly (MCP interrogate path).
     try:
         completed = subprocess.run(command, check=False, capture_output=True, text=True, timeout=15)
     except Exception as exc:  # noqa: BLE001
