@@ -2,7 +2,6 @@ contract-version: v1
 component-id: provider-surface-gemini
 display-name: Gemini Surface
 description: Gemini CLI surface — project instructions and command definitions
-detection-marker: GEMINI.md
 files:
   - path: .audiagentic/components/provider-surface-gemini.yaml
     lifecycle: create-if-missing
