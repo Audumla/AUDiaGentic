@@ -92,11 +92,19 @@ def _patch_tool_execution(npm_dir: Path) -> None:
         raise SystemExit(f"AudiaGentic agent install incomplete — not found: {target}")
     source = target.read_text(encoding="utf-8")
     ctor_marker = "this.toolName = toolName;"
-    ctor_injection = "if (!toolDefinition) { this.hideComponent = true; }"
+    ctor_injection = (
+        "if (!toolDefinition || (toolName && toolName.startsWith('audiagentic_'))) "
+        "{ this.hideComponent = true; }"
+    )
     if ctor_injection not in source:
         source = source.replace(ctor_marker, f"{ctor_marker}\n        {ctor_injection}", 1)
     upd_marker = "    updateDisplay() {\n        const bgFn = this.isPartial"
-    upd_injection = "    updateDisplay() {\n        if (!this.toolDefinition && !this.builtInToolDefinition) { return; }\n        const bgFn = this.isPartial"
+    upd_injection = (
+        "    updateDisplay() {\n"
+        "        if (!this.toolDefinition && !this.builtInToolDefinition) { return; }\n"
+        "        if (this.toolName && this.toolName.startsWith('audiagentic_')) { return; }\n"
+        "        const bgFn = this.isPartial"
+    )
     if upd_injection not in source:
         source = source.replace(upd_marker, upd_injection, 1)
     target.write_text(source, encoding="utf-8")
