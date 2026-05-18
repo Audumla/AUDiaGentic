@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 
 from audiagentic.interoperability.providers.descriptors.registry import all_descriptors
 from audiagentic.interoperability.providers.lifecycle import (
     install_provider_cli,
     provider_cli_plan,
     provision_all_provider_clis,
+    reconcile_all_providers,
+    reconcile_provider,
     uninstall_provider_cli,
 )
 
@@ -107,3 +110,104 @@ def test_all_provider_cli_dry_run_covers_installable_providers() -> None:
     assert providers["qwen"]["package-name"] == "@qwen-code/qwen-code"
     assert providers["local-openai"]["status"] == "skipped"
     assert providers["roo"]["status"] == "skipped"
+
+
+# --- reconcile tests ---
+
+def test_reconcile_provider_enables_when_cli_available_and_not_enabled(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import audiagentic.interoperability.providers.lifecycle as lifecycle
+
+    monkeypatch.setattr(
+        lifecycle,
+        "_probe_provider_cli",
+        lambda d: {"available": True, "command": ["codex", "--version"],
+                   "executable": "/usr/bin/codex", "returncode": 0, "stdout": "1.0", "stderr": ""},
+    )
+
+    result = reconcile_provider("codex", project_root=tmp_path)
+
+    assert result["status"] == "enabled"
+    assert result["cli-available"] is True
+    assert result["was-enabled"] is False
+    assert result["action"] == "reconcile"
+
+
+def test_reconcile_provider_disables_when_cli_absent_and_was_enabled(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import audiagentic.interoperability.providers.lifecycle as lifecycle
+    from audiagentic.foundation.config.provider_config import set_provider_enabled
+
+    set_provider_enabled(tmp_path, "codex", enabled=True)
+    monkeypatch.setattr(
+        lifecycle,
+        "_probe_provider_cli",
+        lambda d: {"available": False, "command": ["codex", "--version"],
+                   "executable": None, "returncode": None, "stdout": "", "stderr": "not found"},
+    )
+
+    result = reconcile_provider("codex", project_root=tmp_path)
+
+    assert result["status"] == "disabled"
+    assert result["cli-available"] is False
+    assert result["was-enabled"] is True
+
+
+def test_reconcile_provider_noop_when_already_in_sync_enabled(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import audiagentic.interoperability.providers.lifecycle as lifecycle
+    from audiagentic.foundation.config.provider_config import set_provider_enabled
+
+    set_provider_enabled(tmp_path, "codex", enabled=True)
+    monkeypatch.setattr(
+        lifecycle,
+        "_probe_provider_cli",
+        lambda d: {"available": True, "command": ["codex", "--version"],
+                   "executable": "/usr/bin/codex", "returncode": 0, "stdout": "1.0", "stderr": ""},
+    )
+
+    result = reconcile_provider("codex", project_root=tmp_path)
+
+    assert result["status"] == "ok"
+    assert "surfaces" not in result
+
+
+def test_reconcile_provider_noop_when_already_in_sync_disabled(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import audiagentic.interoperability.providers.lifecycle as lifecycle
+
+    monkeypatch.setattr(
+        lifecycle,
+        "_probe_provider_cli",
+        lambda d: {"available": False, "command": ["codex", "--version"],
+                   "executable": None, "returncode": None, "stdout": "", "stderr": "not found"},
+    )
+
+    result = reconcile_provider("codex", project_root=tmp_path)
+
+    assert result["status"] == "ok"
+    assert "surfaces" not in result
+
+
+def test_reconcile_all_providers_returns_one_entry_per_descriptor(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import audiagentic.interoperability.providers.lifecycle as lifecycle
+
+    monkeypatch.setattr(
+        lifecycle,
+        "_probe_provider_cli",
+        lambda d: {"available": False, "command": [], "executable": None,
+                   "returncode": None, "stdout": "", "stderr": ""},
+    )
+
+    result = reconcile_all_providers(project_root=tmp_path)
+
+    assert result["action"] == "reconcile"
+    assert result["ok"] is True
+    provider_ids = {entry["provider-id"] for entry in result["providers"]}
+    assert provider_ids == set(all_descriptors())

@@ -266,6 +266,33 @@ def build_server() -> FastMCP:
         project_root = _project_root()
         return _prune(project_root, provider_id=provider_id)
 
+    @mcp.tool(
+        description=(
+            "Reconcile a single provider: probe host CLI availability, then sync providers.yaml. "
+            "Enables + applies surfaces if CLI found but not enabled; disables + prunes if CLI gone "
+            "but still marked enabled. No-op if already in sync."
+        )
+    )
+    def reconcile_provider(provider_id: str) -> dict[str, Any]:
+        from audiagentic.interoperability.providers.lifecycle import (
+            reconcile_provider as _reconcile,
+        )
+        project_root = _project_root()
+        return _reconcile(provider_id, project_root=project_root)
+
+    @mcp.tool(
+        description=(
+            "Reconcile all registered providers against host state. "
+            "For each provider: enables/disables and applies/prunes surfaces as needed."
+        )
+    )
+    def reconcile_all_providers() -> dict[str, Any]:
+        from audiagentic.interoperability.providers.lifecycle import (
+            reconcile_all_providers as _reconcile_all,
+        )
+        project_root = _project_root()
+        return _reconcile_all(project_root=project_root)
+
     return mcp
 
 
