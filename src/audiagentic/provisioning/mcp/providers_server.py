@@ -149,6 +149,8 @@ def build_server() -> FastMCP:
             {
                 "provider_id": d.provider_id,
                 "display_name": d.display_name,
+                "description": d.description,
+                "url": d.url,
                 "has_cli": d.cli_probe is not None,
                 "cli_probe": d.cli_probe,
                 "vscode_extensions": [

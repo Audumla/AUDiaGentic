@@ -12,6 +12,8 @@ from ..descriptors.registry import register
 register(ProviderDescriptor(
     provider_id="copilot",
     display_name="GitHub Copilot",
+    description="GitHub's AI coding assistant. Inline completions, chat, and multi-file edits across VS Code and JetBrains.",
+    url="https://github.com/features/copilot",
     cli_probe=["gh", "copilot", "--help"],
     cli_install=CliInstallRecipe(
         package_manager="npm",
