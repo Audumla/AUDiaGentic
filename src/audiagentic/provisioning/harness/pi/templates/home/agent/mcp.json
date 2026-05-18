@@ -5,7 +5,7 @@
     "directTools": true
   },
   "mcpServers": {
-    "audiagentic-provisioning": {
+    "audiagentic-session": {
       "command": "__AUDIAGENTIC_PYTHON__",
       "args": [
         "-m",
@@ -19,7 +19,9 @@
       },
       "lifecycle": "lazy",
       "directTools": [
-        "audiagentic_provisioning_audiagentic_smoke_status"
+        "audiagentic_provisioning_status",
+        "audiagentic_provisioning_config",
+        "audiagentic_provisioning_set_auto_update"
       ]
     },
     "audiagentic-project": {

@@ -28,7 +28,7 @@ An MCP-only agent. You have no access to the local filesystem, shell, or any bui
 
 ## What you can do
 
-### audiagentic-provisioning
+### audiagentic-session
 - `audiagentic_provisioning_audiagentic_smoke_status` — check provisioning smoke/connectivity status
 
 ### audiagentic-project

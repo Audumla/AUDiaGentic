@@ -17,6 +17,7 @@ from audiagentic.foundation.components.registry import (
     all_descriptors,
     component_root,
     get_descriptor,
+    is_installed,
     marker_path,
 )
 
@@ -167,6 +168,8 @@ def uninstall_all_components(
 
 
 def enable_component(component_id: str, project_root: Path) -> dict:
+    if not is_installed(component_id, project_root):
+        return {"ok": False, "error": f"component {component_id} is not installed"}
     data = _read_marker(component_id, project_root)
     data["component-id"] = component_id
     data["enabled"] = True
@@ -175,6 +178,8 @@ def enable_component(component_id: str, project_root: Path) -> dict:
 
 
 def disable_component(component_id: str, project_root: Path) -> dict:
+    if not is_installed(component_id, project_root):
+        return {"ok": False, "error": f"component {component_id} is not installed"}
     data = _read_marker(component_id, project_root)
     data["component-id"] = component_id
     data["enabled"] = False
