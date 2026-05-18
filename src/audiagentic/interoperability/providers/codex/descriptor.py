@@ -6,6 +6,8 @@ from ..descriptors.registry import register
 register(ProviderDescriptor(
     provider_id="codex",
     display_name="Codex (OpenAI)",
+    description="OpenAI's CLI coding agent. Runs tasks autonomously in a sandboxed environment.",
+    url="https://github.com/openai/codex",
     cli_probe=["codex", "--version"],
     cli_install=CliInstallRecipe(
         package_manager="npm",

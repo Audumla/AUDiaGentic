@@ -83,6 +83,8 @@ def _probe_dispatch(descriptor):
 register(ProviderDescriptor(
     provider_id="pi",
     display_name="Pi Coding Agent",
+    description="Lightweight local coding agent TUI by Earendil Works. Managed and launched by the AUDiaGentic harness.",
+    url="https://www.earendilworks.com/pi",
     cli_probe=["pi", "--version"],
     cli_install=CliInstallRecipe(
         package_manager="pi-harness",
