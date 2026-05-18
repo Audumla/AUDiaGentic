@@ -29,7 +29,7 @@ def prompt_update(info: dict) -> str:
 def maybe_prompt_update(project_root: Path | None = None) -> None:
     """Check for an update and prompt if running interactively.
 
-    Called at launch when the auto-update harness component is installed and enabled.
+    Called at launch when auto-update is enabled via AUDIAGENTIC_AUTO_UPDATE_ENABLED.
     Silent when stdout is not a TTY (pipes, CI, subprocess).
     Never raises — update failures must not prevent the agent from starting.
     """
