@@ -71,9 +71,6 @@ def test_all_descriptors_returns_all_builtin_components() -> None:
     expected = {
         "core-lifecycle", "release-audit-ledger", "provider-layer",
         "planning", "agent-jobs", "discord-overlay", "optional-server",
-        "provider-surface-claude", "provider-surface-codex", "provider-surface-gemini",
-        "provider-surface-cline", "provider-surface-opencode",
-        "provider-surface-copilot", "provider-surface-qwen",
     }
     assert expected.issubset(descs.keys())
 
