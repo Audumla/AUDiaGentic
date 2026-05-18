@@ -209,5 +209,11 @@ def test_reconcile_all_providers_returns_one_entry_per_descriptor(
 
     assert result["action"] == "reconcile"
     assert result["ok"] is True
+    # vscode-method providers are excluded from auto-reconcile
+    from audiagentic.interoperability.providers.descriptors.registry import all_descriptors as _all
+    expected = {
+        pid for pid, d in _all().items()
+        if not (d.cli_install and d.cli_install.package_manager == "vscode")
+    }
     provider_ids = {entry["provider-id"] for entry in result["providers"]}
-    assert provider_ids == set(all_descriptors())
+    assert provider_ids == expected
