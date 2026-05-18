@@ -1,4 +1,4 @@
-"""Provider CLI lifecycle operations — install, uninstall, repair."""
+"""Provider CLI lifecycle operations — install, uninstall, repair, reconcile."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -161,6 +161,79 @@ def repair_provider_cli(
     result = install_provider_cli(provider_id, dry_run=dry_run, timeout=timeout, project_root=project_root)
     result["action"] = "repair"
     return result
+
+
+def reconcile_provider(
+    provider_id: str,
+    *,
+    project_root: Path,
+) -> dict[str, Any]:
+    """Bring providers.yaml in sync with the actual host state for one provider.
+
+    Probes the host, reads the current config, then:
+    - binary present but not enabled  → enable + apply surfaces
+    - binary absent but still enabled → disable + prune surfaces
+    - already in sync                 → no-op, reports current state
+    """
+    from audiagentic.foundation.config.provider_config import (
+        load_provider_config,
+        set_provider_enabled,
+    )
+
+    descriptor = _descriptor(provider_id)
+    probe = _probe_provider_cli(descriptor)
+    cli_available = bool(probe and probe["available"])
+
+    try:
+        provider_config = load_provider_config(project_root)
+    except AudiaGenticError:
+        # Fall back to raw read — reconcile only needs the enabled flag, not full validation.
+        import yaml as _yaml
+
+        from audiagentic.foundation.config.provider_config import _providers_yaml_path
+        _path = _providers_yaml_path(project_root)
+        provider_config = (_yaml.safe_load(_path.read_text(encoding="utf-8")) or {}) if _path.exists() else {}
+    provider_cfg = provider_config.get("providers", {}).get(provider_id, {})
+    currently_enabled = bool(provider_cfg.get("enabled", False))
+
+    action_taken: str
+    surfaces_result: dict[str, Any] | None = None
+
+    if cli_available and not currently_enabled:
+        set_provider_enabled(project_root, provider_id, enabled=True)
+        surfaces_result = apply_provider_surfaces(project_root, provider_id=provider_id)
+        action_taken = "enabled"
+    elif not cli_available and currently_enabled:
+        set_provider_enabled(project_root, provider_id, enabled=False)
+        surfaces_result = prune_provider_surfaces(project_root, provider_id=provider_id)
+        action_taken = "disabled"
+    else:
+        action_taken = "ok"
+
+    result: dict[str, Any] = {
+        "provider-id": provider_id,
+        "action": "reconcile",
+        "status": action_taken,
+        "cli-available": cli_available,
+        "was-enabled": currently_enabled,
+        "probe": probe,
+    }
+    if surfaces_result is not None:
+        result["surfaces"] = surfaces_result
+    return result
+
+
+def reconcile_all_providers(*, project_root: Path) -> dict[str, Any]:
+    """Reconcile every registered provider against host state."""
+    results = [
+        reconcile_provider(provider_id, project_root=project_root)
+        for provider_id in sorted(all_descriptors())
+    ]
+    return {
+        "action": "reconcile",
+        "ok": True,
+        "providers": results,
+    }
 
 
 def provision_all_provider_clis(
