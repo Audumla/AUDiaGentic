@@ -14,6 +14,7 @@ SCOPE_HARNESS = "harness"   # installed into audiagentic_home() — shared acros
 __all__ = [
     "ComponentFile",
     "ComponentDescriptor",
+    "McpServerDeclaration",
     "MODE_REQUIRED_MANAGED",
     "MODE_CREATE_IF_MISSING",
     "MODE_GENERATED_MANAGED",
@@ -31,6 +32,25 @@ class ComponentFile:
     description: str = ""
 
 
+from dataclasses import field
+
+
+@dataclass(frozen=True)
+class McpServerDeclaration:
+    name: str
+    module: str
+    args: tuple[str, ...] = ()
+    direct_tools: list[str] | bool = field(default_factory=list)
+    description: str = ""
+
+
+@dataclass(frozen=True)
+class HarnessInstruction:
+    section: str
+    content: str
+    description: str = ""
+
+
 @dataclass(frozen=True)
 class ComponentDescriptor:
     component_id: str
@@ -41,3 +61,5 @@ class ComponentDescriptor:
     depends_on: tuple[str, ...] = ()
     config_path: str | None = None  # path relative to config/ for detailed component config
     scope: str = SCOPE_PROJECT      # SCOPE_PROJECT | SCOPE_HARNESS
+    mcp_servers: tuple[McpServerDeclaration, ...] = ()
+    harness_instructions: tuple[HarnessInstruction, ...] = ()

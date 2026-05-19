@@ -31,3 +31,16 @@ files:
     lifecycle: runtime-only
     recursive: true
     description: Planning index files
+mcp-servers:
+  - name: audiagentic-planning
+    module: audiagentic.provisioning.mcp.planning_server
+    direct-tools: [audiagentic_planning_planning_status, audiagentic_planning_planning_summary, audiagentic_planning_planning_index, audiagentic_planning_planning_events]
+    description: Planning MCP server for planning system introspection
+harness-instructions:
+  - section: "What you can do"
+    content: |
+      ### audiagentic-planning
+      - `audiagentic_planning_planning_status` — Check planning component status
+      - `audiagentic_planning_planning_summary` — Show planning item counts
+      - `audiagentic_planning_planning_index` — Read a specific planning index
+      - `audiagentic_planning_planning_events` — View recent planning events
