@@ -16,7 +16,7 @@ AGENT_VERSION = "0.75.1"
 AGENT_MCP_ADAPTER_VERSION = "latest"
 
 _AGENT_DIR = Path(__file__).parent
-_TEMPLATES_DIR = _AGENT_DIR / "templates" / "home" / "agent"
+_TEMPLATES_DIR = _AGENT_DIR.parent / "templates" / "home" / "agent"
 
 
 def _find_package_root(start: Path) -> Path:

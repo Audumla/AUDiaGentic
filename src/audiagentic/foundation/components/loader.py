@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .base import SCOPE_PROJECT, ComponentDescriptor, ComponentFile
+from .base import SCOPE_PROJECT, ComponentDescriptor, ComponentFile, HarnessInstruction, McpServerDeclaration
 from .registry import register
 
 # Resolve relative to the installed package — works in both editable installs and wheels.
@@ -26,6 +26,26 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
         )
         for f in (data.get("files") or [])
     )
+    mcp_servers = tuple(
+        McpServerDeclaration(
+            name=ms["name"],
+            module=ms["module"],
+            args=tuple(ms.get("args") or []),
+            direct_tools=ms.get("direct-tools") or [],
+            description=ms.get("description", ""),
+        )
+        for ms in (data.get("mcp-servers") or [])
+    )
+
+    harness_instructions = tuple(
+        HarnessInstruction(
+            section=hi["section"],
+            content=hi["content"],
+            description=hi.get("description", ""),
+        )
+        for hi in (data.get("harness-instructions") or [])
+    )
+
     descriptor = ComponentDescriptor(
         component_id=data["component-id"],
         display_name=data.get("display-name", data["component-id"]),
@@ -35,6 +55,8 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
         depends_on=tuple(data.get("depends-on") or []),
         config_path=data.get("config") or None,
         scope=data.get("scope", SCOPE_PROJECT),
+        mcp_servers=mcp_servers,
+        harness_instructions=harness_instructions,
     )
     register(descriptor)
     return descriptor
