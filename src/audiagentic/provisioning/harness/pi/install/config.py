@@ -40,43 +40,20 @@ def _build_models_config(harness_cfg: dict, model_name: str, model_profile: dict
 
 
 def _build_mcp_config(harness_cfg: dict) -> dict:
-    if not harness_cfg.get("mcp", {}).get("enabled", True):
-        return {"settings": {"toolPrefix": "mcp", "idleTimeout": 10, "directTools": False}, "mcpServers": {}}
+    """Build mcp.json config dynamically from installed components."""
+    from audiagentic.provisioning.mcp_config_builder import build_mcp_config
 
-    import sys
-    extra_args: list[str] = harness_cfg.get("mcp", {}).get("extra_server_args", [])
-    src_dir = str(_c._SRC_DIR).replace("\\", "/")
-    python = sys.executable.replace("\\", "/")
+    # Load extra config from harness_cfg
+    extra_config = {"mcp": harness_cfg.get("mcp", {})}
 
-    def _server(
-        module: str,
-        base_args: list[str] = [],
-        direct_tools: list[str] | bool = [],
-    ) -> dict:
-        s: dict = {
-            "command": python,
-            "args": ["-m", module] + base_args + extra_args,
-            "env": {"PYTHONPATH": src_dir},
-            "lifecycle": "lazy",
-        }
-        if direct_tools is True or direct_tools:
-            s["directTools"] = direct_tools
-        return s
+    # Get project root from environment or default
+    import os
+    project_root = os.environ.get("AUDIAGENTIC_REPO_ROOT")
+    if project_root:
+        return build_mcp_config(Path(project_root), extra_config)
 
-    return {
-        "settings": {"toolPrefix": "mcp", "idleTimeout": 10, "directTools": True},
-        "mcpServers": {
-            "audiagentic-session": _server(
-                "audiagentic.provisioning.mcp.server",
-                ["--readonly", "--smoke-only"],
-                ["audiagentic_provisioning_status", "audiagentic_provisioning_config", "audiagentic_provisioning_set_auto_update"],
-            ),
-            "audiagentic-project": _server("audiagentic.provisioning.mcp.project_server"),
-            "audiagentic-planning": _server("audiagentic.provisioning.mcp.planning_server"),
-            "audiagentic-providers": _server("audiagentic.provisioning.mcp.providers_server", direct_tools=True),
-            "audiagentic-release-please": _server("audiagentic.provisioning.mcp.release_please_server"),
-        },
-    }
+    # For harness-only components (no project root), build with current directory
+    return build_mcp_config(Path.cwd(), extra_config)
 
 
 def _build_settings_config(harness_cfg: dict, target: Path) -> dict:
@@ -112,6 +89,30 @@ def _build_settings_config(harness_cfg: dict, target: Path) -> dict:
     return settings
 
 
+def _build_system_md(target: Path, harness_cfg: dict) -> None:
+    """Build SYSTEM.md with dynamic tool list from installed components."""
+    from audiagentic.provisioning.mcp_config_builder import (
+        apply_system_md_injections,
+        build_system_md_injections,
+    )
+
+    # Read the base SYSTEM.md template
+    template_path = _c._TEMPLATES_DIR / "SYSTEM.md"
+    if not template_path.exists():
+        return
+
+    content = template_path.read_text(encoding="utf-8")
+
+    # Get injections from installed components
+    injections = build_system_md_injections()
+
+    if injections:
+        # Apply injections to the template content
+        content = apply_system_md_injections(content, injections)
+
+    (target / "SYSTEM.md").write_text(content, encoding="utf-8")
+
+
 def materialize_agent_config(target: Path, harness_cfg: dict) -> None:
     """Write all agent config files from Python dicts. Called at install time.
 
@@ -122,10 +123,13 @@ def materialize_agent_config(target: Path, harness_cfg: dict) -> None:
     agent_dir = target / "agent"
     agent_dir.mkdir(parents=True, exist_ok=True)
 
-    for name in ("SYSTEM.md", "APPEND_SYSTEM.md"):
-        src = _c._TEMPLATES_DIR / name
-        if src.exists():
-            shutil.copy2(src, agent_dir / name)
+    # Build SYSTEM.md dynamically
+    _build_system_md(target, harness_cfg)
+
+    # Copy APPEND_SYSTEM.md
+    append_src = _c._TEMPLATES_DIR / "APPEND_SYSTEM.md"
+    if append_src.exists():
+        shutil.copy2(append_src, agent_dir / "APPEND_SYSTEM.md")
 
     ext_src = _c._TEMPLATES_DIR / "extensions"
     if ext_src.exists():

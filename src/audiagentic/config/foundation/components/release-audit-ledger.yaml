@@ -16,3 +16,15 @@ files:
     lifecycle: runtime-only
     recursive: true
     description: Release ledger — fragments, sync state
+mcp-servers:
+  - name: audiagentic-release-please
+    module: audiagentic.provisioning.mcp.release_please_server
+    direct-tools: [audiagentic_release_please_release_please_status, audiagentic_release_please_install_release_please, audiagentic_release_please_update_release_please_workflow]
+    description: Release-please MCP server for release management
+harness-instructions:
+  - section: "What you can do"
+    content: |
+      ### audiagentic-release-please
+      - `audiagentic_release_please_release_please_status` — Check release-please status
+      - `audiagentic_release_please_install_release_please` — Install release-please
+      - `audiagentic_release_please_update_release_please_workflow` — Update release workflow
