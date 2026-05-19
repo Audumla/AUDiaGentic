@@ -3,6 +3,7 @@
 /.vscode
 /.audiagentic/components/
 /.audiagentic/runtime/
+/.audiagentic/sessions/
 /.audiagentic/logs/
 /.audiagentic/planning/extracts/
 /.audiagentic/planning/indexes/

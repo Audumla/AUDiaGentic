@@ -133,7 +133,6 @@ def resolve_model_profile(requested: str | None, model_file: str | None, _profil
             if model_name == raw_profile.get("model_file") or model_name in aliases:
                 target = str(name)
                 break
-    target = target or str(data.get("default") or "")
     if not target:
         raise SystemExit(f"No model profile specified and no default set in {model_profiles_path()}")
 

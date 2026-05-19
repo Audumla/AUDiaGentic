@@ -1,5 +1,4 @@
 {
-  "default": "qwen3.5-2b-q4_k_s",
   "models": {
     "lfm2.5-1.2b-q8": {
       "aliases": [
@@ -62,7 +61,8 @@
       "aliases": [
         "qwen3.5-9b-flash",
         "qwen3.5-9b",
-        "qwen9b"
+        "qwen9b",
+        "audiagentic-rig"
       ],
       "model_file": "../../models/Qwen3.5-9B-DeepSeek-V4-Flash-Q4_K_M.gguf",
       "ag": {
