@@ -26,3 +26,19 @@ files:
   - path: .github/workflows/release.yml
     lifecycle: required-managed
     description: AUDiaGentic release workflow
+mcp-servers:
+  - name: audiagentic-project
+    module: audiagentic.provisioning.mcp.project_server
+    direct-tools: [audiagentic_project_project_status, audiagentic_project_list_components, audiagentic_project_install_component_tool, audiagentic_project_uninstall_component_tool, audiagentic_project_enable_component_tool, audiagentic_project_disable_component_tool, audiagentic_project_read_project_file]
+    description: Project MCP server for project-level component management
+harness-instructions:
+  - section: "What you can do"
+    content: |
+      ### audiagentic-project
+      - `audiagentic_project_project_status` — Check project installation state
+      - `audiagentic_project_list_components` — List all available components
+      - `audiagentic_project_install_component_tool` — Install a component
+      - `audiagentic_project_uninstall_component_tool` — Uninstall a component
+      - `audiagentic_project_enable_component_tool` — Enable a component
+      - `audiagentic_project_disable_component_tool` — Disable a component
+      - `audiagentic_project_read_project_file` — Read a project file

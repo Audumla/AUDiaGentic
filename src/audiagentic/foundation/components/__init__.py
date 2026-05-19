@@ -12,6 +12,8 @@ from .base import (
     MODE_RUNTIME_ONLY,
     ComponentDescriptor,
     ComponentFile,
+    HarnessInstruction,
+    McpServerDeclaration,
 )
 from .registry import (
     all_descriptors,
@@ -24,6 +26,8 @@ from .registry import (
 __all__ = [
     "ComponentDescriptor",
     "ComponentFile",
+    "HarnessInstruction",
+    "McpServerDeclaration",
     "MODE_REQUIRED_MANAGED",
     "MODE_CREATE_IF_MISSING",
     "MODE_GENERATED_MANAGED",

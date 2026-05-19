@@ -14,3 +14,15 @@ files:
     lifecycle: runtime-only
     recursive: true
     description: Runtime provider catalogs and session state
+mcp-servers:
+  - name: audiagentic-providers
+    module: audiagentic.provisioning.mcp.providers_server
+    direct-tools: true
+    description: Providers MCP server for provider management and introspection
+harness-instructions:
+  - section: "What you can do"
+    content: |
+      ### audiagentic-providers
+      - `audiagentic_providers_list_providers` — List all known providers
+      - `audiagentic_providers_provider_status` — Check a specific provider status
+      - `audiagentic_providers_list_provider_models` — List models from a provider's catalog
