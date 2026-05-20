@@ -21,8 +21,6 @@ CANONICAL_COMPONENT_IDS = (
     "agent-jobs",
     "providers",
     "planning",
-    "discord-overlay",
-    "optional-server",
 )
 
 CANONICAL_SCHEMA_IDS = (
