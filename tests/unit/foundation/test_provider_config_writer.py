@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from audiagentic.foundation.config.provider_config import (
+from audiagentic.components.optional.providers.services.provider_config import (
     patch_provider_config,
     set_provider_enabled,
 )
