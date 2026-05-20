@@ -15,9 +15,7 @@
         "core-lifecycle",
         "release-audit-ledger",
         "agent-jobs",
-        "providers",
-        "discord-overlay",
-        "optional-server"
+        "providers"
       ],
       "additionalProperties": false,
       "properties": {
@@ -65,28 +63,7 @@
             }
           }
         },
-        "discord-overlay": {
-          "type": "object",
-          "required": [
-            "enabled"
-          ],
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            }
-          }
-        },
-        "optional-server": {
-          "type": "object",
-          "required": [
-            "enabled"
-          ],
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            }
-          }
-        }
+ 
       }
     }
   }
