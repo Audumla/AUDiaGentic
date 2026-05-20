@@ -2,7 +2,7 @@
 
 Surface descriptors define detection markers and file management rules
 for provider surfaces. They are NOT top-level components — they are
-managed by the provider-layer component.
+managed by the providers component.
 """
 from __future__ import annotations
 

@@ -13,7 +13,7 @@
     "core-lifecycle",
     "release-audit-ledger",
     "agent-jobs",
-    "provider-layer",
+    "providers",
     "discord-overlay",
     "optional-server"
   ]
