@@ -1,0 +1,29 @@
+type: component
+contract-version: v1
+component-id: providers
+display-name: Providers
+description: AI provider configuration and runtime model catalogs
+detection-marker: .audiagentic/components/providers.yaml
+files:
+  - path: .audiagentic/components/providers.yaml
+    lifecycle: create-if-missing
+    description: Installation marker
+  - path: .audiagentic/config/runtime/providers.yaml
+    lifecycle: create-if-missing
+    description: Provider configuration — models, access mode, execution policy
+  - path: .audiagentic/runtime/providers
+    lifecycle: runtime-only
+    recursive: true
+    description: Runtime provider catalogs and session state
+mcp-servers:
+  - name: audiagentic-providers
+    module: audiagentic.components.providers.server
+    direct-tools: true
+    description: Providers MCP server for provider management and introspection
+harness-instructions:
+  - section: "What you can do"
+    content: |
+      ### audiagentic-providers
+      - `mcp_list_providers` — List all known providers
+      - `mcp_provider_status` — Check a specific provider status
+      - `mcp_list_provider_models` — List models from a provider's catalog
