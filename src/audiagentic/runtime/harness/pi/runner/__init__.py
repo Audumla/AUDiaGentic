@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 from .command import _build_run_env, build_agent_command
@@ -21,6 +22,33 @@ from .smoke import (
     query_server_version,
     run_agent,
 )
+
+
+@dataclass
+class RunnerParams:
+    """Harness-agnostic runner parameters.
+
+    Translated to harness-specific args by the runner implementation.
+    """
+    prompt: str | None = None
+    mode: str | None = None           # "text" | "json"
+    verbose: bool = False
+
+
+def translate_agent_args(params: RunnerParams) -> list[str]:
+    """Translate harness-agnostic RunnerParams to PI agent CLI flags.
+
+    This is the harness-specific translation layer. If we swap to a
+    different agent harness, only this function needs to change.
+    """
+    args: list[str] = []
+    if params.prompt is not None:
+        args.extend(["-p", params.prompt])
+    if params.verbose:
+        args.append("--verbose")
+    if params.mode is not None:
+        args.extend(["--mode", params.mode])
+    return args
 
 
 def build_global_context(*, project_root: Path, agent_runtime: Path, enable_mcp: bool) -> AgentContext:

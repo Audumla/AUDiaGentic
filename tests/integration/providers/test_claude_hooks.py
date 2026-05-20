@@ -2,7 +2,7 @@
 
 
 import pytest
-from tools.misc.claude_hooks import (
+from audiagentic.components.optional.providers.adapters.claude.hooks import (
     _parse_first_line_params,
     _resolve_hook_name,
     detect_and_launch_prompt_tag,

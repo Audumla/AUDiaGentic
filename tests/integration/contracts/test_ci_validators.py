@@ -22,7 +22,7 @@ providers:
         encoding="utf-8",
     )
     result = subprocess.run(
-        [sys.executable, "tools/validation/validate_ids.py", str(tmp_path)],
+        [sys.executable, "-m", "audiagentic.foundation.contracts.validate_ids", str(tmp_path)],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -36,7 +36,7 @@ def test_validate_schemas_fails_on_bad_fixture() -> None:
     try:
         bad_fixture.write_text("{\"contract-version\": \"v1\"}", encoding="utf-8")
         result = subprocess.run(
-            [sys.executable, "tools/validation/validate_schemas.py"],
+            [sys.executable, "-m", "audiagentic.foundation.contracts.validate_schemas"],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -60,7 +60,8 @@ def test_validate_packet_dependencies_fails_on_unknown_dependency(tmp_path: Path
     result = subprocess.run(
         [
             sys.executable,
-            "tools/validation/validate_packet_dependencies.py",
+            "-m",
+            "audiagentic.foundation.contracts.validate_packet_dependencies",
             "--registry",
             str(registry),
         ],

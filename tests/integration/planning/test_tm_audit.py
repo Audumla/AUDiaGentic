@@ -12,7 +12,7 @@ for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from tests.planning_testkit import seed_planning_config
+from tests.helpers.planning_testkit import seed_planning_config
 
 from audiagentic.components.optional.planning.app.api import PlanningAPI
 
@@ -53,7 +53,7 @@ def test_tm_audit_reports_inconsistencies(tmp_path: Path) -> None:
     wp_id, task_id = _make_inconsistent_project(tmp_path)
 
     result = subprocess.run(
-        [sys.executable, "tools/planning/tm.py", "--root", str(tmp_path), "audit"],
+        [sys.executable, "src/audiagentic/components/optional/planning/tm.py", "--root", str(tmp_path), "audit"],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -72,7 +72,7 @@ def test_tm_audit_fix_repairs_and_logs(tmp_path: Path) -> None:
     wp_id, _ = _make_inconsistent_project(tmp_path)
 
     result = subprocess.run(
-        [sys.executable, "tools/planning/tm.py", "--root", str(tmp_path), "audit", "--fix"],
+        [sys.executable, "src/audiagentic/components/optional/planning/tm.py", "--root", str(tmp_path), "audit", "--fix"],
         cwd=ROOT,
         capture_output=True,
         text=True,

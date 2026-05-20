@@ -15,7 +15,7 @@ Rules:
 - Keep tag semantics identical to the shared AUDiaGentic launch contract.
 - Keep provenance visible: provider id, surface, and session id should survive normalization.
 - Canonical names are config-managed in `.audiagentic/config/execution/prompt-syntax.yaml`;
-  run `python tools/regenerate_tag_surfaces.py --project-root .` after renaming tags or aliases.
+  run `python -m audiagentic.components.optional.prompt_triggers.skill_surfaces --project-root .` after renaming tags or aliases.
 <!-- AUDIAGENTIC:END agent-jobs/canonical-rule -->
 
 <!-- AUDIAGENTIC:BEGIN agent-jobs/planning-item-policy -->
@@ -72,13 +72,13 @@ All of these are equivalent:
 ```
 <!-- AUDIAGENTIC:END agent-jobs/tag-shortcuts -->
 
-<!-- AUDIAGENTIC:BEGIN release-audit-ledger.process -->
-# Release audit ledger process
+<!-- AUDIAGENTIC:BEGIN agent-ledger.process -->
+# Agent ledger process
 
-For release-affecting work, follow AUDiaGentic release ledger process.
+For release-affecting work, follow AUDiaGentic agent ledger process.
 
 - Check release ledger state before changing release notes, changelog fragments, or release workflow files.
 - Keep release artifacts and job records synchronized with implementation and review outcomes.
 - Add or update the release ledger fragment when behavior, public workflow, or generated release output changes.
 - Do not bypass ledger updates by editing generated release outputs only.
-<!-- AUDIAGENTIC:END release-audit-ledger.process -->
+<!-- AUDIAGENTIC:END agent-ledger.process -->

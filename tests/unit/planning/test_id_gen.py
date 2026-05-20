@@ -7,7 +7,7 @@ import re
 import threading
 from pathlib import Path
 
-from tests.planning_testkit import seed_planning_config
+from tests.helpers.planning_testkit import seed_planning_config
 
 from audiagentic.components.optional.planning.app.id_gen import sync_counter
 from audiagentic.foundation.workflow.id_gen import _format_id, _next_id_config_mode, next_id

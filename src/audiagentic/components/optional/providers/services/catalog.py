@@ -1,6 +1,7 @@
 """Provider model catalog fetching."""
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -12,12 +13,36 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 from ..descriptors.registry import all_descriptors
 
+_CATALOG_TIMEOUT = 10
+
+
+def _call_with_timeout(fn, timeout: float) -> tuple[bool, Any]:
+    """Call fn in a thread, return (success, result_or_exception)."""
+    result: list[Any] = []
+    exception: list[BaseException] = []
+
+    def _target():
+        try:
+            result.append(fn())
+        except BaseException as exc:  # noqa: BLE001
+            exception.append(exc)
+
+    thread = threading.Thread(target=_target, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout)
+    if thread.is_alive():
+        exception.append(TimeoutError(f"catalog fetch timed out after {timeout}s"))
+    if exception:
+        return False, exception[0]
+    return True, result[0]
+
 
 def fetch_provider_catalog(
     provider_id: str,
     *,
     project_root: Path,
     provider_config: dict[str, Any] | None = None,
+    timeout: float = _CATALOG_TIMEOUT,
 ) -> dict[str, Any]:
     descriptors = all_descriptors()
     desc = descriptors.get(provider_id)
@@ -35,7 +60,18 @@ def fetch_provider_catalog(
             message=f"provider {provider_id!r} does not support catalog fetch",
             details={"provider-id": provider_id},
         )
-    models = desc.fetch_catalog_fn(provider_config or {})
+    success, result_or_exc = _call_with_timeout(
+        lambda: desc.fetch_catalog_fn(provider_config or {}),
+        timeout=timeout,
+    )
+    if not success:
+        raise AudiaGenticError(
+            code="PRV-CATALOG-004",
+            kind="timeout",
+            message=f"catalog fetch timed out after {timeout}s for {provider_id!r}",
+            details={"provider-id": provider_id},
+        ) from result_or_exc
+    models = result_or_exc
     if not models:
         raise AudiaGenticError(
             code="PRV-CATALOG-003",

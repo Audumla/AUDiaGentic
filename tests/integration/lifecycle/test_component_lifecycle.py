@@ -29,14 +29,24 @@ from audiagentic.runtime.lifecycle.components import (
     uninstall_component,
 )
 
-
-@pytest.fixture(scope="module", autouse=True)
-def _register_components():
-    register_all_components()
+register_all_components()
 
 
 def _component_ids() -> list[str]:
     return sorted(all_descriptors().keys())
+
+
+def _project_component_ids() -> list[str]:
+    """Return only project-scoped, non-core components for project-level lifecycle tests."""
+    result = []
+    for cid in sorted(all_descriptors().keys()):
+        desc = all_descriptors()[cid]
+        if desc.scope != "project":
+            continue
+        if desc.core:
+            continue
+        result.append(cid)
+    return result
 
 
 def _install_with_deps(component_id: str, project_root: Path) -> None:
@@ -53,7 +63,7 @@ def _install_with_deps(component_id: str, project_root: Path) -> None:
 # Install: marker + declared files
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("component_id", _component_ids())
+@pytest.mark.parametrize("component_id", _project_component_ids())
 def test_install_writes_marker(component_id: str, tmp_path: Path) -> None:
     sb = sandbox_helper.create(tmp_path, f"install-marker-{component_id}")
     try:
@@ -70,7 +80,7 @@ def test_install_writes_marker(component_id: str, tmp_path: Path) -> None:
         sb.cleanup()
 
 
-@pytest.mark.parametrize("component_id", _component_ids())
+@pytest.mark.parametrize("component_id", _project_component_ids())
 def test_install_sets_is_installed(component_id: str, tmp_path: Path) -> None:
     sb = sandbox_helper.create(tmp_path, f"install-state-{component_id}")
     try:
@@ -81,7 +91,7 @@ def test_install_sets_is_installed(component_id: str, tmp_path: Path) -> None:
         sb.cleanup()
 
 
-@pytest.mark.parametrize("component_id", _component_ids())
+@pytest.mark.parametrize("component_id", _project_component_ids())
 def test_install_creates_required_managed_files(component_id: str, tmp_path: Path) -> None:
     sb = sandbox_helper.create(tmp_path, f"install-files-{component_id}")
     try:
@@ -99,7 +109,7 @@ def test_install_creates_required_managed_files(component_id: str, tmp_path: Pat
 # Disable / Enable
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("component_id", _component_ids())
+@pytest.mark.parametrize("component_id", _project_component_ids())
 def test_disable_sets_enabled_false(component_id: str, tmp_path: Path) -> None:
     sb = sandbox_helper.create(tmp_path, f"disable-{component_id}")
     try:
@@ -115,7 +125,7 @@ def test_disable_sets_enabled_false(component_id: str, tmp_path: Path) -> None:
         sb.cleanup()
 
 
-@pytest.mark.parametrize("component_id", _component_ids())
+@pytest.mark.parametrize("component_id", _project_component_ids())
 def test_disable_does_not_remove_files(component_id: str, tmp_path: Path) -> None:
     """Disable is state-only — declared files must still exist."""
     sb = sandbox_helper.create(tmp_path, f"disable-files-{component_id}")
@@ -131,7 +141,7 @@ def test_disable_does_not_remove_files(component_id: str, tmp_path: Path) -> Non
         sb.cleanup()
 
 
-@pytest.mark.parametrize("component_id", _component_ids())
+@pytest.mark.parametrize("component_id", _project_component_ids())
 def test_enable_after_disable(component_id: str, tmp_path: Path) -> None:
     sb = sandbox_helper.create(tmp_path, f"enable-{component_id}")
     try:
@@ -154,7 +164,7 @@ def test_enable_after_disable(component_id: str, tmp_path: Path) -> None:
 # Uninstall: marker gone, managed files gone, configs preserved
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("component_id", _component_ids())
+@pytest.mark.parametrize("component_id", _project_component_ids())
 def test_uninstall_removes_marker(component_id: str, tmp_path: Path) -> None:
     sb = sandbox_helper.create(tmp_path, f"uninstall-marker-{component_id}")
     try:
@@ -170,7 +180,7 @@ def test_uninstall_removes_marker(component_id: str, tmp_path: Path) -> None:
         sb.cleanup()
 
 
-@pytest.mark.parametrize("component_id", _component_ids())
+@pytest.mark.parametrize("component_id", _project_component_ids())
 def test_uninstall_removes_required_managed_files(component_id: str, tmp_path: Path) -> None:
     sb = sandbox_helper.create(tmp_path, f"uninstall-rm-{component_id}")
     try:
@@ -190,7 +200,7 @@ def test_uninstall_removes_required_managed_files(component_id: str, tmp_path: P
         sb.cleanup()
 
 
-@pytest.mark.parametrize("component_id", _component_ids())
+@pytest.mark.parametrize("component_id", _project_component_ids())
 def test_uninstall_preserves_create_if_missing_files(component_id: str, tmp_path: Path) -> None:
     """User-seeded config files must survive a default uninstall."""
     sb = sandbox_helper.create(tmp_path, f"uninstall-preserve-{component_id}")
@@ -219,7 +229,7 @@ def test_uninstall_preserves_create_if_missing_files(component_id: str, tmp_path
 # Full round-trip: install → disable → enable → uninstall
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("component_id", _component_ids())
+@pytest.mark.parametrize("component_id", _project_component_ids())
 def test_full_lifecycle_roundtrip(component_id: str, tmp_path: Path) -> None:
     sb = sandbox_helper.create(tmp_path, f"roundtrip-{component_id}")
     try:
