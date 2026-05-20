@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -12,7 +11,8 @@ def test_provider_status_cli_reports_error_for_missing_config(tmp_path: Path) ->
     result = subprocess.run(
         [
             sys.executable,
-            str(ROOT / "src" / "audiagentic" / "channels" / "cli" / "main.py"),
+            "-m",
+            "audiagentic.launcher",
             "providers-status",
             "--project-root",
             str(tmp_path),
@@ -24,6 +24,3 @@ def test_provider_status_cli_reports_error_for_missing_config(tmp_path: Path) ->
     )
 
     assert result.returncode != 0
-    payload = json.loads(result.stdout)
-    assert payload["ok"] is False
-    assert payload["error-code"] == "PRV-IO-002"

@@ -6,11 +6,11 @@ from pathlib import Path
 
 import yaml
 
-from audiagentic.knowledge.config import load_config
-from audiagentic.knowledge.event_handlers import on_planning_state_change, process_events
-from audiagentic.knowledge.event_scanner import _write_event_proposal, scan_events
-from audiagentic.knowledge.event_state import prune_event_state
-from audiagentic.knowledge.models import EventRecord
+from audiagentic.components.optional.knowledge.config import load_config
+from audiagentic.components.optional.knowledge.event_handlers import on_planning_state_change, process_events
+from audiagentic.components.optional.knowledge.event_scanner import _write_event_proposal, scan_events
+from audiagentic.components.optional.knowledge.event_state import prune_event_state
+from audiagentic.components.optional.knowledge.models import EventRecord
 from audiagentic.paths import REPO_ROOT
 
 

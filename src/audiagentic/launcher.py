@@ -30,13 +30,13 @@ def _status(msg: str) -> None:
     if os.environ.get("AUDIAGENTIC_STARTUP_STATUS", "1") != "0":
         print(f"[audiagentic] {msg}", file=sys.stderr, flush=True)
 
-from audiagentic.provisioning.harness.pi.install import install_to
-from audiagentic.provisioning.harness.pi.runner import (
+from audiagentic.runtime.harness.pi.install import install_to
+from audiagentic.runtime.harness.pi.runner import (
     build_global_context,
     env_flag,
     run_agent,
 )
-from audiagentic.provisioning.home import global_harness_runtime
+from audiagentic.runtime.home import global_harness_runtime
 
 
 def _cmd_install(target: Path, project_root: Path) -> int:
@@ -92,7 +92,9 @@ def _cmd_component(args: argparse.Namespace, project_root: Path) -> int:
                 "state": state,
             }
             if desc.scope == "project" and hasattr(desc, "cli_probe") and desc.cli_probe:
-                from audiagentic.interoperability.providers.descriptors.registry import get_descriptor as _prov_get
+                from audiagentic.components.optional.providers.descriptors.registry import (
+                    get_descriptor as _prov_get,
+                )
                 prov_desc = _prov_get(cid)
                 if prov_desc and prov_desc.cli_probe:
                     row["cli_available"] = shutil.which(prov_desc.cli_probe[0]) is not None
@@ -174,7 +176,7 @@ def _cmd_launch(project_root: Path, args: list[str]) -> int:
 
         providers_path = _providers_yaml_path(project_root)
         if not providers_path.exists():
-            from audiagentic.interoperability.providers.lifecycle import reconcile_all_providers
+            from audiagentic.components.optional.providers.services.lifecycle import reconcile_all_providers
 
             def _on_provider(provider_id: str, status: str) -> None:
                 if status in ("enabled", "disabled"):
@@ -193,7 +195,7 @@ def _cmd_launch(project_root: Path, args: list[str]) -> int:
     )
 
     if ctx.manages_rig:
-        from audiagentic.provisioning.rig.registry import register_client, shutdown_rig_if_last
+        from audiagentic.runtime.rig.registry import register_client, shutdown_rig_if_last
 
         register_client()
 
@@ -255,6 +257,7 @@ def main(argv: list[str] | None = None) -> int:
     subparsers.add_parser("update", help="Check for a new audiagentic version and update")
 
     rb_parser = subparsers.add_parser("release-bootstrap", help="Bootstrap release workflow for a project")
+    rb_parser.add_argument("--project-root", metavar="PATH", help="Project root directory")
     rb_parser.add_argument("--release-id", default="rel_0001", metavar="ID")
 
     binaries_parser = subparsers.add_parser("update-binaries", help="Update llama-server binaries to latest release")
@@ -274,13 +277,14 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_update()
 
     if args.command == "release-bootstrap":
-        from audiagentic.release import bootstrap as release_bootstrap
-        result = release_bootstrap.bootstrap_release_workflow(project_root, release_id=args.release_id)
+        from audiagentic.components.optional.ledger import bootstrap as release_bootstrap
+        bootstrap_root = Path(args.project_root).resolve() if args.project_root else project_root
+        result = release_bootstrap.bootstrap_release_workflow(bootstrap_root, release_id=args.release_id)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
 
     if args.command == "update-binaries":
-        from audiagentic.provisioning.rig.embedded.update_binaries import update_binaries
+        from audiagentic.runtime.rig.embedded.update_binaries import update_binaries
         harness = global_harness_runtime()
         update_binaries(runtime_dir=harness)
         return 0

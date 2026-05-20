@@ -129,7 +129,7 @@ def test_invalid_kind_raises(tmp_path: Path) -> None:
 
 def test_output_matches_live_config(tmp_path: Path) -> None:
     root = _seed_root(tmp_path)
-    from audiagentic.planning.app.config import Config
+    from audiagentic.components.optional.planning.app.config import Config
     cfg = Config(root)
     result = tm.planning_config_summary(mode="compact", root=root)
     assert result["default_profile"] == cfg.default_profile()

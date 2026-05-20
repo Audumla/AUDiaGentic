@@ -9,7 +9,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.interoperability.providers.selection import select_provider
+from audiagentic.components.optional.providers.services.selection import select_provider
 
 
 def _descriptor(provider_id: str) -> dict:

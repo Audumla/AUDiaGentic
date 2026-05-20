@@ -27,8 +27,8 @@ root = bootstrap()
 
 from tests.planning_testkit import seed_planning_config
 
-from audiagentic.planning.app.api import PlanningAPI
-from audiagentic.planning.app.config import Config
+from audiagentic.components.optional.planning.app.api import PlanningAPI
+from audiagentic.components.optional.planning.app.config import Config
 
 
 class TestConfigRequiredSections:
@@ -548,7 +548,7 @@ class TestBackwardCompatibility:
     def test_existing_documents_remain_valid(self):
         """Test that existing documents can still be read."""
         # Try to read an existing spec using spec_mgr
-        from audiagentic.planning.fs.read import parse_markdown
+        from audiagentic.components.optional.planning.fs.read import parse_markdown
 
         spec_path = (
             root

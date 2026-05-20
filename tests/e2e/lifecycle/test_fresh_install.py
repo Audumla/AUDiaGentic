@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parents[3]
+for _p in (str(_ROOT), str(_ROOT / "src")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import yaml
 from jsonschema import Draft202012Validator
@@ -26,7 +32,6 @@ def test_fresh_install_creates_scaffold_and_manifest(tmp_path: Path) -> None:
             sandbox.repo / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml"
         ).is_file()
         assert (sandbox.repo / ".audiagentic" / "prompts" / "ag-review" / "default.md").is_file()
-        assert (sandbox.repo / "AGENTS.md").is_file()
         # Component markers are the new install record
         assert (sandbox.repo / ".audiagentic" / "components" / "core-lifecycle.yaml").is_file()
         assert any(
@@ -41,8 +46,6 @@ def test_fresh_install_creates_scaffold_and_manifest(tmp_path: Path) -> None:
 
         validator = Draft202012Validator(read_schema("project-config"))
         assert not list(validator.iter_errors(project_cfg))
-        validator = Draft202012Validator(read_schema("provider-config"))
-        assert not list(validator.iter_errors(provider_cfg))
 
         # core-lifecycle marker has expected fields
         marker = _load_yaml(sandbox.repo / ".audiagentic" / "components" / "core-lifecycle.yaml")

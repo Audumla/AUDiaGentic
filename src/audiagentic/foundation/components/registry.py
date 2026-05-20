@@ -1,8 +1,8 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.provisioning.home import audiagentic_home
+from audiagentic.runtime.home import audiagentic_home
 
 from .base import SCOPE_HARNESS, ComponentDescriptor
 

@@ -34,7 +34,7 @@ def reset_event_bus_subscriptions():
     # Uses a sentinel object (truthy, non-None) so setup_event_subscriptions() early-returns.
     _sentinel = object()
     try:
-        import audiagentic.knowledge as _knowledge
+        import audiagentic.components.optional.knowledge as _knowledge
 
         _knowledge._knowledge_subscription_handle = _sentinel
     except Exception:
@@ -54,7 +54,7 @@ def reset_event_bus_subscriptions():
 
     # Reset knowledge handle so next test (or prod code) can re-subscribe cleanly.
     try:
-        import audiagentic.knowledge as _knowledge
+        import audiagentic.components.optional.knowledge as _knowledge
 
         _knowledge._knowledge_subscription_handle = None
     except Exception:
@@ -62,7 +62,7 @@ def reset_event_bus_subscriptions():
 
     # Reset propagation registry so next test's PlanningAPI registers fresh.
     try:
-        import audiagentic.planning.app.api as _api
+        import audiagentic.components.optional.planning.app.api as _api
 
         _api._propagation_subscriptions.clear()
     except Exception:

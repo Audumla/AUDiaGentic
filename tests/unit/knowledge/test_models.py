@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.knowledge.models import (
+from audiagentic.components.optional.knowledge.models import (
     DriftItem,
     EventRecord,
     KnowledgePage,

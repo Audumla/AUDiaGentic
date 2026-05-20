@@ -6,17 +6,13 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-CANONICAL_PROVIDER_IDS = (
-    "local-openai",
-    "claude",
-    "codex",
-    "gemini",
-    "qwen",
-    "copilot",
-    "continue",
-    "cline",
-    "opencode",
-)
+
+def canonical_provider_ids() -> tuple[str, ...]:
+    """Return all registered provider IDs from the descriptor registry."""
+    from audiagentic.components.optional.providers.descriptors.registry import (
+        all_descriptors,  # noqa: PLC0415
+    )
+    return tuple(all_descriptors())
 
 CANONICAL_COMPONENT_IDS = (
     "session",
@@ -66,7 +62,7 @@ class CanonicalIds:
 
 def get_canonical_ids() -> CanonicalIds:
     return CanonicalIds(
-        providers=CANONICAL_PROVIDER_IDS,
+        providers=canonical_provider_ids(),
         components=CANONICAL_COMPONENT_IDS,
         schemas=CANONICAL_SCHEMA_IDS,
     )

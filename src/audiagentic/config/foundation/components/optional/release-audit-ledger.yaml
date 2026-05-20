@@ -1,0 +1,33 @@
+contract-version: v1
+component-id: release-audit-ledger
+display-name: Release Audit Ledger
+description: Release management — changelog fragments, sync state, and release docs
+detection-marker: .audiagentic/components/release-audit-ledger.yaml
+config: release/release-audit-ledger.yaml
+files:
+  - path: .audiagentic/components/release-audit-ledger.yaml
+    lifecycle: create-if-missing
+    description: Installation marker
+  - path: .github/workflows/release.yml
+    lifecycle: required-managed
+    description: Release workflow for release-please
+  - path: docs/releases
+    lifecycle: generated-managed
+    recursive: true
+    description: Generated release notes and changelog
+  - path: .audiagentic/runtime/ledger
+    lifecycle: runtime-only
+    recursive: true
+    description: Release ledger — fragments, sync state
+mcp-servers:
+  - name: audiagentic-release-please
+    module: audiagentic.components.ledger.server
+    direct-tools: [release_please_status, install_release_please, update_release_please_workflow]
+    description: Release-please MCP server for release management
+harness-instructions:
+  - section: "What you can do"
+    content: |
+      ### audiagentic-release-please
+      - `mcp_release_please_status` — Check release-please status
+      - `mcp_install_release_please` — Install release-please
+      - `mcp_update_release_please_workflow` — Update release workflow

@@ -112,7 +112,7 @@ def test_gemini_prompt_trigger_bridge_script_launches_job(tmp_path: Path) -> Non
         result = subprocess.run(
             [
                 sys.executable,
-                str(ROOT / "tools" / "bridges" / "gemini_prompt_trigger_bridge.py"),
+                str(ROOT / "src" / "audiagentic" / "components" / "prompt_triggers" / "gemini_prompt_trigger_bridge.py"),
                 "--project-root",
                 str(sandbox.repo),
             ],

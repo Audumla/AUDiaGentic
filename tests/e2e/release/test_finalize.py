@@ -5,9 +5,9 @@ from pathlib import Path
 
 from tests.helpers import sandbox as sandbox_helper
 
+from audiagentic.components.optional.ledger.finalize import finalize_release
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.paths import REPO_ROOT
-from audiagentic.release.finalize import finalize_release
 
 FIXTURES = REPO_ROOT / "docs" / "examples" / "fixtures"
 

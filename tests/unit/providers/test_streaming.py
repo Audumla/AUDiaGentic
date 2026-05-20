@@ -4,8 +4,8 @@ import io
 import json
 from pathlib import Path
 
-from audiagentic.interoperability.protocols.streaming import provider_streaming as streaming
-from audiagentic.interoperability.protocols.streaming.sinks import ConsoleSink, InMemorySink
+from audiagentic.components.optional.providers.protocols.streaming import provider_streaming as streaming
+from audiagentic.components.optional.providers.protocols.streaming.sinks import ConsoleSink, InMemorySink
 
 
 def test_run_streaming_command_captures_stdout_and_stderr(monkeypatch, tmp_path: Path) -> None:

@@ -48,7 +48,7 @@ def _seed(root: Path) -> None:
 def pr(tmp_path: Path):
     """Return (root, api) for an isolated project."""
     _seed(tmp_path)
-    from audiagentic.planning.app.api import PlanningAPI
+    from audiagentic.components.optional.planning.app.api import PlanningAPI
 
     return tmp_path, PlanningAPI(tmp_path)
 
@@ -822,8 +822,8 @@ class TestValidationCoverage:
         spec = _new_spec(api)
         task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
         # Wipe the body so Description section is absent
-        from audiagentic.planning.fs.read import parse_markdown
-        from audiagentic.planning.fs.write import dump_markdown
+        from audiagentic.components.optional.planning.fs.read import parse_markdown
+        from audiagentic.components.optional.planning.fs.write import dump_markdown
 
         data, _ = parse_markdown(task.path)
         dump_markdown(task.path, data, "\n")
@@ -1138,14 +1138,14 @@ class TestValidateRaiseOnError:
 class TestGuidanceSectionVariation:
     def test_spec_light_has_fewer_sections_than_deep(self, pr):
         _, api = pr
-        from audiagentic.planning.app.section_registry import list_sections
+        from audiagentic.components.optional.planning.app.section_registry import list_sections
         light = list_sections("spec", "light", api.root)
         deep = list_sections("spec", "deep", api.root)
         assert len(light) < len(deep)
 
     def test_task_standard_sections_nonempty(self, pr):
         _, api = pr
-        from audiagentic.planning.app.section_registry import list_sections
+        from audiagentic.components.optional.planning.app.section_registry import list_sections
         sections = list_sections("task", "standard", api.root)
         assert len(sections) > 0
 

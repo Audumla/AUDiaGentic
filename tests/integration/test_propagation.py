@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from tests.planning_testkit import seed_planning_config
 
-from audiagentic.planning.app.api import PlanningAPI
+from audiagentic.components.optional.planning.app.api import PlanningAPI
 
 
 def _seed_planning_project(root: Path) -> None:
@@ -441,7 +441,7 @@ kinds: {}
         root, planning_api = planning_root
         _, _, _, wp_id, task_id = _create_task_hierarchy(planning_api)
 
-        with caplog.at_level(logging.ERROR, logger="audiagentic.interoperability.bus"):
+        with caplog.at_level(logging.ERROR, logger="audiagentic.components.optional.providers.bus"):
             planning_api.state(task_id, "ready", metadata={})
             _wait_for_propagation(planning_api)
             planning_api.state(task_id, "in_progress", metadata={})

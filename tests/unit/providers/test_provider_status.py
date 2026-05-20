@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.interoperability.providers.descriptors import registry as descriptor_registry
-from audiagentic.interoperability.providers.status import build_provider_status
+from audiagentic.components.optional.providers.descriptors import registry as descriptor_registry
+from audiagentic.components.optional.providers.services.status import build_provider_status
 
 
 def test_provider_status_reports_cli_and_catalog(tmp_path: Path) -> None:

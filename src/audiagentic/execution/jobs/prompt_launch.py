@@ -11,6 +11,8 @@ from typing import Any
 
 import yaml
 
+from audiagentic.components.optional.providers.services.execution import execute_provider
+from audiagentic.components.optional.providers.services.models import resolve_model_selection
 from audiagentic.execution.jobs.prompt_syntax import load_prompt_syntax, load_review_tag
 from audiagentic.execution.jobs.prompt_templates import (
     load_prompt_context,
@@ -29,8 +31,6 @@ from audiagentic.execution.jobs.reviews import (
 from audiagentic.execution.jobs.state_machine import TERMINAL_STATES
 from audiagentic.foundation.config.provider_config import load_provider_config
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.interoperability.providers.execution import execute_provider
-from audiagentic.interoperability.providers.models import resolve_model_selection
 from audiagentic.runtime.state import jobs_store as store
 
 

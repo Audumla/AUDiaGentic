@@ -148,7 +148,7 @@ def main():
     root = Path(known.root).resolve() if known.root else _find_project_root()
     _setup_sys_path(root)
 
-    from audiagentic.planning.app.api import PlanningAPI
+    from audiagentic.components.optional.planning.app.api import PlanningAPI
 
     api = PlanningAPI(root)
 
