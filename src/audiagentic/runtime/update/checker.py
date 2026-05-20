@@ -1,4 +1,4 @@
-"""Check for available audiagentic updates via GitHub Releases API."""
+﻿"""Check for available audiagentic updates via GitHub Releases API."""
 from __future__ import annotations
 
 import json
@@ -24,7 +24,7 @@ def current_version() -> str:
 
 
 def _cache_path() -> Path:
-    from audiagentic.provisioning.home import audiagentic_home
+    from audiagentic.runtime.home import audiagentic_home
     return audiagentic_home() / "update-check.json"
 
 

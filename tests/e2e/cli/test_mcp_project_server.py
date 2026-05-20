@@ -1,4 +1,4 @@
-"""E2E: MCP project server tools via JSON-RPC subprocess.
+﻿"""E2E: MCP project server tools via JSON-RPC subprocess.
 
 Starts the project MCP server as a subprocess and exercises the component lifecycle
 tools (list_components, install, enable, disable, project_status, read_project_file).
@@ -30,7 +30,7 @@ def _mcp(*messages: dict, project_root: Path) -> list[dict]:
     # Keep AUDIAGENTIC_REPO_ROOT from container env (template root for baseline_sync).
     # The target project is passed via --project-root, not this env var.
     proc = subprocess.run(
-        [sys.executable, "-m", "audiagentic.provisioning.mcp.project_server",
+           [sys.executable, "-m", "audiagentic.components.core.project_server",
          "--project-root", str(project_root)],
         input=payload, text=True, encoding="utf-8", capture_output=True, timeout=30, env=env,
     )

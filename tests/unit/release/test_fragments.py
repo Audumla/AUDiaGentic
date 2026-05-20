@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from audiagentic.components.optional.ledger.fragments import record_change_event
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.paths import REPO_ROOT
-from audiagentic.release.fragments import record_change_event
 
 FIXTURES = REPO_ROOT / "docs" / "examples" / "fixtures"
 

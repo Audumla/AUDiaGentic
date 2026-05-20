@@ -18,7 +18,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from audiagentic.foundation.contracts.canonical_ids import (
     CANONICAL_COMPONENT_IDS,
-    CANONICAL_PROVIDER_IDS,
+    canonical_provider_ids,
     validate_ids,
     validate_schema_files,
 )
@@ -91,7 +91,7 @@ def scan_paths(paths: Iterable[Path]) -> list[dict[str, str]]:
                 findings.append({"path": str(file_path), "issue": f"parse-error: {exc}"})
                 continue
             providers, components = _extract_ids(payload)
-            for issue in validate_ids(providers, CANONICAL_PROVIDER_IDS):
+            for issue in validate_ids(providers, canonical_provider_ids()):
                 findings.append({"path": str(file_path), "issue": issue})
             for issue in validate_ids(components, CANONICAL_COMPONENT_IDS):
                 findings.append({"path": str(file_path), "issue": issue})

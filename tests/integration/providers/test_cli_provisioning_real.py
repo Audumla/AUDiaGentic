@@ -5,8 +5,8 @@ import shutil
 
 import pytest
 
-from audiagentic.interoperability.providers.descriptors.registry import all_descriptors
-from audiagentic.interoperability.providers.lifecycle import (
+from audiagentic.components.optional.providers.descriptors.registry import all_descriptors
+from audiagentic.components.optional.providers.services.lifecycle import (
     install_provider_cli,
     uninstall_provider_cli,
 )

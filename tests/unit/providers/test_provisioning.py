@@ -3,8 +3,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from audiagentic.interoperability.providers.descriptors.registry import all_descriptors
-from audiagentic.interoperability.providers.lifecycle import (
+from audiagentic.components.optional.providers.descriptors.registry import all_descriptors
+from audiagentic.components.optional.providers.services.lifecycle import (
     install_provider_cli,
     provider_cli_plan,
     provision_all_provider_clis,
@@ -60,8 +60,8 @@ def test_provider_cli_uninstall_dry_run_does_not_touch_host() -> None:
 
 
 def test_pi_provider_cli_install_uses_harness_installer(monkeypatch) -> None:
-    import audiagentic.interoperability.providers.lifecycle as lifecycle
-    import audiagentic.interoperability.providers.pi.descriptor as pi_descriptor
+    import audiagentic.components.optional.providers.adapters.pi.descriptor as pi_descriptor
+    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
 
     monkeypatch.setattr(pi_descriptor, "_pi_install",
         lambda project_root=None: subprocess.CompletedProcess(["audiagentic", "install"], 0, "", ""))
@@ -76,8 +76,8 @@ def test_pi_provider_cli_install_uses_harness_installer(monkeypatch) -> None:
 
 
 def test_pi_provider_cli_uninstall_uses_harness_uninstaller(monkeypatch) -> None:
-    import audiagentic.interoperability.providers.lifecycle as lifecycle
-    import audiagentic.interoperability.providers.pi.descriptor as pi_descriptor
+    import audiagentic.components.optional.providers.adapters.pi.descriptor as pi_descriptor
+    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
 
     monkeypatch.setattr(pi_descriptor, "_pi_uninstall",
         lambda project_root=None: subprocess.CompletedProcess(["audiagentic", "uninstall"], 0, "", ""))
@@ -118,7 +118,7 @@ def test_all_provider_cli_dry_run_covers_installable_providers() -> None:
 def test_reconcile_provider_enables_when_cli_available_and_not_enabled(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.interoperability.providers.lifecycle as lifecycle
+    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
@@ -138,7 +138,7 @@ def test_reconcile_provider_enables_when_cli_available_and_not_enabled(
 def test_reconcile_provider_disables_when_cli_absent_and_was_enabled(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.interoperability.providers.lifecycle as lifecycle
+    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
     from audiagentic.foundation.config.provider_config import set_provider_enabled
 
     set_provider_enabled(tmp_path, "codex", enabled=True)
@@ -159,7 +159,7 @@ def test_reconcile_provider_disables_when_cli_absent_and_was_enabled(
 def test_reconcile_provider_noop_when_already_in_sync_enabled(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.interoperability.providers.lifecycle as lifecycle
+    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
     from audiagentic.foundation.config.provider_config import set_provider_enabled
 
     set_provider_enabled(tmp_path, "codex", enabled=True)
@@ -179,7 +179,7 @@ def test_reconcile_provider_noop_when_already_in_sync_enabled(
 def test_reconcile_provider_noop_when_already_in_sync_disabled(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.interoperability.providers.lifecycle as lifecycle
+    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
@@ -197,7 +197,7 @@ def test_reconcile_provider_noop_when_already_in_sync_disabled(
 def test_reconcile_all_providers_returns_one_entry_per_descriptor(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.interoperability.providers.lifecycle as lifecycle
+    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
@@ -211,7 +211,7 @@ def test_reconcile_all_providers_returns_one_entry_per_descriptor(
     assert result["action"] == "reconcile"
     assert result["ok"] is True
     # vscode-method providers are excluded from auto-reconcile
-    from audiagentic.interoperability.providers.descriptors.registry import all_descriptors as _all
+    from audiagentic.components.optional.providers.descriptors.registry import all_descriptors as _all
     expected = {
         pid for pid, d in _all().items()
         if not (d.cli_install and d.cli_install.package_manager == "vscode")

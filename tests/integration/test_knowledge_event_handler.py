@@ -5,8 +5,8 @@ from pathlib import Path
 
 import yaml
 
-from audiagentic.knowledge.config import load_config
-from audiagentic.knowledge.events import on_planning_state_change
+from audiagentic.components.optional.knowledge.config import load_config
+from audiagentic.components.optional.knowledge.events import on_planning_state_change
 from audiagentic.paths import REPO_ROOT
 
 

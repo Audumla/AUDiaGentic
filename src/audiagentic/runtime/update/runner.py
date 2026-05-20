@@ -1,4 +1,4 @@
-"""Download and install a new audiagentic version from GitHub Releases."""
+﻿"""Download and install a new audiagentic version from GitHub Releases."""
 from __future__ import annotations
 
 import subprocess
@@ -138,8 +138,8 @@ def install_version(version: str) -> dict:
 
     print("  Refreshing harness config...", flush=True)
     try:
-        from audiagentic.provisioning.harness.pi.install import install_to
-        from audiagentic.provisioning.home import global_harness_runtime
+        from audiagentic.runtime.harness.pi.install import install_to
+        from audiagentic.runtime.home import global_harness_runtime
         install_to(global_harness_runtime())
     except Exception as exc:  # noqa: BLE001
         return {"ok": True, "version": version, "harness_warning": str(exc)}

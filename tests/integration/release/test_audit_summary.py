@@ -12,7 +12,7 @@ for path in (str(ROOT), str(SRC)):
 
 from tests.helpers import sandbox as sandbox_helper
 
-from audiagentic.release.audit import generate_audit_and_checkin
+from audiagentic.components.optional.ledger.audit import generate_audit_and_checkin
 
 FIXTURES = ROOT / "docs" / "examples" / "fixtures"
 

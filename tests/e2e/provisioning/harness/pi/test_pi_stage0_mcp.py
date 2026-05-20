@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import os
@@ -35,7 +35,7 @@ def _exchange(*messages: dict) -> list[dict]:
         [
             sys.executable,
             "-m",
-            "audiagentic.provisioning.mcp.server",
+            "audiagentic.runtime.mcp.server",
             "--readonly",
             "--smoke-only",
         ],

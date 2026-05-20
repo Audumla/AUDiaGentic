@@ -18,7 +18,7 @@ root = bootstrap()
 import tools.planning.tm_helper as tm
 from tests.planning_testkit import seed_planning_config
 
-from audiagentic.planning.app.api import PlanningAPI
+from audiagentic.components.optional.planning.app.api import PlanningAPI
 
 
 def test_validate_id():

@@ -6,10 +6,10 @@ from pathlib import Path
 
 import yaml
 
-from audiagentic.knowledge.config import load_config
-from audiagentic.knowledge.llm import load_llm_job_state
-from audiagentic.knowledge.models import DriftItem
-from audiagentic.knowledge.sync import (
+from audiagentic.components.optional.knowledge.config import load_config
+from audiagentic.components.optional.knowledge.llm import load_llm_job_state
+from audiagentic.components.optional.knowledge.models import DriftItem
+from audiagentic.components.optional.knowledge.sync import (
     apply_sync_proposal,
     cleanup_lifecycle,
     generate_sync_proposals,

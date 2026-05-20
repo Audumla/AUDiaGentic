@@ -9,8 +9,8 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
+from audiagentic.components.optional.providers.adapters.qwen import adapter as qwen
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.interoperability.providers.qwen import adapter as qwen
 
 
 def test_qwen_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:

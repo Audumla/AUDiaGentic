@@ -130,6 +130,8 @@ def uninstall_component(
     descriptor = get_descriptor(component_id)
     if descriptor is None:
         return []
+    if descriptor.core:
+        return []
     root = component_root(descriptor, project_root)
     deleted: list[Path] = []
     for cf in descriptor.files:

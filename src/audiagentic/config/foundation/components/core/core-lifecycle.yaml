@@ -1,0 +1,41 @@
+contract-version: v1
+component-id: core-lifecycle
+display-name: Core Lifecycle
+description: Core project scaffold — config, prompts, and workflow files
+detection-marker: .audiagentic/components/core-lifecycle.yaml
+files:
+  - path: .audiagentic/components/core-lifecycle.yaml
+    lifecycle: create-if-missing
+    description: Installation marker
+  - path: .audiagentic/config/project.yaml
+    lifecycle: create-if-missing
+    description: Project identity and workflow config
+  - path: .audiagentic/config/execution/prompt-syntax.yaml
+    lifecycle: create-if-missing
+    description: Canonical prompt tag aliases
+  - path: .audiagentic/config/interoperability/config.yaml
+    lifecycle: create-if-missing
+    description: Event bus and interoperability runtime config
+  - path: .audiagentic/config/interoperability/events.yaml
+    lifecycle: create-if-missing
+    description: Project event definitions
+  - path: .audiagentic/prompts
+    lifecycle: required-managed
+    recursive: true
+    description: Managed prompt templates
+mcp-servers:
+  - name: audiagentic-project
+    module: audiagentic.components.core.project_server
+    direct-tools: [project_status, list_components, install_component_tool, uninstall_component_tool, enable_component_tool, disable_component_tool, read_project_file]
+    description: Project MCP server for project-level component management
+harness-instructions:
+  - section: "What you can do"
+    content: |
+      ### audiagentic-project
+      - `mcp_project_status` — Check project installation state
+      - `mcp_list_components` — List all available components
+      - `mcp_install_component_tool` — Install a component
+      - `mcp_uninstall_component_tool` — Uninstall a component
+      - `mcp_enable_component_tool` — Enable a component
+      - `mcp_disable_component_tool` — Disable a component
+      - `mcp_read_project_file` — Read a project file

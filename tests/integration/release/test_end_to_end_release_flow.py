@@ -12,11 +12,11 @@ for path in (str(ROOT), str(SRC)):
 
 from tests.helpers import sandbox as sandbox_helper
 
-from audiagentic.release.audit import generate_audit_and_checkin
-from audiagentic.release.current_summary import regenerate_current_release
-from audiagentic.release.finalize import finalize_release
-from audiagentic.release.fragments import record_change_event
-from audiagentic.release.sync import sync_current_release_ledger
+from audiagentic.components.optional.ledger.audit import generate_audit_and_checkin
+from audiagentic.components.optional.ledger.current_summary import regenerate_current_release
+from audiagentic.components.optional.ledger.finalize import finalize_release
+from audiagentic.components.optional.ledger.fragments import record_change_event
+from audiagentic.components.optional.ledger.sync import sync_current_release_ledger
 
 FIXTURES = ROOT / "docs" / "examples" / "fixtures"
 

@@ -36,7 +36,7 @@ def _seed_planning_project(root: Path) -> None:
 @pytest.fixture()
 def planning_root(tmp_path: Path):
     _seed_planning_project(tmp_path)
-    from audiagentic.planning.app.api import PlanningAPI
+    from audiagentic.components.optional.planning.app.api import PlanningAPI
 
     return tmp_path, PlanningAPI(tmp_path)
 
@@ -180,7 +180,7 @@ def test_id_counter_persisted_across_api_instances(planning_root):
     api.new("request", label="R1", summary="S", source="test")
     api.new("request", label="R2", summary="S", source="test")
     # New API instance should continue from counter
-    from audiagentic.planning.app.api import PlanningAPI
+    from audiagentic.components.optional.planning.app.api import PlanningAPI
 
     api2 = PlanningAPI(root)
     item = api2.new("request", label="R3", summary="S", source="test")
@@ -416,7 +416,7 @@ def test_package_tasks_to_existing_wp_not_duplicate(planning_root):
 
     # Verify tasks are in the WP
     wp_item = api._find(wp_id)
-    from audiagentic.planning.fs.read import parse_markdown
+    from audiagentic.components.optional.planning.fs.read import parse_markdown
 
     data, _body = parse_markdown(wp_item.path)
     task_refs = data.get("task_refs", [])

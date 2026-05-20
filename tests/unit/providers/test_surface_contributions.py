@@ -2,16 +2,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import audiagentic.interoperability.providers  # noqa: F401
-from audiagentic.interoperability.providers.surfaces.base import (
+import audiagentic.components.optional.providers  # noqa: F401
+from audiagentic.components.optional.providers.surfaces.base import (
     SurfaceBlock,
     apply_managed_blocks,
     prune_managed_blocks,
 )
-from audiagentic.interoperability.providers.surfaces.contributions import (
+from audiagentic.components.optional.providers.surfaces.contributions import (
     load_surface_contributions,
 )
-from audiagentic.interoperability.providers.surfaces.manager import (
+from audiagentic.components.optional.providers.surfaces.manager import (
     apply_provider_surfaces,
     build_provider_surface_blocks,
     plan_provider_surfaces,

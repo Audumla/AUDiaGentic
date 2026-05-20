@@ -12,10 +12,10 @@ for _p in (str(ROOT), str(ROOT / "src")):
 
 from tests.planning_testkit import seed_planning_config
 
-from audiagentic.planning.app.api import PlanningAPI
-from audiagentic.planning.app.paths import Paths
-from audiagentic.planning.fs.scan import scan_items
-from audiagentic.planning.fs.write import dump_markdown
+from audiagentic.components.optional.planning.app.api import PlanningAPI
+from audiagentic.components.optional.planning.app.paths import Paths
+from audiagentic.components.optional.planning.fs.scan import scan_items
+from audiagentic.components.optional.planning.fs.write import dump_markdown
 
 
 def _seed_planning_project(root: Path) -> None:
