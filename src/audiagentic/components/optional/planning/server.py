@@ -18,6 +18,11 @@ except ImportError:
     print("Error: mcp package not installed. Run: pip install mcp", file=sys.stderr)
     sys.exit(1)
 
+from audiagentic.foundation.components.loader import register_all_components
+from audiagentic.foundation.components.registry import get_mcp_server_declaration
+
+register_all_components()
+
 _PLANNING_CONFIG_PATH = Path(".audiagentic") / "planning" / "config" / "planning.yaml"
 _INDEXES_PATH = Path(".audiagentic") / "planning" / "indexes"
 _META_PATH = Path(".audiagentic") / "planning" / "meta"
@@ -63,18 +68,38 @@ def _counter_values(project_root: Path) -> dict[str, int]:
         return {}
 
 
-def build_server() -> FastMCP:
-    mcp = FastMCP(
-        "audiagentic-planning",
-        instructions=(
+def _server_decl():
+    return get_mcp_server_declaration("planning", "audiagentic-planning")
+
+
+def _server_instructions() -> str:
+    decl = _server_decl()
+    return (
+        decl.instructions
+        if decl and decl.instructions
+        else (
             "AUDiaGentic planning component server. "
             "Use planning_status to check whether planning is configured, "
             "planning_summary to get item counts per kind, "
             "planning_index to read a specific planning index."
-        ),
+        )
     )
 
-    @mcp.tool(description="Return planning component installation status for the project.")
+
+def _tool_description(name: str, fallback: str) -> str:
+    decl = _server_decl()
+    if decl and name in decl.tool_descriptions:
+        return decl.tool_descriptions[name]
+    return fallback
+
+
+def build_server() -> FastMCP:
+    mcp = FastMCP(
+        "audiagentic-planning",
+        instructions=_server_instructions(),
+    )
+
+    @mcp.tool(description=_tool_description("planning_status", "Return planning component installation status for the project."))
     def planning_status() -> dict[str, Any]:
         project_root = _project_root()
         installed = _planning_installed(project_root)
@@ -93,7 +118,7 @@ def build_server() -> FastMCP:
             ).exists()
         return result
 
-    @mcp.tool(description="Return item counts per planning kind and current ID counters.")
+    @mcp.tool(description=_tool_description("planning_summary", "Return item counts per planning kind and current ID counters."))
     def planning_summary() -> dict[str, Any]:
         project_root = _project_root()
         if not _planning_installed(project_root):
@@ -104,7 +129,7 @@ def build_server() -> FastMCP:
             "counters": _counter_values(project_root),
         }
 
-    @mcp.tool(description="Read a specific planning index (requests, specifications, plans, tasks, work-packages, standards, lookup, readiness, dispatch, trace, claims).")
+    @mcp.tool(description=_tool_description("planning_index", "Read a specific planning index."))
     def planning_index(index_name: str) -> dict[str, Any]:
         valid = {
             "requests", "specifications", "plans", "tasks",
@@ -124,7 +149,7 @@ def build_server() -> FastMCP:
         except (json.JSONDecodeError, OSError) as exc:
             return {"error": str(exc)}
 
-    @mcp.tool(description="Return recent planning events (last N lines from events.jsonl).")
+    @mcp.tool(description=_tool_description("planning_events", "Return recent planning events from events.jsonl."))
     def planning_events(limit: int = 20) -> dict[str, Any]:
         project_root = _project_root()
         events_file = project_root / ".audiagentic" / "planning" / "events" / "events.jsonl"

@@ -76,6 +76,6 @@ def _build_run_env(ctx: AgentContext) -> dict[str, str]:
     env["AUDIAGENTIC_REPO_ROOT"] = str(ctx.project_root)
     env["AUDIAGENTIC_AG_BASE_URL"] = ctx.endpoint
     env["AUDIAGENTIC_AG_MODEL"] = ctx.model
-    env["AUDIAGENTIC_RIG_TYPE"] = "embedded" if ctx.rig_pid is not None else "external"
+    env["AUDIAGENTIC_RIG_TYPE"] = "embedded" if ctx.manages_rig else "external"
     env["AUDIAGENTIC_RIG_PROFILE"] = ctx.profile_name
     return env

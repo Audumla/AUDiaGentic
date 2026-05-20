@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
@@ -7,13 +8,8 @@ from pathlib import Path
 def _print(msg: str) -> None:
     print(msg, flush=True)
 
-try:
-    from importlib.metadata import version as _pkg_version
-    AGENT_VERSION = _pkg_version("audiagentic")
-except Exception:
-    AGENT_VERSION = "0.1.1"
-
-AGENT_MCP_ADAPTER_VERSION = "latest"
+AGENT_VERSION = os.environ.get("AUDIAGENTIC_PI_AGENT_VERSION", "latest")
+AGENT_MCP_ADAPTER_VERSION = os.environ.get("AUDIAGENTIC_PI_MCP_ADAPTER_VERSION", "latest")
 
 _AGENT_DIR = Path(__file__).parent
 _TEMPLATES_DIR = _AGENT_DIR.parent / "templates" / "home" / "agent"

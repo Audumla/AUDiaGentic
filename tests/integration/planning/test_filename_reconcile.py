@@ -12,7 +12,7 @@ for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from tests.planning_testkit import seed_planning_config
+from tests.helpers.planning_testkit import seed_planning_config
 
 from audiagentic.components.optional.planning.app.api import PlanningAPI
 from audiagentic.components.optional.planning.app.paths import Paths

@@ -29,6 +29,18 @@ mcp-servers:
     module: audiagentic.components.core.project_server
     direct-tools: [project_status, list_components, install_component_tool, uninstall_component_tool, enable_component_tool, disable_component_tool, read_project_file]
     description: Project MCP server for project-level component management
+    instructions: >
+      AUDiaGentic project component server.
+      Use project_status to inspect target project.
+      Use list_components to see all registered components and their status.
+    tool-descriptions:
+      project_status: Return current project installation state and installed components.
+      list_components: List all registered AUDiaGentic components with install and enabled status.
+      install_component_tool: Install a component into target project.
+      uninstall_component_tool: Uninstall a component from target project.
+      enable_component_tool: Enable a component in target project.
+      disable_component_tool: Disable a component in target project.
+      read_project_file: Read a file inside project .audiagentic directory.
 harness-instructions:
   - section: "What you can do"
     content: |

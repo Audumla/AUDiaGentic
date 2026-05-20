@@ -96,7 +96,7 @@ sandbox:
 #   the handler blocks so the commands do not execute.
 #   Available: settings, model, scoped-models, export, import, share, copy,
 #              name, session, changelog, hotkeys, fork, clone, tree, login,
-#              logout, new, compact, reload, debug, quit, update, arminsayshi,
+#              logout, new, compact, debug, quit, update, arminsayshi,
 #              dementedelves
 lockdown:
   no_skills: true
@@ -109,7 +109,6 @@ lockdown:
     - login
     - logout
     - share
-    - reload
     - debug
     - arminsayshi
     - dementedelves

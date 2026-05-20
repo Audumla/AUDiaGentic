@@ -20,10 +20,8 @@ register_all_components()
 from audiagentic.foundation.components import (
     all_descriptors,
     get_descriptor,
-    get_owned_files,
     is_enabled,
     is_installed,
-    uninstall_component,
 )
 from audiagentic.foundation.components.base import (
     MODE_CREATE_IF_MISSING,
@@ -34,6 +32,10 @@ from audiagentic.foundation.components.base import (
 )
 from audiagentic.foundation.components.registry import register
 from audiagentic.paths import SRC_ROOT as SRC
+from audiagentic.runtime.lifecycle.components import (
+    get_owned_files,
+    uninstall_component,
+)
 
 pytestmark = pytest.mark.dev
 
@@ -69,7 +71,7 @@ def _make_descriptor(component_id: str, *, files: tuple[ComponentFile, ...] = ()
 def test_all_descriptors_returns_all_builtin_components() -> None:
     descs = all_descriptors()
     expected = {
-        "core-lifecycle", "release-audit-ledger", "providers",
+        "core-lifecycle", "agent-ledger", "providers",
         "planning", "agent-jobs",
     }
     assert expected.issubset(descs.keys())
@@ -118,8 +120,8 @@ def test_is_installed_false_for_unknown_component(tmp_path: Path) -> None:
 # is_enabled
 # ---------------------------------------------------------------------------
 
-def test_is_enabled_true_when_marker_missing(tmp_path: Path) -> None:
-    assert is_enabled("core-lifecycle", tmp_path) is True
+def test_is_enabled_false_when_marker_missing(tmp_path: Path) -> None:
+    assert is_enabled("core-lifecycle", tmp_path) is False
 
 
 def test_is_enabled_true_when_explicitly_enabled(tmp_path: Path) -> None:
@@ -132,10 +134,10 @@ def test_is_enabled_false_when_explicitly_disabled(tmp_path: Path) -> None:
     assert is_enabled("core-lifecycle", tmp_path) is False
 
 
-def test_is_enabled_true_when_other_component_marker_present(tmp_path: Path) -> None:
+def test_is_enabled_false_when_other_component_marker_present(tmp_path: Path) -> None:
     _write_component_marker(tmp_path, "other-component", enabled=True)
-    # core-lifecycle marker is absent — defaults to True
-    assert is_enabled("core-lifecycle", tmp_path) is True
+    # core-lifecycle marker is absent — cannot be enabled if not installed
+    assert is_enabled("core-lifecycle", tmp_path) is False
 
 
 # ---------------------------------------------------------------------------

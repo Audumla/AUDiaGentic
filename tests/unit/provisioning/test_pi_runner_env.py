@@ -3,14 +3,15 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from audiagentic.runtime.harness.pi.runner import (
-    AgentContext,
-    _build_run_env,
-    launch_rig_if_needed,
-)
+from audiagentic.runtime.harness.pi.runner import AgentContext, _build_run_env, launch_rig_if_needed
 
 
-def _make_ctx(*, rig_pid: int | None, profile_name: str = "qwen3.5-9b-flash") -> AgentContext:
+def _make_ctx(
+    *,
+    rig_pid: int | None,
+    profile_name: str = "qwen3.5-9b-flash",
+    manages_rig: bool | None = None,
+) -> AgentContext:
     base = Path("/tmp/agent-test")
     return AgentContext(
         project_root=base,
@@ -26,7 +27,7 @@ def _make_ctx(*, rig_pid: int | None, profile_name: str = "qwen3.5-9b-flash") ->
         profile_name=profile_name,
         provider="audiagentic",
         rig_pid=rig_pid,
-        manages_rig=rig_pid is not None,
+        manages_rig=rig_pid is not None if manages_rig is None else manages_rig,
         enable_mcp=False,
     )
 
@@ -43,6 +44,11 @@ def test_rig_type_is_embedded_when_rig_launched() -> None:
 def test_rig_type_is_external_when_no_rig_pid() -> None:
     env = _build_run_env(_make_ctx(rig_pid=None))
     assert env["AUDIAGENTIC_RIG_TYPE"] == "external"
+
+
+def test_rig_type_is_embedded_when_reusing_existing_rig() -> None:
+    env = _build_run_env(_make_ctx(rig_pid=None, manages_rig=True))
+    assert env["AUDIAGENTIC_RIG_TYPE"] == "embedded"
 
 
 def test_rig_profile_name_in_env() -> None:
@@ -77,7 +83,7 @@ def test_embedded_profile_launches_rig(monkeypatch) -> None:
     fake_result = {"base_url": "http://127.0.0.1:9999/v1", "model": "my.gguf", "pid": 42}
 
     with patch("audiagentic.runtime.rig.registry.StartupLock") as mock_lock, \
-         patch("audiagentic.runtime.rig.registry.read_rig_state", return_value=None), \
+         patch("audiagentic.runtime.rig.registry.ensure_rig_state", return_value=None), \
          patch("audiagentic.runtime.rig.registry.write_rig_state"), \
          patch("audiagentic.runtime.rig.registry.reap_orphan_rigs"), \
          patch("audiagentic.runtime.harness.pi.runner.rig.subprocess.run") as mock_run:
@@ -91,4 +97,32 @@ def test_embedded_profile_launches_rig(monkeypatch) -> None:
     assert rig_pid == 42
     assert manages_rig is True
     assert endpoint == "http://127.0.0.1:9999/v1"
+
+
+def test_embedded_profile_reuses_adopted_rig(monkeypatch) -> None:
+    monkeypatch.delenv("AUDIAGENTIC_AG_BASE_URL", raising=False)
+    local_profile: dict = {"model_file": "../../models/my.gguf"}
+    adopted = {
+        "pid": 99,
+        "port": 9999,
+        "endpoint": "http://127.0.0.1:9999/v1",
+        "model": "local-profile",
+    }
+
+    with patch("audiagentic.runtime.rig.registry.StartupLock") as mock_lock, \
+         patch("audiagentic.runtime.rig.registry.ensure_rig_state", return_value=adopted), \
+         patch("audiagentic.runtime.rig.registry.reap_orphan_rigs") as mock_reap, \
+         patch("audiagentic.runtime.harness.pi.runner.rig.subprocess.run") as mock_run:
+        mock_lock.return_value.__enter__ = lambda s: s
+        mock_lock.return_value.__exit__ = lambda s, *a: None
+        endpoint, model, rig_pid, manages_rig = launch_rig_if_needed(
+            "my.gguf", "local-profile", local_profile, 9999
+        )
+
+    mock_run.assert_not_called()
+    mock_reap.assert_not_called()
+    assert endpoint == "http://127.0.0.1:9999/v1"
+    assert model == "audiagentic-rig"
+    assert rig_pid is None
+    assert manages_rig is True
 

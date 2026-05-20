@@ -39,21 +39,26 @@ def _build_models_config(harness_cfg: dict, model_name: str, model_profile: dict
     }
 
 
-def _build_mcp_config(harness_cfg: dict) -> dict:
+def _resolve_project_root(project_root: Path | None = None) -> Path:
+    if project_root is not None:
+        return project_root
+
+    import os
+
+    env_project_root = os.environ.get("AUDIAGENTIC_REPO_ROOT")
+    if env_project_root:
+        return Path(env_project_root)
+
+    return Path.cwd()
+
+
+def _build_mcp_config(harness_cfg: dict, *, project_root: Path | None = None) -> dict:
     """Build mcp.json config dynamically from installed components."""
     from audiagentic.runtime.mcp_config_builder import build_mcp_config
 
     # Load extra config from harness_cfg
     extra_config = {"mcp": harness_cfg.get("mcp", {})}
-
-    # Get project root from environment or default
-    import os
-    project_root = os.environ.get("AUDIAGENTIC_REPO_ROOT")
-    if project_root:
-        return build_mcp_config(Path(project_root), extra_config)
-
-    # For harness-only components (no project root), build with current directory
-    return build_mcp_config(Path.cwd(), extra_config)
+    return build_mcp_config(_resolve_project_root(project_root), extra_config)
 
 
 def _build_settings_config(harness_cfg: dict, target: Path) -> dict:
@@ -86,10 +91,12 @@ def _build_settings_config(harness_cfg: dict, target: Path) -> dict:
     ]:
         if key in ui:
             settings[dest] = cast(ui[key])
+    if "hide_tool_use" in ui:
+        settings["audiagenticHideToolUse"] = bool(ui["hide_tool_use"])
     return settings
 
 
-def _build_system_md(target: Path, harness_cfg: dict) -> None:
+def _build_system_md(target: Path, harness_cfg: dict, *, project_root: Path | None = None) -> None:
     """Build SYSTEM.md with dynamic tool list from installed components."""
     from audiagentic.runtime.mcp_config_builder import (
         apply_system_md_injections,
@@ -104,7 +111,7 @@ def _build_system_md(target: Path, harness_cfg: dict) -> None:
     content = template_path.read_text(encoding="utf-8")
 
     # Get injections from installed components
-    injections = build_system_md_injections()
+    injections = build_system_md_injections(_resolve_project_root(project_root))
 
     if injections:
         # Apply injections to the template content
@@ -113,7 +120,12 @@ def _build_system_md(target: Path, harness_cfg: dict) -> None:
     (target / "SYSTEM.md").write_text(content, encoding="utf-8")
 
 
-def materialize_agent_config(target: Path, harness_cfg: dict) -> None:
+def materialize_agent_config(
+    target: Path,
+    harness_cfg: dict,
+    *,
+    project_root: Path | None = None,
+) -> None:
     """Write all agent config files from Python dicts. Called at install time.
 
     Static files (SYSTEM.md, extensions/) are also copied here so the agent
@@ -124,7 +136,7 @@ def materialize_agent_config(target: Path, harness_cfg: dict) -> None:
     agent_dir.mkdir(parents=True, exist_ok=True)
 
     # Build SYSTEM.md dynamically
-    _build_system_md(target, harness_cfg)
+    _build_system_md(target, harness_cfg, project_root=project_root)
 
     # Copy APPEND_SYSTEM.md
     append_src = _c._TEMPLATES_DIR / "APPEND_SYSTEM.md"
@@ -152,7 +164,7 @@ def materialize_agent_config(target: Path, harness_cfg: dict) -> None:
         encoding="utf-8",
     )
     (agent_dir / "mcp.json").write_text(
-        json.dumps(_build_mcp_config(harness_cfg), indent=2) + "\n",
+        json.dumps(_build_mcp_config(harness_cfg, project_root=project_root), indent=2) + "\n",
         encoding="utf-8",
     )
     (agent_dir / "settings.json").write_text(

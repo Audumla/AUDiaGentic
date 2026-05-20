@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import tools.misc.seed_example_project as seed_example_project
+import audiagentic.testing.seed_example_project as seed_example_project
 import yaml
 from jsonschema import Draft202012Validator
 

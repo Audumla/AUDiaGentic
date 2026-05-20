@@ -46,9 +46,39 @@ def _patch_tool_execution(npm_dir: Path) -> None:
         raise SystemExit(f"AudiaGentic agent install incomplete — not found: {target}")
     source = target.read_text(encoding="utf-8")
 
+    helper_import = 'import { existsSync, readFileSync } from "fs";'
+    if helper_import not in source:
+        marker = 'import { convertToPng } from "../../../utils/image-convert.js";'
+        if marker in source:
+            source = source.replace(
+                marker,
+                marker + '\n' + helper_import + '\nimport { join } from "path";',
+                1,
+            )
+
+    helper_fn = (
+        "function _audiagenticHideToolUse() {\n"
+        "    try {\n"
+        "        const agentDir = process.env.PI_CODING_AGENT_DIR;\n"
+        "        if (!agentDir) return false;\n"
+        '        const settingsPath = join(agentDir, "settings.json");\n'
+        "        if (!existsSync(settingsPath)) return false;\n"
+        '        const payload = JSON.parse(readFileSync(settingsPath, "utf-8"));\n'
+        "        return !!payload.audiagenticHideToolUse;\n"
+        "    }\n"
+        "    catch {\n"
+        "        return false;\n"
+        "    }\n"
+        "}\n"
+    )
+    if "function _audiagenticHideToolUse()" not in source:
+        marker = 'import { theme } from "../theme/theme.js";'
+        if marker in source:
+            source = source.replace(marker, marker + "\n" + helper_fn, 1)
+
     # Constructor: hide audiagentic_ tools.
     ctor_injection = (
-        "if (!toolDefinition || (toolName && toolName.startsWith('audiagentic_'))) "
+        "if (!toolDefinition || (toolName && toolName.startsWith('audiagentic_') && _audiagenticHideToolUse())) "
         "{ this.hideComponent = true; }"
     )
     ctor_marker = "this.toolName = toolName;"
@@ -60,7 +90,7 @@ def _patch_tool_execution(npm_dir: Path) -> None:
     # Replace the unconditional reset with a conditional that preserves the flag.
     hide_reset = "        this.hideComponent = false;"
     hide_guard = (
-        "        if (!(this.toolName && this.toolName.startsWith('audiagentic_'))) {\n"
+        "        if (!(this.toolName && this.toolName.startsWith('audiagentic_') && _audiagenticHideToolUse())) {\n"
         "            this.hideComponent = false;\n"
         "        }"
     )
@@ -145,6 +175,75 @@ def _patch_mcp_oauth_suppress(npm_dir: Path) -> None:
         target.write_text(source, encoding="utf-8")
 
 
+def _patch_mcp_direct_tools_live_register(npm_dir: Path) -> None:
+    """Register bootstrapped direct MCP tools immediately in-session.
+
+    Upstream adapter populates metadata cache for newly configured direct-tool
+    servers during `session_start`, but only shows a "available after restart"
+    notice. We patch that path to register the newly discovered direct tools
+    immediately so they can be used on the next turn without a full restart.
+    """
+    target = npm_dir / "node_modules" / "pi-mcp-adapter" / "init.ts"
+    if not target.exists():
+        return
+
+    source = target.read_text(encoding="utf-8")
+
+    old_import = 'import { getMissingConfiguredDirectToolServers } from "./direct-tools.ts";'
+    new_import = (
+        'import { createDirectToolExecutor, getMissingConfiguredDirectToolServers, resolveDirectTools } '
+        'from "./direct-tools.ts";'
+    )
+    if new_import not in source and old_import in source:
+        source = source.replace(old_import, new_import, 1)
+
+    if 'import { Type } from "typebox";' not in source:
+        marker = 'import { existsSync } from "node:fs";'
+        if marker in source:
+            source = source.replace(marker, marker + '\nimport { Type } from "typebox";', 1)
+
+    if 'import { renderMcpToolResult } from "./tool-result-renderer.ts";' not in source:
+        marker = 'import { logger } from "./logger.ts";'
+        if marker in source:
+            source = source.replace(
+                marker,
+                marker + '\nimport { renderMcpToolResult } from "./tool-result-renderer.ts";',
+                1,
+            )
+
+    old_block = (
+        "      const bootstrapped = bootstrapResults.filter(r => r.ok).map(r => r.name);\n"
+        "      if (bootstrapped.length > 0 && ctx.hasUI) {\n"
+        '        ctx.ui.notify(`MCP: direct tools for ${bootstrapped.join(", ")} will be available after restart`, "info");\n'
+        "      }"
+    )
+    new_block = (
+        "      const bootstrapped = bootstrapResults.filter(r => r.ok).map(r => r.name);\n"
+        "      if (bootstrapped.length > 0) {\n"
+        "        const updatedCache = loadMetadataCache();\n"
+        "        const bootstrappedSpecs = resolveDirectTools(config, updatedCache, prefix)\n"
+        "          .filter(spec => bootstrapped.includes(spec.serverName));\n"
+        "        for (const spec of bootstrappedSpecs) {\n"
+        "          (pi.registerTool as (tool: unknown) => unknown)({\n"
+        "            name: spec.prefixedName,\n"
+        '            label: `MCP: ${spec.originalName}`,\n'
+        '            description: spec.description || "(no description)",\n'
+        '            parameters: Type.Unsafe((spec.inputSchema || { type: "object", properties: {} }) as never),\n'
+        "            execute: createDirectToolExecutor(() => state, () => Promise.resolve(state), spec),\n"
+        "            renderResult: renderMcpToolResult,\n"
+        "          });\n"
+        "        }\n"
+        "        if (ctx.hasUI) {\n"
+        '          ctx.ui.notify(`MCP: direct tools for ${bootstrapped.join(", ")} are now available`, "info");\n'
+        "        }\n"
+        "      }"
+    )
+    if new_block not in source and old_block in source:
+        source = source.replace(old_block, new_block, 1)
+
+    target.write_text(source, encoding="utf-8")
+
+
 def apply_lockdown_patches(npm_dir: Path, project_root: Path | None = None) -> None:
     cfg = _c._load_config(project_root=project_root)
     blocked = cfg.get("lockdown", {}).get("block_builtin_commands", [])
@@ -159,3 +258,5 @@ def apply_lockdown_patches(npm_dir: Path, project_root: Path | None = None) -> N
     _c._print("Patched AudiaGentic agent: update notifications suppressed")
     _patch_mcp_oauth_suppress(npm_dir)
     _c._print("Patched MCP adapter: OAuth callback server suppressed (stdio servers only)")
+    _patch_mcp_direct_tools_live_register(npm_dir)
+    _c._print("Patched MCP adapter: bootstrapped direct tools register in-session")

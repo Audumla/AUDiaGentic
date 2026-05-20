@@ -42,6 +42,8 @@ class McpServerDeclaration:
     args: tuple[str, ...] = ()
     direct_tools: list[str] | bool = field(default_factory=list)
     description: str = ""
+    instructions: str = ""
+    tool_descriptions: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -65,3 +67,4 @@ class ComponentDescriptor:
     harness_instructions: tuple[HarnessInstruction, ...] = ()
     core: bool = False              # if True, component cannot be uninstalled
     type: str = "component"         # discriminator: "component" vs other config types
+    post_install: str | None = None  # dotted import path to a function(project_root)

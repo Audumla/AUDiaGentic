@@ -4,7 +4,7 @@ from pathlib import Path
 
 from audiagentic.runtime.home import audiagentic_home
 
-from .base import SCOPE_HARNESS, ComponentDescriptor
+from .base import SCOPE_HARNESS, ComponentDescriptor, McpServerDeclaration
 
 _registry: dict[str, ComponentDescriptor] = {}
 
@@ -19,6 +19,19 @@ def get_descriptor(component_id: str) -> ComponentDescriptor | None:
 
 def all_descriptors() -> dict[str, ComponentDescriptor]:
     return dict(_registry)
+
+
+def get_mcp_server_declaration(
+    component_id: str,
+    server_name: str,
+) -> McpServerDeclaration | None:
+    descriptor = get_descriptor(component_id)
+    if descriptor is None:
+        return None
+    for server in descriptor.mcp_servers:
+        if server.name == server_name:
+            return server
+    return None
 
 
 def component_root(descriptor: ComponentDescriptor, project_root: Path) -> Path:
@@ -54,14 +67,14 @@ def is_installed(component_id: str, project_root: Path) -> bool:
 def is_enabled(component_id: str, project_root: Path) -> bool:
     descriptor = _registry.get(component_id)
     if descriptor is None:
-        return True
+        return False
     root = component_root(descriptor, project_root)
     mpath = marker_path(component_id, root, descriptor.scope)
     if not mpath.exists():
-        return True
+        return False
     try:
         import yaml
         data = yaml.safe_load(mpath.read_text(encoding="utf-8")) or {}
     except Exception:  # noqa: BLE001
-        return True
+        return False
     return bool(data.get("enabled", True))

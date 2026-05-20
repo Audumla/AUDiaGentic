@@ -34,9 +34,19 @@ files:
     description: Planning index files
 mcp-servers:
   - name: audiagentic-planning
-    module: audiagentic.components.planning.server
+    module: audiagentic.components.optional.planning.server
     direct-tools: [planning_status, planning_summary, planning_index, planning_events]
     description: Planning MCP server for planning system introspection
+    instructions: >
+      AUDiaGentic planning component server.
+      Use planning_status to check whether planning is configured.
+      Use planning_summary to get item counts per kind.
+      Use planning_index to read a specific planning index.
+    tool-descriptions:
+      planning_status: Return planning component installation status for project.
+      planning_summary: Return item counts per planning kind and current ID counters.
+      planning_index: Read a specific planning index.
+      planning_events: Return recent planning events from events.jsonl.
 harness-instructions:
   - section: "What you can do"
     content: |

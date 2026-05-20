@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.components.base import McpServerDeclaration
+from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import all_descriptors, is_enabled, is_installed
 
 
@@ -21,6 +22,27 @@ def _get_python_path() -> str:
 def _get_src_path() -> str:
     """Return the source directory path for PYTHONPATH."""
     return str(Path(__file__).resolve().parents[3]).replace("\\", "/")
+
+
+def _build_available_components_md(project_root: Path) -> str:
+    lines = [
+        "Use `audiagentic_project_list_components` when user asks what components exist,",
+        "what they do, or whether install/enable needed.",
+        "",
+    ]
+
+    for component_id, descriptor in sorted(all_descriptors().items()):
+        installed = is_installed(component_id, project_root)
+        enabled = is_enabled(component_id, project_root) if installed else None
+        status = "installed/enabled" if installed and enabled else (
+            "installed/disabled" if installed else "not installed"
+        )
+        lines.append(
+            f"- `{component_id}` — {descriptor.description} "
+            f"[status: {status}]"
+        )
+
+    return "\n".join(lines)
 
 
 def build_mcp_config(
@@ -41,6 +63,8 @@ def build_mcp_config(
 
     if extra_config is None:
         extra_config = {}
+
+    register_all_components()
 
     mcp_cfg = extra_config.get("mcp", {})
     if not mcp_cfg.get("enabled", True):
@@ -101,7 +125,11 @@ def build_system_md_injections(
     if project_root is None:
         project_root = Path.cwd()
 
+    register_all_components()
+
     injections: dict[str, str] = {}
+
+    injections["Available components"] = _build_available_components_md(project_root)
 
     for cid, descriptor in all_descriptors().items():
         if not is_installed(cid, project_root):

@@ -24,8 +24,8 @@ def test_hook_chain_settings_json_exists():
 
 
 def test_hook_handlers_module_exists():
-    """Verify hook handlers module exists at its v3 location."""
-    handlers_path = ROOT / 'tools' / 'misc' / 'claude_hooks.py'
+    """Verify hook handlers module exists at its canonical location."""
+    handlers_path = ROOT / 'src' / 'audiagentic' / 'components' / 'optional' / 'providers' / 'adapters' / 'claude' / 'hooks.py'
     assert handlers_path.exists()
 
 
@@ -35,7 +35,7 @@ def test_fallback_to_wrapper_when_hook_unavailable():
     # which allows normal Claude planning to proceed
     # The actual fallback mechanism is tested through the hook logic
     # For now, just verify the module is correctly structured
-    from tools.misc.claude_hooks import PreToolUse_handler, UserPromptSubmit_handler
+    from audiagentic.components.optional.providers.adapters.claude.hooks import PreToolUse_handler, UserPromptSubmit_handler
 
     assert callable(UserPromptSubmit_handler)
     assert callable(PreToolUse_handler)

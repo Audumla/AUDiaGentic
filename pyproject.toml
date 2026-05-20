@@ -18,19 +18,19 @@ dependencies = [
 [project.optional-dependencies]
 # MCP server support for the planning tool surface
 mcp = [
-    "mcp>=1.0",
+    "mcp==1.27.0",
 ]
 # Test dependencies
 test = [
     "pytest>=9.0",
     "pytest-asyncio>=1.3",
-    "mcp>=1.0",
+    "mcp==1.27.0",
 ]
 # Full development environment
 dev = [
     "pytest>=9.0",
     "pytest-asyncio>=1.3",
-    "mcp>=1.0",
+    "mcp==1.27.0",
     "ruff",
     "mypy",
 ]

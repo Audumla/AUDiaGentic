@@ -15,8 +15,8 @@ def bootstrap():
 
 root = bootstrap()
 
-import tools.planning.tm_helper as tm
-from tests.planning_testkit import seed_planning_config
+import audiagentic.components.optional.planning.tm_helper as tm
+from tests.helpers.planning_testkit import seed_planning_config
 
 from audiagentic.components.optional.planning.app.api import PlanningAPI
 

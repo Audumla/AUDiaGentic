@@ -1,1 +1,1 @@
-# Test package marker for shared helpers like `tests.planning_testkit`.
+# Test package marker. Shared helpers live in tests.helpers.

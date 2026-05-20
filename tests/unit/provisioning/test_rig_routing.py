@@ -42,7 +42,7 @@ def test_9b_flash_attempts_embedded_launch(monkeypatch) -> None:
     _, profile = load_model_profile("qwen3.5-9b-flash", "qwen3.5-9b-flash")
     fake_payload = {"base_url": "http://127.0.0.1:9999/v1", "model": "Qwen3.5-9B.gguf", "pid": 77}
     with patch("audiagentic.runtime.rig.registry.StartupLock") as mock_lock, \
-         patch("audiagentic.runtime.rig.registry.read_rig_state", return_value=None), \
+         patch("audiagentic.runtime.rig.registry.ensure_rig_state", return_value=None), \
          patch("audiagentic.runtime.rig.registry.write_rig_state"), \
          patch("audiagentic.runtime.rig.registry.reap_orphan_rigs"), \
          patch("audiagentic.runtime.harness.pi.runner.rig.subprocess.run") as mock_run:
@@ -60,7 +60,7 @@ def test_2b_profile_attempts_embedded_launch(monkeypatch) -> None:
     _, profile = load_model_profile("qwen3.5-2b-q4_k_s", "qwen3.5-2b-q4_k_s")
     fake_payload = {"base_url": "http://127.0.0.1:9999/v1", "model": "Qwen.gguf", "pid": 99}
     with patch("audiagentic.runtime.rig.registry.StartupLock") as mock_lock, \
-         patch("audiagentic.runtime.rig.registry.read_rig_state", return_value=None), \
+         patch("audiagentic.runtime.rig.registry.ensure_rig_state", return_value=None), \
          patch("audiagentic.runtime.rig.registry.write_rig_state"), \
          patch("audiagentic.runtime.rig.registry.reap_orphan_rigs"), \
          patch("audiagentic.runtime.harness.pi.runner.rig.subprocess.run") as mock_run:
@@ -78,7 +78,7 @@ def test_2b_launch_command_passes_model_profile(monkeypatch) -> None:
     _, profile = load_model_profile("qwen3.5-2b-q4_k_s", "qwen3.5-2b-q4_k_s")
     fake_payload = {"base_url": "http://127.0.0.1:9999/v1", "model": "Qwen.gguf", "pid": 99}
     with patch("audiagentic.runtime.rig.registry.StartupLock") as mock_lock, \
-         patch("audiagentic.runtime.rig.registry.read_rig_state", return_value=None), \
+         patch("audiagentic.runtime.rig.registry.ensure_rig_state", return_value=None), \
          patch("audiagentic.runtime.rig.registry.write_rig_state"), \
          patch("audiagentic.runtime.rig.registry.reap_orphan_rigs"), \
          patch("audiagentic.runtime.harness.pi.runner.rig.subprocess.run") as mock_run:

@@ -25,7 +25,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.optional.agent_jobs.state_machine import TERMINAL_STATES, transition_and_persist
+from audiagentic.components.optional.agent_jobs.state_machine import (
+    TERMINAL_STATES,
+    transition_and_persist,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.state import jobs_store as _default_store
 

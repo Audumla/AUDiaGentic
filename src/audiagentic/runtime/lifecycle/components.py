@@ -87,6 +87,27 @@ def get_owned_files(
     return results
 
 
+def _resolve_and_run_post_install(hook_path: str, project_root: Path) -> None:
+    """Resolve a dotted hook path and run it in a background thread.
+
+    hook_path is a dotted import path ending with a function name,
+    e.g. "audiagentic.components.optional.providers.services.lifecycle.reconcile_all".
+    The function must accept project_root as a keyword argument.
+    """
+    from threading import Thread
+
+    parts = hook_path.rsplit(".", 1)
+    if len(parts) != 2:
+        return
+    module_name, fn_name = parts
+    try:
+        module = __import__(module_name, fromlist=[fn_name])
+        fn = getattr(module, fn_name)
+        Thread(target=fn, kwargs={"project_root": project_root}, daemon=True).start()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def install_component(
     component_id: str,
     project_root: Path,
@@ -118,6 +139,11 @@ def install_component(
         marker["installation-kind"] = installation_kind or "fresh"
         marker["last-lifecycle-action"] = last_lifecycle_action or "fresh-install"
     _write_marker(component_id, project_root, marker)
+    if descriptor.post_install:
+        from threading import Thread
+
+        _resolve_and_run_post_install(descriptor.post_install, project_root)
+
     return {"ok": True, "component_id": component_id, "root": str(root), "sync": report}
 
 
