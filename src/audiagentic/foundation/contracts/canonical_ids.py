@@ -19,7 +19,7 @@ CANONICAL_COMPONENT_IDS = (
     "core-lifecycle",
     "release-audit-ledger",
     "agent-jobs",
-    "provider-layer",
+    "providers",
     "planning",
     "discord-overlay",
     "optional-server",

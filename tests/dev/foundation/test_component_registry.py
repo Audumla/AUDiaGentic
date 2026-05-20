@@ -69,7 +69,7 @@ def _make_descriptor(component_id: str, *, files: tuple[ComponentFile, ...] = ()
 def test_all_descriptors_returns_all_builtin_components() -> None:
     descs = all_descriptors()
     expected = {
-        "core-lifecycle", "release-audit-ledger", "provider-layer",
+        "core-lifecycle", "release-audit-ledger", "providers",
         "planning", "agent-jobs", "discord-overlay", "optional-server",
     }
     assert expected.issubset(descs.keys())
