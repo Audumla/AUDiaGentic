@@ -8,8 +8,8 @@ from pathlib import Path
 
 import yaml
 
-from audiagentic.knowledge.config import load_config
-from audiagentic.knowledge.event_state import (
+from audiagentic.components.optional.knowledge.config import load_config
+from audiagentic.components.optional.knowledge.event_state import (
     _fingerprint_text,
     _lookup_dotted,
     _matches_payload_filters,

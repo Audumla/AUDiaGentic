@@ -12,7 +12,7 @@ from audiagentic.execution.jobs.profiles import load_profile
 from audiagentic.execution.jobs.records import build_job_record
 from audiagentic.execution.jobs.stages import execute_stage
 from audiagentic.execution.jobs.state_machine import transition_and_persist
-from audiagentic.foundation.contracts.canonical_ids import CANONICAL_PROVIDER_IDS, validate_ids
+from audiagentic.foundation.contracts.canonical_ids import canonical_provider_ids, validate_ids
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.state import jobs_store as store
 
@@ -78,7 +78,7 @@ def _apply_pending_control(project_root: Path, job_id: str) -> dict[str, Any] | 
 
 
 def _validate_provider_id(provider_id: str) -> None:
-    issues = validate_ids([provider_id], CANONICAL_PROVIDER_IDS)
+    issues = validate_ids([provider_id], canonical_provider_ids())
     if issues:
         raise AudiaGenticError(
             code="JOB-VALIDATION-015",

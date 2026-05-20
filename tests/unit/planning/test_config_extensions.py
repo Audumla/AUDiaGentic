@@ -5,7 +5,7 @@ from pathlib import Path
 import yaml
 from tests.planning_testkit import seed_planning_config
 
-from audiagentic.planning.app.config import Config
+from audiagentic.components.optional.planning.app.config import Config
 
 
 def _seed_base_config(tmp_path: Path, include_optional: bool) -> Path:

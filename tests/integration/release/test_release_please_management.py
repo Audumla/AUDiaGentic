@@ -11,7 +11,7 @@ for path in (str(ROOT), str(SRC)):
 
 from tests.helpers import sandbox as sandbox_helper
 
-from audiagentic.release.release_please import (
+from audiagentic.components.optional.ledger.release_please import (
     BASELINE_WORKFLOW,
     CANDIDATE_NAME,
     LEGACY_NAME,

@@ -14,10 +14,10 @@ for _p in (str(ROOT), str(ROOT / "src")):
 
 from tests.planning_testkit import seed_planning_config
 
-from audiagentic.planning.app.api import PlanningAPI
-from audiagentic.planning.app.paths import Paths
-from audiagentic.planning.app.rec_mgr import Reconcile
-from audiagentic.planning.fs.scan import scan_items
+from audiagentic.components.optional.planning.app.api import PlanningAPI
+from audiagentic.components.optional.planning.app.paths import Paths
+from audiagentic.components.optional.planning.app.rec_mgr import Reconcile
+from audiagentic.components.optional.planning.fs.scan import scan_items
 
 DOCS_SRC = ROOT / "docs" / "planning"
 
