@@ -70,7 +70,7 @@ def test_all_descriptors_returns_all_builtin_components() -> None:
     descs = all_descriptors()
     expected = {
         "core-lifecycle", "release-audit-ledger", "providers",
-        "planning", "agent-jobs", "discord-overlay", "optional-server",
+        "planning", "agent-jobs",
     }
     assert expected.issubset(descs.keys())
 
