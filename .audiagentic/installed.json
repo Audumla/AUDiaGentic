@@ -1,7 +1,7 @@
 {
   "components": {
     "core-lifecycle": "installed",
-    "release-audit-ledger": "installed",
+    "agent-ledger": "installed",
     "release-workflow": "installed"
   },
   "contract-version": "v1",

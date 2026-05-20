@@ -1,6 +1,7 @@
 """Provider CLI lifecycle operations — install, uninstall, repair, reconcile."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -88,6 +89,7 @@ def install_provider_cli(
     dry_run: bool = False,
     timeout: int = 300,
     project_root: Path | None = None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     descriptor = _descriptor(provider_id)
     recipe = descriptor.cli_install
@@ -99,15 +101,24 @@ def install_provider_cli(
             recipe=None,
             reason="provider has no installable CLI recipe",
         )
-    ctx = InvocationContext(project_root=project_root, dry_run=dry_run, timeout=timeout)
+    ctx = InvocationContext(project_root=project_root, dry_run=dry_run, timeout=timeout, on_progress=on_progress)
+    if on_progress is not None:
+        on_progress(f"Installing {provider_id}...")
     inv = recipe.install.run(ctx)
     if dry_run:
         return _result(provider_id=provider_id, action="install", status="planned", recipe=recipe, invocation=inv)
+    if on_progress is not None:
+        on_progress("Probing CLI availability...")
     probe = _probe_provider_cli(descriptor)
     status = "installed" if inv.status == "ok" and (probe is None or probe["available"]) else "failed"
     result = _result(provider_id=provider_id, action="install", status=status, recipe=recipe, invocation=inv, probe=probe)
     if status == "installed" and project_root is not None:
+        _seed_provider_config(project_root, provider_id, descriptor, enabled=True)
+        if on_progress is not None:
+            on_progress("Applying provider surfaces...")
         result["surfaces"] = apply_provider_surfaces(project_root, provider_id=provider_id)
+    if on_progress is not None:
+        on_progress(f"{provider_id}: {status}")
     return result
 
 
@@ -117,6 +128,7 @@ def uninstall_provider_cli(
     dry_run: bool = False,
     timeout: int = 300,
     project_root: Path | None = None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     descriptor = _descriptor(provider_id)
     recipe = descriptor.cli_install
@@ -128,15 +140,28 @@ def uninstall_provider_cli(
             recipe=None,
             reason="provider has no installable CLI recipe",
         )
-    ctx = InvocationContext(project_root=project_root, dry_run=dry_run, timeout=timeout)
+    ctx = InvocationContext(project_root=project_root, dry_run=dry_run, timeout=timeout, on_progress=on_progress)
+    if on_progress is not None:
+        on_progress(f"Uninstalling {provider_id}...")
     inv = recipe.uninstall.run(ctx)
     if dry_run:
         return _result(provider_id=provider_id, action="uninstall", status="planned", recipe=recipe, invocation=inv)
+    if on_progress is not None:
+        on_progress("Probing CLI availability...")
     probe = _probe_provider_cli(descriptor)
     status = "uninstalled" if inv.status == "ok" and (probe is None or not probe["available"]) else "failed"
     result = _result(provider_id=provider_id, action="uninstall", status=status, recipe=recipe, invocation=inv, probe=probe)
     if status == "uninstalled" and project_root is not None:
+        from audiagentic.components.optional.providers.services.provider_config import (
+            set_provider_enabled,
+        )
+
+        set_provider_enabled(project_root, provider_id, enabled=False)
+        if on_progress is not None:
+            on_progress("Pruning provider surfaces...")
         result["surfaces"] = prune_provider_surfaces(project_root, provider_id=provider_id)
+    if on_progress is not None:
+        on_progress(f"{provider_id}: {status}")
     return result
 
 
@@ -146,6 +171,7 @@ def repair_provider_cli(
     dry_run: bool = False,
     timeout: int = 300,
     project_root: Path | None = None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     descriptor = _descriptor(provider_id)
     probe = _probe_provider_cli(descriptor)
@@ -158,7 +184,7 @@ def repair_provider_cli(
             probe=probe,
             reason="CLI already available",
         )
-    result = install_provider_cli(provider_id, dry_run=dry_run, timeout=timeout, project_root=project_root)
+    result = install_provider_cli(provider_id, dry_run=dry_run, timeout=timeout, project_root=project_root, on_progress=on_progress)
     result["action"] = "repair"
     return result
 
@@ -174,7 +200,9 @@ def _seed_provider_config(
 
     Only writes fields that are absent — never overwrites existing values.
     """
-    from audiagentic.components.optional.providers.services.provider_config import patch_provider_config
+    from audiagentic.components.optional.providers.services.provider_config import (
+        patch_provider_config,
+    )
 
     seed: dict[str, Any] = {
         "enabled": enabled,
@@ -212,7 +240,9 @@ def reconcile_provider(
         # Fall back to raw read — reconcile only needs the enabled flag, not full validation.
         import yaml as _yaml
 
-        from audiagentic.components.optional.providers.services.provider_config import _providers_yaml_path
+        from audiagentic.components.optional.providers.services.provider_config import (
+            _providers_yaml_path,
+        )
         _path = _providers_yaml_path(project_root)
         provider_config = (_yaml.safe_load(_path.read_text(encoding="utf-8")) or {}) if _path.exists() else {}
     provider_cfg = provider_config.get("providers", {}).get(provider_id, {})
@@ -227,7 +257,9 @@ def reconcile_provider(
         action_taken = "enabled"
         if descriptor.fetch_catalog_fn is not None:
             try:
-                from audiagentic.components.optional.providers.services.catalog import fetch_provider_catalog
+                from audiagentic.components.optional.providers.services.catalog import (
+                    fetch_provider_catalog,
+                )
                 fetch_provider_catalog(provider_id, project_root=project_root)
             except Exception:  # noqa: BLE001
                 pass
@@ -283,12 +315,26 @@ def reconcile_all_providers(
     }
 
 
+def reconcile_all(*, project_root: Path) -> None:
+    """Generic post-install hook — reconciles all providers.
+
+    Called from the component lifecycle as a background thread target.
+    Silently ignores errors so the component install never fails due to
+    provider probe failures.
+    """
+    try:
+        reconcile_all_providers(project_root=project_root)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def provision_all_provider_clis(
     action: str,
     *,
     dry_run: bool = False,
     timeout: int = 300,
     project_root: Path | None = None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     actions = {
         "install": install_provider_cli,
@@ -303,7 +349,7 @@ def provision_all_provider_clis(
             details={"action": action},
         )
     results = [
-        actions[action](provider_id, dry_run=dry_run, timeout=timeout, project_root=project_root)
+        actions[action](provider_id, dry_run=dry_run, timeout=timeout, project_root=project_root, on_progress=on_progress)
         for provider_id in sorted(all_descriptors())
     ]
     return {

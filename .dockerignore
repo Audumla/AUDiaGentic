@@ -7,11 +7,15 @@
 !AGENTS.md
 !CLAUDE.md
 !GEMINI.md
+!.tmp/
+!.tmp/wheels/
+!.tmp/wheels/mcp-1.27.0-py3-none-any.whl
+!.tmp/docker-overlay/
+!.tmp/docker-overlay/site-packages/
+!.tmp/docker-overlay/site-packages/**
 
 !src/
 !src/**
-!tools/
-!tools/**
 !tests/
 !tests/**
 
@@ -34,7 +38,12 @@
 !.agents/skills/
 !.agents/skills/**
 !.claude/
-!.claude/**
+!.claude/rules/
+!.claude/rules/**
+!.claude/skills/
+!.claude/skills/**
+!.claude/settings.json
+!.claude/settings.local.json
 !.clinerules/
 !.clinerules/**
 !.gemini/
@@ -46,6 +55,8 @@
 !.opencode/**
 .opencode/node_modules
 .opencode/node_modules/**
+.claude/worktrees
+.claude/worktrees/**
 **/node_modules
 **/node_modules/**
 **/__pycache__

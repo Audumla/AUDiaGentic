@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import tools.validation.validate_ids as validate_ids
+import audiagentic.foundation.contracts.validate_ids as validate_ids
 
 
 def _write_yaml(path: Path, content: str) -> None:

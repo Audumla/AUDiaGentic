@@ -41,6 +41,8 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
             args=tuple(ms.get("args") or []),
             direct_tools=ms.get("direct-tools") or [],
             description=ms.get("description", ""),
+            instructions=ms.get("instructions", ""),
+            tool_descriptions=ms.get("tool-descriptions") or {},
         )
         for ms in (data.get("mcp-servers") or [])
     )
@@ -70,6 +72,7 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
         mcp_servers=mcp_servers,
         harness_instructions=harness_instructions,
         core=is_core,
+        post_install=data.get("post-install") or None,
     )
     register(descriptor)
     return descriptor

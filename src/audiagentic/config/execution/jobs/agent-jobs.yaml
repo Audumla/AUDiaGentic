@@ -20,7 +20,7 @@ surface-contributions:
         - Keep tag semantics identical to the shared AUDiaGentic launch contract.
         - Keep provenance visible: provider id, surface, and session id should survive normalization.
         - Canonical names are config-managed in `.audiagentic/config/execution/prompt-syntax.yaml`;
-          run `python tools/regenerate_tag_surfaces.py --project-root .` after renaming tags or aliases.
+          run `python -m audiagentic.components.optional.prompt_triggers.skill_surfaces --project-root .` after renaming tags or aliases.
 
   - id: agent-jobs/tag-shortcuts
     kind: rule

@@ -10,4 +10,4 @@ Rules:
 - Preserve raw prompt text in provenance metadata.
 - Route tagged prompts through the shared bridge when a native hook path is not stable.
 - Canonical names are config-managed in `.audiagentic/config/execution/prompt-syntax.yaml`;
-  run `python tools/regenerate_tag_surfaces.py --project-root .` after renaming tags or aliases.
+  run `python -m audiagentic.components.optional.prompt_triggers.skill_surfaces --project-root .` after renaming tags or aliases.

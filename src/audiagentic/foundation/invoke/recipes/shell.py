@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
+import threading
 from dataclasses import dataclass
 
 from ..base import InvocationRecipe
@@ -26,15 +28,43 @@ class ShellRecipe(InvocationRecipe):
                 command=list(self.command),
                 reason=f"{manager} is not available on PATH",
             )
+        if context.on_progress is not None:
+            context.on_progress(f"Running: {' '.join(self.command)}")
+
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
+
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 list(self.command),
-                check=False,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
-                timeout=context.timeout,
+                bufsize=1,
+                env=env,
             )
+            output_lines: list[str] = []
+            if context.on_progress is not None:
+                def _read_output() -> None:
+                    assert process.stdout is not None
+                    for line in process.stdout:
+                        stripped = line.rstrip("\n\r")
+                        output_lines.append(stripped)
+                        context.on_progress(stripped)
+
+                reader = threading.Thread(target=_read_output, daemon=True)
+                reader.start()
+                process.wait(timeout=context.timeout)
+                reader.join(timeout=1)
+            else:
+                stdout_data, _ = process.communicate(timeout=context.timeout)
+                output_lines = stdout_data.splitlines()
+
+            returncode = process.returncode
         except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
             return InvocationResult(
                 status="failed",
                 command=list(self.command),
@@ -46,10 +76,12 @@ class ShellRecipe(InvocationRecipe):
                 command=list(self.command),
                 reason=str(exc),
             )
+        if context.on_progress is not None:
+            context.on_progress(f"Completed (rc={returncode})")
         return InvocationResult(
-            status="ok" if completed.returncode == 0 else "failed",
+            status="ok" if returncode == 0 else "failed",
             command=list(self.command),
-            returncode=completed.returncode,
-            stdout=completed.stdout.strip(),
-            stderr=completed.stderr.strip(),
+            returncode=returncode,
+            stdout="\n".join(output_lines),
+            stderr="",
         )
