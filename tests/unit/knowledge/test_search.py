@@ -9,7 +9,11 @@ import yaml
 
 from audiagentic.components.optional.knowledge.config import load_config
 from audiagentic.components.optional.knowledge.models import KnowledgePage, Section
-from audiagentic.components.optional.knowledge.search import _build_snippet, filter_by_metadata, search_pages
+from audiagentic.components.optional.knowledge.search import (
+    _build_snippet,
+    filter_by_metadata,
+    search_pages,
+)
 from audiagentic.paths import REPO_ROOT
 
 

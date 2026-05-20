@@ -172,11 +172,15 @@ def _cmd_launch(project_root: Path, args: list[str]) -> int:
     # Subsequent reconciliations are available via the provider MCP server.
     _status("reconciling providers...")
     try:
-        from audiagentic.foundation.config.provider_config import _providers_yaml_path
+        from audiagentic.components.optional.providers.services.provider_config import (
+            _providers_yaml_path,
+        )
 
         providers_path = _providers_yaml_path(project_root)
         if not providers_path.exists():
-            from audiagentic.components.optional.providers.services.lifecycle import reconcile_all_providers
+            from audiagentic.components.optional.providers.services.lifecycle import (
+                reconcile_all_providers,
+            )
 
             def _on_provider(provider_id: str, status: str) -> None:
                 if status in ("enabled", "disabled"):
