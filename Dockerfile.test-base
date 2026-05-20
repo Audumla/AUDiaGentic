@@ -1,0 +1,26 @@
+FROM node:22-bookworm-slim
+
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PATH="/home/linuxbrew/.linuxbrew/bin:/root/.local/bin:/venv/bin:${PATH}"
+
+# Python + system deps (node already installed)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-pip python3-venv python3-dev git ca-certificates curl gpg gnupg wget libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Homebrew (goose, plandex)
+RUN curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh | bash
+
+# uv (openhands, aider)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# GitHub CLI (copilot)
+RUN (curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null) \
+    && (echo "deb [signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/githubcli.list) \
+    && apt-get update && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# Verify all toolchains
+RUN brew --version && uv --version && gh --version --version && node --version

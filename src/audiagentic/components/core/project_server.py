@@ -21,6 +21,7 @@ import yaml
 
 from audiagentic.foundation.components import all_descriptors, is_enabled, is_installed
 from audiagentic.foundation.components.loader import register_all_components
+from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.runtime.lifecycle.components import (
     disable_component,
     enable_component,
@@ -45,24 +46,44 @@ def _project_root() -> Path:
     raise RuntimeError("Pass --project-root or set AUDIAGENTIC_REPO_ROOT")
 
 
-def build_server() -> FastMCP:
-    mcp = FastMCP(
-        "audiagentic-project",
-        instructions=(
+def _server_decl():
+    return get_mcp_server_declaration("core-lifecycle", "audiagentic-project")
+
+
+def _server_instructions() -> str:
+    decl = _server_decl()
+    return (
+        decl.instructions
+        if decl and decl.instructions
+        else (
             "AUDiaGentic project component server. "
             "Use project_status to inspect the target project, "
             "list_components to see all registered components and their status."
-        ),
+        )
     )
 
-    @mcp.tool(description="Return the current project installation state and installed components.")
+
+def _tool_description(name: str, fallback: str) -> str:
+    decl = _server_decl()
+    if decl and name in decl.tool_descriptions:
+        return decl.tool_descriptions[name]
+    return fallback
+
+
+def build_server() -> FastMCP:
+    mcp = FastMCP(
+        "audiagentic-project",
+        instructions=_server_instructions(),
+    )
+
+    @mcp.tool(description=_tool_description("project_status", "Return the current project installation state and installed components."))
     def project_status() -> dict[str, Any]:
         project_root = _project_root()
         state = detect_installed_state(project_root)
         components = {
             cid: {
                 "status": "installed" if is_installed(cid, project_root) else "not-installed",
-                "enabled": is_enabled(cid, project_root),
+                "enabled": is_enabled(cid, project_root) if is_installed(cid, project_root) else None,
             }
             for cid in all_descriptors()
         }
@@ -74,8 +95,6 @@ def build_server() -> FastMCP:
                     marker_data = yaml.safe_load(marker_path.read_text(encoding="utf-8")) or {}
                     version_info = {
                         "version": marker_data.get("version"),
-                        "installation_kind": marker_data.get("installation-kind"),
-                        "last_lifecycle_action": marker_data.get("last-lifecycle-action"),
                         "installed_at": marker_data.get("installed-at"),
                     }
             except Exception as exc:  # noqa: BLE001
@@ -88,7 +107,7 @@ def build_server() -> FastMCP:
             "version_info": version_info,
         }
 
-    @mcp.tool(description="List all registered AUDiaGentic components with install and enabled status.")
+    @mcp.tool(description=_tool_description("list_components", "List all registered AUDiaGentic components with install and enabled status."))
     def list_components() -> list[dict[str, Any]]:
         project_root = _project_root()
         return [
@@ -97,7 +116,7 @@ def build_server() -> FastMCP:
                 "display_name": d.display_name,
                 "description": d.description,
                 "status": "installed" if is_installed(d.component_id, project_root) else "not-installed",
-                "enabled": is_enabled(d.component_id, project_root),
+                "enabled": is_enabled(d.component_id, project_root) if is_installed(d.component_id, project_root) else None,
                 "core": d.core,
                 "detection_marker": d.detection_marker,
                 "file_count": len(d.files),
@@ -105,11 +124,11 @@ def build_server() -> FastMCP:
             for d in all_descriptors().values()
         ]
 
-    @mcp.tool(description="Install a component into the target project.")
+    @mcp.tool(description=_tool_description("install_component_tool", "Install a component into the target project."))
     def install_component_tool(component_id: str) -> dict[str, Any]:
         return install_component(component_id, _project_root())
 
-    @mcp.tool(description="Uninstall a component from the target project.")
+    @mcp.tool(description=_tool_description("uninstall_component_tool", "Uninstall a component from the target project."))
     def uninstall_component_tool(component_id: str, remove_configs: bool = False) -> dict[str, Any]:
         descriptor = all_descriptors().get(component_id)
         if descriptor and descriptor.core:
@@ -117,15 +136,15 @@ def build_server() -> FastMCP:
         deleted = uninstall_component(component_id, _project_root(), remove_configs=remove_configs)
         return {"ok": True, "component_id": component_id, "deleted": [str(p) for p in deleted]}
 
-    @mcp.tool(description="Enable a component in the target project.")
+    @mcp.tool(description=_tool_description("enable_component_tool", "Enable a component in the target project."))
     def enable_component_tool(component_id: str) -> dict[str, Any]:
         return enable_component(component_id, _project_root())
 
-    @mcp.tool(description="Disable a component in the target project.")
+    @mcp.tool(description=_tool_description("disable_component_tool", "Disable a component in the target project."))
     def disable_component_tool(component_id: str) -> dict[str, Any]:
         return disable_component(component_id, _project_root())
 
-    @mcp.tool(description="Read a file inside the project .audiagentic directory (read-only).")
+    @mcp.tool(description=_tool_description("read_project_file", "Read a file inside the project .audiagentic directory."))
     def read_project_file(relative_path: str) -> dict[str, Any]:
         project_root = _project_root()
         rel = Path(relative_path)

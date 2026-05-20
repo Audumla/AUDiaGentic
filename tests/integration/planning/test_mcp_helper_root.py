@@ -10,7 +10,7 @@ for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from tests.planning_testkit import seed_planning_config
+from tests.helpers.planning_testkit import seed_planning_config
 
 
 def _seed_test_project(tmp_path: Path) -> Path:
@@ -43,7 +43,7 @@ class TestMCPHelperRootConfigurability:
 
     def test_set_root_and_create_task(self, tmp_path: Path) -> None:
         """set_root allows creating items in isolated directory."""
-        import tools.planning.tm_helper as tm
+        import audiagentic.components.optional.planning.tm_helper as tm
 
         _seed_test_project(tmp_path)
 
@@ -62,7 +62,7 @@ class TestMCPHelperRootConfigurability:
 
     def test_explicit_root_parameter(self, tmp_path: Path) -> None:
         """Helper functions accept explicit root parameter."""
-        import tools.planning.tm_helper as tm
+        import audiagentic.components.optional.planning.tm_helper as tm
 
         _seed_test_project(tmp_path)
 
@@ -73,7 +73,7 @@ class TestMCPHelperRootConfigurability:
 
     def test_validate_with_custom_root(self, tmp_path: Path) -> None:
         """validate works with custom root."""
-        import tools.planning.tm_helper as tm
+        import audiagentic.components.optional.planning.tm_helper as tm
 
         _seed_test_project(tmp_path)
 
@@ -82,7 +82,7 @@ class TestMCPHelperRootConfigurability:
 
     def test_list_kind_with_custom_root(self, tmp_path: Path) -> None:
         """list_kind works with custom root."""
-        import tools.planning.tm_helper as tm
+        import audiagentic.components.optional.planning.tm_helper as tm
 
         _seed_test_project(tmp_path)
 

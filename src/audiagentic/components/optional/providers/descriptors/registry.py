@@ -123,11 +123,15 @@ def interrogate(provider_id: str, project_root: Path) -> dict[str, Any]:
 
     is_vscode_project = (project_root / ".vscode").exists()
 
+    cli_probe = descriptor.cli_probe
+    if descriptor.cli_install and descriptor.cli_install.package_manager == "vscode":
+        cli_probe = None
+
     result: dict[str, Any] = {
         "provider_id": provider_id,
         "display_name": descriptor.display_name,
         "registered": True,
-        "cli": _probe_cli(descriptor.cli_probe) if descriptor.cli_probe else None,
+        "cli": _probe_cli(cli_probe) if cli_probe else None,
         "vscode_project": is_vscode_project,
         "vscode_extensions": [
             _probe_extension(ext, is_vscode_project=is_vscode_project)

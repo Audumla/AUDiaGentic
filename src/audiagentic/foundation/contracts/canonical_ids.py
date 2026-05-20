@@ -17,7 +17,7 @@ def canonical_provider_ids() -> tuple[str, ...]:
 CANONICAL_COMPONENT_IDS = (
     "session",
     "core-lifecycle",
-    "release-audit-ledger",
+    "agent-ledger",
     "agent-jobs",
     "providers",
     "planning",

@@ -1,0 +1,32 @@
+FROM audiagentic-test
+
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV AUDIAGENTIC_DOCKER_TESTS=1
+ENV AUDIAGENTIC_REPO_ROOT=/app
+ENV PYTHONPATH=/app/src
+
+RUN rm -rf /usr/local/lib/python3.12/site-packages/mcp /usr/local/lib/python3.12/site-packages/mcp-*.dist-info
+COPY .tmp/docker-overlay/site-packages/mcp /usr/local/lib/python3.12/site-packages/mcp
+COPY .tmp/docker-overlay/site-packages/mcp-1.27.0.dist-info /usr/local/lib/python3.12/site-packages/mcp-1.27.0.dist-info
+
+COPY pyproject.toml README.md ./
+COPY src ./src
+COPY tests ./tests
+COPY docs/examples ./docs/examples
+COPY .audiagentic/config ./.audiagentic/config
+COPY .audiagentic/prompts ./.audiagentic/prompts
+COPY .audiagentic/skills ./.audiagentic/skills
+COPY .audiagentic/planning/config ./.audiagentic/planning/config
+COPY .claude/rules ./.claude/rules
+COPY .claude/skills ./.claude/skills
+COPY .claude/settings.json ./.claude/settings.json
+COPY .clinerules ./.clinerules
+COPY .gemini ./.gemini
+COPY .github/workflows ./.github/workflows
+COPY .github/prompts ./.github/prompts
+COPY .opencode ./.opencode
+COPY AGENTS.md CLAUDE.md GEMINI.md ./
+
+CMD ["pytest", "tests/unit/provisioning/test_dynamic_agent_config.py", "tests/integration/lifecycle", "tests/e2e/cli/test_mcp_component_servers.py", "-q"]

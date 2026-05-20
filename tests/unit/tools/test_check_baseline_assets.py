@@ -10,7 +10,8 @@ def test_check_baseline_assets_managed_headers() -> None:
     completed = subprocess.run(
         [
             sys.executable,
-            "tools/checks/check_baseline_assets.py",
+            "-m",
+            "audiagentic.foundation.contracts.check_baseline_assets",
             "--check-gitignore",
             "--check-managed-headers",
         ],

@@ -58,7 +58,7 @@ Repository-owned agent files live in `.github/agents/`:
 Use the shared prompt-trigger bridge for Copilot surfaces:
 
 ```powershell
-python tools/copilot_prompt_trigger_bridge.py --project-root .
+python src/audiagentic/components/optional/prompt_triggers/prompt_trigger_bridge.py --provider-id copilot --project-root .
 ```
 
 If a surface cannot be routed through the wrapper, exact canonical tag support is not

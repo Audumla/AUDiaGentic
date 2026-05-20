@@ -11,7 +11,10 @@ from typing import Any
 
 import yaml
 
-from audiagentic.components.optional.agent_jobs.prompt_syntax import load_prompt_syntax, load_review_tag
+from audiagentic.components.optional.agent_jobs.prompt_syntax import (
+    load_prompt_syntax,
+    load_review_tag,
+)
 from audiagentic.components.optional.agent_jobs.prompt_templates import (
     load_prompt_context,
     load_prompt_template,

@@ -1,0 +1,43 @@
+type: component
+contract-version: v1
+component-id: agent-ledger
+display-name: Agent Ledger
+description: Release management — changelog fragments, sync state, and release docs
+detection-marker: .audiagentic/components/agent-ledger.yaml
+config: release/agent-ledger.yaml
+files:
+  - path: .audiagentic/components/agent-ledger.yaml
+    lifecycle: create-if-missing
+    description: Installation marker
+  - path: .github/workflows/release.yml
+    lifecycle: required-managed
+    description: Release workflow for release-please
+  - path: docs/releases
+    lifecycle: generated-managed
+    recursive: true
+    description: Generated release notes and changelog
+  - path: .audiagentic/runtime/ledger
+    lifecycle: runtime-only
+    recursive: true
+    description: Release ledger — fragments, sync state
+mcp-servers:
+  - name: audiagentic-release-please
+    module: audiagentic.components.optional.ledger.server
+    direct-tools: [release_please_status, install_release_please, update_release_please_workflow]
+    description: Release-please MCP server for release management
+    instructions: >
+      Manages release-please installation for target project.
+      Use release_please_status to inspect current state before acting.
+      Use install_release_please to set up a new project.
+      Use update_release_please_workflow to refresh workflow template without touching config or manifest.
+    tool-descriptions:
+      release_please_status: Return release-please installation status for target project.
+      install_release_please: Install release-please into target project.
+      update_release_please_workflow: Re-render release workflow from current audiagentic template.
+harness-instructions:
+  - section: "What you can do"
+    content: |
+      ### audiagentic-release-please
+      - `mcp_release_please_status` — Check release-please status
+      - `mcp_install_release_please` — Install release-please
+      - `mcp_update_release_please_workflow` — Update release workflow

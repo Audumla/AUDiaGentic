@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from tests.planning_testkit import seed_planning_config
+from tests.helpers.planning_testkit import seed_planning_config
 
 ROOT = Path(__file__).resolve().parents[3]
 SERVER = ROOT / "tools" / "mcp" / "audiagentic-planning" / "audiagentic-planning_mcp.py"
