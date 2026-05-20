@@ -1,3 +1,4 @@
+type: surface
 contract-version: v1
 component-id: provider-surface-cline
 display-name: Cline Surface

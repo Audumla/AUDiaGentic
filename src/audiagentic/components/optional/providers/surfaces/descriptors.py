@@ -28,6 +28,7 @@ class SurfaceFile:
 
 @dataclass(frozen=True)
 class SurfaceDescriptor:
+    type: str
     component_id: str
     display_name: str
     description: str
@@ -49,6 +50,8 @@ def all_surfaces() -> dict[str, SurfaceDescriptor]:
 
 def load_surface_from_yaml(path: Path) -> SurfaceDescriptor:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if data.get("type") != "surface":
+        raise ValueError(f"{path.name}: expected type=surface, got {data.get('type')}")
     files = tuple(
         SurfaceFile(
             rel_path=f["path"],
@@ -59,6 +62,7 @@ def load_surface_from_yaml(path: Path) -> SurfaceDescriptor:
         for f in (data.get("files") or [])
     )
     descriptor = SurfaceDescriptor(
+        type=data["type"],
         component_id=data["component-id"],
         display_name=data.get("display-name", data["component-id"]),
         description=data.get("description", ""),

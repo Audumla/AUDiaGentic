@@ -1,3 +1,4 @@
+type: surface
 contract-version: v1
 component-id: provider-surface-copilot
 display-name: Copilot Surface

@@ -1,3 +1,4 @@
+type: surface
 contract-version: v1
 component-id: provider-surface-gemini
 display-name: Gemini Surface
