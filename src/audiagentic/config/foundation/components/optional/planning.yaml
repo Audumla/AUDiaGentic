@@ -1,3 +1,4 @@
+type: component
 contract-version: v1
 component-id: planning
 display-name: Planning
