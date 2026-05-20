@@ -52,12 +52,12 @@ for _p in (str(_BOOTSTRAP_ROOT), str(_BOOTSTRAP_ROOT / "src")):
         sys.path.insert(0, _p)
 
 # Import after path is set
-from audiagentic.knowledge.actions import execute_deterministic_action
-from audiagentic.knowledge.config import load_config
-from audiagentic.knowledge.capability import doctor, show_capability_contract, show_install_profiles
-from audiagentic.knowledge.events import process_events, record_event_baseline, scan_events
-from audiagentic.knowledge.importers import scaffold_page, seed_from_manifest
-from audiagentic.knowledge.llm import (
+from audiagentic.components.optional.knowledge.actions import execute_deterministic_action
+from audiagentic.components.optional.knowledge.config import load_config
+from audiagentic.components.optional.knowledge.capability import doctor, show_capability_contract, show_install_profiles
+from audiagentic.components.optional.knowledge.events import process_events, record_event_baseline, scan_events
+from audiagentic.components.optional.knowledge.importers import scaffold_page, seed_from_manifest
+from audiagentic.components.optional.knowledge.llm import (
     answer_question,
     bootstrap_project_knowledge,
     draft_sync_proposal,
@@ -67,20 +67,20 @@ from audiagentic.knowledge.llm import (
     show_execution_registry,
     submit_profile_job,
 )
-from audiagentic.knowledge.markdown_io import load_page_by_id
-from audiagentic.knowledge.models import SearchResult
-from audiagentic.knowledge.navigation import explain_navigation_contract, suggest_navigation
-from audiagentic.knowledge.registry import (
+from audiagentic.components.optional.knowledge.markdown_io import load_page_by_id
+from audiagentic.components.optional.knowledge.models import SearchResult
+from audiagentic.components.optional.knowledge.navigation import explain_navigation_contract, suggest_navigation
+from audiagentic.components.optional.knowledge.registry import (
     load_action_registry,
     load_importer_registry,
     load_llm_provider_registry,
     load_execution_registry,
 )
-from audiagentic.knowledge.search import search_pages, filter_by_metadata
-from audiagentic.knowledge.status import build_status
-from audiagentic.knowledge.sync import generate_sync_proposals, scan_drift
-from audiagentic.knowledge.validation import validate_vault
-from audiagentic.knowledge.index_maintenance import (
+from audiagentic.components.optional.knowledge.search import search_pages, filter_by_metadata
+from audiagentic.components.optional.knowledge.status import build_status
+from audiagentic.components.optional.knowledge.sync import generate_sync_proposals, scan_drift
+from audiagentic.components.optional.knowledge.validation import validate_vault
+from audiagentic.components.optional.knowledge.index_maintenance import (
     maintain_index_pages,
     validate_index_links,
     refresh_index,
@@ -164,7 +164,7 @@ def knowledge_search_pages(
     config = load_config(Path.cwd().resolve())
 
     # Load all pages for filtering
-    from audiagentic.knowledge.markdown_io import load_pages
+    from audiagentic.components.optional.knowledge.markdown_io import load_pages
 
     pages = load_pages(config.pages_root, config.meta_root)
 

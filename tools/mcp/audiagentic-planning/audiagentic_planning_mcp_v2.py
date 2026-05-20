@@ -39,7 +39,7 @@ for _p in (str(_CODE_ROOT), str(_CODE_ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from audiagentic.planning.app.api import PlanningAPI
+from audiagentic.components.optional.planning.app.api import PlanningAPI
 
 _ROOT = _find_root()
 _api = PlanningAPI(_ROOT)

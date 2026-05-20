@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from audiagentic.knowledge.config import KnowledgeConfig, load_config
+from audiagentic.components.optional.knowledge.config import KnowledgeConfig, load_config
 from audiagentic.paths import REPO_ROOT
 
 

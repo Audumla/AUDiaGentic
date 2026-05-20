@@ -8,8 +8,8 @@ from __future__ import annotations
 import json
 from unittest.mock import patch
 
-from audiagentic.provisioning.harness.pi.runner import launch_rig_if_needed, load_model_profile
-from audiagentic.provisioning.rig.embedded.launch import (
+from audiagentic.runtime.harness.pi.runner import launch_rig_if_needed, load_model_profile
+from audiagentic.runtime.rig.embedded.launch import (
     ensure_under,
     resolve_under,
     runtime_bin_dir,
@@ -41,15 +41,16 @@ def test_9b_flash_attempts_embedded_launch(monkeypatch) -> None:
     monkeypatch.delenv("AUDIAGENTIC_AG_BASE_URL", raising=False)
     _, profile = load_model_profile("qwen3.5-9b-flash", "qwen3.5-9b-flash")
     fake_payload = {"base_url": "http://127.0.0.1:9999/v1", "model": "Qwen3.5-9B.gguf", "pid": 77}
-    with patch("audiagentic.provisioning.rig.registry.StartupLock") as mock_lock, \
-         patch("audiagentic.provisioning.rig.registry.read_rig_state", return_value=None), \
-         patch("audiagentic.provisioning.rig.registry.write_rig_state"), \
-         patch("audiagentic.provisioning.harness.pi.runner.subprocess.run") as mock_run:
+    with patch("audiagentic.runtime.rig.registry.StartupLock") as mock_lock, \
+         patch("audiagentic.runtime.rig.registry.read_rig_state", return_value=None), \
+         patch("audiagentic.runtime.rig.registry.write_rig_state"), \
+         patch("audiagentic.runtime.rig.registry.reap_orphan_rigs"), \
+         patch("audiagentic.runtime.harness.pi.runner.rig.subprocess.run") as mock_run:
         mock_lock.return_value.__enter__ = lambda s: s
         mock_lock.return_value.__exit__ = lambda s, *a: None
         mock_run.return_value.returncode = 0
         mock_run.return_value.stdout = json.dumps(fake_payload)
-        _, _, rig_pid, _ = launch_rig_if_needed("qwen3.5-9b-flash", "qwen3.5-9b-flash", profile)
+        _, _, rig_pid, _ = launch_rig_if_needed("qwen3.5-9b-flash", "qwen3.5-9b-flash", profile, 9999)
     mock_run.assert_called_once()
     assert rig_pid == 77
 
@@ -58,15 +59,16 @@ def test_2b_profile_attempts_embedded_launch(monkeypatch) -> None:
     monkeypatch.delenv("AUDIAGENTIC_AG_BASE_URL", raising=False)
     _, profile = load_model_profile("qwen3.5-2b-q4_k_s", "qwen3.5-2b-q4_k_s")
     fake_payload = {"base_url": "http://127.0.0.1:9999/v1", "model": "Qwen.gguf", "pid": 99}
-    with patch("audiagentic.provisioning.rig.registry.StartupLock") as mock_lock, \
-         patch("audiagentic.provisioning.rig.registry.read_rig_state", return_value=None), \
-         patch("audiagentic.provisioning.rig.registry.write_rig_state"), \
-         patch("audiagentic.provisioning.harness.pi.runner.subprocess.run") as mock_run:
+    with patch("audiagentic.runtime.rig.registry.StartupLock") as mock_lock, \
+         patch("audiagentic.runtime.rig.registry.read_rig_state", return_value=None), \
+         patch("audiagentic.runtime.rig.registry.write_rig_state"), \
+         patch("audiagentic.runtime.rig.registry.reap_orphan_rigs"), \
+         patch("audiagentic.runtime.harness.pi.runner.rig.subprocess.run") as mock_run:
         mock_lock.return_value.__enter__ = lambda s: s
         mock_lock.return_value.__exit__ = lambda s, *a: None
         mock_run.return_value.returncode = 0
         mock_run.return_value.stdout = json.dumps(fake_payload)
-        _, _, rig_pid, _ = launch_rig_if_needed("qwen3.5-2b-q4_k_s", "qwen3.5-2b-q4_k_s", profile)
+        _, _, rig_pid, _ = launch_rig_if_needed("qwen3.5-2b-q4_k_s", "qwen3.5-2b-q4_k_s", profile, 9999)
     mock_run.assert_called_once()
     assert rig_pid == 99
 
@@ -75,15 +77,16 @@ def test_2b_launch_command_passes_model_profile(monkeypatch) -> None:
     monkeypatch.delenv("AUDIAGENTIC_AG_BASE_URL", raising=False)
     _, profile = load_model_profile("qwen3.5-2b-q4_k_s", "qwen3.5-2b-q4_k_s")
     fake_payload = {"base_url": "http://127.0.0.1:9999/v1", "model": "Qwen.gguf", "pid": 99}
-    with patch("audiagentic.provisioning.rig.registry.StartupLock") as mock_lock, \
-         patch("audiagentic.provisioning.rig.registry.read_rig_state", return_value=None), \
-         patch("audiagentic.provisioning.rig.registry.write_rig_state"), \
-         patch("audiagentic.provisioning.harness.pi.runner.subprocess.run") as mock_run:
+    with patch("audiagentic.runtime.rig.registry.StartupLock") as mock_lock, \
+         patch("audiagentic.runtime.rig.registry.read_rig_state", return_value=None), \
+         patch("audiagentic.runtime.rig.registry.write_rig_state"), \
+         patch("audiagentic.runtime.rig.registry.reap_orphan_rigs"), \
+         patch("audiagentic.runtime.harness.pi.runner.rig.subprocess.run") as mock_run:
         mock_lock.return_value.__enter__ = lambda s: s
         mock_lock.return_value.__exit__ = lambda s, *a: None
         mock_run.return_value.returncode = 0
         mock_run.return_value.stdout = json.dumps(fake_payload)
-        launch_rig_if_needed("qwen3.5-2b-q4_k_s", "qwen3.5-2b-q4_k_s", profile)
+        launch_rig_if_needed("qwen3.5-2b-q4_k_s", "qwen3.5-2b-q4_k_s", profile, 9999)
     cmd = mock_run.call_args[0][0]
     assert "--model-profile" in cmd
     assert "qwen3.5-2b-q4_k_s" in cmd
@@ -111,3 +114,4 @@ def test_2b_model_file_resolves_within_bin_dir() -> None:
 
 def test_9b_model_file_resolves_within_bin_dir() -> None:
     _assert_model_file_within_bin_dir("qwen3.5-9b-flash")
+

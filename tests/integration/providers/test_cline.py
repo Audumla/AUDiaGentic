@@ -9,8 +9,8 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
+from audiagentic.components.optional.providers.adapters.cline import adapter as cline
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.interoperability.providers.cline import adapter as cline
 
 
 def test_cline_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:

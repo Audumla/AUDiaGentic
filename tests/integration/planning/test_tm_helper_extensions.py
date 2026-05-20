@@ -55,7 +55,7 @@ def _seed_helper_project(root: Path) -> None:
 
 @pytest.fixture()
 def helper_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    from audiagentic.planning.app.api import PlanningAPI
+    from audiagentic.components.optional.planning.app.api import PlanningAPI
 
     _seed_helper_project(tmp_path)
     monkeypatch.setattr(tm, "_ROOT", tmp_path)

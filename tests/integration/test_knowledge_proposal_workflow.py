@@ -5,8 +5,8 @@ from pathlib import Path
 
 import yaml
 
-from audiagentic.knowledge.config import load_config
-from audiagentic.knowledge.lifecycle import (
+from audiagentic.components.optional.knowledge.config import load_config
+from audiagentic.components.optional.knowledge.lifecycle import (
     accept_proposal,
     apply_proposal,
     get_proposal,

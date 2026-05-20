@@ -13,7 +13,7 @@ for path in (str(ROOT), str(SRC)):
 
 from tests.helpers import sandbox as sandbox_helper  # noqa: E402
 
-from audiagentic.release.fragments import record_change_event  # noqa: E402
+from audiagentic.components.optional.ledger.fragments import record_change_event  # noqa: E402
 
 
 def test_release_bootstrap_creates_install_and_release_artifacts(tmp_path: Path) -> None:
@@ -66,7 +66,7 @@ def test_release_bootstrap_creates_install_and_release_artifacts(tmp_path: Path)
         result = subprocess.run(
             [
                 sys.executable,
-                str(ROOT / "src" / "audiagentic" / "channels" / "cli" / "main.py"),
+                "-m", "audiagentic.launcher",
                 "release-bootstrap",
                 "--project-root",
                 str(sandbox.repo),

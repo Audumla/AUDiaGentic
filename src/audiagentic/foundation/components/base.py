@@ -63,3 +63,4 @@ class ComponentDescriptor:
     scope: str = SCOPE_PROJECT      # SCOPE_PROJECT | SCOPE_HARNESS
     mcp_servers: tuple[McpServerDeclaration, ...] = ()
     harness_instructions: tuple[HarnessInstruction, ...] = ()
+    core: bool = False              # if True, component cannot be uninstalled

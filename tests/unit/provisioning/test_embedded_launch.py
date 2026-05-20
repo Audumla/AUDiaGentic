@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.provisioning.rig.embedded.launch import (
+from audiagentic.runtime.rig.embedded.launch import (
     load_model_profiles,
     resolve_model,
     resolve_model_profile,
@@ -115,3 +115,4 @@ def _write_models(root: Path, data: dict) -> Path:
     path = root / "models.json"
     path.write_text(json.dumps(data), encoding="utf-8")
     return path
+

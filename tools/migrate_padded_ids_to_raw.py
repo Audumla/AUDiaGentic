@@ -21,8 +21,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from audiagentic.planning.fs.scan import scan_items
-from audiagentic.planning.app.api import PlanningAPI
+from audiagentic.components.optional.planning.fs.scan import scan_items
+from audiagentic.components.optional.planning.app.api import PlanningAPI
 
 
 def _strip_padding(id_: str) -> str | None:

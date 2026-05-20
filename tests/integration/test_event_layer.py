@@ -29,7 +29,7 @@ def _seed_planning_project(root: Path) -> None:
 @pytest.fixture
 def planning_api():
     """Create planning API instance."""
-    from audiagentic.planning.app.api import PlanningAPI
+    from audiagentic.components.optional.planning.app.api import PlanningAPI
 
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -100,7 +100,7 @@ class TestReplaySafety:
 #
 #     def test_planning_task_done_marks_knowledge_stale(self, planning_api, knowledge_api):
 #         """Test that planning task done marks knowledge pages stale."""
-#         from audiagentic.knowledge.events import on_planning_state_change
+#         from audiagentic.components.optional.knowledge.events import on_planning_state_change
 #
 #         # Create planning items
 #         request = planning_api.new("request", "Test Request", "Test request", source="test")

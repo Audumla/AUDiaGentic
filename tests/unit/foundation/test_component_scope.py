@@ -71,8 +71,8 @@ def test_project_marker_path_has_dot_audiagentic(tmp_path):
 
 
 def test_harness_marker_path_no_dot_audiagentic(tmp_path):
-    p = marker_path("auto-update", tmp_path, SCOPE_HARNESS)
-    assert p == tmp_path / "components" / "auto-update.yaml"
+    p = marker_path("session", tmp_path, SCOPE_HARNESS)
+    assert p == tmp_path / "components" / "session.yaml"
 
 
 # ── is_installed / is_enabled with scope ─────────────────────────────────────
@@ -110,12 +110,12 @@ def test_is_enabled_harness_reads_from_harness_home(tmp_path):
         assert not is_enabled("harness-y", tmp_path / "any_project")
 
 
-# ── auto-update descriptor is registered with harness scope ──────────────────
+# ── session descriptor is registered with harness scope ──────────────────────
 
-def test_auto_update_registered_as_harness():
+def test_session_registered_as_harness():
     register_all_components()
     from audiagentic.foundation.components.registry import get_descriptor
-    desc = get_descriptor("auto-update")
+    desc = get_descriptor("session")
     assert desc is not None
     assert desc.scope == SCOPE_HARNESS
 

@@ -11,7 +11,7 @@ for path in (str(ROOT), str(SRC)):
 
 from tests.helpers import sandbox as sandbox_helper
 
-from audiagentic.interoperability.providers.gemini import adapter as gemini
+from audiagentic.components.optional.providers.adapters.gemini import adapter as gemini
 
 
 def test_gemini_adapter_recognizes_tag(monkeypatch, tmp_path: Path) -> None:
