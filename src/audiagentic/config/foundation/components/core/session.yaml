@@ -1,3 +1,4 @@
+type: component
 contract-version: v1
 scope: harness
 component-id: session

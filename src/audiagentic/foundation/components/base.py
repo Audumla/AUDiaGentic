@@ -64,3 +64,4 @@ class ComponentDescriptor:
     mcp_servers: tuple[McpServerDeclaration, ...] = ()
     harness_instructions: tuple[HarnessInstruction, ...] = ()
     core: bool = False              # if True, component cannot be uninstalled
+    type: str = "component"         # discriminator: "component" vs other config types
