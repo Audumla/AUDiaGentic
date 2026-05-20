@@ -1,0 +1,40 @@
+{
+  "settings": {
+    "toolPrefix": "mcp",
+    "idleTimeout": 10,
+    "directTools": true
+  },
+  "mcpServers": {
+    "audiagentic-session": {
+      "command": "__AUDIAGENTIC_PYTHON__",
+      "args": [
+        "-m",
+        "audiagentic.components.core.harness_server",
+        "--readonly",
+        "--smoke-only"
+      ],
+      "env": {
+        "PYTHONPATH": "__AUDIAGENTIC_SRC__",
+        "AUDIAGENTIC_REPO_ROOT": "__AUDIAGENTIC_REPO_ROOT__"
+      },
+      "lifecycle": "lazy",
+      "directTools": [
+        "status",
+        "config",
+        "set_auto_update"
+      ]
+    },
+    "audiagentic-project": {
+      "command": "__AUDIAGENTIC_PYTHON__",
+      "args": [
+        "-m",
+        "audiagentic.components.core.project_server"
+      ],
+      "env": {
+        "PYTHONPATH": "__AUDIAGENTIC_SRC__",
+        "AUDIAGENTIC_REPO_ROOT": "__AUDIAGENTIC_REPO_ROOT__"
+      },
+      "lifecycle": "lazy"
+    }
+  }
+}

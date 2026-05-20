@@ -1,0 +1,23 @@
+contract-version: v1
+scope: harness
+component-id: session
+display-name: Session MCP
+description: Exposes harness status and configuration via MCP tools
+detection-marker: components/session.yaml
+files:
+  - path: components/session.yaml
+    lifecycle: create-if-missing
+    description: Component installation marker
+mcp-servers:
+  - name: audiagentic-session
+    module: audiagentic.components.core.harness_server
+    args: ["--readonly", "--smoke-only"]
+    direct-tools: [status, config, set_auto_update]
+    description: Session MCP server for harness status and configuration
+harness-instructions:
+  - section: "What you can do"
+    content: |
+      ### audiagentic-session
+      - `mcp_status` — Check harness status and configuration
+      - `mcp_config` — Show harness configuration
+      - `mcp_set_auto_update` — Enable or disable auto-update

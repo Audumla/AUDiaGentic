@@ -13,10 +13,10 @@ for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from audiagentic.planning.app.api import PlanningAPI
-from audiagentic.planning.app.config import Config
-from audiagentic.planning.fs.read import parse_markdown
-from audiagentic.planning.fs.write import dump_markdown
+from audiagentic.components.optional.planning.app.api import PlanningAPI
+from audiagentic.components.optional.planning.app.config import Config
+from audiagentic.components.optional.planning.fs.read import parse_markdown
+from audiagentic.components.optional.planning.fs.write import dump_markdown
 
 
 def _write(path: Path, content: str) -> None:

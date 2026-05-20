@@ -38,7 +38,7 @@ def _seed(root: Path) -> None:
 @pytest.fixture()
 def pr(tmp_path: Path):
     _seed(tmp_path)
-    from audiagentic.planning.app.api import PlanningAPI
+    from audiagentic.components.optional.planning.app.api import PlanningAPI
 
     return tmp_path, PlanningAPI(tmp_path)
 

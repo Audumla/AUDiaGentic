@@ -6,8 +6,7 @@ import json
 
 import pytest
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.interoperability.protocols.streaming.completion import (
+from audiagentic.components.optional.providers.protocols.streaming.completion import (
     CompletionStatus,
     Decision,
     NormalizationMethod,
@@ -22,6 +21,7 @@ from audiagentic.interoperability.protocols.streaming.completion import (
     try_extract_json_from_stdout,
     validate_provider_completion,
 )
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 class TestProviderCompletion:

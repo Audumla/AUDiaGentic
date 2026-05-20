@@ -14,7 +14,7 @@ for _p in (str(ROOT), str(ROOT / "src")):
 
 from tests.planning_testkit import seed_planning_config
 
-from audiagentic.planning.app.api import PlanningAPI
+from audiagentic.components.optional.planning.app.api import PlanningAPI
 
 
 def _seed_planning_project(root: Path) -> None:

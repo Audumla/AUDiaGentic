@@ -11,8 +11,8 @@ for path in (str(ROOT), str(SRC)):
 
 from tests.helpers import sandbox as sandbox_helper
 
+from audiagentic.components.optional.ledger.history_import import import_legacy_history
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.release.history_import import import_legacy_history
 
 FIXTURES = ROOT / "docs" / "examples" / "fixtures"
 

@@ -32,7 +32,12 @@ def apply_uninstall(
         )
 
     removed = uninstall_all_components(project_root, remove_configs=remove_configs)
-    deleted = [str(p.relative_to(project_root)) for p in removed]
+    deleted = []
+    for p in removed:
+        try:
+            deleted.append(str(p.relative_to(project_root)))
+        except ValueError:
+            pass
 
     # Safety sweep: remove any runtime state not covered by a component declaration.
     runtime_dir = project_root / ".audiagentic" / "runtime"
