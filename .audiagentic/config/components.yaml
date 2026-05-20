@@ -3,6 +3,6 @@ components:
   core-lifecycle: { enabled: true }
   release-audit-ledger: { enabled: true }
   agent-jobs: { enabled: true }
-  provider-layer: { enabled: true }
+  providers: { enabled: true }
   discord-overlay: { enabled: false }
   optional-server: { enabled: false }

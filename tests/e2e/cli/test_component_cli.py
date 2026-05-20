@@ -66,7 +66,7 @@ def test_status_unknown_component(tmp_path):
 
 LIFECYCLE_COMPONENTS = [
     "core-lifecycle",
-    "provider-layer",
+    "providers",
     "planning",
     "release-audit-ledger",
     "agent-jobs",
