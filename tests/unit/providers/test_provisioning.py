@@ -139,7 +139,9 @@ def test_reconcile_provider_disables_when_cli_absent_and_was_enabled(
     monkeypatch, tmp_path: Path
 ) -> None:
     import audiagentic.components.optional.providers.services.lifecycle as lifecycle
-    from audiagentic.foundation.config.provider_config import set_provider_enabled
+    from audiagentic.components.optional.providers.services.provider_config import (
+        set_provider_enabled,
+    )
 
     set_provider_enabled(tmp_path, "codex", enabled=True)
     monkeypatch.setattr(
@@ -160,7 +162,9 @@ def test_reconcile_provider_noop_when_already_in_sync_enabled(
     monkeypatch, tmp_path: Path
 ) -> None:
     import audiagentic.components.optional.providers.services.lifecycle as lifecycle
-    from audiagentic.foundation.config.provider_config import set_provider_enabled
+    from audiagentic.components.optional.providers.services.provider_config import (
+        set_provider_enabled,
+    )
 
     set_provider_enabled(tmp_path, "codex", enabled=True)
     monkeypatch.setattr(
@@ -211,7 +215,9 @@ def test_reconcile_all_providers_returns_one_entry_per_descriptor(
     assert result["action"] == "reconcile"
     assert result["ok"] is True
     # vscode-method providers are excluded from auto-reconcile
-    from audiagentic.components.optional.providers.descriptors.registry import all_descriptors as _all
+    from audiagentic.components.optional.providers.descriptors.registry import (
+        all_descriptors as _all,
+    )
     expected = {
         pid for pid, d in _all().items()
         if not (d.cli_install and d.cli_install.package_manager == "vscode")
