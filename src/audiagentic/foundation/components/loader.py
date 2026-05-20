@@ -23,6 +23,8 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
     import yaml
 
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if data.get("type") != "component":
+        raise ValueError(f"{path.name}: expected type=component, got {data.get('type')}")
     files = tuple(
         ComponentFile(
             rel_path=f["path"],
@@ -56,6 +58,7 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
     is_core = bool(data.get("core", False)) or path.parent.name == "core"
 
     descriptor = ComponentDescriptor(
+        type=data["type"],
         component_id=data["component-id"],
         display_name=data.get("display-name", data["component-id"]),
         description=data.get("description", ""),
