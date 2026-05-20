@@ -19,5 +19,5 @@ Do not:
 ## Bridge invocation
 
 Route tagged prompts through the shared bridge:
-  python tools/copilot_prompt_trigger_bridge.py --project-root .
+  python src/audiagentic/components/optional/prompt_triggers/prompt_trigger_bridge.py --provider-id copilot --project-root .
 

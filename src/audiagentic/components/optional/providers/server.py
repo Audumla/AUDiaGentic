@@ -14,15 +14,21 @@ from typing import Any
 
 try:
     from mcp.server.fastmcp import FastMCP
+    from mcp.server.fastmcp.server import Context
 except ImportError:
     print("Error: mcp package not installed. Run: pip install mcp", file=sys.stderr)
     sys.exit(1)
+
+from audiagentic.foundation.components.loader import register_all_components
+from audiagentic.foundation.components.registry import get_mcp_server_declaration
 
 from audiagentic.components.optional.providers.services.provider_catalog import (
     catalog_is_stale,
     runtime_catalog_path,
     runtime_catalog_root,
 )
+
+register_all_components()
 
 
 def _descriptor_ids() -> frozenset[str]:
@@ -63,17 +69,37 @@ def _read_catalog(project_root: Path, provider_id: str) -> dict[str, Any] | None
         return None
 
 
-def build_server() -> FastMCP:
-    mcp = FastMCP(
-        "audiagentic-providers",
-        instructions=(
+def _server_decl():
+    return get_mcp_server_declaration("providers", "audiagentic-providers")
+
+
+def _server_instructions() -> str:
+    decl = _server_decl()
+    return (
+        decl.instructions
+        if decl and decl.instructions
+        else (
             "AUDiaGentic providers component server. "
             "Use list_providers to see all providers and their status, "
             "provider_status to inspect a specific provider's runtime catalog."
-        ),
+        )
     )
 
-    @mcp.tool(description="List all known providers and their configuration/catalog status.")
+
+def _tool_description(name: str, fallback: str) -> str:
+    decl = _server_decl()
+    if decl and name in decl.tool_descriptions:
+        return decl.tool_descriptions[name]
+    return fallback
+
+
+def build_server() -> FastMCP:
+    mcp = FastMCP(
+        "audiagentic-providers",
+        instructions=_server_instructions(),
+    )
+
+    @mcp.tool(description=_tool_description("list_providers", "List all known providers and their configuration or catalog status."))
     def list_providers() -> dict[str, Any]:
         project_root = _project_root()
         providers_yaml = _read_providers_yaml(project_root)
@@ -143,7 +169,7 @@ def build_server() -> FastMCP:
             "providers": result,
         }
 
-    @mcp.tool(description="Return detailed status for a specific provider including catalog contents.")
+    @mcp.tool(description=_tool_description("provider_status", "Return detailed status for a specific provider including catalog contents."))
     def provider_status(provider_id: str) -> dict[str, Any]:
         project_root = _project_root()
         providers_yaml = _read_providers_yaml(project_root)
@@ -192,18 +218,13 @@ def build_server() -> FastMCP:
             result["vscode_extensions"] = vscode_exts
         return result
 
-    @mcp.tool(
-        description=(
-            "Interrogate a provider: check CLI availability, VS Code extension install status, "
-            "permissions model, and which agent files are present in the project."
-        )
-    )
+    @mcp.tool(description=_tool_description("interrogate_provider", "Interrogate a provider for CLI availability, VS Code extension status, permissions, and agent files."))
     def interrogate_provider(provider_id: str) -> dict[str, Any]:
         from audiagentic.components.optional.providers.descriptors import interrogate
         project_root = _project_root()
         return interrogate(provider_id, project_root)
 
-    @mcp.tool(description="List all registered provider descriptors (static metadata).")
+    @mcp.tool(description=_tool_description("list_provider_descriptors", "List all registered provider descriptors and static metadata."))
     def list_provider_descriptors() -> list[dict[str, Any]]:
         from audiagentic.components.optional.providers.descriptors import all_descriptors
         return [
@@ -234,7 +255,7 @@ def build_server() -> FastMCP:
             for d in sorted(all_descriptors().values(), key=lambda x: x.provider_id)
         ]
 
-    @mcp.tool(description="List model IDs from a provider's runtime catalog.")
+    @mcp.tool(description=_tool_description("list_provider_models", "List model IDs from a provider runtime catalog."))
     def list_provider_models(provider_id: str) -> dict[str, Any]:
         project_root = _project_root()
         catalog = _read_catalog(project_root, provider_id)
@@ -256,27 +277,18 @@ def build_server() -> FastMCP:
             "models": models,
         }
 
-    @mcp.tool(
-        description=(
-            "Fetch and persist the live model catalog for a provider. "
-            "Requires the provider CLI to be installed and authenticated. "
-            "Not all providers support this — check 'supports_catalog_fetch' in list_provider_descriptors."
-        )
-    )
+    @mcp.tool(description=_tool_description("refresh_provider_catalog", "Fetch and persist live model catalog for a provider."))
     def refresh_provider_catalog(provider_id: str) -> dict[str, Any]:
-        from audiagentic.components.optional.providers.services.catalog import fetch_provider_catalog
+        from audiagentic.components.optional.providers.services.catalog import (
+            fetch_provider_catalog,
+        )
         project_root = _project_root()
         try:
             return fetch_provider_catalog(provider_id, project_root=project_root)
         except Exception as exc:  # noqa: BLE001
             return {"provider_id": provider_id, "ok": False, "error": str(exc)}
 
-    @mcp.tool(
-        description=(
-            "Fetch and persist model catalogs for all providers that support it. "
-            "Requires each provider CLI to be installed and authenticated."
-        )
-    )
+    @mcp.tool(description=_tool_description("refresh_all_catalogs", "Fetch and persist model catalogs for all providers that support it."))
     def refresh_all_catalogs() -> dict[str, Any]:
         from audiagentic.components.optional.providers.services.catalog import (
             refresh_all_catalogs as _refresh,
@@ -284,47 +296,46 @@ def build_server() -> FastMCP:
         project_root = _project_root()
         return _refresh(project_root=project_root)
 
-    # --- lifecycle tools (write) ---
+   # --- lifecycle tools (write) ---
 
-    @mcp.tool(
-        description=(
-            "Install a provider CLI. Pass dry_run=true (default) to see what would run "
-            "without touching the host. Pass dry_run=false to execute."
+    @mcp.tool(description=_tool_description("install_provider", "Install a provider CLI, with dry-run support."))
+    async def install_provider(provider_id: str, dry_run: bool = False, ctx: Context = None) -> dict[str, Any]:
+        from audiagentic.components.optional.providers.services.lifecycle import (
+            install_provider_cli,
         )
-    )
-    def install_provider(provider_id: str, dry_run: bool = True) -> dict[str, Any]:
-        from audiagentic.components.optional.providers.services.lifecycle import install_provider_cli
         project_root = _project_root()
-        return install_provider_cli(provider_id, dry_run=dry_run, project_root=project_root)
+        if ctx is not None:
+            await ctx.info(f"[{provider_id}] Installing provider CLI...")
+        result = install_provider_cli(provider_id, dry_run=dry_run, project_root=project_root)
+        if ctx is not None:
+            await ctx.info(f"[{provider_id}] install: {result.get('status', 'unknown')}")
+        return result
 
-    @mcp.tool(
-        description=(
-            "Uninstall a provider CLI. Pass dry_run=true (default) to see what would run "
-            "without touching the host. Pass dry_run=false to execute."
+    @mcp.tool(description=_tool_description("uninstall_provider", "Uninstall a provider CLI, with dry-run support."))
+    async def uninstall_provider(provider_id: str, dry_run: bool = False, ctx: Context = None) -> dict[str, Any]:
+        from audiagentic.components.optional.providers.services.lifecycle import (
+            uninstall_provider_cli,
         )
-    )
-    def uninstall_provider(provider_id: str, dry_run: bool = True) -> dict[str, Any]:
-        from audiagentic.components.optional.providers.services.lifecycle import uninstall_provider_cli
         project_root = _project_root()
-        return uninstall_provider_cli(provider_id, dry_run=dry_run, project_root=project_root)
+        if ctx is not None:
+            await ctx.info(f"[{provider_id}] Uninstalling provider CLI...")
+        result = uninstall_provider_cli(provider_id, dry_run=dry_run, project_root=project_root)
+        if ctx is not None:
+            await ctx.info(f"[{provider_id}] uninstall: {result.get('status', 'unknown')}")
+        return result
 
-    @mcp.tool(
-        description=(
-            "Repair a provider CLI: installs it if missing, no-op if already available. "
-            "Pass dry_run=true (default) to preview. Pass dry_run=false to execute."
-        )
-    )
-    def repair_provider(provider_id: str, dry_run: bool = True) -> dict[str, Any]:
+    @mcp.tool(description=_tool_description("repair_provider", "Repair a provider CLI by installing it if missing."))
+    async def repair_provider(provider_id: str, dry_run: bool = False, ctx: Context = None) -> dict[str, Any]:
         from audiagentic.components.optional.providers.services.lifecycle import repair_provider_cli
         project_root = _project_root()
-        return repair_provider_cli(provider_id, dry_run=dry_run, project_root=project_root)
+        if ctx is not None:
+            await ctx.info(f"[{provider_id}] Repairing provider CLI...")
+        result = repair_provider_cli(provider_id, dry_run=dry_run, project_root=project_root)
+        if ctx is not None:
+            await ctx.info(f"[{provider_id}] repair: {result.get('status', 'unknown')}")
+        return result
 
-    @mcp.tool(
-        description=(
-            "Enable or disable a provider in providers.yaml. "
-            "Does not install or uninstall the CLI — use install_provider / uninstall_provider for that."
-        )
-    )
+    @mcp.tool(description=_tool_description("set_provider_enabled", "Enable or disable a provider in providers.yaml."))
     def set_provider_enabled(provider_id: str, enabled: bool) -> dict[str, Any]:
         from audiagentic.components.optional.providers.services.provider_config import (
             set_provider_enabled as _set_enabled,
@@ -333,12 +344,7 @@ def build_server() -> FastMCP:
         _set_enabled(project_root, provider_id, enabled=enabled)
         return {"provider_id": provider_id, "enabled": enabled, "ok": True}
 
-    @mcp.tool(
-        description=(
-            "Apply managed surface blocks (rules, skills, config) to a provider's agent files. "
-            "Idempotent — safe to run at any time. Omit provider_id to apply all providers."
-        )
-    )
+    @mcp.tool(description=_tool_description("apply_provider_surfaces", "Apply managed provider surface blocks to agent files."))
     def apply_provider_surfaces(provider_id: str | None = None) -> dict[str, Any]:
         from audiagentic.components.optional.providers.surfaces.manager import (
             apply_provider_surfaces as _apply,
@@ -346,13 +352,7 @@ def build_server() -> FastMCP:
         project_root = _project_root()
         return _apply(project_root, provider_id=provider_id)
 
-    @mcp.tool(
-        description=(
-            "Remove stale managed surface blocks from a provider's agent files — "
-            "blocks whose contributing component no longer exists. "
-            "Omit provider_id to scan all providers."
-        )
-    )
+    @mcp.tool(description=_tool_description("prune_provider_surfaces", "Remove stale managed provider surface blocks from agent files."))
     def prune_provider_surfaces(provider_id: str | None = None) -> dict[str, Any]:
         from audiagentic.components.optional.providers.surfaces.manager import (
             prune_provider_surfaces as _prune,
@@ -360,13 +360,7 @@ def build_server() -> FastMCP:
         project_root = _project_root()
         return _prune(project_root, provider_id=provider_id)
 
-    @mcp.tool(
-        description=(
-            "Reconcile a single provider: probe host CLI availability, then sync providers.yaml. "
-            "Enables + applies surfaces if CLI found but not enabled; disables + prunes if CLI gone "
-            "but still marked enabled. No-op if already in sync."
-        )
-    )
+    @mcp.tool(description=_tool_description("reconcile_provider", "Reconcile a single provider against host state and sync config or surfaces."))
     def reconcile_provider(provider_id: str) -> dict[str, Any]:
         from audiagentic.components.optional.providers.services.lifecycle import (
             reconcile_provider as _reconcile,
@@ -374,12 +368,7 @@ def build_server() -> FastMCP:
         project_root = _project_root()
         return _reconcile(provider_id, project_root=project_root)
 
-    @mcp.tool(
-        description=(
-            "Reconcile all registered providers against host state. "
-            "For each provider: enables/disables and applies/prunes surfaces as needed."
-        )
-    )
+    @mcp.tool(description=_tool_description("reconcile_all_providers", "Reconcile all registered providers against host state."))
     def reconcile_all_providers() -> dict[str, Any]:
         from audiagentic.components.optional.providers.services.lifecycle import (
             reconcile_all_providers as _reconcile_all,

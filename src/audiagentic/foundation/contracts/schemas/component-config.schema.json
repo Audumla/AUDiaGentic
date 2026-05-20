@@ -13,7 +13,7 @@
       "type": "object",
       "required": [
         "core-lifecycle",
-        "release-audit-ledger",
+        "agent-ledger",
         "agent-jobs",
         "providers"
       ],
@@ -30,7 +30,7 @@
             }
           }
         },
-        "release-audit-ledger": {
+        "agent-ledger": {
           "type": "object",
           "required": [
             "enabled"

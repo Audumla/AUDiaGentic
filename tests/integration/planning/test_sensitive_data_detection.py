@@ -10,7 +10,7 @@ for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-import tools.planning.tm_helper as tm
+import audiagentic.components.optional.planning.tm_helper as tm
 
 
 class TestCheckSensitiveDataPatternDetection:

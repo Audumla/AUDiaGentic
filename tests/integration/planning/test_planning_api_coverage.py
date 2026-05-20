@@ -20,7 +20,7 @@ for _p in (str(ROOT), str(ROOT / "src")):
         sys.path.insert(0, _p)
 
 import pytest
-from tests.planning_testkit import seed_planning_config
+from tests.helpers.planning_testkit import seed_planning_config
 
 # ---------------------------------------------------------------------------
 # Fixture
@@ -902,7 +902,7 @@ class TestValidationCoverage:
 
 class TestBatchOperations:
     def test_batch_state_and_label(self, pr):
-        import tools.planning.tm_helper as tm
+        import audiagentic.components.optional.planning.tm_helper as tm
 
         _seed(pr[0])
         tm.set_root(pr[0])
@@ -926,7 +926,7 @@ class TestBatchOperations:
             tm.reset_root()
 
     def test_batch_unknown_op_raises_or_logs(self, pr):
-        import tools.planning.tm_helper as tm
+        import audiagentic.components.optional.planning.tm_helper as tm
 
         spec = _new_spec(pr[1])
         task = pr[1].new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
@@ -939,7 +939,7 @@ class TestBatchOperations:
         assert "results" in result or "errors" in result
 
     def test_batch_meta_op_sets_field(self, pr):
-        import tools.planning.tm_helper as tm
+        import audiagentic.components.optional.planning.tm_helper as tm
 
         spec = _new_spec(pr[1])
         task = pr[1].new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
@@ -959,7 +959,7 @@ class TestBatchOperations:
 
 class TestStatusAndEvents:
     def test_status_returns_counts_for_all_kinds(self, pr):
-        import tools.planning.tm_helper as tm
+        import audiagentic.components.optional.planning.tm_helper as tm
 
         root, api = pr
         api.new("request", label="R", summary="S", source="test")
@@ -977,7 +977,7 @@ class TestStatusAndEvents:
         assert result["request"].get("_total") == 2
 
     def test_events_returns_recent_events(self, pr):
-        import tools.planning.tm_helper as tm
+        import audiagentic.components.optional.planning.tm_helper as tm
 
         root, api = pr
         api.new("request", label="R", summary="S", source="test")  # triggers emit_event hook
@@ -986,7 +986,7 @@ class TestStatusAndEvents:
         assert len(events) >= 1
 
     def test_events_tail_limits_output(self, pr):
-        import tools.planning.tm_helper as tm
+        import audiagentic.components.optional.planning.tm_helper as tm
 
         root, api = pr
         for i in range(5):

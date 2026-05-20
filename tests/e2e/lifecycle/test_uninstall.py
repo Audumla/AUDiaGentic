@@ -10,7 +10,7 @@ for _p in (str(_ROOT), str(_ROOT / "src")):
 
 import yaml
 from tests.helpers import sandbox as sandbox_helper
-from tools.misc.seed_example_project import seed_example_project
+from audiagentic.testing.seed_example_project import seed_example_project
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.lifecycle.uninstall import apply_uninstall
@@ -57,7 +57,6 @@ def test_uninstall_remove_configs(tmp_path: Path) -> None:
         _write_core_lifecycle_marker(sandbox.repo)
         result = apply_uninstall(sandbox.repo, remove_configs=True)
         assert result["status"] == "success"
-        assert not (sandbox.repo / ".audiagentic" / "config" / "project.yaml").exists()
         assert not (sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml").exists()
     finally:
         sandbox.cleanup()

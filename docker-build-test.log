@@ -1,0 +1,82 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile.test
+#1 transferring dockerfile: 1.26kB done
+#1 DONE 0.1s
+
+#2 [internal] load metadata for docker.io/library/python:3.12-slim
+#2 DONE 0.0s
+
+#3 [ 1/19] FROM docker.io/library/python:3.12-slim@sha256:401f6e1a67dad31a1bd78e9ad22d0ee0a3b52154e6bd30e90be696bb6a3d7461
+#3 resolve docker.io/library/python:3.12-slim@sha256:401f6e1a67dad31a1bd78e9ad22d0ee0a3b52154e6bd30e90be696bb6a3d7461 0.0s done
+#3 DONE 0.0s
+
+#4 [ 2/19] WORKDIR /app
+#4 CACHED
+
+#5 [internal] load .dockerignore
+#5 transferring context: 945B done
+#5 DONE 0.1s
+
+#6 [internal] load build context
+#6 transferring context: 2.46MB 0.2s done
+#6 DONE 0.3s
+
+#7 [ 3/19] COPY pyproject.toml README.md ./
+#7 DONE 0.1s
+
+#8 [ 4/18] COPY src ./src
+#8 DONE 0.1s
+
+#9 [ 3/22] COPY pyproject.toml README.md ./
+#9 CACHED
+
+#10 [ 4/22] COPY src ./src
+#10 CACHED
+
+#11 [ 5/22] COPY tests ./tests
+#11 DONE 0.1s
+
+#12 [ 6/22] COPY docs/examples ./docs/examples
+#12 DONE 0.1s
+
+#13 [ 7/22] COPY .audiagentic/config ./.audiagentic/config
+#13 DONE 0.1s
+
+#14 [ 8/22] COPY .audiagentic/prompts ./.audiagentic/prompts
+#14 DONE 0.1s
+
+#15 [ 9/22] COPY .audiagentic/skills ./.audiagentic/skills
+#15 DONE 0.1s
+
+#16 [10/22] COPY .audiagentic/planning/config ./.audiagentic/planning/config
+#16 DONE 0.1s
+
+#17 [11/22] COPY .claude/rules ./.claude/rules
+#17 DONE 0.1s
+
+#18 [12/22] COPY .claude/skills ./.claude/skills
+#18 DONE 0.1s
+
+#19 [13/22] COPY .claude/settings.json ./.claude/settings.json
+#19 DONE 0.1s
+
+#20 [14/22] COPY .gemini ./.gemini
+#20 DONE 0.1s
+
+#21 [15/22] COPY .clinerules ./.clinerules
+#21 DONE 0.1s
+
+#22 [16/22] COPY .github/workflows ./.github/workflows
+#22 DONE 0.1s
+
+#23 [17/22] COPY .github/prompts ./.github/prompts
+#23 DONE 0.1s
+
+#24 [18/22] COPY .opencode ./.opencode
+#24 DONE 0.1s
+
+#25 [19/22] COPY AGENTS.md CLAUDE.md GEMINI.md ./
+#25 DONE 0.1s
+
+#26 [20/22] RUN pip install --no-cache-dir --no-compile setuptools wheel build

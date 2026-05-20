@@ -296,3 +296,7 @@ providers:
     enabled: false
     install-mode: external-configured
     access-mode: env
+  openhands:
+    enabled: false
+    install-mode: external-configured
+    access-mode: cli

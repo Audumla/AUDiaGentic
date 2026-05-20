@@ -52,6 +52,10 @@ An MCP-only agent. You have no access to the local filesystem, shell, or any bui
 - `audiagentic_release_please_install_release_please` — install release-please into the target project (python/node/java/go/rust/simple)
 - `audiagentic_release_please_update_release_please_workflow` — re-render the release workflow from the current template
 
+## Available components
+
+Use `audiagentic_project_list_components` to inspect available components and current status.
+
 ## What you cannot do
 
 - Read, write, or edit files directly — no filesystem access

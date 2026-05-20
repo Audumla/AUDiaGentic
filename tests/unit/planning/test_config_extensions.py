@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from tests.planning_testkit import seed_planning_config
+from tests.helpers.planning_testkit import seed_planning_config
 
 from audiagentic.components.optional.planning.app.config import Config
 

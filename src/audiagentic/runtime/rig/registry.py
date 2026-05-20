@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import time
 from pathlib import Path
+from urllib.error import URLError
+from urllib.request import urlopen
 
 # ---------------------------------------------------------------------------
 # Internal path helpers
@@ -24,6 +27,10 @@ def _clients_dir() -> Path:
 
 def _startup_lock_path() -> Path:
     return _rig_runtime_dir() / "start.lock"
+
+
+def _default_endpoint(port: int) -> str:
+    return f"http://127.0.0.1:{port}/v1"
 
 
 # ---------------------------------------------------------------------------
@@ -66,6 +73,114 @@ def _clear_rig_state() -> None:
     _rig_json().unlink(missing_ok=True)
 
 
+def _query_server_model(endpoint: str, timeout: float = 2.0) -> str | None:
+    try:
+        with urlopen(f"{endpoint}/models", timeout=timeout) as response:
+            if response.status != 200:
+                return None
+            payload = json.loads(response.read())
+    except (URLError, OSError, TimeoutError, json.JSONDecodeError):
+        return None
+
+    data = payload.get("data")
+    if isinstance(data, list) and data:
+        first = data[0]
+        if isinstance(first, dict) and first.get("id"):
+            return str(first["id"])
+    models = payload.get("models")
+    if isinstance(models, list) and models:
+        first = models[0]
+        if isinstance(first, dict) and first.get("model"):
+            return str(first["model"])
+        if isinstance(first, dict) and first.get("name"):
+            return str(first["name"])
+    return None
+
+
+def _find_pid_listening_on_port(port: int) -> int | None:
+    if os.name == "nt":
+        result = subprocess.run(
+            ["netstat", "-ano", "-p", "tcp"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        needle = f":{port}"
+        for line in result.stdout.splitlines():
+            stripped = line.strip()
+            if "LISTENING" not in stripped or needle not in stripped:
+                continue
+            parts = stripped.split()
+            if len(parts) < 5:
+                continue
+            local_addr = parts[1]
+            state = parts[3]
+            if not local_addr.endswith(needle) or state != "LISTENING":
+                continue
+            try:
+                return int(parts[4])
+            except ValueError:
+                continue
+        return None
+
+    for command in (
+        ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
+        ["ss", "-ltnp"],
+    ):
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            continue
+        if command[0] == "lsof":
+            for line in result.stdout.splitlines():
+                try:
+                    return int(line.strip())
+                except ValueError:
+                    continue
+            continue
+        needle = f":{port} "
+        for line in result.stdout.splitlines():
+            if needle not in line:
+                continue
+            marker = "pid="
+            idx = line.find(marker)
+            if idx == -1:
+                continue
+            fragment = line[idx + len(marker):].split(",", 1)[0]
+            try:
+                return int(fragment)
+            except ValueError:
+                continue
+    return None
+
+
+def adopt_rig_state(port: int, *, endpoint: str | None = None, model: str | None = None) -> dict | None:
+    """Reconstruct rig.json for a healthy rig already listening on the expected port."""
+    endpoint = endpoint or _default_endpoint(port)
+    server_model = _query_server_model(endpoint)
+    if server_model is None:
+        return None
+
+    pid = _find_pid_listening_on_port(port)
+    if pid is None:
+        return None
+
+    write_rig_state(pid, port, endpoint, model or server_model)
+    return {
+        "pid": pid,
+        "port": port,
+        "endpoint": endpoint,
+        "model": model or server_model,
+    }
+
+
+def ensure_rig_state(port: int, *, model: str | None = None) -> dict | None:
+    """Return live rig state, rebuilding rig.json from active port when needed."""
+    state = read_rig_state()
+    if state is not None:
+        return state
+    return adopt_rig_state(port, model=model)
+
+
 # ---------------------------------------------------------------------------
 # Client registry (one file per live CLI PID)
 # ---------------------------------------------------------------------------
@@ -91,12 +206,14 @@ def _live_client_count() -> int:
     return count
 
 
-def shutdown_rig_if_last() -> None:
+def shutdown_rig_if_last(port: int | None = None) -> None:
     """Deregister this client. If none remain, stop the embedded rig."""
     (_clients_dir() / str(os.getpid())).unlink(missing_ok=True)
     if _live_client_count() > 0:
         return
     state = read_rig_state()
+    if state is None and port is not None:
+        state = adopt_rig_state(port)
     if state is None:
         return
     _kill_pid(int(state["pid"]))

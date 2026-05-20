@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import tools.validation.validate_schemas as validate_schemas
+import audiagentic.foundation.contracts.validate_schemas as validate_schemas
 
 
 def test_all_fixtures_validate() -> None:

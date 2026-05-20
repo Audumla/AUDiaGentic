@@ -27,7 +27,7 @@ def launch_rig_if_needed(
 
     from audiagentic.runtime.rig.registry import (
         StartupLock,
-        read_rig_state,
+        ensure_rig_state,
         reap_orphan_rigs,
         write_rig_state,
     )
@@ -35,7 +35,7 @@ def launch_rig_if_needed(
     from .context import env_with_pythonpath
 
     with StartupLock():
-        state = read_rig_state()
+        state = ensure_rig_state(rig_port, model=profile_name)
         if state is not None:
             endpoint = str(state["endpoint"])
             os.environ["AUDIAGENTIC_AG_BASE_URL"] = endpoint

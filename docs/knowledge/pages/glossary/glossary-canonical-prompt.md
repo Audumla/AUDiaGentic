@@ -71,7 +71,7 @@ template=review-default
 **Configuration:**
 - Prompt syntax: `.audiagentic/prompt-syntax.yaml`
 - Agent instructions: `AGENTS.md`
-- Bridge implementation: `tools/codex_prompt_trigger_bridge.py`
+- Bridge implementation: `src/audiagentic/components/optional/prompt_triggers/prompt_trigger_bridge.py`
 
 ## How to use
 **Using Canonical Prompts:**
@@ -119,7 +119,7 @@ This page should be refreshed when:
 **Sources:**
 - `.audiagentic/prompt-syntax.yaml` - Prompt syntax configuration
 - `AGENTS.md` - Agent instructions
-- `tools/codex_prompt_trigger_bridge.py` - Bridge implementation
+- `src/audiagentic/components/optional/prompt_triggers/prompt_trigger_bridge.py` - Bridge implementation
 
 **Sync frequency:** On prompt syntax or bridge changes
 
