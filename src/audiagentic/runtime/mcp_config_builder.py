@@ -93,14 +93,19 @@ def build_mcp_config(
     def _build_external_decl(ext: ExternalMcpServerDeclaration) -> dict[str, Any] | None:
         if any(shutil.which(r) is None for r in ext.requires):
             return None
-        result: dict[str, Any] = {
+        if ext.probe:
+            import subprocess
+            result = subprocess.run(list(ext.probe), capture_output=True)
+            if result.returncode != 0:
+                return None
+        entry: dict[str, Any] = {
             "command": ext.command,
             "args": list(ext.args),
             "lifecycle": "lazy",
         }
         if ext.env:
-            result["env"] = dict(ext.env)
-        return result
+            entry["env"] = dict(ext.env)
+        return entry
 
     servers: dict[str, dict[str, Any]] = {}
 

@@ -61,7 +61,8 @@ class ExternalMcpServerDeclaration:
     env: dict[str, str] = field(default_factory=dict)
     description: str = ""
     instructions: str = ""
-    requires: tuple[str, ...] = ()  # CLI tool names checked via shutil.which
+    requires: tuple[str, ...] = ()   # CLI tool names checked via shutil.which
+    probe: tuple[str, ...] = ()      # command to run to verify server is usable (returncode 0 = ok)
 
 
 @dataclass(frozen=True)
