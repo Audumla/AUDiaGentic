@@ -1,4 +1,4 @@
-type: prompt-trigger-tag
+type: agent-action
 contract-version: v1
 tag-id: ag-implement
 display-name: Implement
@@ -21,12 +21,7 @@ directives:
 requires-body: false
 is-generic-tag: false
 is-review-tag: false
-skill-content-file: skill.md
-
-files:
-  - path: .audiagentic/skills/ag-implement/skill.md
-    lifecycle: required-managed
-    description: ag-implement canonical skill source
+skill-content-file: ag-implement-skill.md
 
 surface-contributions:
   - id: ag-implement/doctrine
@@ -41,4 +36,4 @@ surface-contributions:
 
 prompts:
   - name: default
-    content-file: prompts/default.md
+    content-file: ag-implement-prompt-default.md

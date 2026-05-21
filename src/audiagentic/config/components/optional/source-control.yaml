@@ -1,0 +1,80 @@
+type: component
+contract-version: v1
+component-id: source-control
+display-name: Source Control
+description: Source control — installs and manages official git and GitHub MCP servers for providers
+detection-marker: .audiagentic/components/source-control.yaml
+depends-on:
+  - project
+files:
+  - path: .audiagentic/components/source-control.yaml
+    lifecycle: create-if-missing
+    description: Installation marker
+mcp-servers:
+  - name: audiagentic-source-control-admin
+    module: audiagentic.components.optional.source_control.source_control_admin_mcp
+    direct-tools: [get_source_control_status, install_source_control_mcp_servers]
+    description: Source control component management
+    instructions: >
+      Use get_source_control_status to check git, gh CLI, and MCP server availability.
+      Use install_source_control_mcp_servers to register official git and GitHub MCP
+      servers into provider settings. Run this once after installing the component.
+    tool-descriptions:
+      get_source_control_status: Return availability of git, gh CLI, and official MCP servers.
+      install_source_control_mcp_servers: Detect and register official git and GitHub MCP servers into provider settings.
+external-mcp-servers:
+  - name: git
+    command: uvx
+    args: [mcp-server-git, --repository, .]
+    requires: [uvx]
+    description: Local git operations via official mcp-server-git
+    instructions: >
+      Use git MCP tools for local repository operations: status, diff, log,
+      commit, branch management, and staging.
+  - name: github
+    command: gh
+    args: [mcp, serve]
+    env:
+      GITHUB_TOKEN: "${GITHUB_TOKEN}"
+    requires: [gh]
+    description: GitHub API operations via official gh mcp serve
+    instructions: >
+      Use github MCP tools for GitHub API operations: pull requests, issues,
+      releases, workflow dispatch, and code search.
+harness-instructions:
+  - section: "What you can do"
+    content: |
+      ### audiagentic-source-control-admin
+      - `get_source_control_status` — Check git, gh CLI, and MCP server availability
+      - `install_source_control_mcp_servers` — Register official MCP servers into provider settings
+
+      ### Official MCP servers (installed by this component)
+
+      **git** (`mcp-server-git` via uvx)
+      - Local git operations: status, diff, log, commit, branch, stage
+
+      **github** (`gh mcp serve` via GitHub CLI)
+      - GitHub API: pull requests, issues, releases, workflow dispatch, code search
+
+      Prerequisites:
+      - `uv` installed for git MCP server (`pip install uv` or https://docs.astral.sh/uv)
+      - `gh` CLI installed with `gh extension install github/gh-mcp` for GitHub MCP server
+      - `GITHUB_TOKEN` environment variable set for GitHub operations
+
+agent-tags:
+  - config: components/optional/agent-actions/ag-check-in-prep.yaml
+
+surface-contributions:
+  - id: source-control/doctrine
+    owner: source-control
+    kind: rule
+    title: Source control doctrine
+    preferred-targets:
+      - skill
+      - instruction
+    content:
+      body: |
+        Use the source control component for all git and GitHub operations.
+        Before committing, record a change event to the ledger using the
+        audiagentic-ledger-write MCP tool (record_change_event).
+        Do not invoke git or GitHub APIs directly — use the MCP tools.
