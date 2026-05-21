@@ -224,3 +224,123 @@ def test_reconcile_all_providers_returns_one_entry_per_descriptor(
     }
     provider_ids = {entry["provider-id"] for entry in result["providers"]}
     assert provider_ids == expected
+
+
+def test_reconcile_provider_does_not_fetch_catalog_by_default(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """fetch_catalog defaults False — catalog fn must not be called during reconcile."""
+    import audiagentic.components.optional.providers.services.catalog as catalog_mod
+    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
+
+    catalog_called: list[str] = []
+
+    monkeypatch.setattr(
+        lifecycle,
+        "_probe_provider_cli",
+        lambda d: {"available": True, "command": ["claude", "--version"],
+                   "executable": "/usr/bin/claude", "returncode": 0, "stdout": "1.0", "stderr": ""},
+    )
+    # Patch via the catalog module — lifecycle imports it lazily inside the if-block
+    monkeypatch.setattr(
+        catalog_mod,
+        "fetch_provider_catalog",
+        lambda provider_id, **_: catalog_called.append(provider_id) or {"ok": True},
+    )
+
+    reconcile_provider("claude", project_root=tmp_path)
+
+    assert catalog_called == [], "catalog fetch must not run when fetch_catalog=False"
+
+
+def test_reconcile_provider_fetches_catalog_when_flag_set(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """fetch_catalog=True must trigger catalog fetch when enabling a provider."""
+    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
+
+    catalog_called: list[str] = []
+
+    monkeypatch.setattr(
+        lifecycle,
+        "_probe_provider_cli",
+        lambda d: {"available": True, "command": ["claude", "--version"],
+                   "executable": "/usr/bin/claude", "returncode": 0, "stdout": "1.0", "stderr": ""},
+    )
+
+    import audiagentic.components.optional.providers.services.catalog as catalog_mod
+    monkeypatch.setattr(
+        catalog_mod,
+        "fetch_provider_catalog",
+        lambda provider_id, **_: catalog_called.append(provider_id) or {"ok": True, "model_count": 3},
+    )
+
+    result = reconcile_provider("claude", project_root=tmp_path, fetch_catalog=True)
+
+    assert result["status"] == "enabled"
+    assert "claude" in catalog_called
+
+
+def test_reconcile_provider_emits_progress(monkeypatch, tmp_path: Path) -> None:
+    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
+
+    monkeypatch.setattr(
+        lifecycle,
+        "_probe_provider_cli",
+        lambda d: {"available": True, "command": ["codex", "--version"],
+                   "executable": "/usr/bin/codex", "returncode": 0, "stdout": "1.0", "stderr": ""},
+    )
+
+    events: list[str] = []
+    reconcile_provider("codex", project_root=tmp_path, on_progress=lambda e: events.append(e.message))
+
+    assert any("codex" in msg.lower() or "probing" in msg.lower() for msg in events)
+    assert len(events) >= 2
+
+
+def test_reconcile_all_providers_does_not_fetch_catalogs_by_default(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import audiagentic.components.optional.providers.services.catalog as catalog_mod
+    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
+
+    catalog_called: list[str] = []
+
+    monkeypatch.setattr(
+        lifecycle,
+        "_probe_provider_cli",
+        lambda d: {"available": False, "command": [], "executable": None,
+                   "returncode": None, "stdout": "", "stderr": ""},
+    )
+    monkeypatch.setattr(
+        catalog_mod,
+        "fetch_provider_catalog",
+        lambda provider_id, **_: catalog_called.append(provider_id) or {"ok": True},
+    )
+
+    reconcile_all_providers(project_root=tmp_path)
+
+    assert catalog_called == [], "no catalog fetches should occur by default"
+
+
+def test_reconcile_all_providers_emits_progress_with_total(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
+    from audiagentic.foundation.output import ComponentOutputEvent
+
+    monkeypatch.setattr(
+        lifecycle,
+        "_probe_provider_cli",
+        lambda d: {"available": False, "command": [], "executable": None,
+                   "returncode": None, "stdout": "", "stderr": ""},
+    )
+
+    progress_events: list[ComponentOutputEvent] = []
+    reconcile_all_providers(project_root=tmp_path, on_progress=progress_events.append)
+
+    # At least one event must have progress + total set
+    timed = [e for e in progress_events if e.progress is not None and e.total is not None]
+    assert timed, "expected at least one progress event with total"
+    assert all(e.total > 0 for e in timed)
+    assert all(e.progress <= e.total for e in timed)

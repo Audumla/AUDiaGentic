@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 
 from audiagentic.foundation.invoke.recipes.callable_ import CallableRecipe
@@ -33,8 +34,9 @@ def _pi_uninstall(project_root=None):
 def _pi_probe(descriptor):
     from audiagentic.runtime.harness.pi.runner import resolve_agent_bin
     from audiagentic.runtime.home import global_harness_runtime
-    executable = resolve_agent_bin(global_harness_runtime())
-    command = [str(executable), "--version"]
+    harness_runtime = global_harness_runtime()
+    executable = resolve_agent_bin(harness_runtime)
+    command = ["audiagentic", "pi-harness", "metadata"]
     if not executable.exists():
         return {
             "available": False,
@@ -44,24 +46,23 @@ def _pi_probe(descriptor):
             "stdout": "",
             "stderr": "command not found",
         }
-    try:
-        completed = subprocess.run(command, check=False, capture_output=True, text=True, timeout=15)
-    except Exception as exc:  # noqa: BLE001
-        return {
-            "available": False,
-            "command": command,
-            "executable": str(executable),
-            "returncode": None,
-            "stdout": "",
-            "stderr": str(exc),
-        }
+
+    version = ""
+    package_json = harness_runtime / "cli" / "node_modules" / "@earendil-works" / "pi-coding-agent" / "package.json"
+    if package_json.exists():
+        try:
+            payload = json.loads(package_json.read_text(encoding="utf-8"))
+            version = str(payload.get("version") or "")
+        except (OSError, json.JSONDecodeError):
+            version = ""
+
     return {
-        "available": completed.returncode == 0,
+        "available": True,
         "command": command,
         "executable": str(executable),
-        "returncode": completed.returncode,
-        "stdout": completed.stdout.strip(),
-        "stderr": completed.stderr.strip(),
+        "returncode": 0,
+        "stdout": f"pi {version}".strip(),
+        "stderr": "",
     }
 
 
@@ -82,7 +83,7 @@ register(ProviderDescriptor(
     display_name="Pi Coding Agent",
     description="Lightweight local coding agent TUI by Earendil Works. Managed and launched by the AUDiaGentic harness.",
     url="https://www.earendilworks.com/pi",
-    cli_probe=["pi", "--version"],
+    cli_probe=None,
     cli_install=CliInstallRecipe(
         package_manager="pi-harness",
         package_name="audiagentic-pi-harness",

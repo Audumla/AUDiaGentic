@@ -67,16 +67,16 @@ def _cmd_component(args: argparse.Namespace, project_root: Path) -> int:
         is_enabled,
         is_installed,
     )
+    from audiagentic.runtime.harness.pi.install import (
+        refresh_materialized_agent_config,
+        request_runtime_reload,
+    )
+    from audiagentic.runtime.home import global_harness_runtime
     from audiagentic.runtime.lifecycle.components import (
         disable_component,
         enable_component,
         install_component,
         uninstall_component,
-    )
-    from audiagentic.runtime.home import global_harness_runtime
-    from audiagentic.runtime.harness.pi.install import (
-        refresh_materialized_agent_config,
-        request_runtime_reload,
     )
 
     register_all_components()
@@ -185,6 +185,34 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
     """
     if not prompt:
         return None
+
+    reconcile_all_match = re.fullmatch(
+        r"\s*reconcile\s+(?:all\s+)?(?:providers?|provider\s+clis?)\s*",
+        prompt,
+        flags=re.IGNORECASE,
+    )
+    reconcile_one_match = re.fullmatch(
+        r"\s*reconcile\s+([a-z0-9_.-]+)(?:\s+(?:provider|provider\s+cli))?\s*",
+        prompt,
+        flags=re.IGNORECASE,
+    )
+    if reconcile_all_match or reconcile_one_match:
+        from audiagentic.components.optional.providers.services.lifecycle import (
+            reconcile_all_providers,
+            reconcile_provider,
+        )
+
+        def _progress(event) -> None:
+            message = getattr(event, "message", str(event))
+            print(message, flush=True)
+
+        if reconcile_all_match:
+            result = reconcile_all_providers(project_root=project_root, on_progress=_progress)
+        else:
+            result = reconcile_provider(reconcile_one_match.group(1).lower(), project_root=project_root, on_progress=_progress)
+
+        print(json.dumps(result, indent=2), flush=True)
+        return 0 if result.get("ok", True) else 1
 
     match = re.fullmatch(
         r"\s*(install|uninstall|repair)\s+(?:the\s+)?([a-z0-9_.-]+)(?:\s+(?:provider|provider\s+cli))?\s*",

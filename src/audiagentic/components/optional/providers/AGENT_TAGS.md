@@ -18,7 +18,7 @@ Tags and providers are **mutually ignorant** — a tag does not name any provide
 ### 1. Create the tag directory
 
 ```text
-src/audiagentic/config/prompt-triggers/tags/<your-tag-name>/
+src/audiagentic/config/agent-actions/tags/<your-tag-name>/
 ```
 
 Use a short, lowercase, hyphen-separated name.
@@ -97,7 +97,7 @@ The `Trigger:`, `Do:`, and `Do not:` sections are parsed by the surface renderer
 If your `descriptor.yaml` lists prompts, create the referenced files:
 
 ```text
-src/audiagentic/config/prompt-triggers/tags/<your-tag-name>/prompts/default.md
+src/audiagentic/config/agent-actions/tags/<your-tag-name>/prompts/default.md
 ```
 
 ### 5. Declare the tag in the owning component's config
@@ -109,9 +109,9 @@ Tags are not discovered by directory walk — they must be declared by a compone
 component-id: agent-jobs
 
 agent-tags:
-  - config: prompt-triggers/tags/implement/descriptor.yaml
-  - config: prompt-triggers/tags/plan/descriptor.yaml
-  - config: prompt-triggers/tags/my-tag/descriptor.yaml   # ← add here
+  - config: agent-actions/tags/implement/descriptor.yaml
+  - config: agent-actions/tags/plan/descriptor.yaml
+  - config: agent-actions/tags/my-tag/descriptor.yaml   # ← add here
 ```
 
 The path is relative to the config root (`src/audiagentic/config/`).
@@ -138,8 +138,8 @@ If you're creating a new component that has its own actions:
 component-id: my-component
 
 agent-tags:
-  - config: prompt-triggers/tags/my-action/descriptor.yaml
-  - config: prompt-triggers/tags/my-other-action/descriptor.yaml
+  - config: agent-actions/tags/my-action/descriptor.yaml
+  - config: agent-actions/tags/my-other-action/descriptor.yaml
 
 surface-contributions:
   - id: my-component/doctrine
@@ -158,7 +158,7 @@ surface-contributions:
 ## Removing a tag
 
 1. Remove its entry from the owning component's `agent-tags` list.
-2. Delete the tag directory from `config/prompt-triggers/tags/`.
+2. Delete the tag directory from `config/agent-actions/tags/`.
 3. Run surface regeneration — stale provider skill files are pruned automatically.
 
 ---

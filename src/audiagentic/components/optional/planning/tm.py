@@ -7,6 +7,7 @@ Usage (from any directory):
 """
 
 from __future__ import annotations
+
 import argparse
 import json
 import sys
@@ -26,7 +27,6 @@ def _find_project_root() -> Path:
 
 def print_json(data):
     import io
-    import sys
 
     # Force UTF-8 encoding for stdout
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")

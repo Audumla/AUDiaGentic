@@ -34,7 +34,7 @@ providers:
       target-type: default
       timeout-seconds: 120
   qwen:
-    enabled: true
+    enabled: false
     install-mode: external-configured
     access-mode: cli
     default-model: qwen-coder
@@ -66,7 +66,7 @@ providers:
       target-type: default
       timeout-seconds: 120
   codex:
-    enabled: true
+    enabled: false
     install-mode: external-configured
     access-mode: cli
     default-model: gpt-5.4-mini
@@ -99,7 +99,7 @@ providers:
       target-type: default
       timeout-seconds: 300
   claude:
-    enabled: true
+    enabled: false
     install-mode: external-configured
     access-mode: cli
     default-model: sonnet
@@ -131,7 +131,7 @@ providers:
       target-type: default
       timeout-seconds: 300
   gemini:
-    enabled: true
+    enabled: false
     install-mode: external-configured
     access-mode: cli
     default-model: gemini-2.5-pro
@@ -219,7 +219,7 @@ providers:
       target-type: default
       timeout-seconds: 120
   cline:
-    enabled: true
+    enabled: false
     install-mode: external-configured
     access-mode: cli
     default-model: kwaipilot/kat-coder-pro
@@ -252,7 +252,7 @@ providers:
       target-type: default
       timeout-seconds: 300
   opencode:
-    enabled: true
+    enabled: false
     install-mode: external-configured
     access-mode: cli
     default-model: openai/gpt-5
@@ -297,6 +297,6 @@ providers:
     install-mode: external-configured
     access-mode: env
   openhands:
-    enabled: false
+    enabled: true
     install-mode: external-configured
     access-mode: cli

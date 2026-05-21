@@ -10,11 +10,11 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
+from audiagentic.components.optional.ledger.finalize import finalize_release
 from tests.helpers import sandbox as sandbox_helper
 
 from audiagentic.components.optional.ledger.audit import generate_audit_and_checkin
 from audiagentic.components.optional.ledger.current_summary import regenerate_current_release
-from audiagentic.components.optional.ledger.finalize import finalize_release
 from audiagentic.components.optional.ledger.fragments import record_change_event
 from audiagentic.components.optional.ledger.sync import sync_current_release_ledger
 

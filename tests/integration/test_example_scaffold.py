@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import audiagentic.testing.seed_example_project as seed_example_project
 import yaml
 from jsonschema import Draft202012Validator
 
+import audiagentic.testing.seed_example_project as seed_example_project
 from audiagentic.foundation.contracts.schema_registry import read_schema
 
 

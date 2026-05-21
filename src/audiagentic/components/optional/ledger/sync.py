@@ -4,15 +4,14 @@ from __future__ import annotations
 import json
 import os
 import socket
-import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.io import atomic_write_ndjson, load_ndjson
 
-LOCK_TIMEOUT_SECONDS = 60
 STALE_AFTER_SECONDS = 300
 
 
@@ -45,12 +44,9 @@ def _acquire_lock(project_root: Path) -> tuple[Path, str | None]:
         payload = json.loads(lock_path.read_text(encoding="utf-8"))
         acquired_at = payload.get("acquired-at")
         pid = int(payload.get("pid", 0))
-        if acquired_at:
-            try:
-                acquired_dt = datetime.fromisoformat(acquired_at.replace("Z", "+00:00"))
-            except ValueError:
-                acquired_dt = datetime.now(timezone.utc)
-        else:
+        try:
+            acquired_dt = datetime.fromisoformat(acquired_at.replace("Z", "+00:00")) if acquired_at else datetime.now(timezone.utc)
+        except ValueError:
             acquired_dt = datetime.now(timezone.utc)
         age = (datetime.now(timezone.utc) - acquired_dt).total_seconds()
 
@@ -60,7 +56,7 @@ def _acquire_lock(project_root: Path) -> tuple[Path, str | None]:
                 os.kill(pid, 0)
                 pid_alive = True
             except Exception:
-                pid_alive = False
+                pass
 
         if age <= STALE_AFTER_SECONDS and pid_alive:
             raise AudiaGenticError(
@@ -71,13 +67,12 @@ def _acquire_lock(project_root: Path) -> tuple[Path, str | None]:
             )
         warning = "stale-lock-replaced"
 
-    payload = {
+    lock_path.write_text(json.dumps({
         "pid": os.getpid(),
         "hostname": socket.gethostname(),
         "acquired-at": _now(),
         "command": "sync-current-release-ledger",
-    }
-    lock_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    }, indent=2), encoding="utf-8")
     return lock_path, warning
 
 
@@ -94,41 +89,17 @@ def _load_fragments(project_root: Path) -> list[dict[str, Any]]:
     fragments_dir = _fragment_dir(project_root)
     if not fragments_dir.exists():
         return []
-    events = []
-    for fragment_path in sorted(fragments_dir.glob("*.json")):
-        events.append(json.loads(fragment_path.read_text(encoding="utf-8")))
-    return events
-
-
-def _load_current_ledger(ledger_path: Path) -> list[dict[str, Any]]:
-    if not ledger_path.exists():
-        return []
-    entries = []
-    for line in ledger_path.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            entries.append(json.loads(line))
-    return entries
+    return [
+        json.loads(p.read_text(encoding="utf-8"))
+        for p in sorted(fragments_dir.glob("*.json"))
+    ]
 
 
 def _merge_by_event_id(current: list[dict[str, Any]], incoming: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    by_id: dict[str, dict[str, Any]] = {entry["event-id"]: entry for entry in current}
+    by_id: dict[str, dict[str, Any]] = {e["event-id"]: e for e in current}
     for event in incoming:
         by_id.setdefault(event["event-id"], event)
-    return [by_id[key] for key in sorted(by_id.keys())]
-
-
-def _write_ndjson(path: Path, entries: list[dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(prefix=path.stem + ".", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            for entry in entries:
-                handle.write(json.dumps(entry, sort_keys=True))
-                handle.write("\n")
-        os.replace(tmp_path, path)
-    finally:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
+    return [by_id[k] for k in sorted(by_id.keys())]
 
 
 def sync_current_release_ledger(project_root: Path) -> SyncResult:
@@ -136,17 +107,15 @@ def sync_current_release_ledger(project_root: Path) -> SyncResult:
     lock_path, warning = _acquire_lock(project_root)
     try:
         fragments = _load_fragments(project_root)
-        current = _load_current_ledger(ledger_path)
-        merged = _merge_by_event_id(current, fragments)
-        _write_ndjson(ledger_path, merged)
+        merged = _merge_by_event_id(load_ndjson(ledger_path), fragments)
+        atomic_write_ndjson(ledger_path, merged)
 
-        manifest = {
+        manifest_path = _manifest_path(project_root)
+        manifest_path.write_text(json.dumps({
             "synced-at": _now(),
             "fragment-count": len(fragments),
             "ledger-path": str(ledger_path),
-        }
-        manifest_path = _manifest_path(project_root)
-        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        }, indent=2), encoding="utf-8")
     finally:
         _release_lock(lock_path)
 

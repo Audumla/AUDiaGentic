@@ -10,8 +10,9 @@ for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-import audiagentic.components.optional.planning.tm_helper as tm
 from tests.helpers.planning_testkit import seed_planning_config
+
+import audiagentic.components.optional.planning.tm_helper as tm
 
 KNOWN_KINDS = {"request", "spec", "plan", "task", "wp", "standard"}
 

@@ -59,9 +59,9 @@ class McpOutputBridge:
         progress = output.progress
         if progress is None:
             progress = self._next_progress
-            self._next_progress += 1.0
-        else:
-            self._next_progress = max(self._next_progress, progress + 1.0)
+        elif progress < self._next_progress:
+            progress = self._next_progress
+        self._next_progress = progress + 1.0
         await self._ctx.report_progress(progress, total=output.total, message=output.message)
 
 
@@ -88,14 +88,14 @@ async def run_blocking_with_output(
     last_emit = asyncio.get_running_loop().time()
 
     while not task.done():
-        latest: ComponentOutputEvent | None = None
+        emitted = False
         while True:
             try:
-                latest = events.get_nowait()
+                await bridge.emit(events.get_nowait())
+                emitted = True
             except queue.Empty:
                 break
-        if latest is not None:
-            await bridge.emit(latest)
+        if emitted:
             last_emit = asyncio.get_running_loop().time()
         elif heartbeat_message and asyncio.get_running_loop().time() - last_emit >= heartbeat_seconds:
             await bridge.emit(ComponentOutputEvent(message=heartbeat_message))

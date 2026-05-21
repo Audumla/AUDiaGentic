@@ -1,21 +1,10 @@
 """Audit and check-in summary generation."""
 from __future__ import annotations
 
-import json
-import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
-
-def _load_ledger(path: Path) -> list[dict[str, Any]]:
-    if not path.exists():
-        return []
-    entries = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            entries.append(json.loads(line))
-    return entries
+from audiagentic.foundation.io import atomic_write_text, load_ndjson
 
 
 def _render_audit(entries: list[dict[str, Any]]) -> str:
@@ -33,27 +22,11 @@ def _render_checkin(entries: list[dict[str, Any]]) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
-def _atomic_write(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(prefix=path.stem + ".", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(content)
-        os.replace(tmp_path, path)
-    finally:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-
-
 def generate_audit_and_checkin(project_root: Path) -> tuple[Path, Path]:
     ledger_path = project_root / "docs" / "releases" / "CURRENT_RELEASE_LEDGER.ndjson"
     audit_path = project_root / "docs" / "releases" / "AUDIT_SUMMARY.md"
     checkin_path = project_root / "docs" / "releases" / "CHECKIN.md"
-
-    entries = _load_ledger(ledger_path)
-    audit = _render_audit(entries)
-    checkin = _render_checkin(entries)
-
-    _atomic_write(audit_path, audit)
-    _atomic_write(checkin_path, checkin)
+    entries = load_ndjson(ledger_path)
+    atomic_write_text(audit_path, _render_audit(entries))
+    atomic_write_text(checkin_path, _render_checkin(entries))
     return audit_path, checkin_path
