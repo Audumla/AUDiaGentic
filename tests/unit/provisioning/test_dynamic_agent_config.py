@@ -127,7 +127,7 @@ def test_ledger_component_uses_optional_server_module_in_mcp_config(
 def test_component_mcp_metadata_loads_from_yaml() -> None:
     register_all_components()
 
-    project_decl = get_mcp_server_declaration("core-lifecycle", "audiagentic-project")
+    project_decl = get_mcp_server_declaration("project", "audiagentic-project")
     session_decl = get_mcp_server_declaration("session", "audiagentic-session")
     planning_decl = get_mcp_server_declaration("planning", "audiagentic-planning")
     ledger_decl = get_mcp_server_declaration("agent-ledger", "audiagentic-release-please")

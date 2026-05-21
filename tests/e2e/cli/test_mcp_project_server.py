@@ -1,4 +1,4 @@
-﻿"""E2E: MCP project server tools via JSON-RPC subprocess.
+"""E2E: MCP project server tools via JSON-RPC subprocess.
 
 Starts the project MCP server as a subprocess and exercises the component lifecycle
 tools (list_components, install, enable, disable, project_status, read_project_file).
@@ -79,7 +79,7 @@ def test_mcp_list_components_returns_all(tmp_path):
     result = _call("list_components", {}, project_root=tmp_path)
     components = result if isinstance(result, list) else [result]
     ids = {c.get("component_id", c.get("name", "")) for c in components}
-    assert "core-lifecycle" in ids
+    assert "project" in ids
     assert len(ids) >= 7
 
 
@@ -100,37 +100,37 @@ def test_mcp_project_status_on_fresh_dir(tmp_path):
 
 
 def test_mcp_project_status_after_install(tmp_path):
-    _call("install_component_tool", {"component_id": "core-lifecycle"}, project_root=tmp_path)
+    _call("install_component_tool", {"component_id": "project"}, project_root=tmp_path)
     result = _call("project_status", {}, project_root=tmp_path)
     payload = result if isinstance(result, dict) else result[0]
     assert payload["install_state"] == "installed"
-    assert "core-lifecycle" in payload["components"]
-    assert payload["components"]["core-lifecycle"]["status"] == "installed"
+    assert "project" in payload["components"]
+    assert payload["components"]["project"]["status"] == "installed"
 
 
 # ── install / disable / enable via MCP ───────────────────────────────────────
 
 def test_mcp_install_component(tmp_path):
-    result = _call("install_component_tool", {"component_id": "core-lifecycle"}, project_root=tmp_path)
+    result = _call("install_component_tool", {"component_id": "project"}, project_root=tmp_path)
     payload = result if isinstance(result, dict) else result[0]
     assert payload["ok"] is True
-    assert payload["component_id"] == "core-lifecycle"
-    marker = tmp_path / ".audiagentic" / "components" / "core-lifecycle.yaml"
+    assert payload["component_id"] == "project"
+    marker = tmp_path / ".audiagentic" / "components" / "project.yaml"
     assert marker.exists()
 
 
 def test_mcp_disable_component(tmp_path):
-    _call("install_component_tool", {"component_id": "core-lifecycle"}, project_root=tmp_path)
-    result = _call("disable_component_tool", {"component_id": "core-lifecycle"}, project_root=tmp_path)
+    _call("install_component_tool", {"component_id": "project"}, project_root=tmp_path)
+    result = _call("disable_component_tool", {"component_id": "project"}, project_root=tmp_path)
     payload = result if isinstance(result, dict) else result[0]
     assert payload["ok"] is True
     assert payload["enabled"] is False
 
 
 def test_mcp_enable_component(tmp_path):
-    _call("install_component_tool", {"component_id": "core-lifecycle"}, project_root=tmp_path)
-    _call("disable_component_tool", {"component_id": "core-lifecycle"}, project_root=tmp_path)
-    result = _call("enable_component_tool", {"component_id": "core-lifecycle"}, project_root=tmp_path)
+    _call("install_component_tool", {"component_id": "project"}, project_root=tmp_path)
+    _call("disable_component_tool", {"component_id": "project"}, project_root=tmp_path)
+    result = _call("enable_component_tool", {"component_id": "project"}, project_root=tmp_path)
     payload = result if isinstance(result, dict) else result[0]
     assert payload["ok"] is True
     assert payload["enabled"] is True
@@ -139,7 +139,7 @@ def test_mcp_enable_component(tmp_path):
 # ── read_project_file ─────────────────────────────────────────────────────────
 
 def test_mcp_read_project_file_after_install(tmp_path):
-    _call("install_component_tool", {"component_id": "core-lifecycle"}, project_root=tmp_path)
+    _call("install_component_tool", {"component_id": "project"}, project_root=tmp_path)
     result = _call(
         "read_project_file",
         {"relative_path": ".audiagentic/config/project.yaml"},

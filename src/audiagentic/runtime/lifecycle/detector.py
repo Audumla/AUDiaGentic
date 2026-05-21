@@ -4,10 +4,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-_CORE_LIFECYCLE_MARKER = Path(".audiagentic/components/core-lifecycle.yaml")
+_PROJECT_MARKER = Path(".audiagentic/components/project.yaml")
 
 AUDIAGENTIC_MARKERS = (
-    _CORE_LIFECYCLE_MARKER,
+    _PROJECT_MARKER,
 )
 
 
@@ -30,7 +30,7 @@ def detect_installed_state(project_root: Path) -> InstalledState:
     if not audiagentic_dir.exists():
         return InstalledState("none", audia_hits)
 
-    if (project_root / _CORE_LIFECYCLE_MARKER).exists():
+    if (project_root / _PROJECT_MARKER).exists():
         return InstalledState("installed", audia_hits)
 
     return InstalledState("invalid", audia_hits)

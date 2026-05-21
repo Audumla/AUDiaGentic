@@ -12,14 +12,14 @@
     "components": {
       "type": "object",
       "required": [
-        "core-lifecycle",
+        "project",
         "agent-ledger",
         "agent-jobs",
         "providers"
       ],
       "additionalProperties": false,
       "properties": {
-        "core-lifecycle": {
+        "project": {
           "type": "object",
           "required": [
             "enabled"

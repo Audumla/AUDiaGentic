@@ -32,18 +32,18 @@ def test_release_bootstrap_returns_ok(tmp_path):
     assert result.get("ok") is True or result.get("status") == "success"
 
 
-def test_release_bootstrap_writes_core_lifecycle_marker(tmp_path):
+def test_release_bootstrap_writes_project_marker(tmp_path):
     _cli("release-bootstrap", project=tmp_path)
-    marker = tmp_path / ".audiagentic" / "components" / "core-lifecycle.yaml"
+    marker = tmp_path / ".audiagentic" / "components" / "project.yaml"
     assert marker.is_file()
 
 
 def test_release_bootstrap_marker_has_expected_fields(tmp_path):
     _cli("release-bootstrap", project=tmp_path)
     import yaml
-    marker = tmp_path / ".audiagentic" / "components" / "core-lifecycle.yaml"
+    marker = tmp_path / ".audiagentic" / "components" / "project.yaml"
     data = yaml.safe_load(marker.read_text(encoding="utf-8"))
-    assert data["component-id"] == "core-lifecycle"
+    assert data["component-id"] == "project"
     assert data["enabled"] is True
     assert "installed-at" in data
     assert "version" in data
@@ -63,7 +63,7 @@ def test_release_bootstrap_custom_release_id(tmp_path):
 def test_release_bootstrap_second_call_is_update(tmp_path):
     _cli("release-bootstrap", project=tmp_path)
     import yaml
-    marker = tmp_path / ".audiagentic" / "components" / "core-lifecycle.yaml"
+    marker = tmp_path / ".audiagentic" / "components" / "project.yaml"
     first_installed_at = yaml.safe_load(marker.read_text(encoding="utf-8"))["installed-at"]
 
     _cli("release-bootstrap", project=tmp_path)

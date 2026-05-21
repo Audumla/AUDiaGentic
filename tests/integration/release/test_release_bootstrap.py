@@ -87,7 +87,7 @@ def test_release_bootstrap_creates_install_and_release_artifacts(tmp_path: Path)
         assert (
             sandbox.repo / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml"
         ).is_file()
-        assert (sandbox.repo / ".audiagentic" / "components" / "core-lifecycle.yaml").is_file()
+        assert (sandbox.repo / ".audiagentic" / "components" / "project.yaml").is_file()
         assert (sandbox.repo / ".audiagentic" / "prompts" / "ag-review" / "default.md").is_file()
         assert (sandbox.repo / "AGENTS.md").is_file()
         assert (sandbox.repo / ".github" / "workflows" / "release.yml").is_file()
