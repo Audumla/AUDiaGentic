@@ -13,14 +13,20 @@ files:
 mcp-servers:
   - name: audiagentic-source-control
     module: audiagentic.components.optional.source_control.source_control_admin_mcp
-    direct-tools: [get_source_control_status]
+    direct-tools: [get_source_control_status, install_dependencies, uninstall_dependencies]
     description: Source control component management
     instructions: >
-      Use get_source_control_status to check git, gh CLI, and MCP server availability.
-      External MCP servers (git, github) are registered automatically into the audiagentic
-      mcp.json based on detection probes — no manual registration needed.
+      Use get_source_control_status to check git, gh CLI, gh mcp extension, and uv (uvx).
+      The status includes a missing-dependencies list. If any are missing and the user
+      wants them installed, ASK the user first which to install, then call
+      install_dependencies(names=[...]). External MCP servers (git, github) are then
+      registered automatically into the audiagentic mcp.json on next refresh. Use
+      uninstall_dependencies(names=[...]) only when the user explicitly asks — never on
+      component uninstall.
     tool-descriptions:
-      get_source_control_status: Return availability of git, gh CLI, and official MCP servers.
+      get_source_control_status: Return availability of git, gh CLI, gh mcp, uv plus list of missing dependencies.
+      install_dependencies: Install named source-control dependencies (git, gh, gh-mcp, uv) via host package manager after user confirms.
+      uninstall_dependencies: Uninstall named source-control dependencies via host package manager (explicit user action only).
 external-mcp-servers:
   - name: git
     command: uvx
@@ -45,7 +51,13 @@ harness-instructions:
   - section: "What you can do"
     content: |
       ### audiagentic-source-control
-      - `get_source_control_status` — Check git, gh CLI, and MCP server availability
+      - `get_source_control_status` — Check git, gh, gh-mcp, uv availability and list missing dependencies
+      - `install_dependencies` — Install missing dependencies (git, gh, gh-mcp, uv) after user confirms
+      - `uninstall_dependencies` — Uninstall named dependencies (explicit user action; not on component uninstall)
+
+      When installing the source-control component: check missing-dependencies, ASK the user
+      which to install, then call install_dependencies. Then run mcp_refresh_harness_config
+      so the new git/github MCP servers appear in mcp.json.
 
       ### Official MCP servers (installed by this component)
 
