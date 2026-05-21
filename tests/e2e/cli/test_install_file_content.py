@@ -30,45 +30,45 @@ def _cli(*args: str, project: Path | None = None, expect_rc: int = 0) -> dict | 
     return json.loads(stdout) if stdout else None
 
 
-# ── core-lifecycle file content ───────────────────────────────────────────────
+# ── project file content ───────────────────────────────────────────────
 
-def test_install_core_lifecycle_creates_prompt_files(tmp_path):
-    _cli("component", "install", "core-lifecycle", project=tmp_path)
+def test_install_project_creates_prompt_files(tmp_path):
+    _cli("component", "install", "project", project=tmp_path)
     prompt = tmp_path / ".audiagentic" / "prompts" / "ag-review" / "default.md"
     assert prompt.is_file(), f"expected prompt file at {prompt}"
     assert prompt.stat().st_size > 0
 
 
-def test_install_core_lifecycle_creates_release_workflow(tmp_path):
-    _cli("component", "install", "core-lifecycle", project=tmp_path)
+def test_install_project_creates_release_workflow(tmp_path):
+    _cli("component", "install", "project", project=tmp_path)
     wf = tmp_path / ".github" / "workflows" / "release.yml"
     assert wf.is_file(), f"expected workflow at {wf}"
     assert "on:" in wf.read_text(encoding="utf-8") or "jobs:" in wf.read_text(encoding="utf-8")
 
 
-def test_install_core_lifecycle_seeds_project_yaml(tmp_path):
-    _cli("component", "install", "core-lifecycle", project=tmp_path)
+def test_install_project_seeds_project_yaml(tmp_path):
+    _cli("component", "install", "project", project=tmp_path)
     project_yaml = tmp_path / ".audiagentic" / "config" / "project.yaml"
     assert project_yaml.is_file()
     assert project_yaml.stat().st_size > 0
 
 
-def test_reinstall_core_lifecycle_refreshes_required_managed(tmp_path):
-    _cli("component", "install", "core-lifecycle", project=tmp_path)
+def test_reinstall_project_refreshes_required_managed(tmp_path):
+    _cli("component", "install", "project", project=tmp_path)
     prompt = tmp_path / ".audiagentic" / "prompts" / "ag-review" / "default.md"
     original = prompt.read_text(encoding="utf-8")
     prompt.write_text("corrupted", encoding="utf-8")
 
-    _cli("component", "install", "core-lifecycle", project=tmp_path)
+    _cli("component", "install", "project", project=tmp_path)
     assert prompt.read_text(encoding="utf-8") == original
 
 
-def test_reinstall_core_lifecycle_preserves_create_if_missing(tmp_path):
-    _cli("component", "install", "core-lifecycle", project=tmp_path)
+def test_reinstall_project_preserves_create_if_missing(tmp_path):
+    _cli("component", "install", "project", project=tmp_path)
     project_yaml = tmp_path / ".audiagentic" / "config" / "project.yaml"
     project_yaml.write_text("contract-version: v1\nproject-id: my-project\n", encoding="utf-8")
 
-    _cli("component", "install", "core-lifecycle", project=tmp_path)
+    _cli("component", "install", "project", project=tmp_path)
     assert "my-project" in project_yaml.read_text(encoding="utf-8")
 
 
@@ -83,27 +83,27 @@ def test_install_agent_jobs_creates_skill_files(tmp_path):
 # ── uninstall removes required-managed files ──────────────────────────────────
 
 def test_uninstall_removes_required_managed_files(tmp_path):
-    _cli("component", "install", "core-lifecycle", project=tmp_path)
+    _cli("component", "install", "project", project=tmp_path)
     prompt_dir = tmp_path / ".audiagentic" / "prompts"
     assert prompt_dir.exists()
 
-    _cli("component", "uninstall", "core-lifecycle", project=tmp_path)
+    _cli("component", "uninstall", "project", project=tmp_path)
     assert not prompt_dir.exists()
 
 
 def test_uninstall_preserves_create_if_missing_without_flag(tmp_path):
-    _cli("component", "install", "core-lifecycle", project=tmp_path)
+    _cli("component", "install", "project", project=tmp_path)
     project_yaml = tmp_path / ".audiagentic" / "config" / "project.yaml"
     assert project_yaml.exists()
 
-    _cli("component", "uninstall", "core-lifecycle", project=tmp_path)
+    _cli("component", "uninstall", "project", project=tmp_path)
     assert project_yaml.exists()
 
 
 def test_uninstall_removes_configs_with_flag(tmp_path):
-    _cli("component", "install", "core-lifecycle", project=tmp_path)
+    _cli("component", "install", "project", project=tmp_path)
     project_yaml = tmp_path / ".audiagentic" / "config" / "project.yaml"
     assert project_yaml.exists()
 
-    _cli("component", "uninstall", "core-lifecycle", "--remove-configs", project=tmp_path)
+    _cli("component", "uninstall", "project", "--remove-configs", project=tmp_path)
     assert not project_yaml.exists()

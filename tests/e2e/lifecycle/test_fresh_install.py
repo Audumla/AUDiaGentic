@@ -33,7 +33,7 @@ def test_fresh_install_creates_scaffold_and_manifest(tmp_path: Path) -> None:
         ).is_file()
         assert (sandbox.repo / ".audiagentic" / "prompts" / "ag-review" / "default.md").is_file()
         # Component markers are the new install record
-        assert (sandbox.repo / ".audiagentic" / "components" / "core-lifecycle.yaml").is_file()
+        assert (sandbox.repo / ".audiagentic" / "components" / "project.yaml").is_file()
         assert any(
             path.startswith(".audiagentic/runtime/")
             for path in result["baseline-sync-report"]["excluded-paths"]
@@ -47,9 +47,9 @@ def test_fresh_install_creates_scaffold_and_manifest(tmp_path: Path) -> None:
         validator = Draft202012Validator(read_schema("project-config"))
         assert not list(validator.iter_errors(project_cfg))
 
-        # core-lifecycle marker has expected fields
-        marker = _load_yaml(sandbox.repo / ".audiagentic" / "components" / "core-lifecycle.yaml")
-        assert marker["component-id"] == "core-lifecycle"
+        # project marker has expected fields
+        marker = _load_yaml(sandbox.repo / ".audiagentic" / "components" / "project.yaml")
+        assert marker["component-id"] == "project"
         assert marker["enabled"] is True
         assert marker["installation-kind"] == "fresh"
     finally:

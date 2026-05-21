@@ -28,7 +28,7 @@ def apply_fresh_install(project_root: Path) -> dict:
     from audiagentic.foundation.components.registry import all_descriptors
     for component_id in all_descriptors():
         kwargs: dict = {"version": DEFAULT_VERSION}
-        if component_id == "core-lifecycle":
+        if component_id == "project":
             kwargs["installation_kind"] = "fresh"
             kwargs["last_lifecycle_action"] = "fresh-install"
         install_component(component_id, project_root, **kwargs)
