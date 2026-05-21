@@ -2,11 +2,10 @@ type: component
 contract-version: v1
 component-id: agent-jobs
 display-name: Agent Jobs
-description: Execution/jobs layer — workflow tags, job records, and session artifacts. Skill sources are owned by each tag descriptor in config/prompt-triggers/tags/.
+description: Execution/jobs layer — workflow action tags, job records, and session artifacts. Skill sources are owned by the agent-actions component.
 detection-marker: .audiagentic/components/agent-jobs.yaml
 depends-on:
   - project
-config: execution/jobs/agent-jobs.yaml
 files:
   - path: .audiagentic/components/agent-jobs.yaml
     lifecycle: create-if-missing
@@ -19,3 +18,9 @@ files:
     lifecycle: runtime-only
     recursive: true
     description: Agent session input and review state
+
+agent-tags:
+  - config: components/optional/agent-actions/ag-implement.yaml
+  - config: components/optional/agent-actions/ag-plan.yaml
+  - config: components/optional/agent-actions/ag-review.yaml
+  - config: components/optional/agent-actions/ag-audit.yaml

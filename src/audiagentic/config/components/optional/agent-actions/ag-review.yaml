@@ -1,4 +1,4 @@
-type: prompt-trigger-tag
+type: agent-action
 contract-version: v1
 tag-id: ag-review
 display-name: Review
@@ -24,12 +24,7 @@ directives:
 requires-body: true
 is-generic-tag: false
 is-review-tag: true
-skill-content-file: skill.md
-
-files:
-  - path: .audiagentic/skills/ag-review/skill.md
-    lifecycle: required-managed
-    description: ag-review canonical skill source
+skill-content-file: ag-review-skill.md
 
 surface-contributions:
   - id: ag-review/doctrine
@@ -53,4 +48,4 @@ surface-contributions:
 
 prompts:
   - name: default
-    content-file: prompts/default.md
+    content-file: ag-review-prompt-default.md

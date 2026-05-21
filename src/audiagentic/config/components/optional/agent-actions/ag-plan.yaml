@@ -1,4 +1,4 @@
-type: prompt-trigger-tag
+type: agent-action
 contract-version: v1
 tag-id: ag-plan
 display-name: Plan
@@ -20,12 +20,7 @@ directives:
 requires-body: true
 is-generic-tag: false
 is-review-tag: false
-skill-content-file: skill.md
-
-files:
-  - path: .audiagentic/skills/ag-plan/skill.md
-    lifecycle: required-managed
-    description: ag-plan canonical skill source
+skill-content-file: ag-plan-skill.md
 
 surface-contributions:
   - id: ag-plan/doctrine
@@ -51,4 +46,4 @@ surface-contributions:
 
 prompts:
   - name: default
-    content-file: prompts/default.md
+    content-file: ag-plan-prompt-default.md
