@@ -136,9 +136,18 @@ def build_server() -> FastMCP:
                     _build_warnings,
                     detect_availability,
                 )
+                from audiagentic.components.optional.source_control.dependencies import detect_missing
                 availability = detect_availability()
                 result["availability"] = availability
                 result["warnings"] = _build_warnings(availability)
+                missing = detect_missing()
+                result["missing-dependencies"] = missing
+                if missing:
+                    result["next-step"] = (
+                        f"Missing: {', '.join(missing)}. Ask the user which to install, "
+                        f"then call audiagentic-source-control.install_dependencies(names=[...]). "
+                        f"After install, call audiagentic-session.refresh_harness_config."
+                    )
         return result
 
     @mcp.tool(description=_tool_description("uninstall_component_tool", "Uninstall a component from the target project."))
