@@ -5,8 +5,8 @@ tag descriptor files. Tags are owned by the component that declares them; the
 providers component surfaces them on every installed provider.
 
 Tag descriptor files (``descriptor.yaml`` + ``skill.md``) live under
-``config/prompt-triggers/tags/<name>/`` and are referenced by relative path from
-the config root.
+``config/components/optional/agent-actions/tags/<name>/`` and are referenced by relative path from
+the config root. Each descriptor must have ``type: agent-action``.
 """
 from __future__ import annotations
 
@@ -93,8 +93,8 @@ def load_tag_from_yaml(path: Path) -> TagDescriptor:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"{path}: expected a YAML mapping")
-    if data.get("type") != "prompt-trigger-tag":
-        raise ValueError(f"{path}: expected type=prompt-trigger-tag, got {data.get('type')!r}")
+    if data.get("type") != "agent-action":
+        raise ValueError(f"{path}: expected type=agent-action, got {data.get('type')!r}")
     tag_id = data.get("tag-id")
     if not isinstance(tag_id, str) or not tag_id:
         raise ValueError(f"{path}: missing or empty tag-id")
@@ -156,10 +156,7 @@ def load_all_tags(config_root: Path | None = None) -> list[TagDescriptor]:
     root = (config_root or _CONFIG_ROOT).resolve()
     descriptors: list[TagDescriptor] = []
     for component in sorted(all_descriptors().values(), key=lambda d: d.component_id):
-        if not component.config_path:
+        if not component.yaml_path or not component.yaml_path.exists():
             continue
-        config_file = root / component.config_path
-        if not config_file.exists():
-            continue
-        descriptors.extend(_load_tags_from_component_config(config_file, root))
+        descriptors.extend(_load_tags_from_component_config(component.yaml_path, root))
     return descriptors
