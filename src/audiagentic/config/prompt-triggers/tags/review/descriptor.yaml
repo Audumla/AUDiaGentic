@@ -1,0 +1,56 @@
+type: prompt-trigger-tag
+contract-version: v1
+tag-id: ag-review
+display-name: Review
+description: Perform read-focused validation and completeness review without adding implementation work
+aliases:
+  - agr
+  - r
+  - review
+directives:
+  - id
+  - target
+  - context
+  - output
+  - template
+  - job
+  - profile
+  - model
+  - model-alias
+  - review-count
+  - aggregation
+  - distinct-reviewers
+  - require-distinct-reviewers
+requires-body: true
+is-generic-tag: false
+is-review-tag: true
+skill-content-file: skill.md
+
+files:
+  - path: .audiagentic/skills/ag-review/skill.md
+    lifecycle: required-managed
+    description: ag-review canonical skill source
+
+surface-contributions:
+  - id: ag-review/doctrine
+    kind: rule
+    title: Review action doctrine
+    content:
+      body: |
+        When the review action is triggered: perform read-focused validation and
+        completeness review. Identify blockers, missing tests, contract mismatches,
+        and drift from tracked docs. Do not add implementation work unless explicitly
+        requested. Do not broaden review into feature-scope changes.
+
+  - id: ag-review/review-doctrine
+    kind: rule
+    title: Review doctrine
+    content:
+      body: |
+        - Review prompts should stay read-focused unless the normalized request explicitly allows more.
+        - Do not broaden review into implementation work.
+        - Keep tracked docs and release artifacts synchronized with the job record.
+
+prompts:
+  - name: default
+    content-file: prompts/default.md

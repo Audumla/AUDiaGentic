@@ -1,0 +1,44 @@
+type: prompt-trigger-tag
+contract-version: v1
+tag-id: ag-implement
+display-name: Implement
+description: Carry out a requested code change within the contracted scope
+aliases:
+  - agi
+  - i
+  - implement
+directives:
+  - id
+  - target
+  - context
+  - output
+  - template
+  - job
+  - profile
+  - model
+  - model-alias
+  - commit-scope
+requires-body: false
+is-generic-tag: false
+is-review-tag: false
+skill-content-file: skill.md
+
+files:
+  - path: .audiagentic/skills/ag-implement/skill.md
+    lifecycle: required-managed
+    description: ag-implement canonical skill source
+
+surface-contributions:
+  - id: ag-implement/doctrine
+    kind: rule
+    title: Implement action doctrine
+    content:
+      body: |
+        When the implement action is triggered: carry out the requested implementation
+        work within the stated scope. Do not broaden scope beyond the requested change.
+        Prefer shared helpers, repository-owned scripts, and existing patterns.
+        Run verification steps (type checks, tests) when available before declaring done.
+
+prompts:
+  - name: default
+    content-file: prompts/default.md

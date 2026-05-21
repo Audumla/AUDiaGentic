@@ -1,6 +1,4 @@
-"""Skill surface management — regenerate provider skill surface files from canonical tags.
-
-Migrated from tools/misc/regenerate_tag_surfaces.py.
+"""Skill surface management — regenerate provider skill surface files from the tag registry.
 
 Public API
 ----------
@@ -60,17 +58,17 @@ def _parse_section(lines: list[str], section_name: str) -> list[str]:
     return items
 
 
-def _load_skill_definition(path: Path, tag: str) -> SkillDefinition:
-    text = path.read_text(encoding="utf-8")
-    if not text.startswith("---\n"):
-        raise ValueError(f"canonical skill file missing frontmatter: {path}")
-    _, frontmatter, body = text.split("---", 2)
+def _skill_definition_from_content(tag_id: str, content: str) -> SkillDefinition:
+    """Parse a skill.md string (with YAML frontmatter) into a SkillDefinition."""
+    if not content.startswith("---\n"):
+        raise ValueError(f"skill content for {tag_id!r} missing frontmatter")
+    _, frontmatter, body = content.split("---", 2)
     meta = _parse_frontmatter(frontmatter)
     body_lines = [line.rstrip() for line in body.strip().splitlines()]
-    title = next((line[2:].strip() for line in body_lines if line.startswith("# ")), f"{tag} skill")
+    title = next((line[2:].strip() for line in body_lines if line.startswith("# ")), f"{tag_id} skill")
     return SkillDefinition(
-        tag=tag,
-        name=meta.get("name", tag),
+        tag=tag_id,
+        name=meta.get("name", tag_id),
         description=meta.get("description", ""),
         title=title,
         trigger=_parse_section(body_lines, "Trigger"),
@@ -79,25 +77,32 @@ def _load_skill_definition(path: Path, tag: str) -> SkillDefinition:
     )
 
 
-def _load_canonical_skills(project_root: Path, syntax: dict[str, object]) -> list[SkillDefinition]:
-    skills_root = project_root / ".audiagentic" / "skills"
-    canonical_tags = syntax.get("canonical-tags")
-    if not isinstance(canonical_tags, list):
-        raise ValueError("prompt syntax missing canonical-tags list")
+def _load_skills_from_registry(project_root: Path | None = None) -> list[SkillDefinition]:
+    """Load SkillDefinitions from the tag registry.
+
+    If a project-local override exists at .audiagentic/skills/<tag>/skill.md it
+    takes precedence over the tag package's bundled skill.md.
+    """
+    from audiagentic.components.optional.providers.tags.registry import (  # noqa: PLC0415
+        all_tags_loaded,
+    )
+    tags = all_tags_loaded()
     skills: list[SkillDefinition] = []
-    for tag in canonical_tags:
-        if not isinstance(tag, str) or not tag:
-            continue
-        skill_path = skills_root / tag / "skill.md"
-        if not skill_path.exists():
-            raise FileNotFoundError(f"missing canonical skill source: {skill_path}")
-        skills.append(_load_skill_definition(skill_path, tag))
+    for tag_id, descriptor in sorted(tags.items()):
+        # Project-level override wins if present
+        if project_root is not None:
+            override = project_root / ".audiagentic" / "skills" / tag_id / "skill.md"
+            if override.exists():
+                content = override.read_text(encoding="utf-8")
+                skills.append(_skill_definition_from_content(tag_id, content))
+                continue
+        skills.append(_skill_definition_from_content(tag_id, descriptor.skill_content()))
     return skills
 
 
 def _build_base_surfaces(project_root: Path, syntax: dict[str, object]) -> dict[Path, str]:
     """Build rendered surfaces from provider renderers (without contribution overlays)."""
-    skills = _load_canonical_skills(project_root, syntax)
+    skills = _load_skills_from_registry(project_root)
     surface_config = syntax.get("skill-surfaces")
     if not isinstance(surface_config, dict):
         raise ValueError("prompt syntax missing skill-surfaces config")
@@ -185,7 +190,7 @@ def regenerate_skill_surfaces(
     dry_run: bool = False,
     check: bool = False,
 ) -> int:
-    """Regenerate skill surface files from canonical tags.
+    """Regenerate skill surface files from the tag registry.
 
     Parameters
     ----------
