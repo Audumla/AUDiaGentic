@@ -11,7 +11,7 @@ files:
     lifecycle: create-if-missing
     description: Installation marker
 mcp-servers:
-  - name: audiagentic-source-control-admin
+  - name: audiagentic-source-control
     module: audiagentic.components.optional.source_control.source_control_admin_mcp
     direct-tools: [get_source_control_status, install_source_control_mcp_servers]
     description: Source control component management
@@ -37,6 +37,7 @@ external-mcp-servers:
     env:
       GITHUB_TOKEN: "${GITHUB_TOKEN}"
     requires: [gh]
+    probe: [gh, mcp, serve, --help]
     description: GitHub API operations via official gh mcp serve
     instructions: >
       Use github MCP tools for GitHub API operations: pull requests, issues,
@@ -44,7 +45,7 @@ external-mcp-servers:
 harness-instructions:
   - section: "What you can do"
     content: |
-      ### audiagentic-source-control-admin
+      ### audiagentic-source-control
       - `get_source_control_status` — Check git, gh CLI, and MCP server availability
       - `install_source_control_mcp_servers` — Register official MCP servers into provider settings
 
@@ -60,6 +61,8 @@ harness-instructions:
       - `uv` installed for git MCP server (`pip install uv` or https://docs.astral.sh/uv)
       - `gh` CLI installed with `gh extension install github/gh-mcp` for GitHub MCP server
       - `GITHUB_TOKEN` environment variable set for GitHub operations
+
+lifecycle-observer: audiagentic.components.optional.source_control.observer
 
 agent-tags:
   - config: components/optional/agent-actions/ag-check-in-prep.yaml

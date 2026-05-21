@@ -180,6 +180,19 @@
         "unreleased",
         "released"
       ]
+    },
+    "release-id": {
+      "type": "string",
+      "description": "Release identifier stamped by archive_current_ledger when status transitions to released."
+    },
+    "git-commits": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 7
+      },
+      "uniqueItems": true,
+      "description": "Git commit SHAs that contain files from this fragment. Populated by post-commit hook; append-only."
     }
   }
 }

@@ -83,15 +83,81 @@ def _write_claude_mcp_config(project_root: Path, availability: dict[str, Any]) -
     return registered
 
 
+_POST_COMMIT_HOOK = """\
+#!/bin/sh
+# Installed by AUDiaGentic source-control component.
+# Stamps ledger fragments with the commit SHA for any files that intersect.
+python -c "
+from pathlib import Path
+from audiagentic.components.optional.source_control.git_commits import stamp_fragments_for_commit
+stamp_fragments_for_commit(Path('.').resolve())
+" 2>/dev/null || true
+"""
+
+
+def _install_post_commit_hook(project_root: Path) -> bool:
+    """Install or update the post-commit hook. Returns True if installed."""
+    hooks_dir = project_root / ".git" / "hooks"
+    if not hooks_dir.exists():
+        return False
+    hook_path = hooks_dir / "post-commit"
+    marker = "audiagentic-ledger-stamp"
+    if hook_path.exists():
+        existing = hook_path.read_text(encoding="utf-8")
+        if marker in existing:
+            return False  # already installed
+        # append to existing hook
+        updated = existing.rstrip("\n") + "\n\n# " + marker + "\n" + _POST_COMMIT_HOOK.lstrip("#!/bin/sh\n")
+        hook_path.write_text(updated, encoding="utf-8")
+    else:
+        hook_path.write_text("# " + marker + "\n" + _POST_COMMIT_HOOK, encoding="utf-8")
+    try:
+        import stat
+        hook_path.chmod(hook_path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    except OSError:
+        pass
+    return True
+
+
+def _remove_post_commit_hook(project_root: Path) -> bool:
+    """Remove the AUDiaGentic post-commit hook block. Returns True if removed."""
+    hook_path = project_root / ".git" / "hooks" / "post-commit"
+    if not hook_path.exists():
+        return False
+    marker = "audiagentic-ledger-stamp"
+    content = hook_path.read_text(encoding="utf-8")
+    if marker not in content:
+        return False
+    # Remove from the marker line onward until end of our block
+    lines = content.splitlines(keepends=True)
+    out = []
+    skip = False
+    for line in lines:
+        if marker in line:
+            skip = True
+        if not skip:
+            out.append(line)
+        elif line.strip() == "" and skip:
+            skip = False  # blank line ends our block
+    result = "".join(out).rstrip("\n") + "\n" if out else ""
+    if result.strip():
+        hook_path.write_text(result, encoding="utf-8")
+    else:
+        hook_path.unlink()
+    return True
+
+
 def bootstrap_source_control(project_root: Path) -> dict[str, Any]:
     availability = detect_availability()
     registered = _write_claude_mcp_config(project_root, availability)
+    hook_installed = _install_post_commit_hook(project_root)
 
     return {
         "contract-version": "v1",
         "status": "success",
         "availability": availability,
         "registered-mcp-servers": registered,
+        "hook-installed": hook_installed,
         "warnings": _build_warnings(availability),
     }
 

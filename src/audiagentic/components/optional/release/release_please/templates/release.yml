@@ -23,8 +23,38 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  build-and-publish:
+  finalize-ledger:
     needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: __BRANCH__
+          fetch-depth: 0
+
+      - name: Finalize ledger
+        run: |
+          python scripts/components/optional/ledger/finalize_ledger.py \
+            --release-id "${{ needs.release-please.outputs.tag_name }}"
+
+      - name: Commit release artifacts
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/releases/LEDGER.ndjson \
+                  docs/releases/CURRENT_RELEASE_LEDGER.ndjson \
+                  docs/releases/CHANGELOG.md \
+                  docs/releases/RELEASE_NOTES.md \
+                  docs/releases/VERSION_HISTORY.md \
+                  docs/releases/CURRENT_RELEASE.md
+          git diff --cached --quiet || git commit -m "chore(release): finalize ledger for ${{ needs.release-please.outputs.tag_name }} [skip ci]"
+          git push
+
+  build-and-publish:
+    needs: [release-please, finalize-ledger]
     if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
     steps:
