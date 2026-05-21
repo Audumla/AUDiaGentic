@@ -22,6 +22,7 @@ import yaml
 from audiagentic.foundation.components import all_descriptors, is_enabled, is_installed
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
+from audiagentic.runtime.harness.pi.install import refresh_harness_config_if_installed
 from audiagentic.runtime.lifecycle.components import (
     disable_component,
     enable_component,
@@ -126,23 +127,37 @@ def build_server() -> FastMCP:
 
     @mcp.tool(description=_tool_description("install_component_tool", "Install a component into the target project."))
     def install_component_tool(component_id: str) -> dict[str, Any]:
-        return install_component(component_id, _project_root())
+        project_root = _project_root()
+        result = install_component(component_id, project_root)
+        if result.get("ok", True):
+            refresh_harness_config_if_installed(project_root, reason="component-installed", component_id=component_id)
+        return result
 
     @mcp.tool(description=_tool_description("uninstall_component_tool", "Uninstall a component from the target project."))
     def uninstall_component_tool(component_id: str, remove_configs: bool = False) -> dict[str, Any]:
+        project_root = _project_root()
         descriptor = all_descriptors().get(component_id)
         if descriptor and descriptor.core:
             return {"ok": False, "error": f"cannot uninstall core component: {component_id}"}
-        deleted = uninstall_component(component_id, _project_root(), remove_configs=remove_configs)
+        deleted = uninstall_component(component_id, project_root, remove_configs=remove_configs)
+        refresh_harness_config_if_installed(project_root, reason="component-uninstalled", component_id=component_id)
         return {"ok": True, "component_id": component_id, "deleted": [str(p) for p in deleted]}
 
     @mcp.tool(description=_tool_description("enable_component_tool", "Enable a component in the target project."))
     def enable_component_tool(component_id: str) -> dict[str, Any]:
-        return enable_component(component_id, _project_root())
+        project_root = _project_root()
+        result = enable_component(component_id, project_root)
+        if result.get("ok", True):
+            refresh_harness_config_if_installed(project_root, reason="component-enabled", component_id=component_id)
+        return result
 
     @mcp.tool(description=_tool_description("disable_component_tool", "Disable a component in the target project."))
     def disable_component_tool(component_id: str) -> dict[str, Any]:
-        return disable_component(component_id, _project_root())
+        project_root = _project_root()
+        result = disable_component(component_id, project_root)
+        if result.get("ok", True):
+            refresh_harness_config_if_installed(project_root, reason="component-disabled", component_id=component_id)
+        return result
 
     @mcp.tool(description=_tool_description("read_project_file", "Read a file inside the project .audiagentic directory."))
     def read_project_file(relative_path: str) -> dict[str, Any]:
