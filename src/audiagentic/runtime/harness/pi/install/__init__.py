@@ -88,3 +88,28 @@ def refresh_materialized_agent_config(target: Path, project_root: Path | None = 
     harness_cfg = _c._load_config(project_root=project_root)
     materialize_agent_config(target, harness_cfg, project_root=project_root)
     return 0
+
+
+def refresh_harness_config_if_installed(
+    project_root: Path,
+    *,
+    reason: str,
+    component_id: str | None = None,
+) -> bool:
+    """Regenerate mcp.json and request runtime reload if harness is installed.
+
+    Returns True if harness was present and config was refreshed.
+    """
+    from audiagentic.runtime.home import global_harness_runtime
+    harness_runtime = global_harness_runtime()
+    if not (harness_runtime / "cli" / "node_modules" / ".bin").exists():
+        return False
+    try:
+        refresh_materialized_agent_config(harness_runtime, project_root=project_root)
+    except Exception:
+        pass
+    try:
+        request_runtime_reload(project_root, reason=reason, component_id=component_id)
+    except Exception:
+        pass
+    return True
