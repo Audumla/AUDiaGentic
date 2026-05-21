@@ -9,15 +9,21 @@ from audiagentic.foundation.io import atomic_write_text, load_ndjson
 _RELEASES_DIR = ("docs", "releases")
 
 
-def render_release_docs(project_root: Path, release_id: str) -> dict[str, Any]:
+def render_release_docs(
+    project_root: Path,
+    release_id: str,
+    released_event_ids: list[str] | None = None,
+) -> dict[str, Any]:
     """Render CHANGELOG.md, RELEASE_NOTES.md, VERSION_HISTORY.md from LEDGER.ndjson."""
     releases = project_root.joinpath(*_RELEASES_DIR)
     historical_path = releases / "LEDGER.ndjson"
     events = load_ndjson(historical_path)
 
-    release_events = [e for e in events if e.get("status") == "unreleased"]
-    if not release_events:
-        release_events = events
+    if released_event_ids:
+        id_set = set(released_event_ids)
+        release_events = [e for e in events if e.get("event-id") in id_set]
+    else:
+        release_events = [e for e in events if e.get("release-id") == release_id]
 
     change_lines = [f"## {release_id}"]
     for event in sorted(release_events, key=lambda e: e.get("event-id", "")):

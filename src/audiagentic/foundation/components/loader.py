@@ -60,6 +60,7 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
             description=ms.get("description", ""),
             instructions=ms.get("instructions", ""),
             requires=tuple(ms.get("requires") or []),
+            probe=tuple(ms.get("probe") or []),
         )
         for ms in (data.get("external-mcp-servers") or [])
     )

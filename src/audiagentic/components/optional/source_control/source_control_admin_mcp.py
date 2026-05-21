@@ -4,14 +4,13 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
-
 from audiagentic.components.optional.source_control.bootstrap import (
     bootstrap_source_control,
     detect_availability,
 )
+from audiagentic.runtime.mcp.server import mcp_server
 
-mcp = FastMCP("audiagentic-source-control-admin")
+mcp = mcp_server(__name__)
 
 
 def _project_root() -> Path:
