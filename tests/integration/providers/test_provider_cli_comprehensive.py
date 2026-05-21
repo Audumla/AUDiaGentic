@@ -181,7 +181,8 @@ class TestToolchainFactories:
 # ---------------------------------------------------------------------------
 
 # Known problematic providers that install but have binary/runtime issues
-_KNOWN_PROBLEMATIC = {"continue"}  # @continuedev/cli segfaults on cn --version
+_KNOWN_PROBLEMATIC = {"continue", "qwen", "gemini", "opencode"}  # segfaults or help timeout on CLI invocation
+_KNOWN_SLOW_INSTALL = {"cline"}  # npm install times out at 600s
 
 
 def _get_npm_providers() -> list[tuple[str, ProviderDescriptor]]:
@@ -190,7 +191,7 @@ def _get_npm_providers() -> list[tuple[str, ProviderDescriptor]]:
     return [
         (pid, desc)
         for pid, desc in sorted(descriptors.items())
-        if desc.cli_install and desc.cli_install.package_manager == "npm" and pid not in _KNOWN_PROBLEMATIC
+        if desc.cli_install and desc.cli_install.package_manager == "npm" and pid not in _KNOWN_PROBLEMATIC and pid not in _KNOWN_SLOW_INSTALL
     ]
 
 
@@ -278,7 +279,7 @@ class TestNpmProviderInstallUninstall:
 # ---------------------------------------------------------------------------
 
 # Providers that need GitHub auth for their brew tap
-_KNOWN_BREW_AUTH = {"plandex"}  # plandex-ai/tap requires GitHub credentials
+_KNOWN_BREW_AUTH = {"plandex", "goose"}  # plandex-ai/tap requires GitHub credentials; block-goose-cli brew API issue
 
 
 def _get_brew_providers() -> list[str]:

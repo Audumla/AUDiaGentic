@@ -18,7 +18,7 @@ providers:
   local-openai:
     enabled: true
 components:
-  core-lifecycle:
+  project:
     enabled: true
 """.lstrip(),
     )

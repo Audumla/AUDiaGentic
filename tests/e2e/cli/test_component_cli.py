@@ -39,7 +39,7 @@ def test_component_list_returns_all_registered(tmp_path):
     rows = _cli("component", "list", project=tmp_path)
     assert isinstance(rows, list)
     ids = {r["component_id"] for r in rows}
-    assert "core-lifecycle" in ids
+    assert "project" in ids
     assert len(ids) >= 7
 
 
@@ -53,7 +53,7 @@ def test_component_list_shows_not_installed_for_fresh_dir(tmp_path):
 # ── status ────────────────────────────────────────────────────────────────────
 
 def test_status_not_installed(tmp_path):
-    result = _cli("component", "status", "core-lifecycle", project=tmp_path)
+    result = _cli("component", "status", "project", project=tmp_path)
     assert result["installed"] is False
     assert result["enabled"] is None
 
@@ -65,7 +65,7 @@ def test_status_unknown_component(tmp_path):
 # ── install → status → disable → enable → uninstall ──────────────────────────
 
 LIFECYCLE_COMPONENTS = [
-    "core-lifecycle",
+    "project",
     "providers",
     "planning",
     "release-audit-ledger",
