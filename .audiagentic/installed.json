@@ -1,6 +1,6 @@
 {
   "components": {
-    "core-lifecycle": "installed",
+    "project": "installed",
     "agent-ledger": "installed",
     "release-workflow": "installed"
   },

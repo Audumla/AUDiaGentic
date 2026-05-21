@@ -71,17 +71,17 @@ def _make_descriptor(component_id: str, *, files: tuple[ComponentFile, ...] = ()
 def test_all_descriptors_returns_all_builtin_components() -> None:
     descs = all_descriptors()
     expected = {
-        "core-lifecycle", "agent-ledger", "providers",
+        "project", "agent-ledger", "providers",
         "planning", "agent-jobs",
     }
     assert expected.issubset(descs.keys())
 
 
 def test_get_descriptor_returns_correct_descriptor() -> None:
-    d = get_descriptor("core-lifecycle")
+    d = get_descriptor("project")
     assert d is not None
-    assert d.component_id == "core-lifecycle"
-    assert d.detection_marker == ".audiagentic/components/core-lifecycle.yaml"
+    assert d.component_id == "project"
+    assert d.detection_marker == ".audiagentic/components/project.yaml"
 
 
 def test_get_descriptor_returns_none_for_unknown() -> None:
@@ -102,14 +102,14 @@ def test_register_custom_component() -> None:
 # ---------------------------------------------------------------------------
 
 def test_is_installed_true_when_marker_exists(tmp_path: Path) -> None:
-    marker = tmp_path / ".audiagentic" / "components" / "core-lifecycle.yaml"
+    marker = tmp_path / ".audiagentic" / "components" / "project.yaml"
     marker.parent.mkdir(parents=True)
-    marker.write_text("component-id: core-lifecycle\nenabled: true\n", encoding="utf-8")
-    assert is_installed("core-lifecycle", tmp_path) is True
+    marker.write_text("component-id: project\nenabled: true\n", encoding="utf-8")
+    assert is_installed("project", tmp_path) is True
 
 
 def test_is_installed_false_when_marker_missing(tmp_path: Path) -> None:
-    assert is_installed("core-lifecycle", tmp_path) is False
+    assert is_installed("project", tmp_path) is False
 
 
 def test_is_installed_false_for_unknown_component(tmp_path: Path) -> None:
@@ -121,23 +121,23 @@ def test_is_installed_false_for_unknown_component(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def test_is_enabled_false_when_marker_missing(tmp_path: Path) -> None:
-    assert is_enabled("core-lifecycle", tmp_path) is False
+    assert is_enabled("project", tmp_path) is False
 
 
 def test_is_enabled_true_when_explicitly_enabled(tmp_path: Path) -> None:
-    _write_component_marker(tmp_path, "core-lifecycle", enabled=True)
-    assert is_enabled("core-lifecycle", tmp_path) is True
+    _write_component_marker(tmp_path, "project", enabled=True)
+    assert is_enabled("project", tmp_path) is True
 
 
 def test_is_enabled_false_when_explicitly_disabled(tmp_path: Path) -> None:
-    _write_component_marker(tmp_path, "core-lifecycle", enabled=False)
-    assert is_enabled("core-lifecycle", tmp_path) is False
+    _write_component_marker(tmp_path, "project", enabled=False)
+    assert is_enabled("project", tmp_path) is False
 
 
 def test_is_enabled_false_when_other_component_marker_present(tmp_path: Path) -> None:
     _write_component_marker(tmp_path, "other-component", enabled=True)
-    # core-lifecycle marker is absent — cannot be enabled if not installed
-    assert is_enabled("core-lifecycle", tmp_path) is False
+    # project marker is absent — cannot be enabled if not installed
+    assert is_enabled("project", tmp_path) is False
 
 
 # ---------------------------------------------------------------------------
