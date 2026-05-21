@@ -2,17 +2,6 @@
 
 This repository uses AUDiaGentic workflow jobs.
 
-## Bridge
-
-When a prompt begins with a workflow tag, route it through the repo-owned bridge:
-
-```powershell
-$bridge_command
-```
-
-If a native hook path is present in the active Gemini build, it should normalize into the
-same shared launch contract. If it is not stable, the bridge stays authoritative.
-
 ## Prompt tag doctrine
 
 - Parse only the first non-empty line for the workflow tag.

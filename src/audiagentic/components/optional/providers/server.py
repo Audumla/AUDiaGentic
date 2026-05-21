@@ -19,16 +19,15 @@ except ImportError:
     print("Error: mcp package not installed. Run: pip install mcp", file=sys.stderr)
     sys.exit(1)
 
-from audiagentic.foundation.components.loader import register_all_components
-from audiagentic.foundation.components.registry import get_mcp_server_declaration
-from audiagentic.foundation.output import ComponentOutputEvent
-from audiagentic.runtime.mcp.server import run_blocking_with_output
-
 from audiagentic.components.optional.providers.services.provider_catalog import (
     catalog_is_stale,
     runtime_catalog_path,
     runtime_catalog_root,
 )
+from audiagentic.foundation.components.loader import register_all_components
+from audiagentic.foundation.components.registry import get_mcp_server_declaration
+from audiagentic.foundation.output import ComponentOutputEvent
+from audiagentic.runtime.mcp.server import run_blocking_with_output
 
 register_all_components()
 
@@ -298,23 +297,33 @@ def build_server() -> FastMCP:
         }
 
     @mcp.tool(description=_tool_description("refresh_provider_catalog", "Fetch and persist live model catalog for a provider."))
-    def refresh_provider_catalog(provider_id: str) -> dict[str, Any]:
+    async def refresh_provider_catalog(provider_id: str, ctx: Context = None) -> dict[str, Any]:
         from audiagentic.components.optional.providers.services.catalog import (
             fetch_provider_catalog,
         )
         project_root = _project_root()
         try:
-            return fetch_provider_catalog(provider_id, project_root=project_root)
+            return await run_blocking_with_output(
+                ctx=ctx,
+                logger="providers.catalog",
+                heartbeat_message=f"[{provider_id}] catalog fetch running...",
+                work=lambda output: fetch_provider_catalog(provider_id, project_root=project_root, on_progress=output),
+            )
         except Exception as exc:  # noqa: BLE001
             return {"provider_id": provider_id, "ok": False, "error": str(exc)}
 
     @mcp.tool(description=_tool_description("refresh_all_catalogs", "Fetch and persist model catalogs for all providers that support it."))
-    def refresh_all_catalogs() -> dict[str, Any]:
+    async def refresh_all_catalogs(ctx: Context = None) -> dict[str, Any]:
         from audiagentic.components.optional.providers.services.catalog import (
             refresh_all_catalogs as _refresh,
         )
         project_root = _project_root()
-        return _refresh(project_root=project_root)
+        return await run_blocking_with_output(
+            ctx=ctx,
+            logger="providers.catalog",
+            heartbeat_message="Fetching provider catalogs...",
+            work=lambda output: _refresh(project_root=project_root, on_progress=output),
+        )
 
    # --- lifecycle tools (write) ---
 
@@ -380,36 +389,56 @@ def build_server() -> FastMCP:
         return {"provider_id": provider_id, "enabled": enabled, "ok": True}
 
     @mcp.tool(description=_tool_description("apply_provider_surfaces", "Apply managed provider surface blocks to agent files."))
-    def apply_provider_surfaces(provider_id: str | None = None) -> dict[str, Any]:
+    async def apply_provider_surfaces(provider_id: str | None = None, ctx: Context = None) -> dict[str, Any]:
         from audiagentic.components.optional.providers.surfaces.manager import (
             apply_provider_surfaces as _apply,
         )
         project_root = _project_root()
-        return _apply(project_root, provider_id=provider_id)
+        return await run_blocking_with_output(
+            ctx=ctx,
+            logger="providers.surfaces",
+            heartbeat_message="Applying provider surfaces...",
+            work=lambda output: _apply(project_root, provider_id=provider_id, on_progress=output),
+        )
 
     @mcp.tool(description=_tool_description("prune_provider_surfaces", "Remove stale managed provider surface blocks from agent files."))
-    def prune_provider_surfaces(provider_id: str | None = None) -> dict[str, Any]:
+    async def prune_provider_surfaces(provider_id: str | None = None, ctx: Context = None) -> dict[str, Any]:
         from audiagentic.components.optional.providers.surfaces.manager import (
             prune_provider_surfaces as _prune,
         )
         project_root = _project_root()
-        return _prune(project_root, provider_id=provider_id)
+        return await run_blocking_with_output(
+            ctx=ctx,
+            logger="providers.surfaces",
+            heartbeat_message="Pruning provider surfaces...",
+            work=lambda output: _prune(project_root, provider_id=provider_id, on_progress=output),
+        )
 
     @mcp.tool(description=_tool_description("reconcile_provider", "Reconcile a single provider against host state and sync config or surfaces."))
-    def reconcile_provider(provider_id: str) -> dict[str, Any]:
+    async def reconcile_provider(provider_id: str, fetch_catalog: bool = False, ctx: Context = None) -> dict[str, Any]:
         from audiagentic.components.optional.providers.services.lifecycle import (
             reconcile_provider as _reconcile,
         )
         project_root = _project_root()
-        return _reconcile(provider_id, project_root=project_root)
+        return await run_blocking_with_output(
+            ctx=ctx,
+            logger="providers.reconcile",
+            heartbeat_message=f"[{provider_id}] reconcile still running...",
+            work=lambda output: _reconcile(provider_id, project_root=project_root, fetch_catalog=fetch_catalog, on_progress=output),
+        )
 
     @mcp.tool(description=_tool_description("reconcile_all_providers", "Reconcile all registered providers against host state."))
-    def reconcile_all_providers() -> dict[str, Any]:
+    async def reconcile_all_providers(fetch_catalogs: bool = False, ctx: Context = None) -> dict[str, Any]:
         from audiagentic.components.optional.providers.services.lifecycle import (
             reconcile_all_providers as _reconcile_all,
         )
         project_root = _project_root()
-        return _reconcile_all(project_root=project_root)
+        return await run_blocking_with_output(
+            ctx=ctx,
+            logger="providers.reconcile",
+            heartbeat_message="Reconciling providers...",
+            work=lambda output: _reconcile_all(project_root=project_root, fetch_catalogs=fetch_catalogs, on_progress=output),
+        )
 
     return mcp
 

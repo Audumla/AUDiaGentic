@@ -1,15 +1,13 @@
-"""Claude Code hook handlers for prompt-trigger bridge integration."""
+"""Claude Code hook handlers for prompt-trigger integration."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-# Canonical tags recognized by the shared bridge
 CANONICAL_TAGS = {'plan', 'implement', 'review', 'audit', 'check-in-prep'}
 HOOK_USER_PROMPT_SUBMIT = 'user-prompt-submit'
 HOOK_PRE_TOOL_USE = 'pre-tool-use'
@@ -55,8 +53,7 @@ def detect_and_launch_prompt_tag(
     # We just need to detect that a tag-like token is present
     tag_found = '@' + tag_token
 
-    # Tag detected: normalize and route to shared bridge
-    return _invoke_shared_bridge(
+    return _invoke_prompt_launch(
         raw_prompt=raw_prompt,
         first_line=first_line,
         tag=tag_found,
@@ -64,65 +61,34 @@ def detect_and_launch_prompt_tag(
     )
 
 
-def _invoke_shared_bridge(
+def _invoke_prompt_launch(
     raw_prompt: str,
     first_line: str,
     tag: str,
     session_metadata: dict[str, Any],
 ) -> dict[str, Any]:
-    """Invoke shared prompt-trigger bridge and return result."""
     try:
+        from audiagentic.components.optional.agent_jobs.prompt_launch import launch_prompt_request
+        from audiagentic.components.optional.agent_jobs.prompt_parser import (
+            parse_prompt_launch_request,
+        )
+
         workspace_root = session_metadata.get('workspace_root', '.')
         surface = session_metadata.get('surface', 'cli')
         session_id = session_metadata.get('session_id', '')
-
-        # Extract parameters from first line (e.g., "@plan provider=cline id=job_001")
         params = _parse_first_line_params(first_line)
         provider_id = params.get('provider', 'claude')
 
-        bridge_path = Path(__file__).resolve().parents[3] / 'agent_jobs' / 'prompt_trigger_bridge.py'
-
-        # Build bridge invocation
-        bridge_cmd = [
-            sys.executable,
-            str(bridge_path),
-            '--project-root', str(workspace_root),
-            '--surface', surface,
-            '--provider-id', provider_id,
-        ]
-
-        if session_id:
-            bridge_cmd.extend(['--session-id', session_id])
-
-        # Invoke shared bridge
-        result = subprocess.run(
-            bridge_cmd,
-            input=raw_prompt,
-            capture_output=True,
-            text=True,
-            timeout=30,
+        request = parse_prompt_launch_request(
+            raw_prompt,
+            surface=surface,
+            provider_id=provider_id,
+            session_id=session_id or None,
+            allow_adhoc_target=False,
+            project_root=Path(workspace_root),
         )
+        return launch_prompt_request(Path(workspace_root), request)
 
-        if result.returncode != 0:
-            # Bridge failed; return error context
-            try:
-                return json.loads(result.stdout)
-            except (json.JSONDecodeError, ValueError):
-                return {
-                    'status': 'error',
-                    'kind': 'bridge_invocation_failed',
-                    'message': result.stderr or 'Bridge invocation failed with no error output',
-                }
-
-        # Parse and return bridge result
-        return json.loads(result.stdout)
-
-    except subprocess.TimeoutExpired:
-        return {
-            'status': 'error',
-            'kind': 'timeout',
-            'message': 'Shared bridge invocation timed out after 30 seconds',
-        }
     except Exception as exc:
         return {
             'status': 'error',

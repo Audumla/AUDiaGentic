@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +9,7 @@ from jsonschema import Draft202012Validator
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import read_schema
+from audiagentic.foundation.io import atomic_write_text
 
 
 def _validate_change_event(payload: dict[str, Any]) -> None:
@@ -30,18 +29,6 @@ def _fragment_dir(project_root: Path) -> Path:
     return project_root / ".audiagentic" / "runtime" / "ledger" / "fragments"
 
 
-def _write_atomic(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(prefix=path.stem + ".", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2, sort_keys=True)
-        os.replace(tmp_path, path)
-    finally:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-
-
 def record_change_event(project_root: Path, event: dict[str, Any]) -> dict[str, Any]:
     _validate_change_event(event)
     event_id = event["event-id"]
@@ -58,5 +45,5 @@ def record_change_event(project_root: Path, event: dict[str, Any]) -> dict[str, 
             )
         return {"fragment-path": str(fragment_path), "event-id": event_id, "status": "exists"}
 
-    _write_atomic(fragment_path, event)
+    atomic_write_text(fragment_path, json.dumps(event, indent=2, sort_keys=True))
     return {"fragment-path": str(fragment_path), "event-id": event_id, "status": "created"}

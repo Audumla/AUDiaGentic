@@ -1,7 +1,7 @@
 """TagDescriptor — metadata for a single prompt-trigger tag."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -34,7 +34,7 @@ class TagPrompt:
 class TagDescriptor:
     """Full definition of a prompt-trigger tag.
 
-    Loaded from config/prompt-triggers/tags/<name>/descriptor.yaml.
+    Loaded from config/agent-actions/tags/<name>/descriptor.yaml.
     Neither the tag nor the loading code references specific providers.
     """
     tag_id: str
