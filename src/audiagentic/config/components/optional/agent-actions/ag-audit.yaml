@@ -1,4 +1,4 @@
-type: prompt-trigger-tag
+type: agent-action
 contract-version: v1
 tag-id: ag-audit
 display-name: Audit
@@ -20,12 +20,7 @@ directives:
 requires-body: false
 is-generic-tag: false
 is-review-tag: false
-skill-content-file: skill.md
-
-files:
-  - path: .audiagentic/skills/ag-audit/skill.md
-    lifecycle: required-managed
-    description: ag-audit canonical skill source
+skill-content-file: ag-audit-skill.md
 
 surface-contributions:
   - id: ag-audit/doctrine
@@ -40,4 +35,4 @@ surface-contributions:
 
 prompts:
   - name: default
-    content-file: prompts/default.md
+    content-file: ag-audit-prompt-default.md

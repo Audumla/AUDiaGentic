@@ -5,11 +5,7 @@ from typing import Any
 
 import yaml
 
-from audiagentic.paths import SRC_ROOT
-
 from .base import SurfaceContribution
-
-_CONFIG_ROOT = SRC_ROOT / "audiagentic" / "config"
 
 
 def _as_strings(raw: Any) -> tuple[str, ...]:
@@ -45,11 +41,20 @@ def _contributions_from_data(data: dict[str, Any], component_id: str) -> list[Su
     return contributions
 
 
-def load_tag_surface_contributions() -> list[SurfaceContribution]:
-    """Load surface contributions declared in each tag's descriptor.yaml."""
+def load_tag_surface_contributions(project_root: Path | None = None) -> list[SurfaceContribution]:
+    """Load surface contributions declared in each tag's descriptor.yaml.
+
+    Tags are optional parts of the agent-actions component, not separate components.
+    If project_root is given, contributions are only included when agent-actions is installed.
+    """
     from audiagentic.components.optional.providers.tags.registry import (  # noqa: PLC0415
         all_tags_loaded,
     )
+    from audiagentic.foundation.components.registry import is_installed  # noqa: PLC0415
+
+    if project_root is not None and not is_installed("agent-actions", project_root):
+        return []
+
     contributions: list[SurfaceContribution] = []
     for tag_id, descriptor in sorted(all_tags_loaded().items()):
         for contrib in descriptor.surface_contributions:
@@ -81,7 +86,7 @@ def _build_canonical_tags_body(tags: dict) -> str:
         "- Do not reinterpret these tags — route the raw tagged prompt through the repo-owned bridge.",
         "- Keep tag semantics identical to the shared AUDiaGentic launch contract.",
         "- Keep provenance visible: provider id, surface, and session id should survive normalization.",
-        "- Tag definitions are managed in `config/prompt-triggers/tags/`;",
+        "- Tag definitions are managed in `config/components/optional/agent-actions/tags/`;",
         "  run `python -m audiagentic.components.optional.providers.skill_surfaces --project-root .`"
         " after adding, removing, or renaming tags.",
     ]
@@ -92,7 +97,7 @@ def _build_tag_shortcuts_body(tags: dict) -> str:
     """Build the aliases cheatsheet body from all loaded tags."""
     lines = [
         "Tag and provider aliases are centralized in the tag registry and",
-        "`config/prompt-triggers/tags/` and work in all surfaces.\n",
+        "`config/components/optional/agent-actions/tags/` and work in all surfaces.\n",
         "Tag aliases:\n",
     ]
     for tag_id in sorted(tags):
@@ -112,16 +117,20 @@ def _build_tag_shortcuts_body(tags: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def build_summary_contributions() -> list[SurfaceContribution]:
+def build_summary_contributions(project_root: Path | None = None) -> list[SurfaceContribution]:
     """Build synthetic cross-tag summary contributions.
 
     These replace the old hardcoded agent-jobs/canonical-rule and
     agent-jobs/tag-shortcuts blocks. Generated dynamically from all
     loaded tag descriptors so they stay accurate without manual edits.
+
+    Always uses all registered tags — the canonical-rule is a routing contract
+    that documents every valid tag regardless of per-tag installation state.
     """
     from audiagentic.components.optional.providers.tags.registry import (  # noqa: PLC0415
         all_tags_loaded,
     )
+
     tags = all_tags_loaded()
     if not tags:
         return []
@@ -143,28 +152,33 @@ def build_summary_contributions() -> list[SurfaceContribution]:
     ]
 
 
-def load_surface_contributions(config_root: Path | None = None) -> list[SurfaceContribution]:
+def load_surface_contributions(
+    project_root: Path | None = None,
+) -> list[SurfaceContribution]:
     from audiagentic.foundation.components.loader import register_all_components
-    from audiagentic.foundation.components.registry import all_descriptors
+    from audiagentic.foundation.components.registry import all_descriptors, is_enabled, is_installed
 
     register_all_components()
-    root = (config_root or _CONFIG_ROOT).resolve()
 
-    # Component-level contributions (from YAML config files)
+    # Component-level contributions (from each component's YAML file)
     contributions: list[SurfaceContribution] = []
     for descriptor in sorted(all_descriptors().values(), key=lambda d: d.component_id):
-        if not descriptor.config_path:
+        if not descriptor.yaml_path or not descriptor.yaml_path.exists():
             continue
-        config_file = root / descriptor.config_path
-        if not config_file.exists():
-            continue
-        data = yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}
+        # Only include contributions from installed+enabled components.
+        # Core components always contribute (they cannot be uninstalled).
+        if project_root is not None and not descriptor.core:
+            if not is_installed(descriptor.component_id, project_root):
+                continue
+            if not is_enabled(descriptor.component_id, project_root):
+                continue
+        data = yaml.safe_load(descriptor.yaml_path.read_text(encoding="utf-8")) or {}
         contributions.extend(_contributions_from_data(data, descriptor.component_id))
 
     # Per-tag contributions from tag descriptors
-    contributions.extend(load_tag_surface_contributions())
+    contributions.extend(load_tag_surface_contributions(project_root=project_root))
 
     # Synthetic cross-tag summaries (canonical list + aliases cheatsheet)
-    contributions.extend(build_summary_contributions())
+    contributions.extend(build_summary_contributions(project_root=project_root))
 
     return contributions
