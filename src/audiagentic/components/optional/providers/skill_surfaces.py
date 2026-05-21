@@ -18,7 +18,10 @@ import tempfile
 from pathlib import Path
 
 from audiagentic.components.optional.agent_jobs.prompt_syntax import load_prompt_syntax
-from audiagentic.components.optional.providers.surfaces.base import SkillDefinition, apply_managed_blocks
+from audiagentic.components.optional.providers.surfaces.base import (
+    SkillDefinition,
+    apply_managed_blocks,
+)
 from audiagentic.components.optional.providers.surfaces.manager import build_provider_surface_blocks
 from audiagentic.components.optional.providers.surfaces.registry import load_renderer_registry
 

@@ -105,6 +105,21 @@ def test_install_creates_required_managed_files(component_id: str, tmp_path: Pat
         sb.cleanup()
 
 
+@pytest.mark.parametrize("component_id", _project_component_ids())
+def test_install_creates_create_if_missing_files(component_id: str, tmp_path: Path) -> None:
+    """create-if-missing files (including the detection marker) must exist after install."""
+    sb = sandbox_helper.create(tmp_path, f"install-cim-{component_id}")
+    try:
+        _install_with_deps(component_id, sb.repo)
+        descriptor = all_descriptors()[component_id]
+        for cf in descriptor.files:
+            if cf.lifecycle == MODE_CREATE_IF_MISSING and not cf.recursive:
+                target = sb.repo / cf.rel_path
+                assert target.is_file(), f"{component_id}: create-if-missing file missing after install: {cf.rel_path}"
+    finally:
+        sb.cleanup()
+
+
 # ---------------------------------------------------------------------------
 # Disable / Enable
 # ---------------------------------------------------------------------------
@@ -221,6 +236,31 @@ def test_uninstall_preserves_create_if_missing_files(component_id: str, tmp_path
 
         for path in existing_before:
             assert path.exists(), f"{component_id}: config file incorrectly removed: {path}"
+    finally:
+        sb.cleanup()
+
+
+@pytest.mark.parametrize("component_id", _project_component_ids())
+def test_uninstall_remove_configs_removes_create_if_missing_files(component_id: str, tmp_path: Path) -> None:
+    """remove_configs=True must remove create-if-missing files (and the marker)."""
+    sb = sandbox_helper.create(tmp_path, f"uninstall-force-{component_id}")
+    try:
+        _install_with_deps(component_id, sb.repo)
+        descriptor = all_descriptors()[component_id]
+        cim_paths = [
+            sb.repo / cf.rel_path
+            for cf in descriptor.files
+            if cf.lifecycle == MODE_CREATE_IF_MISSING and not cf.recursive
+        ]
+        existing_before = [p for p in cim_paths if p.exists()]
+
+        uninstall_component(component_id, sb.repo, remove_configs=True)
+
+        marker = sb.repo / ".audiagentic" / "components" / f"{component_id}.yaml"
+        assert not marker.exists(), f"{component_id}: marker still present after forced uninstall"
+        assert not is_installed(component_id, sb.repo)
+        for path in existing_before:
+            assert not path.exists(), f"{component_id}: create-if-missing file not removed with remove_configs=True: {path}"
     finally:
         sb.cleanup()
 

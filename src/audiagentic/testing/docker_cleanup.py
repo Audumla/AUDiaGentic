@@ -4,7 +4,6 @@ import argparse
 import subprocess
 import sys
 
-
 SAFE_IMAGE_PATTERNS = (
     "audiagentic",
     "audia-provider-cli-test",

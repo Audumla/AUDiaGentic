@@ -9,7 +9,10 @@ from audiagentic.components.core.harness_server import _set_cli_visibility
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.runtime.harness.pi.install import request_runtime_reload
-from audiagentic.runtime.harness.pi.install.config import _build_settings_config, materialize_agent_config
+from audiagentic.runtime.harness.pi.install.config import (
+    _build_settings_config,
+    materialize_agent_config,
+)
 from audiagentic.runtime.lifecycle.components import install_component
 from audiagentic.runtime.mcp_config_builder import build_system_md_injections
 

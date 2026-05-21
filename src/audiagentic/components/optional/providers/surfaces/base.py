@@ -6,10 +6,6 @@ from string import Template
 from typing import Any, Protocol
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
-_BRIDGE_COMMAND = (
-    "python src/audiagentic/components/optional/agent_jobs/prompt_trigger_bridge.py"
-    " --provider-id {provider_id} --project-root ."
-)
 
 MANAGED_MARKDOWN_HEADER = "<!-- MANAGED_BY_AUDIAGENTIC: do not edit directly. -->"
 
@@ -89,7 +85,6 @@ def render_instruction_file(
     content = Template(template_text).safe_substitute(
         display_name=instruction_file,
         provider_id=provider_id,
-        bridge_command=_BRIDGE_COMMAND.format(provider_id=provider_id),
     )
     return apply_managed_header(content)
 

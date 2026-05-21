@@ -5,11 +5,15 @@ declared MCP server configurations and harness instructions.
 """
 from __future__ import annotations
 
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.components.base import McpServerDeclaration
+from audiagentic.foundation.components.base import (
+    ExternalMcpServerDeclaration,
+    McpServerDeclaration,
+)
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import all_descriptors, is_enabled, is_installed
 
@@ -86,19 +90,32 @@ def build_mcp_config(
             result["directTools"] = server_decl.direct_tools
         return result
 
+    def _build_external_decl(ext: ExternalMcpServerDeclaration) -> dict[str, Any] | None:
+        if any(shutil.which(r) is None for r in ext.requires):
+            return None
+        result: dict[str, Any] = {
+            "command": ext.command,
+            "args": list(ext.args),
+            "lifecycle": "lazy",
+        }
+        if ext.env:
+            result["env"] = dict(ext.env)
+        return result
+
     servers: dict[str, dict[str, Any]] = {}
 
     for cid, descriptor in all_descriptors().items():
-        if descriptor.core:
-            for server_decl in descriptor.mcp_servers:
-                servers[server_decl.name] = _build_server_decl(server_decl)
-        elif not is_installed(cid, project_root):
+        active = descriptor.core or (
+            is_installed(cid, project_root) and is_enabled(cid, project_root)
+        )
+        if not active:
             continue
-        elif not is_enabled(cid, project_root):
-            continue
-        else:
-            for server_decl in descriptor.mcp_servers:
-                servers[server_decl.name] = _build_server_decl(server_decl)
+        for server_decl in descriptor.mcp_servers:
+            servers[server_decl.name] = _build_server_decl(server_decl)
+        for ext in descriptor.external_mcp_servers:
+            entry = _build_external_decl(ext)
+            if entry is not None:
+                servers[ext.name] = entry
 
     settings = {
         "toolPrefix": "mcp",

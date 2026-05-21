@@ -10,10 +10,10 @@ for _p in (str(_ROOT), str(_ROOT / "src")):
 
 import yaml
 from tests.helpers import sandbox as sandbox_helper
-from audiagentic.testing.seed_example_project import seed_example_project
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.lifecycle.uninstall import apply_uninstall
+from audiagentic.testing.seed_example_project import seed_example_project
 
 
 def _write_project_marker(root: Path) -> None:
