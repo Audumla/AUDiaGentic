@@ -131,6 +131,14 @@ def build_server() -> FastMCP:
         result = install_component(component_id, project_root)
         if result.get("ok", True):
             refresh_harness_config_if_installed(project_root, reason="component-installed", component_id=component_id)
+            if component_id == "source-control":
+                from audiagentic.components.optional.source_control.bootstrap import (
+                    _build_warnings,
+                    detect_availability,
+                )
+                availability = detect_availability()
+                result["availability"] = availability
+                result["warnings"] = _build_warnings(availability)
         return result
 
     @mcp.tool(description=_tool_description("uninstall_component_tool", "Uninstall a component from the target project."))
