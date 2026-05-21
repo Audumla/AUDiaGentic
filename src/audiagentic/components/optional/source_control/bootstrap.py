@@ -83,8 +83,10 @@ def _write_claude_mcp_config(project_root: Path, availability: dict[str, Any]) -
     return registered
 
 
-_POST_COMMIT_HOOK = """\
-#!/bin/sh
+_HOOK_MARKER = "audiagentic-ledger-stamp"
+
+_POST_COMMIT_HOOK_BODY = """\
+# {marker}
 # Installed by AUDiaGentic source-control component.
 # Stamps ledger fragments with the commit SHA for any files that intersect.
 python -c "
@@ -92,7 +94,7 @@ from pathlib import Path
 from audiagentic.components.optional.source_control.git_commits import stamp_fragments_for_commit
 stamp_fragments_for_commit(Path('.').resolve())
 " 2>/dev/null || true
-"""
+""".format(marker=_HOOK_MARKER)
 
 
 def _install_post_commit_hook(project_root: Path) -> bool:
@@ -101,16 +103,15 @@ def _install_post_commit_hook(project_root: Path) -> bool:
     if not hooks_dir.exists():
         return False
     hook_path = hooks_dir / "post-commit"
-    marker = "audiagentic-ledger-stamp"
     if hook_path.exists():
         existing = hook_path.read_text(encoding="utf-8")
-        if marker in existing:
+        if _HOOK_MARKER in existing:
             return False  # already installed
-        # append to existing hook
-        updated = existing.rstrip("\n") + "\n\n# " + marker + "\n" + _POST_COMMIT_HOOK.lstrip("#!/bin/sh\n")
+        # append to existing hook (shebang already present in existing file)
+        updated = existing.rstrip("\n") + "\n\n" + _POST_COMMIT_HOOK_BODY
         hook_path.write_text(updated, encoding="utf-8")
     else:
-        hook_path.write_text("# " + marker + "\n" + _POST_COMMIT_HOOK, encoding="utf-8")
+        hook_path.write_text("#!/bin/sh\n" + _POST_COMMIT_HOOK_BODY, encoding="utf-8")
     try:
         import stat
         hook_path.chmod(hook_path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
@@ -124,16 +125,15 @@ def _remove_post_commit_hook(project_root: Path) -> bool:
     hook_path = project_root / ".git" / "hooks" / "post-commit"
     if not hook_path.exists():
         return False
-    marker = "audiagentic-ledger-stamp"
     content = hook_path.read_text(encoding="utf-8")
-    if marker not in content:
+    if _HOOK_MARKER not in content:
         return False
     # Remove from the marker line onward until end of our block
     lines = content.splitlines(keepends=True)
     out = []
     skip = False
     for line in lines:
-        if marker in line:
+        if _HOOK_MARKER in line:
             skip = True
         if not skip:
             out.append(line)
