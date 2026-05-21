@@ -244,6 +244,128 @@ def _patch_mcp_direct_tools_live_register(npm_dir: Path) -> None:
     target.write_text(source, encoding="utf-8")
 
 
+def _patch_mcp_direct_tools_progress(npm_dir: Path) -> None:
+    """Bridge MCP progress notifications into Pi tool updates.
+
+    The MCP SDK only requests `notifications/progress` when `onprogress` is
+    supplied on the request. This keeps long-running tool calls request-scoped
+    and lets Pi render compact status without scraping subprocess output.
+    """
+    target = npm_dir / "node_modules" / "pi-mcp-adapter" / "direct-tools.ts"
+    if not target.exists():
+        return
+
+    source = target.read_text(encoding="utf-8")
+    old_signature = "  return async function execute(_toolCallId, params) {"
+    new_signature = "  return async function execute(_toolCallId, params, _signal, onUpdate, ctx) {"
+    if new_signature not in source and old_signature in source:
+        source = source.replace(old_signature, new_signature, 1)
+
+    old_import = 'import { authenticate, supportsOAuth } from "./mcp-auth-flow.ts";'
+    new_import = (
+        'import { authenticate, supportsOAuth } from "./mcp-auth-flow.ts";\n'
+        'import { LoggingMessageNotificationSchema } from "@modelcontextprotocol/sdk/types.js";'
+    )
+    if "LoggingMessageNotificationSchema" not in source and old_import in source:
+        source = source.replace(old_import, new_import, 1)
+
+    old = (
+        "      const resultPromise = connection.client.callTool({\n"
+        "        name: spec.originalName,\n"
+        "        arguments: params ?? {},\n"
+        "        _meta: uiSession?.requestMeta,\n"
+        "      });"
+    )
+    new = (
+        "      const resultPromise = connection.client.callTool(\n"
+        "        {\n"
+        "          name: spec.originalName,\n"
+        "          arguments: params ?? {},\n"
+        "          _meta: uiSession?.requestMeta,\n"
+        "        },\n"
+        "        undefined,\n"
+        "        {\n"
+        "          resetTimeoutOnProgress: true,\n"
+        "          onprogress: (progress) => {\n"
+        "            const message = typeof progress.message === \"string\"\n"
+        "              ? progress.message\n"
+        "              : `MCP progress${typeof progress.progress === \"number\" ? ` ${progress.progress}` : \"\"}`;\n"
+        "            ctx?.ui?.setWorkingVisible?.(true);\n"
+        "            ctx?.ui?.setWorkingMessage?.(message);\n"
+        "            ctx?.ui?.setStatus?.(\"mcp-progress\", message);\n"
+        "            onUpdate?.({\n"
+        "              content: [{ type: \"text\" as const, text: message }],\n"
+        "              details: { server: spec.serverName, tool: spec.originalName, progress },\n"
+        "            });\n"
+        "          },\n"
+        "        },\n"
+        "      );"
+    )
+    if new not in source and old in source:
+        source = source.replace(old, new, 1)
+    elif "ctx?.ui?.setStatus?.(\"mcp-progress\", message);" not in source:
+        source = source.replace(
+            "            onUpdate?.({\n"
+            "              content: [{ type: \"text\" as const, text: message }],",
+            "            ctx?.ui?.setStatus?.(\"mcp-progress\", message);\n"
+            "            onUpdate?.({\n"
+            "              content: [{ type: \"text\" as const, text: message }],",
+            1,
+        )
+    elif "ctx?.ui?.setWorkingMessage?.(message);" not in source:
+        source = source.replace(
+            "            ctx?.ui?.setStatus?.(\"mcp-progress\", message);",
+            "            ctx?.ui?.setWorkingVisible?.(true);\n"
+            "            ctx?.ui?.setWorkingMessage?.(message);\n"
+            "            ctx?.ui?.setStatus?.(\"mcp-progress\", message);",
+            1,
+        )
+
+    log_handler = (
+        "      connection.client.setNotificationHandler(LoggingMessageNotificationSchema, (notification) => {\n"
+        "        const data = notification.params.data;\n"
+        "        const message = typeof data === \"object\" && data !== null && \"message\" in data\n"
+        "          ? String((data as { message?: unknown }).message)\n"
+        "          : typeof data === \"string\"\n"
+        "            ? data\n"
+        "            : JSON.stringify(data);\n"
+        "        const text = `[${notification.params.level}] ${message}`;\n"
+        "        ctx?.ui?.setWorkingVisible?.(true);\n"
+        "        ctx?.ui?.setWorkingMessage?.(text);\n"
+        "        ctx?.ui?.setStatus?.(\"mcp-progress\", text);\n"
+        "        onUpdate?.({\n"
+        "          content: [{ type: \"text\" as const, text }],\n"
+        "          details: { server: spec.serverName, tool: spec.originalName, log: notification.params },\n"
+        "        });\n"
+        "      });\n\n"
+    )
+    call_marker = "      const resultPromise = connection.client.callTool(\n"
+    if "connection.client.setNotificationHandler(LoggingMessageNotificationSchema" not in source and call_marker in source:
+        source = source.replace(call_marker, log_handler + call_marker, 1)
+    elif "ctx?.ui?.setWorkingMessage?.(text);" not in source:
+        source = source.replace(
+            "        ctx?.ui?.setStatus?.(\"mcp-progress\", text);",
+            "        ctx?.ui?.setWorkingVisible?.(true);\n"
+            "        ctx?.ui?.setWorkingMessage?.(text);\n"
+            "        ctx?.ui?.setStatus?.(\"mcp-progress\", text);",
+            1,
+        )
+
+    finally_marker = "    } finally {\n"
+    clear_status = "      ctx?.ui?.setStatus?.(\"mcp-progress\", undefined);\n"
+    if clear_status not in source and finally_marker in source:
+        source = source.replace(finally_marker, finally_marker + clear_status, 1)
+    clear_working = "      ctx?.ui?.setWorkingMessage?.();\n"
+    if clear_working not in source and finally_marker in source:
+        source = source.replace(finally_marker, finally_marker + clear_working, 1)
+    remove_log_handler = "      connection?.client?.removeNotificationHandler?.(LoggingMessageNotificationSchema);\n"
+    if remove_log_handler not in source and finally_marker in source:
+        source = source.replace(finally_marker, finally_marker + remove_log_handler, 1)
+
+    if source != target.read_text(encoding="utf-8"):
+        target.write_text(source, encoding="utf-8")
+
+
 def apply_lockdown_patches(npm_dir: Path, project_root: Path | None = None) -> None:
     cfg = _c._load_config(project_root=project_root)
     blocked = cfg.get("lockdown", {}).get("block_builtin_commands", [])
@@ -260,3 +382,5 @@ def apply_lockdown_patches(npm_dir: Path, project_root: Path | None = None) -> N
     _c._print("Patched MCP adapter: OAuth callback server suppressed (stdio servers only)")
     _patch_mcp_direct_tools_live_register(npm_dir)
     _c._print("Patched MCP adapter: bootstrapped direct tools register in-session")
+    _patch_mcp_direct_tools_progress(npm_dir)
+    _c._print("Patched MCP adapter: direct tool progress bridged to Pi")

@@ -7,69 +7,74 @@ from typing import Any
 
 import yaml
 
-DEFAULT_PROMPT_SYNTAX: dict[str, Any] = {
-    "contract-version": "v1",
-    "default-profile": "shared",
-    "generic-tag": "adhoc",
-    "no-body-required-tags": [
-        "ag-audit",
-        "ag-check-in-prep",
-    ],
-    "review-tag": "ag-review",
-    "implement-tag": "ag-implement",
-    "canonical-tags": [
-        "ag-plan",
-        "ag-implement",
-        "ag-review",
-        "ag-audit",
-        "ag-check-in-prep",
-    ],
-    "tag-aliases": {
-        # new short forms
-        "agp": "ag-plan",
-        "agi": "ag-implement",
-        "agr": "ag-review",
-        "aga": "ag-audit",
-        "agc": "ag-check-in-prep",
-        # backward-compat short forms
-        "p": "ag-plan",
-        "i": "ag-implement",
-        "r": "ag-review",
-        "a": "ag-audit",
-        "c": "ag-check-in-prep",
-        # backward-compat full names
-        "plan": "ag-plan",
-        "implement": "ag-implement",
-        "review": "ag-review",
-        "audit": "ag-audit",
-        "check-in-prep": "ag-check-in-prep",
-    },
-    "skill-surfaces": {},  # populated dynamically from descriptor registry in load_prompt_syntax()
-    "provider-aliases": {
-        # shorthand aliases — identity aliases for all registered providers are added dynamically
-        "lo": "local-openai",
-        "cx": "codex",
-        "cld": "claude",
-        "gm": "gemini",
-        "qw": "qwen",
-        "cp": "copilot",
-        "ctr": "continue",
-        "cln": "cline",
-        "opc": "opencode",
-    },
-    "directive-aliases": {
-        "agent": "provider",
-        "subject": "id",
-        "ctx": "context",
-        "out": "output",
-        "t": "template",
-    },
+# Base directive aliases that apply regardless of which tags are loaded.
+_DIRECTIVE_ALIASES: dict[str, str] = {
+    "agent": "provider",
+    "subject": "id",
+    "ctx": "context",
+    "out": "output",
+    "t": "template",
+}
+
+# Provider shorthand aliases — identity aliases for registered providers are added dynamically.
+_PROVIDER_ALIASES: dict[str, str] = {
+    "lo": "local-openai",
+    "cx": "codex",
+    "cld": "claude",
+    "gm": "gemini",
+    "qw": "qwen",
+    "cp": "copilot",
+    "ctr": "continue",
+    "cln": "cline",
+    "opc": "opencode",
 }
 
 
+def _build_default_syntax() -> dict[str, Any]:
+    """Build the default prompt syntax dict from the tag registry."""
+    from audiagentic.components.optional.providers.tags.registry import (  # noqa: PLC0415
+        all_tags_loaded,
+    )
+    tags = all_tags_loaded()
+    canonical_tags = sorted(tags)
+    tag_aliases: dict[str, str] = {}
+    for tag_id, descriptor in tags.items():
+        tag_aliases[tag_id] = tag_id   # identity
+        for alias in descriptor.aliases:
+            tag_aliases[alias] = tag_id
+
+    generic_tag = next(
+        (tag_id for tag_id, d in tags.items() if d.is_generic_tag),
+        None,
+    )
+    review_tag = next(
+        (tag_id for tag_id, d in tags.items() if d.is_review_tag),
+        None,
+    )
+    implement_tag = next(
+        (tag_id for tag_id, d in tags.items() if not d.is_generic_tag and not d.is_review_tag and "implement" in tag_id),
+        canonical_tags[0] if canonical_tags else "ag-implement",
+    )
+    no_body_required = [tag_id for tag_id, d in tags.items() if not d.requires_body]
+
+    return {
+        "contract-version": "v1",
+        "default-profile": "shared",
+        "generic-tag": generic_tag or "adhoc",
+        "no-body-required-tags": no_body_required,
+        "review-tag": review_tag or "ag-review",
+        "implement-tag": implement_tag,
+        "canonical-tags": canonical_tags,
+        "tag-aliases": tag_aliases,
+        "skill-surfaces": {},   # populated dynamically below
+        "provider-aliases": dict(_PROVIDER_ALIASES),
+        "directive-aliases": dict(_DIRECTIVE_ALIASES),
+    }
+
+
 def _derive_skill_surfaces() -> dict[str, Any]:
-    from audiagentic.components.optional.providers.descriptors.registry import (
-        all_descriptors,  # noqa: PLC0415
+    from audiagentic.components.optional.providers.descriptors.registry import (  # noqa: PLC0415
+        all_descriptors,
     )
     result: dict[str, Any] = {}
     for pid, descriptor in all_descriptors().items():
@@ -79,8 +84,8 @@ def _derive_skill_surfaces() -> dict[str, Any]:
 
 
 def _derive_provider_identity_aliases() -> dict[str, str]:
-    from audiagentic.components.optional.providers.descriptors.registry import (
-        all_descriptors,  # noqa: PLC0415
+    from audiagentic.components.optional.providers.descriptors.registry import (  # noqa: PLC0415
+        all_descriptors,
     )
     return {pid: pid for pid in all_descriptors()}
 
@@ -90,7 +95,10 @@ def load_no_body_required_tags(syntax: dict[str, Any]) -> set[str]:
     tags = syntax.get("no-body-required-tags")
     if isinstance(tags, list):
         return {t for t in tags if isinstance(t, str) and t}
-    return set(DEFAULT_PROMPT_SYNTAX["no-body-required-tags"])
+    from audiagentic.components.optional.providers.tags.registry import (  # noqa: PLC0415
+        no_body_required_tag_ids,
+    )
+    return no_body_required_tag_ids()
 
 
 def load_review_tag(syntax: dict[str, Any]) -> str:
@@ -98,7 +106,10 @@ def load_review_tag(syntax: dict[str, Any]) -> str:
     value = syntax.get("review-tag")
     if isinstance(value, str) and value.strip():
         return value.strip()
-    return str(DEFAULT_PROMPT_SYNTAX["review-tag"])
+    from audiagentic.components.optional.providers.tags.registry import (  # noqa: PLC0415
+        review_tag_id,
+    )
+    return review_tag_id() or "ag-review"
 
 
 def load_canonical_tags(syntax: dict[str, Any]) -> set[str]:
@@ -106,7 +117,10 @@ def load_canonical_tags(syntax: dict[str, Any]) -> set[str]:
     tags = syntax.get("canonical-tags")
     if isinstance(tags, list):
         return {t for t in tags if isinstance(t, str) and t}
-    return set(DEFAULT_PROMPT_SYNTAX["canonical-tags"])
+    from audiagentic.components.optional.providers.tags.registry import (  # noqa: PLC0415
+        canonical_tag_ids,
+    )
+    return set(canonical_tag_ids())
 
 
 def _merge_dict(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
@@ -135,11 +149,11 @@ def _resolve_profile(profiles: dict[str, Any], profile_name: str) -> dict[str, A
 
 
 def load_prompt_syntax(project_root: Path | None, profile_name: str | None = None) -> dict[str, Any]:
-    syntax = deepcopy(DEFAULT_PROMPT_SYNTAX)
-    # Populate skill-surfaces and identity aliases from descriptor registry.
+    syntax = _build_default_syntax()
     syntax["skill-surfaces"] = _derive_skill_surfaces()
     identity_aliases = _derive_provider_identity_aliases()
     syntax["provider-aliases"] = {**identity_aliases, **syntax["provider-aliases"]}
+
     if project_root is None:
         return syntax
 

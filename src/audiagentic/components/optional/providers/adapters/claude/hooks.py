@@ -80,8 +80,7 @@ def _invoke_shared_bridge(
         params = _parse_first_line_params(first_line)
         provider_id = params.get('provider', 'claude')
 
-        # Resolve bridge path from the prompt_triggers component
-        bridge_path = Path(__file__).resolve().parents[3] / 'prompt_triggers' / 'prompt_trigger_bridge.py'
+        bridge_path = Path(__file__).resolve().parents[3] / 'agent_jobs' / 'prompt_trigger_bridge.py'
 
         # Build bridge invocation
         bridge_cmd = [
