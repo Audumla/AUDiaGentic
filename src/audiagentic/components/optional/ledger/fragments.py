@@ -36,7 +36,10 @@ def record_change_event(project_root: Path, event: dict[str, Any]) -> dict[str, 
 
     if fragment_path.exists():
         existing = json.loads(fragment_path.read_text(encoding="utf-8"))
-        if existing != event:
+        # git-commits is a mutable annotation — exclude from immutability check
+        existing_core = {k: v for k, v in existing.items() if k != "git-commits"}
+        event_core = {k: v for k, v in event.items() if k != "git-commits"}
+        if existing_core != event_core:
             raise AudiaGenticError(
                 code="RLS-BUSINESS-001",
                 kind="business-rule",

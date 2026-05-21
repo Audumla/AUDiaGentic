@@ -39,9 +39,11 @@ def finalize(project_root: Path, release_id: str) -> dict[str, Any]:
     Calls ledger.api.archive_current then renders CHANGELOG.md etc.
     After this returns, the agent should call the GitHub MCP server create_release_tag tool.
     """
-    from audiagentic.components.optional.ledger.api import archive_current
+    from audiagentic.components.optional.ledger.api import archive_current, sync
+    sync(project_root)
     archive_result = archive_current(project_root, release_id)
-    docs_result = render_release_docs(project_root, release_id)
+    released_ids = archive_result.get("released-event-ids")
+    docs_result = render_release_docs(project_root, release_id, released_event_ids=released_ids)
     return {**archive_result, **docs_result}
 
 

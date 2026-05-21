@@ -4,11 +4,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
-
 from audiagentic.components.optional.ledger import api
+from audiagentic.runtime.mcp.server import mcp_server
 
-mcp = FastMCP("audiagentic-ledger-write")
+mcp = mcp_server(__name__)
 
 
 def _project_root() -> Path:

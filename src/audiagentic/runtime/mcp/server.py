@@ -36,8 +36,25 @@ def project_root_from_env() -> Path:
     raise RuntimeError("AUDIAGENTIC_REPO_ROOT not set")
 
 
-def mcp_server(component_name: str, instructions: str) -> FastMCP:
-    return FastMCP(component_name, instructions=instructions)
+def _resolve_mcp_server_name(module_name: str) -> str:
+    """Return the MCP server name declared for module_name in component config YAMLs."""
+    try:
+        from audiagentic.foundation.components.loader import register_all_components
+        from audiagentic.foundation.components.registry import all_descriptors
+        register_all_components()
+        for descriptor in all_descriptors().values():
+            for server in descriptor.mcp_servers:
+                if server.module == module_name:
+                    return server.name
+    except Exception:  # noqa: BLE001
+        pass
+    return module_name
+
+
+def mcp_server(module_name: str, instructions: str = "") -> FastMCP:
+    """Create a FastMCP instance whose name is looked up from the component config."""
+    name = _resolve_mcp_server_name(module_name)
+    return FastMCP(name, instructions=instructions)
 
 
 class McpOutputBridge:
