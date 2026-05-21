@@ -1,0 +1,43 @@
+type: prompt-trigger-tag
+contract-version: v1
+tag-id: ag-check-in-prep
+display-name: Check-in Prep
+description: Prepare the repository for a stable check-in by verifying state, summarizing outstanding changes, and confirming no blockers remain
+aliases:
+  - agc
+  - c
+  - check-in-prep
+directives:
+  - id
+  - target
+  - context
+  - output
+  - template
+  - job
+  - profile
+  - model
+  - model-alias
+requires-body: false
+is-generic-tag: false
+is-review-tag: false
+skill-content-file: skill.md
+
+files:
+  - path: .audiagentic/skills/ag-check-in-prep/skill.md
+    lifecycle: required-managed
+    description: ag-check-in-prep canonical skill source
+
+surface-contributions:
+  - id: ag-check-in-prep/doctrine
+    kind: rule
+    title: Check-in prep action doctrine
+    content:
+      body: |
+        When the check-in prep action is triggered: summarize outstanding changes and
+        their verification state. Confirm baseline assets are current. Report any open
+        blockers, failing checks, or uncommitted work. Do not introduce new changes or
+        mark the repo as ready if blockers remain.
+
+prompts:
+  - name: default
+    content-file: prompts/default.md

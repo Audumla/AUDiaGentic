@@ -209,7 +209,8 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
         "repair": repair_provider_cli,
     }
 
-    def _progress(message: str) -> None:
+    def _progress(event) -> None:
+        message = getattr(event, "message", str(event))
         print(f"[{provider_id}] {message}", flush=True)
 
     result = handlers[action](
