@@ -13,7 +13,7 @@ mcp-servers:
   - name: audiagentic-session
     module: audiagentic.components.core.harness_server
     args: ["--readonly", "--smoke-only"]
-    direct-tools: [status, config, set_auto_update, cli_visibility, set_cli_visibility]
+    direct-tools: [status, config, set_auto_update, cli_visibility, set_cli_visibility, refresh_harness_config]
     description: Harness status and configuration
     instructions: >
       AUDiaGentic session server.
@@ -24,6 +24,7 @@ mcp-servers:
       set_auto_update: Enable or disable auto-update checks at launch.
       cli_visibility: Show current CLI visibility settings for thinking blocks and tool or MCP blocks.
       set_cli_visibility: Set CLI visibility for thinking blocks and tool or MCP blocks, then request an in-session reload.
+      refresh_harness_config: Regenerate mcp.json and SYSTEM.md from current component state, then request in-session reload.
 harness-instructions:
   - section: "What you can do"
     content: |
@@ -33,3 +34,4 @@ harness-instructions:
       - `mcp_set_auto_update` — Enable or disable auto-update
       - `mcp_cli_visibility` — Show whether thinking/tool blocks are visible
       - `mcp_set_cli_visibility` — Show or hide thinking/tool blocks in the CLI
+      - `mcp_refresh_harness_config` — Regenerate mcp.json/SYSTEM.md from current component state after install/uninstall
