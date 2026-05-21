@@ -400,6 +400,8 @@ def main(argv: list[str] | None = None) -> int:
 
     binaries_parser = subparsers.add_parser("update-binaries", help="Update llama-server binaries to latest release")
 
+    subparsers.add_parser("refresh", help="Regenerate agent config (mcp.json, SYSTEM.md) from current component state")
+
     args, remaining = parser.parse_known_args(argv)
 
     project_root = Path(args.project).resolve() if args.project else Path.cwd()
@@ -425,6 +427,15 @@ def main(argv: list[str] | None = None) -> int:
         from audiagentic.runtime.rig.embedded.update_binaries import update_binaries
         harness = global_harness_runtime()
         update_binaries(runtime_dir=harness)
+        return 0
+
+    if args.command == "refresh":
+        from audiagentic.runtime.harness.pi.install import refresh_harness_config_if_installed
+        refreshed = refresh_harness_config_if_installed(project_root, reason="manual-refresh")
+        if not refreshed:
+            print("Harness not installed. Run: audiagentic install", file=sys.stderr)
+            return 1
+        print(json.dumps({"ok": True, "refreshed": True}, indent=2))
         return 0
 
     from audiagentic.runtime.harness.pi.runner import RunnerParams
