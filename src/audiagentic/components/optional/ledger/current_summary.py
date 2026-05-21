@@ -1,20 +1,10 @@
 """Current release summary regeneration."""
 from __future__ import annotations
 
-import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
-
-def _load_ledger(path: Path) -> list[dict[str, Any]]:
-    if not path.exists():
-        return []
-    entries = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            entries.append(__import__("json").loads(line))
-    return entries
+from audiagentic.foundation.io import atomic_write_text, load_ndjson
 
 
 def _render_markdown(entries: list[dict[str, Any]]) -> str:
@@ -37,15 +27,6 @@ def _render_markdown(entries: list[dict[str, Any]]) -> str:
 def regenerate_current_release(project_root: Path) -> Path:
     ledger_path = project_root / "docs" / "releases" / "CURRENT_RELEASE_LEDGER.ndjson"
     output_path = project_root / "docs" / "releases" / "CURRENT_RELEASE.md"
-    entries = _load_ledger(ledger_path)
-    markdown = _render_markdown(entries)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(prefix="CURRENT_RELEASE.", suffix=".tmp", dir=output_path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(markdown)
-        os.replace(tmp_path, output_path)
-    finally:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
+    entries = load_ndjson(ledger_path)
+    atomic_write_text(output_path, _render_markdown(entries))
     return output_path

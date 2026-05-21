@@ -121,6 +121,25 @@ def sync_managed_baseline(
             cast.append({"path": asset.target, "reason": MODE_GENERATED_MANAGED})
             continue
 
+        if asset.mode == MODE_CREATE_IF_MISSING:
+            target_path = target_root / asset.target
+            relative_target = asset.target.replace("\\", "/")
+            if target_path.exists():
+                preserved = report["preserved-files"]
+                assert isinstance(preserved, list)
+                preserved.append(relative_target)
+            else:
+                source_base = source_root / asset.source
+                if source_base.exists():
+                    _copy_file(source_base, target_path)
+                else:
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
+                    target_path.write_text("# Installation marker\n", encoding="utf-8")
+                created = report["created-files"]
+                assert isinstance(created, list)
+                created.append(relative_target)
+            continue
+
         source_base = source_root / asset.source
         if not source_base.exists():
             warnings = report["warnings"]
@@ -140,12 +159,6 @@ def sync_managed_baseline(
                 skipped = report["skipped-files"]
                 assert isinstance(skipped, list)
                 skipped.append({"path": relative_target, "reason": "source-equals-target"})
-                continue
-
-            if asset.mode == MODE_CREATE_IF_MISSING and target_path.exists():
-                preserved = report["preserved-files"]
-                assert isinstance(preserved, list)
-                preserved.append(relative_target)
                 continue
 
             if target_path.exists() and _same_file_contents(source_path, target_path):

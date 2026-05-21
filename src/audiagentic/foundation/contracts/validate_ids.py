@@ -4,12 +4,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import yaml
 
-from audiagentic.lib.repo_paths import REPO_ROOT
 from audiagentic.foundation.contracts.canonical_ids import (
     CANONICAL_COMPONENT_IDS,
     canonical_provider_ids,
@@ -17,6 +17,7 @@ from audiagentic.foundation.contracts.canonical_ids import (
     validate_schema_files,
 )
 from audiagentic.foundation.contracts.schema_registry import SCHEMA_DIR
+from audiagentic.lib.repo_paths import REPO_ROOT
 
 
 def _extract_ids(payload: Any) -> tuple[list[str], list[str]]:

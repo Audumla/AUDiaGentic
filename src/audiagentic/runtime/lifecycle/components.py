@@ -22,6 +22,7 @@ from audiagentic.foundation.components.registry import (
 )
 
 from .baseline_sync import sync_managed_baseline
+from .observers import fire_post_install, fire_post_uninstall
 
 _REMOVE_ALWAYS = {MODE_REQUIRED_MANAGED, MODE_GENERATED_MANAGED, MODE_RUNTIME_ONLY}
 _REMOVE_WITH_CONFIGS = {MODE_CREATE_IF_MISSING}
@@ -140,10 +141,10 @@ def install_component(
         marker["last-lifecycle-action"] = last_lifecycle_action or "fresh-install"
     _write_marker(component_id, project_root, marker)
     if descriptor.post_install:
-        from threading import Thread
 
         _resolve_and_run_post_install(descriptor.post_install, project_root)
 
+    fire_post_install(component_id, project_root)
     return {"ok": True, "component_id": component_id, "root": str(root), "sync": report}
 
 
@@ -181,6 +182,7 @@ def uninstall_component(
         mpath.unlink()
         if mpath not in deleted:
             deleted.append(mpath)
+    fire_post_uninstall(component_id, project_root)
     return deleted
 
 

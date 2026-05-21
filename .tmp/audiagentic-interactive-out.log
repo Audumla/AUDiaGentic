@@ -1,6 +1,8 @@
 Materialized agent config in C:\Users\mgs\.audiagentic\harness\agent
-[2J[HThe installation of the OpenHands provider timed out. This could be due to a slow network connection or the provider being temporarily unavailable.
+[2J[HThe **openhands** provider has been successfully installed.
 
-You can try again in a moment, or if you're on a limited connection, consider running the installation from your terminal directly.
+- **Executable**: `openhands` (OpenHands CLI 1.16.0)
+- **Location**: `C:\Users\mgs\.local\bin\openhands.EXE`
+- **Status**: Ready to use
 
-Would you like me to attempt the installation again, or would you prefer to handle it yourself?
+The provider is now available in your AUDiaGentic environment. You can use it to provision agents, manage models, and interact with OpenHands functionality.

@@ -10,8 +10,9 @@ for _p in (str(ROOT), str(ROOT / "src")):
         sys.path.insert(0, _p)
 
 import pytest
-import audiagentic.components.optional.planning.tm_helper as tm
 from tests.helpers.planning_testkit import seed_planning_config
+
+import audiagentic.components.optional.planning.tm_helper as tm
 
 
 def _seed_helper_project(root: Path) -> None:
