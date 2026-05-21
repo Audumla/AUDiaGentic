@@ -28,8 +28,7 @@ class ShellRecipe(InvocationRecipe):
                 command=list(self.command),
                 reason=f"{manager} is not available on PATH",
             )
-        if context.on_progress is not None:
-            context.on_progress(f"Running: {' '.join(self.command)}")
+        context.progress(f"Running: {' '.join(self.command)}")
 
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
@@ -38,6 +37,7 @@ class ShellRecipe(InvocationRecipe):
         try:
             process = subprocess.Popen(
                 list(self.command),
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -51,7 +51,7 @@ class ShellRecipe(InvocationRecipe):
                     for line in process.stdout:
                         stripped = line.rstrip("\n\r")
                         output_lines.append(stripped)
-                        context.on_progress(stripped)
+                        context.progress(stripped)
 
                 reader = threading.Thread(target=_read_output, daemon=True)
                 reader.start()
@@ -76,8 +76,7 @@ class ShellRecipe(InvocationRecipe):
                 command=list(self.command),
                 reason=str(exc),
             )
-        if context.on_progress is not None:
-            context.on_progress(f"Completed (rc={returncode})")
+        context.progress(f"Completed (rc={returncode})")
         return InvocationResult(
             status="ok" if returncode == 0 else "failed",
             command=list(self.command),

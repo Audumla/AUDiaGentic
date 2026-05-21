@@ -1,17 +1,23 @@
 """Provider CLI lifecycle operations — install, uninstall, repair, reconcile."""
 from __future__ import annotations
 
-from collections.abc import Callable
+import time
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.invoke.context import InvocationContext
 from audiagentic.foundation.invoke.result import InvocationResult
+from audiagentic.foundation.output import ComponentOutputEvent, ComponentOutputSink
 
 from ..descriptors.base import CliInstallRecipe, ProviderDescriptor
 from ..descriptors.registry import _probe_cli, all_descriptors, get_descriptor
 from ..surfaces.manager import apply_provider_surfaces, prune_provider_surfaces
+
+
+def _emit(output: ComponentOutputSink | None, message: str, **data: Any) -> None:
+    if output is not None:
+        output(ComponentOutputEvent(message=message, data=data))
 
 
 def _descriptor(provider_id: str) -> ProviderDescriptor:
@@ -31,6 +37,19 @@ def _probe_provider_cli(descriptor: ProviderDescriptor) -> dict[str, Any] | None
     if recipe and recipe.probe_fn:
         return recipe.probe_fn(descriptor)
     return _probe_cli(descriptor.cli_probe) if descriptor.cli_probe else None
+
+
+def _probe_provider_cli_after_install(descriptor: ProviderDescriptor) -> dict[str, Any] | None:
+    """Probe a newly installed CLI, allowing Windows shims/PATH to settle."""
+    probe = _probe_provider_cli(descriptor)
+    if probe is None or probe.get("available"):
+        return probe
+    for _ in range(3):
+        time.sleep(1)
+        probe = _probe_provider_cli(descriptor)
+        if probe is None or probe.get("available"):
+            break
+    return probe
 
 
 def _result(
@@ -89,7 +108,7 @@ def install_provider_cli(
     dry_run: bool = False,
     timeout: int = 300,
     project_root: Path | None = None,
-    on_progress: Callable[[str], None] | None = None,
+    on_progress: ComponentOutputSink | None = None,
 ) -> dict[str, Any]:
     descriptor = _descriptor(provider_id)
     recipe = descriptor.cli_install
@@ -102,23 +121,19 @@ def install_provider_cli(
             reason="provider has no installable CLI recipe",
         )
     ctx = InvocationContext(project_root=project_root, dry_run=dry_run, timeout=timeout, on_progress=on_progress)
-    if on_progress is not None:
-        on_progress(f"Installing {provider_id}...")
+    _emit(on_progress, f"Installing {provider_id}...", provider_id=provider_id, action="install")
     inv = recipe.install.run(ctx)
     if dry_run:
         return _result(provider_id=provider_id, action="install", status="planned", recipe=recipe, invocation=inv)
-    if on_progress is not None:
-        on_progress("Probing CLI availability...")
-    probe = _probe_provider_cli(descriptor)
+    _emit(on_progress, "Probing CLI availability...", provider_id=provider_id, action="install")
+    probe = _probe_provider_cli_after_install(descriptor) if inv.status == "ok" else _probe_provider_cli(descriptor)
     status = "installed" if inv.status == "ok" and (probe is None or probe["available"]) else "failed"
     result = _result(provider_id=provider_id, action="install", status=status, recipe=recipe, invocation=inv, probe=probe)
     if status == "installed" and project_root is not None:
         _seed_provider_config(project_root, provider_id, descriptor, enabled=True)
-        if on_progress is not None:
-            on_progress("Applying provider surfaces...")
+        _emit(on_progress, "Applying provider surfaces...", provider_id=provider_id, action="install")
         result["surfaces"] = apply_provider_surfaces(project_root, provider_id=provider_id)
-    if on_progress is not None:
-        on_progress(f"{provider_id}: {status}")
+    _emit(on_progress, f"{provider_id}: {status}", provider_id=provider_id, action="install", status=status)
     return result
 
 
@@ -128,7 +143,7 @@ def uninstall_provider_cli(
     dry_run: bool = False,
     timeout: int = 300,
     project_root: Path | None = None,
-    on_progress: Callable[[str], None] | None = None,
+    on_progress: ComponentOutputSink | None = None,
 ) -> dict[str, Any]:
     descriptor = _descriptor(provider_id)
     recipe = descriptor.cli_install
@@ -141,13 +156,11 @@ def uninstall_provider_cli(
             reason="provider has no installable CLI recipe",
         )
     ctx = InvocationContext(project_root=project_root, dry_run=dry_run, timeout=timeout, on_progress=on_progress)
-    if on_progress is not None:
-        on_progress(f"Uninstalling {provider_id}...")
+    _emit(on_progress, f"Uninstalling {provider_id}...", provider_id=provider_id, action="uninstall")
     inv = recipe.uninstall.run(ctx)
     if dry_run:
         return _result(provider_id=provider_id, action="uninstall", status="planned", recipe=recipe, invocation=inv)
-    if on_progress is not None:
-        on_progress("Probing CLI availability...")
+    _emit(on_progress, "Probing CLI availability...", provider_id=provider_id, action="uninstall")
     probe = _probe_provider_cli(descriptor)
     status = "uninstalled" if inv.status == "ok" and (probe is None or not probe["available"]) else "failed"
     result = _result(provider_id=provider_id, action="uninstall", status=status, recipe=recipe, invocation=inv, probe=probe)
@@ -157,11 +170,9 @@ def uninstall_provider_cli(
         )
 
         set_provider_enabled(project_root, provider_id, enabled=False)
-        if on_progress is not None:
-            on_progress("Pruning provider surfaces...")
+        _emit(on_progress, "Pruning provider surfaces...", provider_id=provider_id, action="uninstall")
         result["surfaces"] = prune_provider_surfaces(project_root, provider_id=provider_id)
-    if on_progress is not None:
-        on_progress(f"{provider_id}: {status}")
+    _emit(on_progress, f"{provider_id}: {status}", provider_id=provider_id, action="uninstall", status=status)
     return result
 
 
@@ -171,7 +182,7 @@ def repair_provider_cli(
     dry_run: bool = False,
     timeout: int = 300,
     project_root: Path | None = None,
-    on_progress: Callable[[str], None] | None = None,
+    on_progress: ComponentOutputSink | None = None,
 ) -> dict[str, Any]:
     descriptor = _descriptor(provider_id)
     probe = _probe_provider_cli(descriptor)
@@ -334,7 +345,7 @@ def provision_all_provider_clis(
     dry_run: bool = False,
     timeout: int = 300,
     project_root: Path | None = None,
-    on_progress: Callable[[str], None] | None = None,
+    on_progress: ComponentOutputSink | None = None,
 ) -> dict[str, Any]:
     actions = {
         "install": install_provider_cli,

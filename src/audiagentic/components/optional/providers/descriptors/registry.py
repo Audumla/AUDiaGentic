@@ -37,10 +37,10 @@ def _probe_cli(command: list[str]) -> dict[str, Any]:
         }
     try:
         completed = subprocess.run(
-            subprocess.list2cmdline(command),
-            shell=True,
+            command,
             check=False,
             capture_output=True,
+            stdin=subprocess.DEVNULL,
             text=True,
             timeout=15,
         )

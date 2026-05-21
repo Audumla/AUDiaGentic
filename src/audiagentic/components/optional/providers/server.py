@@ -21,6 +21,8 @@ except ImportError:
 
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
+from audiagentic.foundation.output import ComponentOutputEvent
+from audiagentic.runtime.mcp.server import run_blocking_with_output
 
 from audiagentic.components.optional.providers.services.provider_catalog import (
     catalog_is_stale,
@@ -42,6 +44,24 @@ def _project_root() -> Path:
     if not repo_root:
         raise RuntimeError("AUDIAGENTIC_REPO_ROOT not set")
     return Path(repo_root)
+
+
+def _prefix_output(provider_id: str, output):
+    if output is None:
+        return None
+
+    def sink(event: ComponentOutputEvent) -> None:
+        output(ComponentOutputEvent(
+            message=f"[{provider_id}] {event.message}",
+            kind=event.kind,
+            level=event.level,
+            progress=event.progress,
+            total=event.total,
+            logger=event.logger,
+            data=event.data,
+        ))
+
+    return sink
 
 
 def _providers_config_path(project_root: Path) -> Path:
@@ -304,12 +324,17 @@ def build_server() -> FastMCP:
             install_provider_cli,
         )
         project_root = _project_root()
-        if ctx is not None:
-            await ctx.info(f"[{provider_id}] Installing provider CLI...")
-        result = install_provider_cli(provider_id, dry_run=dry_run, project_root=project_root)
-        if ctx is not None:
-            await ctx.info(f"[{provider_id}] install: {result.get('status', 'unknown')}")
-        return result
+        return await run_blocking_with_output(
+            ctx=ctx,
+            logger="providers.install",
+            heartbeat_message=f"[{provider_id}] install still running...",
+            work=lambda output: install_provider_cli(
+                provider_id,
+                dry_run=dry_run,
+                project_root=project_root,
+                on_progress=_prefix_output(provider_id, output),
+            ),
+        )
 
     @mcp.tool(description=_tool_description("uninstall_provider", "Uninstall a provider CLI, with dry-run support."))
     async def uninstall_provider(provider_id: str, dry_run: bool = False, ctx: Context = None) -> dict[str, Any]:
@@ -317,23 +342,33 @@ def build_server() -> FastMCP:
             uninstall_provider_cli,
         )
         project_root = _project_root()
-        if ctx is not None:
-            await ctx.info(f"[{provider_id}] Uninstalling provider CLI...")
-        result = uninstall_provider_cli(provider_id, dry_run=dry_run, project_root=project_root)
-        if ctx is not None:
-            await ctx.info(f"[{provider_id}] uninstall: {result.get('status', 'unknown')}")
-        return result
+        return await run_blocking_with_output(
+            ctx=ctx,
+            logger="providers.uninstall",
+            heartbeat_message=f"[{provider_id}] uninstall still running...",
+            work=lambda output: uninstall_provider_cli(
+                provider_id,
+                dry_run=dry_run,
+                project_root=project_root,
+                on_progress=_prefix_output(provider_id, output),
+            ),
+        )
 
     @mcp.tool(description=_tool_description("repair_provider", "Repair a provider CLI by installing it if missing."))
     async def repair_provider(provider_id: str, dry_run: bool = False, ctx: Context = None) -> dict[str, Any]:
         from audiagentic.components.optional.providers.services.lifecycle import repair_provider_cli
         project_root = _project_root()
-        if ctx is not None:
-            await ctx.info(f"[{provider_id}] Repairing provider CLI...")
-        result = repair_provider_cli(provider_id, dry_run=dry_run, project_root=project_root)
-        if ctx is not None:
-            await ctx.info(f"[{provider_id}] repair: {result.get('status', 'unknown')}")
-        return result
+        return await run_blocking_with_output(
+            ctx=ctx,
+            logger="providers.repair",
+            heartbeat_message=f"[{provider_id}] repair still running...",
+            work=lambda output: repair_provider_cli(
+                provider_id,
+                dry_run=dry_run,
+                project_root=project_root,
+                on_progress=_prefix_output(provider_id, output),
+            ),
+        )
 
     @mcp.tool(description=_tool_description("set_provider_enabled", "Enable or disable a provider in providers.yaml."))
     def set_provider_enabled(provider_id: str, enabled: bool) -> dict[str, Any]:

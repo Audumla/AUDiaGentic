@@ -1,0 +1,43 @@
+type: prompt-trigger-tag
+contract-version: v1
+tag-id: ag-audit
+display-name: Audit
+description: Check tracked docs, release artifacts, and state consistency across the project
+aliases:
+  - aga
+  - a
+  - audit
+directives:
+  - id
+  - target
+  - context
+  - output
+  - template
+  - job
+  - profile
+  - model
+  - model-alias
+requires-body: false
+is-generic-tag: false
+is-review-tag: false
+skill-content-file: skill.md
+
+files:
+  - path: .audiagentic/skills/ag-audit/skill.md
+    lifecycle: required-managed
+    description: ag-audit canonical skill source
+
+surface-contributions:
+  - id: ag-audit/doctrine
+    kind: rule
+    title: Audit action doctrine
+    content:
+      body: |
+        When the audit action is triggered: check tracked docs, release artifacts,
+        and state consistency across the project. Note specific drift, missing evidence,
+        or broken invariants. Do not mutate tracked docs or code without explicit approval.
+        Report all drift — do not hide findings.
+
+prompts:
+  - name: default
+    content-file: prompts/default.md

@@ -7,7 +7,7 @@ from typing import Any, Protocol
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _BRIDGE_COMMAND = (
-    "python src/audiagentic/components/optional/prompt_triggers/prompt_trigger_bridge.py"
+    "python src/audiagentic/components/optional/agent_jobs/prompt_trigger_bridge.py"
     " --provider-id {provider_id} --project-root ."
 )
 
