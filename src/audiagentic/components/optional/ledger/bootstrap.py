@@ -45,8 +45,8 @@ def bootstrap_release_workflow(project_root: Path, *, release_id: str = "rel_000
     sync_report = sync_managed_baseline(project_root, source_root=REPO_ROOT)
     created_files = list(sync_report.get("created-files", []))
 
-    # Read existing core-lifecycle marker for version continuity
-    marker_path = project_root / ".audiagentic" / "components" / "core-lifecycle.yaml"
+    # Read existing project marker for version continuity
+    marker_path = project_root / ".audiagentic" / "components" / "project.yaml"
     current_marker: dict[str, Any] | None = None
     if marker_path.exists():
         current_marker = yaml.safe_load(marker_path.read_text(encoding="utf-8")) or {}
@@ -56,7 +56,7 @@ def bootstrap_release_workflow(project_root: Path, *, release_id: str = "rel_000
     now = _now_timestamp()
 
     updated_marker: dict[str, Any] = {
-        "component-id": "core-lifecycle",
+        "component-id": "project",
         "enabled": True,
         "installation-kind": installation_kind,
         "installed-at": (current_marker or {}).get("installed-at", now),

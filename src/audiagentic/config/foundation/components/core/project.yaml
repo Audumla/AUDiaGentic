@@ -1,11 +1,11 @@
 type: component
 contract-version: v1
-component-id: core-lifecycle
-display-name: Core Lifecycle
+component-id: project
+display-name: Project
 description: Core project scaffold — config, prompts, and workflow files
-detection-marker: .audiagentic/components/core-lifecycle.yaml
+detection-marker: .audiagentic/components/project.yaml
 files:
-  - path: .audiagentic/components/core-lifecycle.yaml
+  - path: .audiagentic/components/project.yaml
     lifecycle: create-if-missing
     description: Installation marker
   - path: .audiagentic/config/project.yaml

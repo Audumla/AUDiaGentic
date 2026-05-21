@@ -135,7 +135,7 @@ def install_component(
         "installed-at": _now_timestamp(),
         "version": version,
     }
-    if component_id == "core-lifecycle":
+    if component_id == "project":
         marker["installation-kind"] = installation_kind or "fresh"
         marker["last-lifecycle-action"] = last_lifecycle_action or "fresh-install"
     _write_marker(component_id, project_root, marker)

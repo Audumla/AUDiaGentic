@@ -13,8 +13,8 @@ def test_detect_none(tmp_path: Path) -> None:
 def test_detect_installed(tmp_path: Path) -> None:
     audi_root = tmp_path / ".audiagentic"
     (audi_root / "components").mkdir(parents=True)
-    (audi_root / "components" / "core-lifecycle.yaml").write_text(
-        "component-id: core-lifecycle\nenabled: true\n", encoding="utf-8"
+    (audi_root / "components" / "project.yaml").write_text(
+        "component-id: project\nenabled: true\n", encoding="utf-8"
     )
     state = detect_installed_state(tmp_path)
     assert state.state == "installed"
@@ -23,7 +23,7 @@ def test_detect_installed(tmp_path: Path) -> None:
 def test_detect_invalid_partial_install(tmp_path: Path) -> None:
     audi_root = tmp_path / ".audiagentic"
     audi_root.mkdir(parents=True)
-    # .audiagentic exists but core-lifecycle marker is absent
+    # .audiagentic exists but project marker is absent
     state = detect_installed_state(tmp_path)
     assert state.state == "invalid"
 

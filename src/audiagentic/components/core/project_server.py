@@ -47,7 +47,7 @@ def _project_root() -> Path:
 
 
 def _server_decl():
-    return get_mcp_server_declaration("core-lifecycle", "audiagentic-project")
+    return get_mcp_server_declaration("project", "audiagentic-project")
 
 
 def _server_instructions() -> str:
@@ -90,7 +90,7 @@ def build_server() -> FastMCP:
         version_info: dict[str, Any] | None = None
         if state.state == "installed":
             try:
-                marker_path = project_root / ".audiagentic" / "components" / "core-lifecycle.yaml"
+                marker_path = project_root / ".audiagentic" / "components" / "project.yaml"
                 if marker_path.exists():
                     marker_data = yaml.safe_load(marker_path.read_text(encoding="utf-8")) or {}
                     version_info = {
