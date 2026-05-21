@@ -4,6 +4,7 @@ component-id: providers
 display-name: Providers
 description: External provider CLI integration, project surfaces, and provider model catalogs
 post-install: audiagentic.components.optional.providers.services.lifecycle.reconcile_all
+lifecycle-observer: audiagentic.components.optional.providers.surfaces.observer
 detection-marker: .audiagentic/components/providers.yaml
 files:
   - path: .audiagentic/components/providers.yaml

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 MODE_REQUIRED_MANAGED = "required-managed"
 MODE_CREATE_IF_MISSING = "create-if-missing"
@@ -15,6 +16,7 @@ __all__ = [
     "ComponentFile",
     "ComponentDescriptor",
     "McpServerDeclaration",
+    "ExternalMcpServerDeclaration",
     "MODE_REQUIRED_MANAGED",
     "MODE_CREATE_IF_MISSING",
     "MODE_GENERATED_MANAGED",
@@ -47,6 +49,22 @@ class McpServerDeclaration:
 
 
 @dataclass(frozen=True)
+class ExternalMcpServerDeclaration:
+    """MCP server backed by an external command (not a Python module).
+
+    Entries are included in the harness mcp.json only when all tools listed
+    in `requires` are present on PATH.
+    """
+    name: str
+    command: str
+    args: tuple[str, ...] = ()
+    env: dict[str, str] = field(default_factory=dict)
+    description: str = ""
+    instructions: str = ""
+    requires: tuple[str, ...] = ()  # CLI tool names checked via shutil.which
+
+
+@dataclass(frozen=True)
 class HarnessInstruction:
     section: str
     content: str
@@ -61,10 +79,12 @@ class ComponentDescriptor:
     detection_marker: str   # rel_path proving component is installed (relative to component_root)
     files: tuple[ComponentFile, ...] = ()
     depends_on: tuple[str, ...] = ()
-    config_path: str | None = None  # path relative to config/ for detailed component config
+    yaml_path: Path | None = None   # absolute path to the component's YAML file
     scope: str = SCOPE_PROJECT      # SCOPE_PROJECT | SCOPE_HARNESS
     mcp_servers: tuple[McpServerDeclaration, ...] = ()
+    external_mcp_servers: tuple[ExternalMcpServerDeclaration, ...] = ()
     harness_instructions: tuple[HarnessInstruction, ...] = ()
     core: bool = False              # if True, component cannot be uninstalled
     type: str = "component"         # discriminator: "component" vs other config types
     post_install: str | None = None  # dotted import path to a function(project_root)
+    lifecycle_observer: str | None = None  # dotted module path imported by register_all_components to self-register bus subscribers

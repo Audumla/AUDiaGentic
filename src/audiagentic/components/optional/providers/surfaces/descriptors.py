@@ -13,7 +13,7 @@ import yaml
 
 from audiagentic.paths import SRC_ROOT
 
-_SURFACE_CONFIG_DIR = SRC_ROOT / "audiagentic" / "config" / "providers" / "adapters"
+_SURFACE_CONFIG_DIR = SRC_ROOT / "audiagentic" / "config" / "components" / "optional" / "providers"
 
 _REGISTRY: dict[str, SurfaceDescriptor] = {}
 
@@ -50,8 +50,8 @@ def all_surfaces() -> dict[str, SurfaceDescriptor]:
 
 def load_surface_from_yaml(path: Path) -> SurfaceDescriptor:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if data.get("type") != "surface":
-        raise ValueError(f"{path.name}: expected type=surface, got {data.get('type')}")
+    if data.get("type") != "provider":
+        raise ValueError(f"{path.name}: expected type=provider, got {data.get('type')}")
     files = tuple(
         SurfaceFile(
             rel_path=f["path"],
