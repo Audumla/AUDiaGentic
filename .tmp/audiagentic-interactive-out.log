@@ -1,8 +1,0 @@
-Materialized agent config in C:\Users\mgs\.audiagentic\harness\agent
-[2J[HThe **openhands** provider has been successfully installed.
-
-- **Executable**: `openhands` (OpenHands CLI 1.16.0)
-- **Location**: `C:\Users\mgs\.local\bin\openhands.EXE`
-- **Status**: Ready to use
-
-The provider is now available in your AUDiaGentic environment. You can use it to provision agents, manage models, and interact with OpenHands functionality.
