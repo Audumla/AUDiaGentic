@@ -2,6 +2,7 @@
 
 
 import pytest
+
 from audiagentic.components.optional.providers.adapters.claude.hooks import (
     _parse_first_line_params,
     _resolve_hook_name,

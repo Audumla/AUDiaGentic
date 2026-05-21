@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import queue
 import subprocess
 import sys

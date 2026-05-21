@@ -6,9 +6,16 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.output import ComponentOutputEvent, ComponentOutputSink
+
 from .base import SurfaceBlock, apply_managed_blocks, prune_managed_blocks
 from .contributions import load_surface_contributions
 from .registry import load_contribution_renderer_registry
+
+
+def _emit(output: ComponentOutputSink | None, message: str, level: str = "info", **data: Any) -> None:
+    if output is not None:
+        output(ComponentOutputEvent(message=message, kind="log", level=level, data=data))
 
 
 def build_provider_surface_blocks(
@@ -16,7 +23,7 @@ def build_provider_surface_blocks(
     *,
     provider_id: str | None = None,
 ) -> list[SurfaceBlock]:
-    contributions = load_surface_contributions()
+    contributions = load_surface_contributions(project_root=project_root)
     renderers = load_contribution_renderer_registry()
     provider_ids = [provider_id] if provider_id else sorted(renderers)
     blocks: dict[tuple[Path, str], SurfaceBlock] = {}
@@ -70,6 +77,7 @@ def prune_provider_surfaces(
     project_root: Path,
     *,
     provider_id: str | None = None,
+    on_progress: ComponentOutputSink | None = None,
 ) -> dict[str, Any]:
     """Remove managed blocks that no longer have an active contribution.
 
@@ -77,10 +85,12 @@ def prune_provider_surfaces(
     ID appears in the current contribution set are kept; all others are pruned.
     If provider_id is given, only files owned by that provider are touched.
     """
-    contributions = load_surface_contributions()
+    contributions = load_surface_contributions(project_root=project_root)
     active_ids = {c.contribution_id for c in contributions}
     renderers = load_contribution_renderer_registry()
     provider_ids = [provider_id] if provider_id else sorted(renderers)
+
+    _emit(on_progress, f"Pruning stale surface blocks ({len(active_ids)} active contributions)")
 
     # Discover candidate paths by running renderers with the real contribution list.
     # Paths are determined by what contributions are present; an empty list returns
@@ -100,10 +110,13 @@ def prune_provider_surfaces(
         current = path.read_text(encoding="utf-8")
         desired = prune_managed_blocks(current, active_ids)
         if current == desired:
+            _emit(on_progress, f"No stale blocks in {path.name}", level="debug")
             continue
         _write_atomic(path, desired)
         pruned.append(str(path))
+        _emit(on_progress, f"Pruned stale blocks from {path.name}")
 
+    _emit(on_progress, f"Prune complete — {len(pruned)} file(s) updated")
     return {"ok": True, "pruned": pruned}
 
 
@@ -111,7 +124,10 @@ def apply_provider_surfaces(
     project_root: Path,
     *,
     provider_id: str | None = None,
+    on_progress: ComponentOutputSink | None = None,
 ) -> dict[str, Any]:
+    scope = provider_id or "all providers"
+    _emit(on_progress, f"Applying surface contributions to {scope}")
     blocks = build_provider_surface_blocks(project_root, provider_id=provider_id)
     grouped: dict[Path, list[SurfaceBlock]] = defaultdict(list)
     for block in blocks:
@@ -121,7 +137,10 @@ def apply_provider_surfaces(
         current = path.read_text(encoding="utf-8") if path.exists() else ""
         desired = apply_managed_blocks(current, file_blocks)
         if current == desired:
+            _emit(on_progress, f"No changes — {path.name}", level="debug")
             continue
         _write_atomic(path, desired)
         written.append(str(path))
+        _emit(on_progress, f"Updated {path.name} ({len(file_blocks)} block(s))")
+    _emit(on_progress, f"Apply complete — {len(written)} file(s) updated")
     return {"ok": True, "written": written}

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-from pathlib import Path
 
 from audiagentic.foundation.components.base import MODE_REQUIRED_MANAGED
 from audiagentic.foundation.components.loader import register_all_components

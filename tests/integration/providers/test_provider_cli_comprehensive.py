@@ -9,10 +9,8 @@ Tests every registered provider descriptor to ensure:
 """
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
@@ -36,7 +34,6 @@ from audiagentic.foundation.invoke.toolchains import (
     uv,
     vscode,
 )
-
 
 # ---------------------------------------------------------------------------
 # Descriptor registry tests
