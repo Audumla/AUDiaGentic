@@ -14,7 +14,7 @@ Rules:
 - Do not reinterpret these tags — route the raw tagged prompt through the repo-owned bridge.
 - Keep tag semantics identical to the shared AUDiaGentic launch contract.
 - Keep provenance visible: provider id, surface, and session id should survive normalization.
-- Tag definitions are managed in `config/prompt-triggers/tags/`;
+- Tag definitions are managed in `config/components/optional/agent-actions/tags/`;
   run `python -m audiagentic.components.optional.providers.skill_surfaces --project-root .` after adding, removing, or renaming tags.
 <!-- AUDIAGENTIC:END agent-jobs/canonical-rule -->
 
@@ -22,7 +22,7 @@ Rules:
 # Tag shortcuts and aliases
 
 Tag and provider aliases are centralized in the tag registry and
-`config/prompt-triggers/tags/` and work in all surfaces.
+`config/components/optional/agent-actions/tags/` and work in all surfaces.
 
 Tag aliases:
 
@@ -114,12 +114,3 @@ requested. Do not broaden review into feature-scope changes.
 - Do not broaden review into implementation work.
 - Keep tracked docs and release artifacts synchronized with the job record.
 <!-- AUDIAGENTIC:END ag-review/review-doctrine -->
-
-<!-- AUDIAGENTIC:BEGIN source-control/doctrine -->
-# Source control doctrine
-
-Use the source control component for all git and GitHub operations.
-Before committing, record a change event to the ledger using the
-audiagentic-ledger-write MCP tool (record_change_event).
-Do not invoke git or GitHub APIs directly — use the MCP tools.
-<!-- AUDIAGENTIC:END source-control/doctrine -->
