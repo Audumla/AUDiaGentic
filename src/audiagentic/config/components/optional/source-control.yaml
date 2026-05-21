@@ -13,15 +13,14 @@ files:
 mcp-servers:
   - name: audiagentic-source-control
     module: audiagentic.components.optional.source_control.source_control_admin_mcp
-    direct-tools: [get_source_control_status, install_source_control_mcp_servers]
+    direct-tools: [get_source_control_status]
     description: Source control component management
     instructions: >
       Use get_source_control_status to check git, gh CLI, and MCP server availability.
-      Use install_source_control_mcp_servers to register official git and GitHub MCP
-      servers into provider settings. Run this once after installing the component.
+      External MCP servers (git, github) are registered automatically into the audiagentic
+      mcp.json based on detection probes — no manual registration needed.
     tool-descriptions:
       get_source_control_status: Return availability of git, gh CLI, and official MCP servers.
-      install_source_control_mcp_servers: Detect and register official git and GitHub MCP servers into provider settings.
 external-mcp-servers:
   - name: git
     command: uvx
@@ -47,7 +46,6 @@ harness-instructions:
     content: |
       ### audiagentic-source-control
       - `get_source_control_status` — Check git, gh CLI, and MCP server availability
-      - `install_source_control_mcp_servers` — Register official MCP servers into provider settings
 
       ### Official MCP servers (installed by this component)
 
