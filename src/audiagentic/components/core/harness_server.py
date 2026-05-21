@@ -360,6 +360,12 @@ def build_server() -> FastMCP:
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
+    @mcp.tool(description=_tool_description("refresh_harness_config", "Regenerate mcp.json and SYSTEM.md from current component state, then request in-session reload."))
+    def refresh_harness_config() -> dict[str, Any]:
+        from audiagentic.runtime.harness.pi.install import refresh_harness_config_if_installed
+        refreshed = refresh_harness_config_if_installed(_project_root(), reason="mcp-refresh-tool")
+        return {"ok": refreshed, "refreshed": refreshed}
+
     return mcp
 
 
