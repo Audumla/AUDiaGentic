@@ -24,3 +24,8 @@ dist/
 build/
 opencode.json
 .aider*
+/.claude/
+/.tmp/
+/.caveman-mode
+/.opencode/node_modules/
+/.pi/npm/node_modules/
