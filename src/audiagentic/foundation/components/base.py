@@ -78,6 +78,7 @@ class ComponentDescriptor:
     display_name: str
     description: str
     detection_marker: str   # rel_path proving component is installed (relative to component_root)
+    aliases: tuple[str, ...] = ()
     files: tuple[ComponentFile, ...] = ()
     depends_on: tuple[str, ...] = ()
     yaml_path: Path | None = None   # absolute path to the component's YAML file
@@ -89,3 +90,5 @@ class ComponentDescriptor:
     type: str = "component"         # discriminator: "component" vs other config types
     post_install: str | None = None  # dotted import path to a function(project_root)
     lifecycle_observer: str | None = None  # dotted module path imported by register_all_components to self-register bus subscribers
+    lifecycle_hook: str | None = None  # dotted import path to a function(event_type, payload, metadata)
+    status_hook: str | None = None  # dotted import path to a function(project_root) -> dict

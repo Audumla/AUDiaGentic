@@ -11,6 +11,7 @@ from .base import (
     HarnessInstruction,
     McpServerDeclaration,
 )
+from .hooks import initialize_lifecycle_hook_dispatch
 from .registry import register
 
 # Resolve relative to the installed package — works in both editable installs and wheels.
@@ -29,6 +30,9 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     if data.get("type") != "component":
         raise ValueError(f"{path.name}: expected type=component, got {data.get('type')}")
+    component_id = data.get("id")
+    if not isinstance(component_id, str) or not component_id:
+        raise ValueError(f"{path.name}: missing or empty id")
     files = tuple(
         ComponentFile(
             rel_path=f["path"],
@@ -79,10 +83,11 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
 
     descriptor = ComponentDescriptor(
         type=data["type"],
-        component_id=data["component-id"],
-        display_name=data.get("display-name", data["component-id"]),
+        component_id=component_id,
+        display_name=data.get("display-name", component_id),
         description=data.get("description", ""),
         detection_marker=data.get("detection-marker", ""),
+        aliases=tuple(data.get("aliases") or []),
         files=files,
         depends_on=tuple(data.get("depends-on") or []),
         yaml_path=path,
@@ -93,6 +98,8 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
         core=is_core,
         post_install=data.get("post-install") or None,
         lifecycle_observer=data.get("lifecycle-observer") or None,
+        lifecycle_hook=data.get("lifecycle-hook") or None,
+        status_hook=data.get("status-hook") or None,
     )
     register(descriptor)
     return descriptor
@@ -102,7 +109,7 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
     """Load and register every *.yaml file across all component config dirs.
 
     Defaults to config/components/{core,optional}/ (top-level YAMLs only).
-    Idempotent — re-registering an already-known component-id is a no-op overwrite.
+    Idempotent — re-registering an already-known component id is a no-op overwrite.
 
     After loading descriptors, imports any declared lifecycle-observer modules so
     they self-register their event bus subscriptions.
@@ -112,10 +119,39 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
     for target in targets:
         for path in sorted(target.resolve().glob("*.yaml")):
             descriptors.append(register_from_yaml(path))
+
+    _validate_loaded_descriptors(descriptors)
+
     for descriptor in descriptors:
         if descriptor.lifecycle_observer:
             try:
                 __import__(descriptor.lifecycle_observer)
             except Exception:  # noqa: BLE001
                 pass
+    initialize_lifecycle_hook_dispatch()
     return descriptors
+
+
+def _validate_loaded_descriptors(descriptors: list[ComponentDescriptor]) -> None:
+    """Post-load validation for component dependency references.
+
+    Runs after ALL descriptors are loaded so depends-on references can be
+    checked against the full set rather than an incrementally built partial set.
+    """
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for descriptor in descriptors:
+        if descriptor.component_id in seen:
+            duplicates.add(descriptor.component_id)
+        seen.add(descriptor.component_id)
+    if duplicates:
+        raise ValueError(f"duplicate component ids loaded: {', '.join(sorted(duplicates))}")
+
+    loaded_ids = {d.component_id for d in descriptors}
+
+    for descriptor in descriptors:
+        for dep in descriptor.depends_on:
+            if dep not in loaded_ids:
+                raise ValueError(
+                    f"component '{descriptor.component_id}' depends on unknown component '{dep}'"
+                )

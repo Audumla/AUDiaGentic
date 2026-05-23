@@ -1,6 +1,6 @@
 type: component
 contract-version: v1
-component-id: source-control
+id: source-control
 display-name: Source Control
 description: Source control — installs and manages official git and GitHub MCP servers for providers
 detection-marker: .audiagentic/components/source-control.yaml
@@ -62,20 +62,13 @@ harness-instructions:
       ### Official MCP servers (installed by this component)
 
       **git** (`mcp-server-git` via uvx)
-      - Local git operations: status, diff, log, commit, branch, stage
+      - Git operations: status, diff, log, commit, branch, stage
 
       **github** (`gh mcp serve` via GitHub CLI)
-      - GitHub API: pull requests, issues, releases, workflow dispatch, code search
+      - GitHub operations: pull requests, issues, releases, workflow dispatch, code search
 
-      Prerequisites:
-      - `uv` installed for git MCP server (`pip install uv` or https://docs.astral.sh/uv)
-      - `gh` CLI installed with `gh extension install github/gh-mcp` for GitHub MCP server
-      - `GITHUB_TOKEN` environment variable set for GitHub operations
-
-lifecycle-observer: audiagentic.components.optional.source_control.observer
-
-agent-tags:
-  - config: components/optional/agent-actions/ag-check-in-prep.yaml
+lifecycle-hook: audiagentic.components.optional.source_control.bootstrap.on_component_lifecycle
+status-hook: audiagentic.components.optional.source_control.bootstrap.status_payload
 
 surface-contributions:
   - id: source-control/doctrine
@@ -88,6 +81,7 @@ surface-contributions:
     content:
       body: |
         Use the source control component for all git and GitHub operations.
-        Before committing, record a change event to the ledger using the
-        audiagentic-ledger-write MCP tool (record_change_event).
+        If the agent-ledger component is installed, record a change event to the
+        ledger before committing using the audiagentic-ledger-write MCP tool
+        (record_change_event).
         Do not invoke git or GitHub APIs directly — use the MCP tools.

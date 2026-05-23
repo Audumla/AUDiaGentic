@@ -5,6 +5,8 @@ markers are written, but that the managed files are present and non-empty.
 """
 from __future__ import annotations
 
+import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -12,9 +14,6 @@ _ROOT = Path(__file__).resolve().parents[3]
 for _p in (str(_ROOT), str(_ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
-
-import json
-import subprocess
 
 
 def _cli(*args: str, project: Path | None = None, expect_rc: int = 0) -> dict | list | None:
@@ -43,7 +42,11 @@ def test_install_project_creates_release_workflow(tmp_path):
     _cli("component", "install", "project", project=tmp_path)
     wf = tmp_path / ".github" / "workflows" / "release.yml"
     assert wf.is_file(), f"expected workflow at {wf}"
-    assert "on:" in wf.read_text(encoding="utf-8") or "jobs:" in wf.read_text(encoding="utf-8")
+    content = wf.read_text(encoding="utf-8")
+    assert "on:" in content or "jobs:" in content
+    assert "PYTHONPATH: src" in content
+    assert "from audiagentic.components.optional.release import api" in content
+    assert "scripts/components/optional/ledger/finalize_ledger.py" not in content
 
 
 def test_install_project_seeds_project_yaml(tmp_path):

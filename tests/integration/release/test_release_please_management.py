@@ -1,3 +1,4 @@
+#! ruff: noqa: E402, I001
 from __future__ import annotations
 
 import sys
@@ -9,21 +10,21 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.components.optional.ledger.release_please import (
+from audiagentic.components.optional.release.release_please.manage import (
     BASELINE_WORKFLOW,
     CANDIDATE_NAME,
     LEGACY_NAME,
     LEGACY_SUFFIX,
     MANAGED_NAME,
-    ensure_release_please_baseline,
-)
-from tests.helpers import sandbox as sandbox_helper
+    ensure_baseline,
+)  # noqa: E402
+from tests.helpers import sandbox as sandbox_helper  # noqa: E402
 
 
 def test_release_please_absent_installs_baseline(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "rp-absent")
     try:
-        result = ensure_release_please_baseline(sandbox.repo)
+        result = ensure_baseline(sandbox.repo)
         managed = sandbox.repo / ".github" / "workflows" / MANAGED_NAME
         assert managed.is_file()
         assert managed.read_text(encoding="utf-8") == BASELINE_WORKFLOW
@@ -40,7 +41,7 @@ def test_release_please_legacy_renamed(tmp_path: Path) -> None:
         legacy = workflow_dir / LEGACY_NAME
         legacy.write_text("legacy", encoding="utf-8")
 
-        result = ensure_release_please_baseline(sandbox.repo)
+        result = ensure_baseline(sandbox.repo)
         assert (workflow_dir / LEGACY_SUFFIX).is_file()
         assert (workflow_dir / MANAGED_NAME).is_file()
         assert result["warnings"]
@@ -56,7 +57,7 @@ def test_release_please_managed_modified_preserved(tmp_path: Path) -> None:
         managed = workflow_dir / MANAGED_NAME
         managed.write_text("custom", encoding="utf-8")
 
-        result = ensure_release_please_baseline(sandbox.repo)
+        result = ensure_baseline(sandbox.repo)
         assert managed.read_text(encoding="utf-8") == "custom"
         assert (workflow_dir / CANDIDATE_NAME).is_file()
         assert result["warnings"]
@@ -72,7 +73,7 @@ def test_release_please_managed_unmodified_refresh(tmp_path: Path) -> None:
         managed = workflow_dir / MANAGED_NAME
         managed.write_text(BASELINE_WORKFLOW, encoding="utf-8")
 
-        result = ensure_release_please_baseline(sandbox.repo)
+        result = ensure_baseline(sandbox.repo)
         assert managed.read_text(encoding="utf-8") == BASELINE_WORKFLOW
         assert result["warnings"] == []
     finally:
@@ -85,7 +86,7 @@ def test_release_please_external_unknown(tmp_path: Path) -> None:
         workflow_dir = sandbox.repo / ".github" / "workflows"
         workflow_dir.mkdir(parents=True)
         (workflow_dir / "release-please.custom.yml").write_text("custom", encoding="utf-8")
-        result = ensure_release_please_baseline(sandbox.repo)
+        result = ensure_baseline(sandbox.repo)
         assert (workflow_dir / CANDIDATE_NAME).is_file()
         assert result["warnings"]
     finally:

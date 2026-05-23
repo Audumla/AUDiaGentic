@@ -3540,3 +3540,23 @@
 {"ts": "2026-05-21T01:12:39.372799+00:00", "event": "planning.item.updated", "id": "standard-7", "kind": "standard"}
 {"ts": "2026-05-21T01:15:10.860174+00:00", "event": "planning.maintained", "renames": 0, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 500, "extracts_skipped": 0}
 {"ts": "2026-05-21T01:15:10.860475+00:00", "event": "planning.reconciled", "renames": 0, "orphans": ["spec-0021"]}
+{"ts": "2026-05-21T13:22:17.997956+00:00", "event": "planning.item.created", "id": "standard-8", "kind": "standard", "path": "docs\\planning\\standards\\standard-8-review-findings-standard.md"}
+{"ts": "2026-05-21T13:22:18.349835+00:00", "event": "planning.item.updated", "id": "standard-8", "kind": "standard"}
+{"ts": "2026-05-21T13:23:58.289090+00:00", "event": "planning.maintained", "renames": 0, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 501, "extracts_skipped": 0}
+{"ts": "2026-05-21T13:23:58.289269+00:00", "event": "planning.reconciled", "renames": 0, "orphans": ["spec-0021"]}
+{"ts": "2026-05-21T13:24:42.239769+00:00", "event": "planning.item.created", "id": "standard-9", "kind": "standard", "path": "docs\\planning\\standards\\standard-9-review-findings-standard.md"}
+{"ts": "2026-05-21T13:24:42.593743+00:00", "event": "planning.item.updated", "id": "standard-9", "kind": "standard"}
+{"ts": "2026-05-21T13:26:23.084371+00:00", "event": "planning.maintained", "renames": 0, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 502, "extracts_skipped": 0}
+{"ts": "2026-05-21T13:26:23.084549+00:00", "event": "planning.reconciled", "renames": 0, "orphans": ["spec-0021"]}
+{"ts": "2026-05-21T13:26:46.600560+00:00", "event": "planning.item.created", "id": "standard-10", "kind": "standard", "path": "docs\\planning\\standards\\standard-10-review-findings-standard.md"}
+{"ts": "2026-05-21T13:26:46.961109+00:00", "event": "planning.item.updated", "id": "standard-10", "kind": "standard"}
+{"ts": "2026-05-21T13:28:27.307068+00:00", "event": "planning.maintained", "renames": 0, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 503, "extracts_skipped": 0}
+{"ts": "2026-05-21T13:28:27.307246+00:00", "event": "planning.reconciled", "renames": 0, "orphans": ["spec-0021"]}
+{"ts": "2026-05-21T13:28:55.522942+00:00", "event": "planning.item.created", "id": "standard-11", "kind": "standard", "path": "docs\\planning\\standards\\standard-11-review-findings-standard.md"}
+{"ts": "2026-05-21T13:28:55.883670+00:00", "event": "planning.item.updated", "id": "standard-11", "kind": "standard"}
+{"ts": "2026-05-21T13:30:38.228016+00:00", "event": "planning.maintained", "renames": 0, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 504, "extracts_skipped": 0}
+{"ts": "2026-05-21T13:30:38.228214+00:00", "event": "planning.reconciled", "renames": 0, "orphans": ["spec-0021"]}
+{"ts": "2026-05-21T21:56:30.463205+00:00", "event": "planning.item.created", "id": "standard-12", "kind": "standard", "path": "docs\\planning\\standards\\standard-12-review-findings-standard.md"}
+{"ts": "2026-05-21T21:56:30.818215+00:00", "event": "planning.item.updated", "id": "standard-12", "kind": "standard"}
+{"ts": "2026-05-21T21:59:38.062165+00:00", "event": "planning.maintained", "renames": 0, "orphans": ["spec-0021"], "indexes_rebuilt": true, "extracts_rebuilt": 505, "extracts_skipped": 0}
+{"ts": "2026-05-21T21:59:38.062547+00:00", "event": "planning.reconciled", "renames": 0, "orphans": ["spec-0021"]}

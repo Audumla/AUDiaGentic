@@ -1,11 +1,11 @@
 type: provider
 contract-version: v1
-component-id: provider-surface-claude
+id: provider-claude
 display-name: Claude Surface
-detection-marker: .audiagentic/components/provider-surface-claude.yaml
+detection-marker: .audiagentic/components/provider-claude.yaml
 description: Claude Code surface — project instructions, rules, and skills
 files:
-  - path: .audiagentic/components/provider-surface-claude.yaml
+  - path: .audiagentic/components/provider-claude.yaml
     lifecycle: create-if-missing
     description: Installation marker
   - path: CLAUDE.md

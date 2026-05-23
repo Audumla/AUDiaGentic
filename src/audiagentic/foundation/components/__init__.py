@@ -15,12 +15,14 @@ from .base import (
     HarnessInstruction,
     McpServerDeclaration,
 )
+from .hooks import initialize_lifecycle_hook_dispatch
 from .registry import (
     all_descriptors,
     get_descriptor,
     is_enabled,
     is_installed,
     register,
+    resolve_component_id,
 )
 
 __all__ = [
@@ -37,4 +39,6 @@ __all__ = [
     "all_descriptors",
     "is_installed",
     "is_enabled",
+    "resolve_component_id",
+    "initialize_lifecycle_hook_dispatch",
 ]

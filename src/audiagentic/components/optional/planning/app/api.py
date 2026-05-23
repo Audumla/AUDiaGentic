@@ -6,6 +6,7 @@ from audiagentic.foundation.event import EventLog, EventService
 from audiagentic.foundation.workflow import FrontmatterBuilder, ItemView, StateMachine
 
 from ..fs.scan import scan_items
+from ..fs.write import dump_markdown
 from .claims import Claims
 from .compact_mgr import Compactor
 from .config import Config
@@ -82,6 +83,10 @@ class PlanningAPI:
 
     def _scan(self):
         return scan_items(self.root)
+
+    def save(self, item: ItemView) -> None:
+        """Persist an ItemView's frontmatter and body back to disk."""
+        dump_markdown(item.path, item.data, item.body)
 
     def _publish_event(
         self,
