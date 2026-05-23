@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - proof-release-*
 
 permissions:
   contents: write
@@ -22,6 +23,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          target-branch: ${{ github.ref_name }}
 
   build-and-publish:
     needs: release-please
