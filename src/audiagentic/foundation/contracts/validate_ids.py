@@ -11,7 +11,11 @@ from typing import Any
 import yaml
 
 from audiagentic.foundation.components.ids import ALL_COMPONENT_IDS
-from audiagentic.foundation.contracts.canonical_ids import canonical_provider_ids, validate_ids, validate_schema_files
+from audiagentic.foundation.contracts.canonical_ids import (
+    canonical_provider_ids,
+    validate_ids,
+    validate_schema_files,
+)
 from audiagentic.foundation.contracts.schema_registry import SCHEMA_DIR
 from audiagentic.lib.repo_paths import REPO_ROOT
 

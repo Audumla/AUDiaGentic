@@ -1,6 +1,12 @@
 from audiagentic.foundation.invoke.toolchains import brew
 
-from ...descriptors.base import AgentFile, CliInstallRecipe, ProviderDescriptor, ProviderPermissions
+from ...descriptors.base import (
+    AgentFile,
+    CliInstallRecipe,
+    McpConfigSpec,
+    ProviderDescriptor,
+    ProviderPermissions,
+)
 from ...descriptors.registry import register
 
 register(ProviderDescriptor(
@@ -27,5 +33,10 @@ register(ProviderDescriptor(
     agent_files=(
         AgentFile(".goose/config.yaml", managed=False, description="Goose project configuration"),
         AgentFile("AGENTS.md", managed=False, description="Shared project instructions"),
+    ),
+    mcp_config=McpConfigSpec(
+        config_path=".goose/config.yaml",
+        format="goose-yaml",
+        refresh_mode="restart-required",
     ),
 ))
