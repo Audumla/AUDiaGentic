@@ -3,6 +3,7 @@ from audiagentic.foundation.invoke.toolchains import npm
 from ...descriptors.base import (
     AgentFile,
     CliInstallRecipe,
+    McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
     VsCodeExtension,
@@ -36,5 +37,10 @@ register(ProviderDescriptor(
     skill_surface_path=".agents/skills/{tag}/SKILL.md",
     agent_files=(
         AgentFile("AGENTS.md", managed=False, description="Codex project instructions"),
+    ),
+    mcp_config=McpConfigSpec(
+        config_path=".mcp.json",
+        format="mcp-json",
+        refresh_mode="restart-required",
     ),
 ))
