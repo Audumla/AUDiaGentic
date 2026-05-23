@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -348,6 +349,150 @@ def reconcile_all_providers(
         "ok": True,
         "providers": results,
     }
+
+
+def _all_known_server_names() -> set[str]:
+    """All server names declared by any component (regardless of install state)."""
+    from audiagentic.foundation.components.loader import register_all_components
+    from audiagentic.foundation.components.registry import all_descriptors as _all_comp
+
+    register_all_components()
+    names: set[str] = set()
+    for descriptor in _all_comp().values():
+        for decl in descriptor.mcp_servers:
+            names.add(decl.name)
+        for ext in descriptor.external_mcp_servers:
+            names.add(ext.name)
+    return names
+
+
+def _build_active_mcp_entries(project_root: Path) -> dict[str, Any]:
+    """Build MCP server entries for all installed+enabled components."""
+    import shutil
+
+    from audiagentic.foundation.components.loader import register_all_components
+    from audiagentic.foundation.components.registry import all_descriptors as _all_comp
+    from audiagentic.foundation.components.registry import is_enabled, is_installed
+
+    from ..mcp_config import McpServerEntry, build_mcp_entry
+
+    register_all_components()
+    entries: dict[str, McpServerEntry] = {}
+    for cid, comp_desc in _all_comp().items():
+        active = comp_desc.core or (is_installed(cid, project_root) and is_enabled(cid, project_root))
+        if not active:
+            continue
+        for decl in comp_desc.mcp_servers:
+            entry = build_mcp_entry(decl)
+            entries[entry.name] = entry
+        for ext in comp_desc.external_mcp_servers:
+            if any(shutil.which(r) is None for r in ext.requires):
+                continue
+            entry = build_mcp_entry(ext)
+            entries[entry.name] = entry
+    return entries
+
+
+def apply_provider_mcp_servers(
+    provider_id: str,
+    project_root: Path,
+    *,
+    on_progress: ComponentOutputSink | None = None,
+) -> dict[str, Any]:
+    """Reconcile provider MCP config: write active servers, remove stale known servers."""
+    from ..mcp_config import read_mcp_servers, remove_mcp_server, write_mcp_servers
+
+    descriptor = _descriptor(provider_id)
+    spec = descriptor.mcp_config
+    if spec is None:
+        return {"provider_id": provider_id, "ok": True, "skipped": "no mcp_config defined for this provider"}
+
+    config_path = project_root / spec.config_path
+    desired = _build_active_mcp_entries(project_root)
+    known_names = _all_known_server_names()
+
+    _emit(on_progress, f"Applying {len(desired)} MCP server(s) to {provider_id}", provider_id=provider_id)
+    write_mcp_servers(config_path, desired, spec.format)
+
+    # Remove entries that were known but are no longer active
+    current = read_mcp_servers(config_path, spec.format)
+    removed = []
+    for name in list(current):
+        if name in known_names and name not in desired:
+            remove_mcp_server(config_path, name, spec.format)
+            removed.append(name)
+
+    return {
+        "provider_id": provider_id,
+        "ok": True,
+        "config_path": str(config_path),
+        "format": spec.format,
+        "refresh_mode": spec.refresh_mode,
+        "servers_applied": sorted(desired),
+        "servers_removed": removed,
+    }
+
+
+def remove_provider_mcp_server(
+    provider_id: str,
+    server_name: str,
+    project_root: Path,
+) -> dict[str, Any]:
+    """Remove a single named MCP server entry from provider config."""
+    from ..mcp_config import remove_mcp_server
+
+    descriptor = _descriptor(provider_id)
+    spec = descriptor.mcp_config
+    if spec is None:
+        return {"provider_id": provider_id, "ok": False, "error": "no mcp_config defined for this provider"}
+
+    config_path = project_root / spec.config_path
+    removed = remove_mcp_server(config_path, server_name, spec.format)
+    return {
+        "provider_id": provider_id,
+        "ok": True,
+        "config_path": str(config_path),
+        "server_name": server_name,
+        "removed": removed,
+    }
+
+
+def list_provider_mcp_servers(
+    provider_id: str,
+    project_root: Path,
+) -> dict[str, Any]:
+    """Return current MCP server entries from provider config."""
+    from ..mcp_config import read_mcp_servers
+
+    descriptor = _descriptor(provider_id)
+    spec = descriptor.mcp_config
+    if spec is None:
+        return {"provider_id": provider_id, "ok": True, "servers": [], "skipped": "no mcp_config defined"}
+
+    config_path = project_root / spec.config_path
+    current = read_mcp_servers(config_path, spec.format)
+    return {
+        "provider_id": provider_id,
+        "ok": True,
+        "config_path": str(config_path),
+        "format": spec.format,
+        "refresh_mode": spec.refresh_mode,
+        "config_exists": config_path.exists(),
+        "servers": [
+            {"name": e.name, "command": e.command, "args": list(e.args)}
+            for e in current.values()
+        ],
+    }
+
+
+def refresh_provider_mcp(
+    provider_id: str,
+    project_root: Path,
+    *,
+    on_progress: ComponentOutputSink | None = None,
+) -> dict[str, Any]:
+    """Re-apply MCP servers for a provider (useful after component install/uninstall)."""
+    return apply_provider_mcp_servers(provider_id, project_root, on_progress=on_progress)
 
 
 def reconcile_all(*, project_root: Path) -> None:

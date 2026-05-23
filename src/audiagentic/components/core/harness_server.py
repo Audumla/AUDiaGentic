@@ -22,6 +22,7 @@ except ImportError:  # pragma: no cover - exercised by missing optional dep only
     print("Error: mcp package not installed. Run: pip install mcp", file=sys.stderr)
     sys.exit(1)
 
+from audiagentic.foundation.components.ids import COMPONENT_SESSION
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 
@@ -105,6 +106,7 @@ def _set_cli_visibility(
     _save_yaml(config_path, current)
 
     from audiagentic.runtime.harness.pi.install import (
+        build_runtime_sync,
         refresh_materialized_agent_config,
         request_runtime_reload,
     )
@@ -119,11 +121,12 @@ def _set_cli_visibility(
         "config_path": str(config_path),
         "updated": updates,
         "effective": _effective_cli_visibility(project_root),
+        "sync": build_runtime_sync(reason="session-ui-visibility-updated"),
     }
 
 
 def _server_decl():
-    return get_mcp_server_declaration("session", "audiagentic-session")
+    return get_mcp_server_declaration(COMPONENT_SESSION, "audiagentic-session")
 
 
 def _server_instructions() -> str:
@@ -362,9 +365,16 @@ def build_server() -> FastMCP:
 
     @mcp.tool(description=_tool_description("refresh_harness_config", "Regenerate mcp.json and SYSTEM.md from current component state, then request in-session reload."))
     def refresh_harness_config() -> dict[str, Any]:
-        from audiagentic.runtime.harness.pi.install import refresh_harness_config_if_installed
+        from audiagentic.runtime.harness.pi.install import (
+            build_runtime_sync,
+            refresh_harness_config_if_installed,
+        )
         refreshed = refresh_harness_config_if_installed(_project_root(), reason="mcp-refresh-tool")
-        return {"ok": refreshed, "refreshed": refreshed}
+        return {
+            "ok": refreshed,
+            "refreshed": refreshed,
+            "sync": build_runtime_sync(reason="mcp-refresh-tool"),
+        }
 
     return mcp
 

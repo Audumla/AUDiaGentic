@@ -131,10 +131,24 @@ def sync_managed_baseline(
             else:
                 source_base = source_root / asset.source
                 if source_base.exists():
-                    _copy_file(source_base, target_path)
+                    if asset.recursive and source_base.is_dir():
+                        copied = False
+                        for source_path, relative_path in _iter_source_files(source_root, asset):
+                            copied = True
+                            nested_target = target_root / asset.target / relative_path
+                            _copy_file(source_path, nested_target)
+                        if not copied:
+                            target_path.mkdir(parents=True, exist_ok=True)
+                    elif source_base.is_dir():
+                        target_path.mkdir(parents=True, exist_ok=True)
+                    else:
+                        _copy_file(source_base, target_path)
                 else:
-                    target_path.parent.mkdir(parents=True, exist_ok=True)
-                    target_path.write_text("# Installation marker\n", encoding="utf-8")
+                    if asset.recursive:
+                        target_path.mkdir(parents=True, exist_ok=True)
+                    else:
+                        target_path.parent.mkdir(parents=True, exist_ok=True)
+                        target_path.write_text("# Installation marker\n", encoding="utf-8")
                 created = report["created-files"]
                 assert isinstance(created, list)
                 created.append(relative_target)

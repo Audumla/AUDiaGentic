@@ -10,12 +10,8 @@ from typing import Any
 
 import yaml
 
-from audiagentic.foundation.contracts.canonical_ids import (
-    CANONICAL_COMPONENT_IDS,
-    canonical_provider_ids,
-    validate_ids,
-    validate_schema_files,
-)
+from audiagentic.foundation.components.ids import ALL_COMPONENT_IDS
+from audiagentic.foundation.contracts.canonical_ids import canonical_provider_ids, validate_ids, validate_schema_files
 from audiagentic.foundation.contracts.schema_registry import SCHEMA_DIR
 from audiagentic.lib.repo_paths import REPO_ROOT
 
@@ -88,7 +84,7 @@ def scan_paths(paths: Iterable[Path]) -> list[dict[str, str]]:
             providers, components = _extract_ids(payload)
             for issue in validate_ids(providers, canonical_provider_ids()):
                 findings.append({"path": str(file_path), "issue": issue})
-            for issue in validate_ids(components, CANONICAL_COMPONENT_IDS):
+            for issue in validate_ids(components, ALL_COMPONENT_IDS):
                 findings.append({"path": str(file_path), "issue": issue})
     schema_findings = validate_schema_files(SCHEMA_DIR)
     for issue in schema_findings:

@@ -1,6 +1,6 @@
 type: component
 contract-version: v1
-component-id: agent-jobs
+id: agent-jobs
 display-name: Agent Jobs
 description: Execution/jobs layer — workflow action tags, job records, and session artifacts. Skill sources are owned by the agent-actions component.
 detection-marker: .audiagentic/components/agent-jobs.yaml
