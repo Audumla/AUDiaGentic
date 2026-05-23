@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/Audumla/AUDiaGentic/compare/v0.1.1...v0.2.0) (2026-05-23)
+
+
+### Features
+
+* add clean release proof marker ([5ebba75](https://github.com/Audumla/AUDiaGentic/commit/5ebba75a73d7e6f6341317d1b58cfc2fcba3a7cd))
+
 ## [0.1.1](https://github.com/Audumla/AUDiaGentic/compare/v0.1.0...v0.1.1) (2026-05-13)
 
 
