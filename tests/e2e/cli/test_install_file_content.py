@@ -26,7 +26,12 @@ def _cli(*args: str, project: Path | None = None, expect_rc: int = 0) -> dict | 
         f"CLI {args!r} rc={result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
     )
     stdout = result.stdout.strip()
-    return json.loads(stdout) if stdout else None
+    if not stdout:
+        return None
+    start = stdout.find("{")
+    if start >= 0:
+        return json.loads(stdout[start:])
+    return json.loads(stdout)
 
 
 # ── project file content ───────────────────────────────────────────────
@@ -38,8 +43,10 @@ def test_install_project_creates_prompt_files(tmp_path):
     assert prompt.stat().st_size > 0
 
 
-def test_install_project_creates_release_workflow(tmp_path):
+def test_install_release_creates_release_workflow(tmp_path):
     _cli("component", "install", "project", project=tmp_path)
+    _cli("component", "install", "agent-ledger", project=tmp_path)
+    _cli("component", "install", "release", project=tmp_path)
     wf = tmp_path / ".github" / "workflows" / "release.yml"
     assert wf.is_file(), f"expected workflow at {wf}"
     content = wf.read_text(encoding="utf-8")
@@ -76,37 +83,45 @@ def test_reinstall_project_preserves_create_if_missing(tmp_path):
 
 
 
-def test_install_agent_jobs_creates_skill_files(tmp_path):
-    _cli("component", "install", "agent-jobs", project=tmp_path)
+def test_install_agent_actions_creates_skill_files(tmp_path):
+    _cli("component", "install", "project", project=tmp_path)
+    _cli("component", "install", "agent-actions", project=tmp_path)
     skill = tmp_path / ".audiagentic" / "skills" / "ag-review" / "skill.md"
     assert skill.is_file(), f"expected skill file at {skill}"
     assert skill.stat().st_size > 0
 
 
-# ── uninstall removes required-managed files ──────────────────────────────────
+# ── uninstall removes required-managed files for optional components ──────────
 
-def test_uninstall_removes_required_managed_files(tmp_path):
+def test_uninstall_removes_release_required_managed_files(tmp_path):
     _cli("component", "install", "project", project=tmp_path)
-    prompt_dir = tmp_path / ".audiagentic" / "prompts"
-    assert prompt_dir.exists()
+    _cli("component", "install", "agent-ledger", project=tmp_path)
+    _cli("component", "install", "release", project=tmp_path)
+    workflow = tmp_path / ".github" / "workflows" / "release.yml"
+    assert workflow.exists()
 
-    _cli("component", "uninstall", "project", project=tmp_path)
-    assert not prompt_dir.exists()
+    _cli("component", "uninstall", "release", project=tmp_path)
+    assert not workflow.exists()
 
 
 def test_uninstall_preserves_create_if_missing_without_flag(tmp_path):
     _cli("component", "install", "project", project=tmp_path)
-    project_yaml = tmp_path / ".audiagentic" / "config" / "project.yaml"
-    assert project_yaml.exists()
+    _cli("component", "install", "agent-actions", project=tmp_path)
+    skill = tmp_path / ".audiagentic" / "skills" / "ag-review" / "skill.md"
+    marker = tmp_path / ".audiagentic" / "components" / "agent-actions.yaml"
+    assert skill.exists()
+    assert marker.exists()
 
-    _cli("component", "uninstall", "project", project=tmp_path)
-    assert project_yaml.exists()
+    _cli("component", "uninstall", "agent-actions", project=tmp_path)
+    assert not skill.exists()
+    assert not marker.exists()
 
 
 def test_uninstall_removes_configs_with_flag(tmp_path):
     _cli("component", "install", "project", project=tmp_path)
-    project_yaml = tmp_path / ".audiagentic" / "config" / "project.yaml"
-    assert project_yaml.exists()
+    _cli("component", "install", "agent-actions", project=tmp_path)
+    marker = tmp_path / ".audiagentic" / "components" / "agent-actions.yaml"
+    assert marker.exists()
 
-    _cli("component", "uninstall", "project", "--remove-configs", project=tmp_path)
-    assert not project_yaml.exists()
+    _cli("component", "uninstall", "agent-actions", "--remove-configs", project=tmp_path)
+    assert not marker.exists()

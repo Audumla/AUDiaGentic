@@ -1,6 +1,7 @@
 #! ruff: noqa: E402, I001
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -92,3 +93,12 @@ def test_release_please_external_unknown(tmp_path: Path) -> None:
         assert result["warnings"]
     finally:
         sandbox.cleanup()
+
+
+def test_release_please_config_keeps_pre_major_features_minor() -> None:
+    config = json.loads((ROOT / "release-please-config.json").read_text(encoding="utf-8"))
+    package = config["packages"]["."]
+    assert config["bump-minor-pre-major"] is True
+    assert config["bump-patch-for-minor-pre-major"] is False
+    assert package["bump-minor-pre-major"] is True
+    assert package["bump-patch-for-minor-pre-major"] is False
