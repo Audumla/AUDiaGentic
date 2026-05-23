@@ -12,4 +12,4 @@ Top-level package for the AUDiaGentic system. Domain layout:
   knowledge/         — optional knowledge management capability (deferred)
 """
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
