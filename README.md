@@ -34,6 +34,34 @@ The build-status registry is the live operational starting point for all work.
 
 ## Validation and Maintenance
 
+### Docker Test Path
+
+Use the existing Docker base image as the normal test path. Do not rebuild test
+images for routine validation unless the image inputs changed.
+
+Normal path:
+
+```bash
+docker run --rm \
+  -v "${PWD}:/app" \
+  -w /app \
+  -e AUDIAGENTIC_DOCKER_TESTS=1 \
+  -e AUDIAGENTIC_REPO_ROOT=/app \
+  audia-test-base:latest \
+  bash -lc "python3 -m pip install --no-cache-dir --break-system-packages -e . pytest pytest-asyncio mcp==1.27.0 && pytest tests/integration/release tests/e2e/release -q"
+```
+
+Rebuild only when one of these changed:
+
+- `Dockerfile.test-base`
+- `Dockerfile.test`
+- `Dockerfile.release-test`
+- image-level package/tool bootstrap requirements
+- the local image is missing or known-bad
+
+Use `Dockerfile.release-test` only when validating the wheel-installed release
+path or package-data bundling. It is not the default recheck path.
+
 ### Planning Document Integrity
 
 Before merging planning changes or after bulk operations, run:
