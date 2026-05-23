@@ -5,6 +5,8 @@ from typing import Any
 
 import yaml
 
+from audiagentic.foundation.components.ids import COMPONENT_AGENT_ACTIONS, COMPONENT_AGENT_JOBS
+
 from .base import SurfaceContribution
 
 
@@ -52,7 +54,7 @@ def load_tag_surface_contributions(project_root: Path | None = None) -> list[Sur
     )
     from audiagentic.foundation.components.registry import is_installed  # noqa: PLC0415
 
-    if project_root is not None and not is_installed("agent-actions", project_root):
+    if project_root is not None and not is_installed(COMPONENT_AGENT_ACTIONS, project_root):
         return []
 
     contributions: list[SurfaceContribution] = []
@@ -137,14 +139,14 @@ def build_summary_contributions(project_root: Path | None = None) -> list[Surfac
     return [
         SurfaceContribution(
             contribution_id="agent-jobs/canonical-rule",
-            owner_component="agent-jobs",
+            owner_component=COMPONENT_AGENT_JOBS,
             kind="rule",
             title="Canonical workflow tags",
             body=_build_canonical_tags_body(tags),
         ),
         SurfaceContribution(
             contribution_id="agent-jobs/tag-shortcuts",
-            owner_component="agent-jobs",
+            owner_component=COMPONENT_AGENT_JOBS,
             kind="rule",
             title="Tag shortcuts and aliases",
             body=_build_tag_shortcuts_body(tags),

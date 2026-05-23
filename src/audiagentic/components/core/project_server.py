@@ -17,19 +17,22 @@ except ImportError:
     print("Error: mcp package not installed. Run: pip install mcp", file=sys.stderr)
     sys.exit(1)
 
-import yaml
-
 from audiagentic.foundation.components import all_descriptors, is_enabled, is_installed
+from audiagentic.foundation.components.hooks import get_component_status
+from audiagentic.foundation.components.ids import COMPONENT_PROJECT, COMPONENT_PROVIDERS
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
-from audiagentic.runtime.harness.pi.install import refresh_harness_config_if_installed
+from audiagentic.runtime.harness.pi.install import (
+    build_runtime_sync,
+    refresh_harness_config_if_installed,
+)
 from audiagentic.runtime.lifecycle.components import (
     disable_component,
     enable_component,
     install_component,
     uninstall_component,
 )
-from audiagentic.runtime.lifecycle.detector import detect_installed_state
+from audiagentic.runtime.lifecycle.detector import detect_installed_state, get_project_version_info
 
 register_all_components()
 
@@ -48,7 +51,7 @@ def _project_root() -> Path:
 
 
 def _server_decl():
-    return get_mcp_server_declaration("project", "audiagentic-project")
+    return get_mcp_server_declaration(COMPONENT_PROJECT, "audiagentic-project")
 
 
 def _server_instructions() -> str:
@@ -88,31 +91,29 @@ def build_server() -> FastMCP:
             }
             for cid in all_descriptors()
         }
-        version_info: dict[str, Any] | None = None
-        if state.state == "installed":
-            try:
-                marker_path = project_root / ".audiagentic" / "components" / "project.yaml"
-                if marker_path.exists():
-                    marker_data = yaml.safe_load(marker_path.read_text(encoding="utf-8")) or {}
-                    version_info = {
-                        "version": marker_data.get("version"),
-                        "installed_at": marker_data.get("installed-at"),
-                    }
-            except Exception as exc:  # noqa: BLE001
-                version_info = {"error": str(exc)}
+        version_info = get_project_version_info(project_root) if state.state == "installed" else None
+        component_details: dict[str, dict[str, Any]] = {}
+        for component_id, descriptor in all_descriptors().items():
+            if not is_installed(component_id, project_root):
+                continue
+            payload = get_component_status(descriptor, project_root)
+            if payload:
+                component_details[component_id] = payload
         return {
             "project_root": str(project_root),
             "install_state": state.state,
             "audiagentic_markers": state.audiagentic_markers,
             "components": components,
             "version_info": version_info,
+            "component_details": component_details,
         }
 
     @mcp.tool(description=_tool_description("list_components", "List all registered AUDiaGentic components with install and enabled status."))
     def list_components() -> list[dict[str, Any]]:
         project_root = _project_root()
-        return [
-            {
+        rows: list[dict[str, Any]] = []
+        for d in all_descriptors().values():
+            row = {
                 "component_id": d.component_id,
                 "display_name": d.display_name,
                 "description": d.description,
@@ -122,8 +123,12 @@ def build_server() -> FastMCP:
                 "detection_marker": d.detection_marker,
                 "file_count": len(d.files),
             }
-            for d in all_descriptors().values()
-        ]
+            if is_installed(d.component_id, project_root):
+                payload = get_component_status(d, project_root)
+                if payload:
+                    row["component_status"] = payload
+            rows.append(row)
+        return rows
 
     @mcp.tool(description=_tool_description("install_component_tool", "Install a component into the target project."))
     def install_component_tool(component_id: str) -> dict[str, Any]:
@@ -131,23 +136,6 @@ def build_server() -> FastMCP:
         result = install_component(component_id, project_root)
         if result.get("ok", True):
             refresh_harness_config_if_installed(project_root, reason="component-installed", component_id=component_id)
-            if component_id == "source-control":
-                from audiagentic.components.optional.source_control.bootstrap import (
-                    _build_warnings,
-                    detect_availability,
-                )
-                from audiagentic.components.optional.source_control.dependencies import detect_missing
-                availability = detect_availability()
-                result["availability"] = availability
-                result["warnings"] = _build_warnings(availability)
-                missing = detect_missing()
-                result["missing-dependencies"] = missing
-                if missing:
-                    result["next-step"] = (
-                        f"Missing: {', '.join(missing)}. Ask the user which to install, "
-                        f"then call audiagentic-source-control.install_dependencies(names=[...]). "
-                        f"After install, call audiagentic-session.refresh_harness_config."
-                    )
         return result
 
     @mcp.tool(description=_tool_description("uninstall_component_tool", "Uninstall a component from the target project."))
@@ -156,9 +144,10 @@ def build_server() -> FastMCP:
         descriptor = all_descriptors().get(component_id)
         if descriptor and descriptor.core:
             return {"ok": False, "error": f"cannot uninstall core component: {component_id}"}
-        deleted = uninstall_component(component_id, project_root, remove_configs=remove_configs)
-        refresh_harness_config_if_installed(project_root, reason="component-uninstalled", component_id=component_id)
-        return {"ok": True, "component_id": component_id, "deleted": [str(p) for p in deleted]}
+        result = uninstall_component(component_id, project_root, remove_configs=remove_configs)
+        if result.get("ok", True):
+            refresh_harness_config_if_installed(project_root, reason="component-uninstalled", component_id=component_id)
+        return result
 
     @mcp.tool(description=_tool_description("enable_component_tool", "Enable a component in the target project."))
     def enable_component_tool(component_id: str) -> dict[str, Any]:
@@ -199,6 +188,18 @@ def build_server() -> FastMCP:
             except json.JSONDecodeError:
                 pass
         return {"path": relative_path, "content": text}
+
+    @mcp.tool(description=_tool_description("runtime_sync_contract", "Return AUDiaGentic runtime sync contract and supported actions for Pi-aware clients."))
+    def runtime_sync_contract() -> dict[str, Any]:
+        return {
+            "target": "pi-runtime",
+            "actions": {
+                "refresh_required": "Refresh local client state only.",
+                "reload_required": "Reload Pi runtime after request completes.",
+                "restart_required": "Prompt for full Pi session restart.",
+            },
+            "example": build_runtime_sync(reason="component-installed", component_id=COMPONENT_PROVIDERS),
+        }
 
     return mcp
 

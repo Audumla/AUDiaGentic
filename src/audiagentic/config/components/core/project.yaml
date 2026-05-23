@@ -1,6 +1,6 @@
 type: component
 contract-version: v1
-component-id: project
+id: project
 display-name: Project
 description: Core project scaffold — config, prompts, and workflow files
 detection-marker: .audiagentic/components/project.yaml

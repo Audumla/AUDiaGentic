@@ -1,7 +1,7 @@
 type: component
 contract-version: v1
 scope: harness
-component-id: session
+id: session
 display-name: Session
 description: Harness status and configuration
 detection-marker: components/session.yaml

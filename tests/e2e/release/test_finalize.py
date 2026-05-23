@@ -5,7 +5,7 @@ from pathlib import Path
 
 from tests.helpers import sandbox as sandbox_helper
 
-from audiagentic.components.optional.ledger.finalize import finalize_release
+from audiagentic.components.optional.release import api as release_api
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.paths import REPO_ROOT
 
@@ -34,16 +34,16 @@ def test_finalize_appends_once(tmp_path: Path) -> None:
         entries = [_load_event("chg_001", "Add A"), _load_event("chg_002", "Fix B")]
         _write_ledger(current_ledger, entries)
 
-        result = finalize_release(sandbox.repo, release_id="rel_001")
-        assert result["status"] == "success"
+        result = release_api.finalize(sandbox.repo, release_id="rel_001")
+        assert result["release-id"] == "rel_001"
 
         historical = sandbox.repo / "docs" / "releases" / "LEDGER.ndjson"
         lines = [json.loads(line) for line in historical.read_text(encoding="utf-8").splitlines() if line.strip()]
         assert len(lines) == 2
 
         # idempotent
-        result2 = finalize_release(sandbox.repo, release_id="rel_001")
-        assert result2["status"] == "success"
+        result2 = release_api.finalize(sandbox.repo, release_id="rel_001")
+        assert result2["release-id"] == "rel_001"
         lines2 = [json.loads(line) for line in historical.read_text(encoding="utf-8").splitlines() if line.strip()]
         assert len(lines2) == 2
 
@@ -57,7 +57,7 @@ def test_finalize_fails_with_empty_ledger(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "finalize-empty")
     try:
         try:
-            finalize_release(sandbox.repo, release_id="rel_002")
+            release_api.finalize(sandbox.repo, release_id="rel_002")
         except AudiaGenticError as exc:
             assert exc.kind == "business-rule"
         else:

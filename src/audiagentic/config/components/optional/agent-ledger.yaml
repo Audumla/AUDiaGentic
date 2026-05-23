@@ -1,6 +1,6 @@
 type: component
 contract-version: v1
-component-id: agent-ledger
+id: agent-ledger
 display-name: Agent Ledger
 description: Change ledger — fragment recording, sync, audit summaries, and release archiving
 detection-marker: .audiagentic/components/agent-ledger.yaml

@@ -29,7 +29,7 @@ class SurfaceFile:
 @dataclass(frozen=True)
 class SurfaceDescriptor:
     type: str
-    component_id: str
+    descriptor_id: str
     display_name: str
     description: str
     detection_marker: str
@@ -37,11 +37,11 @@ class SurfaceDescriptor:
 
 
 def register_surface(descriptor: SurfaceDescriptor) -> None:
-    _REGISTRY[descriptor.component_id] = descriptor
+    _REGISTRY[descriptor.descriptor_id] = descriptor
 
 
-def get_surface_descriptor(component_id: str) -> SurfaceDescriptor | None:
-    return _REGISTRY.get(component_id)
+def get_surface_descriptor(descriptor_id: str) -> SurfaceDescriptor | None:
+    return _REGISTRY.get(descriptor_id)
 
 
 def all_surfaces() -> dict[str, SurfaceDescriptor]:
@@ -63,8 +63,8 @@ def load_surface_from_yaml(path: Path) -> SurfaceDescriptor:
     )
     descriptor = SurfaceDescriptor(
         type=data["type"],
-        component_id=data["component-id"],
-        display_name=data.get("display-name", data["component-id"]),
+        descriptor_id=data["id"],
+        display_name=data.get("display-name", data["id"]),
         description=data.get("description", ""),
         detection_marker=data.get("detection-marker", ""),
         files=files,

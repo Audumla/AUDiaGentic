@@ -21,15 +21,6 @@ or broken invariants. Do not mutate tracked docs or code without explicit approv
 Report all drift — do not hide findings.
 <!-- AUDIAGENTIC:END ag-audit/doctrine -->
 
-<!-- AUDIAGENTIC:BEGIN ag-check-in-prep/doctrine -->
-## Check-in prep action doctrine
-
-When the check-in prep action is triggered: summarize outstanding changes and
-their verification state. Confirm baseline assets are current. Report any open
-blockers, failing checks, or uncommitted work. Do not introduce new changes or
-mark the repo as ready if blockers remain.
-<!-- AUDIAGENTIC:END ag-check-in-prep/doctrine -->
-
 <!-- AUDIAGENTIC:BEGIN ag-implement/doctrine -->
 ## Implement action doctrine
 
@@ -81,7 +72,6 @@ requested. Do not broaden review into feature-scope changes.
 Canonical tags:
 
 - `ag-audit` (aliases: `aga`, `a`)
-- `ag-check-in-prep` (aliases: `agc`, `c`)
 - `ag-implement` (aliases: `agi`, `i`)
 - `ag-plan` (aliases: `agp`, `p`)
 - `ag-review` (aliases: `agr`, `r`)
@@ -106,9 +96,6 @@ Tag aliases:
 - `aga` -> `ag-audit`
 - `a` -> `ag-audit`
 - `audit` -> `ag-audit`
-- `agc` -> `ag-check-in-prep`
-- `c` -> `ag-check-in-prep`
-- `check-in-prep` -> `ag-check-in-prep`
 - `agi` -> `ag-implement`
 - `i` -> `ag-implement`
 - `implement` -> `ag-implement`
@@ -128,3 +115,12 @@ Provider aliases:
 - `opc` -> `opencode`
 - `cp` -> `copilot`
 <!-- AUDIAGENTIC:END agent-jobs/tag-shortcuts -->
+
+<!-- AUDIAGENTIC:BEGIN source-control/doctrine -->
+## Source control doctrine
+
+Use the source control component for all git and GitHub operations.
+Before committing, record a change event to the ledger using the
+audiagentic-ledger-write MCP tool (record_change_event).
+Do not invoke git or GitHub APIs directly — use the MCP tools.
+<!-- AUDIAGENTIC:END source-control/doctrine -->

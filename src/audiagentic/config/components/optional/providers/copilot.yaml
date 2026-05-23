@@ -1,11 +1,11 @@
 type: provider
 contract-version: v1
-component-id: provider-surface-copilot
+id: provider-copilot
 display-name: Copilot Surface
-detection-marker: .audiagentic/components/provider-surface-copilot.yaml
+detection-marker: .audiagentic/components/provider-copilot.yaml
 description: GitHub Copilot surface — project instructions
 files:
-  - path: .audiagentic/components/provider-surface-copilot.yaml
+  - path: .audiagentic/components/provider-copilot.yaml
     lifecycle: create-if-missing
     description: Installation marker
   - path: COPILOT.md
