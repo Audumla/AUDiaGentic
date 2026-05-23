@@ -13,6 +13,10 @@ class McpConfigSpec:
     config_path: str   # relative to project root, e.g. ".mcp.json"
     format: str        # "mcp-json" | "goose-yaml" | "continue-json"
     refresh_mode: str  # "file-watch" | "restart-required"
+    # Optional: called after config is written to signal the running provider.
+    # Receives project_root; returns a result dict merged into the reload response.
+    # None = inform-only (caller must restart the provider manually).
+    reload_fn: Callable[[Path], dict[str, Any]] | None = None
 
 
 @dataclass(frozen=True)

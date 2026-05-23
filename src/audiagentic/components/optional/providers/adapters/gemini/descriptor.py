@@ -3,6 +3,7 @@ from audiagentic.foundation.invoke.toolchains import npm
 from ...descriptors.base import (
     AgentFile,
     CliInstallRecipe,
+    McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
     VsCodeExtension,
@@ -36,5 +37,10 @@ register(ProviderDescriptor(
     skill_surface_path=".gemini/commands/{tag}.md",
     agent_files=(
         AgentFile("GEMINI.md", managed=False, description="Gemini project instructions"),
+    ),
+    mcp_config=McpConfigSpec(
+        config_path=".gemini/settings.json",
+        format="mcp-json",
+        refresh_mode="restart-required",
     ),
 ))

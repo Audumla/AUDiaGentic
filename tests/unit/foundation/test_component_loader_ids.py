@@ -4,8 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.foundation.components.loader import _validate_loaded_descriptors, register_from_yaml
 from audiagentic.foundation.components.base import ComponentDescriptor
+from audiagentic.foundation.components.loader import (
+    _validate_loaded_descriptors,
+    register_from_yaml,
+)
 
 
 def _write_component(path: Path, body: str) -> None:

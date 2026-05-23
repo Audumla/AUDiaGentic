@@ -2,6 +2,7 @@ from audiagentic.foundation.invoke.toolchains import npm
 
 from ...descriptors.base import (
     CliInstallRecipe,
+    McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
     VsCodeExtension,
@@ -33,4 +34,9 @@ register(ProviderDescriptor(
     ),
     instruction_file="QWEN.md",
     agent_files=(),
+    mcp_config=McpConfigSpec(
+        config_path=".mcp.json",
+        format="mcp-json",
+        refresh_mode="file-watch",
+    ),
 ))

@@ -450,30 +450,21 @@ def build_server() -> FastMCP:
         )
         return _list_mcp(provider_id, _project_root())
 
-    @mcp.tool(description=_tool_description("apply_provider_mcp_servers", "Write active component MCP servers to a provider's config, removing stale entries."))
-    async def apply_provider_mcp_servers(provider_id: str, ctx: Context = None) -> dict[str, Any]:
+    @mcp.tool(description=_tool_description("add_mcp_server_to_provider", "Add or update a named MCP server entry in a provider's config file."))
+    def add_mcp_server_to_provider(
+        provider_id: str,
+        name: str,
+        command: str,
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         from audiagentic.components.optional.providers.services.lifecycle import (
-            apply_provider_mcp_servers as _apply_mcp,
+            add_provider_mcp_server as _add_mcp,
         )
-        project_root = _project_root()
-        return await run_blocking_with_output(
-            ctx=ctx,
-            logger="providers.mcp",
-            heartbeat_message=f"[{provider_id}] applying MCP servers...",
-            work=lambda output: _apply_mcp(provider_id, project_root, on_progress=output),
-        )
-
-    @mcp.tool(description=_tool_description("refresh_provider_mcp", "Re-apply MCP server config for a provider after component changes."))
-    async def refresh_provider_mcp(provider_id: str, ctx: Context = None) -> dict[str, Any]:
-        from audiagentic.components.optional.providers.services.lifecycle import (
-            refresh_provider_mcp as _refresh_mcp,
-        )
-        project_root = _project_root()
-        return await run_blocking_with_output(
-            ctx=ctx,
-            logger="providers.mcp",
-            heartbeat_message=f"[{provider_id}] refreshing MCP config...",
-            work=lambda output: _refresh_mcp(provider_id, project_root, on_progress=output),
+        return _add_mcp(
+            provider_id, name, command, _project_root(),
+            args=tuple(args or []),
+            env=env,
         )
 
     @mcp.tool(description=_tool_description("remove_provider_mcp_server", "Remove a named MCP server entry from a provider's config file."))
@@ -482,6 +473,13 @@ def build_server() -> FastMCP:
             remove_provider_mcp_server as _remove_mcp,
         )
         return _remove_mcp(provider_id, server_name, _project_root())
+
+    @mcp.tool(description=_tool_description("reload_provider_mcp", "Signal or reload a provider after its MCP config has changed."))
+    def reload_provider_mcp(provider_id: str) -> dict[str, Any]:
+        from audiagentic.components.optional.providers.services.lifecycle import (
+            reload_provider_mcp as _reload_mcp,
+        )
+        return _reload_mcp(provider_id, _project_root())
 
     return mcp
 

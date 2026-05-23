@@ -10,6 +10,7 @@ from audiagentic.foundation.invoke.toolchains import npm
 from ...descriptors.base import (
     AgentFile,
     CliInstallRecipe,
+    McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
     VsCodeExtension,
@@ -97,4 +98,9 @@ register(ProviderDescriptor(
         AgentFile("AGENTS.md", managed=False, description="OpenCode project instructions"),
     ),
     fetch_catalog_fn=_fetch_opencode_catalog,
+    mcp_config=McpConfigSpec(
+        config_path=".mcp.json",
+        format="mcp-json",
+        refresh_mode="file-watch",
+    ),
 ))
