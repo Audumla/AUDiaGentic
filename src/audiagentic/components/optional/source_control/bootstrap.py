@@ -133,7 +133,7 @@ def _build_warnings(availability: dict[str, Any]) -> list[str]:
     if not availability["gh"]:
         warnings.append("gh CLI not found — install GitHub CLI to enable GitHub MCP server")
     elif not availability["gh-mcp"]:
-        warnings.append("gh mcp serve not available — run: gh extension install github/gh-mcp")
+        warnings.append("gh mcp serve not available — run: gh extension install shuymn/gh-mcp")
     return warnings
 
 

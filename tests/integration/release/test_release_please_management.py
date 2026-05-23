@@ -10,6 +10,8 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
+from tests.helpers import sandbox as sandbox_helper  # noqa: E402
+
 from audiagentic.components.optional.release.release_please.manage import (
     BASELINE_WORKFLOW,
     CANDIDATE_NAME,
@@ -18,7 +20,6 @@ from audiagentic.components.optional.release.release_please.manage import (
     MANAGED_NAME,
     ensure_baseline,
 )  # noqa: E402
-from tests.helpers import sandbox as sandbox_helper  # noqa: E402
 
 
 def test_release_please_absent_installs_baseline(tmp_path: Path) -> None:

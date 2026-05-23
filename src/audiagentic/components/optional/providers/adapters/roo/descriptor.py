@@ -6,6 +6,7 @@ from audiagentic.foundation.invoke.toolchains import vscode
 from ...descriptors.base import (
     AgentFile,
     CliInstallRecipe,
+    McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
     VsCodeExtension,
@@ -71,5 +72,10 @@ register(ProviderDescriptor(
     agent_files=(
         AgentFile(".roo/rules/audiagentic.md", managed=True, description="AUDiaGentic rules for Roo"),
         AgentFile(".rooignore", managed=False, description="Roo ignore file"),
+    ),
+    mcp_config=McpConfigSpec(
+        config_path=".mcp.json",
+        format="mcp-json",
+        refresh_mode="restart-required",
     ),
 ))

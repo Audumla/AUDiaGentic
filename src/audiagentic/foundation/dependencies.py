@@ -10,6 +10,7 @@ from __future__ import annotations
 import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.invoke.base import InvocationRecipe
@@ -47,8 +48,18 @@ class DependencySpec:
 def gh_mcp_available() -> bool:
     if not tool_available("gh"):
         return False
+    ext_dir = Path.home() / ".local" / "share" / "gh" / "extensions" / "gh-mcp"
+    if ext_dir.exists():
+        return True
     result = subprocess.run(["gh", "mcp", "serve", "--help"], capture_output=True)
     return result.returncode == 0
+
+
+def uv_available() -> bool:
+    if tool_available("uvx") or tool_available("uv"):
+        return True
+    local_bin = Path.home() / ".local" / "bin"
+    return (local_bin / "uv").exists() or (local_bin / "uvx").exists()
 
 
 _WINGET_FLAGS = ("--accept-source-agreements", "--accept-package-agreements")
@@ -110,7 +121,7 @@ SYSTEM_DEPENDENCIES: dict[str, DependencySpec] = {
     ),
     "uv": DependencySpec(
         id="uv",
-        check=lambda: tool_available("uvx") or tool_available("uv"),
+        check=uv_available,
         install=PlatformRecipe(
             variants={
                 "winget": winget.install("astral-sh.uv", *_WINGET_FLAGS),
@@ -130,8 +141,8 @@ SYSTEM_DEPENDENCIES: dict[str, DependencySpec] = {
     "gh-mcp": DependencySpec(
         id="gh-mcp",
         check=gh_mcp_available,
-        install=gh_extension.install("github/gh-mcp"),
-        uninstall=gh_extension.remove("github/gh-mcp"),
+        install=gh_extension.install("shuymn/gh-mcp"),
+        uninstall=gh_extension.remove("gh-mcp"),
         requires=("gh",),
     ),
 }
