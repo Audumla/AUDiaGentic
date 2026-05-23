@@ -24,6 +24,7 @@ from audiagentic.components.optional.providers.services.provider_catalog import 
     runtime_catalog_path,
     runtime_catalog_root,
 )
+from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.foundation.output import ComponentOutputEvent
@@ -89,7 +90,7 @@ def _read_catalog(project_root: Path, provider_id: str) -> dict[str, Any] | None
 
 
 def _server_decl():
-    return get_mcp_server_declaration("providers", "audiagentic-providers")
+    return get_mcp_server_declaration(COMPONENT_PROVIDERS, "audiagentic-providers")
 
 
 def _server_instructions() -> str:
@@ -439,6 +440,48 @@ def build_server() -> FastMCP:
             heartbeat_message="Reconciling providers...",
             work=lambda output: _reconcile_all(project_root=project_root, fetch_catalogs=fetch_catalogs, on_progress=output),
         )
+
+    # --- MCP config management tools ---
+
+    @mcp.tool(description=_tool_description("list_provider_mcp_servers", "List current MCP server entries in a provider's config file."))
+    def list_provider_mcp_servers(provider_id: str) -> dict[str, Any]:
+        from audiagentic.components.optional.providers.services.lifecycle import (
+            list_provider_mcp_servers as _list_mcp,
+        )
+        return _list_mcp(provider_id, _project_root())
+
+    @mcp.tool(description=_tool_description("apply_provider_mcp_servers", "Write active component MCP servers to a provider's config, removing stale entries."))
+    async def apply_provider_mcp_servers(provider_id: str, ctx: Context = None) -> dict[str, Any]:
+        from audiagentic.components.optional.providers.services.lifecycle import (
+            apply_provider_mcp_servers as _apply_mcp,
+        )
+        project_root = _project_root()
+        return await run_blocking_with_output(
+            ctx=ctx,
+            logger="providers.mcp",
+            heartbeat_message=f"[{provider_id}] applying MCP servers...",
+            work=lambda output: _apply_mcp(provider_id, project_root, on_progress=output),
+        )
+
+    @mcp.tool(description=_tool_description("refresh_provider_mcp", "Re-apply MCP server config for a provider after component changes."))
+    async def refresh_provider_mcp(provider_id: str, ctx: Context = None) -> dict[str, Any]:
+        from audiagentic.components.optional.providers.services.lifecycle import (
+            refresh_provider_mcp as _refresh_mcp,
+        )
+        project_root = _project_root()
+        return await run_blocking_with_output(
+            ctx=ctx,
+            logger="providers.mcp",
+            heartbeat_message=f"[{provider_id}] refreshing MCP config...",
+            work=lambda output: _refresh_mcp(provider_id, project_root, on_progress=output),
+        )
+
+    @mcp.tool(description=_tool_description("remove_provider_mcp_server", "Remove a named MCP server entry from a provider's config file."))
+    def remove_provider_mcp_server(provider_id: str, server_name: str) -> dict[str, Any]:
+        from audiagentic.components.optional.providers.services.lifecycle import (
+            remove_provider_mcp_server as _remove_mcp,
+        )
+        return _remove_mcp(provider_id, server_name, _project_root())
 
     return mcp
 

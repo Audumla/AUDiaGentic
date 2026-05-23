@@ -1,22 +1,23 @@
-"""Generic state machine for workflow items.
+"""Config-driven state transition engine.
 
-Validates transitions against configured workflows, tracks history, emits events.
+Validates transitions against workflows, applies lifecycle action metadata,
+emits events, and triggers configured cascades. The engine is generic —
+it never reads or writes item files directly; the host's WorkflowContext
+provides lookup/save/event-publish.
 """
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
+from typing import Any
 
 from .interfaces import WorkflowContext
 
+logger = logging.getLogger(__name__)
+
 
 class StateMachine:
-    """Config-driven state transition engine.
-
-    Validates transitions against workflows, applies lifecycle actions,
-    tracks state history, and emits events.
-    """
-
     def __init__(self, ctx: WorkflowContext):
         self.ctx = ctx
 
@@ -26,16 +27,13 @@ class StateMachine:
         new_state: str,
         reason: str | None = None,
         actor: str | None = None,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
-        from ...planning.fs.read import parse_markdown
-        from ...planning.fs.write import dump_markdown
-
         item = self.ctx._find(id_)
-        data, body = parse_markdown(item.path)
+        data = item.data
         wf_name = data.get("workflow")
         wf = self.ctx.config.workflow_for(item.kind, wf_name)
-        old = data["state"]
+        old = data.get("state", self.ctx.config.initial_state(item.kind, wf_name))
 
         if new_state not in wf["values"]:
             raise ValueError(f"unknown state {new_state} for workflow")
@@ -44,8 +42,7 @@ class StateMachine:
 
         data["state"] = new_state
         timestamp = datetime.now(timezone.utc).isoformat()
-        event_payload = {"id": id_, "old_state": old, "new_state": new_state}
-
+        event_payload: dict[str, Any] = {"id": id_, "old_state": old, "new_state": new_state}
         if actor is not None:
             event_payload["actor"] = actor
         if reason is not None:
@@ -55,28 +52,19 @@ class StateMachine:
             item.kind, old, new_state, wf_name
         )
         if action:
-            self.apply_metadata(
-                data,
-                event_payload,
-                action.get("metadata", {}),
-                timestamp=timestamp,
-                actor=actor,
-                reason=reason,
+            self._apply_metadata(
+                data, event_payload, action.get("metadata", {}), timestamp, actor, reason
             )
 
-        dump_markdown(item.path, data, body)
+        self.ctx.save(item)
 
         if action and action.get("event_suffix"):
-            self.ctx._publish_event(
-                f"{item.kind}.{action['event_suffix']}",
-                event_payload,
-                None,
-            )
+            self.ctx._publish_event(f"{item.kind}.{action['event_suffix']}", event_payload, None)
 
         if action:
-            self.cascade(id_, item.kind, action, actor, reason)
+            self._cascade(id_, item.kind, action, actor, reason, metadata=metadata)
 
-        event_metadata = {
+        event_metadata: dict[str, Any] = {
             "subject": {"kind": item.kind, "id": id_},
             "triggered_by": "manual",
             "project_root": str(self.ctx.root.resolve()),
@@ -85,10 +73,7 @@ class StateMachine:
             event_metadata.update(metadata)
 
         self.ctx._publish_event(
-            "planning.item.state.changed",
-            event_payload,
-            event_metadata,
-            mode="sync",
+            "planning.item.state.changed", event_payload, event_metadata, mode="sync"
         )
 
         self.ctx.index()
@@ -100,7 +85,7 @@ class StateMachine:
         id_: str,
         reason: str | None = None,
         actor: str | None = None,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         action = self.ctx.config.lifecycle_action(name)
         transition_to = action.get("transition_to")
@@ -108,12 +93,20 @@ class StateMachine:
             raise ValueError(f"lifecycle action '{name}' has no transition_to state")
         return self.state(id_, transition_to, reason=reason, actor=actor, metadata=metadata)
 
-    def apply_metadata(
+    def is_terminal(self, id_: str) -> bool:
+        try:
+            item = self.ctx._find(id_)
+        except KeyError:
+            return True
+        return self.ctx.config.state_in_set(
+            item.kind, item.data.get("state"), "terminal", item.data.get("workflow")
+        )
+
+    def _apply_metadata(
         self,
-        data: dict,
-        event_payload: dict,
-        metadata_rules: dict,
-        *,
+        data: dict[str, Any],
+        event_payload: dict[str, Any],
+        rules: dict[str, str],
         timestamp: str,
         actor: str | None,
         reason: str | None,
@@ -126,21 +119,29 @@ class StateMachine:
             "reason_or_empty": reason or "",
             "null": None,
         }
-        for field, token in metadata_rules.items():
+        for field, token in rules.items():
             value = values.get(token, token)
             data[field] = value
             event_payload[field] = value
 
-    def cascade(
-        self, id_: str, kind: str, action: dict, actor: str | None, reason: str | None
+    def _cascade(
+        self,
+        id_: str,
+        kind: str,
+        action: dict[str, Any],
+        actor: str | None,
+        reason: str | None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
-        cascade_rules = action.get("cascade", {}).get("by_kind", {}).get(kind, {})
-        if not cascade_rules:
+        rules = action.get("cascade", {}).get("by_kind", {}).get(kind, {})
+        if not rules:
             return
-
+        depth = (metadata or {}).get("propagation_depth", 0)
+        cascade_metadata = dict(metadata or {})
+        cascade_metadata["propagation_depth"] = depth + 1
         for item in self.ctx._scan():
-            target_state = cascade_rules.get(item.kind)
-            if not target_state:
+            target = rules.get(item.kind)
+            if not target:
                 continue
             if self.ctx.config.state_in_set(
                 item.kind, item.data.get("state"), "terminal", item.data.get("workflow")
@@ -149,18 +150,12 @@ class StateMachine:
             try:
                 self.state(
                     item.data["id"],
-                    target_state,
+                    target,
                     reason=reason or f"Cascaded from {id_}",
                     actor=actor,
+                    metadata=cascade_metadata,
                 )
-            except Exception:
-                pass
-
-    def is_terminal(self, id_: str) -> bool:
-        try:
-            item = self.ctx._find(id_)
-            return self.ctx.config.state_in_set(
-                item.kind, item.data.get("state"), "terminal", item.data.get("workflow")
-            )
-        except KeyError:
-            return True
+            except Exception as exc:
+                logger.debug(
+                    "cascade skipped %s -> %s: %s", item.data.get("id"), target, exc
+                )

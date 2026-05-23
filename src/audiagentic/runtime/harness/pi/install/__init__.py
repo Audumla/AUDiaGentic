@@ -15,21 +15,50 @@ def runtime_reload_request_path(project_root: Path) -> Path:
     return project_root / ".audiagentic" / "runtime" / "harness" / "reload-request.json"
 
 
+def _runtime_action_for_reason(reason: str) -> str:
+    if reason in {
+        "component-installed",
+        "component-uninstalled",
+        "component-enabled",
+        "component-disabled",
+        "manual-refresh",
+        "mcp-refresh-tool",
+    }:
+        return "reload_required"
+    if reason in {"session-ui-visibility-updated"}:
+        return "reload_required"
+    return "refresh_required"
+
+
+def build_runtime_sync(
+    *,
+    reason: str,
+    component_id: str | None = None,
+    target: str = "pi-runtime",
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "target": target,
+        "action": _runtime_action_for_reason(reason),
+        "reason": reason,
+    }
+    if component_id:
+        payload["component_id"] = component_id
+    return payload
+
+
 def request_runtime_reload(
     project_root: Path,
     *,
     reason: str,
     component_id: str | None = None,
 ) -> Path:
-    """Request an in-session Pi runtime reload via marker file."""
+    """Write a structured runtime action marker for the active Pi session."""
     path = runtime_reload_request_path(project_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "requested_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "reason": reason,
+        **build_runtime_sync(reason=reason, component_id=component_id),
     }
-    if component_id:
-        payload["component_id"] = component_id
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     return path
 

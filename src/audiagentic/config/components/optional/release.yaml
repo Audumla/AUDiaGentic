@@ -1,6 +1,6 @@
 type: component
 contract-version: v1
-component-id: release
+id: release
 display-name: Release
 description: Release management — versioning, changelog rendering, and release manager tooling
 detection-marker: .audiagentic/components/release.yaml

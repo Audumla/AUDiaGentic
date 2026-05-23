@@ -4,7 +4,6 @@
 Canonical tags:
 
 - `ag-audit` (aliases: `aga`, `a`)
-- `ag-check-in-prep` (aliases: `agc`, `c`)
 - `ag-implement` (aliases: `agi`, `i`)
 - `ag-plan` (aliases: `agp`, `p`)
 - `ag-review` (aliases: `agr`, `r`)
@@ -29,9 +28,6 @@ Tag aliases:
 - `aga` -> `ag-audit`
 - `a` -> `ag-audit`
 - `audit` -> `ag-audit`
-- `agc` -> `ag-check-in-prep`
-- `c` -> `ag-check-in-prep`
-- `check-in-prep` -> `ag-check-in-prep`
 - `agi` -> `ag-implement`
 - `i` -> `ag-implement`
 - `implement` -> `ag-implement`
@@ -60,15 +56,6 @@ and state consistency across the project. Note specific drift, missing evidence,
 or broken invariants. Do not mutate tracked docs or code without explicit approval.
 Report all drift — do not hide findings.
 <!-- AUDIAGENTIC:END ag-audit/doctrine -->
-
-<!-- AUDIAGENTIC:BEGIN ag-check-in-prep/doctrine -->
-# Check-in prep action doctrine
-
-When the check-in prep action is triggered: summarize outstanding changes and
-their verification state. Confirm baseline assets are current. Report any open
-blockers, failing checks, or uncommitted work. Do not introduce new changes or
-mark the repo as ready if blockers remain.
-<!-- AUDIAGENTIC:END ag-check-in-prep/doctrine -->
 
 <!-- AUDIAGENTIC:BEGIN ag-implement/doctrine -->
 # Implement action doctrine
@@ -114,3 +101,12 @@ requested. Do not broaden review into feature-scope changes.
 - Do not broaden review into implementation work.
 - Keep tracked docs and release artifacts synchronized with the job record.
 <!-- AUDIAGENTIC:END ag-review/review-doctrine -->
+
+<!-- AUDIAGENTIC:BEGIN source-control/doctrine -->
+# Source control doctrine
+
+Use the source control component for all git and GitHub operations.
+Before committing, record a change event to the ledger using the
+audiagentic-ledger-write MCP tool (record_change_event).
+Do not invoke git or GitHub APIs directly — use the MCP tools.
+<!-- AUDIAGENTIC:END source-control/doctrine -->

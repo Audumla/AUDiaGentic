@@ -1,3 +1,4 @@
+#! ruff: noqa: E402, I001
 from __future__ import annotations
 
 import json
@@ -10,13 +11,13 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.components.optional.ledger.finalize import finalize_release
-from tests.helpers import sandbox as sandbox_helper
+from audiagentic.components.optional.release import api as release_api  # noqa: E402
+from tests.helpers import sandbox as sandbox_helper  # noqa: E402
 
-from audiagentic.components.optional.ledger.audit import generate_audit_and_checkin
-from audiagentic.components.optional.ledger.current_summary import regenerate_current_release
-from audiagentic.components.optional.ledger.fragments import record_change_event
-from audiagentic.components.optional.ledger.sync import sync_current_release_ledger
+from audiagentic.components.optional.ledger.audit import generate_audit_and_checkin  # noqa: E402
+from audiagentic.components.optional.ledger.current_summary import regenerate_current_release  # noqa: E402
+from audiagentic.components.optional.ledger.fragments import record_change_event  # noqa: E402
+from audiagentic.components.optional.ledger.sync import sync_current_release_ledger  # noqa: E402
 
 FIXTURES = ROOT / "docs" / "examples" / "fixtures"
 
@@ -47,12 +48,12 @@ def test_end_to_end_release_flow(tmp_path: Path) -> None:
         checkpoint = json.loads((FIXTURES / "finalize-checkpoint.partial.json").read_text(encoding="utf-8"))
         (checkpoint_dir / "finalize.json").write_text(json.dumps(checkpoint, indent=2), encoding="utf-8")
 
-        finalize_release(sandbox.repo, release_id="rel_e2e")
+        release_api.finalize(sandbox.repo, release_id="rel_e2e")
         lines = [json.loads(line) for line in historical.read_text(encoding="utf-8").splitlines() if line.strip()]
         assert len(lines) == 2
 
         # rerun finalize should not duplicate
-        finalize_release(sandbox.repo, release_id="rel_e2e")
+        release_api.finalize(sandbox.repo, release_id="rel_e2e")
         lines2 = [json.loads(line) for line in historical.read_text(encoding="utf-8").splitlines() if line.strip()]
         assert len(lines2) == 2
     finally:

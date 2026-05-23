@@ -6,31 +6,27 @@ the external-mcp-servers declarations in source-control.yaml.
 """
 from __future__ import annotations
 
-import shutil
-import subprocess
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.components import is_installed
+from audiagentic.foundation.components.ids import COMPONENT_AGENT_LEDGER, COMPONENT_SOURCE_CONTROL
+from audiagentic.foundation.contracts.follow_up import build_confirmable_handler_follow_up
+from audiagentic.foundation.dependencies import (
+    SYSTEM_DEPENDENCIES,
+    detect_missing,
+    gh_mcp_available,
+)
+from audiagentic.foundation.invoke.toolchains.detect import tool_available
 
-def _tool_available(name: str) -> bool:
-    return shutil.which(name) is not None
-
-
-def _gh_mcp_available() -> bool:
-    if not _tool_available("gh"):
-        return False
-    result = subprocess.run(
-        ["gh", "mcp", "serve", "--help"],
-        capture_output=True, text=True,
-    )
-    return result.returncode == 0
+SOURCE_CONTROL_DEPENDENCY_IDS = ["git", "gh", "gh-mcp", "uv"]
 
 
 def detect_availability() -> dict[str, Any]:
-    git_ok = _tool_available("git")
-    uvx_ok = _tool_available("uvx")
-    gh_ok = _tool_available("gh")
-    gh_mcp_ok = _gh_mcp_available() if gh_ok else False
+    git_ok = tool_available("git")
+    uvx_ok = tool_available("uvx")
+    gh_ok = tool_available("gh")
+    gh_mcp_ok = gh_mcp_available() if gh_ok else False
 
     return {
         "git": git_ok,
@@ -44,33 +40,59 @@ def detect_availability() -> dict[str, Any]:
 
 _HOOK_MARKER = "audiagentic-ledger-stamp"
 
-_POST_COMMIT_HOOK_BODY = """\
-# {marker}
-# Installed by AUDiaGentic source-control component.
-# Stamps ledger fragments with the commit SHA for any files that intersect.
-python -c "
-from pathlib import Path
-from audiagentic.components.optional.source_control.git_commits import stamp_fragments_for_commit
-stamp_fragments_for_commit(Path('.').resolve())
-" 2>/dev/null || true
-""".format(marker=_HOOK_MARKER)
+
+def _ledger_hook_template_path() -> Path:
+    return Path(__file__).with_name("post_commit_ledger_hook.sh")
+
+
+def _post_commit_hook_body() -> str:
+    return _ledger_hook_template_path().read_text(encoding="utf-8")
+
+
+def ledger_integration_enabled(project_root: Path) -> bool:
+    return is_installed(COMPONENT_AGENT_LEDGER, project_root)
+
+
+def on_component_lifecycle(event_type: str, payload: dict, metadata: dict) -> None:
+    component_id = payload.get("component_id")
+    project_root = payload.get("project_root")
+    if not isinstance(project_root, Path):
+        return
+
+    if component_id == COMPONENT_SOURCE_CONTROL:
+        if event_type == "lifecycle.component.installed":
+            _install_post_commit_hook(project_root)
+        elif event_type == "lifecycle.component.uninstalled":
+            _remove_post_commit_hook(project_root)
+        return
+
+    if component_id == COMPONENT_AGENT_LEDGER:
+        if not is_installed(COMPONENT_SOURCE_CONTROL, project_root):
+            return
+        if event_type == "lifecycle.component.installed":
+            _install_post_commit_hook(project_root)
+        elif event_type == "lifecycle.component.uninstalled":
+            _remove_post_commit_hook(project_root)
 
 
 def _install_post_commit_hook(project_root: Path) -> bool:
     """Install or update the post-commit hook. Returns True if installed."""
+    if not ledger_integration_enabled(project_root):
+        return False
     hooks_dir = project_root / ".git" / "hooks"
     if not hooks_dir.exists():
         return False
     hook_path = hooks_dir / "post-commit"
+    hook_body = _post_commit_hook_body()
     if hook_path.exists():
         existing = hook_path.read_text(encoding="utf-8")
         if _HOOK_MARKER in existing:
             return False  # already installed
         # append to existing hook (shebang already present in existing file)
-        updated = existing.rstrip("\n") + "\n\n" + _POST_COMMIT_HOOK_BODY
+        updated = existing.rstrip("\n") + "\n\n" + hook_body
         hook_path.write_text(updated, encoding="utf-8")
     else:
-        hook_path.write_text("#!/bin/sh\n" + _POST_COMMIT_HOOK_BODY, encoding="utf-8")
+        hook_path.write_text("#!/bin/sh\n" + hook_body, encoding="utf-8")
     try:
         import stat
         hook_path.chmod(hook_path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
@@ -87,18 +109,14 @@ def _remove_post_commit_hook(project_root: Path) -> bool:
     content = hook_path.read_text(encoding="utf-8")
     if _HOOK_MARKER not in content:
         return False
-    # Remove from the marker line onward until end of our block
-    lines = content.splitlines(keepends=True)
-    out = []
-    skip = False
-    for line in lines:
-        if _HOOK_MARKER in line:
-            skip = True
-        if not skip:
-            out.append(line)
-        elif line.strip() == "" and skip:
-            skip = False  # blank line ends our block
-    result = "".join(out).rstrip("\n") + "\n" if out else ""
+    lines = content.splitlines()
+    marker_idx = next((idx for idx, line in enumerate(lines) if _HOOK_MARKER in line), None)
+    if marker_idx is None:
+        return False
+    out = lines[:marker_idx]
+    while out and not out[-1].strip():
+        out.pop()
+    result = ("\n".join(out) + "\n") if out else ""
     if result.strip():
         hook_path.write_text(result, encoding="utf-8")
     else:
@@ -117,3 +135,32 @@ def _build_warnings(availability: dict[str, Any]) -> list[str]:
     elif not availability["gh-mcp"]:
         warnings.append("gh mcp serve not available — run: gh extension install github/gh-mcp")
     return warnings
+
+
+def status_payload(project_root: Path | None = None) -> dict[str, Any]:
+    availability = detect_availability()
+    missing = detect_missing(SYSTEM_DEPENDENCIES, SOURCE_CONTROL_DEPENDENCY_IDS)
+    follow_up = None
+    if missing:
+        missing_text = ", ".join(missing)
+        follow_up = build_confirmable_handler_follow_up(
+            id="source-control/install-missing-dependencies",
+            title="Install source-control dependencies?",
+            message=f"Install missing source-control dependencies: {missing_text}?",
+            handler="audiagentic.foundation.dependencies.install_system_dependencies",
+            kwargs={"names": missing},
+        )
+    return {
+        "availability": availability,
+        "warnings": _build_warnings(availability),
+        "ledger-integration-enabled": bool(project_root and ledger_integration_enabled(project_root)),
+        "missing-dependencies": missing,
+        "dependency-action-required": bool(missing),
+        "dependency-install-offer": (
+            "Ask the user which missing dependencies to install, then call "
+            "audiagentic-source-control.install_dependencies(names=[...]). "
+            "After install, call audiagentic-session.refresh_harness_config."
+            if missing else ""
+        ),
+        "follow_up": follow_up,
+    }

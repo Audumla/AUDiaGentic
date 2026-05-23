@@ -29,16 +29,30 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      PYTHONPATH: src
     steps:
       - uses: actions/checkout@v4
         with:
           ref: __BRANCH__
           fetch-depth: 0
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "__PYTHON_VERSION__"
+
       - name: Finalize ledger
         run: |
-          python scripts/components/optional/ledger/finalize_ledger.py \
-            --release-id "${{ needs.release-please.outputs.tag_name }}"
+          python - <<'PY'
+          from pathlib import Path
+          from audiagentic.components.optional.release import api
+
+          result = api.finalize(
+              project_root=Path(".").resolve(),
+              release_id="${{ needs.release-please.outputs.tag_name }}",
+          )
+          print(result)
+          PY
 
       - name: Commit release artifacts
         run: |

@@ -19,7 +19,10 @@ from audiagentic.foundation.components.registry import (
     get_descriptor,
     is_installed,
     marker_path,
+    resolve_component_id,
 )
+from audiagentic.foundation.components.ids import COMPONENT_PROJECT
+from audiagentic.runtime.harness.pi.install import build_runtime_sync
 
 from .baseline_sync import sync_managed_baseline
 from .observers import fire_post_install, fire_post_uninstall
@@ -43,9 +46,10 @@ def _get_component_root(component_id: str, project_root: Path) -> Path:
 
 def _get_marker_path(component_id: str, project_root: Path) -> Path:
     descriptor = get_descriptor(component_id)
+    resolved = resolve_component_id(component_id) or component_id
     root = _get_component_root(component_id, project_root)
     scope = descriptor.scope if descriptor else "project"
-    return marker_path(component_id, root, scope)
+    return marker_path(resolved, root, scope)
 
 
 def _read_marker(component_id: str, project_root: Path) -> dict:
@@ -62,6 +66,21 @@ def _write_marker(component_id: str, project_root: Path, data: dict) -> None:
     path = _get_marker_path(component_id, project_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.dump(data, default_flow_style=False, sort_keys=True), encoding="utf-8")
+
+
+def _component_result(
+    component_id: str,
+    *,
+    reason: str,
+    **payload: object,
+) -> dict[str, object]:
+    canonical_id = resolve_component_id(component_id) or component_id
+    return {
+        "ok": True,
+        "component_id": canonical_id,
+        "sync": build_runtime_sync(reason=reason, component_id=canonical_id),
+        **payload,
+    }
 
 
 def get_owned_files(
@@ -89,24 +108,16 @@ def get_owned_files(
 
 
 def _resolve_and_run_post_install(hook_path: str, project_root: Path) -> None:
-    """Resolve a dotted hook path and run it in a background thread.
-
-    hook_path is a dotted import path ending with a function name,
-    e.g. "audiagentic.components.optional.providers.services.lifecycle.reconcile_all".
-    The function must accept project_root as a keyword argument.
-    """
     from threading import Thread
 
-    parts = hook_path.rsplit(".", 1)
-    if len(parts) != 2:
-        return
-    module_name, fn_name = parts
-    try:
-        module = __import__(module_name, fromlist=[fn_name])
-        fn = getattr(module, fn_name)
-        Thread(target=fn, kwargs={"project_root": project_root}, daemon=True).start()
-    except Exception:  # noqa: BLE001
-        pass
+    from audiagentic.foundation.components.hooks import invoke_hook
+
+    Thread(
+        target=invoke_hook,
+        args=(hook_path,),
+        kwargs={"project_root": project_root, "failure_label": "post_install"},
+        daemon=True,
+    ).start()
 
 
 def install_component(
@@ -118,6 +129,7 @@ def install_component(
     installation_kind: str | None = None,
     last_lifecycle_action: str | None = None,
 ) -> dict:
+    resolved_id = resolve_component_id(component_id) or component_id
     descriptor = get_descriptor(component_id)
     if descriptor is None:
         return {"ok": False, "error": f"unknown component: {component_id}"}
@@ -131,21 +143,37 @@ def install_component(
             component_ids={component_id},
         )
     marker: dict = {
-        "component-id": component_id,
+        "component-id": resolved_id,
         "enabled": True,
         "installed-at": _now_timestamp(),
         "version": version,
     }
-    if component_id == "project":
+    if resolved_id == COMPONENT_PROJECT:
         marker["installation-kind"] = installation_kind or "fresh"
         marker["last-lifecycle-action"] = last_lifecycle_action or "fresh-install"
-    _write_marker(component_id, project_root, marker)
+    _write_marker(resolved_id, project_root, marker)
     if descriptor.post_install:
-
         _resolve_and_run_post_install(descriptor.post_install, project_root)
 
-    fire_post_install(component_id, project_root)
-    return {"ok": True, "component_id": component_id, "root": str(root), "sync": report}
+    fire_post_install(resolved_id, project_root)
+    result = _component_result(
+        resolved_id,
+        reason="component-installed",
+        root=str(root),
+        baseline_sync=report,
+    )
+    from audiagentic.foundation.components.hooks import get_component_status  # noqa: PLC0415
+    status_payload = get_component_status(descriptor, project_root)
+    if status_payload:
+        result["component_status"] = status_payload
+        missing = status_payload.get("missing-dependencies") or []
+        follow_up = status_payload.get("follow_up")
+        if isinstance(follow_up, dict):
+            result["follow_up"] = follow_up
+        if missing:
+            install_offer = status_payload.get("dependency-install-offer", "")
+            result["next-step"] = f"Missing: {', '.join(missing)}. {install_offer}".strip()
+    return result
 
 
 def uninstall_component(
@@ -153,12 +181,13 @@ def uninstall_component(
     project_root: Path,
     *,
     remove_configs: bool = False,
-) -> list[Path]:
+) -> dict[str, object]:
+    resolved_id = resolve_component_id(component_id) or component_id
     descriptor = get_descriptor(component_id)
     if descriptor is None:
-        return []
+        return {"ok": False, "error": f"unknown component: {component_id}"}
     if descriptor.core:
-        return []
+        return {"ok": False, "error": f"cannot uninstall core component: {resolved_id}"}
     root = component_root(descriptor, project_root)
     deleted: list[Path] = []
     for cf in descriptor.files:
@@ -177,13 +206,19 @@ def uninstall_component(
                 target.unlink()
                 deleted.append(target)
     # Always remove the marker — it is system-owned, not user config
-    mpath = _get_marker_path(component_id, project_root)
+    mpath = _get_marker_path(resolved_id, project_root)
     if mpath.exists():
         mpath.unlink()
         if mpath not in deleted:
             deleted.append(mpath)
-    fire_post_uninstall(component_id, project_root)
-    return deleted
+    fire_post_uninstall(resolved_id, project_root)
+    return _component_result(
+        resolved_id,
+        reason="component-uninstalled",
+        root=str(root),
+        deleted=[str(path) for path in deleted],
+        removed_configs=bool(remove_configs),
+    )
 
 
 def uninstall_all_components(
@@ -193,25 +228,28 @@ def uninstall_all_components(
 ) -> list[Path]:
     deleted: list[Path] = []
     for component_id in all_descriptors():
-        deleted.extend(uninstall_component(component_id, project_root, remove_configs=remove_configs))
+        result = uninstall_component(component_id, project_root, remove_configs=remove_configs)
+        deleted.extend(Path(path) for path in result.get("deleted", []) if isinstance(path, str))
     return deleted
 
 
 def enable_component(component_id: str, project_root: Path) -> dict:
-    if not is_installed(component_id, project_root):
+    resolved_id = resolve_component_id(component_id) or component_id
+    if not is_installed(resolved_id, project_root):
         return {"ok": False, "error": f"component {component_id} is not installed"}
-    data = _read_marker(component_id, project_root)
-    data["component-id"] = component_id
+    data = _read_marker(resolved_id, project_root)
+    data["component-id"] = resolved_id
     data["enabled"] = True
-    _write_marker(component_id, project_root, data)
-    return {"ok": True, "component_id": component_id, "enabled": True}
+    _write_marker(resolved_id, project_root, data)
+    return _component_result(resolved_id, reason="component-enabled", enabled=True)
 
 
 def disable_component(component_id: str, project_root: Path) -> dict:
-    if not is_installed(component_id, project_root):
+    resolved_id = resolve_component_id(component_id) or component_id
+    if not is_installed(resolved_id, project_root):
         return {"ok": False, "error": f"component {component_id} is not installed"}
-    data = _read_marker(component_id, project_root)
-    data["component-id"] = component_id
+    data = _read_marker(resolved_id, project_root)
+    data["component-id"] = resolved_id
     data["enabled"] = False
-    _write_marker(component_id, project_root, data)
-    return {"ok": True, "component_id": component_id, "enabled": False}
+    _write_marker(resolved_id, project_root, data)
+    return _component_result(resolved_id, reason="component-disabled", enabled=False)

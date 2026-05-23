@@ -1,7 +1,10 @@
-"""Interfaces for generic workflow engine.
+"""Interfaces for the generic workflow engine.
 
-WorkflowConfig: config methods the workflow engine needs from its host component.
-WorkflowContext: runtime operations (lookup, state transitions, scans, events).
+WorkflowConfig: config methods the engine needs from its host component.
+WorkflowContext: runtime operations (lookup, scan, save, publish, etc.).
+
+Both are Protocols — any object with matching attributes satisfies them.
+The workflow package itself has no dependency on the host implementation.
 """
 
 from __future__ import annotations
@@ -9,13 +12,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Protocol
 
+from .item import ItemView
+
 
 class WorkflowConfig(Protocol):
-    """Config interface for workflow engine.
-
-    Implementing component provides these methods to drive workflow behaviour.
-    """
-
     def initial_state(self, kind: str, workflow: str | None = ...) -> str: ...
 
     def workflow_for(self, kind: str, workflow_name: str | None) -> dict[str, Any]: ...
@@ -65,11 +65,9 @@ class WorkflowConfig(Protocol):
 
 
 class WorkflowContext(Protocol):
-    """Runtime context the workflow engine uses for item operations.
+    """Minimal runtime context the engine uses for item operations.
 
-    The host component (e.g., PlanningAPI) provides this context to the
-    generic workflow engine. The engine only touches these methods, not
-    the host's internals.
+    Hosts implement these; the engine does not touch host internals.
     """
 
     @property
@@ -78,11 +76,13 @@ class WorkflowContext(Protocol):
     @property
     def config(self) -> WorkflowConfig: ...
 
-    def lookup(self, item_id: str) -> Any: ...
+    def lookup(self, item_id: str) -> ItemView | None: ...
 
-    def _scan(self) -> list[Any]: ...
+    def _find(self, item_id: str) -> ItemView: ...
 
-    def _find(self, item_id: str) -> Any: ...
+    def _scan(self) -> list[ItemView]: ...
+
+    def save(self, item: ItemView) -> None: ...
 
     def _publish_event(
         self,
@@ -105,10 +105,20 @@ class WorkflowContext(Protocol):
         fields: dict[str, Any] | None = None,
         check_duplicates: bool = True,
         **kwargs: Any,
-    ) -> Any: ...
+    ) -> ItemView: ...
 
     def relink(
         self, src: str, field: str, dst: str, *, seq: int | None = None, display: str | None = None
     ) -> None: ...
+
+    def state(
+        self,
+        id_: str,
+        new_state: str,
+        *,
+        reason: str | None = None,
+        actor: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> ItemView: ...
 
     def index(self) -> None: ...

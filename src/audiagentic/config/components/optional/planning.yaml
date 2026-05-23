@@ -1,6 +1,6 @@
 type: component
 contract-version: v1
-component-id: planning
+id: planning
 display-name: Planning
 description: Structured planning system — requests, specs, plans, tasks, work-packages
 detection-marker: .audiagentic/components/planning.yaml

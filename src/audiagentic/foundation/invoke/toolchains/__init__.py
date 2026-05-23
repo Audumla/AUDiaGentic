@@ -1,3 +1,3 @@
-from . import brew, gh_extension, npm, uv, vscode
+from . import apt, brew, choco, dnf, gh_extension, npm, pacman, scoop, uv, vscode, winget
 
-__all__ = ["brew", "gh_extension", "npm", "uv", "vscode"]
+__all__ = ["apt", "brew", "choco", "dnf", "gh_extension", "npm", "pacman", "scoop", "uv", "vscode", "winget"]

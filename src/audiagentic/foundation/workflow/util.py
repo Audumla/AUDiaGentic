@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+from typing import Any
 
 
 def slugify(s: str) -> str:
@@ -16,3 +17,20 @@ def now_iso() -> str:
 
 def body_has_section(body: str, section: str) -> bool:
     return f"# {section}" in body or f"## {section}" in body
+
+
+def extract_ref_ids(value: Any) -> list[str]:
+    """Normalise scalar/list/dict reference values into plain item IDs."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        ref = value.get("ref")
+        return [ref] if isinstance(ref, str) and ref else []
+    if isinstance(value, list):
+        ids: list[str] = []
+        for v in value:
+            ids.extend(extract_ref_ids(v))
+        return ids
+    return []

@@ -25,6 +25,8 @@ import signal
 import sys
 from pathlib import Path
 
+from audiagentic.foundation.components.ids import COMPONENT_SESSION
+
 
 def _status(msg: str) -> None:
     """Print a startup status line to stderr. Set AUDIAGENTIC_STARTUP_STATUS=0 to suppress."""
@@ -50,7 +52,7 @@ def _cmd_install(target: Path, project_root: Path) -> int:
             from audiagentic.foundation.components.loader import register_all_components
             from audiagentic.runtime.lifecycle.components import install_component
             register_all_components()
-            install_component("session", project_root)
+            install_component(COMPONENT_SESSION, project_root)
         except Exception:
             pass
         print("\nInstall complete. Run 'audiagentic' from any project directory.", flush=True)
@@ -143,16 +145,17 @@ def _cmd_component(args: argparse.Namespace, project_root: Path) -> int:
         result = install_component(component_id, project_root)
         if result.get("ok", True):
             _refresh_harness_config(component_id, reason="component-installed")
-        print(json.dumps({"ok": result.get("ok", True), "component_id": component_id}, indent=2))
+        print(json.dumps(result, indent=2))
         return 0 if result.get("ok", True) else 1
 
     if sub == "uninstall":
-        deleted = uninstall_component(
+        result = uninstall_component(
             component_id, project_root, remove_configs=getattr(args, "remove_configs", False)
         )
-        _refresh_harness_config(component_id, reason="component-uninstalled")
-        print(json.dumps({"ok": True, "component_id": component_id, "deleted": len(deleted)}, indent=2))
-        return 0
+        if result.get("ok", True):
+            _refresh_harness_config(component_id, reason="component-uninstalled")
+        print(json.dumps(result, indent=2))
+        return 0 if result.get("ok", True) else 1
 
     if sub == "enable":
         result = enable_component(component_id, project_root)
@@ -419,7 +422,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "release-bootstrap":
         from audiagentic.components.optional.ledger import bootstrap as release_bootstrap
         bootstrap_root = Path(args.project_root).resolve() if args.project_root else project_root
-        result = release_bootstrap.bootstrap_release_workflow(bootstrap_root, release_id=args.release_id)
+        result = release_bootstrap.bootstrap_ledger(bootstrap_root)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
 
@@ -435,7 +438,11 @@ def main(argv: list[str] | None = None) -> int:
         if not refreshed:
             print("Harness not installed. Run: audiagentic install", file=sys.stderr)
             return 1
-        print(json.dumps({"ok": True, "refreshed": True}, indent=2))
+        print(json.dumps({
+            "ok": True,
+            "refreshed": True,
+            "sync": build_runtime_sync(reason="manual-refresh"),
+        }, indent=2))
         return 0
 
     from audiagentic.runtime.harness.pi.runner import RunnerParams
