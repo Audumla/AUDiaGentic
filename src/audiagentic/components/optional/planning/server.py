@@ -15,6 +15,7 @@ except ImportError:
     print("Error: mcp package not installed. Run: pip install mcp", file=sys.stderr)
     sys.exit(1)
 
+from audiagentic.foundation.components.ids import COMPONENT_PLANNING
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.runtime.mcp.server import project_root_from_env
@@ -35,7 +36,7 @@ from .api import (
 register_all_components()
 
 def _server_decl():
-    return get_mcp_server_declaration("planning", "audiagentic-planning")
+    return get_mcp_server_declaration(COMPONENT_PLANNING, "audiagentic-planning")
 
 
 def _server_instructions() -> str:

@@ -1,6 +1,6 @@
 type: component
 contract-version: v1
-component-id: agent-actions
+id: agent-actions
 display-name: Agent Actions
 description: Workflow action tags — audit, check-in-prep, implement, plan, review. Installs canonical skill sources and injects doctrine rules into all provider surfaces. Individual actions are optional and configured within this component.
 detection-marker: .audiagentic/components/agent-actions.yaml

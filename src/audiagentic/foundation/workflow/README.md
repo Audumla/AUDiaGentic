@@ -210,13 +210,26 @@ No state names, transitions, or propagation rules are hardcoded in the code. Add
 | File | Responsibility |
 |------|----------------|
 | `state_machine.py` | State transitions, lifecycle actions, cascade, metadata tokens |
-| `propagation.py` | StatePropagationEngine — config-driven propagation calculation and application |
-| `propagation_rules.py` | Rule implementations: rule_none, rule_parent_in_set, rule_all_children_in_set, etc. |
-| `propagation_api.py` | WorkflowItemAPI protocol — minimal interface for propagation engine |
+| `propagation/engine.py` | StatePropagationEngine — orchestration of `propagate()` / `apply_propagation()` |
+| `propagation/config.py` | YAML loader, validator, dotted-path callable importer |
+| `propagation/parents.py` | Direct + reverse parent/child ref resolution (`extract_ref_ids` lives in `util.py`) |
+| `propagation/rules.py` | Configurable rule and action implementations |
+| `propagation/healing.py` | `validate_hierarchy`, `heal_hierarchy` |
+| `propagation/log.py` | Propagation attempt audit log |
+| `propagation/api.py` | `WorkflowItemAPI` protocol (minimal host interface) |
+| `propagation_rules.py` | Backward-compat shim re-exporting `propagation.rules` |
+| `propagation_api.py` | Backward-compat shim re-exporting `propagation.api` |
 | `actions.py` | WorkflowActionExecutor — batch item creation with placeholder rendering |
 | `frontmatter.py` | FrontmatterBuilder — assembles frontmatter from config defaults |
 | `rel.py` | Relationships — rel_list management |
 | `id_gen.py` | Thread-safe sequential ID generation with file locking |
 | `item.py` | ItemView DTO |
 | `interfaces.py` | WorkflowConfig, WorkflowContext protocols |
-| `util.py` | slugify, now_iso, body_has_section utilities |
+| `util.py` | `slugify`, `now_iso`, `body_has_section`, `extract_ref_ids` |
+
+### Host coupling
+
+The engine never reads or writes item files directly. The host's
+`WorkflowContext` supplies `_find` / `lookup` / `_scan` for reads, `save(item)`
+for writes, and `_publish_event` for events. The package has no dependency on
+any concrete host module.

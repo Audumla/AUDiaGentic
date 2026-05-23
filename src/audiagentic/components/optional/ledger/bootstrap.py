@@ -10,6 +10,7 @@ import yaml
 from audiagentic.components.optional.ledger.audit import generate_audit_and_checkin
 from audiagentic.components.optional.ledger.current_summary import regenerate_current_release
 from audiagentic.components.optional.ledger.sync import sync_current_release_ledger
+from audiagentic.foundation.components.ids import COMPONENT_PROJECT
 from audiagentic.paths import REPO_ROOT
 from audiagentic.runtime.lifecycle.baseline_sync import ensure_project_layout, sync_managed_baseline
 from audiagentic.runtime.lifecycle.detector import detect_installed_state
@@ -36,7 +37,7 @@ def bootstrap_ledger(project_root: Path) -> dict[str, Any]:
 
     now = _now_timestamp()
     updated_marker: dict[str, Any] = {
-        "component-id": "project",
+        "component-id": COMPONENT_PROJECT,
         "enabled": True,
         "installation-kind": "fresh" if current_marker is None else "update",
         "installed-at": (current_marker or {}).get("installed-at", now),

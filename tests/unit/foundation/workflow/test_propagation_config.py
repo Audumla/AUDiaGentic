@@ -1,0 +1,194 @@
+"""Unit tests for foundation/workflow/propagation/config.py."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from audiagentic.foundation.workflow.propagation.config import (
+    _import_callable,
+    bind_callables,
+    load_config,
+    validate,
+)
+
+# ── load_config ───────────────────────────────────────────────────────────────
+
+def test_load_config_missing_path_returns_disabled() -> None:
+    cfg = load_config(None)
+    assert cfg["global"]["enabled"] is False
+
+
+def test_load_config_nonexistent_file_returns_disabled(tmp_path: Path) -> None:
+    cfg = load_config(tmp_path / "missing.yaml")
+    assert cfg["global"]["enabled"] is False
+
+
+def test_load_config_empty_yaml_returns_empty_dict(tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text("", encoding="utf-8")
+    cfg = load_config(path)
+    assert isinstance(cfg, dict)
+
+
+def test_load_config_valid_yaml(tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text("global:\n  enabled: true\n  max_depth: 5\n", encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg["global"]["enabled"] is True
+    assert cfg["global"]["max_depth"] == 5
+
+
+def test_load_config_malformed_yaml_returns_disabled(tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text(":\n  - bad: [unclosed", encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg["global"]["enabled"] is False
+
+
+def test_load_config_reads_utf8_content(tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text('global:\n  note: "héllo wörld"\n', encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg["global"]["note"] == "héllo wörld"
+
+
+# ── bind_callables ────────────────────────────────────────────────────────────
+
+def test_bind_callables_resolves_dotted_path() -> None:
+    config = {
+        "rules": {
+            "none": {
+                "logic": "audiagentic.foundation.workflow.propagation.rules.rule_none",
+                "enabled": True,
+            }
+        }
+    }
+    bind_callables(config)
+    assert callable(config["rules"]["none"]["logic"])
+
+
+def test_bind_callables_already_callable_unchanged() -> None:
+    sentinel = lambda *a: False
+    config = {"rules": {"x": {"logic": sentinel}}}
+    bind_callables(config)
+    assert config["rules"]["x"]["logic"] is sentinel
+
+
+def test_bind_callables_invalid_path_installs_fallback(caplog) -> None:
+    config = {"rules": {"bad": {"logic": "audiagentic.does.not.exist.fn"}}}
+    with caplog.at_level("WARNING"):
+        bind_callables(config)
+    assert callable(config["rules"]["bad"]["logic"])
+    assert config["rules"]["bad"]["logic"]() is False
+
+
+def test_bind_callables_invalid_action_installs_empty_list_fallback() -> None:
+    config = {"actions": {"bad": {"logic": "audiagentic.does.not.exist.fn"}}}
+    bind_callables(config)
+    assert config["actions"]["bad"]["logic"]() == []
+
+
+def test_bind_callables_no_logic_key_unchanged() -> None:
+    config = {"rules": {"x": {"enabled": True}}}
+    bind_callables(config)
+    assert "logic" not in config["rules"]["x"]
+
+
+# ── _import_callable ──────────────────────────────────────────────────────────
+
+def test_import_callable_returns_function() -> None:
+    fn = _import_callable("audiagentic.foundation.workflow.propagation.rules.rule_none")
+    assert callable(fn)
+
+
+def test_import_callable_invalid_ref_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="Invalid callable reference"):
+        _import_callable("no_dot")
+
+
+def test_import_callable_nonexistent_module_raises_import_error() -> None:
+    with pytest.raises(ImportError):
+        _import_callable("audiagentic.does.not.exist.fn")
+
+
+def test_import_callable_nonexistent_attr_raises_attribute_error() -> None:
+    with pytest.raises(AttributeError):
+        _import_callable("audiagentic.foundation.workflow.propagation.rules.no_such_fn")
+
+
+# ── validate ─────────────────────────────────────────────────────────────────
+
+def test_validate_empty_config_no_errors() -> None:
+    assert validate({}, None) == []
+
+
+def test_validate_required_field_missing_reports_error() -> None:
+    config = {
+        "validation": {"required_fields": ["global.enabled"]},
+        "global": {},
+    }
+    errors = validate(config, None)
+    assert any("global.enabled" in e for e in errors)
+
+
+def test_validate_required_field_present_no_error() -> None:
+    config = {
+        "validation": {"required_fields": ["global.enabled"]},
+        "global": {"enabled": True},
+    }
+    assert validate(config, None) == []
+
+
+def test_validate_required_rule_missing_reports_error() -> None:
+    config = {
+        "validation": {"required_rules": ["all_children_in_set"]},
+        "rules": {},
+    }
+    errors = validate(config, None)
+    assert any("all_children_in_set" in e for e in errors)
+
+
+def test_validate_unknown_state_in_kind_reports_error() -> None:
+    config = {
+        "kinds": {
+            "task": {
+                "state_rules": {
+                    "nonexistent_state": {"rule": "none", "new_state": "done"},
+                }
+            }
+        }
+    }
+    errors = validate(config, lambda kind: ["draft", "active", "done"])
+    assert any("nonexistent_state" in e for e in errors)
+
+
+def test_validate_unknown_rule_in_state_rules_reports_error() -> None:
+    config = {
+        "rules": {},
+        "kinds": {
+            "task": {
+                "state_rules": {
+                    "done": {"rule": "ghost_rule", "new_state": "done"},
+                }
+            }
+        },
+    }
+    errors = validate(config, lambda kind: ["draft", "active", "done"])
+    assert any("ghost_rule" in e for e in errors)
+
+
+def test_validate_no_states_getter_skips_state_check() -> None:
+    # With no states_getter, unknown states are not checked — but unknown rules still are
+    config = {
+        "rules": {"none": {"enabled": True}},
+        "kinds": {
+            "task": {
+                "state_rules": {
+                    "phantom": {"rule": "none", "new_state": "done"},
+                }
+            }
+        },
+    }
+    assert validate(config, None) == []

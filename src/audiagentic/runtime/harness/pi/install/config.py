@@ -81,7 +81,13 @@ def _build_settings_config(harness_cfg: dict, target: Path) -> dict:
         custom_theme_path.write_text(json.dumps(base, indent=2) + "\n", encoding="utf-8")
         theme_name = str(custom_theme_path)
 
-    settings: dict = {"theme": theme_name, "extensions": ["extensions/footer.ts"]}
+    settings: dict = {
+        "theme": theme_name,
+        "extensions": [
+            "extensions/footer.ts",
+            "extensions/follow_up_actions.ts",
+        ],
+    }
     for key, dest, cast in [
         ("quiet_startup",      "quietStartup",         bool),
         ("collapse_changelog", "collapseChangelog",    bool),

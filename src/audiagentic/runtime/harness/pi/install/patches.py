@@ -256,6 +256,41 @@ def _patch_mcp_direct_tools_progress(npm_dir: Path) -> None:
         return
 
     source = target.read_text(encoding="utf-8")
+
+    helper_marker = "type DirectAutoAuthResult =\n"
+    sync_helpers = (
+        "type RuntimeSyncHint = {\n"
+        "  target?: string;\n"
+        "  action?: string;\n"
+        "  reason?: string;\n"
+        "  component_id?: string;\n"
+        "};\n\n"
+        "function getRuntimeSyncHint(result: { structuredContent?: unknown } | null | undefined): RuntimeSyncHint | undefined {\n"
+        "  const structured = result?.structuredContent;\n"
+        "  if (!structured || typeof structured !== \"object\" || Array.isArray(structured)) {\n"
+        "    return undefined;\n"
+        "  }\n"
+        "  const sync = (structured as Record<string, unknown>).sync;\n"
+        "  if (!sync || typeof sync !== \"object\" || Array.isArray(sync)) {\n"
+        "    return undefined;\n"
+        "  }\n"
+        "  return sync as RuntimeSyncHint;\n"
+        "}\n\n"
+        "function formatRuntimeSyncNotice(sync: RuntimeSyncHint): string {\n"
+        "  const component = typeof sync.component_id === \"string\" ? ` for component \\\"${sync.component_id}\\\"` : \"\";\n"
+        "  switch (sync.action) {\n"
+        "    case \"reload_required\":\n"
+        "      return `AUDiaGentic runtime changed${component}. Reload Pi session to apply updates.`;\n"
+        "    case \"restart_required\":\n"
+        "      return `AUDiaGentic runtime changed${component}. Restart Pi session to apply updates.`;\n"
+        "    case \"refresh_required\":\n"
+        "    default:\n"
+        "      return `AUDiaGentic runtime refreshed${component}.`;\n"
+        "  }\n"
+        "}\n\n"
+    )
+    if "type RuntimeSyncHint =" not in source and helper_marker in source:
+        source = source.replace(helper_marker, sync_helpers + helper_marker, 1)
     old_signature = "  return async function execute(_toolCallId, params) {"
     new_signature = "  return async function execute(_toolCallId, params, _signal, onUpdate, ctx) {"
     if new_signature not in source and old_signature in source:
@@ -350,6 +385,41 @@ def _patch_mcp_direct_tools_progress(npm_dir: Path) -> None:
             "        ctx?.ui?.setStatus?.(\"mcp-progress\", text);",
             1,
         )
+
+    sync_notice_marker = "      const result = await resultPromise;\n"
+    sync_notice_block = (
+        "      const result = await resultPromise;\n"
+        "      const sync = getRuntimeSyncHint(result as { structuredContent?: unknown });\n"
+        "      if (sync && ctx?.hasUI) {\n"
+        "        const notice = formatRuntimeSyncNotice(sync);\n"
+        "        ctx.ui.notify(notice, sync.action === \"restart_required\" ? \"warning\" : \"info\");\n"
+        "        ctx.ui.setStatus(\"audiagentic-runtime-action\", notice);\n"
+        "      }\n"
+    )
+    if "const sync = getRuntimeSyncHint(result as { structuredContent?: unknown });" not in source and sync_notice_marker in source:
+        source = source.replace(sync_notice_marker, sync_notice_block, 1)
+
+    success_details_old = '        details: { server: spec.serverName, tool: spec.originalName, uiOpen: true },\n'
+    success_details_new = (
+        '        details: { server: spec.serverName, tool: spec.originalName, uiOpen: true, '
+        'mcpResult: result, sync },\n'
+    )
+    if success_details_new not in source and success_details_old in source:
+        source = source.replace(success_details_old, success_details_new, 1)
+
+    plain_details_old = '        details: { server: spec.serverName, tool: spec.originalName },\n'
+    plain_details_new = (
+        '        details: { server: spec.serverName, tool: spec.originalName, mcpResult: result, sync },\n'
+    )
+    if plain_details_new not in source and plain_details_old in source:
+        source = source.replace(plain_details_old, plain_details_new, 1)
+
+    error_details_old = '          details: { error: "tool_error", server: spec.serverName },\n'
+    error_details_new = (
+        '          details: { error: "tool_error", server: spec.serverName, mcpResult: result, sync },\n'
+    )
+    if error_details_new not in source and error_details_old in source:
+        source = source.replace(error_details_old, error_details_new, 1)
 
     finally_marker = "    } finally {\n"
     clear_status = "      ctx?.ui?.setStatus?.(\"mcp-progress\", undefined);\n"

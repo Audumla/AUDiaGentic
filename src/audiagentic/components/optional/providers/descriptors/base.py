@@ -8,6 +8,14 @@ from audiagentic.foundation.invoke.base import InvocationRecipe
 
 
 @dataclass(frozen=True)
+class McpConfigSpec:
+    """Declares how a provider reads/writes its MCP server config."""
+    config_path: str   # relative to project root, e.g. ".mcp.json"
+    format: str        # "mcp-json" | "goose-yaml" | "continue-json"
+    refresh_mode: str  # "file-watch" | "restart-required"
+
+
+@dataclass(frozen=True)
 class VsCodeExtension:
     extension_id: str
     display_name: str
@@ -82,6 +90,8 @@ class ProviderDescriptor:
     # of model dicts conforming to provider-model-catalog schema (model-id, display-name,
     # status, supports-structured-output, context-window). None = not supported.
     fetch_catalog_fn: Callable[[dict[str, Any]], list[dict[str, Any]]] | None = None
+    # MCP server config spec — None means this provider has no manageable MCP config.
+    mcp_config: McpConfigSpec | None = None
 
     @property
     def install_mode(self) -> str:

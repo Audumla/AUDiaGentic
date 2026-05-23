@@ -1,4 +1,4 @@
-"""Canonical id registry for AUDiaGentic."""
+"""Canonical provider and schema id helpers for AUDiaGentic."""
 
 from __future__ import annotations
 
@@ -6,22 +6,12 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-
 def canonical_provider_ids() -> tuple[str, ...]:
     """Return all registered provider IDs from the descriptor registry."""
     from audiagentic.components.optional.providers.descriptors.registry import (
         all_descriptors,  # noqa: PLC0415
     )
     return tuple(all_descriptors())
-
-CANONICAL_COMPONENT_IDS = (
-    "session",
-    "project",
-    "agent-ledger",
-    "agent-jobs",
-    "providers",
-    "planning",
-)
 
 CANONICAL_SCHEMA_IDS = (
     "approval-request",
@@ -54,14 +44,12 @@ CANONICAL_SCHEMA_IDS = (
 @dataclass(frozen=True)
 class CanonicalIds:
     providers: tuple[str, ...]
-    components: tuple[str, ...]
     schemas: tuple[str, ...]
 
 
 def get_canonical_ids() -> CanonicalIds:
     return CanonicalIds(
         providers=canonical_provider_ids(),
-        components=CANONICAL_COMPONENT_IDS,
         schemas=CANONICAL_SCHEMA_IDS,
     )
 

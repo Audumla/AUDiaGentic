@@ -7,14 +7,27 @@ from audiagentic.runtime.home import audiagentic_home
 from .base import SCOPE_HARNESS, ComponentDescriptor, McpServerDeclaration
 
 _registry: dict[str, ComponentDescriptor] = {}
+_aliases: dict[str, str] = {}
 
 
 def register(descriptor: ComponentDescriptor) -> None:
+    for alias, owner in list(_aliases.items()):
+        if owner == descriptor.component_id:
+            del _aliases[alias]
     _registry[descriptor.component_id] = descriptor
+    for alias in descriptor.aliases:
+        _aliases[alias] = descriptor.component_id
+
+
+def resolve_component_id(component_id: str) -> str | None:
+    if component_id in _registry:
+        return component_id
+    return _aliases.get(component_id)
 
 
 def get_descriptor(component_id: str) -> ComponentDescriptor | None:
-    return _registry.get(component_id)
+    resolved = resolve_component_id(component_id) or component_id
+    return _registry.get(resolved)
 
 
 def all_descriptors() -> dict[str, ComponentDescriptor]:
@@ -57,7 +70,7 @@ def marker_path(component_id: str, root: Path, scope: str) -> Path:
 
 
 def is_installed(component_id: str, project_root: Path) -> bool:
-    descriptor = _registry.get(component_id)
+    descriptor = get_descriptor(component_id)
     if descriptor is None:
         return False
     root = component_root(descriptor, project_root)
@@ -65,11 +78,11 @@ def is_installed(component_id: str, project_root: Path) -> bool:
 
 
 def is_enabled(component_id: str, project_root: Path) -> bool:
-    descriptor = _registry.get(component_id)
+    descriptor = get_descriptor(component_id)
     if descriptor is None:
         return False
     root = component_root(descriptor, project_root)
-    mpath = marker_path(component_id, root, descriptor.scope)
+    mpath = marker_path(descriptor.component_id, root, descriptor.scope)
     if not mpath.exists():
         return False
     try:

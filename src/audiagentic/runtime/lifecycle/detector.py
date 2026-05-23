@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 _PROJECT_MARKER = Path(".audiagentic/components/project.yaml")
 
@@ -34,3 +37,18 @@ def detect_installed_state(project_root: Path) -> InstalledState:
         return InstalledState("installed", audia_hits)
 
     return InstalledState("invalid", audia_hits)
+
+
+def get_project_version_info(project_root: Path) -> dict[str, Any] | None:
+    """Read version and install timestamp from the project marker file."""
+    marker = project_root / _PROJECT_MARKER
+    if not marker.exists():
+        return None
+    try:
+        data = yaml.safe_load(marker.read_text(encoding="utf-8")) or {}
+        return {
+            "version": data.get("version"),
+            "installed_at": data.get("installed-at"),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": str(exc)}
