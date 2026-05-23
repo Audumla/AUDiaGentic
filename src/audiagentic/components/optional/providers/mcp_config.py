@@ -264,7 +264,10 @@ def remove_mcp_server(config_path: Path, name: str, fmt: str) -> bool:
 
 def build_mcp_entry(server_decl: Any) -> McpServerEntry:
     """Convert McpServerDeclaration or ExternalMcpServerDeclaration to McpServerEntry."""
-    from audiagentic.foundation.components.base import ExternalMcpServerDeclaration, McpServerDeclaration
+    from audiagentic.foundation.components.base import (
+        ExternalMcpServerDeclaration,
+        McpServerDeclaration,
+    )
     if isinstance(server_decl, McpServerDeclaration):
         return McpServerEntry(
             name=server_decl.name,

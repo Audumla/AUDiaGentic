@@ -3,6 +3,7 @@ from audiagentic.foundation.invoke.toolchains import gh_extension
 from ...descriptors.base import (
     AgentFile,
     CliInstallRecipe,
+    McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
     VsCodeExtension,
@@ -37,5 +38,10 @@ register(ProviderDescriptor(
     agent_files=(
         AgentFile("COPILOT.md", managed=True, description="Copilot project instructions"),
         AgentFile(".github/copilot-instructions.md", managed=False, description="GitHub Copilot repo instructions"),
+    ),
+    mcp_config=McpConfigSpec(
+        config_path=".mcp.json",
+        format="mcp-json",
+        refresh_mode="restart-required",
     ),
 ))

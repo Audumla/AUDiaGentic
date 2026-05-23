@@ -9,6 +9,7 @@ from audiagentic.foundation.invoke.toolchains import npm
 from ...descriptors.base import (
     AgentFile,
     CliInstallRecipe,
+    McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
     VsCodeExtension,
@@ -110,4 +111,9 @@ register(ProviderDescriptor(
     instruction_file="CLAUDE.md",
     skill_surface_path=".claude/skills/{tag}/SKILL.md",
     fetch_catalog_fn=_fetch_claude_catalog,
+    mcp_config=McpConfigSpec(
+        config_path=".mcp.json",
+        format="mcp-json",
+        refresh_mode="file-watch",
+    ),
 ))

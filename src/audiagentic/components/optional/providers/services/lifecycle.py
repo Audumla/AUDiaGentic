@@ -351,86 +351,34 @@ def reconcile_all_providers(
     }
 
 
-def _all_known_server_names() -> set[str]:
-    """All server names declared by any component (regardless of install state)."""
-    from audiagentic.foundation.components.loader import register_all_components
-    from audiagentic.foundation.components.registry import all_descriptors as _all_comp
-
-    register_all_components()
-    names: set[str] = set()
-    for descriptor in _all_comp().values():
-        for decl in descriptor.mcp_servers:
-            names.add(decl.name)
-        for ext in descriptor.external_mcp_servers:
-            names.add(ext.name)
-    return names
-
-
-def _build_active_mcp_entries(project_root: Path) -> dict[str, Any]:
-    """Build MCP server entries for all installed+enabled components."""
-    import shutil
-
-    from audiagentic.foundation.components.loader import register_all_components
-    from audiagentic.foundation.components.registry import all_descriptors as _all_comp
-    from audiagentic.foundation.components.registry import is_enabled, is_installed
-
-    from ..mcp_config import McpServerEntry, build_mcp_entry
-
-    register_all_components()
-    entries: dict[str, McpServerEntry] = {}
-    for cid, comp_desc in _all_comp().items():
-        active = comp_desc.core or (is_installed(cid, project_root) and is_enabled(cid, project_root))
-        if not active:
-            continue
-        for decl in comp_desc.mcp_servers:
-            entry = build_mcp_entry(decl)
-            entries[entry.name] = entry
-        for ext in comp_desc.external_mcp_servers:
-            if any(shutil.which(r) is None for r in ext.requires):
-                continue
-            entry = build_mcp_entry(ext)
-            entries[entry.name] = entry
-    return entries
-
-
-def apply_provider_mcp_servers(
+def add_provider_mcp_server(
     provider_id: str,
+    name: str,
+    command: str,
     project_root: Path,
     *,
-    on_progress: ComponentOutputSink | None = None,
+    args: tuple[str, ...] = (),
+    env: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Reconcile provider MCP config: write active servers, remove stale known servers."""
-    from ..mcp_config import read_mcp_servers, remove_mcp_server, write_mcp_servers
+    """Add or update a single MCP server entry in a provider's config, then reload."""
+    from ..mcp_config import McpServerEntry, write_mcp_servers
 
     descriptor = _descriptor(provider_id)
     spec = descriptor.mcp_config
     if spec is None:
-        return {"provider_id": provider_id, "ok": True, "skipped": "no mcp_config defined for this provider"}
+        return {"provider_id": provider_id, "ok": False, "error": "no mcp_config defined for this provider"}
 
     config_path = project_root / spec.config_path
-    desired = _build_active_mcp_entries(project_root)
-    known_names = _all_known_server_names()
-
-    _emit(on_progress, f"Applying {len(desired)} MCP server(s) to {provider_id}", provider_id=provider_id)
-    write_mcp_servers(config_path, desired, spec.format)
-
-    # Remove entries that were known but are no longer active
-    current = read_mcp_servers(config_path, spec.format)
-    removed = []
-    for name in list(current):
-        if name in known_names and name not in desired:
-            remove_mcp_server(config_path, name, spec.format)
-            removed.append(name)
-
-    return {
+    entry = McpServerEntry(name=name, command=command, args=tuple(args), env=dict(env or {}))
+    write_mcp_servers(config_path, {name: entry}, spec.format)
+    result: dict[str, Any] = {
         "provider_id": provider_id,
         "ok": True,
         "config_path": str(config_path),
-        "format": spec.format,
-        "refresh_mode": spec.refresh_mode,
-        "servers_applied": sorted(desired),
-        "servers_removed": removed,
+        "server_name": name,
     }
+    result.update(reload_provider_mcp(provider_id, project_root))
+    return result
 
 
 def remove_provider_mcp_server(
@@ -438,7 +386,7 @@ def remove_provider_mcp_server(
     server_name: str,
     project_root: Path,
 ) -> dict[str, Any]:
-    """Remove a single named MCP server entry from provider config."""
+    """Remove a single MCP server entry from a provider's config, then reload."""
     from ..mcp_config import remove_mcp_server
 
     descriptor = _descriptor(provider_id)
@@ -448,20 +396,23 @@ def remove_provider_mcp_server(
 
     config_path = project_root / spec.config_path
     removed = remove_mcp_server(config_path, server_name, spec.format)
-    return {
+    result: dict[str, Any] = {
         "provider_id": provider_id,
         "ok": True,
         "config_path": str(config_path),
         "server_name": server_name,
         "removed": removed,
     }
+    if removed:
+        result.update(reload_provider_mcp(provider_id, project_root))
+    return result
 
 
 def list_provider_mcp_servers(
     provider_id: str,
     project_root: Path,
 ) -> dict[str, Any]:
-    """Return current MCP server entries from provider config."""
+    """Return current MCP server entries from a provider's config."""
     from ..mcp_config import read_mcp_servers
 
     descriptor = _descriptor(provider_id)
@@ -485,14 +436,53 @@ def list_provider_mcp_servers(
     }
 
 
-def refresh_provider_mcp(
+def reload_provider_mcp(
     provider_id: str,
     project_root: Path,
-    *,
-    on_progress: ComponentOutputSink | None = None,
 ) -> dict[str, Any]:
-    """Re-apply MCP servers for a provider (useful after component install/uninstall)."""
-    return apply_provider_mcp_servers(provider_id, project_root, on_progress=on_progress)
+    """Signal or reload a provider after its MCP config has changed.
+
+    file-watch providers auto-reload on file change — nothing extra needed.
+    restart-required providers call reload_fn if defined, otherwise inform only.
+    """
+    descriptor = _descriptor(provider_id)
+    spec = descriptor.mcp_config
+    if spec is None:
+        return {"provider_id": provider_id, "ok": False, "error": "no mcp_config defined for this provider"}
+
+    if spec.refresh_mode == "file-watch":
+        return {
+            "provider_id": provider_id,
+            "ok": True,
+            "auto_refreshed": True,
+            "method": "file-watch",
+        }
+
+    if spec.reload_fn is not None:
+        try:
+            fn_result = spec.reload_fn(project_root)
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "provider_id": provider_id,
+                "ok": False,
+                "method": "reload-fn",
+                "error": str(exc),
+            }
+        return {
+            "provider_id": provider_id,
+            "ok": True,
+            "auto_refreshed": True,
+            "method": "reload-fn",
+            **fn_result,
+        }
+
+    return {
+        "provider_id": provider_id,
+        "ok": True,
+        "auto_refreshed": False,
+        "method": "restart-required",
+        "action_needed": f"restart {descriptor.display_name} to apply MCP config changes",
+    }
 
 
 def reconcile_all(*, project_root: Path) -> None:

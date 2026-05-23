@@ -3,6 +3,7 @@ from audiagentic.foundation.invoke.toolchains import npm
 from ...descriptors.base import (
     AgentFile,
     CliInstallRecipe,
+    McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
     VsCodeExtension,
@@ -34,5 +35,10 @@ register(ProviderDescriptor(
     ),
     agent_files=(
         AgentFile(".continue/config.json", managed=False, description="Continue configuration"),
+    ),
+    mcp_config=McpConfigSpec(
+        config_path=".continue/config.json",
+        format="continue-json",
+        refresh_mode="restart-required",
     ),
 ))

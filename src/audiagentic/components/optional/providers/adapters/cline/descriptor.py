@@ -3,6 +3,7 @@ from audiagentic.foundation.invoke.toolchains import npm
 from ...descriptors.base import (
     AgentFile,
     CliInstallRecipe,
+    McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
     VsCodeExtension,
@@ -36,5 +37,10 @@ register(ProviderDescriptor(
     agent_files=(
         AgentFile(".clinerules/prompt-tags.md", managed=True, description="Canonical prompt tag rules for Cline"),
         AgentFile(".clinerules", managed=False, description="Cline rules directory"),
+    ),
+    mcp_config=McpConfigSpec(
+        config_path=".mcp.json",
+        format="mcp-json",
+        refresh_mode="restart-required",
     ),
 ))

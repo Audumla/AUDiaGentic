@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+
 def canonical_provider_ids() -> tuple[str, ...]:
     """Return all registered provider IDs from the descriptor registry."""
     from audiagentic.components.optional.providers.descriptors.registry import (

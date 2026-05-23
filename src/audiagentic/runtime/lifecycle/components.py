@@ -13,6 +13,7 @@ from audiagentic.foundation.components.base import (
     MODE_REQUIRED_MANAGED,
     MODE_RUNTIME_ONLY,  # uninstall logic only
 )
+from audiagentic.foundation.components.ids import COMPONENT_PROJECT
 from audiagentic.foundation.components.registry import (
     all_descriptors,
     component_root,
@@ -21,7 +22,6 @@ from audiagentic.foundation.components.registry import (
     marker_path,
     resolve_component_id,
 )
-from audiagentic.foundation.components.ids import COMPONENT_PROJECT
 from audiagentic.runtime.harness.pi.install import build_runtime_sync
 
 from .baseline_sync import sync_managed_baseline
