@@ -10,12 +10,18 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import audiagentic.runtime.mcp_probe_observer  # noqa: F401 — registers probe observer on import
 from audiagentic.foundation.components.base import (
     ExternalMcpServerDeclaration,
     McpServerDeclaration,
 )
 from audiagentic.foundation.components.loader import register_all_components
-from audiagentic.foundation.components.registry import all_descriptors, is_enabled, is_installed
+from audiagentic.foundation.components.registry import (
+    all_descriptors,
+    get_external_probe_results,
+    is_enabled,
+    is_installed,
+)
 
 
 def _get_python_path() -> str:
@@ -25,7 +31,7 @@ def _get_python_path() -> str:
 
 def _get_src_path() -> str:
     """Return the source directory path for PYTHONPATH."""
-    return str(Path(__file__).resolve().parents[3]).replace("\\", "/")
+    return str(Path(__file__).resolve().parents[2]).replace("\\", "/")
 
 
 def _build_available_components_md(project_root: Path) -> str:
@@ -90,14 +96,15 @@ def build_mcp_config(
             result["directTools"] = server_decl.direct_tools
         return result
 
-    def _build_external_decl(ext: ExternalMcpServerDeclaration) -> dict[str, Any] | None:
+    def _build_external_decl(
+        ext: ExternalMcpServerDeclaration,
+        probe_cache: dict[str, bool],
+    ) -> dict[str, Any] | None:
         if any(shutil.which(r) is None for r in ext.requires):
             return None
-        if ext.probe:
-            import subprocess
-            result = subprocess.run(list(ext.probe), capture_output=True)
-            if result.returncode != 0:
-                return None
+        # Probe results cached at install/enable time; absent = optimistic include
+        if ext.probe and probe_cache.get(ext.name) is False:
+            return None
         entry: dict[str, Any] = {
             "command": ext.command,
             "args": list(ext.args),
@@ -117,8 +124,9 @@ def build_mcp_config(
             continue
         for server_decl in descriptor.mcp_servers:
             servers[server_decl.name] = _build_server_decl(server_decl)
+        probe_cache = get_external_probe_results(cid, project_root)
         for ext in descriptor.external_mcp_servers:
-            entry = _build_external_decl(ext)
+            entry = _build_external_decl(ext, probe_cache)
             if entry is not None:
                 servers[ext.name] = entry
 

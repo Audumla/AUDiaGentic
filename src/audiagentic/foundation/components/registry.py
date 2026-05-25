@@ -91,3 +91,24 @@ def is_enabled(component_id: str, project_root: Path) -> bool:
     except Exception:  # noqa: BLE001
         return False
     return bool(data.get("enabled", True))
+
+
+def get_external_probe_results(component_id: str, project_root: Path) -> dict[str, bool]:
+    """Return cached external MCP server probe results stored in the component marker.
+
+    Keys are server names; values are True (probe passed) or False (probe failed).
+    Returns empty dict when no probes have been cached (e.g. older installs).
+    """
+    descriptor = get_descriptor(component_id)
+    if descriptor is None:
+        return {}
+    root = component_root(descriptor, project_root)
+    mpath = marker_path(component_id, root, descriptor.scope)
+    if not mpath.exists():
+        return {}
+    try:
+        import yaml
+        data = yaml.safe_load(mpath.read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001
+        return {}
+    return dict(data.get("external-mcp-probe", {}))
