@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -37,17 +38,29 @@ def _default_endpoint(port: int) -> str:
 # Rig state (rig.json)
 # ---------------------------------------------------------------------------
 
-def read_rig_state() -> dict | None:
-    """Return rig state dict if a live embedded rig exists, else None.
+def read_rig_state(*, expected_model: str | None = None) -> dict | None:
+    """Return rig state dict if a healthy embedded rig exists, else None.
 
-    Cleans up a stale rig.json if the recorded PID is no longer running.
+    Cleans up stale rig.json when the recorded PID is dead, the endpoint is not
+    ready, or the tracked model no longer matches the requested profile.
     """
     path = _rig_json()
     if not path.exists():
         return None
     try:
         state = json.loads(path.read_text(encoding="utf-8"))
-        os.kill(int(state["pid"]), 0)   # raises OSError if dead
+        pid = int(state["pid"])
+        os.kill(pid, 0)   # raises OSError if dead
+        endpoint = str(state.get("endpoint") or _default_endpoint(int(state["port"])))
+        server_model = _query_server_model(endpoint)
+        if server_model is None:
+            _kill_pid(pid)
+            path.unlink(missing_ok=True)
+            return None
+        if expected_model is not None and str(state.get("model")) != expected_model:
+            _kill_pid(pid)
+            path.unlink(missing_ok=True)
+            return None
         return state
     except (KeyError, ValueError, OSError, json.JSONDecodeError):
         path.unlink(missing_ok=True)
@@ -175,7 +188,7 @@ def adopt_rig_state(port: int, *, endpoint: str | None = None, model: str | None
 
 def ensure_rig_state(port: int, *, model: str | None = None) -> dict | None:
     """Return live rig state, rebuilding rig.json from active port when needed."""
-    state = read_rig_state()
+    state = read_rig_state(expected_model=model)
     if state is not None:
         return state
     return adopt_rig_state(port, model=model)
@@ -280,6 +293,8 @@ def reap_orphan_rigs(keep_pid: int | None = None) -> list[int]:
             killed.append(pid)
     else:
         import subprocess
+        if shutil.which("pgrep") is None:
+            return killed
         for name in ("llama-server", "llamafile"):
             result = subprocess.run(
                 ["pgrep", "-x", name],

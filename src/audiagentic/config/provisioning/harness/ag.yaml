@@ -11,14 +11,9 @@
 # Do not place secrets here.
 
 # Model default. Overridden by AUDIAGENTIC_PI_MODEL env var.
-# Rig type (embedded vs external) is determined by whether the model profile
-# in models.json has a model_file field.
-model: qwen3.5-9b-flash
-
-# Model ID passed to Pi. The rig loads the actual GGUF based on the `model`
-# profile name above, but Pi always sees this fixed ID. Change this if you
-# want a different model name in Pi's UI.
-model-id: audiagentic-rig
+# Use rig model ID from rig.yaml by default. Rig profile resolution happens
+# through rig_model.profile in rig.yaml.
+model: audiagentic-rig
 
 # --- Rig port ---
 #
