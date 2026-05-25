@@ -11,9 +11,15 @@ from audiagentic.foundation.invoke.context import InvocationContext
 from audiagentic.foundation.invoke.result import InvocationResult
 from audiagentic.foundation.output import ComponentOutputEvent, ComponentOutputSink
 
-from ..descriptors.base import CliInstallRecipe, ProviderDescriptor
+from ..descriptors.base import CliInstallRecipe, McpConfigSpec, ProviderDescriptor
 from ..descriptors.registry import _probe_cli, all_descriptors, get_descriptor
 from ..surfaces.manager import apply_provider_surfaces, prune_provider_surfaces
+
+
+def _resolve_mcp_path(spec: McpConfigSpec, project_root: Path) -> Path:
+    if callable(spec.config_path):
+        return spec.config_path()
+    return project_root / spec.config_path
 
 
 def _emit(output: ComponentOutputSink | None, message: str, **data: Any) -> None:
@@ -295,12 +301,13 @@ def reconcile_provider(
         _emit(on_progress, f"{provider_id} already in sync ({('enabled' if currently_enabled else 'disabled')})")
         action_taken = "ok"
 
+    now_enabled = cli_available and action_taken in ("enabled", "ok")
     result: dict[str, Any] = {
         "provider-id": provider_id,
         "action": "reconcile",
         "status": action_taken,
         "cli-available": cli_available,
-        "was-enabled": currently_enabled,
+        "enabled": now_enabled,
         "probe": probe,
     }
     if surfaces_result is not None:
@@ -368,7 +375,7 @@ def add_provider_mcp_server(
     if spec is None:
         return {"provider_id": provider_id, "ok": False, "error": "no mcp_config defined for this provider"}
 
-    config_path = project_root / spec.config_path
+    config_path = _resolve_mcp_path(spec, project_root)
     entry = McpServerEntry(name=name, command=command, args=tuple(args), env=dict(env or {}))
     write_mcp_servers(config_path, {name: entry}, spec.format)
     result: dict[str, Any] = {
@@ -394,7 +401,7 @@ def remove_provider_mcp_server(
     if spec is None:
         return {"provider_id": provider_id, "ok": False, "error": "no mcp_config defined for this provider"}
 
-    config_path = project_root / spec.config_path
+    config_path = _resolve_mcp_path(spec, project_root)
     removed = remove_mcp_server(config_path, server_name, spec.format)
     result: dict[str, Any] = {
         "provider_id": provider_id,
@@ -420,7 +427,7 @@ def list_provider_mcp_servers(
     if spec is None:
         return {"provider_id": provider_id, "ok": True, "servers": [], "skipped": "no mcp_config defined"}
 
-    config_path = project_root / spec.config_path
+    config_path = _resolve_mcp_path(spec, project_root)
     current = read_mcp_servers(config_path, spec.format)
     return {
         "provider_id": provider_id,
@@ -492,6 +499,10 @@ def reconcile_all(*, project_root: Path) -> None:
     Silently ignores errors so the component install never fails due to
     provider probe failures.
     """
+    from audiagentic.foundation.components.registry import is_installed
+    # Guard: component may have been uninstalled before background thread runs.
+    if not is_installed("providers", project_root):
+        return
     try:
         reconcile_all_providers(project_root=project_root)
     except Exception:  # noqa: BLE001

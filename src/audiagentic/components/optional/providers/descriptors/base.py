@@ -10,7 +10,10 @@ from audiagentic.foundation.invoke.base import InvocationRecipe
 @dataclass(frozen=True)
 class McpConfigSpec:
     """Declares how a provider reads/writes its MCP server config."""
-    config_path: str   # relative to project root, e.g. ".mcp.json"
+    # Relative string (resolved against project_root) or zero-arg callable returning
+    # an absolute Path (used when the config lives outside the project tree, e.g. the
+    # audiagentic harness which stores its config in a global runtime directory).
+    config_path: str | Callable[[], Path]
     format: str        # "mcp-json" | "goose-yaml" | "continue-json"
     refresh_mode: str  # "file-watch" | "restart-required"
     # Optional: called after config is written to signal the running provider.
