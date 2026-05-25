@@ -4,18 +4,21 @@ import json
 import shutil
 from pathlib import Path
 
+from audiagentic.runtime.rig.embedded.launch import load_rig_model, resolve_profile_definition
+
 from . import constants as _c
 
 
 def _build_models_config(harness_cfg: dict, model_name: str, model_profile: dict) -> dict:
-    ag = model_profile.get("ag", {}) if isinstance(model_profile, dict) else {}
-    compat: dict = ag.get("compat", {
+    agent = model_profile.get("agent", {}) if isinstance(model_profile, dict) else {}
+    compat: dict = agent.get("compat", {
         "supportsDeveloperRole": False,
         "supportsReasoningEffort": False,
     })
     rig_port = int(harness_cfg.get("rig", {}).get("port", _c.DEFAULT_RIG_PORT))
     endpoint = f"http://127.0.0.1:{rig_port}/v1"
     api_key = _c.DEFAULT_API_KEY
+    context_size = int(agent.get("context_size", 262144))
     return {
         "providers": {
             _c.DEFAULT_PROVIDER: {
@@ -27,10 +30,10 @@ def _build_models_config(harness_cfg: dict, model_name: str, model_profile: dict
                     {
                         "id": model_name,
                         "name": "AUDiaGentic local planner",
-                        "reasoning": bool(ag.get("reasoning", False)),
+                        "reasoning": bool(agent.get("reasoning", False)),
                         "input": ["text"],
-                        "contextWindow": int(ag.get("context_window", 262144)),
-                        "maxTokens": int(ag.get("max_tokens", 4096)),
+                        "contextWindow": context_size,
+                        "maxTokens": int(agent.get("max_tokens", 4096)),
                         "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
                     }
                 ],
@@ -157,14 +160,18 @@ def materialize_agent_config(
     if not model_name:
         raise SystemExit("No model configured in harness config. Set 'model' in ag.yaml or via AUDIAGENTIC_PI_MODEL env var.")
     model_profile: dict = {}
-    if _c._MODELS_JSON.exists():
+    model_id = model_name
+    if _c._RIG_CONFIG.exists():
         try:
-            data = json.loads(_c._MODELS_JSON.read_text(encoding="utf-8"))
-            model_profile = data.get("models", {}).get(model_name, {})
-        except Exception:
+            profile_name, rig_model_id = load_rig_model(_c._RIG_CONFIG)
+            if model_name == rig_model_id:
+                model_id = rig_model_id
+                model_profile = resolve_profile_definition(profile_name, _c._RIG_CONFIG)
+            else:
+                model_profile = resolve_profile_definition(model_name, _c._RIG_CONFIG)
+        except (Exception, SystemExit):
             pass
 
-    model_id: str = harness_cfg.get("model-id", "audiagentic-rig")
     (agent_dir / "models.json").write_text(
         json.dumps(_build_models_config(harness_cfg, model_id, model_profile), indent=2) + "\n",
         encoding="utf-8",
