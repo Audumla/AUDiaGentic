@@ -25,7 +25,7 @@ from audiagentic.foundation.components.registry import (
 from audiagentic.runtime.harness.pi.install import build_runtime_sync
 
 from .baseline_sync import sync_managed_baseline
-from .observers import fire_post_install, fire_post_uninstall
+from .observers import fire_post_disable, fire_post_enable, fire_post_install, fire_post_uninstall
 
 _REMOVE_ALWAYS = {MODE_REQUIRED_MANAGED, MODE_GENERATED_MANAGED, MODE_RUNTIME_ONLY}
 _REMOVE_WITH_CONFIGS = {MODE_CREATE_IF_MISSING}
@@ -241,6 +241,7 @@ def enable_component(component_id: str, project_root: Path) -> dict:
     data["component-id"] = resolved_id
     data["enabled"] = True
     _write_marker(resolved_id, project_root, data)
+    fire_post_enable(resolved_id, project_root)
     return _component_result(resolved_id, reason="component-enabled", enabled=True)
 
 
@@ -252,4 +253,5 @@ def disable_component(component_id: str, project_root: Path) -> dict:
     data["component-id"] = resolved_id
     data["enabled"] = False
     _write_marker(resolved_id, project_root, data)
+    fire_post_disable(resolved_id, project_root)
     return _component_result(resolved_id, reason="component-disabled", enabled=False)
