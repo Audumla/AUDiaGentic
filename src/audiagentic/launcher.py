@@ -113,6 +113,7 @@ def _cmd_component(args: argparse.Namespace, project_root: Path) -> int:
                 "installed": installed,
                 "enabled": enabled,
                 "state": state,
+                "scope": desc.scope,
             }
             if desc.scope == "project" and hasattr(desc, "cli_probe") and desc.cli_probe:
                 from audiagentic.components.optional.providers.descriptors.registry import (
