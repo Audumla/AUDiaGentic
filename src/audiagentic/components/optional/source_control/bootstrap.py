@@ -11,10 +11,7 @@ from typing import Any
 
 from audiagentic.foundation.components import is_installed
 from audiagentic.foundation.components.ids import COMPONENT_AGENT_LEDGER, COMPONENT_SOURCE_CONTROL
-from audiagentic.foundation.contracts.follow_up import build_confirmable_handler_follow_up
 from audiagentic.foundation.dependencies import (
-    SYSTEM_DEPENDENCIES,
-    detect_missing,
     gh_mcp_available,
 )
 from audiagentic.foundation.invoke.toolchains.detect import tool_available
@@ -138,29 +135,13 @@ def _build_warnings(availability: dict[str, Any]) -> list[str]:
 
 
 def status_payload(project_root: Path | None = None) -> dict[str, Any]:
-    availability = detect_availability()
-    missing = detect_missing(SYSTEM_DEPENDENCIES, SOURCE_CONTROL_DEPENDENCY_IDS)
-    follow_up = None
-    if missing:
-        missing_text = ", ".join(missing)
-        follow_up = build_confirmable_handler_follow_up(
-            id="source-control/install-missing-dependencies",
-            title="Install source-control dependencies?",
-            message=f"Install missing source-control dependencies: {missing_text}?",
-            handler="audiagentic.foundation.dependencies.install_system_dependencies",
-            kwargs={"names": missing},
-        )
+    from audiagentic.foundation.components.registry import get_external_probe_results
+    probe_cache = get_external_probe_results("source-control", project_root) if project_root else {}
     return {
-        "availability": availability,
-        "warnings": _build_warnings(availability),
         "ledger-integration-enabled": bool(project_root and ledger_integration_enabled(project_root)),
-        "missing-dependencies": missing,
-        "dependency-action-required": bool(missing),
-        "dependency-install-offer": (
-            "Ask the user which missing dependencies to install, then call "
-            "audiagentic-source-control.install_dependencies(names=[...]). "
-            "After install, call audiagentic-session.refresh_harness_config."
-            if missing else ""
-        ),
-        "follow_up": follow_up,
+        "mcp-servers": {
+            name: ("available" if probe_cache.get(name, True) else "unavailable")
+            for name in ("git", "github")
+        },
+        "hint": "Use audiagentic-source-control.get_source_control_status for full dependency checks.",
     }

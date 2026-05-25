@@ -7,9 +7,11 @@ subset of dependency IDs.
 """
 from __future__ import annotations
 
+import os
 import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -45,14 +47,45 @@ class DependencySpec:
         return self.display_name or self.id
 
 
+@cache
 def gh_mcp_available() -> bool:
+    """Check whether gh mcp serve is available (extension or built-in).
+
+    Cached per process — gh capability does not change while the process is running.
+    Never uses `gh mcp serve` as a probe because it blocks on stdin.
+    """
     if not tool_available("gh"):
         return False
-    ext_dir = Path.home() / ".local" / "share" / "gh" / "extensions" / "gh-mcp"
-    if ext_dir.exists():
+
+    # Fast path: check known extension install directories (cross-platform).
+    ext_name = "gh-mcp"
+    ext_dirs: list[Path] = [
+        Path.home() / ".local" / "share" / "gh" / "extensions" / ext_name,  # Linux
+        Path.home() / ".config" / "gh" / "extensions" / ext_name,            # Mac/Linux alt
+    ]
+    if os.name == "nt":
+        for env_var in ("LOCALAPPDATA", "APPDATA"):
+            base = os.environ.get(env_var)
+            if base:
+                ext_dirs.append(Path(base) / "GitHub CLI" / "extensions" / ext_name)
+    if any(d.exists() for d in ext_dirs):
         return True
-    result = subprocess.run(["gh", "mcp", "serve", "--help"], capture_output=True)
-    return result.returncode == 0
+
+    # Check registered extensions (covers non-standard install locations).
+    try:
+        r = subprocess.run(["gh", "extension", "list"], capture_output=True, timeout=5, text=True)
+        if r.returncode == 0 and ext_name in r.stdout:
+            return True
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+
+    # Check whether gh mcp serve is a built-in (newer gh versions).
+    # `gh mcp --help` prints subcommand list and exits — safe to run.
+    try:
+        r = subprocess.run(["gh", "mcp", "--help"], capture_output=True, timeout=5, text=True)
+        return r.returncode == 0 and "serve" in r.stdout
+    except (subprocess.TimeoutExpired, OSError):
+        return False
 
 
 def uv_available() -> bool:
