@@ -12,6 +12,7 @@
 /.audiagentic/provisioning/goose/bin/
 /.audiagentic/provisioning/rig/embedded/bin/
 /.audiagentic/provisioning/rig/embedded/build/
+/src/audiagentic/runtime/rig/embedded/rig/
 /dist/
 /.audiagentic/provisioning/build-cache/
 /test/planning/
