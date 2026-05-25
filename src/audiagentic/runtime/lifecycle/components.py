@@ -22,7 +22,7 @@ from audiagentic.foundation.components.registry import (
     marker_path,
     resolve_component_id,
 )
-from audiagentic.runtime.harness.pi.install import build_runtime_sync
+from audiagentic.runtime.harness import build_runtime_sync
 
 from .baseline_sync import sync_managed_baseline
 from .observers import fire_post_disable, fire_post_enable, fire_post_install, fire_post_uninstall

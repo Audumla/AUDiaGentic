@@ -33,11 +33,11 @@ def _status(msg: str) -> None:
     if os.environ.get("AUDIAGENTIC_STARTUP_STATUS", "1") != "0":
         print(f"[audiagentic] {msg}", file=sys.stderr, flush=True)
 
-from audiagentic.runtime.harness.pi.install import install_to
-from audiagentic.runtime.harness.pi.runner import (
+from audiagentic.runtime.harness import (
     RunnerParams,
     build_global_context,
     env_flag,
+    install_to,
     run_agent,
 )
 from audiagentic.runtime.home import global_harness_runtime
@@ -69,7 +69,7 @@ def _cmd_component(args: argparse.Namespace, project_root: Path) -> int:
         is_enabled,
         is_installed,
     )
-    from audiagentic.runtime.harness.pi.install import (
+    from audiagentic.runtime.harness import (
         refresh_materialized_agent_config,
         request_runtime_reload,
     )
@@ -299,7 +299,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
 
     _status("refreshing agent config...")
     try:
-        from audiagentic.runtime.harness.pi.install import refresh_materialized_agent_config
+        from audiagentic.runtime.harness import refresh_materialized_agent_config
 
         refresh_materialized_agent_config(harness_runtime, project_root=project_root)
     except Exception:
@@ -307,7 +307,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
 
     _status("starting agent...")
     enable_mcp = env_flag("AUDIAGENTIC_AG_ENABLE_MCP")
-    from audiagentic.runtime.harness.pi.runner import translate_agent_args
+    from audiagentic.runtime.harness import translate_agent_args
     ctx = build_global_context(
         project_root=project_root,
         agent_runtime=harness_runtime,
@@ -434,7 +434,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "refresh":
-        from audiagentic.runtime.harness.pi.install import refresh_harness_config_if_installed
+        from audiagentic.runtime.harness import refresh_harness_config_if_installed
         refreshed = refresh_harness_config_if_installed(project_root, reason="manual-refresh")
         if not refreshed:
             print("Harness not installed. Run: audiagentic install", file=sys.stderr)
@@ -446,7 +446,7 @@ def main(argv: list[str] | None = None) -> int:
         }, indent=2))
         return 0
 
-    from audiagentic.runtime.harness.pi.runner import RunnerParams
+    from audiagentic.runtime.harness import RunnerParams
     params = RunnerParams(
         prompt=args.prompt,
         mode=args.mode,
