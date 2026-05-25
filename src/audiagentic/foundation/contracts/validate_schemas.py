@@ -10,7 +10,7 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from audiagentic.foundation.contracts.schema_registry import SCHEMA_DIR, schema_filename
-from audiagentic.lib.repo_paths import REPO_ROOT
+from audiagentic.paths import REPO_ROOT
 
 FIXTURES_DIR = REPO_ROOT / "docs" / "examples" / "fixtures"
 

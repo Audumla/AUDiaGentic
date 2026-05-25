@@ -9,7 +9,7 @@ from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
-from audiagentic.lib.repo_paths import REPO_ROOT
+from audiagentic.paths import REPO_ROOT
 
 REGISTRY_PATH = REPO_ROOT / "docs" / "implementation" / "31_Build_Status_and_Work_Registry.md"
 
