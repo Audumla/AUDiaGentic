@@ -7,6 +7,7 @@ import sys
 import urllib.request
 from datetime import datetime
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 
 from .constants import DEFAULT_SMOKE_TIMEOUT
 from .context import AgentContext
@@ -31,13 +32,13 @@ def query_server_version(bin_dir: Path, timeout: float = 10.0) -> str | None:
     import subprocess
     import sys as _sys
 
-    from audiagentic.runtime.rig.embedded.launch import resolve_platform_dirs
+    from audiagentic.runtime.rig.embedded.launch import executable_command, resolve_platform_dirs
     try:
         server_dir, _ = resolve_platform_dirs(bin_dir)
         server_bin = server_dir / ("llama-server.exe" if _sys.platform == "win32" else "llama-server")
         if not server_bin.exists():
             return None
-        result = subprocess.run([str(server_bin), "--version"], capture_output=True, text=True, timeout=10)
+        result = subprocess.run([*executable_command(server_bin), "--version"], capture_output=True, text=True, timeout=10)
         if result.returncode == 0:
             output = (result.stdout + result.stderr).strip()
             first_line = output.split("\n")[0]
@@ -48,15 +49,35 @@ def query_server_version(bin_dir: Path, timeout: float = 10.0) -> str | None:
 
 
 def check_endpoint(ctx: AgentContext) -> None:
+    status_url = f"{ctx.endpoint}/models"
     import urllib.request
-    with urllib.request.urlopen(f"{ctx.endpoint}/models", timeout=15) as response:
-        if response.status != 200:
-            raise SystemExit(f"Endpoint health failed: {ctx.endpoint}/models -> {response.status}")
+    try:
+        with urllib.request.urlopen(status_url, timeout=15) as response:
+            if response.status != 200:
+                raise SystemExit(f"Rig health failed: {status_url} -> HTTP {response.status}")
+            payload = json.loads(response.read())
+    except HTTPError as exc:
+        detail = exc.reason
+        try:
+            body = json.loads(exc.read())
+            error = body.get("error", {})
+            detail = error.get("message") or detail
+        except Exception:
+            pass
+        raise SystemExit(f"Rig not ready: {status_url} -> HTTP {exc.code}: {detail}") from exc
+    except (URLError, OSError, TimeoutError) as exc:
+        raise SystemExit(f"Rig unavailable: {status_url}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"Rig health returned invalid JSON: {status_url}") from exc
+
+    data = payload.get("data")
+    if not isinstance(data, list) or not data:
+        raise SystemExit(f"Rig health returned no models: {status_url}")
 
 
 def direct_mcp_smoke(ctx: AgentContext, env: dict[str, str]) -> None:
     completed = subprocess.run(
-        [sys.executable, "-m", "audiagentic.components.core.harness_server", "--readonly", "--smoke-only", "--direct-smoke"],
+        [sys.executable, "-m", "audiagentic.components.core.session_server", "--readonly", "--smoke-only", "--direct-smoke"],
         cwd=ctx.project_root,
         env=env,
         check=False,
@@ -93,6 +114,7 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
             print("MCP disabled")
         print(f"Writing AudiaGentic smoke log: {log_path}")
     else:
+        check_endpoint(ctx)
         ui_cfg = ctx.harness_cfg.get("ui", {})
         tools_cfg = ctx.harness_cfg.get("tools", {})
 

@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from audiagentic.runtime.rig.embedded.launch import load_rig_model
+
 from .command import _build_run_env, build_agent_command
 from .constants import DEFAULT_PROVIDER, DEFAULT_RIG_PORT
 from .context import (
@@ -61,7 +63,7 @@ def build_global_context(*, project_root: Path, agent_runtime: Path, enable_mcp:
         )
     profile_name, model_profile = load_model_profile(None, requested_model)
     rig_port = int(harness_cfg.get("rig", {}).get("port", DEFAULT_RIG_PORT))
-    model_id = harness_cfg.get("model-id", "audiagentic-rig")
+    _, model_id = load_rig_model()
     endpoint, model, rig_pid, manages_rig = launch_rig_if_needed(
         requested_model, profile_name, model_profile, rig_port=rig_port, model_id=model_id
     )

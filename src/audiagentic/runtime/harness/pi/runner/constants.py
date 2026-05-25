@@ -20,5 +20,5 @@ def _find_package_root(start: Path) -> Path:
 
 
 _PKG_ROOT = _find_package_root(_AGENT_DIR)
-_MODELS_JSON = _PKG_ROOT / "runtime" / "rig" / "embedded" / "models.json"
+_RIG_CONFIG = _PKG_ROOT / "config" / "provisioning" / "rig" / "rig.yaml"
 _HARNESS_CONFIG = _PKG_ROOT / "config" / "provisioning" / "harness" / "ag.yaml"

@@ -1,37 +1,35 @@
 from __future__ import annotations
 
-import json
 import os
 
-from .constants import _MODELS_JSON
+from audiagentic.runtime.rig.embedded.launch import (
+    load_rig_model,
+    load_rig_profiles,
+    resolve_profile_definition,
+)
+
+from .constants import _RIG_CONFIG
 
 
 def load_model_profile(requested: str | None, model: str) -> tuple[str, dict[str, object]]:
-    data = json.loads(_MODELS_JSON.read_text(encoding="utf-8"))
+    data = load_rig_profiles(_RIG_CONFIG)
     models = data.get("models", {})
     if not isinstance(models, dict):
-        raise SystemExit(f"Invalid model profile file: {_MODELS_JSON}")
+        raise SystemExit(f"Invalid rig config: {_RIG_CONFIG}")
+    rig_profile, rig_model_id = load_rig_model(_RIG_CONFIG)
     target = requested or os.environ.get("AUDIAGENTIC_RIG_MODEL_PROFILE") or os.environ.get("AUDIAGENTIC_AG_MODEL_PROFILE")
+    if target == rig_model_id:
+        target = rig_profile
     if not target:
         if model in models:
             target = model
-        else:
-            for name, raw_profile in models.items():
-                if isinstance(raw_profile, dict) and model in raw_profile.get("aliases", []):
-                    target = str(name)
-                    break
+        elif model == rig_model_id:
+            target = rig_profile
     if not target:
         raise SystemExit(
             f"Model profile not found: {model}. "
-            f"Set AUDIAGENTIC_AG_MODEL, set model in harness config, or ensure the model name or alias matches an entry in {_MODELS_JSON}."
+            f"Set AUDIAGENTIC_AG_MODEL, set model in harness config, or ensure the model name matches an entry in {_RIG_CONFIG}."
         )
-    raw = models.get(target)
-    if raw is None:
-        for name, raw_profile in models.items():
-            if isinstance(raw_profile, dict) and target in raw_profile.get("aliases", []):
-                target = str(name)
-                raw = raw_profile
-                break
-    if not isinstance(raw, dict):
+    if target not in models:
         raise SystemExit(f"Model profile not found: {target}")
-    return target, raw
+    return target, resolve_profile_definition(target, _RIG_CONFIG)
