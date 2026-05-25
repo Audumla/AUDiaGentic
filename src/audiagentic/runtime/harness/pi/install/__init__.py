@@ -95,7 +95,7 @@ def install_to(target: Path, project_root: Path | None = None) -> int:
     )
     apply_lockdown_patches(npm_dir, project_root=project_root)
 
-    harness_cfg = _c._load_config(project_root=project_root)
+    harness_cfg = _c.load_harness_config(project_root=project_root)
     materialize_agent_config(target, harness_cfg, project_root=project_root)
     return 0
 
@@ -114,7 +114,7 @@ def uninstall_from(target: Path) -> int:
 
 def refresh_materialized_agent_config(target: Path, project_root: Path | None = None) -> int:
     """Rebuild generated agent config for current project/component state."""
-    harness_cfg = _c._load_config(project_root=project_root)
+    harness_cfg = _c.load_harness_config(project_root=project_root)
     materialize_agent_config(target, harness_cfg, project_root=project_root)
     return 0
 

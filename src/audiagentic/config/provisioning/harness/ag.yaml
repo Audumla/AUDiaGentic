@@ -13,6 +13,9 @@
 # Which model to use. Resolved against rig.yaml profile list.
 model: audiagentic-rig
 
+# Default provider id for Pi harness sessions.
+provider: audiagentic
+
 # Embedded rig settings.
 rig:
   port: 42001

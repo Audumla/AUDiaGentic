@@ -6,13 +6,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from audiagentic.runtime.rig.embedded.launch import (
-    build_command,
-    load_model_profiles,
-    resolve_model,
-    resolve_model_profile,
-    runtime_bin_dir,
-)
+from audiagentic.runtime.rig.embedded.config import load_model_profiles, resolve_model_profile
+from audiagentic.runtime.rig.embedded.launch import resolve_model, runtime_bin_dir
+from audiagentic.runtime.rig.embedded.process import build_command
 
 MINIMAL_MODELS = {
     "rig_model": {
