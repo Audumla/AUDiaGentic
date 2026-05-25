@@ -22,7 +22,7 @@ COPY .github/prompts ./.github/prompts
 COPY .opencode ./.opencode
 COPY AGENTS.md CLAUDE.md GEMINI.md ./
 
-RUN python3 -m pip install --no-cache-dir --break-system-packages --no-compile setuptools wheel build
+RUN python3 -m pip install --no-cache-dir --break-system-packages --no-compile "setuptools>=67" wheel build
 RUN python3 -m build --wheel --no-isolation --outdir /dist
 RUN python3 -m pip install --no-cache-dir --break-system-packages --no-compile /dist/*.whl pytest pytest-asyncio mcp==1.27.0
 
