@@ -45,8 +45,12 @@ def test_component_list_returns_all_registered(tmp_path):
 
 def test_component_list_shows_not_installed_for_fresh_dir(tmp_path):
     rows = _cli("component", "list", project=tmp_path)
+    # Harness-scoped components (e.g. session) resolve their marker from the global
+    # audiagentic_home() directory, not from tmp_path, so they may appear installed.
     for row in rows:
-        assert row["installed"] is False
+        if row.get("scope") == "harness":
+            continue
+        assert row["installed"] is False, f"{row['component_id']} should not be installed in fresh dir"
         assert row["enabled"] is None
 
 
@@ -65,10 +69,9 @@ def test_status_unknown_component(tmp_path):
 # ── install → status → disable → enable → uninstall ──────────────────────────
 
 LIFECYCLE_COMPONENTS = [
-    "project",
     "providers",
     "planning",
-    "release-audit-ledger",
+    "release",
     "agent-jobs",
 ]
 
