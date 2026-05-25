@@ -6,11 +6,12 @@ from .context import AgentContext
 
 
 def build_agent_command(ctx: AgentContext, *, smoke: bool) -> list[str]:
-    cfg = ctx.harness_cfg
-    tools_cfg = cfg.get("tools", {})
-    ext_cfg = cfg.get("extensions", {})
-    sandbox_cfg = cfg.get("sandbox", {})
-    lockdown_cfg = cfg.get("lockdown", {})
+    from audiagentic.runtime.harness.pi.install.constants import load_pi_config
+    pi_cfg = load_pi_config(ctx.project_root)
+    tools_cfg = pi_cfg.get("tools", {})
+    ext_cfg = pi_cfg.get("extensions", {})
+    sandbox_cfg = pi_cfg.get("sandbox", {})
+    lockdown_cfg = pi_cfg.get("lockdown", {})
 
     command = [str(ctx.agent_bin)]
     command.extend(["--provider", ctx.provider, "--model", ctx.model])
@@ -34,7 +35,7 @@ def build_agent_command(ctx: AgentContext, *, smoke: bool) -> list[str]:
         for ext_path in ext_cfg.get("load", []):
             command.extend(["-e", str(ext_path)])
 
-        custom_header = cfg.get("ui", {}).get("custom_header_extension")
+        custom_header = pi_cfg.get("ui", {}).get("custom_header_extension")
         if custom_header:
             command.extend(["-e", str(custom_header)])
 
@@ -50,7 +51,7 @@ def build_agent_command(ctx: AgentContext, *, smoke: bool) -> list[str]:
         if lockdown_cfg.get("no_context_files", True):
             command.append("--no-context-files")
 
-        for flag in cfg.get("extra_flags", []):
+        for flag in pi_cfg.get("extra_flags", []):
             command.append(flag)
 
     if not smoke:
