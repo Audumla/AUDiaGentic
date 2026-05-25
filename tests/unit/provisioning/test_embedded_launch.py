@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from audiagentic.runtime.rig.embedded.config import load_model_profiles, resolve_model_profile
+from audiagentic.runtime.rig.embedded.config import load_rig_profiles, resolve_model_profile
 from audiagentic.runtime.rig.embedded.launch import resolve_model, runtime_bin_dir
 from audiagentic.runtime.rig.embedded.process import build_command
 
@@ -43,17 +43,17 @@ MINIMAL_MODELS = {
 
 
 # ---------------------------------------------------------------------------
-# load_model_profiles
+# load_rig_profiles
 # ---------------------------------------------------------------------------
 
-def test_load_model_profiles_raises_when_file_missing(tmp_path: Path) -> None:
+def test_load_rig_profiles_raises_when_file_missing(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="not found"):
-        load_model_profiles(tmp_path / "missing.yaml")
+        load_rig_profiles(tmp_path / "missing.yaml")
 
 
-def test_load_model_profiles_returns_dict(tmp_path: Path) -> None:
+def test_load_rig_profiles_returns_dict(tmp_path: Path) -> None:
     p = _write_models(tmp_path, MINIMAL_MODELS)
-    data = load_model_profiles(p)
+    data = load_rig_profiles(p)
     assert data["rig_model"]["profile"] == "fast"
 
 

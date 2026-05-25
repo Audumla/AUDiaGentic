@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from audiagentic.runtime.config import load_yaml_file
+
 from .base import (
     SCOPE_PROJECT,
     ComponentDescriptor,
@@ -25,9 +27,7 @@ _ALL_COMPONENT_CONFIG_DIRS = [
 
 def register_from_yaml(path: Path) -> ComponentDescriptor:
     """Parse a single component config YAML and register the descriptor."""
-    import yaml
-
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    data = load_yaml_file(path)
     if data.get("type") != "component":
         raise ValueError(f"{path.name}: expected type=component, got {data.get('type')}")
     component_id = data.get("id")

@@ -12,7 +12,6 @@ The AUDiaGentic interoperability system provides event bus infrastructure and cr
 **Provider System** (`src/audiagentic/interoperability/providers/`):
 - **Adapters** (`adapters/`): Provider-specific implementations (codex, cline, claude, gemini, qwen, opencode)
 - **Execution** (`execution.py`): Provider dispatch
-- **Selection** (`selection.py`): Provider selection logic
 - **Health** (`health.py`): Provider health checks
 - **Models** (`models.py`): Model catalog types
 - **Status** (`status.py`): Provider status reporting

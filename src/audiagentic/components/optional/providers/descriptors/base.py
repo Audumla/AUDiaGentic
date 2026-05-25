@@ -2,23 +2,26 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.invoke.base import InvocationRecipe
+from audiagentic.runtime.mcp import McpServerEntry
 
 
 @dataclass(frozen=True)
 class McpConfigSpec:
-    """Declares how a provider reads/writes its MCP server config."""
-    # Relative string (resolved against project_root) or zero-arg callable returning
-    # an absolute Path (used when the config lives outside the project tree, e.g. the
-    # audiagentic harness which stores its config in a global runtime directory).
+    """Declares how a provider reads/writes its MCP server config.
+
+    reader/writer/remover are supplied by each adapter — they own their format.
+    format is informational only (display, tests, logging).
+    """
     config_path: str | Callable[[], Path]
-    format: str        # "mcp-json" | "goose-yaml" | "continue-json"
+    reader: Callable[[Path], dict[str, McpServerEntry]]
+    writer: Callable[[Path, dict[str, McpServerEntry]], None]
+    remover: Callable[[Path, str], bool]
     refresh_mode: str  # "file-watch" | "restart-required"
-    # Optional: called after config is written to signal the running provider.
-    # Receives project_root; returns a result dict merged into the reload response.
-    # None = inform-only (caller must restart the provider manually).
+    format: str = ""   # informational label
     reload_fn: Callable[[Path], dict[str, Any]] | None = None
 
 

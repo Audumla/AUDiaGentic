@@ -10,7 +10,7 @@ from . import constants as _c
 
 
 def _require_harness_provider(harness_cfg: dict) -> str:
-    provider = harness_cfg.get("provider")
+    provider = harness_cfg.get("rig", {}).get("provider")
     if not isinstance(provider, str) or not provider.strip():
         raise SystemExit(
             "Harness config missing required 'provider'. "
@@ -84,12 +84,17 @@ def _resolve_project_root(project_root: Path | None = None) -> Path:
     return Path.cwd()
 
 
-def _build_mcp_config(harness_cfg: dict, pi_cfg: dict, *, project_root: Path | None = None) -> dict:
-    """Build mcp.json config dynamically from installed components."""
-    from audiagentic.runtime.mcp_config_builder import build_mcp_config
+def _build_mcp_config(harness_cfg: dict, *, project_root: Path | None = None) -> dict:
+    """Build pi mcp.json from installed components via the pi harness adaptor."""
+    from audiagentic.runtime.harness.pi.mcp_format import build_pi_mcp_dict
+    from audiagentic.runtime.mcp.config_builder import collect_mcp_servers
 
-    mcp = {**harness_cfg.get("mcp", {}), **pi_cfg.get("mcp", {})}
-    return build_mcp_config(_resolve_project_root(project_root), {"mcp": mcp})
+    enabled = harness_cfg.get("mcp", {}).get("enabled", True)
+    if not enabled:
+        return build_pi_mcp_dict({}, enabled=False)
+
+    entries = collect_mcp_servers(_resolve_project_root(project_root))
+    return build_pi_mcp_dict(entries)
 
 
 def _build_settings_config(pi_cfg: dict, target: Path) -> dict:
@@ -135,7 +140,7 @@ def _build_settings_config(pi_cfg: dict, target: Path) -> dict:
 
 def _build_system_md(target: Path, *, project_root: Path | None = None) -> None:
     """Build SYSTEM.md with dynamic tool list from installed components."""
-    from audiagentic.runtime.mcp_config_builder import (
+    from audiagentic.runtime.mcp.config_builder import (
         apply_system_md_injections,
         build_system_md_injections,
     )
@@ -179,7 +184,7 @@ def materialize_agent_config(
     if ext_src.exists():
         shutil.copytree(ext_src, agent_dir / "extensions", dirs_exist_ok=True)
 
-    model_name: str = harness_cfg.get("model")
+    model_name: str = harness_cfg.get("rig", {}).get("model")
     if not model_name:
         raise SystemExit("No model configured. Set 'model' in ag.yaml or via AUDIAGENTIC_PI_MODEL env var.")
     model_profile: dict = {}
@@ -197,7 +202,7 @@ def materialize_agent_config(
         encoding="utf-8",
     )
     (agent_dir / "mcp.json").write_text(
-        json.dumps(_build_mcp_config(harness_cfg, pi_cfg, project_root=project_root), indent=2) + "\n",
+        json.dumps(_build_mcp_config(harness_cfg, project_root=project_root), indent=2) + "\n",
         encoding="utf-8",
     )
     (agent_dir / "settings.json").write_text(

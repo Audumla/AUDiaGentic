@@ -4,6 +4,7 @@ import json
 import subprocess
 
 from audiagentic.foundation.invoke.recipes.callable_ import CallableRecipe
+from audiagentic.runtime.mcp.formats import read_mcp_json, remove_mcp_json, write_mcp_json
 
 from ...descriptors.base import (
     AgentFile,
@@ -70,20 +71,6 @@ def _pi_probe(descriptor):
         "stdout": f"pi {version}".strip(),
         "stderr": "",
     }
-
-
-def _install_dispatch(project_root=None):
-    return _pi_install(project_root)
-
-
-def _uninstall_dispatch(project_root=None):
-    return _pi_uninstall(project_root)
-
-
-def _probe_dispatch(descriptor):
-    return _pi_probe(descriptor)
-
-
 register(ProviderDescriptor(
     provider_id="pi",
     display_name="Pi Coding Agent",
@@ -95,9 +82,9 @@ register(ProviderDescriptor(
         package_manager="pi-harness",
         package_name="audiagentic-pi-harness",
         executable="pi",
-        install=CallableRecipe(_install_dispatch, label="pi-harness install"),
-        uninstall=CallableRecipe(_uninstall_dispatch, label="pi-harness uninstall"),
-        probe_fn=_probe_dispatch,
+        install=CallableRecipe(_pi_install, label="pi-harness install"),
+        uninstall=CallableRecipe(_pi_uninstall, label="pi-harness uninstall"),
+        probe_fn=_pi_probe,
     ),
     vscode_extensions=(),
     permissions=ProviderPermissions(
@@ -112,6 +99,9 @@ register(ProviderDescriptor(
     ),
     mcp_config=McpConfigSpec(
         config_path=".mcp.json",
+        reader=read_mcp_json,
+        writer=write_mcp_json,
+        remover=remove_mcp_json,
         format="mcp-json",
         refresh_mode="restart-required",
     ),
