@@ -34,6 +34,7 @@ _SRC_DIR = _PKG_ROOT.parent  # src/
 _REPO_ROOT = _PKG_ROOT.parent.parent  # repo root (dev layout)
 _RIG_CONFIG = _PKG_ROOT / "config" / "provisioning" / "rig" / "rig.yaml"
 _HARNESS_CONFIG = _PKG_ROOT / "config" / "provisioning" / "harness" / "ag.yaml"
+_PI_CONFIG = _PKG_ROOT / "config" / "provisioning" / "harness" / "pi.yaml"
 
 DEFAULT_PROVIDER = "audiagentic"
 DEFAULT_API_KEY = "dummy"
@@ -53,6 +54,15 @@ def _load_config(project_root: Path | None = None) -> dict:
         pkg_default_path=_HARNESS_CONFIG,
         project_root=project_root,
         namespace="harness/ag",
+    )
+
+
+def load_pi_config(project_root: Path | None = None) -> dict:
+    from audiagentic.runtime.config_loader import load_layered_config
+    return load_layered_config(
+        pkg_default_path=_PI_CONFIG,
+        project_root=project_root,
+        namespace="harness/pi",
     )
 
 

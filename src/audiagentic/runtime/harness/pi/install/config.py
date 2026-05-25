@@ -55,17 +55,16 @@ def _resolve_project_root(project_root: Path | None = None) -> Path:
     return Path.cwd()
 
 
-def _build_mcp_config(harness_cfg: dict, *, project_root: Path | None = None) -> dict:
+def _build_mcp_config(harness_cfg: dict, pi_cfg: dict, *, project_root: Path | None = None) -> dict:
     """Build mcp.json config dynamically from installed components."""
     from audiagentic.runtime.mcp_config_builder import build_mcp_config
 
-    # Load extra config from harness_cfg
-    extra_config = {"mcp": harness_cfg.get("mcp", {})}
-    return build_mcp_config(_resolve_project_root(project_root), extra_config)
+    mcp = {**harness_cfg.get("mcp", {}), **pi_cfg.get("mcp", {})}
+    return build_mcp_config(_resolve_project_root(project_root), {"mcp": mcp})
 
 
-def _build_settings_config(harness_cfg: dict, target: Path) -> dict:
-    ui = harness_cfg.get("ui", {})
+def _build_settings_config(pi_cfg: dict, target: Path) -> dict:
+    ui = pi_cfg.get("ui", {})
     theme_name: str = ui.get("theme", "dark")
     theme_colors = ui.get("theme_colors") or {}
 
@@ -105,7 +104,7 @@ def _build_settings_config(harness_cfg: dict, target: Path) -> dict:
     return settings
 
 
-def _build_system_md(target: Path, harness_cfg: dict, *, project_root: Path | None = None) -> None:
+def _build_system_md(target: Path, *, project_root: Path | None = None) -> None:
     """Build SYSTEM.md with dynamic tool list from installed components."""
     from audiagentic.runtime.mcp_config_builder import (
         apply_system_md_injections,
@@ -135,19 +134,14 @@ def materialize_agent_config(
     *,
     project_root: Path | None = None,
 ) -> None:
-    """Write all agent config files from Python dicts. Called at install time.
+    """Write all agent config files. Called at install and refresh time."""
+    pi_cfg = _c.load_pi_config(project_root=project_root)
 
-    Static files (SYSTEM.md, extensions/) are also copied here so the agent
-    directory is fully populated after install with no further writes needed at
-    launch time.
-    """
     agent_dir = target / "agent"
     agent_dir.mkdir(parents=True, exist_ok=True)
 
-    # Build SYSTEM.md dynamically
-    _build_system_md(target, harness_cfg, project_root=project_root)
+    _build_system_md(target, project_root=project_root)
 
-    # Copy APPEND_SYSTEM.md
     append_src = _c._TEMPLATES_DIR / "APPEND_SYSTEM.md"
     if append_src.exists():
         shutil.copy2(append_src, agent_dir / "APPEND_SYSTEM.md")
@@ -158,7 +152,7 @@ def materialize_agent_config(
 
     model_name: str = harness_cfg.get("model")
     if not model_name:
-        raise SystemExit("No model configured in harness config. Set 'model' in ag.yaml or via AUDIAGENTIC_PI_MODEL env var.")
+        raise SystemExit("No model configured. Set 'model' in ag.yaml or via AUDIAGENTIC_PI_MODEL env var.")
     model_profile: dict = {}
     model_id = model_name
     if _c._RIG_CONFIG.exists():
@@ -177,11 +171,11 @@ def materialize_agent_config(
         encoding="utf-8",
     )
     (agent_dir / "mcp.json").write_text(
-        json.dumps(_build_mcp_config(harness_cfg, project_root=project_root), indent=2) + "\n",
+        json.dumps(_build_mcp_config(harness_cfg, pi_cfg, project_root=project_root), indent=2) + "\n",
         encoding="utf-8",
     )
     (agent_dir / "settings.json").write_text(
-        json.dumps(_build_settings_config(harness_cfg, target), indent=2) + "\n",
+        json.dumps(_build_settings_config(pi_cfg, target), indent=2) + "\n",
         encoding="utf-8",
     )
 
