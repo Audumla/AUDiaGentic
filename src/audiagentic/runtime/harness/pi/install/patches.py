@@ -436,6 +436,151 @@ def _patch_mcp_direct_tools_progress(npm_dir: Path) -> None:
         target.write_text(source, encoding="utf-8")
 
 
+def _patch_mcp_proxy_progress(npm_dir: Path) -> None:
+    """Bridge MCP progress notifications for generic `mcp(...)` calls too."""
+    proxy_target = npm_dir / "node_modules" / "pi-mcp-adapter" / "proxy-modes.ts"
+    index_target = npm_dir / "node_modules" / "pi-mcp-adapter" / "index.ts"
+    if not proxy_target.exists() or not index_target.exists():
+        return
+
+    proxy_source = proxy_target.read_text(encoding="utf-8")
+
+    old_import = 'import { authenticate, supportsOAuth } from "./mcp-auth-flow.ts";'
+    new_import = (
+        'import { authenticate, supportsOAuth } from "./mcp-auth-flow.ts";\n'
+        'import { LoggingMessageNotificationSchema } from "@modelcontextprotocol/sdk/types.js";'
+    )
+    if "LoggingMessageNotificationSchema" not in proxy_source and old_import in proxy_source:
+        proxy_source = proxy_source.replace(old_import, new_import, 1)
+
+    old_sig = (
+        "export async function executeCall(\n"
+        "  state: McpExtensionState,\n"
+        "  toolName: string,\n"
+        "  args?: Record<string, unknown>,\n"
+        "  serverOverride?: string,\n"
+        "  getPiTools?: () => ToolInfo[] | undefined,\n"
+        "): Promise<ProxyToolResult> {"
+    )
+    new_sig = (
+        "export async function executeCall(\n"
+        "  state: McpExtensionState,\n"
+        "  toolName: string,\n"
+        "  args?: Record<string, unknown>,\n"
+        "  serverOverride?: string,\n"
+        "  getPiTools?: () => ToolInfo[] | undefined,\n"
+        "  onUpdate?: ((update: AgentToolResult<Record<string, unknown>>) => void) | undefined,\n"
+        "  ctx?: { ui?: { setWorkingVisible?: (visible: boolean) => void; setWorkingMessage?: (message?: string) => void; setStatus?: (key: string, value?: string) => void } } | undefined,\n"
+        "): Promise<ProxyToolResult> {"
+    )
+    if "onUpdate?: ((update: AgentToolResult<Record<string, unknown>>) => void) | undefined," not in proxy_source and old_sig in proxy_source:
+        proxy_source = proxy_source.replace(old_sig, new_sig, 1)
+
+    call_marker = "    const resultPromise = connection.client.callTool({\n"
+    progress_block = (
+        "    connection.client.setNotificationHandler(LoggingMessageNotificationSchema, (notification) => {\n"
+        "      const data = notification.params.data;\n"
+        "      const message = typeof data === \"object\" && data !== null && \"message\" in data\n"
+        "        ? String((data as { message?: unknown }).message)\n"
+        "        : typeof data === \"string\"\n"
+        "          ? data\n"
+        "          : JSON.stringify(data);\n"
+        "      const text = `[${notification.params.level}] ${message}`;\n"
+        "      ctx?.ui?.setWorkingVisible?.(true);\n"
+        "      ctx?.ui?.setWorkingMessage?.(text);\n"
+        "      ctx?.ui?.setStatus?.(\"mcp-progress\", text);\n"
+        "      onUpdate?.({\n"
+        "        content: [{ type: \"text\" as const, text }],\n"
+        "        details: { mode: \"call\", server: serverName, tool: toolMeta?.originalName ?? toolName, log: notification.params },\n"
+        "      });\n"
+        "    });\n\n"
+        "    const resultPromise = connection.client.callTool(\n"
+        "      {\n"
+        "        name: toolMeta.originalName,\n"
+        "        arguments: args ?? {},\n"
+        "        _meta: uiSession?.requestMeta,\n"
+        "      },\n"
+        "      undefined,\n"
+        "      {\n"
+        "        resetTimeoutOnProgress: true,\n"
+        "        onprogress: (progress) => {\n"
+        "          const message = typeof progress.message === \"string\"\n"
+        "            ? progress.message\n"
+        "            : `MCP progress${typeof progress.progress === \"number\" ? ` ${progress.progress}` : \"\"}`;\n"
+        "          ctx?.ui?.setWorkingVisible?.(true);\n"
+        "          ctx?.ui?.setWorkingMessage?.(message);\n"
+        "          ctx?.ui?.setStatus?.(\"mcp-progress\", message);\n"
+        "          onUpdate?.({\n"
+        "            content: [{ type: \"text\" as const, text: message }],\n"
+        "            details: { mode: \"call\", server: serverName, tool: toolMeta.originalName, progress },\n"
+        "          });\n"
+        "        },\n"
+        "      },\n"
+        "    );"
+    )
+    old_call = (
+        "    const resultPromise = connection.client.callTool({\n"
+        "      name: toolMeta.originalName,\n"
+        "      arguments: args ?? {},\n"
+        "      _meta: uiSession?.requestMeta,\n"
+        "    });"
+    )
+    if "resetTimeoutOnProgress: true" not in proxy_source and old_call in proxy_source:
+        proxy_source = proxy_source.replace(old_call, progress_block, 1)
+
+    finally_marker = "  } finally {\n"
+    finally_inserts = (
+        "  } finally {\n"
+        "    connection?.client?.removeNotificationHandler?.(LoggingMessageNotificationSchema);\n"
+        "    ctx?.ui?.setWorkingMessage?.();\n"
+        "    ctx?.ui?.setStatus?.(\"mcp-progress\", undefined);\n"
+    )
+    if "removeNotificationHandler?.(LoggingMessageNotificationSchema)" not in proxy_source and finally_marker in proxy_source:
+        proxy_source = proxy_source.replace(finally_marker, finally_inserts, 1)
+
+    if proxy_source != proxy_target.read_text(encoding="utf-8"):
+        proxy_target.write_text(proxy_source, encoding="utf-8")
+
+    index_source = index_target.read_text(encoding="utf-8")
+    old_execute = "          return executeCall(state, params.tool, parsedArgs, params.server, getPiTools);\n"
+    new_execute = "          return executeCall(state, params.tool, parsedArgs, params.server, getPiTools, _onUpdate, _ctx);\n"
+    if new_execute not in index_source and old_execute in index_source:
+        index_source = index_source.replace(old_execute, new_execute, 1)
+    if index_source != index_target.read_text(encoding="utf-8"):
+        index_target.write_text(index_source, encoding="utf-8")
+
+
+def _patch_mcp_explicit_config_only(npm_dir: Path) -> None:
+    target = npm_dir / "node_modules" / "pi-mcp-adapter" / "config.ts"
+    if not target.exists():
+        return
+    source = target.read_text(encoding="utf-8")
+    marker = "if (overridePath) {\n"
+    if marker in source:
+        return
+    needle = (
+        "  const userPath = getPiGlobalConfigPath(overridePath);\n"
+        "  const projectPath = getProjectConfigPath(cwd);\n"
+    )
+    replacement = (
+        "  const userPath = getPiGlobalConfigPath(overridePath);\n"
+        "  if (overridePath) {\n"
+        "    return [{\n"
+        "      id: \"pi-global\",\n"
+        "      label: \"Pi explicit MCP config\",\n"
+        "      readPath: userPath,\n"
+        "      writePath: userPath,\n"
+        "      kind: \"user\",\n"
+        "      shared: false,\n"
+        "      scope: \"global\",\n"
+        "    }];\n"
+        "  }\n"
+        "  const projectPath = getProjectConfigPath(cwd);\n"
+    )
+    if needle in source:
+        target.write_text(source.replace(needle, replacement, 1), encoding="utf-8")
+
+
 def apply_lockdown_patches(npm_dir: Path, project_root: Path | None = None) -> None:
     cfg = _c._load_config(project_root=project_root)
     blocked = cfg.get("lockdown", {}).get("block_builtin_commands", [])
@@ -450,7 +595,11 @@ def apply_lockdown_patches(npm_dir: Path, project_root: Path | None = None) -> N
     _c._print("Patched AudiaGentic agent: update notifications suppressed")
     _patch_mcp_oauth_suppress(npm_dir)
     _c._print("Patched MCP adapter: OAuth callback server suppressed (stdio servers only)")
+    _patch_mcp_explicit_config_only(npm_dir)
+    _c._print("Patched MCP adapter: explicit config disables auto-discovery")
     _patch_mcp_direct_tools_live_register(npm_dir)
     _c._print("Patched MCP adapter: bootstrapped direct tools register in-session")
     _patch_mcp_direct_tools_progress(npm_dir)
     _c._print("Patched MCP adapter: direct tool progress bridged to Pi")
+    _patch_mcp_proxy_progress(npm_dir)
+    _c._print("Patched MCP adapter: proxy tool progress bridged to Pi")

@@ -9,7 +9,7 @@
       "command": "__AUDIAGENTIC_PYTHON__",
       "args": [
         "-m",
-        "audiagentic.components.core.harness_server",
+        "audiagentic.components.core.session_server",
         "--readonly",
         "--smoke-only"
       ],
