@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from audiagentic.runtime.rig.embedded.launch import (
+from audiagentic.runtime.rig.embedded.config import (
     load_rig_model,
     load_rig_profiles,
     resolve_profile_definition,

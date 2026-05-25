@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from audiagentic.runtime.harness.pi.runner import AgentContext, _build_run_env, launch_rig_if_needed
-from audiagentic.runtime.rig.embedded.launch import load_rig_model
+from audiagentic.runtime.rig.embedded.config import load_rig_model
 
 RIG_PROFILE, RIG_MODEL_ID = load_rig_model()
 
@@ -72,7 +72,7 @@ def test_pi_model_in_env() -> None:
 def test_external_profile_skips_embedded_launch(monkeypatch) -> None:
     monkeypatch.delenv("AUDIAGENTIC_AG_BASE_URL", raising=False)
     external_profile: dict = {}
-    with patch("audiagentic.runtime.harness.pi.runner.smoke.subprocess.run") as mock_run:
+    with patch("audiagentic.runtime.harness.pi.runner.agent_run.subprocess.run") as mock_run:
         endpoint, model, rig_pid, manages_rig = launch_rig_if_needed(RIG_MODEL_ID, RIG_PROFILE, external_profile, 9999)
     mock_run.assert_not_called()
     assert rig_pid is None

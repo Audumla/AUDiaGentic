@@ -20,11 +20,18 @@ def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]
     return result
 
 
-def _load_yaml(path: Path) -> dict[str, Any]:
-    """Load a YAML file; return {} if the file does not exist."""
+def load_yaml_file(path: Path) -> dict[str, Any]:
+    """Load YAML file.
+
+    Missing files return {}.
+    Malformed YAML raises SystemExit with the file path.
+    """
     if not path.exists():
         return {}
-    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise SystemExit(f"Invalid YAML config: {path}") from exc
 
 
 def load_layered_config(
@@ -61,15 +68,15 @@ def load_layered_config(
             project_root / ".audiagentic" / "config" / f"{namespace}.yaml"
         )
 
-    defaults = _load_yaml(pkg_default_path)
+    defaults = load_yaml_file(pkg_default_path)
 
     local: dict[str, Any] = {}
     if project_local_path is not None:
-        local = _load_yaml(project_local_path)
+        local = load_yaml_file(project_local_path)
 
     exclusive_local = bool(local.pop("exclusive_local", False))
 
-    user_global: dict[str, Any] = {} if exclusive_local else _load_yaml(user_global_path)
+    user_global: dict[str, Any] = {} if exclusive_local else load_yaml_file(user_global_path)
 
     result = _deep_merge(defaults, user_global)
     result = _deep_merge(result, local)
