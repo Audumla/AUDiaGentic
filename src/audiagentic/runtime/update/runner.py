@@ -138,7 +138,7 @@ def install_version(version: str) -> dict:
 
     print("  Refreshing harness config...", flush=True)
     try:
-        from audiagentic.runtime.harness.pi.install import install_to
+        from audiagentic.runtime.harness import install_to
         from audiagentic.runtime.home import global_harness_runtime
         install_to(global_harness_runtime())
     except Exception as exc:  # noqa: BLE001
