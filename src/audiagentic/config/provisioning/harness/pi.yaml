@@ -1,0 +1,101 @@
+# AUDiaGentic Pi harness — Pi-specific package defaults.
+#
+# Loaded only by the Pi harness runner and installer. Generic harness settings
+# live in ag.yaml and are loaded independently.
+#
+# Override hierarchy (deep-merge, lowest priority first):
+#   1. This file     — package defaults
+#   2. User-global   — $AUDIAGENTIC_HOME/config/harness/pi.yaml
+#   3. Project-local — <project>/.audiagentic/config/harness/pi.yaml
+
+# --- Built-in tool access control ---
+#
+# allow:      Explicit allowlist of Pi built-in tools. null = Pi defaults.
+#             Available: read, bash, edit, write, grep, find, ls
+# no_builtin: Disable all Pi built-in tools. MCP and extension tools remain active.
+# no_all:     Disable every tool including extensions and MCP.
+#
+# Priority: no_all > no_builtin > allow
+tools:
+  allow: null
+  no_builtin: true
+  no_all: false
+
+# --- Extension loading ---
+#
+# no_auto_discovery: Block Pi from auto-loading extensions from the home dir.
+# load:             Explicit extension paths to load.
+extensions:
+  no_auto_discovery: true
+  load: []
+
+# --- MCP extra server args ---
+#
+# Additional args appended to the Pi MCP adapter server invocation.
+# The adapter already passes --readonly --smoke-only; add extras here.
+mcp:
+  extra_server_args: []
+
+# --- Sandbox ---
+#
+# enabled:     Load the sandbox extension.
+# config_path: Path to sandbox.json.
+sandbox:
+  enabled: false
+  config_path: null
+
+# --- Lockdown ---
+#
+# Restricts the slash-command surface exposed to the user.
+#
+# no_skills:           Disable skill-based /commands.
+# no_prompt_templates: Disable prompt-template /commands.
+# no_context_files:    Stop Pi auto-loading CLAUDE.md / AGENTS.md.
+# block_builtin_commands: Commands removed at install time (patch applied once).
+lockdown:
+  no_skills: true
+  no_prompt_templates: true
+  no_context_files: true
+  block_builtin_commands:
+    - settings
+    - model
+    - scoped-models
+    - login
+    - logout
+    - share
+    - debug
+    - arminsayshi
+    - dementedelves
+    - export
+    - import
+    - copy
+    - name
+    - session
+    - changelog
+    - hotkeys
+    - fork
+    - clone
+    - tree
+    - new
+    - update
+    - compact
+    - resume
+
+# Extra Pi CLI flags appended verbatim to every non-smoke invocation.
+extra_flags: []
+
+# --- UI customization ---
+#
+# Written into Pi's settings.json on each install/refresh.
+ui:
+  theme: dark
+  quiet_startup: true
+  collapse_changelog: true
+  custom_header_extension: null
+  show_startup_info: false
+  startup_banner: null
+  hide_thinking_block: true
+  hide_tool_use: true
+  thinking: off
+  editor_padding_x: 0
+  theme_colors: {}

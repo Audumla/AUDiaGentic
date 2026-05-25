@@ -57,3 +57,9 @@ def load_active_profile(
     """Load and resolve the active rig model profile."""
     from .pi.runner.models import load_model_profile
     return load_model_profile(profiles_path, model)
+
+
+def load_pi_config(project_root: Path | None = None) -> dict:
+    """Load Pi-specific harness config (pi.yaml). Only used by Pi-aware callers."""
+    from .pi.install.constants import load_pi_config as _load
+    return _load(project_root=project_root)

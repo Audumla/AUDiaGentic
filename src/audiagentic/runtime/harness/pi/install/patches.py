@@ -582,13 +582,13 @@ def _patch_mcp_explicit_config_only(npm_dir: Path) -> None:
 
 
 def apply_lockdown_patches(npm_dir: Path, project_root: Path | None = None) -> None:
-    cfg = _c._load_config(project_root=project_root)
-    blocked = cfg.get("lockdown", {}).get("block_builtin_commands", [])
+    pi_cfg = _c.load_pi_config(project_root=project_root)
+    blocked = pi_cfg.get("lockdown", {}).get("block_builtin_commands", [])
     if blocked:
         _patch_slash_commands(npm_dir, blocked)
         _patch_interactive_mode(npm_dir, blocked)
         _c._print(f"Patched AudiaGentic agent: blocked commands {blocked}")
-    if cfg.get("ui", {}).get("hide_tool_use"):
+    if pi_cfg.get("ui", {}).get("hide_tool_use"):
         _patch_tool_execution(npm_dir)
         _c._print("Patched AudiaGentic agent: MCP tool call blocks hidden")
     _patch_update_notification(npm_dir)
