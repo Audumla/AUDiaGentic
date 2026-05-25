@@ -34,7 +34,7 @@ def _npm() -> str:
 
 
 def load_harness_config(project_root: Path | None = None) -> dict:
-    from audiagentic.runtime.config_loader import load_layered_config
+    from audiagentic.runtime.config import load_layered_config
     return load_layered_config(
         pkg_default_path=_HARNESS_CONFIG,
         project_root=project_root,
@@ -43,7 +43,7 @@ def load_harness_config(project_root: Path | None = None) -> dict:
 
 
 def load_pi_config(project_root: Path | None = None) -> dict:
-    from audiagentic.runtime.config_loader import load_layered_config
+    from audiagentic.runtime.config import load_layered_config
     return load_layered_config(
         pkg_default_path=_PI_CONFIG,
         project_root=project_root,

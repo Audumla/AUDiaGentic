@@ -6,7 +6,6 @@ Reads AUDIAGENTIC_REPO_ROOT from env to locate the target project.
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from pathlib import Path
@@ -19,11 +18,6 @@ except ImportError:
     print("Error: mcp package not installed. Run: pip install mcp", file=sys.stderr)
     sys.exit(1)
 
-from audiagentic.components.optional.providers.services.provider_catalog import (
-    catalog_is_stale,
-    runtime_catalog_path,
-    runtime_catalog_root,
-)
 from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
@@ -31,12 +25,6 @@ from audiagentic.foundation.output import ComponentOutputEvent
 from audiagentic.runtime.mcp.server import run_blocking_with_output
 
 register_all_components()
-
-
-def _descriptor_ids() -> frozenset[str]:
-    """Return provider IDs from the descriptor registry (lazy import, avoids init cost)."""
-    from audiagentic.components.optional.providers.descriptors.registry import all_descriptors
-    return frozenset(all_descriptors())
 
 
 def _project_root() -> Path:
@@ -62,31 +50,6 @@ def _prefix_output(provider_id: str, output):
         ))
 
     return sink
-
-
-def _providers_config_path(project_root: Path) -> Path:
-    return project_root / ".audiagentic" / "config" / "runtime" / "providers.yaml"
-
-
-def _read_providers_yaml(project_root: Path) -> dict[str, Any] | None:
-    path = _providers_config_path(project_root)
-    if not path.exists():
-        return None
-    try:
-        import yaml
-        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except Exception:  # noqa: BLE001
-        return None
-
-
-def _read_catalog(project_root: Path, provider_id: str) -> dict[str, Any] | None:
-    path = runtime_catalog_path(project_root, provider_id)
-    if not path.exists():
-        return None
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None
 
 
 def _server_decl():
@@ -121,122 +84,17 @@ def build_server() -> FastMCP:
 
     @mcp.tool(description=_tool_description("list_providers", "List all known providers and their configuration or catalog status."))
     def list_providers() -> dict[str, Any]:
-        project_root = _project_root()
-        providers_yaml = _read_providers_yaml(project_root)
-        catalogs_dir = runtime_catalog_root(project_root)
-
-        configured_ids: set[str] = set()
-        if providers_yaml:
-            configured_ids = set(providers_yaml.get("providers", {}).keys())
-
-        catalog_ids: set[str] = set()
-        if catalogs_dir.exists():
-            catalog_ids = {p.name for p in catalogs_dir.iterdir() if p.is_dir()}
-
-        descriptor_ids = _descriptor_ids()
-        all_ids = descriptor_ids | configured_ids | catalog_ids
-
-        from audiagentic.components.optional.providers.descriptors.registry import (
-            _list_vscode_extensions,
-        )
-        from audiagentic.components.optional.providers.descriptors.registry import (
-            all_descriptors as _all_desc,
-        )
-        descriptors = _all_desc()
-        is_vscode_project = (project_root / ".vscode").exists()
-        installed_extensions: list[str] | None = _list_vscode_extensions(allow_probe=True) if is_vscode_project else None
-
-        result = []
-        for provider_id in sorted(all_ids):
-            catalog = _read_catalog(project_root, provider_id)
-            cfg = providers_yaml.get("providers", {}).get(provider_id, {}) if providers_yaml else {}
-            desc = descriptors.get(provider_id)
-            install_method = (desc.cli_install.package_manager if desc and desc.cli_install else "") or ""
-
-            vscode_exts: list[dict[str, Any]] = []
-            if desc and desc.vscode_extensions and is_vscode_project:
-                for ext in desc.vscode_extensions:
-                    vscode_exts.append({
-                        "extension_id": ext.extension_id,
-                        "display_name": ext.display_name,
-                        "installed": (
-                            ext.extension_id.lower() in installed_extensions
-                            if installed_extensions is not None else False
-                        ),
-                    })
-
-            entry: dict[str, Any] = {
-                "provider_id": provider_id,
-                "known": provider_id in descriptor_ids,
-                "configured": provider_id in configured_ids,
-                "enabled": cfg.get("enabled", False),
-                "install_method": install_method,
-                "access_mode": cfg.get("access-mode", ""),
-                "default_model": cfg.get("default-model", ""),
-                "has_catalog": catalog is not None,
-                "catalog_fetched_at": catalog.get("fetched-at", "") if catalog else "",
-                "catalog_model_count": len(catalog.get("models", [])) if catalog else 0,
-                "catalog_stale": catalog_is_stale(catalog, max_age_hours=24) if catalog else False,
-            }
-            if vscode_exts:
-                entry["vscode_extensions"] = vscode_exts
-            result.append(entry)
-
-        return {
-            "project_root": str(project_root),
-            "vscode_project": is_vscode_project,
-            "providers_yaml_exists": providers_yaml is not None,
-            "providers": result,
-        }
+        from audiagentic.components.optional.providers.services.status import build_provider_status
+        return build_provider_status(_project_root())
 
     @mcp.tool(description=_tool_description("provider_status", "Return detailed status for a specific provider including catalog contents."))
     def provider_status(provider_id: str) -> dict[str, Any]:
-        project_root = _project_root()
-        providers_yaml = _read_providers_yaml(project_root)
-
-        config: dict[str, Any] | None = None
-        if providers_yaml:
-            config = providers_yaml.get("providers", {}).get(provider_id)
-
-        catalog = _read_catalog(project_root, provider_id)
-
-        from audiagentic.components.optional.providers.descriptors.registry import (
-            _list_vscode_extensions,
-            get_descriptor,
-        )
-        desc = get_descriptor(provider_id)
-        install_method = (desc.cli_install.package_manager if desc and desc.cli_install else "") or ""
-        is_vscode_project = (project_root / ".vscode").exists()
-
-        vscode_exts: list[dict[str, Any]] = []
-        if desc and desc.vscode_extensions and is_vscode_project:
-            installed_extensions = _list_vscode_extensions()
-            for ext in desc.vscode_extensions:
-                vscode_exts.append({
-                    "extension_id": ext.extension_id,
-                    "display_name": ext.display_name,
-                    "installed": (
-                        ext.extension_id.lower() in installed_extensions
-                        if installed_extensions is not None else False
-                    ),
-                })
-
-        result: dict[str, Any] = {
-            "provider_id": provider_id,
-            "project_root": str(project_root),
-            "vscode_project": is_vscode_project,
-            "configured": config is not None,
-            "enabled": config.get("enabled", False) if config else False,
-            "install_method": install_method,
-            "access_mode": config.get("access-mode", "") if config else "",
-            "default_model": config.get("default-model", "") if config else "",
-            "config": config or {},
-            "catalog": catalog or {},
-            "catalog_stale": catalog_is_stale(catalog, max_age_hours=24) if catalog else False,
-        }
-        if vscode_exts:
-            result["vscode_extensions"] = vscode_exts
-        return result
+        from audiagentic.components.optional.providers.services.status import build_provider_status
+        from audiagentic.foundation.contracts.errors import AudiaGenticError
+        try:
+            return build_provider_status(_project_root(), provider_id)
+        except AudiaGenticError as exc:
+            return {"provider_id": provider_id, "ok": False, "error": exc.message}
 
     @mcp.tool(description=_tool_description("interrogate_provider", "Interrogate a provider for CLI availability, VS Code extension status, permissions, and agent files."))
     def interrogate_provider(provider_id: str) -> dict[str, Any]:
@@ -277,9 +135,14 @@ def build_server() -> FastMCP:
 
     @mcp.tool(description=_tool_description("list_provider_models", "List model IDs from a provider runtime catalog."))
     def list_provider_models(provider_id: str) -> dict[str, Any]:
+        from audiagentic.components.optional.providers.services.provider_catalog import (
+            read_model_catalog,
+        )
+        from audiagentic.foundation.contracts.errors import AudiaGenticError
         project_root = _project_root()
-        catalog = _read_catalog(project_root, provider_id)
-        if catalog is None:
+        try:
+            catalog = read_model_catalog(project_root, provider_id)
+        except AudiaGenticError:
             return {"provider_id": provider_id, "models": [], "error": "no catalog found"}
         models = [
             {
@@ -445,7 +308,7 @@ def build_server() -> FastMCP:
 
     @mcp.tool(description=_tool_description("list_provider_mcp_servers", "List current MCP server entries in a provider's config file."))
     def list_provider_mcp_servers(provider_id: str) -> dict[str, Any]:
-        from audiagentic.components.optional.providers.services.lifecycle import (
+        from audiagentic.components.optional.providers.services.mcp import (
             list_provider_mcp_servers as _list_mcp,
         )
         return _list_mcp(provider_id, _project_root())
@@ -458,7 +321,7 @@ def build_server() -> FastMCP:
         args: list[str] | None = None,
         env: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        from audiagentic.components.optional.providers.services.lifecycle import (
+        from audiagentic.components.optional.providers.services.mcp import (
             add_provider_mcp_server as _add_mcp,
         )
         return _add_mcp(
@@ -469,14 +332,14 @@ def build_server() -> FastMCP:
 
     @mcp.tool(description=_tool_description("remove_provider_mcp_server", "Remove a named MCP server entry from a provider's config file."))
     def remove_provider_mcp_server(provider_id: str, server_name: str) -> dict[str, Any]:
-        from audiagentic.components.optional.providers.services.lifecycle import (
+        from audiagentic.components.optional.providers.services.mcp import (
             remove_provider_mcp_server as _remove_mcp,
         )
         return _remove_mcp(provider_id, server_name, _project_root())
 
     @mcp.tool(description=_tool_description("reload_provider_mcp", "Signal or reload a provider after its MCP config has changed."))
     def reload_provider_mcp(provider_id: str) -> dict[str, Any]:
-        from audiagentic.components.optional.providers.services.lifecycle import (
+        from audiagentic.components.optional.providers.services.mcp import (
             reload_provider_mcp as _reload_mcp,
         )
         return _reload_mcp(provider_id, _project_root())

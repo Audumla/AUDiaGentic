@@ -27,7 +27,7 @@ class AgentContext:
 
 
 def load_harness_config(project_root: Path | None = None) -> dict:
-    from audiagentic.runtime.config_loader import load_layered_config
+    from audiagentic.runtime.config import load_layered_config
 
     from .constants import _HARNESS_CONFIG
     return load_layered_config(
@@ -55,7 +55,7 @@ def env_flag(name: str, default: bool = False) -> bool:
 
 
 def require_harness_provider(harness_cfg: dict) -> str:
-    provider = harness_cfg.get("provider")
+    provider = harness_cfg.get("rig", {}).get("provider")
     if not isinstance(provider, str) or not provider.strip():
         raise SystemExit(
             "Harness config missing required 'provider'. "

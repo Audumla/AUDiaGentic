@@ -8,11 +8,12 @@ from audiagentic.components.optional.providers.descriptors.base import (
     ProviderDescriptor,
 )
 from audiagentic.components.optional.providers.descriptors.registry import register
-
-
-def _harness_mcp_path() -> Path:
-    from audiagentic.runtime.home import global_harness_runtime
-    return global_harness_runtime() / "agent" / "mcp.json"
+from audiagentic.runtime.harness.pi.mcp_format import (
+    pi_mcp_path,
+    read_pi_mcp_json,
+    remove_pi_mcp_json,
+    write_pi_mcp_json,
+)
 
 
 def _harness_reload(project_root: Path) -> dict[str, Any]:
@@ -27,8 +28,11 @@ register(ProviderDescriptor(
     description="AUDiaGentic CLI Management interface.",
     access_mode="none",
     mcp_config=McpConfigSpec(
-        config_path=_harness_mcp_path,
-        format="mcp-json",
+        config_path=pi_mcp_path,
+        reader=read_pi_mcp_json,
+        writer=write_pi_mcp_json,
+        remover=remove_pi_mcp_json,
+        format="pi-mcp-json",
         refresh_mode="restart-required",
         reload_fn=_harness_reload,
     ),

@@ -1,7 +1,7 @@
 """Source control component bootstrap.
 
 Detects git and gh CLI availability and manages the post-commit ledger-stamp hook.
-External MCP server registration is handled generically by mcp_config_builder via
+External MCP server registration is handled generically by mcp.config_builder via
 the external-mcp-servers declarations in source-control.yaml.
 """
 from __future__ import annotations

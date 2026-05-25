@@ -60,35 +60,45 @@ def test_provider_cli_uninstall_dry_run_does_not_touch_host() -> None:
 
 
 def test_pi_provider_cli_install_uses_harness_installer(monkeypatch) -> None:
-    import audiagentic.components.optional.providers.adapters.pi.descriptor as pi_descriptor
     import audiagentic.components.optional.providers.services.lifecycle as lifecycle
 
-    monkeypatch.setattr(pi_descriptor, "_pi_install",
-        lambda project_root=None: subprocess.CompletedProcess(["audiagentic", "install"], 0, "", ""))
+    recipe = all_descriptors()["pi"].cli_install.install
+    original_fn = recipe.fn
+    object.__setattr__(
+        recipe,
+        "fn",
+        lambda project_root=None: subprocess.CompletedProcess(["audiagentic", "install"], 0, "", ""),
+    )
     monkeypatch.setattr(lifecycle, "_probe_provider_cli",
         lambda descriptor: {"available": True, "command": ["pi", "--version"],
                             "executable": "/tmp/pi", "returncode": 0, "stdout": "0.74.0", "stderr": ""})
-
-    result = install_provider_cli("pi")
-
-    assert result["status"] == "installed"
-    assert result["package-manager"] == "pi-harness"
+    try:
+        result = install_provider_cli("pi")
+        assert result["status"] == "installed"
+        assert result["package-manager"] == "pi-harness"
+    finally:
+        object.__setattr__(recipe, "fn", original_fn)
 
 
 def test_pi_provider_cli_uninstall_uses_harness_uninstaller(monkeypatch) -> None:
-    import audiagentic.components.optional.providers.adapters.pi.descriptor as pi_descriptor
     import audiagentic.components.optional.providers.services.lifecycle as lifecycle
 
-    monkeypatch.setattr(pi_descriptor, "_pi_uninstall",
-        lambda project_root=None: subprocess.CompletedProcess(["audiagentic", "uninstall"], 0, "", ""))
+    recipe = all_descriptors()["pi"].cli_install.uninstall
+    original_fn = recipe.fn
+    object.__setattr__(
+        recipe,
+        "fn",
+        lambda project_root=None: subprocess.CompletedProcess(["audiagentic", "uninstall"], 0, "", ""),
+    )
     monkeypatch.setattr(lifecycle, "_probe_provider_cli",
         lambda descriptor: {"available": False, "command": ["pi", "--version"],
                             "executable": None, "returncode": None, "stdout": "", "stderr": "command not found"})
-
-    result = uninstall_provider_cli("pi")
-
-    assert result["status"] == "uninstalled"
-    assert result["package-manager"] == "pi-harness"
+    try:
+        result = uninstall_provider_cli("pi")
+        assert result["status"] == "uninstalled"
+        assert result["package-manager"] == "pi-harness"
+    finally:
+        object.__setattr__(recipe, "fn", original_fn)
 
 
 def test_all_provider_cli_dry_run_covers_installable_providers() -> None:

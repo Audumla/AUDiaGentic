@@ -17,7 +17,6 @@ Implements the provider integration pattern:
 - `execution.py`: Generic provider execution wrapper
 - `health.py`: Health check logic
 - `models.py`: Model selection and resolution
-- `selection.py`: Provider selection logic
 - `status.py`: Provider status reporting
 - `provisioning.py`: Provider CLI install, uninstall, and repair
 

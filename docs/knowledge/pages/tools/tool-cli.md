@@ -17,7 +17,6 @@ The AUDiaGentic CLI provides command-line interfaces for the knowledge component
 **Main CLI** (`src/audiagentic/channels/cli/main.py`):
 - Job control: manage execution jobs
 - Prompt launch: trigger workflow jobs
-- Prompt trigger bridge: normalize and route tagged prompts
 - Session input: manage session state
 - Release bootstrap: initialize release system
 - Lifecycle stub: runtime lifecycle operations
@@ -110,9 +109,6 @@ python -m src.audiagentic.channels.cli.main job-control --operation status --job
 
 ## Prompt launch
 python -m src.audiagentic.channels.cli.main prompt-launch --prompt "@ag-plan Review the system"
-
-## Prompt trigger bridge
-python -m src.audiagentic.channels.cli.main prompt-trigger-bridge --raw-prompt "@ag-review provider=codex"
 
 ## Session input management
 python -m src.audiagentic.channels.cli.main session-input --operation add --details '{"event": "..."}'

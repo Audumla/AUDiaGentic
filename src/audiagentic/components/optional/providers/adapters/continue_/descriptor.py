@@ -9,6 +9,7 @@ from ...descriptors.base import (
     VsCodeExtension,
 )
 from ...descriptors.registry import register
+from .mcp_format import read_continue_json, remove_continue_json, write_continue_json
 
 register(ProviderDescriptor(
     provider_id="continue",
@@ -38,6 +39,9 @@ register(ProviderDescriptor(
     ),
     mcp_config=McpConfigSpec(
         config_path=".continue/config.json",
+        reader=read_continue_json,
+        writer=write_continue_json,
+        remover=remove_continue_json,
         format="continue-json",
         refresh_mode="restart-required",
     ),
