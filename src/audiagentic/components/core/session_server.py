@@ -67,10 +67,10 @@ def _save_yaml(path: Path, payload: dict[str, Any]) -> None:
 
 def _effective_cli_visibility(project_root: Path) -> dict[str, bool]:
     from audiagentic.runtime.config_loader import load_layered_config
-    from audiagentic.runtime.harness.pi.install.constants import _HARNESS_CONFIG
+    from audiagentic.runtime.harness import default_config_path
 
     cfg = load_layered_config(
-        pkg_default_path=_HARNESS_CONFIG,
+        pkg_default_path=default_config_path(),
         project_root=project_root,
         namespace="harness/ag",
     )
@@ -126,7 +126,7 @@ def _set_cli_visibility(
 
     _save_yaml(config_path, current)
 
-    from audiagentic.runtime.harness.pi.install import (
+    from audiagentic.runtime.harness import (
         build_runtime_sync,
         refresh_materialized_agent_config,
         request_runtime_reload,
@@ -172,23 +172,21 @@ def _get_versions() -> dict[str, Any]:
 
     # Agent version
     try:
-        from audiagentic.runtime.harness.pi.install.constants import (
-            AGENT_MCP_ADAPTER_VERSION,
-            AGENT_VERSION,
-        )
-        versions["audiagentic"] = AGENT_VERSION
-        versions["mcp_adapter"] = AGENT_MCP_ADAPTER_VERSION
+        from audiagentic.runtime.harness import version_info
+        vi = version_info()
+        versions["audiagentic"] = vi["agent"]
+        versions["mcp_adapter"] = vi["mcp_adapter"]
     except Exception:
         pass
 
     # Llama-server version
     try:
-        from audiagentic.runtime.harness.pi.runner.smoke import query_server_version
+        from audiagentic.runtime.harness import query_rig_server_version
         from audiagentic.runtime.home import global_harness_runtime
 
         harness = global_harness_runtime()
         if harness and (harness / "rig" / "bin").exists():
-            server_ver = query_server_version(harness / "rig" / "bin")
+            server_ver = query_rig_server_version(harness / "rig" / "bin")
             if server_ver:
                 versions["llama_server"] = server_ver
     except Exception:
@@ -203,8 +201,11 @@ def _get_model_info() -> dict[str, Any]:
 
     try:
         from audiagentic.runtime.config_loader import load_layered_config
-        from audiagentic.runtime.harness.pi.runner.models import load_model_profile
-        from audiagentic.runtime.harness.pi.runner.smoke import query_server_version
+        from audiagentic.runtime.harness import (
+            default_config_path,
+            load_active_profile,
+            query_rig_server_version,
+        )
         from audiagentic.runtime.home import global_harness_runtime
 
         # Get configured model
@@ -223,11 +224,9 @@ def _get_model_info() -> dict[str, Any]:
                     pass
 
         if not requested:
-            # Fallback: try source tree config
             try:
-                from audiagentic.runtime.harness.pi.install.constants import _HARNESS_CONFIG
                 cfg = load_layered_config(
-                    pkg_default_path=_HARNESS_CONFIG,
+                    pkg_default_path=default_config_path(),
                     project_root=None,
                     namespace="harness/ag",
                 )
@@ -237,14 +236,13 @@ def _get_model_info() -> dict[str, Any]:
 
         if requested:
             info["configured_model"] = requested
-            profile_name, profile = load_model_profile(None, requested)
+            profile_name, profile = load_active_profile(None, requested)
             info["profile_name"] = profile_name
             info["model_file"] = profile.get("model_file")
 
-            # Server version from installed harness
             harness = global_harness_runtime()
             if harness and (harness / "rig" / "bin").exists():
-                server_ver = query_server_version(harness / "rig" / "bin")
+                server_ver = query_rig_server_version(harness / "rig" / "bin")
                 if server_ver:
                     info["server_version"] = server_ver
     except BaseException:
@@ -258,20 +256,19 @@ def _get_config_info() -> dict[str, Any]:
     config: dict[str, Any] = {}
 
     try:
-        from audiagentic.runtime.harness.pi.install.constants import _HARNESS_CONFIG
+        from audiagentic.runtime.config_loader import load_layered_config
+        from audiagentic.runtime.harness import default_config_path
         from audiagentic.runtime.home import global_harness_runtime
 
         harness = global_harness_runtime()
-
-        # Load layered config (source template → installed overrides → project overrides)
-        from audiagentic.runtime.config_loader import load_layered_config
+        cfg_path = default_config_path()
         harness_config = load_layered_config(
-            pkg_default_path=_HARNESS_CONFIG,
+            pkg_default_path=cfg_path,
             project_root=None,
             namespace="harness/ag",
         )
         config["config"] = harness_config
-        config["config_path"] = str(_HARNESS_CONFIG)
+        config["config_path"] = str(cfg_path)
 
         if harness:
             models_path = harness / "agent" / "models.json"
@@ -386,7 +383,7 @@ def build_server() -> FastMCP:
 
     @mcp.tool(description=_tool_description("refresh_harness_config", "Regenerate mcp.json and SYSTEM.md from current component state, then request in-session reload."))
     def refresh_harness_config() -> dict[str, Any]:
-        from audiagentic.runtime.harness.pi.install import (
+        from audiagentic.runtime.harness import (
             build_runtime_sync,
             refresh_harness_config_if_installed,
         )

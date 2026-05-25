@@ -22,7 +22,7 @@ from audiagentic.foundation.components.hooks import get_component_status
 from audiagentic.foundation.components.ids import COMPONENT_PROJECT, COMPONENT_PROVIDERS
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
-from audiagentic.runtime.harness.pi.install import (
+from audiagentic.runtime.harness import (
     build_runtime_sync,
     refresh_harness_config_if_installed,
 )
