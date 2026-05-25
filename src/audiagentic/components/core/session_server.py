@@ -1,4 +1,4 @@
-"""AUDiaGentic provisioning MCP server.
+"""AUDiaGentic session MCP server.
 
 Exposes harness status and configuration plus lightweight session-scoped
 mutations such as CLI visibility toggles.
@@ -11,13 +11,16 @@ import json
 import os
 import platform
 import sys
+import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 
 try:
     from mcp.server.fastmcp import FastMCP
+    from mcp.server.fastmcp.server import Context
 except ImportError:  # pragma: no cover - exercised by missing optional dep only
     print("Error: mcp package not installed. Run: pip install mcp", file=sys.stderr)
     sys.exit(1)
@@ -76,6 +79,24 @@ def _effective_cli_visibility(project_root: Path) -> dict[str, bool]:
         "show_thinking_blocks": not bool(ui.get("hide_thinking_block", False)),
         "show_tool_blocks": not bool(ui.get("hide_tool_use", False)),
     }
+
+
+def _active_embedded_rig_profile() -> str | None:
+    if os.environ.get("AUDIAGENTIC_RIG_TYPE") != "embedded":
+        return None
+    profile = os.environ.get("AUDIAGENTIC_RIG_PROFILE")
+    if isinstance(profile, str) and profile.strip():
+        return profile.strip()
+    return None
+
+
+def _active_embedded_rig_port() -> int:
+    endpoint = os.environ.get("AUDIAGENTIC_AG_BASE_URL")
+    if endpoint:
+        parsed = urlparse(endpoint)
+        if parsed.port is not None:
+            return int(parsed.port)
+    return 42001
 
 
 def _set_cli_visibility(
@@ -330,7 +351,7 @@ def build_server() -> FastMCP:
             },
         }
 
-    @mcp.tool(description=_tool_description("config", "Show the current AUDiaGentic harness configuration: ag.yaml settings and models.json."))
+    @mcp.tool(description=_tool_description("config", "Show the current AUDiaGentic harness configuration: ag.yaml settings and generated agent model config."))
     def config() -> dict[str, Any]:
         return _get_config_info()
 
@@ -375,6 +396,111 @@ def build_server() -> FastMCP:
             "refreshed": refreshed,
             "sync": build_runtime_sync(reason="mcp-refresh-tool"),
         }
+
+    @mcp.tool(description=_tool_description("update_embedded_rig", "Update the embedded rig's llama-server binary to the latest ggml-org/llama.cpp release."))
+    async def update_embedded_rig(ctx: Context) -> dict[str, Any]:
+        import contextlib
+        import io
+
+        from audiagentic.foundation.output import ComponentOutputEvent
+        from audiagentic.runtime.mcp.server import run_blocking_with_output
+        from audiagentic.runtime.rig.embedded.launch import runtime_bin_dir, start_embedded_rig
+        from audiagentic.runtime.rig.embedded.update_binaries import update_binaries as _update
+        from audiagentic.runtime.rig.registry import (
+            _clear_rig_state,
+            _kill_pid,
+            ensure_rig_state,
+            read_rig_state,
+            write_rig_state,
+        )
+
+        def _work(sink):
+            out = io.StringIO()
+            try:
+                bin_dir = runtime_bin_dir()
+                active_profile = _active_embedded_rig_profile()
+                active_state = None
+                if active_profile:
+                    active_state = read_rig_state()
+                    if active_state is None:
+                        active_state = ensure_rig_state(_active_embedded_rig_port(), model=active_profile)
+                if sink:
+                    if active_state and active_profile:
+                        sink(
+                            ComponentOutputEvent(
+                                message=(
+                                    f"[rig] stopping embedded rig '{active_profile}' on "
+                                    f"{active_state.get('endpoint', 'unknown endpoint')}"
+                                )
+                            )
+                        )
+                    else:
+                        sink(ComponentOutputEvent(message="[rig] updating embedded rig binaries"))
+
+                if active_state and active_profile:
+                    _kill_pid(int(active_state["pid"]))
+                    deadline = time.time() + 15.0
+                    while time.time() < deadline:
+                        try:
+                            os.kill(int(active_state["pid"]), 0)
+                        except OSError:
+                            break
+                        time.sleep(0.25)
+                    _clear_rig_state()
+
+                with contextlib.redirect_stdout(out):
+                    _update(target_bin_dir=bin_dir)
+
+                restarted: dict[str, Any] | None = None
+                if active_state and active_profile:
+                    port = int(active_state["port"])
+                    if sink:
+                        sink(ComponentOutputEvent(message=f"[rig] restarting embedded rig '{active_profile}'"))
+                    launch_result = start_embedded_rig(
+                        model_profile=active_profile,
+                        port=port,
+                        health_timeout=90.0,
+                        on_progress=(lambda message: sink(ComponentOutputEvent(message=message))) if sink else None,
+                    )
+                    restarted = {
+                        "pid": int(launch_result.pid),
+                        "port": int(launch_result.port),
+                        "base_url": str(launch_result.base_url),
+                    }
+                    write_rig_state(
+                        int(restarted["pid"]),
+                        int(restarted["port"]),
+                        str(restarted["base_url"]),
+                        active_profile,
+                    )
+                    if sink:
+                        sink(
+                            ComponentOutputEvent(
+                                message=(
+                                    f"[rig] embedded rig '{active_profile}' healthy at "
+                                    f"{restarted['base_url']}"
+                                )
+                            )
+                        )
+                if sink:
+                    sink(ComponentOutputEvent(message=out.getvalue().strip()))
+                return {
+                    "ok": True,
+                    "output": out.getvalue().strip(),
+                    "restarted": restarted is not None,
+                    "endpoint": restarted["base_url"] if restarted else None,
+                    "profile": active_profile,
+                }
+            except Exception as exc:
+                return {"ok": False, "error": str(exc), "output": out.getvalue().strip()}
+
+        result = await run_blocking_with_output(
+            ctx=ctx,
+            logger="session.update_rig",
+            heartbeat_message="[rig] update still running...",
+            work=_work,
+        )
+        return result
 
     return mcp
 
