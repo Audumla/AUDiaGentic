@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 
 @dataclass(frozen=True)
 class McpServerEntry:
@@ -91,9 +93,8 @@ def _read_goose_yaml(path: Path) -> dict[str, McpServerEntry]:
     if not path.exists():
         return {}
     try:
-        import yaml
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except Exception:  # noqa: BLE001
+    except (yaml.YAMLError, OSError):
         return {}
     result = {}
     for ext in data.get("extensions", []):
@@ -111,14 +112,13 @@ def _read_goose_yaml(path: Path) -> dict[str, McpServerEntry]:
 
 
 def _write_goose_yaml(path: Path, entries: dict[str, McpServerEntry]) -> None:
-    import yaml
     path.parent.mkdir(parents=True, exist_ok=True)
     existing: dict[str, Any] = {}
     if path.exists():
         try:
             existing = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        except Exception:  # noqa: BLE001
-            pass
+        except (yaml.YAMLError, OSError) as exc:
+            raise ValueError(f"invalid goose YAML config: {path}") from exc
     extensions: list[dict[str, Any]] = list(existing.get("extensions", []))
     by_name = {e.get("name"): i for i, e in enumerate(extensions) if e.get("type") == "stdio"}
     for name, entry in entries.items():
@@ -141,16 +141,14 @@ def _remove_goose_yaml(path: Path, name: str) -> bool:
     if not path.exists():
         return False
     try:
-        import yaml
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except Exception:  # noqa: BLE001
+    except (yaml.YAMLError, OSError):
         return False
     extensions = data.get("extensions", [])
     new_extensions = [e for e in extensions if e.get("name") != name]
     if len(new_extensions) == len(extensions):
         return False
     data["extensions"] = new_extensions
-    import yaml
     path.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False), encoding="utf-8")
     return True
 

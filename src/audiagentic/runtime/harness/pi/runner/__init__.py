@@ -4,20 +4,21 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from audiagentic.runtime.rig.embedded.launch import load_rig_model
+from audiagentic.runtime.rig.embedded.config import load_rig_model
 
 from .command import _build_run_env, build_agent_command
-from .constants import DEFAULT_PROVIDER, DEFAULT_RIG_PORT
 from .context import (
     AgentContext,
     env_flag,
     env_with_pythonpath,
     load_harness_config,
+    require_harness_provider,
+    require_harness_rig_port,
     resolve_agent_bin,
 )
 from .models import load_model_profile
 from .rig import cleanup_process_tree, cleanup_rig, launch_rig_if_needed
-from .smoke import (
+from .agent_run import (
     check_endpoint,
     direct_mcp_smoke,
     query_server_model,
@@ -62,7 +63,7 @@ def build_global_context(*, project_root: Path, agent_runtime: Path, enable_mcp:
             "or set 'model' in harness config."
         )
     profile_name, model_profile = load_model_profile(None, requested_model)
-    rig_port = int(harness_cfg.get("rig", {}).get("port", DEFAULT_RIG_PORT))
+    rig_port = require_harness_rig_port(harness_cfg)
     _, model_id = load_rig_model()
     endpoint, model, rig_pid, manages_rig = launch_rig_if_needed(
         requested_model, profile_name, model_profile, rig_port=rig_port, model_id=model_id
@@ -71,7 +72,7 @@ def build_global_context(*, project_root: Path, agent_runtime: Path, enable_mcp:
         model = query_server_model(endpoint) or model
     rig_bin_dir = agent_runtime / "rig" / "bin"
     server_version = query_server_version(rig_bin_dir)
-    provider = os.environ.get("AUDIAGENTIC_AG_PROVIDER", DEFAULT_PROVIDER)
+    provider = os.environ.get("AUDIAGENTIC_AG_PROVIDER") or require_harness_provider(harness_cfg)
     resolved_enable_mcp = enable_mcp or bool(harness_cfg.get("mcp", {}).get("enabled", False))
     return AgentContext(
         project_root=project_root,

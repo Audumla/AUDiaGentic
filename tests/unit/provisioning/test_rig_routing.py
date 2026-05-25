@@ -5,13 +5,8 @@ import json
 from unittest.mock import patch
 
 from audiagentic.runtime.harness.pi.runner import launch_rig_if_needed, load_model_profile
-from audiagentic.runtime.rig.embedded.launch import (
-    ensure_under,
-    load_rig_model,
-    resolve_profile_definition,
-    resolve_under,
-    runtime_bin_dir,
-)
+from audiagentic.runtime.rig.embedded.config import load_rig_model, resolve_profile_definition
+from audiagentic.runtime.rig.embedded.launch import ensure_under, resolve_under, runtime_bin_dir
 
 
 def _rig_target() -> tuple[str, str, dict[str, object]]:
