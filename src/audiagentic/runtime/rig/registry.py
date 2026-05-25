@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import subprocess
 import time
 from pathlib import Path
-from urllib.error import URLError
-from urllib.request import urlopen
+
+from audiagentic.runtime.rig.http import probe_models_endpoint
 
 # ---------------------------------------------------------------------------
 # Internal path helpers
@@ -87,27 +86,8 @@ def _clear_rig_state() -> None:
 
 
 def _query_server_model(endpoint: str, timeout: float = 2.0) -> str | None:
-    try:
-        with urlopen(f"{endpoint}/models", timeout=timeout) as response:
-            if response.status != 200:
-                return None
-            payload = json.loads(response.read())
-    except (URLError, OSError, TimeoutError, json.JSONDecodeError):
-        return None
-
-    data = payload.get("data")
-    if isinstance(data, list) and data:
-        first = data[0]
-        if isinstance(first, dict) and first.get("id"):
-            return str(first["id"])
-    models = payload.get("models")
-    if isinstance(models, list) and models:
-        first = models[0]
-        if isinstance(first, dict) and first.get("model"):
-            return str(first["model"])
-        if isinstance(first, dict) and first.get("name"):
-            return str(first["name"])
-    return None
+    probe = probe_models_endpoint(endpoint, timeout=timeout)
+    return None if probe is None else probe.first_model_id
 
 
 def _find_pid_listening_on_port(port: int) -> int | None:

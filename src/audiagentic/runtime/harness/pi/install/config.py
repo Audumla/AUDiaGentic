@@ -4,9 +4,38 @@ import json
 import shutil
 from pathlib import Path
 
-from audiagentic.runtime.rig.embedded.launch import load_rig_model, resolve_profile_definition
+from audiagentic.runtime.rig.embedded.config import load_rig_model, resolve_profile_definition
 
 from . import constants as _c
+
+
+def _require_harness_provider(harness_cfg: dict) -> str:
+    provider = harness_cfg.get("provider")
+    if not isinstance(provider, str) or not provider.strip():
+        raise SystemExit(
+            "Harness config missing required 'provider'. "
+            "Set it in config/provisioning/harness/ag.yaml or override config."
+        )
+    return provider.strip()
+
+
+def _require_harness_rig_port(harness_cfg: dict) -> int:
+    rig_cfg = harness_cfg.get("rig")
+    if not isinstance(rig_cfg, dict):
+        raise SystemExit(
+            "Harness config missing required 'rig' section. "
+            "Expected config/provisioning/harness/ag.yaml to define rig.port."
+        )
+    raw = rig_cfg.get("port")
+    if raw is None:
+        raise SystemExit(
+            "Harness config missing required 'rig.port'. "
+            "Set it in config/provisioning/harness/ag.yaml or override config."
+        )
+    try:
+        return int(raw)
+    except (TypeError, ValueError) as exc:
+        raise SystemExit(f"Invalid harness config value for rig.port: {raw!r}") from exc
 
 
 def _build_models_config(harness_cfg: dict, model_name: str, model_profile: dict) -> dict:
@@ -15,13 +44,13 @@ def _build_models_config(harness_cfg: dict, model_name: str, model_profile: dict
         "supportsDeveloperRole": False,
         "supportsReasoningEffort": False,
     })
-    rig_port = int(harness_cfg.get("rig", {}).get("port", _c.DEFAULT_RIG_PORT))
+    rig_port = _require_harness_rig_port(harness_cfg)
     endpoint = f"http://127.0.0.1:{rig_port}/v1"
     api_key = _c.DEFAULT_API_KEY
     context_size = int(agent.get("context_size", 262144))
     return {
         "providers": {
-            _c.DEFAULT_PROVIDER: {
+            _require_harness_provider(harness_cfg): {
                 "baseUrl": endpoint,
                 "api": "openai-completions",
                 "apiKey": api_key,
@@ -156,15 +185,12 @@ def materialize_agent_config(
     model_profile: dict = {}
     model_id = model_name
     if _c._RIG_CONFIG.exists():
-        try:
-            profile_name, rig_model_id = load_rig_model(_c._RIG_CONFIG)
-            if model_name == rig_model_id:
-                model_id = rig_model_id
-                model_profile = resolve_profile_definition(profile_name, _c._RIG_CONFIG)
-            else:
-                model_profile = resolve_profile_definition(model_name, _c._RIG_CONFIG)
-        except (Exception, SystemExit):
-            pass
+        profile_name, rig_model_id = load_rig_model(_c._RIG_CONFIG)
+        if model_name == rig_model_id:
+            model_id = rig_model_id
+            model_profile = resolve_profile_definition(profile_name, _c._RIG_CONFIG)
+        else:
+            model_profile = resolve_profile_definition(model_name, _c._RIG_CONFIG)
 
     (agent_dir / "models.json").write_text(
         json.dumps(_build_models_config(harness_cfg, model_id, model_profile), indent=2) + "\n",

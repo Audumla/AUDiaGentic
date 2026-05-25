@@ -46,7 +46,7 @@ def version_info() -> dict[str, str | None]:
 
 def query_rig_server_version(bin_dir: Path, timeout: float = 10.0) -> str | None:
     """Query the llama-server binary version string."""
-    from .pi.runner.smoke import query_server_version
+    from .pi.runner.agent_run import query_server_version
     return query_server_version(bin_dir, timeout=timeout)
 
 

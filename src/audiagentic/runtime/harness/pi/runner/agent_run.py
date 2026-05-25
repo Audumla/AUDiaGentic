@@ -4,75 +4,46 @@ import json
 import os
 import subprocess
 import sys
-import urllib.request
 from datetime import datetime
 from pathlib import Path
-from urllib.error import HTTPError, URLError
 
-from .constants import DEFAULT_SMOKE_TIMEOUT
-from .context import AgentContext
+from audiagentic.runtime.rig.http import probe_models_endpoint, require_models_endpoint
+
+from .context import AgentContext, require_smoke_timeout
 
 
 def query_server_model(endpoint: str, timeout: float = 10.0) -> str | None:
-    """Query the server's /models endpoint and return the first model ID, or None on failure."""
-    try:
-        with urllib.request.urlopen(f"{endpoint}/models", timeout=timeout) as response:
-            if response.status == 200:
-                data = json.loads(response.read())
-                models = data.get("data", [])
-                if models:
-                    return str(models[0]["id"])
-    except Exception:
-        pass
-    return None
+    probe = probe_models_endpoint(endpoint, timeout=timeout)
+    return None if probe is None else probe.first_model_id
 
 
 def query_server_version(bin_dir: Path, timeout: float = 10.0) -> str | None:
-    """Get the llama-server version by running the binary with --version."""
-    import subprocess
+    """Get llama-server version by running binary with --version."""
     import sys as _sys
 
-    from audiagentic.runtime.rig.embedded.launch import executable_command, resolve_platform_dirs
+    from audiagentic.runtime.rig.embedded.process import executable_command, resolve_platform_dirs
+
     try:
         server_dir, _ = resolve_platform_dirs(bin_dir)
         server_bin = server_dir / ("llama-server.exe" if _sys.platform == "win32" else "llama-server")
         if not server_bin.exists():
             return None
-        result = subprocess.run([*executable_command(server_bin), "--version"], capture_output=True, text=True, timeout=10)
+        result = subprocess.run(
+            [*executable_command(server_bin), "--version"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
         if result.returncode == 0:
             output = (result.stdout + result.stderr).strip()
-            first_line = output.split("\n")[0]
-            return first_line
+            return output.split("\n")[0]
     except Exception:
         pass
     return None
 
 
 def check_endpoint(ctx: AgentContext) -> None:
-    status_url = f"{ctx.endpoint}/models"
-    import urllib.request
-    try:
-        with urllib.request.urlopen(status_url, timeout=15) as response:
-            if response.status != 200:
-                raise SystemExit(f"Rig health failed: {status_url} -> HTTP {response.status}")
-            payload = json.loads(response.read())
-    except HTTPError as exc:
-        detail = exc.reason
-        try:
-            body = json.loads(exc.read())
-            error = body.get("error", {})
-            detail = error.get("message") or detail
-        except Exception:
-            pass
-        raise SystemExit(f"Rig not ready: {status_url} -> HTTP {exc.code}: {detail}") from exc
-    except (URLError, OSError, TimeoutError) as exc:
-        raise SystemExit(f"Rig unavailable: {status_url}: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise SystemExit(f"Rig health returned invalid JSON: {status_url}") from exc
-
-    data = payload.get("data")
-    if not isinstance(data, list) or not data:
-        raise SystemExit(f"Rig health returned no models: {status_url}")
+    require_models_endpoint(ctx.endpoint, timeout=15)
 
 
 def direct_mcp_smoke(ctx: AgentContext, env: dict[str, str]) -> None:
@@ -97,7 +68,8 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
     ctx.agent_log_dir.mkdir(parents=True, exist_ok=True)
     (ctx.project_root / ".audiagentic" / "sessions").mkdir(parents=True, exist_ok=True)
 
-    from .command import _build_run_env
+    from .command import _build_run_env, build_agent_command
+
     env = _build_run_env(ctx)
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -142,36 +114,50 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
             print(f"  Log:      {log_path}")
             print()
 
-    from .command import build_agent_command
     command = build_agent_command(ctx, smoke=smoke)
 
     if smoke:
-        smoke_timeout = float(
-            os.environ.get("AUDIAGENTIC_AG_SMOKE_TIMEOUT",
-                           ctx.harness_cfg.get("smoke", {}).get("timeout", DEFAULT_SMOKE_TIMEOUT))
-        )
+        smoke_timeout = float(os.environ.get("AUDIAGENTIC_AG_SMOKE_TIMEOUT") or require_smoke_timeout(ctx.harness_cfg))
         with log_path.open("w", encoding="utf-8") as handle:
-            process = subprocess.Popen(command, cwd=ctx.agent_work, env=env,
-                                       stdout=handle, stderr=subprocess.STDOUT, text=True)
+            process = subprocess.Popen(
+                command,
+                cwd=ctx.agent_work,
+                env=env,
+                stdout=handle,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
             try:
                 returncode = process.wait(timeout=smoke_timeout)
             except subprocess.TimeoutExpired:
                 from .rig import cleanup_process_tree
+
                 cleanup_process_tree(process.pid)
                 handle.write(f"\nSmoke timed out after {smoke_timeout:.1f}s\n")
                 return 124
-        sys.stdout.write(log_path.read_text(encoding="utf-8"))
-        if returncode == 0 and "audiagentic-agent-local-ok" not in log_path.read_text(encoding="utf-8"):
+        output = log_path.read_text(encoding="utf-8")
+        sys.stdout.write(output)
+        if returncode == 0 and "audiagentic-agent-local-ok" not in output:
             return 1
         return int(returncode)
 
     command.extend(agent_args)
     with log_path.open("w", encoding="utf-8") as handle:
-        handle.write(json.dumps({
-            "event": "agent_run_started", "project_root": str(ctx.project_root),
-            "provider": ctx.provider, "model": ctx.model,
-            "endpoint": ctx.endpoint, "mcp": ctx.enable_mcp, "args": agent_args,
-        }, indent=2) + "\n")
+        handle.write(
+            json.dumps(
+                {
+                    "event": "agent_run_started",
+                    "project_root": str(ctx.project_root),
+                    "provider": ctx.provider,
+                    "model": ctx.model,
+                    "endpoint": ctx.endpoint,
+                    "mcp": ctx.enable_mcp,
+                    "args": agent_args,
+                },
+                indent=2,
+            )
+            + "\n"
+        )
 
     completed = subprocess.run(command, cwd=ctx.agent_work, env=env, check=False)
 
