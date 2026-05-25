@@ -1,290 +1,13 @@
-contract-version: v1
 providers:
-  local-openai:
-    enabled: false
-    install-mode: external-configured
-    access-mode: none
-    base-url: http://localhost:8000/v1
-    default-model: qwen-coder
-    model-aliases:
-      fast: qwen-coder
-      balanced: qwen-plus
-      deep: qwen-max
-      review: qwen-max
-      code: qwen-coder
-      reasoning: qwen-max
-      long: qwen-max
-    catalog-refresh:
-      source: static
-      max-age-hours: 168
-    prompt-surface:
-      enabled: true
-      tag-syntax: prefix-token-v1
-      first-line-policy: first-non-empty-line
-      cli-mode: bridge-wrapper
-      vscode-mode: bridge-wrapper
-      settings-profile: openai-bridge-prompt-tags-v1
-    execution-policy:
-      output-format: json
-      permission-mode: auto
-      safety-mode: standard
-      auto-approve: false
-      full-auto: false
-      ephemeral: true
-      target-type: default
-      timeout-seconds: 120
-  qwen:
-    enabled: false
+  aider:
+    enabled: true
     install-mode: external-configured
     access-mode: cli
-    default-model: qwen-coder
-    model-aliases:
-      fast: qwen-coder
-      balanced: qwen-plus
-      deep: qwen-max
-      review: qwen-max
-      code: qwen-coder
-      reasoning: qwen-max
-      long: qwen-max
-    catalog-refresh:
-      source: cli
-      max-age-hours: 168
-    prompt-surface:
-      enabled: true
-      tag-syntax: prefix-token-v1
-      first-line-policy: first-non-empty-line
-      cli-mode: bridge-wrapper
-      vscode-mode: bridge-wrapper
-      settings-profile: openai-bridge-prompt-tags-v1
-    execution-policy:
-      output-format: text
-      permission-mode: auto
-      safety-mode: standard
-      auto-approve: false
-      full-auto: false
-      ephemeral: true
-      target-type: default
-      timeout-seconds: 120
-  codex:
-    enabled: false
-    install-mode: external-configured
-    access-mode: cli
-    default-model: gpt-5.4-mini
-    timeout-seconds: 300
-    model-aliases:
-      fast: gpt-5.4-mini
-      balanced: gpt-5.4-mini
-      deep: gpt-5.4
-      review: gpt-5.4
-      code: gpt-5.4-mini
-      reasoning: gpt-5.4
-      long: gpt-5.4
-    catalog-refresh:
-      source: cli
-      max-age-hours: 168
-    prompt-surface:
-      enabled: true
-      tag-syntax: prefix-token-v1
-      first-line-policy: first-non-empty-line
-      cli-mode: wrapper-normalize
-      vscode-mode: extension-normalize
-      settings-profile: codex-prompt-tags-v1
-    execution-policy:
-      output-format: text
-      permission-mode: auto
-      safety-mode: standard
-      auto-approve: false
-      full-auto: true
-      ephemeral: true
-      target-type: default
-      timeout-seconds: 300
-  claude:
-    enabled: false
-    install-mode: external-configured
-    access-mode: cli
-    default-model: sonnet
-    model-aliases:
-      fast: sonnet
-      balanced: sonnet
-      deep: opus
-      review: opus
-      code: sonnet
-      reasoning: opus
-      long: opus
-    catalog-refresh:
-      source: cli
-      max-age-hours: 168
-    prompt-surface:
-      enabled: true
-      tag-syntax: prefix-token-v1
-      first-line-policy: first-non-empty-line
-      cli-mode: wrapper-normalize
-      vscode-mode: extension-normalize
-      settings-profile: claude-prompt-tags-v1
-    execution-policy:
-      output-format: text
-      permission-mode: auto
-      safety-mode: standard
-      auto-approve: false
-      full-auto: false
-      ephemeral: false
-      target-type: default
-      timeout-seconds: 300
-  gemini:
-    enabled: false
-    install-mode: external-configured
-    access-mode: cli
-    default-model: gemini-2.5-pro
-    timeout-seconds: 300
-    model-aliases:
-      fast: gemini-2.5-flash
-      balanced: gemini-2.5-pro
-      deep: gemini-2.5-pro
-      review: gemini-2.5-pro
-      code: gemini-2.5-flash
-      reasoning: gemini-2.5-pro
-      long: gemini-2.5-pro
-    catalog-refresh:
-      source: cli
-      max-age-hours: 168
-    prompt-surface:
-      enabled: true
-      tag-syntax: prefix-token-v1
-      first-line-policy: first-non-empty-line
-      cli-mode: wrapper-normalize
-      vscode-mode: extension-normalize
-      settings-profile: gemini-prompt-tags-v1
-    execution-policy:
-      output-format: text
-      permission-mode: auto
-      safety-mode: standard
-      auto-approve: false
-      full-auto: false
-      ephemeral: false
-      target-type: default
-      timeout-seconds: 300
   copilot:
     enabled: true
     install-mode: external-configured
     access-mode: cli
-    default-model: default
-    model-aliases:
-      fast: default
-      balanced: default
-      deep: default
-      review: default
-      code: default
-      reasoning: default
-    catalog-refresh:
-      source: cli
-      max-age-hours: 168
-    prompt-surface:
-      enabled: true
-      tag-syntax: prefix-token-v1
-      first-line-policy: first-non-empty-line
-      cli-mode: bridge-wrapper
-      vscode-mode: extension-normalize
-      settings-profile: copilot-prompt-tags-v1
-    execution-policy:
-      output-format: text
-      permission-mode: auto
-      safety-mode: standard
-      auto-approve: false
-      full-auto: false
-      ephemeral: false
-      target-type: default
-      timeout-seconds: 120
-  continue:
-    enabled: false
-    install-mode: external-configured
-    access-mode: cli
-    default-model: default
-    model-aliases:
-      fast: default
-      balanced: default
-      deep: default
-      review: default
-      code: default
-      reasoning: default
-    catalog-refresh:
-      source: cli
-      max-age-hours: 168
-    execution-policy:
-      output-format: text
-      permission-mode: auto
-      safety-mode: standard
-      auto-approve: false
-      full-auto: false
-      ephemeral: false
-      target-type: default
-      timeout-seconds: 120
-  cline:
-    enabled: false
-    install-mode: external-configured
-    access-mode: cli
-    default-model: kwaipilot/kat-coder-pro
-    timeout-seconds: 300
-    model-aliases:
-      fast: kwaipilot/kat-coder-pro
-      balanced: kwaipilot/kat-coder-pro
-      deep: kwaipilot/kat-coder-pro
-      review: kwaipilot/kat-coder-pro
-      code: kwaipilot/kat-coder-pro
-      reasoning: kwaipilot/kat-coder-pro
-      long: kwaipilot/kat-coder-pro
-    catalog-refresh:
-      source: cli
-      max-age-hours: 168
-    prompt-surface:
-      enabled: true
-      tag-syntax: prefix-token-v1
-      first-line-policy: first-non-empty-line
-      cli-mode: wrapper-normalize
-      vscode-mode: extension-normalize
-      settings-profile: cline-prompt-tags-v1
-    execution-policy:
-      output-format: json
-      permission-mode: auto
-      safety-mode: standard
-      auto-approve: true
-      full-auto: false
-      ephemeral: false
-      target-type: default
-      timeout-seconds: 300
-  opencode:
-    enabled: false
-    install-mode: external-configured
-    access-mode: cli
-    default-model: openai/gpt-5
-    timeout-seconds: 120
-    model-aliases:
-      fast: openai/gpt-5-mini
-      balanced: openai/gpt-5
-      deep: openai/gpt-5
-      review: openai/gpt-5
-      code: openai/gpt-5
-      reasoning: openai/gpt-5
-      long: openai/gpt-5
-    catalog-refresh:
-      source: cli
-      max-age-hours: 168
-    prompt-surface:
-      enabled: true
-      tag-syntax: prefix-token-v1
-      first-line-policy: first-non-empty-line
-      cli-mode: wrapper-normalize
-      vscode-mode: unsupported
-      settings-profile: opencode-prompt-tags-v1
-    execution-policy:
-      output-format: json
-      permission-mode: auto
-      safety-mode: standard
-      auto-approve: false
-      full-auto: false
-      ephemeral: false
-      target-type: default
-      timeout-seconds: 120
-  aider:
+  openhands:
     enabled: true
     install-mode: external-configured
     access-mode: cli
@@ -292,11 +15,27 @@ providers:
     enabled: true
     install-mode: external-configured
     access-mode: cli
-  roo:
-    enabled: false
+  claude:
+    enabled: true
     install-mode: external-configured
-    access-mode: env
-  openhands:
+    access-mode: cli
+  cline:
+    enabled: true
+    install-mode: external-configured
+    access-mode: cli
+  codex:
+    enabled: true
+    install-mode: external-configured
+    access-mode: cli
+  gemini:
+    enabled: true
+    install-mode: external-configured
+    access-mode: cli
+  opencode:
+    enabled: true
+    install-mode: external-configured
+    access-mode: cli
+  qwen:
     enabled: true
     install-mode: external-configured
     access-mode: cli
