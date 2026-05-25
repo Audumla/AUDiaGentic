@@ -184,10 +184,10 @@ def update_binaries(runtime_dir: Path | None = None, target_bin_dir: Path | None
     if target_bin_dir:
         target_dir = target_bin_dir / "llama-server" / ("windows" if plat == "win32" else ("macOS" if plat == "darwin" else "linux"))
     elif runtime_dir:
-        target_dir = runtime_dir / "rig" / "bin" / "llama-server" / ("windows" if plat == "win32" else ("macOS" if plat == "darwin" else "linux"))
+        target_dir = runtime_dir / "bin" / "llama-server" / ("windows" if plat == "win32" else ("macOS" if plat == "darwin" else "linux"))
     else:
-        # Default: current working directory's rig bin
-        target_dir = Path.cwd() / "rig" / "bin" / "llama-server" / ("windows" if plat == "win32" else ("macOS" if plat == "darwin" else "linux"))
+        # Default: bundled embedded rig bin next to this module.
+        target_dir = Path(__file__).parent / "bin" / "llama-server" / ("windows" if plat == "win32" else ("macOS" if plat == "darwin" else "linux"))
 
     target_dir.mkdir(parents=True, exist_ok=True)
 

@@ -17,7 +17,7 @@ from audiagentic.foundation.contracts.canonical_ids import (
     validate_schema_files,
 )
 from audiagentic.foundation.contracts.schema_registry import SCHEMA_DIR
-from audiagentic.lib.repo_paths import REPO_ROOT
+from audiagentic.paths import REPO_ROOT
 
 
 def _extract_ids(payload: Any) -> tuple[list[str], list[str]]:
