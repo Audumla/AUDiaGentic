@@ -32,7 +32,7 @@ def _find_package_root(start: Path) -> Path:
 _PKG_ROOT = _find_package_root(_AGENT_DIR)
 _SRC_DIR = _PKG_ROOT.parent  # src/
 _REPO_ROOT = _PKG_ROOT.parent.parent  # repo root (dev layout)
-_MODELS_JSON = _PKG_ROOT / "provisioning" / "rig" / "embedded" / "models.json"
+_RIG_CONFIG = _PKG_ROOT / "config" / "provisioning" / "rig" / "rig.yaml"
 _HARNESS_CONFIG = _PKG_ROOT / "config" / "provisioning" / "harness" / "ag.yaml"
 
 DEFAULT_PROVIDER = "audiagentic"
