@@ -16,8 +16,6 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-import yaml
-
 try:
     from mcp.server.fastmcp import FastMCP
     from mcp.server.fastmcp.server import Context
@@ -28,6 +26,7 @@ except ImportError:  # pragma: no cover - exercised by missing optional dep only
 from audiagentic.foundation.components.ids import COMPONENT_SESSION
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
+from audiagentic.runtime.config import load_layered_config, load_yaml_file, save_yaml_file
 
 register_all_components()
 
@@ -54,19 +53,11 @@ def _config_path(scope: str, project_root: Path) -> Path:
     raise ValueError(f"unsupported scope: {scope}")
 
 
-def _load_yaml(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-
-
 def _save_yaml(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    save_yaml_file(path, payload, sort_keys=False)
 
 
 def _effective_cli_visibility(project_root: Path) -> dict[str, bool]:
-    from audiagentic.runtime.config_loader import load_layered_config
     from audiagentic.runtime.harness import default_config_path
 
     cfg = load_layered_config(
@@ -110,7 +101,7 @@ def _set_cli_visibility(
         raise ValueError("at least one visibility toggle must be provided")
 
     config_path = _config_path(scope, project_root)
-    current = _load_yaml(config_path)
+    current = load_yaml_file(config_path)
     ui = current.get("ui")
     if not isinstance(ui, dict):
         ui = {}
@@ -176,8 +167,8 @@ def _get_versions() -> dict[str, Any]:
         vi = version_info()
         versions["audiagentic"] = vi["agent"]
         versions["mcp_adapter"] = vi["mcp_adapter"]
-    except Exception:
-        pass
+    except Exception as exc:
+        versions["audiagentic_error"] = str(exc)
 
     # Llama-server version
     try:
@@ -189,8 +180,8 @@ def _get_versions() -> dict[str, Any]:
             server_ver = query_rig_server_version(harness / "rig" / "bin")
             if server_ver:
                 versions["llama_server"] = server_ver
-    except Exception:
-        pass
+    except Exception as exc:
+        versions["llama_server_error"] = str(exc)
 
     return versions
 
@@ -199,54 +190,55 @@ def _get_model_info() -> dict[str, Any]:
     """Collect current model and rig info."""
     info: dict[str, Any] = {}
 
-    try:
-        from audiagentic.runtime.config_loader import load_layered_config
-        from audiagentic.runtime.harness import (
-            default_config_path,
-            load_active_profile,
-            query_rig_server_version,
-        )
-        from audiagentic.runtime.home import global_harness_runtime
+    from audiagentic.runtime.harness import (
+        default_config_path,
+        load_active_profile,
+        query_rig_server_version,
+    )
+    from audiagentic.runtime.home import global_harness_runtime
 
-        # Get configured model
-        requested = os.environ.get("AUDIAGENTIC_AG_MODEL")
-        if not requested:
-            harness = global_harness_runtime()
-            if harness:
-                try:
-                    cfg = load_layered_config(
-                        pkg_default_path=harness / "config" / "provisioning" / "harness" / "ag.yaml",
-                        project_root=None,
-                        namespace="harness/ag",
-                    )
-                    requested = cfg.get("model")
-                except SystemExit:
-                    pass
-
-        if not requested:
+    requested = os.environ.get("AUDIAGENTIC_AG_MODEL")
+    if not requested:
+        harness = global_harness_runtime()
+        if harness:
             try:
                 cfg = load_layered_config(
-                    pkg_default_path=default_config_path(),
+                    pkg_default_path=harness / "config" / "provisioning" / "harness" / "ag.yaml",
                     project_root=None,
                     namespace="harness/ag",
                 )
                 requested = cfg.get("model")
-            except SystemExit:
-                pass
+            except SystemExit as exc:
+                info["config_error"] = str(exc)
 
-        if requested:
-            info["configured_model"] = requested
+    if not requested:
+        try:
+            cfg = load_layered_config(
+                pkg_default_path=default_config_path(),
+                project_root=None,
+                namespace="harness/ag",
+            )
+            requested = cfg.get("model")
+        except SystemExit as exc:
+            info["config_error"] = str(exc)
+
+    if requested:
+        info["configured_model"] = requested
+        try:
             profile_name, profile = load_active_profile(None, requested)
             info["profile_name"] = profile_name
             info["model_file"] = profile.get("model_file")
+        except Exception as exc:
+            info["profile_error"] = str(exc)
 
-            harness = global_harness_runtime()
-            if harness and (harness / "rig" / "bin").exists():
+        harness = global_harness_runtime()
+        if harness and (harness / "rig" / "bin").exists():
+            try:
                 server_ver = query_rig_server_version(harness / "rig" / "bin")
                 if server_ver:
                     info["server_version"] = server_ver
-    except BaseException:
-        pass
+            except Exception as exc:
+                info["server_version_error"] = str(exc)
 
     return info
 
@@ -256,7 +248,6 @@ def _get_config_info() -> dict[str, Any]:
     config: dict[str, Any] = {}
 
     try:
-        from audiagentic.runtime.config_loader import load_layered_config
         from audiagentic.runtime.harness import default_config_path
         from audiagentic.runtime.home import global_harness_runtime
 
@@ -401,8 +392,8 @@ def build_server() -> FastMCP:
 
         from audiagentic.foundation.output import ComponentOutputEvent
         from audiagentic.runtime.mcp.server import run_blocking_with_output
+        from audiagentic.runtime.rig.embedded.binaries import update_binaries as _update
         from audiagentic.runtime.rig.embedded.launch import runtime_bin_dir, start_embedded_rig
-        from audiagentic.runtime.rig.embedded.update_binaries import update_binaries as _update
         from audiagentic.runtime.rig.registry import (
             _clear_rig_state,
             _kill_pid,

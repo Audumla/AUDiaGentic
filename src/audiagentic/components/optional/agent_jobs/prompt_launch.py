@@ -9,8 +9,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from audiagentic.components.optional.agent_jobs.prompt_syntax import (
     load_prompt_syntax,
     load_review_tag,
@@ -34,6 +32,7 @@ from audiagentic.components.optional.providers.services.execution import execute
 from audiagentic.components.optional.providers.services.models import resolve_model_selection
 from audiagentic.components.optional.providers.services.provider_config import load_provider_config
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.runtime.config import load_yaml_file
 from audiagentic.runtime.state import jobs_store as store
 
 
@@ -58,9 +57,7 @@ def _write_atomic(path: Path, payload: dict[str, Any]) -> Path:
 
 def load_project_config(project_root: Path) -> dict[str, Any]:
     path = project_root / ".audiagentic" / "config" / "project.yaml"
-    if not path.exists():
-        return {}
-    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return load_yaml_file(path)
 
 
 def _apply_launch_defaults(project_root: Path, request: dict[str, Any]) -> dict[str, Any]:

@@ -311,7 +311,7 @@ def test_update_embedded_rig_works_directly(tmp_path: Path) -> None:
 
     from audiagentic.foundation.output import ComponentOutputEvent
     from audiagentic.runtime.home import global_harness_runtime
-    from audiagentic.runtime.rig.embedded.update_binaries import update_binaries as _update
+    from audiagentic.runtime.rig.embedded.binaries import update_binaries as _update
     os.environ["AUDIAGENTIC_HOME"] = str(tmp_path / ".audiagentic")
 
     out = io.StringIO()

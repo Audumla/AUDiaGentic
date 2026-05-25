@@ -10,7 +10,6 @@ from pathlib import Path
 
 from audiagentic.runtime.rig.http import probe_models_endpoint
 
-
 _LLAMA_ARG_MAP: list[tuple[str, str, str]] = [
     ("context_size", "--ctx-size", "value"),
 ]

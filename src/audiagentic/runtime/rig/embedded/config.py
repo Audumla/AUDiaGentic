@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from audiagentic.runtime.config_loader import load_yaml_file
+from audiagentic.runtime.config import load_yaml_file
 
 
 @dataclass
@@ -18,11 +18,9 @@ class ModelProfile:
     tool_call_proxy: str | None
 
 
-_PKG_ROOT = Path(__file__).parents[3]
-
-
 def rig_config_path() -> Path:
-    return _PKG_ROOT / "config" / "provisioning" / "rig" / "rig.yaml"
+    from audiagentic.runtime.harness.pi.paths import find_pi_package_root
+    return find_pi_package_root(Path(__file__)) / "config" / "provisioning" / "rig" / "rig.yaml"
 
 
 def load_rig_profiles(profiles_path: Path | None = None) -> dict[str, object]:
@@ -96,12 +94,6 @@ def resolve_profile_definition(profile_name: str, profiles_path: Path | None = N
     merged["prompt"] = prompt_cfg
     merged["proxy"] = proxy_cfg
     return merged
-
-
-def load_model_profiles(profiles_path: Path | None = None) -> dict[str, object]:
-    return load_rig_profiles(profiles_path)
-
-
 def load_rig_config(profile_name: str) -> tuple[dict[str, object], dict[str, object], str | None]:
     resolved = resolve_profile_definition(profile_name)
     server_cfg = resolved.get("server", {})

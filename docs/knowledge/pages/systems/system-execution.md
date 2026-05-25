@@ -14,7 +14,6 @@ The AUDiaGentic execution system manages workflow jobs, prompt processing, and j
 
 **Prompt Processing** (`src/audiagentic/execution/jobs/`):
 - **Prompt Launch** (`prompt_launch.py`): Launch jobs from prompts
-- **Prompt Trigger Bridge** (`prompt_trigger_bridge.py`): Normalize and route tagged prompts
 - **Prompt Parser** (`prompt_parser.py`): Parse prompt launch requests
 - **Prompt Syntax** (`prompt_syntax.py`): Define and validate prompt syntax
 - **Prompt Templates** (`prompt_templates.py`): Manage prompt templates
@@ -75,24 +74,6 @@ result = prompt_launch.launch_with_template(
 )
 ```
 
-**Prompt Trigger Bridge:**
-
-```python
-from audiagentic.execution.jobs import prompt_trigger_bridge
-
-## Process tagged prompt
-result = prompt_trigger_bridge.process(
-    raw_prompt="@ag-review provider=codex id=job_001 ctx=documentation",
-    project_root="."
-)
-
-## Normalize prompt
-normalized = prompt_trigger_bridge.normalize(
-    raw_prompt="@ag-plan Review the code",
-    defaults={"provider": "codex", "template": "plan-default"}
-)
-```
-
 **State Machine:**
 
 ```python
@@ -125,13 +106,11 @@ python -m src.audiagentic.channels.cli.main job-control --operation status --job
 ## Prompt launch
 python -m src.audiagentic.channels.cli.main prompt-launch --prompt "@ag-plan Review the system"
 
-## Prompt trigger bridge
-python -m src.audiagentic.channels.cli.main prompt-trigger-bridge --raw-prompt "@ag-review provider=codex"
 ```
 
 **Workflow:**
 1. Parse incoming prompt with canonical tags
-2. Normalize prompt through trigger bridge
+2. Parse and normalize prompt through prompt launch
 3. Create job record with metadata
 4. Transition through state machine
 5. Execute stages in order

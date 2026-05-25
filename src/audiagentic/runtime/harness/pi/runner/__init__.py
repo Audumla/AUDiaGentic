@@ -6,6 +6,13 @@ from pathlib import Path
 
 from audiagentic.runtime.rig.embedded.config import load_rig_model
 
+from .agent_run import (
+    check_endpoint,
+    direct_mcp_smoke,
+    query_server_model,
+    query_server_version,
+    run_agent,
+)
 from .command import _build_run_env, build_agent_command
 from .context import (
     AgentContext,
@@ -18,13 +25,6 @@ from .context import (
 )
 from .models import load_model_profile
 from .rig import cleanup_process_tree, cleanup_rig, launch_rig_if_needed
-from .agent_run import (
-    check_endpoint,
-    direct_mcp_smoke,
-    query_server_model,
-    query_server_version,
-    run_agent,
-)
 
 
 @dataclass
@@ -56,7 +56,7 @@ def translate_agent_args(params: RunnerParams) -> list[str]:
 
 def build_global_context(*, project_root: Path, agent_runtime: Path, enable_mcp: bool) -> AgentContext:
     harness_cfg = load_harness_config(project_root=project_root)
-    requested_model = os.environ.get("AUDIAGENTIC_AG_MODEL") or harness_cfg.get("model")
+    requested_model = os.environ.get("AUDIAGENTIC_AG_MODEL") or harness_cfg.get("rig", {}).get("model")
     if not requested_model:
         raise SystemExit(
             "No model configured. Set AUDIAGENTIC_AG_MODEL environment variable "

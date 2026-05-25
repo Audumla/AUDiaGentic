@@ -4,32 +4,36 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
-from audiagentic.components.optional.providers.mcp_config import (
-    McpServerEntry,
-    read_mcp_servers,
-    remove_mcp_server,
-    write_mcp_servers,
+from audiagentic.components.optional.providers.adapters.continue_.mcp_format import (
+    read_continue_json,
+    remove_continue_json,
+    write_continue_json,
 )
-from audiagentic.components.optional.providers.services.lifecycle import (
+from audiagentic.components.optional.providers.adapters.goose.mcp_format import (
+    read_goose_yaml,
+    remove_goose_yaml,
+    write_goose_yaml,
+)
+from audiagentic.components.optional.providers.services.mcp import (
     add_provider_mcp_server,
     list_provider_mcp_servers,
     reload_provider_mcp,
     remove_provider_mcp_server,
 )
+from audiagentic.runtime.mcp import McpServerEntry
+from audiagentic.runtime.mcp.formats import read_mcp_json, remove_mcp_json, write_mcp_json
 
-# --- mcp_config.py format handler tests ---
+# --- format handler tests ---
 
 class TestMcpJsonFormat:
     def test_read_missing_file_returns_empty(self, tmp_path: Path) -> None:
-        result = read_mcp_servers(tmp_path / ".mcp.json", "mcp-json")
+        result = read_mcp_json(tmp_path / ".mcp.json")
         assert result == {}
 
     def test_write_creates_file(self, tmp_path: Path) -> None:
         path = tmp_path / ".mcp.json"
         entry = McpServerEntry(name="my-server", command="uvx", args=("my-tool",))
-        write_mcp_servers(path, {"my-server": entry}, "mcp-json")
+        write_mcp_json(path, {"my-server": entry})
         assert path.exists()
         data = json.loads(path.read_text())
         assert "my-server" in data["mcpServers"]
@@ -40,7 +44,7 @@ class TestMcpJsonFormat:
         path = tmp_path / ".mcp.json"
         path.write_text(json.dumps({"mcpServers": {"existing": {"command": "old", "args": []}}, "settings": {"x": 1}}))
         entry = McpServerEntry(name="new-server", command="uvx", args=())
-        write_mcp_servers(path, {"new-server": entry}, "mcp-json")
+        write_mcp_json(path, {"new-server": entry})
         data = json.loads(path.read_text())
         assert "existing" in data["mcpServers"]
         assert "new-server" in data["mcpServers"]
@@ -49,21 +53,21 @@ class TestMcpJsonFormat:
     def test_write_omits_empty_env(self, tmp_path: Path) -> None:
         path = tmp_path / ".mcp.json"
         entry = McpServerEntry(name="s", command="cmd", args=())
-        write_mcp_servers(path, {"s": entry}, "mcp-json")
+        write_mcp_json(path, {"s": entry})
         data = json.loads(path.read_text())
         assert "env" not in data["mcpServers"]["s"]
 
     def test_write_includes_env_when_set(self, tmp_path: Path) -> None:
         path = tmp_path / ".mcp.json"
         entry = McpServerEntry(name="s", command="cmd", args=(), env={"FOO": "bar"})
-        write_mcp_servers(path, {"s": entry}, "mcp-json")
+        write_mcp_json(path, {"s": entry})
         data = json.loads(path.read_text())
         assert data["mcpServers"]["s"]["env"] == {"FOO": "bar"}
 
     def test_remove_existing_entry(self, tmp_path: Path) -> None:
         path = tmp_path / ".mcp.json"
         path.write_text(json.dumps({"mcpServers": {"a": {"command": "x", "args": []}, "b": {"command": "y", "args": []}}}))
-        removed = remove_mcp_server(path, "a", "mcp-json")
+        removed = remove_mcp_json(path, "a")
         assert removed is True
         data = json.loads(path.read_text())
         assert "a" not in data["mcpServers"]
@@ -72,16 +76,16 @@ class TestMcpJsonFormat:
     def test_remove_missing_entry_returns_false(self, tmp_path: Path) -> None:
         path = tmp_path / ".mcp.json"
         path.write_text(json.dumps({"mcpServers": {}}))
-        assert remove_mcp_server(path, "nonexistent", "mcp-json") is False
+        assert remove_mcp_json(path, "nonexistent") is False
 
     def test_remove_missing_file_returns_false(self, tmp_path: Path) -> None:
-        assert remove_mcp_server(tmp_path / ".mcp.json", "x", "mcp-json") is False
+        assert remove_mcp_json(tmp_path / ".mcp.json", "x") is False
 
     def test_read_roundtrip(self, tmp_path: Path) -> None:
         path = tmp_path / ".mcp.json"
         entry = McpServerEntry(name="srv", command="python", args=("-m", "mod"), env={"K": "V"})
-        write_mcp_servers(path, {"srv": entry}, "mcp-json")
-        result = read_mcp_servers(path, "mcp-json")
+        write_mcp_json(path, {"srv": entry})
+        result = read_mcp_json(path)
         assert "srv" in result
         assert result["srv"].command == "python"
         assert result["srv"].args == ("-m", "mod")
@@ -90,14 +94,14 @@ class TestMcpJsonFormat:
 
 class TestGooseYamlFormat:
     def test_read_missing_file_returns_empty(self, tmp_path: Path) -> None:
-        result = read_mcp_servers(tmp_path / "config.yaml", "goose-yaml")
+        result = read_goose_yaml(tmp_path / "config.yaml")
         assert result == {}
 
     def test_write_creates_extension_entry(self, tmp_path: Path) -> None:
         path = tmp_path / "config.yaml"
         entry = McpServerEntry(name="my-ext", command="uvx", args=("tool",))
-        write_mcp_servers(path, {"my-ext": entry}, "goose-yaml")
-        result = read_mcp_servers(path, "goose-yaml")
+        write_goose_yaml(path, {"my-ext": entry})
+        result = read_goose_yaml(path)
         assert "my-ext" in result
         assert result["my-ext"].command == "uvx"
 
@@ -106,7 +110,7 @@ class TestGooseYamlFormat:
         path = tmp_path / "config.yaml"
         path.write_text(yaml.dump({"extensions": [{"name": "other", "type": "builtin"}]}))
         entry = McpServerEntry(name="srv", command="cmd", args=())
-        write_mcp_servers(path, {"srv": entry}, "goose-yaml")
+        write_goose_yaml(path, {"srv": entry})
         import yaml as _yaml
         data = _yaml.safe_load(path.read_text())
         names = [e["name"] for e in data["extensions"]]
@@ -116,22 +120,22 @@ class TestGooseYamlFormat:
     def test_remove_entry(self, tmp_path: Path) -> None:
         path = tmp_path / "config.yaml"
         entry = McpServerEntry(name="srv", command="cmd", args=())
-        write_mcp_servers(path, {"srv": entry}, "goose-yaml")
-        removed = remove_mcp_server(path, "srv", "goose-yaml")
+        write_goose_yaml(path, {"srv": entry})
+        removed = remove_goose_yaml(path, "srv")
         assert removed is True
-        result = read_mcp_servers(path, "goose-yaml")
+        result = read_goose_yaml(path)
         assert "srv" not in result
 
 
 class TestContinueJsonFormat:
     def test_read_missing_file_returns_empty(self, tmp_path: Path) -> None:
-        result = read_mcp_servers(tmp_path / "config.json", "continue-json")
+        result = read_continue_json(tmp_path / "config.json")
         assert result == {}
 
     def test_write_creates_server_entry(self, tmp_path: Path) -> None:
         path = tmp_path / "config.json"
         entry = McpServerEntry(name="srv", command="uvx", args=("tool",))
-        write_mcp_servers(path, {"srv": entry}, "continue-json")
+        write_continue_json(path, {"srv": entry})
         data = json.loads(path.read_text())
         assert any(s["name"] == "srv" for s in data["mcpServers"])
 
@@ -139,7 +143,7 @@ class TestContinueJsonFormat:
         path = tmp_path / "config.json"
         path.write_text(json.dumps({"mcpServers": [{"name": "existing", "command": "x", "args": []}]}))
         entry = McpServerEntry(name="new", command="y", args=())
-        write_mcp_servers(path, {"new": entry}, "continue-json")
+        write_continue_json(path, {"new": entry})
         data = json.loads(path.read_text())
         names = [s["name"] for s in data["mcpServers"]]
         assert "existing" in names
@@ -148,28 +152,13 @@ class TestContinueJsonFormat:
     def test_remove_entry(self, tmp_path: Path) -> None:
         path = tmp_path / "config.json"
         entry = McpServerEntry(name="srv", command="cmd", args=())
-        write_mcp_servers(path, {"srv": entry}, "continue-json")
-        removed = remove_mcp_server(path, "srv", "continue-json")
+        write_continue_json(path, {"srv": entry})
+        removed = remove_continue_json(path, "srv")
         assert removed is True
-        result = read_mcp_servers(path, "continue-json")
+        result = read_continue_json(path)
         assert "srv" not in result
 
 
-class TestUnsupportedFormat:
-    def test_read_raises(self, tmp_path: Path) -> None:
-        with pytest.raises(ValueError, match="unsupported"):
-            read_mcp_servers(tmp_path / "f", "unknown-format")
-
-    def test_write_raises(self, tmp_path: Path) -> None:
-        with pytest.raises(ValueError, match="unsupported"):
-            write_mcp_servers(tmp_path / "f", {}, "unknown-format")
-
-    def test_remove_raises(self, tmp_path: Path) -> None:
-        with pytest.raises(ValueError, match="unsupported"):
-            remove_mcp_server(tmp_path / "f", "x", "unknown-format")
-
-
-# --- lifecycle function tests ---
 
 class TestAddProviderMcpServer:
     def test_adds_entry_to_mcp_json(self, tmp_path: Path) -> None:

@@ -428,7 +428,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "update-binaries":
-        from audiagentic.runtime.rig.embedded.update_binaries import update_binaries
+        from audiagentic.runtime.rig.embedded.binaries import update_binaries
         harness = global_harness_runtime()
         update_binaries(runtime_dir=harness)
         return 0

@@ -5,13 +5,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from audiagentic.components.optional.ledger.audit import generate_audit_and_checkin
 from audiagentic.components.optional.ledger.current_summary import regenerate_current_release
 from audiagentic.components.optional.ledger.sync import sync_current_release_ledger
 from audiagentic.foundation.components.ids import COMPONENT_PROJECT
 from audiagentic.paths import REPO_ROOT
+from audiagentic.runtime.config import load_yaml_file, save_yaml_file
 from audiagentic.runtime.lifecycle.baseline_sync import ensure_project_layout, sync_managed_baseline
 from audiagentic.runtime.lifecycle.detector import detect_installed_state
 
@@ -33,7 +32,7 @@ def bootstrap_ledger(project_root: Path) -> dict[str, Any]:
     marker_path = project_root / ".audiagentic" / "components" / "project.yaml"
     current_marker: dict[str, Any] | None = None
     if marker_path.exists():
-        current_marker = yaml.safe_load(marker_path.read_text(encoding="utf-8")) or {}
+        current_marker = load_yaml_file(marker_path)
 
     now = _now_timestamp()
     updated_marker: dict[str, Any] = {
@@ -44,8 +43,7 @@ def bootstrap_ledger(project_root: Path) -> dict[str, Any]:
         "last-lifecycle-action": "ledger-bootstrap",
         "version": (current_marker or {}).get("version") or "0.1.0",
     }
-    marker_path.parent.mkdir(parents=True, exist_ok=True)
-    marker_path.write_text(yaml.dump(updated_marker, default_flow_style=False, sort_keys=True), encoding="utf-8")
+    save_yaml_file(marker_path, updated_marker, sort_keys=True)
 
     sync_result = sync_current_release_ledger(project_root)
     summary_path = regenerate_current_release(project_root)

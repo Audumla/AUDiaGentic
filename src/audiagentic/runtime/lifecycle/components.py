@@ -5,8 +5,6 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-import yaml
-
 from audiagentic.foundation.components.base import (
     MODE_CREATE_IF_MISSING,
     MODE_GENERATED_MANAGED,
@@ -22,6 +20,7 @@ from audiagentic.foundation.components.registry import (
     marker_path,
     resolve_component_id,
 )
+from audiagentic.runtime.config import load_yaml_file, save_yaml_file
 from audiagentic.runtime.harness import build_runtime_sync
 
 from .baseline_sync import sync_managed_baseline
@@ -54,18 +53,15 @@ def _get_marker_path(component_id: str, project_root: Path) -> Path:
 
 def _read_marker(component_id: str, project_root: Path) -> dict:
     path = _get_marker_path(component_id, project_root)
-    if not path.exists():
-        return {}
     try:
-        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        return load_yaml_file(path)
     except Exception:  # noqa: BLE001
         return {}
 
 
 def _write_marker(component_id: str, project_root: Path, data: dict) -> None:
     path = _get_marker_path(component_id, project_root)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.dump(data, default_flow_style=False, sort_keys=True), encoding="utf-8")
+    save_yaml_file(path, data, sort_keys=True)
 
 
 def _component_result(

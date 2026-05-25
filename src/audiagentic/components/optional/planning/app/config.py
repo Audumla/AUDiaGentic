@@ -4,10 +4,10 @@ import json
 import re
 from pathlib import Path
 
-import yaml
 from jsonschema import Draft202012Validator
 
 from audiagentic.paths import REPO_ROOT, SRC_ROOT
+from audiagentic.runtime.config import load_yaml_file, load_yaml_value
 
 _PLANNING_SCHEMA_DIR = (
     SRC_ROOT / "audiagentic" / "foundation" / "contracts" / "schemas" / "planning"
@@ -86,13 +86,13 @@ class Config:
         ]
 
     def _read_required_yaml(self, filename: str) -> dict:
-        return yaml.safe_load((self.config_dir / filename).read_text(encoding="utf-8"))
+        return load_yaml_file(self.config_dir / filename)
 
     def _read_optional_yaml(self, filename: str) -> dict:
         path = self.config_dir / filename
         if not path.exists():
             return {}
-        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        return load_yaml_file(path)
 
     def _read_profile_packs(self) -> dict[str, dict]:
         profile_pack_dir = self.config_dir / "profile-packs"
@@ -100,14 +100,14 @@ class Config:
             return {}
         out: dict[str, dict] = {}
         for path in sorted(profile_pack_dir.glob("*.yaml")):
-            out[path.stem] = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            out[path.stem] = load_yaml_file(path)
         return out
 
     def _validate_yaml_file(self, filename: str, schema: str, required: bool = True) -> list[str]:
         path = self.config_dir / filename
         if not path.exists():
             return [] if not required else [f"config {filename}: file is missing"]
-        inst = yaml.safe_load(path.read_text(encoding="utf-8"))
+        inst = load_yaml_value(path)
         sch = json.loads((self.schemas / schema).read_text(encoding="utf-8"))
         v = Draft202012Validator(sch)
         return [f"config {filename}: {e.message}" for e in v.iter_errors(inst)]
@@ -129,7 +129,7 @@ class Config:
             schema = "profile-pack.schema.json"
             for path in sorted(profile_pack_dir.glob("*.yaml")):
                 sch = json.loads((self.schemas / schema).read_text(encoding="utf-8"))
-                inst = yaml.safe_load(path.read_text(encoding="utf-8"))
+                inst = load_yaml_value(path)
                 v = Draft202012Validator(sch)
                 for e in v.iter_errors(inst):
                     errors.append(f"config profile-packs/{path.name}: {e.message}")

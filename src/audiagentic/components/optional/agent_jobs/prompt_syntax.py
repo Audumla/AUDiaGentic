@@ -5,7 +5,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-import yaml
+from audiagentic.runtime.config import load_yaml_file
 
 # Base directive aliases that apply regardless of which tags are loaded.
 _DIRECTIVE_ALIASES: dict[str, str] = {
@@ -161,7 +161,7 @@ def load_prompt_syntax(project_root: Path | None, profile_name: str | None = Non
     if not syntax_path.exists():
         return syntax
 
-    payload = yaml.safe_load(syntax_path.read_text(encoding="utf-8")) or {}
+    payload = load_yaml_file(syntax_path)
     if not isinstance(payload, dict):
         return syntax
 

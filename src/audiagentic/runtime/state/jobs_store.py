@@ -87,7 +87,3 @@ def write_job_record(project_root: Path, payload: dict[str, Any]) -> Path:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
     return target_path
-
-
-def save_job_record(project_root: Path, payload: dict[str, Any]) -> Path:
-    return write_job_record(project_root, payload)

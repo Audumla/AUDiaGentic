@@ -37,4 +37,3 @@ The active core of job orchestration. Contains all modules that drive a prompt r
 | `records.py` | Job record construction (not persistence) |
 | `profiles.py` | Workflow profile loading and application |
 | `release_bridge.py` | Signal release domain on job completion |
-| `prompt_trigger_bridge.py` | Bridge raw prompt trigger to prompt_launch |

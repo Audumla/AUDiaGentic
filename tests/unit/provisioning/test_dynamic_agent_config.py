@@ -14,7 +14,7 @@ from audiagentic.runtime.harness.pi.install.config import (
     materialize_agent_config,
 )
 from audiagentic.runtime.lifecycle.components import install_component
-from audiagentic.runtime.mcp_config_builder import build_system_md_injections
+from audiagentic.runtime.mcp.config_builder import build_system_md_injections
 
 
 def test_build_system_md_injections_uses_explicit_project_root(

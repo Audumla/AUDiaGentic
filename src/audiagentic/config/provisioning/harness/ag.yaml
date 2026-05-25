@@ -10,15 +10,19 @@
 #
 # Set exclusive_local: true in the project-local file to skip the user-global tier.
 
-# Which model to use. Resolved against rig.yaml profile list.
-model: audiagentic-rig
-
-# Default provider id for Pi harness sessions.
-provider: audiagentic
+# Harness implementation to use.
+# Each harness is an isolated adaptor under runtime/harness/<type>/.
+# Supported: pi
+harness:
+  type: pi
 
 # Embedded rig settings.
 rig:
   port: 42001
+  # Which model to use. Resolved against rig.yaml profile list.
+  model: audiagentic-rig
+  # Provider id passed to the harness CLI (names the models.json backend block).
+  provider: audiagentic
 
 # Smoke test timeout in seconds.
 smoke:

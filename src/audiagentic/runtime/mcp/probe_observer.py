@@ -2,7 +2,7 @@
 
 Subscribes to component lifecycle events and caches probe results for any
 ExternalMcpServerDeclaration entries that declare a probe command. Results
-are stored in the component marker so build_mcp_config can read them at
+are stored in the component marker so collect_mcp_servers can read them at
 runtime without running subprocesses on every launch.
 
 Import this module to activate the subscription. Importing it multiple

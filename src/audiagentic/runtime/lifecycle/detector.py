@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
+from audiagentic.runtime.config import load_yaml_file
 
 _PROJECT_MARKER = Path(".audiagentic/components/project.yaml")
 
@@ -45,10 +45,10 @@ def get_project_version_info(project_root: Path) -> dict[str, Any] | None:
     if not marker.exists():
         return None
     try:
-        data = yaml.safe_load(marker.read_text(encoding="utf-8")) or {}
+        data = load_yaml_file(marker)
         return {
             "version": data.get("version"),
             "installed_at": data.get("installed-at"),
         }
-    except Exception as exc:  # noqa: BLE001
+    except BaseException as exc:  # noqa: BLE001
         return {"error": str(exc)}

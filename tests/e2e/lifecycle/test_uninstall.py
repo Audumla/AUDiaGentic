@@ -9,11 +9,11 @@ for _p in (str(_ROOT), str(_ROOT / "src")):
         sys.path.insert(0, _p)
 
 import yaml
+from tests.dev.seed_example_project import seed_example_project
 from tests.helpers import sandbox as sandbox_helper
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.lifecycle.uninstall import apply_uninstall
-from audiagentic.testing.seed_example_project import seed_example_project
 
 
 def _write_project_marker(root: Path) -> None:

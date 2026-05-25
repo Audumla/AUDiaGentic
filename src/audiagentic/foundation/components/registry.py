@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from audiagentic.runtime.config import load_yaml_file
 from audiagentic.runtime.home import audiagentic_home
 
 from .base import SCOPE_HARNESS, ComponentDescriptor, McpServerDeclaration
@@ -86,8 +87,7 @@ def is_enabled(component_id: str, project_root: Path) -> bool:
     if not mpath.exists():
         return False
     try:
-        import yaml
-        data = yaml.safe_load(mpath.read_text(encoding="utf-8")) or {}
+        data = load_yaml_file(mpath)
     except Exception:  # noqa: BLE001
         return False
     return bool(data.get("enabled", True))
@@ -107,8 +107,7 @@ def get_external_probe_results(component_id: str, project_root: Path) -> dict[st
     if not mpath.exists():
         return {}
     try:
-        import yaml
-        data = yaml.safe_load(mpath.read_text(encoding="utf-8")) or {}
+        data = load_yaml_file(mpath)
     except Exception:  # noqa: BLE001
         return {}
     return dict(data.get("external-mcp-probe", {}))

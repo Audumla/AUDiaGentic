@@ -1,4 +1,5 @@
 from audiagentic.foundation.invoke.toolchains import npm
+from audiagentic.runtime.mcp.formats import read_mcp_json, remove_mcp_json, write_mcp_json
 
 from ...descriptors.base import (
     CliInstallRecipe,
@@ -36,6 +37,9 @@ register(ProviderDescriptor(
     agent_files=(),
     mcp_config=McpConfigSpec(
         config_path=".mcp.json",
+        reader=read_mcp_json,
+        writer=write_mcp_json,
+        remover=remove_mcp_json,
         format="mcp-json",
         refresh_mode="file-watch",
     ),
