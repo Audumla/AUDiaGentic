@@ -1,29 +1,46 @@
 from __future__ import annotations
 
-import json
+import os
 from pathlib import Path
 
 import pytest
+import yaml
 
 from audiagentic.runtime.rig.embedded.launch import (
+    build_command,
     load_model_profiles,
     resolve_model,
     resolve_model_profile,
+    runtime_bin_dir,
 )
 
 MINIMAL_MODELS = {
-    "default": "fast",
+    "rig_model": {
+        "profile": "fast",
+        "model_id": "audiagentic-rig",
+    },
+    "profile_settings": {
+        "base_fast": {
+            "server": {
+                "parallel": 1,
+                "gpu_layers": "all",
+                "fit": "on",
+                "reasoning": "off",
+                "context_size": 4096,
+            },
+            "agent": {
+                "reasoning": False,
+                "max_tokens": 2048,
+            },
+        }
+    },
     "models": {
         "fast": {
-            "aliases": ["quick", "fast-alias"],
+            "extends": ["base_fast"],
             "model_file": "models/fast.gguf",
-            "context": 4096,
-            "parallel": 1,
-            "gpu_layers": "all",
-            "fit": "on",
-            "reasoning": "off",
-            "sampling": {},
-            "chat_template_kwargs": {},
+            "prompt": {
+                "chat_template": {},
+            },
         }
     },
 }
@@ -35,13 +52,13 @@ MINIMAL_MODELS = {
 
 def test_load_model_profiles_raises_when_file_missing(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="not found"):
-        load_model_profiles(tmp_path / "missing.json")
+        load_model_profiles(tmp_path / "missing.yaml")
 
 
 def test_load_model_profiles_returns_dict(tmp_path: Path) -> None:
     p = _write_models(tmp_path, MINIMAL_MODELS)
     data = load_model_profiles(p)
-    assert data["default"] == "fast"
+    assert data["rig_model"]["profile"] == "fast"
 
 
 # ---------------------------------------------------------------------------
@@ -60,22 +77,22 @@ def test_resolve_model_profile_by_explicit_name(tmp_path: Path) -> None:
     assert profile.name == "fast"
 
 
-def test_resolve_model_profile_by_alias(tmp_path: Path) -> None:
+def test_resolve_model_profile_by_rig_model_id(tmp_path: Path) -> None:
     p = _write_models(tmp_path, MINIMAL_MODELS)
-    profile = resolve_model_profile("quick", None, p)
+    profile = resolve_model_profile("audiagentic-rig", None, p)
     assert profile.name == "fast"
 
 
-def test_resolve_model_profile_by_model_file_alias(tmp_path: Path) -> None:
+def test_resolve_model_profile_by_model_file_name(tmp_path: Path) -> None:
     p = _write_models(tmp_path, MINIMAL_MODELS)
-    profile = resolve_model_profile(None, "fast-alias", p)
+    profile = resolve_model_profile(None, "fast.gguf", p)
     assert profile.name == "fast"
 
 
-def test_resolve_model_profile_raises_when_no_default(tmp_path: Path) -> None:
-    data = {"models": MINIMAL_MODELS["models"]}
+def test_resolve_model_profile_raises_when_no_rig_model(tmp_path: Path) -> None:
+    data = {"profile_settings": MINIMAL_MODELS["profile_settings"], "models": MINIMAL_MODELS["models"]}
     p = _write_models(tmp_path, data)
-    with pytest.raises(SystemExit, match="No model profile specified"):
+    with pytest.raises(SystemExit, match="rig_model"):
         resolve_model_profile(None, None, p)
 
 
@@ -107,12 +124,43 @@ def test_resolve_model_returns_path_for_existing_file(tmp_path: Path) -> None:
     assert arg == str(model_file)
 
 
+def test_build_command_passes_through_unknown_server_args(tmp_path: Path) -> None:
+    binary = tmp_path / "llama-server"
+    cmd = build_command(
+        binary=binary,
+        model_arg="models/test.gguf",
+        host="127.0.0.1",
+        port=42001,
+        device=None,
+        server_cfg={"spec_type": "draft-mtp", "context_size": 4096},
+        chat_template_kwargs={},
+        alias=None,
+    )
+    assert "--spec-type" in cmd
+    assert "draft-mtp" in cmd
+
+
+def test_runtime_bin_dir_prefers_project_provisioning_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project_root = tmp_path / "project"
+    project_bin = project_root / ".audiagentic" / "provisioning" / "rig" / "embedded" / "bin"
+    project_bin.mkdir(parents=True)
+    monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(project_root))
+    assert runtime_bin_dir() == project_bin
+
+
+def test_runtime_bin_dir_falls_back_when_project_bin_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(Path(os.sep) / "missing-project-root"))
+    path = runtime_bin_dir()
+    assert path.name == "bin"
+    assert path.exists()
+
+
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
 
 def _write_models(root: Path, data: dict) -> Path:
-    path = root / "models.json"
-    path.write_text(json.dumps(data), encoding="utf-8")
+    path = root / "rig.yaml"
+    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     return path
 
