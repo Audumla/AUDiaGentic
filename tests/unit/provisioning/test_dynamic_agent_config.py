@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from audiagentic import launcher
-from audiagentic.components.core.harness_server import _set_cli_visibility
+from audiagentic.components.core.session_server import _set_cli_visibility
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.runtime.harness.pi.install import request_runtime_reload
@@ -248,7 +248,7 @@ def test_set_cli_visibility_updates_project_config_and_requests_reload(
         lambda project_root, *, reason, component_id=None: reload_calls.append((project_root, reason)),
     )
     monkeypatch.setattr(
-        "audiagentic.components.core.harness_server._effective_cli_visibility",
+        "audiagentic.components.core.session_server._effective_cli_visibility",
         lambda project_root: {
             "show_thinking_blocks": False,
             "show_tool_blocks": True,

@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[3]
@@ -30,7 +31,7 @@ _INIT = {
 _INITIALIZED = {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
 
 
-def _mcp(module: str, *messages: dict, project_root: Path, extra_args: list[str] | None = None) -> list[dict]:
+def _mcp(module: str, *messages: dict, project_root: Path, extra_args: list[str] | None = None, timeout: int = 30) -> list[dict]:
     payload = "\n".join(json.dumps(m) for m in [_INIT, _INITIALIZED, *messages]) + "\n"
     env = dict(os.environ)
     env["AUDIAGENTIC_REPO_ROOT"] = str(project_root)
@@ -43,7 +44,7 @@ def _mcp(module: str, *messages: dict, project_root: Path, extra_args: list[str]
         text=True,
         encoding="utf-8",
         capture_output=True,
-        timeout=30,
+        timeout=timeout,
         env=env,
     )
     assert proc.returncode == 0, f"MCP server {module} rc={proc.returncode}\n{proc.stderr}"
@@ -69,6 +70,7 @@ def _call(
     project_root: Path,
     msg_id: int = 2,
     extra_args: list[str] | None = None,
+    timeout: int = 30,
 ) -> dict | list:
     responses = _mcp(
         module,
@@ -80,7 +82,74 @@ def _call(
         },
         project_root=project_root,
         extra_args=extra_args,
+        timeout=timeout,
     )
+    resp = next(r for r in responses if r.get("id") == msg_id)
+    assert "error" not in resp, f"tool {tool!r} error: {resp['error']}"
+    blocks = resp["result"]["content"]
+    parsed = [json.loads(block["text"]) for block in blocks]
+    return parsed if len(parsed) > 1 else parsed[0]
+
+
+def _call_keepalive(
+    module: str,
+    tool: str,
+    args: dict,
+    *,
+    project_root: Path,
+    msg_id: int = 2,
+    timeout: int = 120,
+) -> dict | list:
+    env = dict(os.environ)
+    env["AUDIAGENTIC_REPO_ROOT"] = str(project_root)
+    proc = subprocess.Popen(
+        [sys.executable, "-m", module],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        env=env,
+    )
+    assert proc.stdin is not None
+    assert proc.stdout is not None
+    for message in (
+        _INIT,
+        _INITIALIZED,
+        {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "method": "tools/call",
+            "params": {
+                "name": tool,
+                "arguments": args,
+                "_meta": {"progressToken": f"test-{msg_id}"},
+            },
+        },
+    ):
+        proc.stdin.write(json.dumps(message) + "\n")
+    proc.stdin.flush()
+
+    responses: list[dict] = []
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        line = proc.stdout.readline()
+        if not line:
+            if proc.poll() is not None:
+                break
+            continue
+        payload = json.loads(line)
+        responses.append(payload)
+        if payload.get("id") == msg_id:
+            break
+
+    proc.stdin.close()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.terminate()
+        proc.wait(timeout=5)
+
     resp = next(r for r in responses if r.get("id") == msg_id)
     assert "error" not in resp, f"tool {tool!r} error: {resp['error']}"
     blocks = resp["result"]["content"]
@@ -90,7 +159,7 @@ def _call(
 
 def test_session_server_exposes_expected_tools(tmp_path: Path) -> None:
     names = _tools_list(
-        "audiagentic.components.core.harness_server",
+        "audiagentic.components.core.session_server",
         tmp_path,
         extra_args=["--readonly", "--smoke-only"],
     )
@@ -105,7 +174,7 @@ def test_session_server_exposes_expected_tools(tmp_path: Path) -> None:
 
 def test_session_server_status_returns_environment(tmp_path: Path) -> None:
     result = _call(
-        "audiagentic.components.core.harness_server",
+        "audiagentic.components.core.session_server",
         "status",
         {},
         project_root=tmp_path,
@@ -189,7 +258,10 @@ def test_planning_server_status_on_fresh_project(tmp_path: Path) -> None:
 
 
 def test_release_please_server_exposes_expected_tools(tmp_path: Path) -> None:
-    names = _tools_list("audiagentic.components.optional.ledger.server", tmp_path)
+    names = _tools_list(
+        "audiagentic.components.optional.release.release_please.release_please_mcp",
+        tmp_path,
+    )
     assert {
         "release_please_status",
         "install_release_please",
@@ -199,10 +271,59 @@ def test_release_please_server_exposes_expected_tools(tmp_path: Path) -> None:
 
 def test_release_please_server_status_returns_payload(tmp_path: Path) -> None:
     result = _call(
-        "audiagentic.components.optional.ledger.server",
+        "audiagentic.components.optional.release.release_please.release_please_mcp",
         "release_please_status",
         {},
         project_root=tmp_path,
     )
     payload = result if isinstance(result, dict) else result[0]
     assert isinstance(payload, dict)
+
+
+def test_session_server_update_embedded_rig(tmp_path: Path) -> None:
+    result = _call_keepalive(
+        "audiagentic.components.core.session_server",
+        "update_embedded_rig",
+        {},
+        project_root=tmp_path,
+        timeout=120,
+    )
+    payload = result if isinstance(result, dict) else result[0]
+    assert payload["ok"] is True
+    assert "output" in payload
+
+
+def test_session_server_detects_active_embedded_rig_profile(monkeypatch) -> None:
+    from audiagentic.components.core.session_server import _active_embedded_rig_profile
+
+    monkeypatch.setenv("AUDIAGENTIC_RIG_TYPE", "embedded")
+    monkeypatch.setenv("AUDIAGENTIC_RIG_PROFILE", "qwen3.5-2b-q4_k_s")
+    assert _active_embedded_rig_profile() == "qwen3.5-2b-q4_k_s"
+
+
+def test_update_embedded_rig_works_directly(tmp_path: Path) -> None:
+    """Test the update_binaries work function directly (avoids MCP subprocess timeout)."""
+    import contextlib
+    import io
+
+    # Set harness home for the test
+    import os
+
+    from audiagentic.foundation.output import ComponentOutputEvent
+    from audiagentic.runtime.home import global_harness_runtime
+    from audiagentic.runtime.rig.embedded.update_binaries import update_binaries as _update
+    os.environ["AUDIAGENTIC_HOME"] = str(tmp_path / ".audiagentic")
+
+    out = io.StringIO()
+    events = []
+
+    def _sink(event: ComponentOutputEvent) -> None:
+        events.append(event)
+
+    harness = global_harness_runtime()
+    with contextlib.redirect_stdout(out):
+        _update(runtime_dir=harness)
+    _sink(ComponentOutputEvent(message=out.getvalue().strip()))
+
+    assert len(events) > 0
+    assert "llama-server" in events[-1].message or "Installed" in events[-1].message or "up to date" in events[-1].message
