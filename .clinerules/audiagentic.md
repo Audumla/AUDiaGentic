@@ -106,7 +106,27 @@ requested. Do not broaden review into feature-scope changes.
 # Source control doctrine
 
 Use the source control component for all git and GitHub operations.
-Before committing, record a change event to the ledger using the
-audiagentic-ledger-write MCP tool (record_change_event).
+If the agent-ledger component is installed, record a change event to the
+ledger before committing using the audiagentic-ledger-write MCP tool
+(record_change_event).
 Do not invoke git or GitHub APIs directly — use the MCP tools.
 <!-- AUDIAGENTIC:END source-control/doctrine -->
+
+<!-- AUDIAGENTIC:BEGIN agent-ledger/process -->
+# Agent ledger process
+
+For release-affecting work, follow AUDiaGentic agent ledger process.
+
+- Check release ledger state before changing release notes, changelog fragments, or release workflow files.
+- Keep release artifacts and job records synchronized with implementation and review outcomes.
+- Add or update the release ledger fragment when behavior, public workflow, or generated release output changes.
+- Do not bypass ledger updates by editing generated release outputs only.
+<!-- AUDIAGENTIC:END agent-ledger/process -->
+
+<!-- AUDIAGENTIC:BEGIN agent-ledger/write-instruction -->
+# Ledger write instruction
+
+After completing substantive implementation work, record a change event to the ledger
+using the audiagentic-ledger-write MCP tool (record_change_event).
+Do not skip this step — the ledger is the authoritative record for release tracking.
+<!-- AUDIAGENTIC:END agent-ledger/write-instruction -->
