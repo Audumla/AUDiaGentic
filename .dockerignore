@@ -3,6 +3,7 @@
 !Dockerfile.test
 !Dockerfile.provider-cli-test
 !pyproject.toml
+!release-please-config.json
 !README.md
 !AGENTS.md
 !CLAUDE.md

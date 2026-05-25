@@ -178,7 +178,7 @@ class TestToolchainFactories:
 # ---------------------------------------------------------------------------
 
 # Known problematic providers that install but have binary/runtime issues
-_KNOWN_PROBLEMATIC = {"continue", "qwen", "gemini", "opencode"}  # segfaults or help timeout on CLI invocation
+_KNOWN_PROBLEMATIC = {"continue", "qwen", "gemini", "opencode", "openhands"}  # segfaults or help timeout on CLI invocation
 _KNOWN_SLOW_INSTALL = {"cline"}  # npm install times out at 600s
 
 

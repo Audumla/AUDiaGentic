@@ -3,13 +3,19 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[3]
 SRC = ROOT / "src"
 for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.components.optional.ledger.history_import import import_legacy_history
+_ledger_history = pytest.importorskip(
+    "audiagentic.components.optional.ledger.history_import",
+    reason="ledger history_import module not present in this build",
+)
+import_legacy_history = _ledger_history.import_legacy_history
 from tests.helpers import sandbox as sandbox_helper
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
