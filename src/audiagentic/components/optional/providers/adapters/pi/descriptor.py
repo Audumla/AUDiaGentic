@@ -5,7 +5,13 @@ import subprocess
 
 from audiagentic.foundation.invoke.recipes.callable_ import CallableRecipe
 
-from ...descriptors.base import AgentFile, CliInstallRecipe, ProviderDescriptor, ProviderPermissions
+from ...descriptors.base import (
+    AgentFile,
+    CliInstallRecipe,
+    McpConfigSpec,
+    ProviderDescriptor,
+    ProviderPermissions,
+)
 from ...descriptors.registry import register
 
 
@@ -81,8 +87,9 @@ def _probe_dispatch(descriptor):
 register(ProviderDescriptor(
     provider_id="pi",
     display_name="Pi Coding Agent",
-    description="Lightweight local coding agent TUI by Earendil Works. Managed and launched by the AUDiaGentic harness.",
+    description="Lightweight local coding agent TUI by Earendil Works. Supports MCP tool use via the pi-mcp-adapter extension.",
     url="https://www.earendilworks.com/pi",
+    access_mode="none",
     cli_probe=None,
     cli_install=CliInstallRecipe(
         package_manager="pi-harness",
@@ -98,9 +105,14 @@ register(ProviderDescriptor(
         can_execute_shell=True,
         can_browse_web=False,
         can_read_env=True,
-        notes="TUI coding agent; launched and managed by AUDiaGentic harness",
+        notes="TUI coding agent; MCP tool use available when pi-mcp-adapter is installed",
     ),
     agent_files=(
         AgentFile(".pi", managed=False, description="Pi agent runtime directory"),
+    ),
+    mcp_config=McpConfigSpec(
+        config_path=".mcp.json",
+        format="mcp-json",
+        refresh_mode="restart-required",
     ),
 ))
