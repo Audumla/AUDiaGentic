@@ -8,10 +8,9 @@ for path in (str(ROOT), str(ROOT / "src")):
     if path not in sys.path:
         sys.path.insert(0, path)
 
+import tests.dev.lifecycle_stub as lifecycle_stub  # noqa: E402
+import tests.dev.seed_example_project as seed_example_project  # noqa: E402
 from tests.helpers import sandbox as sandbox_helper  # noqa: E402
-
-import audiagentic.testing.lifecycle_stub as lifecycle_stub  # noqa: E402
-import audiagentic.testing.seed_example_project as seed_example_project  # noqa: E402
 
 
 def test_stub_returns_plan_payload(tmp_path: Path) -> None:

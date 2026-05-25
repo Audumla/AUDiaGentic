@@ -6,7 +6,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-import audiagentic.testing.create_sandbox as create_sandbox
+from tests.helpers import create_sandbox
 
 
 @dataclass

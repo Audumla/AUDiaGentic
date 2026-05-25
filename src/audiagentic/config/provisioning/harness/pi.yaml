@@ -29,13 +29,6 @@ extensions:
   no_auto_discovery: true
   load: []
 
-# --- MCP extra server args ---
-#
-# Additional args appended to the Pi MCP adapter server invocation.
-# The adapter already passes --readonly --smoke-only; add extras here.
-mcp:
-  extra_server_args: []
-
 # --- Sandbox ---
 #
 # enabled:     Load the sandbox extension.

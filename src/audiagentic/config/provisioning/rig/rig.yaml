@@ -23,15 +23,17 @@ profile_settings:
   mtp_base:
     server:
       spec_type: draft-mtp
-      spec_draft_n_max: 4
+      spec_draft_n_max: 2
+      spec-draft-type-v: q8_0
+      spec-draft-type-k: q8_0
 
   qwen_base:
     server:
       ubatch_size: 512
-      batch_size: 512
+      batch_size: 2048
       gpu_layers: all
       fit: "on"
-      fit-target: 512
+      fit-target: 1024
       no_mmap: true
       flash_attn: "on"
       reasoning: "off"
@@ -40,6 +42,8 @@ profile_settings:
       top_k: 20
       min_p: 0.0
       parallel: 1
+      cache-type-k: q8_0
+      cache-type-v: q8_0
     agent:
       reasoning: false
       compat: *compat_qwen
@@ -49,7 +53,7 @@ profile_settings:
 
 
 rig_model:
-  profile: qwen3.5-9b
+  profile: qwen3.5-2b
   model_id: audiagentic-rig
 
 # --- Per-model overrides ---
@@ -66,7 +70,7 @@ models:
 
   qwen3.5-9b:
     extends: [qwen_base]
-    model_file: ../../models/Qwen3.5-9B-UD-Q4_K_XL.gguf
+    model_file: ../../models/Qwen3.5-9B-IQ4_XS.gguf
     server:
-      context_size: 32768
+      context_size: 1280000
  

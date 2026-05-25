@@ -8,6 +8,7 @@ from ...descriptors.base import (
     ProviderPermissions,
 )
 from ...descriptors.registry import register
+from .mcp_format import read_goose_yaml, remove_goose_yaml, write_goose_yaml
 
 register(ProviderDescriptor(
     provider_id="goose",
@@ -36,6 +37,9 @@ register(ProviderDescriptor(
     ),
     mcp_config=McpConfigSpec(
         config_path=".goose/config.yaml",
+        reader=read_goose_yaml,
+        writer=write_goose_yaml,
+        remover=remove_goose_yaml,
         format="goose-yaml",
         refresh_mode="restart-required",
     ),

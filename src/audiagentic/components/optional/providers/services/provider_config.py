@@ -4,15 +4,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import yaml
 from jsonschema import Draft202012Validator
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import read_schema
-
-
-def _load_yaml(path: Path) -> dict[str, Any]:
-    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+from audiagentic.runtime.config import load_yaml_file, save_yaml_file
 
 
 def validate_provider_config(payload: dict[str, Any]) -> list[str]:
@@ -54,19 +50,7 @@ def _providers_yaml_path(project_root: Path) -> Path:
 
 
 def _save_provider_config(path: Path, payload: dict[str, Any]) -> None:
-    import os
-    import tempfile
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=path.stem + ".", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            yaml.dump(payload, fh, default_flow_style=False, allow_unicode=True, sort_keys=False)
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(tmp, path)
-    finally:
-        if os.path.exists(tmp):
-            os.unlink(tmp)
+    save_yaml_file(path, payload, sort_keys=False, atomic=True)
 
 
 def patch_provider_config(
@@ -81,7 +65,7 @@ def patch_provider_config(
     """
     path = _providers_yaml_path(project_root)
     if path.exists():
-        payload = _load_yaml(path)
+        payload = load_yaml_file(path)
     else:
         payload = {}
     providers = payload.setdefault("providers", {})
@@ -99,7 +83,7 @@ def set_provider_enabled(project_root: Path, provider_id: str, *, enabled: bool)
 def load_provider_config(project_root: Path) -> dict[str, Any]:
     path = project_root / ".audiagentic" / "config" / "runtime" / "providers.yaml"
     try:
-        payload = _load_yaml(path)
+        payload = load_yaml_file(path)
     except Exception as exc:  # noqa: BLE001
         raise AudiaGenticError(
             code="PRV-IO-002",
