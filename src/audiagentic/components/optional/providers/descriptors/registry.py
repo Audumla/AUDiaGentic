@@ -35,9 +35,10 @@ def _probe_cli(command: list[str]) -> dict[str, Any]:
             "stdout": "",
             "stderr": "command not found",
         }
+    resolved_command = [executable] + list(command[1:])
     try:
         completed = subprocess.run(
-            command,
+            resolved_command,
             check=False,
             capture_output=True,
             stdin=subprocess.DEVNULL,
