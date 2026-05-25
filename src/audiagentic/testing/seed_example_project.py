@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from audiagentic.lib.repo_paths import REPO_ROOT
+from audiagentic.paths import REPO_ROOT
 from audiagentic.runtime.lifecycle.baseline_sync import ensure_project_layout, sync_managed_baseline
 
 
