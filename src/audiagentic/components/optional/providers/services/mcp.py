@@ -38,7 +38,7 @@ def add_provider_mcp_server(
     env: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Add or update a single MCP server entry in a provider's config, then reload."""
-    from audiagentic.runtime.mcp import McpServerEntry
+    from audiagentic.foundation.mcp import McpServerEntry
 
     descriptor = _descriptor(provider_id)
     spec = descriptor.mcp_config

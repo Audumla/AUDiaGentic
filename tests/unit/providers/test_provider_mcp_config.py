@@ -14,14 +14,18 @@ from audiagentic.components.optional.providers.adapters.goose.mcp_format import 
     remove_goose_yaml,
     write_goose_yaml,
 )
+from audiagentic.components.optional.providers.adapters.mcp_json import (
+    read_mcp_json,
+    remove_mcp_json,
+    write_mcp_json,
+)
 from audiagentic.components.optional.providers.services.mcp import (
     add_provider_mcp_server,
     list_provider_mcp_servers,
     reload_provider_mcp,
     remove_provider_mcp_server,
 )
-from audiagentic.runtime.mcp import McpServerEntry
-from audiagentic.runtime.mcp.formats import read_mcp_json, remove_mcp_json, write_mcp_json
+from audiagentic.foundation.mcp import McpServerEntry
 
 # --- format handler tests ---
 
