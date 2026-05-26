@@ -5,8 +5,12 @@ import re
 import subprocess
 from typing import Any
 
+from audiagentic.components.optional.providers.adapters.mcp_opencode import (
+    read_opencode_mcp,
+    remove_opencode_mcp,
+    write_opencode_mcp,
+)
 from audiagentic.foundation.invoke.toolchains import npm
-from audiagentic.runtime.mcp.formats import read_mcp_json, remove_mcp_json, write_mcp_json
 
 from ...descriptors.base import (
     AgentFile,
@@ -100,11 +104,11 @@ register(ProviderDescriptor(
     ),
     fetch_catalog_fn=_fetch_opencode_catalog,
     mcp_config=McpConfigSpec(
-        config_path=".mcp.json",
-        reader=read_mcp_json,
-        writer=write_mcp_json,
-        remover=remove_mcp_json,
-        format="mcp-json",
+        config_path=".opencode/opencode.json",
+        reader=read_opencode_mcp,
+        writer=write_opencode_mcp,
+        remover=remove_opencode_mcp,
+        format="opencode-mcp",
         refresh_mode="file-watch",
     ),
 ))

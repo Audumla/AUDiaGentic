@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from audiagentic.runtime.mcp import McpServerEntry
+from audiagentic.foundation.mcp import McpServerEntry
 
 
 def read_goose_yaml(path: Path) -> dict[str, McpServerEntry]:
