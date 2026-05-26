@@ -164,6 +164,44 @@ def test_validate_unknown_state_in_kind_reports_error() -> None:
     assert any("nonexistent_state" in e for e in errors)
 
 
+def test_validate_rejects_state_valid_only_for_other_kind() -> None:
+    config = {
+        "kinds": {
+            "request": {
+                "state_rules": {
+                    "task_done": {"rule": "none", "new_state": "approved"},
+                }
+            }
+        }
+    }
+
+    def states_for_kind(kind: str) -> list[str]:
+        if kind == "request":
+            return ["draft", "approved"]
+        if kind == "task":
+            return ["task_done"]
+        return []
+
+    errors = validate(config, states_for_kind)
+    assert any("task_done" in e and "request" in e for e in errors)
+
+
+def test_validate_skips_disabled_kind_state_rules() -> None:
+    config = {
+        "kinds": {
+            "request": {
+                "enabled": False,
+                "state_rules": {
+                    "task_done": {"rule": "ghost_rule", "new_state": "approved"},
+                },
+            }
+        }
+    }
+
+    errors = validate(config, lambda kind: ["draft", "approved"])
+    assert errors == []
+
+
 def test_validate_unknown_rule_in_state_rules_reports_error() -> None:
     config = {
         "rules": {},

@@ -1,24 +1,19 @@
-"""Propagation attempt audit log.
-
-The on-disk layout is a JSON list to preserve compatibility with the existing
-consumer in ``planning.tm`` and integration tests. Writes are append-only via
-read-modify-write — fine for low-volume audit traffic.
-"""
+"""Propagation attempt audit log."""
 
 from __future__ import annotations
 
-import json
 import logging
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from audiagentic.foundation.event.log import StructuredLog
 
 logger = logging.getLogger(__name__)
 
 
 class PropagationLog:
     def __init__(self, path: Path | None):
-        self._path = path
+        self._log = StructuredLog(path)
 
     def append(
         self,
@@ -34,39 +29,31 @@ class PropagationLog:
         old_state: str | None = None,
         reason: str | None = None,
     ) -> None:
-        if self._path is None:
-            return
-
-        entry: dict[str, Any] = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "event_id": metadata.get("correlation_id") or metadata.get("event_id"),
+        attributes: dict[str, Any] = {
+            "event.name": f"workflow.propagation.{status}",
+            "event.domain": "workflow",
+            "event.action": "propagate",
+            "event.outcome": status,
+            "workflow.source.kind": source_kind,
+            "workflow.source.id": source_id,
+            "workflow.source.state": source_state,
+            "workflow.target.kind": target_kind,
+            "workflow.target.id": target_id,
+            "workflow.target.old_state": old_state,
+            "workflow.target.new_state": target_state,
+            "workflow.triggered_by": metadata.get("triggered_by", "automatic"),
+            "workflow.propagation_depth": metadata.get("propagation_depth", 0),
             "correlation_id": metadata.get("correlation_id"),
-            "source_kind": source_kind,
-            "source_id": source_id,
-            "target_kind": target_kind,
-            "target_id": target_id,
-            "old_state": old_state,
-            "new_state": target_state,
-            "trigger_source_state": source_state,
-            "triggered_by": metadata.get("triggered_by", "automatic"),
-            "propagation_depth": metadata.get("propagation_depth", 0),
-            "status": status,
+            "event_id": metadata.get("correlation_id") or metadata.get("event_id"),
         }
         if reason:
-            entry["reason"] = reason
+            attributes["workflow.reason"] = reason
 
         try:
-            self._path.parent.mkdir(parents=True, exist_ok=True)
-            data: list = []
-            if self._path.exists():
-                try:
-                    raw = json.loads(self._path.read_text(encoding="utf-8"))
-                    data = raw if isinstance(raw, list) else []
-                except (json.JSONDecodeError, ValueError):
-                    data = []
-            data.append(entry)
-            self._path.write_text(
-                json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+            self._log.emit(
+                body=f"workflow.propagation.{status}",
+                severity_text="ERROR" if status == "failed" else "INFO",
+                attributes=attributes,
             )
         except Exception as exc:
             logger.warning("Failed to write propagation log entry for %s: %s", target_id, exc)

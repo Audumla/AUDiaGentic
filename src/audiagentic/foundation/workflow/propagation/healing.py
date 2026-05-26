@@ -98,7 +98,7 @@ def heal(engine: Any, item_id: str, auto_fix: bool = False) -> dict[str, Any]:
 
         if auto_fix and not log_only and fix.get("can_auto_fix"):
             try:
-                _apply(engine, fix)
+                apply_fix(engine, fix)
                 fix["applied"] = True
                 logger.info(
                     "Applied healing fix: %s -> %s", fix.get("target_id"), fix.get("target_state")
@@ -210,7 +210,7 @@ def _pick_parent_advance(cfg: Any, parent_view: Any) -> str | None:
     return None
 
 
-def _apply(engine: Any, fix: dict[str, Any]) -> None:
+def apply_fix(engine: Any, fix: dict[str, Any]) -> None:
     target_id = fix.get("target_id")
     target_state = fix.get("target_state")
     if not target_id or not target_state:

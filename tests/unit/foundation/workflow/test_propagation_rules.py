@@ -217,6 +217,25 @@ def test_action_complete_parent_completes_parent_when_all_siblings_done() -> Non
     assert ("p-1", "plan", "done") in result
 
 
+def test_action_complete_parent_completes_reverse_linked_parent() -> None:
+    ctx = FakeContext()
+    ctx.add_item("p-1", "plan", state="active", task_refs=["t-1", "t-2"])
+    ctx.add_item("t-1", "task", state="done")
+    ctx.add_item("t-2", "task", state="done")
+    engine = FakeEngine(ctx, {"kinds": {"task": {"parent_kind": "plan", "parent_field": "task_refs"}}})
+    result = action_complete_parent(
+        engine, "t-1",
+        {
+            "required_state_set": "complete",
+            "parent_field": "task_refs",
+            "target_state": "done",
+            "parent_blocking_set": "terminal",
+        },
+        {},
+    )
+    assert ("p-1", "plan", "done") in result
+
+
 def test_action_complete_parent_skips_parent_in_blocking_set() -> None:
     ctx = FakeContext()
     ctx.add_item("p-1", "plan", state="cancelled", task_refs=["t-1"])
