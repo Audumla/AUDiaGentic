@@ -91,19 +91,21 @@ def validate(config: dict[str, Any], states_for_kind: Callable[[str], list[str]]
 
     kinds = config.get("kinds", {})
     if states_for_kind is not None:
-        all_states: set[str] = set()
-        for kind_name in kinds:
-            try:
-                all_states.update(states_for_kind(kind_name))
-            except (KeyError, TypeError):
-                pass
         for kind_name, kind_config in kinds.items():
+            if kind_config.get("enabled") is False:
+                continue
+            try:
+                valid_states = set(states_for_kind(kind_name))
+            except (KeyError, TypeError):
+                valid_states = set()
             for state in kind_config.get("state_rules", {}):
-                if state not in all_states:
+                if state not in valid_states:
                     errors.append(f"Invalid state '{state}' in kind '{kind_name}'")
 
     configured_rules = set(rules.keys())
     for kind_name, kind_config in kinds.items():
+        if kind_config.get("enabled") is False:
+            continue
         for state, state_config in kind_config.get("state_rules", {}).items():
             rule = state_config.get("rule")
             if rule and rule not in configured_rules:

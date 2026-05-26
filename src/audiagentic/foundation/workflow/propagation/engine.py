@@ -26,6 +26,7 @@ class StatePropagationEngine:
         ctx: WorkflowItemAPI,
         enabled: bool = True,
         config_path: Path | None = None,
+        log_path: Path | None = None,
     ) -> None:
         if enabled and config_path is None:
             raise ValueError(
@@ -36,7 +37,7 @@ class StatePropagationEngine:
         self._enabled = enabled
         self._config_path = config_path
         self._workflow_config: dict[str, Any] | None = None
-        self._log = PropagationLog(self._derive_log_path())
+        self._log = PropagationLog(log_path)
 
     # ------------------------------------------------------------------ public
 
@@ -51,15 +52,6 @@ class StatePropagationEngine:
         if self._workflow_config is None:
             self.load_workflow_config()
         return self._workflow_config or {}
-
-    # Compatibility alias for code that reads/writes ``engine._config`` directly.
-    @property
-    def _config(self) -> dict[str, Any] | None:
-        return self._workflow_config
-
-    @_config.setter
-    def _config(self, value: dict[str, Any] | None) -> None:
-        self._workflow_config = value
 
     def load_workflow_config(self) -> dict[str, Any]:
         config = _config.load_config(self._config_path if self._enabled else None)
@@ -184,8 +176,9 @@ class StatePropagationEngine:
         except ValueError as exc:
             self._record(
                 "skipped", target_id, target_state, source_id, source_state, new_metadata,
-                target_kind=target_kind, old_state=current_state, reason=str(exc),
+                target_kind=target_kind, old_state=current_state, reason="invalid_transition",
             )
+            logger.debug("Propagation skipped invalid transition for %s: %s", target_id, exc)
             return
         except Exception as exc:
             self._record(
@@ -210,6 +203,9 @@ class StatePropagationEngine:
 
     def heal_hierarchy(self, item_id: str, auto_fix: bool = False) -> dict[str, Any]:
         return _healing.heal(self, item_id, auto_fix)
+
+    def apply_healing_fix(self, fix: dict[str, Any]) -> None:
+        _healing.apply_fix(self, fix)
 
     # ---- internals -----------------------------------------------------
 
@@ -259,12 +255,6 @@ class StatePropagationEngine:
         if cfg is None:
             return []
         return cfg.workflow_states(kind)
-
-    def _derive_log_path(self) -> Path | None:
-        root = getattr(self.ctx, "root", None)
-        if root is None:
-            return None
-        return Path(root) / ".audiagentic" / "planning" / "meta" / "propagation_log.json"
 
     def _record(
         self,
