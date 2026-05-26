@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 from pathlib import Path
 
 import pytest
@@ -144,28 +143,28 @@ rules:
   none:
     enabled: true
     description: "No state propagation"
-    logic: "audiagentic.foundation.workflow.propagation_rules.rule_none"
+    logic: "audiagentic.foundation.workflow.propagation.rules.rule_none"
 
   parent_in_set:
     enabled: true
     description: "Set parent to new_state when parent is in configured state set"
-    logic: "audiagentic.foundation.workflow.propagation_rules.rule_parent_in_set"
+    logic: "audiagentic.foundation.workflow.propagation.rules.rule_parent_in_set"
 
   all_children_in_set:
     enabled: true
     description: "Set parent to new_state when all sibling children are in configured state set"
-    logic: "audiagentic.foundation.workflow.propagation_rules.rule_all_children_in_set"
+    logic: "audiagentic.foundation.workflow.propagation.rules.rule_all_children_in_set"
 
   parent_not_in_set:
     enabled: true
     description: "Set parent to new_state when parent is not in configured state set"
-    logic: "audiagentic.foundation.workflow.propagation_rules.rule_parent_not_in_set"
+    logic: "audiagentic.foundation.workflow.propagation.rules.rule_parent_not_in_set"
 
 actions:
   complete_parent:
     enabled: true
     description: "Complete parent when all related children are in configured state set"
-    logic: "audiagentic.foundation.workflow.propagation_rules.action_complete_parent"
+    logic: "audiagentic.foundation.workflow.propagation.rules.action_complete_parent"
 """)
 
 
@@ -176,19 +175,29 @@ def _wait_for_propagation(planning_api: PlanningAPI, timeout: float = 5.0) -> No
         planning_api: PlanningAPI instance
         timeout: Maximum time to wait in seconds
     """
-    from audiagentic.foundation.event.queue import AsyncQueue
+    from audiagentic.foundation.event import get_bus
 
-    queue = AsyncQueue.get_instance()
-    start_time = time.time()
-    while queue.size() > 0 and (time.time() - start_time) < timeout:
-        time.sleep(0.1)
+    get_bus().wait_idle(timeout=timeout)
 
 
 def _read_propagation_log(root: Path) -> list[dict]:
-    path = root / ".audiagentic" / "planning" / "meta" / "propagation_log.json"
+    path = root / ".audiagentic" / "planning" / "meta" / "propagation_log.jsonl"
     if not path.exists():
         return []
-    return json.loads(path.read_text(encoding="utf-8"))
+    records = [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    return [
+        {
+            "target_id": record.get("attributes", {}).get("workflow.target.id"),
+            "new_state": record.get("attributes", {}).get("workflow.target.new_state"),
+            "status": record.get("attributes", {}).get("event.outcome"),
+            "reason": record.get("attributes", {}).get("workflow.reason"),
+        }
+        for record in records
+    ]
 
 
 def _create_request_and_spec(planning_api: PlanningAPI) -> tuple[str, str]:
@@ -404,7 +413,7 @@ kinds: {}
         planning_api = PlanningAPI(tmp_path)
         config = planning_api._propagation_engine.load_workflow_config()
         config["global"]["max_depth"] = 2
-        planning_api._propagation_engine._config = config
+        planning_api._propagation_engine._workflow_config = config
         _, spec_id = _create_request_and_spec(planning_api)
         plan = planning_api.new(
             "plan", label="Test Plan", summary="Test plan", refs={"spec": spec_id}
