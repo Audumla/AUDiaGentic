@@ -17,6 +17,23 @@ def _make_ctx(**extra_config_kwargs) -> FakeContext:
     return FakeContext(config=FakeConfig())
 
 
+class CascadeConfig(FakeConfig):
+    def reference_fields(self, kind: str) -> list[str]:
+        return {
+            "plan": ["task_refs"],
+            "task": ["plan_ref", "subtask_refs"],
+            "subtask": ["task_ref"],
+        }.get(kind, [])
+
+    def reference_field_targets(self, f: str) -> list[str]:
+        return {
+            "task_refs": ["task"],
+            "plan_ref": ["plan"],
+            "subtask_refs": ["subtask"],
+            "task_ref": ["task"],
+        }.get(f, [])
+
+
 # ── valid transitions ─────────────────────────────────────────────────────────
 
 def test_valid_transition_updates_state() -> None:
@@ -259,7 +276,7 @@ def test_is_terminal_true_for_missing_item() -> None:
 # ── cascade ───────────────────────────────────────────────────────────────────
 
 def test_cascade_transitions_matching_kind() -> None:
-    cfg = FakeConfig()
+    cfg = CascadeConfig()
     cfg._lifecycle_transitions[("plan", "active", "cancelled")] = (
         "cancel",
         {
@@ -269,15 +286,33 @@ def test_cascade_transitions_matching_kind() -> None:
     )
     ctx = FakeContext(config=cfg)
     ctx.add_item("plan-1", "plan", state="active")
+    ctx.add_item("t-1", "task", state="active", plan_ref="plan-1")
+    ctx.add_item("t-2", "task", state="active", plan_ref="plan-2")
+    StateMachine(ctx).state("plan-1", "cancelled")
+    assert ctx.items["t-1"].data["state"] == "cancelled"
+    assert ctx.items["t-2"].data["state"] == "active"
+
+
+def test_cascade_follows_parent_reference_lists() -> None:
+    cfg = CascadeConfig()
+    cfg._lifecycle_transitions[("plan", "active", "cancelled")] = (
+        "cancel",
+        {
+            "metadata": {},
+            "cascade": {"by_kind": {"plan": {"task": "cancelled"}}},
+        },
+    )
+    ctx = FakeContext(config=cfg)
+    ctx.add_item("plan-1", "plan", state="active", task_refs=["t-1"])
     ctx.add_item("t-1", "task", state="active")
     ctx.add_item("t-2", "task", state="active")
     StateMachine(ctx).state("plan-1", "cancelled")
     assert ctx.items["t-1"].data["state"] == "cancelled"
-    assert ctx.items["t-2"].data["state"] == "cancelled"
+    assert ctx.items["t-2"].data["state"] == "active"
 
 
 def test_cascade_skips_terminal_items() -> None:
-    cfg = FakeConfig()
+    cfg = CascadeConfig()
     cfg._lifecycle_transitions[("plan", "active", "cancelled")] = (
         "cancel",
         {
@@ -287,21 +322,21 @@ def test_cascade_skips_terminal_items() -> None:
     )
     ctx = FakeContext(config=cfg)
     ctx.add_item("plan-1", "plan", state="active")
-    ctx.add_item("t-done", "task", state="done")
+    ctx.add_item("t-done", "task", state="done", plan_ref="plan-1")
     StateMachine(ctx).state("plan-1", "cancelled")
     assert ctx.items["t-done"].data["state"] == "done"
 
 
 def test_cascade_passes_depth_one_when_no_prior_metadata() -> None:
     """Cascade without prior metadata must publish event with propagation_depth=1."""
-    cfg = FakeConfig()
+    cfg = CascadeConfig()
     cfg._lifecycle_transitions[("plan", "active", "cancelled")] = (
         "cancel",
         {"metadata": {}, "cascade": {"by_kind": {"plan": {"task": "cancelled"}}}},
     )
     ctx = FakeContext(config=cfg)
     ctx.add_item("plan-1", "plan", state="active")
-    ctx.add_item("t-1", "task", state="active")
+    ctx.add_item("t-1", "task", state="active", plan_ref="plan-1")
     StateMachine(ctx).state("plan-1", "cancelled")
     # The cascade state change for t-1 emits planning.item.state.changed with the
     # cascade metadata merged into event_metadata.
@@ -316,14 +351,14 @@ def test_cascade_passes_depth_one_when_no_prior_metadata() -> None:
 
 def test_cascade_increments_depth_from_incoming_metadata() -> None:
     """Cascade with metadata depth=2 must publish event with propagation_depth=3."""
-    cfg = FakeConfig()
+    cfg = CascadeConfig()
     cfg._lifecycle_transitions[("plan", "active", "cancelled")] = (
         "cancel",
         {"metadata": {}, "cascade": {"by_kind": {"plan": {"task": "cancelled"}}}},
     )
     ctx = FakeContext(config=cfg)
     ctx.add_item("plan-1", "plan", state="active")
-    ctx.add_item("t-1", "task", state="active")
+    ctx.add_item("t-1", "task", state="active", plan_ref="plan-1")
     StateMachine(ctx).state("plan-1", "cancelled", metadata={"propagation_depth": 2})
     t1_events = [
         e for e in ctx.events
@@ -341,7 +376,7 @@ def test_cascade_depth_flows_through_two_level_chain() -> None:
     Without depth threading the second hop would carry no depth, breaking any
     host-side depth guard.  With threading: plan=0, task=1, subtask=2.
     """
-    cfg = FakeConfig()
+    cfg = CascadeConfig()
     cfg._lifecycle_transitions[("plan", "active", "cancelled")] = (
         "cancel",
         {"metadata": {}, "cascade": {"by_kind": {"plan": {"task": "cancelled"}}}},
@@ -352,8 +387,8 @@ def test_cascade_depth_flows_through_two_level_chain() -> None:
     )
     ctx = FakeContext(config=cfg)
     ctx.add_item("plan-1", "plan", state="active")
-    ctx.add_item("t-1", "task", state="active")
-    ctx.add_item("sub-1", "subtask", state="active")
+    ctx.add_item("t-1", "task", state="active", plan_ref="plan-1")
+    ctx.add_item("sub-1", "subtask", state="active", task_ref="t-1")
 
     StateMachine(ctx).state("plan-1", "cancelled")
 
@@ -373,7 +408,7 @@ def test_cascade_depth_flows_through_two_level_chain() -> None:
 
 def test_cascade_logs_not_swallows_on_invalid_transition() -> None:
     """Cascade skips items where the target transition is disallowed — no raise."""
-    cfg = FakeConfig()
+    cfg = CascadeConfig()
     cfg._lifecycle_transitions[("plan", "active", "cancelled")] = (
         "cancel",
         {
@@ -384,7 +419,7 @@ def test_cascade_logs_not_swallows_on_invalid_transition() -> None:
     )
     ctx = FakeContext(config=cfg)
     ctx.add_item("plan-1", "plan", state="active")
-    ctx.add_item("t-1", "task", state="draft")
+    ctx.add_item("t-1", "task", state="draft", plan_ref="plan-1")
     sm = StateMachine(ctx)
     sm.state("plan-1", "cancelled")
     assert ctx.items["t-1"].data["state"] == "draft"
