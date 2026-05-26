@@ -18,7 +18,7 @@ except ImportError:
 from audiagentic.foundation.components.ids import COMPONENT_PLANNING
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
-from audiagentic.runtime.mcp.server import project_root_from_env
+from audiagentic.foundation.mcp.component_server import project_root_from_env
 
 from .api import (
     planning_events as _planning_events,

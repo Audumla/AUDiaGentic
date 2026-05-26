@@ -11,8 +11,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
+
+from audiagentic.foundation.event.log import StructuredLog
 
 
 def _find_project_root() -> Path:
@@ -34,20 +35,30 @@ def print_json(data):
 
 
 def _propagation_log_path(root: Path) -> Path:
-    return root / ".audiagentic" / "planning" / "meta" / "propagation_log.json"
+    return root / ".audiagentic" / "planning" / "meta" / "propagation_log.jsonl"
 
 
 def _append_propagation_audit_log(root: Path, entries: list[dict]) -> Path:
     path = _propagation_log_path(root)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        existing = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(existing, list):
-            existing = []
-    else:
-        existing = []
-    existing.extend(entries)
-    path.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+    log = StructuredLog(path)
+    for entry in entries:
+        log.emit(
+            body="workflow.propagation.audit_fix",
+            attributes={
+                "event.name": "workflow.propagation.audit_fix",
+                "event.domain": "workflow",
+                "event.action": "audit_fix",
+                "event.outcome": entry.get("status"),
+                "workflow.source": entry.get("source"),
+                "workflow.item.id": entry.get("item_id"),
+                "workflow.item.kind": entry.get("kind"),
+                "workflow.target.id": entry.get("target_id"),
+                "workflow.target.new_state": entry.get("target_state"),
+                "workflow.suggestion": entry.get("suggestion"),
+                "workflow.error": entry.get("error"),
+                "workflow.fixed_by_audit": entry.get("fixed_by_audit"),
+            },
+        )
     return path
 
 
@@ -75,13 +86,12 @@ def _run_audit(api, root: Path, *, auto_fix: bool, verbose: bool) -> tuple[dict,
             finding["fixes"] = healing.get("fixes", [])
             for fix in finding["fixes"]:
                 if fix.get("can_auto_fix") and not fix.get("applied"):
-                    api._propagation_engine._apply_fix(fix)  # noqa: SLF001 - CLI repair path
+                    api._propagation_engine.apply_healing_fix(fix)
                     fix["applied"] = True
             for fix in healing.get("fixes", []):
                 if fix.get("applied"):
                     log_entries.append(
                         {
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
                             "source": "planning.audit",
                             "fixed_by_audit": True,
                             "item_id": item.data["id"],
@@ -94,10 +104,8 @@ def _run_audit(api, root: Path, *, auto_fix: bool, verbose: bool) -> tuple[dict,
                         }
                     )
         elif verbose:
-            finding["fixes"] = [
-                api._propagation_engine._suggest_fix(error)  # noqa: SLF001 - CLI introspection
-                for error in errors
-            ]
+            healing = api._propagation_engine.heal_hierarchy(item.data["id"], auto_fix=False)
+            finding["fixes"] = healing.get("fixes", [])
 
         findings.append(finding)
 

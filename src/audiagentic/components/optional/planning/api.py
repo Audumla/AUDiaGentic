@@ -104,7 +104,28 @@ def planning_events(project_root: Path, limit: int = 20) -> dict[str, Any]:
         if not line:
             continue
         try:
-            events.append(json.loads(line))
+            raw = json.loads(line)
+            if isinstance(raw, dict):
+                attrs = raw.get("attributes", {}) if isinstance(raw.get("attributes"), dict) else {}
+                payload = attrs.get("payload", {}) if isinstance(attrs.get("payload"), dict) else {}
+                event = {
+                    "timestamp": raw.get("timestamp"),
+                    "severity_text": raw.get("severity_text"),
+                    "event_name": raw.get("body") or attrs.get("event.name"),
+                    "event_id": attrs.get("event.id"),
+                    "subject": attrs.get("subject"),
+                    "payload": payload,
+                    "metadata": attrs.get("metadata", {}),
+                }
+                if "id" in payload:
+                    event["id"] = payload["id"]
+                if "new_state" in payload:
+                    event["new_state"] = payload["new_state"]
+                if "old_state" in payload:
+                    event["old_state"] = payload["old_state"]
+                events.append(event)
+            else:
+                events.append({"raw": raw})
         except json.JSONDecodeError:
             events.append({"raw": line})
     return {"events": events, "total_lines": len(lines)}
