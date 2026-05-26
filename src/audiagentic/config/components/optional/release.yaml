@@ -28,6 +28,7 @@ mcp-servers:
   - name: audiagentic-release-please
     module: audiagentic.components.optional.release.release_please.release_please_mcp
     direct-tools: [release_please_status, install_release_please, update_release_please_workflow, finalize_release]
+    propagate: providers
     description: Release-please release management tools
     instructions: >
       Use release_please_status to inspect current state before acting.
