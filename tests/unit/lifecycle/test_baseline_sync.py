@@ -32,7 +32,7 @@ def test_sync_managed_baseline_copies_skill_sources(tmp_path: Path) -> None:
     assert (target / ".audiagentic" / "skills" / "ag-plan" / "skill.md").exists()
     assert (target / ".audiagentic" / "skills" / "ag-implement" / "skill.md").exists()
     assert (target / ".audiagentic" / "skills" / "ag-review" / "skill.md").exists()
-    assert (target / ".audiagentic" / "skills" / "ag-audit" / "skill.md").exists()
+    assert (target / ".audiagentic" / "skills" / "ag-ledger" / "skill.md").exists()
     assert (target / ".audiagentic" / "skills" / "ag-check-in-prep" / "skill.md").exists()
 
 

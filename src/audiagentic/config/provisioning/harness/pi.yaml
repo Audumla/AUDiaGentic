@@ -8,6 +8,15 @@
 #   2. User-global   — $AUDIAGENTIC_HOME/config/harness/pi.yaml
 #   3. Project-local — <project>/.audiagentic/config/harness/pi.yaml
 
+# --- Agent package versions ---
+#
+# Pin to a specific npm version to prevent silent upgrades on reinstall.
+# Use "latest" to always pull the current release.
+# Overridden by env vars: AUDIAGENTIC_PI_AGENT_VERSION, AUDIAGENTIC_PI_MCP_ADAPTER_VERSION
+agent:
+  version: latest
+  mcp_adapter_version: latest
+
 # --- Built-in tool access control ---
 #
 # allow:      Explicit allowlist of Pi built-in tools. null = Pi defaults.

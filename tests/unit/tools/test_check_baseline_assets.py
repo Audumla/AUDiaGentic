@@ -11,7 +11,7 @@ def test_check_baseline_assets_managed_headers() -> None:
         [
             sys.executable,
             "-m",
-            "audiagentic.foundation.contracts.check_baseline_assets",
+            "tests.helpers.check_baseline_assets",
             "--check-gitignore",
             "--check-managed-headers",
         ],
