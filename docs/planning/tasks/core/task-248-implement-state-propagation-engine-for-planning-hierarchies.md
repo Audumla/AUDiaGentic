@@ -41,7 +41,7 @@ Implement planning state propagation engine. This task owns subscribing to `plan
 - Emit new event for each propagation step (enables chaining)
 - Respect config from task-0252
 - Idempotent: safe to run multiple times on same event
-- **Log all propagation attempts to `.audiagentic/planning/meta/propagation_log.json`**
+- **Log all propagation attempts to `.audiagentic/planning/meta/propagation_log.jsonl`**
 - **Batch parent state changes to minimize disk I/O**
 - Conflict resolution: `blocked` > `in_progress` > `ready` > `draft`
 - Terminal states (`done`, `archived`) not overwritten
@@ -57,7 +57,7 @@ Implement planning state propagation engine. This task owns subscribing to `plan
 - Replayed events skipped (`is_replay: true`)
 - Events with `propagation_depth >= 10` rejected and logged
 - Each propagation emits `planning.item.state.changed` event with incremented depth
-- **All propagation attempts logged to `propagation_log.json`**
+- **All propagation attempts logged to `propagation_log.jsonl`**
 - **Batched writes reduce disk I/O compared to naive implementation**
 - Integration tests cover: forward propagation, rollback, conflicts, idempotency, cycle detection
 - Smoke test proves planning state transitions work with propagation enabled (ASYNC mode)

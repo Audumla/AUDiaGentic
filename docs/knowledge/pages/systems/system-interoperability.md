@@ -5,7 +5,7 @@ The AUDiaGentic interoperability system provides event bus infrastructure and cr
 **Interoperability System** (`src/audiagentic/interoperability/`):
 
 **Event Bus:**
-- **Queue** (`queue.py`): Event queue management with delivery modes
+- **Bus** (`bus.py`): In-process publish/subscribe with sync and async delivery modes
 - **Store** (`store.py`): Persistent event storage and retrieval
 - **Replay** (`replay.py`): Event replay for recovery and testing
 

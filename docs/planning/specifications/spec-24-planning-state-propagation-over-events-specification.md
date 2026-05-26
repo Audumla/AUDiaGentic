@@ -133,8 +133,9 @@ This spec defines planning-specific event consumption and state propagation logi
 - Duplicate events with same `id` shall be ignored
 
 ### SP-10: Propagation Logging and Recovery
-- **All propagation attempts shall be logged to `.audiagentic/planning/meta/propagation_log.json`**
-- Log entries shall include: `event_id`, `source_item`, `target_item`, `old_state`, `new_state`, `timestamp`, `status` (success/failed/skipped)
+- **All propagation attempts shall be logged to `.audiagentic/planning/meta/propagation_log.jsonl`**
+- Log entries shall use foundation `StructuredLog` JSONL records aligned with the OpenTelemetry Logs data model
+- Log attributes shall include: `event_id`, `workflow.source.*`, `workflow.target.*`, `timestamp`, `event.outcome` (success/failed/skipped)
 - **Failed propagations shall be logged with full context for debugging**
 - **`audiagentic planning audit --fix` command shall:**
   - Scan all planning items for inconsistent hierarchies
@@ -183,7 +184,7 @@ src/audiagentic/planning/propagation/
 .audiagentic/planning/config/
 ├── state_propagation.yaml   # Propagation configuration
 └── meta/
-    └── propagation_log.json # Propagation attempt log
+    └── propagation_log.jsonl # Propagation attempt log
 ```
 
 ## Propagation Engine Architecture
@@ -195,7 +196,7 @@ planning.item.state.changed event
           -> RulesEvaluator (evaluate SP-1 through SP-3)
           -> ConflictResolver (SP-6)
           -> StateWriter (batched updates, SP-11)
-              -> propagation_log.json (SP-10)
+              -> propagation_log.jsonl (SP-10)
                   -> Audit CLI (task-0265)
 ```
 
@@ -402,39 +403,30 @@ manual_override:
 ### Propagation Log Format
 
 ```json
-// .audiagentic/planning/meta/propagation_log.json
-[
-  {
-    "event_id": "evt_abc123",
-    "source_kind": "task",
-    "source_id": "task-001",
-    "target_kind": "wp",
-    "target_id": "wp-001",
-    "old_state": "ready",
-    "new_state": "in_progress",
-    "triggered_by": "automatic",
+// .audiagentic/planning/meta/propagation_log.jsonl
+{
+  "timestamp": "2026-04-14T12:34:56Z",
+  "observed_timestamp": "2026-04-14T12:34:56Z",
+  "severity_text": "INFO",
+  "body": "workflow.propagation.success",
+  "attributes": {
+    "event.name": "workflow.propagation.success",
+    "event.domain": "workflow",
+    "event.action": "propagate",
+    "event.outcome": "success",
+    "workflow.source.kind": "task",
+    "workflow.source.id": "task-001",
+    "workflow.source.state": "done",
+    "workflow.target.kind": "wp",
+    "workflow.target.id": "wp-001",
+    "workflow.target.old_state": "ready",
+    "workflow.target.new_state": "done",
+    "workflow.triggered_by": "automatic",
+    "workflow.propagation_depth": 1,
     "correlation_id": "corr_xyz789",
-    "propagation_depth": 1,
-    "timestamp": "2026-04-14T12:34:56Z",
-    "status": "success",
-    "batch_id": "batch_001"
-  },
-  {
-    "event_id": "evt_abc124",
-    "source_kind": "wp",
-    "source_id": "wp-001",
-    "target_kind": "plan",
-    "target_id": "plan-001",
-    "old_state": "ready",
-    "new_state": "in_progress",
-    "triggered_by": "automatic",
-    "correlation_id": "corr_xyz789",
-    "propagation_depth": 2,
-    "timestamp": "2026-04-14T12:34:57Z",
-    "status": "success",
-    "batch_id": "batch_001"
+    "event_id": "evt_abc123"
   }
-]
+}
 ```
 
 # Constraints
@@ -530,7 +522,7 @@ metadata:
 - [ ] Cycle detection via `correlation_id` prevents infinite loops
 
 ## AC-8: Propagation Logging and Recovery Work
-- [ ] All propagation attempts logged to `propagation_log.json`
+- [ ] All propagation attempts logged to `propagation_log.jsonl`
 - [ ] Failed propagations logged with full context
 - [ ] `audiagentic planning audit` reports inconsistent hierarchies
 - [ ] `audiagentic planning audit --fix` repairs inconsistencies
