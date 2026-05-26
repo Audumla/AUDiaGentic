@@ -74,6 +74,7 @@ ls docs/planning/tasks/ | grep -E "task-[0-9]+" | head -20
 1. Implement the work per the spec
 2. Update task state to `done` when complete
 3. Events are automatically logged to `.audiagentic/planning/events/`
+   Structured records use `body` for event name and `attributes.payload` for event data.
 
 **Feature Extension Numbering:**
 The project uses decimal suffixes for doc-changing feature extensions to prevent collisions:
@@ -140,11 +141,10 @@ This page is **event-driven** and should be refreshed when:
 **Event Triggers:**
 - `planning.item.state.changed` with `new_state: done` or `verified`
 - `planning.item.created` for new work packages or plans
-- `task.after_state_change` (legacy compatibility)
 
 **Sources:**
 - `docs/planning/` - Planning artifacts
-- `.audiagentic/planning/events/` - Event log
+- `.audiagentic/planning/events/` - Structured event log
 - `docs/knowledge/data/state/sync-state.yml` - Sync state
 
 **Sync frequency:** On planning state changes (event-driven)

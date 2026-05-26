@@ -60,7 +60,7 @@ audiagentic planning audit --verbose
 - `audit` reports items where parent state doesn't match children
 - `audit --fix` automatically repairs inconsistencies by re-running propagation
 - `audit --verbose` shows detailed propagation log analysis
-- All fixes logged to `propagation_log.json` with `fixed_by_audit: true` flag
+- All fixes logged to `propagation_log.jsonl` with `workflow.fixed_by_audit: true` attribute
 - Command is idempotent (safe to run multiple times)
 - Unit tests cover: inconsistency detection, auto-fix, idempotency
 - Integration test covers: crash simulation → audit → repair
@@ -71,4 +71,4 @@ Depends on: task-251 (propagation engine), task-0252 (config). This task is CLI 
 
 Assessment on 2026-04-17: audit/repair remains useful but does not replace fixing the root propagation defect tracked in `task-0006`. The observed `draft -> done` failure came from live propagation during state changes, not only from stale persisted hierarchies.
 
-Implemented on 2026-04-17: added `tm audit` / `tm audit --fix` in `tools/planning/tm.py`, backed by existing propagation validation/healing logic and audit log writes to `.audiagentic/planning/meta/propagation_log.json` with `fixed_by_audit: true`. Added integration coverage in `tests/integration/planning/test_tm_audit.py` for report and repair flows. Verified with `pytest tests/integration/planning/test_tm_audit.py -q` -> 2 passed.
+Implemented on 2026-04-17: added `tm audit` / `tm audit --fix` in `tools/planning/tm.py`, backed by existing propagation validation/healing logic and audit log writes to `.audiagentic/planning/meta/propagation_log.jsonl` with `workflow.fixed_by_audit: true`. Added integration coverage in `tests/integration/planning/test_tm_audit.py` for report and repair flows. Verified with `pytest tests/integration/planning/test_tm_audit.py -q` -> 2 passed.

@@ -33,7 +33,7 @@ Create configuration surface for planning state propagation. This task owns load
 enabled: true
 mode: ASYNC  # SYNC or ASYNC
 max_depth: 10
-log_file: planning/meta/propagation_log.json
+log_file: planning/meta/propagation_log.jsonl
 defaults:
   task:
     to_in_progress: trigger_wp_in_progress

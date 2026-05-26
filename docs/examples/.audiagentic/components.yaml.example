@@ -1,12 +1,12 @@
 contract-version: v1
 components:
-  core-lifecycle:
+  project:
     enabled: true
-  release-audit-ledger:
+  agent-ledger:
     enabled: true
   agent-jobs:
     enabled: true
-  provider-layer:
+  providers:
     enabled: true
   discord-overlay:
     enabled: false

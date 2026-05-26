@@ -18,7 +18,7 @@ Request (problem/opportunity)
 - `done`: Completed and verified
 
 **Event Logging:**
-All state changes and creations are logged to `.audiagentic/planning/events/events.jsonl` with timestamps and details.
+All state changes and creations are logged to `.audiagentic/planning/events/events.jsonl` as structured JSONL records with `timestamp`, `body`, and `attributes.payload`.
 
 ## How to use
 **Creating Artifacts:**
@@ -102,7 +102,7 @@ This page should be refreshed when:
 **Sources:**
 - `src/audiagentic/planning/` - Core implementation
 - CLI command definitions
-- Event schema in event log
+- Event schema in structured event log (`body`, `attributes.event.name`, `attributes.payload`)
 
 **Sync frequency:** On planning system API changes
 

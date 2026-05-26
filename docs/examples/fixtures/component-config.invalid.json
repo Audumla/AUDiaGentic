@@ -2,6 +2,6 @@
   "contract-version": "v1",
   "components": {
     "project": {"enabled": true},
-    "release-audit-ledger": {"enabled": true}
+    "agent-ledger": {"enabled": true}
   }
 }

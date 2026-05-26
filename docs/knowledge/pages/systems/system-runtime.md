@@ -16,7 +16,7 @@ The AUDiaGentic runtime system provides lifecycle management, state tracking, an
 
 **State Management** (`src/audiagentic/runtime/state/`):
 - **Jobs Store** (`jobs_store.py`): Persistent storage for job state and history
-- **Reviews Store** (`reviews_store.py`): Track review state and outcomes
+- **Reviews** (`execution/jobs/reviews.py`): Build, validate, and persist review state and outcomes
 - **Session Input Store** (`session_input_store.py`): Manage session-specific input state
 
 **Core Capabilities:**
