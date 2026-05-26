@@ -217,8 +217,48 @@ def _iter_event_stream_entries(path: Path, adapter: dict[str, Any]) -> Iterable[
             continue
         if not isinstance(record, dict):
             continue
+        record = _normalize_event_stream_record(record)
         record.setdefault("_stream_line", line_number)
         yield record
+
+
+def _normalize_event_stream_record(record: dict[str, Any]) -> dict[str, Any]:
+    """Project structured event logs onto generic event-stream fields."""
+    normalized = dict(record)
+    attrs = normalized.get("attributes", {}) if isinstance(normalized.get("attributes"), dict) else {}
+    payload = attrs.get("payload", {}) if isinstance(attrs.get("payload"), dict) else {}
+    metadata = attrs.get("metadata", {}) if isinstance(attrs.get("metadata"), dict) else {}
+    subject = attrs.get("subject", {}) if isinstance(attrs.get("subject"), dict) else {}
+
+    event_name = (
+        normalized.get("event_name")
+        or normalized.get("event")
+        or normalized.get("type")
+        or normalized.get("body")
+        or attrs.get("event.name")
+    )
+    if event_name is not None:
+        normalized.setdefault("event_name", event_name)
+        normalized.setdefault("event", event_name)
+        normalized.setdefault("type", event_name)
+
+    if "timestamp" in normalized and "occurred_at" not in normalized:
+        normalized["occurred_at"] = normalized["timestamp"]
+    if payload and "payload" not in normalized:
+        normalized["payload"] = payload
+    if metadata and "metadata" not in normalized:
+        normalized["metadata"] = metadata
+    if subject and "subject" not in normalized:
+        normalized["subject"] = subject
+    if attrs.get("event.id") and "id" not in normalized:
+        normalized["id"] = attrs["event.id"]
+    if payload.get("id") and "id" not in normalized:
+        normalized["id"] = payload["id"]
+
+    for key, value in payload.items():
+        normalized.setdefault(key, value)
+
+    return normalized
 
 
 def _write_event_proposal(

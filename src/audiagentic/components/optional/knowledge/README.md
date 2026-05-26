@@ -140,7 +140,7 @@ See [Critical Review](#critical-review-findings) below for known gaps and planne
 
 ## Integration
 
-- **Planning bridge**: Event adapter watches `.audiagentic/planning/events/events.jsonl`
+- **Planning bridge**: Event adapter watches `.audiagentic/planning/events/events.jsonl` in structured JSONL form (`body` + `attributes.payload`)
 - **Knowledge vault**: `docs/knowledge/` with pages, meta, proposals, registries
 - **Event processing**: 2132+ planning events processed at integration
 
