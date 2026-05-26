@@ -7,6 +7,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from audiagentic.foundation.system.process import find_pid_on_port, kill_pid, pid_alive
 from audiagentic.runtime.rig.http import probe_models_endpoint
 
 # ---------------------------------------------------------------------------
@@ -24,10 +25,6 @@ def _rig_json() -> Path:
 
 def _clients_dir() -> Path:
     return _rig_runtime_dir() / "clients"
-
-
-def _startup_lock_path() -> Path:
-    return _rig_runtime_dir() / "start.lock"
 
 
 def _default_endpoint(port: int) -> str:
@@ -50,15 +47,17 @@ def read_rig_state(*, expected_model: str | None = None) -> dict | None:
     try:
         state = json.loads(path.read_text(encoding="utf-8"))
         pid = int(state["pid"])
-        os.kill(pid, 0)   # raises OSError if dead
+        if not pid_alive(pid):
+            path.unlink(missing_ok=True)
+            return None
         endpoint = str(state.get("endpoint") or _default_endpoint(int(state["port"])))
         server_model = _query_server_model(endpoint)
         if server_model is None:
-            _kill_pid(pid)
+            kill_pid(pid)
             path.unlink(missing_ok=True)
             return None
         if expected_model is not None and str(state.get("model")) != expected_model:
-            _kill_pid(pid)
+            kill_pid(pid)
             path.unlink(missing_ok=True)
             return None
         return state
@@ -91,62 +90,6 @@ def _query_server_model(endpoint: str, timeout: float = 2.0) -> str | None:
     return None if probe is None else probe.first_model_id
 
 
-def _find_pid_listening_on_port(port: int) -> int | None:
-    if os.name == "nt":
-        result = subprocess.run(
-            ["netstat", "-ano", "-p", "tcp"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        needle = f":{port}"
-        for line in result.stdout.splitlines():
-            stripped = line.strip()
-            if "LISTENING" not in stripped or needle not in stripped:
-                continue
-            parts = stripped.split()
-            if len(parts) < 5:
-                continue
-            local_addr = parts[1]
-            state = parts[3]
-            if not local_addr.endswith(needle) or state != "LISTENING":
-                continue
-            try:
-                return int(parts[4])
-            except ValueError:
-                continue
-        return None
-
-    for command in (
-        ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
-        ["ss", "-ltnp"],
-    ):
-        result = subprocess.run(command, capture_output=True, text=True, check=False)
-        if result.returncode != 0:
-            continue
-        if command[0] == "lsof":
-            for line in result.stdout.splitlines():
-                try:
-                    return int(line.strip())
-                except ValueError:
-                    continue
-            continue
-        needle = f":{port} "
-        for line in result.stdout.splitlines():
-            if needle not in line:
-                continue
-            marker = "pid="
-            idx = line.find(marker)
-            if idx == -1:
-                continue
-            fragment = line[idx + len(marker):].split(",", 1)[0]
-            try:
-                return int(fragment)
-            except ValueError:
-                continue
-    return None
-
-
 def adopt_rig_state(port: int, *, endpoint: str | None = None, model: str | None = None) -> dict | None:
     """Reconstruct rig.json for a healthy rig already listening on the expected port."""
     endpoint = endpoint or _default_endpoint(port)
@@ -154,7 +97,7 @@ def adopt_rig_state(port: int, *, endpoint: str | None = None, model: str | None
     if server_model is None:
         return None
 
-    pid = _find_pid_listening_on_port(port)
+    pid = find_pid_on_port(port)
     if pid is None:
         return None
 
@@ -193,9 +136,11 @@ def _live_client_count() -> int:
     count = 0
     for entry in list(cdir.iterdir()):
         try:
-            os.kill(int(entry.name), 0)
-            count += 1
-        except (ValueError, OSError):
+            if pid_alive(int(entry.name)):
+                count += 1
+            else:
+                entry.unlink(missing_ok=True)
+        except ValueError:
             entry.unlink(missing_ok=True)
     return count
 
@@ -210,23 +155,8 @@ def shutdown_rig_if_last(port: int | None = None) -> None:
         state = adopt_rig_state(port)
     if state is None:
         return
-    _kill_pid(int(state["pid"]))
+    kill_pid(int(state["pid"]))
     _clear_rig_state()
-
-
-def _kill_pid(pid: int) -> None:
-    if os.name == "nt":
-        import subprocess
-        subprocess.run(
-            ["taskkill", "/PID", str(pid), "/T", "/F"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
-        )
-    else:
-        import signal as _signal
-        try:
-            os.kill(pid, _signal.SIGTERM)
-        except OSError:
-            pass
 
 
 def reap_orphan_rigs(keep_pid: int | None = None) -> list[int]:
@@ -238,7 +168,6 @@ def reap_orphan_rigs(keep_pid: int | None = None) -> list[int]:
     """
     killed: list[int] = []
     if os.name == "nt":
-        import subprocess
         result = subprocess.run(
             ["tasklist", "/FI", "IMAGENAME eq llama-server.exe", "/FO", "CSV", "/NH"],
             capture_output=True, text=True, check=False,
@@ -253,9 +182,8 @@ def reap_orphan_rigs(keep_pid: int | None = None) -> list[int]:
                 continue
             if keep_pid and pid == keep_pid:
                 continue
-            _kill_pid(pid)
+            kill_pid(pid)
             killed.append(pid)
-        # Also check llamafile
         result2 = subprocess.run(
             ["tasklist", "/FI", "IMAGENAME eq llamafile.exe", "/FO", "CSV", "/NH"],
             capture_output=True, text=True, check=False,
@@ -270,10 +198,9 @@ def reap_orphan_rigs(keep_pid: int | None = None) -> list[int]:
                 continue
             if keep_pid and pid == keep_pid:
                 continue
-            _kill_pid(pid)
+            kill_pid(pid)
             killed.append(pid)
     else:
-        import subprocess
         if shutil.which("pgrep") is None:
             return killed
         for name in ("llama-server", "llamafile"):
@@ -288,47 +215,6 @@ def reap_orphan_rigs(keep_pid: int | None = None) -> list[int]:
                     continue
                 if keep_pid and pid == keep_pid:
                     continue
-                _kill_pid(pid)
+                kill_pid(pid)
                 killed.append(pid)
     return killed
-
-
-# ---------------------------------------------------------------------------
-# Startup lock — prevents two CLIs racing to start the rig simultaneously.
-# Uses O_CREAT|O_EXCL which is atomic on NTFS and POSIX.
-# ---------------------------------------------------------------------------
-
-class StartupLock:
-    def __init__(self, timeout: float = 30.0) -> None:
-        self._path = _startup_lock_path()
-        self._timeout = timeout
-        self._fd: int | None = None
-
-    def __enter__(self) -> StartupLock:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        deadline = time.monotonic() + self._timeout
-        while time.monotonic() < deadline:
-            try:
-                self._fd = os.open(str(self._path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                os.write(self._fd, str(os.getpid()).encode())
-                return self
-            except FileExistsError:
-                # Lock exists — check if holder is still alive.
-                try:
-                    holder = int(self._path.read_text(encoding="utf-8"))
-                    os.kill(holder, 0)
-                    time.sleep(0.1)         # holder alive, wait
-                except (ValueError, OSError):
-                    self._path.unlink(missing_ok=True)  # stale, retry
-        raise SystemExit(
-            "Timed out waiting for rig startup lock — another audiagentic instance may be stuck."
-        )
-
-    def __exit__(self, *_: object) -> None:
-        if self._fd is not None:
-            try:
-                os.close(self._fd)
-            except OSError:
-                pass
-            self._fd = None
-        self._path.unlink(missing_ok=True)

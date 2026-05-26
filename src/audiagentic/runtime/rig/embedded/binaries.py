@@ -13,7 +13,7 @@ import zipfile
 from pathlib import Path
 from typing import NamedTuple
 
-from audiagentic.runtime.rig.embedded.process import executable_command
+from audiagentic.foundation.system.process import executable_command
 
 GITHUB_REPO = "ggml-org/llama.cpp"
 GITHUB_API = f"https://api.github.com/repos/{GITHUB_REPO}"
