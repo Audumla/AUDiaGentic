@@ -77,6 +77,8 @@ python -m src.audiagentic.planning.cli next-tasks --state ready
 python -m src.audiagentic.planning.cli show --id task-XXXX
 ```
 
+Planning events are structured JSONL records. Event name lives in `body`; event data lives in `attributes.payload`.
+
 **3. Explore the Knowledge Vault:**
 ```bash
 # Check knowledge vault health
@@ -98,7 +100,7 @@ python -m src.audiagentic.knowledge.cli --root . search --query "planning"
 
 **5. Understand Canonical Prompts:**
 - Read `AGENTS.md` for agent workflow instructions
-- Canonical tags: `@ag-plan`, `@ag-implement`, `@ag-review`, `@ag-audit`, `@ag-check-in-prep`
+- Canonical tags: `@ag-plan`, `@ag-implement`, `@ag-review`, `@ag-ledger`, `@ag-check-in-prep`
 - These trigger specific workflow jobs through the prompt bridge
 
 ## Sync notes

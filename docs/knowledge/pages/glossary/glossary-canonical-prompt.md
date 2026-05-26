@@ -27,7 +27,7 @@ A **canonical prompt** is a standardized prompt tag that triggers a specific wor
 | `@ag-plan` | ag-plan | Create planning artifacts (requests, specs, plans) |
 | `@ag-implement` | ag-implement | Execute implementation work |
 | `@ag-review` | ag-review | Review work and call out gaps |
-| `@ag-audit` | ag-audit | Audit system state and compliance |
+| `@ag-ledger` | ag-ledger | Ledger state, release artifacts, and consistency checks |
 | `@ag-check-in-prep` | ag-check-in-prep | Prepare for check-in/commit |
 
 **Provider Shorthands:**

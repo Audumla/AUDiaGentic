@@ -51,6 +51,12 @@ adapters:
 | `file_change` | Watch files for content changes | Config files, source code |
 | `event_stream` | Process NDJSON event logs | Planning events, runtime logs |
 
+**Structured planning events:**
+- Stored as OpenTelemetry-style JSONL records
+- Event name comes from `body` / `attributes.event.name`
+- Event payload comes from `attributes.payload`
+- Adapter scanning normalizes payload keys such as `new_state` for filtering
+
 **Actions:**
 
 | Action | Description |
