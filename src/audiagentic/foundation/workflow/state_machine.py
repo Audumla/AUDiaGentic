@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .interfaces import WorkflowContext
+from .item import ItemView
+from .util import extract_ref_ids
 
 logger = logging.getLogger(__name__)
 
@@ -139,23 +141,62 @@ class StateMachine:
         depth = (metadata or {}).get("propagation_depth", 0)
         cascade_metadata = dict(metadata or {})
         cascade_metadata["propagation_depth"] = depth + 1
+        source = self.ctx._find(id_)
+        for target_kind, target in rules.items():
+            for item in self._cascade_targets(source, kind, target_kind):
+                if self.ctx.config.state_in_set(
+                    item.kind, item.data.get("state"), "terminal", item.data.get("workflow")
+                ):
+                    continue
+                try:
+                    self.state(
+                        item.data["id"],
+                        target,
+                        reason=reason or f"Cascaded from {id_}",
+                        actor=actor,
+                        metadata=cascade_metadata,
+                    )
+                except Exception as exc:
+                    logger.debug(
+                        "cascade skipped %s -> %s: %s", item.data.get("id"), target, exc
+                    )
+
+    def _cascade_targets(
+        self, source: ItemView, source_kind: str, target_kind: str
+    ) -> list[ItemView]:
+        """Find target-kind items directly related to source via configured refs."""
+        source_id = source.data.get("id")
+        if not isinstance(source_id, str) or not source_id:
+            return []
+
+        targets: list[ItemView] = []
+        seen: set[str] = set()
+
+        def add(item: ItemView | None) -> None:
+            if item is None or item.kind != target_kind:
+                return
+            item_id = item.data.get("id")
+            if not isinstance(item_id, str) or item_id in seen:
+                return
+            seen.add(item_id)
+            targets.append(item)
+
+        for field in self.ctx.config.reference_fields(source_kind):
+            field_targets = self.ctx.config.reference_field_targets(field)
+            if target_kind not in field_targets:
+                continue
+            for item_id in extract_ref_ids(source.data.get(field)):
+                add(self.ctx.lookup(item_id))
+
         for item in self.ctx._scan():
-            target = rules.get(item.kind)
-            if not target:
+            if item.kind != target_kind:
                 continue
-            if self.ctx.config.state_in_set(
-                item.kind, item.data.get("state"), "terminal", item.data.get("workflow")
-            ):
-                continue
-            try:
-                self.state(
-                    item.data["id"],
-                    target,
-                    reason=reason or f"Cascaded from {id_}",
-                    actor=actor,
-                    metadata=cascade_metadata,
-                )
-            except Exception as exc:
-                logger.debug(
-                    "cascade skipped %s -> %s: %s", item.data.get("id"), target, exc
-                )
+            for field in self.ctx.config.reference_fields(target_kind):
+                field_targets = self.ctx.config.reference_field_targets(field)
+                if source_kind not in field_targets:
+                    continue
+                if source_id in extract_ref_ids(item.data.get(field)):
+                    add(item)
+                    break
+
+        return targets
