@@ -1,0 +1,38 @@
+type: agent-action
+contract-version: v1
+tag-id: ag-ledger
+display-name: Ledger
+description: Check ledger state, tracked docs, release artifacts, and project consistency
+aliases:
+  - agl
+  - l
+  - ledger
+directives:
+  - id
+  - target
+  - context
+  - output
+  - template
+  - job
+  - profile
+  - model
+  - model-alias
+requires-body: false
+is-generic-tag: false
+is-review-tag: false
+skill-content-file: ag-ledger-skill.md
+
+surface-contributions:
+  - id: ag-ledger/doctrine
+    kind: rule
+    title: Ledger action doctrine
+    content:
+      body: |
+        When the ledger action is triggered: check ledger state, tracked docs,
+        release artifacts, and state consistency across the project. Note specific drift,
+        missing evidence, or broken invariants. Do not mutate tracked docs or code without
+        explicit approval. Report all drift — do not hide findings.
+
+prompts:
+  - name: default
+    content-file: ag-ledger-prompt-default.md
