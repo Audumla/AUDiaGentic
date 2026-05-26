@@ -23,4 +23,4 @@ agent-tags:
   - config: components/optional/agent-actions/ag-implement.yaml
   - config: components/optional/agent-actions/ag-plan.yaml
   - config: components/optional/agent-actions/ag-review.yaml
-  - config: components/optional/agent-actions/ag-audit.yaml
+  - config: components/optional/agent-actions/ag-ledger.yaml

@@ -14,13 +14,13 @@ The active core of job orchestration. Contains all modules that drive a prompt r
 ## Must NOT Own
 - Job record I/O (→ `runtime/state/jobs_store.py`)
 - Session input I/O (→ `runtime/state/session_input_store.py`)
-- Review bundle I/O (→ `runtime/state/reviews_store.py`)
+- Review bundle I/O and validation
 - Provider-specific execution code (→ `interoperability/providers/adapters/`)
 
 ## Allowed Dependencies
 - `foundation/contracts` — errors, schemas, canonical IDs
 - `foundation/config` — provider config, project config
-- `runtime/state` — jobs_store, session_input_store, reviews_store
+- `runtime/state` — jobs_store, session_input_store
 - `interoperability/providers` — provider selection and dispatch
 - `interoperability/protocols/streaming` — stream sink management
 
