@@ -25,6 +25,7 @@ COMPONENT_PLANNING       = "planning"
 COMPONENT_PROVIDERS      = "providers"
 COMPONENT_RELEASE        = "release"
 COMPONENT_SOURCE_CONTROL = "source-control"
+COMPONENT_CODING_LSP     = "coding-lsp"
 
 # ── grouped sets ─────────────────────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ OPTIONAL_COMPONENT_IDS: frozenset[str] = frozenset({
     COMPONENT_PROVIDERS,
     COMPONENT_RELEASE,
     COMPONENT_SOURCE_CONTROL,
+    COMPONENT_CODING_LSP,
 })
 
 ALL_COMPONENT_IDS: frozenset[str] = CORE_COMPONENT_IDS | OPTIONAL_COMPONENT_IDS
