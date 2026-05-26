@@ -32,6 +32,7 @@ external-mcp-servers:
     command: uvx
     args: [mcp-server-git, --repository, .]
     requires: [uvx]
+    propagate: audiagentic,providers
     description: Local git operations via official mcp-server-git
     instructions: >
       Use git MCP tools for local repository operations: status, diff, log,
@@ -43,6 +44,7 @@ external-mcp-servers:
       GITHUB_TOKEN: "${GITHUB_TOKEN}"
     requires: [gh]
     probe: [gh, mcp, serve, --help]
+    propagate: audiagentic,providers
     description: GitHub API operations via official gh mcp serve
     instructions: >
       Use github MCP tools for GitHub API operations: pull requests, issues,
