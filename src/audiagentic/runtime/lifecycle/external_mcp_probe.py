@@ -1,21 +1,20 @@
-"""MCP external server probe observer.
+"""External MCP server probe observer.
 
 Subscribes to component lifecycle events and caches probe results for any
 ExternalMcpServerDeclaration entries that declare a probe command. Results
 are stored in the component marker so collect_mcp_servers can read them at
 runtime without running subprocesses on every launch.
 
-Import this module to activate the subscription. Importing it multiple
-times is safe — registration is guarded by a module-level flag.
+Import this module to activate the subscription. Importing multiple times
+is safe — registration is guarded by a module-level flag.
 """
 from __future__ import annotations
 
-import shutil
-import subprocess
 from pathlib import Path
 
 from audiagentic.foundation.components.registry import get_descriptor
 from audiagentic.foundation.event import get_bus
+from audiagentic.foundation.system.probe import probe_binary
 from audiagentic.runtime.lifecycle.observers import (
     COMPONENT_ENABLED,
     COMPONENT_INSTALLED,
@@ -30,16 +29,13 @@ def _run_and_store_probes(component_id: str, project_root: Path) -> None:
         return
     results: dict[str, bool] = {}
     for ext in descriptor.external_mcp_servers:
-        if not ext.probe:
+        if not ext.probe and not ext.requires:
             continue
-        if any(shutil.which(r) is None for r in ext.requires):
-            results[ext.name] = False
-            continue
-        try:
-            r = subprocess.run(list(ext.probe), capture_output=True, timeout=5)
-            results[ext.name] = r.returncode == 0
-        except (subprocess.TimeoutExpired, OSError):
-            results[ext.name] = False
+        results[ext.name] = probe_binary(
+            ext.name,
+            tuple(ext.requires),
+            list(ext.probe) if ext.probe else None,
+        )
     if not results:
         return
     from audiagentic.runtime.lifecycle.components import _read_marker, _write_marker

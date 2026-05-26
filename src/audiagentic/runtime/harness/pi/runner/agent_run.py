@@ -5,41 +5,10 @@ import os
 import subprocess
 import sys
 from datetime import datetime
-from pathlib import Path
 
-from audiagentic.runtime.rig.http import probe_models_endpoint, require_models_endpoint
+from audiagentic.runtime.rig.http import require_models_endpoint
 
 from .context import AgentContext, require_smoke_timeout
-
-
-def query_server_model(endpoint: str, timeout: float = 10.0) -> str | None:
-    probe = probe_models_endpoint(endpoint, timeout=timeout)
-    return None if probe is None else probe.first_model_id
-
-
-def query_server_version(bin_dir: Path, timeout: float = 10.0) -> str | None:
-    """Get llama-server version by running binary with --version."""
-    import sys as _sys
-
-    from audiagentic.runtime.rig.embedded.process import executable_command, resolve_platform_dirs
-
-    try:
-        server_dir, _ = resolve_platform_dirs(bin_dir)
-        server_bin = server_dir / ("llama-server.exe" if _sys.platform == "win32" else "llama-server")
-        if not server_bin.exists():
-            return None
-        result = subprocess.run(
-            [*executable_command(server_bin), "--version"],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        if result.returncode == 0:
-            output = (result.stdout + result.stderr).strip()
-            return output.split("\n")[0]
-    except Exception:
-        pass
-    return None
 
 
 def check_endpoint(ctx: AgentContext) -> None:
@@ -130,9 +99,9 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
             try:
                 returncode = process.wait(timeout=smoke_timeout)
             except subprocess.TimeoutExpired:
-                from .rig import cleanup_process_tree
+                from audiagentic.foundation.system.process import kill_process_tree
 
-                cleanup_process_tree(process.pid)
+                kill_process_tree(process.pid)
                 handle.write(f"\nSmoke timed out after {smoke_timeout:.1f}s\n")
                 return 124
         output = log_path.read_text(encoding="utf-8")

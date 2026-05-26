@@ -35,7 +35,7 @@ def _exchange(*messages: dict) -> list[dict]:
         [
             sys.executable,
             "-m",
-            "audiagentic.runtime.mcp.server",
+            "audiagentic.foundation.mcp.component_server",
             "--readonly",
             "--smoke-only",
         ],
