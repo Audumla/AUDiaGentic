@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 from audiagentic.components.optional.ledger import api
-from audiagentic.runtime.mcp.server import mcp_server
+from audiagentic.foundation.mcp.component_server import mcp_server
 
 mcp = mcp_server(__name__)
 

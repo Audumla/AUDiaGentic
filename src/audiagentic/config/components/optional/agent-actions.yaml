@@ -2,7 +2,7 @@ type: component
 contract-version: v1
 id: agent-actions
 display-name: Agent Actions
-description: Workflow action tags — audit, check-in-prep, implement, plan, review. Installs canonical skill sources and injects doctrine rules into all provider surfaces. Individual actions are optional and configured within this component.
+description: Workflow action tags — ledger, check-in-prep, implement, plan, review. Installs canonical skill sources and injects doctrine rules into all provider surfaces. Individual actions are optional and configured within this component.
 detection-marker: .audiagentic/components/agent-actions.yaml
 depends-on:
   - project
@@ -10,9 +10,9 @@ files:
   - path: .audiagentic/components/agent-actions.yaml
     lifecycle: create-if-missing
     description: Installation marker
-  - path: .audiagentic/skills/ag-audit/skill.md
+  - path: .audiagentic/skills/ag-ledger/skill.md
     lifecycle: required-managed
-    description: ag-audit canonical skill source
+    description: ag-ledger canonical skill source
   - path: .audiagentic/skills/ag-check-in-prep/skill.md
     lifecycle: required-managed
     description: ag-check-in-prep canonical skill source
