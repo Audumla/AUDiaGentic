@@ -5,6 +5,7 @@ Tests use FakeContext exclusively — zero dependency on planning components.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -50,9 +51,11 @@ def _engine(ctx: FakeContext, config: dict | None = None, tmp_path: Path | None 
     import yaml
 
     cfg = config or _minimal_config()
-    p = Path(tempfile.mkdtemp()) / "propagation.yaml"
+    root = tmp_path or Path(tempfile.mkdtemp())
+    p = root / "propagation.yaml"
     p.write_text(yaml.safe_dump(cfg), encoding="utf-8")
-    return StatePropagationEngine(ctx=ctx, enabled=True, config_path=p)
+    log_path = root / ".audiagentic" / "planning" / "meta" / "propagation_log.jsonl"
+    return StatePropagationEngine(ctx=ctx, enabled=True, config_path=p, log_path=log_path)
 
 
 # ── constructor guards ────────────────────────────────────────────────────────
@@ -151,8 +154,7 @@ def test_propagate_deduplicates_same_triple_from_multiple_sources() -> None:
     """Rule + action both producing the same triple independently → one entry in output.
 
     This is the real dedupe scenario: two independent code paths suggest the same
-    propagation.  The old 7-line set/loop and the new dict.fromkeys() both handle
-    this, but this test pins the contract so any future regression is caught.
+    propagation. This test pins the contract so any future regression is caught.
     Config with callables is injected directly to bypass YAML serialization.
     """
     def _always_true(*args, **kw) -> bool:
@@ -166,7 +168,7 @@ def test_propagate_deduplicates_same_triple_from_multiple_sources() -> None:
     ctx.add_item("t-1", "task", state="done")
     engine = _engine(ctx)
     # Inject callable config directly — bypasses YAML round-trip
-    engine._config = {
+    engine._workflow_config = {
         "global": {"enabled": True, "max_depth": 10},
         "kinds": {
             "task": {
@@ -225,6 +227,23 @@ def test_apply_propagation_invalid_transition_skips() -> None:
     engine.apply_propagation("p-1", "cancelled", "s-1", "done", {})
     # draft -> cancelled is not a valid transition in FakeConfig
     assert ctx.items["p-1"].data["state"] == "draft"
+
+
+def test_apply_propagation_invalid_transition_logs_normalized_reason(tmp_path: Path) -> None:
+    ctx = FakeContext()
+    ctx.root = tmp_path
+    ctx.add_item("p-1", "plan", state="draft")
+    ctx.add_item("s-1", "task", state="done")
+    engine = _engine(ctx, tmp_path=tmp_path)
+    engine.apply_propagation("p-1", "cancelled", "s-1", "done", {})
+
+    log_path = tmp_path / ".audiagentic" / "planning" / "meta" / "propagation_log.jsonl"
+    entries = [
+        json.loads(line)
+        for line in log_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert entries[-1]["attributes"]["workflow.reason"] == "invalid_transition"
 
 
 def test_apply_propagation_lower_priority_state_skips() -> None:
@@ -327,19 +346,3 @@ def test_apply_propagation_increments_depth_in_metadata() -> None:
     engine.apply_propagation("p-1", "done", "t-1", "done", {"propagation_depth": 1})
     assert captured[0]["propagation_depth"] == 2
 
-
-# ── _config compat alias ──────────────────────────────────────────────────────
-
-def test_config_alias_reads_workflow_config() -> None:
-    ctx = FakeContext()
-    engine = _engine(ctx)
-    engine.load_workflow_config()  # trigger lazy load
-    assert engine._config == engine.workflow_config
-
-
-def test_config_alias_setter_works() -> None:
-    ctx = FakeContext()
-    engine = _engine(ctx)
-    new_cfg = {"global": {"enabled": False}}
-    engine._config = new_cfg
-    assert engine.workflow_config is new_cfg

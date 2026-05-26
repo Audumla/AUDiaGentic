@@ -100,19 +100,19 @@ kinds:
 rules:
   all_children_in_set:
     enabled: true
-    logic: audiagentic.foundation.workflow.propagation_rules.rule_all_children_in_set
+    logic: audiagentic.foundation.workflow.propagation.rules.rule_all_children_in_set
 
 actions:
   complete_parent:
     enabled: true
-    logic: audiagentic.foundation.workflow.propagation_rules.action_complete_parent
+    logic: audiagentic.foundation.workflow.propagation.rules.action_complete_parent
 
 healing:
   auto_fix: false
   log_only: true
 ```
 
-### Propagation Rules (`propagation_rules.py`)
+### Propagation Rules (`propagation/rules.py`)
 
 Configurable rule implementations referenced by name in propagation config:
 
@@ -168,7 +168,7 @@ Protocol definitions for the workflow engine's dependencies:
 
 - **WorkflowConfig** — config methods the engine needs: `initial_state()`, `workflow_for()`, `state_in_set()`, `lifecycle_action()`, `reference_fields()`, etc.
 - **WorkflowContext** — runtime operations: `lookup()`, `_scan()`, `_find()`, `_publish_event()`, `new()`, `relink()`, `index()`
-- **WorkflowItemAPI** (in `propagation_api.py`) — minimal interface for propagation engine: `lookup()`, `state()`, `_scan()`
+- **WorkflowItemAPI** (in `propagation/api.py`) — minimal interface for propagation engine: `lookup()`, `state()`, `_scan()`
 
 ### Utilities (`util.py`)
 
@@ -217,8 +217,6 @@ No state names, transitions, or propagation rules are hardcoded in the code. Add
 | `propagation/healing.py` | `validate_hierarchy`, `heal_hierarchy` |
 | `propagation/log.py` | Propagation attempt audit log |
 | `propagation/api.py` | `WorkflowItemAPI` protocol (minimal host interface) |
-| `propagation_rules.py` | Backward-compat shim re-exporting `propagation.rules` |
-| `propagation_api.py` | Backward-compat shim re-exporting `propagation.api` |
 | `actions.py` | WorkflowActionExecutor — batch item creation with placeholder rendering |
 | `frontmatter.py` | FrontmatterBuilder — assembles frontmatter from config defaults |
 | `rel.py` | Relationships — rel_list management |
