@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..util import extract_ref_ids
-from .parents import linked_child_ids
+from .parents import find_parents, linked_child_ids
 
 
 def rule_none(
@@ -119,8 +119,14 @@ def action_complete_parent(
     ):
         return []
 
+    kind_config = engine.workflow_config.get("kinds", {}).get(source_kind, {})
+    configured_parent_kind = kind_config.get("parent_kind")
+    parents = find_parents(engine.ctx, item_id, configured_parent_kind, parent_field)
+    if not parents:
+        parents = [(parent_id, "") for parent_id in extract_ref_ids(source.data.get(parent_field, []))]
+
     propagations: list[tuple[str, str, str]] = []
-    for parent_id in extract_ref_ids(source.data.get(parent_field, [])):
+    for parent_id, _configured_kind in parents:
         parent_view = engine.ctx.lookup(parent_id)
         if not parent_view or not parent_view.data:
             continue
