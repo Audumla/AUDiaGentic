@@ -1,0 +1,25 @@
+type: component
+contract-version: v1
+id: coding-lsp
+display-name: Coding LSP
+description: Language server protocol bridge for AI-assisted code navigation and editing
+lifecycle-observer: audiagentic.components.optional.coding_lsp.bootstrap
+status-hook: audiagentic.components.optional.coding_lsp.bootstrap.status_payload
+detection-marker: .audiagentic/components/coding-lsp.yaml
+files:
+  - path: .audiagentic/components/coding-lsp.yaml
+    lifecycle: create-if-missing
+    description: Installation marker
+  - path: .coding-lsp/logs
+    lifecycle: runtime-only
+    recursive: true
+    description: MCP server and session logs
+mcp-servers:
+  - name: lsp-config-mcp
+    module: audiagentic.components.optional.coding_lsp.config_mcp
+    description: LSP server configuration — manage language server settings
+    propagate: audiagentic
+  - name: lsp-mcp
+    module: audiagentic.components.optional.coding_lsp.mcp_server
+    description: LSP code intelligence — symbols, definitions, diagnostics
+    propagate: providers
