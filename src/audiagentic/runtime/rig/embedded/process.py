@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
-import random
-import socket
 import subprocess
 import sys
 import time
 from pathlib import Path
 
+from audiagentic.foundation.system.process import executable_command
 from audiagentic.runtime.rig.http import probe_models_endpoint
 
 _LLAMA_ARG_MAP: list[tuple[str, str, str]] = [
@@ -23,45 +22,6 @@ def resolve_platform_dirs(bin_dir: Path) -> tuple[Path, Path]:
     if sys.platform == "darwin":
         return bin_dir / "llama-server" / "macOS", bin_dir / "llamafile" / "macOS"
     return bin_dir / "llama-server" / "linux", bin_dir / "llamafile" / "linux"
-
-
-def executable_command(binary: Path) -> list[str]:
-    if sys.platform == "win32":
-        return [str(binary)]
-    try:
-        if binary.read_bytes()[:2] == b"MZ":
-            return ["sh", str(binary)]
-    except OSError:
-        pass
-    return [str(binary)]
-
-
-def choose_free_port(host: str) -> int:
-    candidates = list(range(30000, 61000))
-    random.shuffle(candidates)
-    for port in candidates[:64]:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            try:
-                sock.bind((host, port))
-            except OSError:
-                continue
-            return port
-    raise SystemExit(f"Unable to find free port on {host}")
-
-
-def candidate_ports(host: str, requested_port: int) -> list[int]:
-    if requested_port != 0:
-        return [requested_port]
-    primary = choose_free_port(host)
-    extras = []
-    seen = {primary}
-    while len(extras) < 7:
-        port = choose_free_port(host)
-        if port in seen:
-            continue
-        seen.add(port)
-        extras.append(port)
-    return [primary, *extras]
 
 
 def build_command(
@@ -112,7 +72,6 @@ def wait_for_health(
     log_path: Path | None = None,
 ) -> None:
     deadline = time.monotonic() + timeout_s
-    last_error = "unknown error"
     while time.monotonic() < deadline:
         probe = probe_models_endpoint(base_url, timeout=5)
         if probe is not None:
@@ -123,4 +82,4 @@ def wait_for_health(
                 detail += f". See log: {log_path}"
             raise SystemExit(detail)
         time.sleep(0.5)
-    raise SystemExit(f"Rig health check failed for {base_url}/models: {last_error}")
+    raise SystemExit(f"Rig health check failed for {base_url}/models")

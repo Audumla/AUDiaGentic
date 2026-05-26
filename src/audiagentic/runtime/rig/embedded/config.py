@@ -19,8 +19,8 @@ class ModelProfile:
 
 
 def rig_config_path() -> Path:
-    from audiagentic.runtime.harness.pi.paths import find_pi_package_root
-    return find_pi_package_root(Path(__file__)) / "config" / "provisioning" / "rig" / "rig.yaml"
+    from audiagentic.runtime.harness.paths import _RIG_CONFIG
+    return _RIG_CONFIG
 
 
 def load_rig_profiles(profiles_path: Path | None = None) -> dict[str, object]:
