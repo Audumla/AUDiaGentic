@@ -13,7 +13,7 @@ The planning system consists of:
 
 **State Management:**
 - Tasks flow through states: `draft` → `ready` → `in_progress` → `done`
-- State changes are logged to `.audiagentic/planning/events/events.jsonl`
+- State changes are logged to `.audiagentic/planning/events/events.jsonl` as structured JSONL records
 - Each artifact has unique ID (e.g., `task-0258`, `spec-0050`)
 
 **Core Components:**
@@ -81,7 +81,7 @@ This page should be refreshed when:
 
 **Sources:**
 - `src/audiagentic/planning/` - Core implementation
-- `.audiagentic/planning/events/events.jsonl` - Event log
+- `.audiagentic/planning/events/events.jsonl` - Structured event log (`body`, `attributes.event.name`, `attributes.payload`)
 - `docs/planning/` - Artifact storage
 
 **Sync frequency:** On planning system changes

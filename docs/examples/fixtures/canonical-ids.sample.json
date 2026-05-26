@@ -11,8 +11,8 @@
   ],
   "canonical-component-ids": [
     "project",
-    "release-audit-ledger",
+    "agent-ledger",
     "agent-jobs",
- "providers"
+    "providers"
   ]
 }

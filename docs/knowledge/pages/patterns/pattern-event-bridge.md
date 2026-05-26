@@ -17,8 +17,9 @@ Event Source → Event Stream → Adapter → Filter → Transform → Action �
 
 2. **Event Stream**: Format for events
    - NDJSON (one JSON object per line)
-   - Fields: `ts`, `event`, `id`, payload fields
-   - Example: `{"ts": "...", "event": "task.after_state_change", "id": "task-0258", "new_state": "done"}`
+   - Structured log fields: `timestamp`, `severity_text`, `body`, `attributes`
+   - Event payload lives under `attributes.payload`
+   - Example: `{"timestamp":"...","severity_text":"INFO","body":"planning.item.state.changed","attributes":{"event.id":"...","event.name":"planning.item.state.changed","payload":{"id":"task-0258","new_state":"done"}}}`
 
 3. **Adapter**: Configuration bridging source to knowledge
    - Defined in `.audiagentic/knowledge/config/events/adapters.yml`
@@ -32,6 +33,7 @@ Event Source → Event Stream → Adapter → Filter → Transform → Action �
 5. **Transform**: Normalize event format
    - Map source fields to knowledge event schema
    - Add metadata (source_system, occurred_at)
+   - Flatten `attributes.payload.*` into adapter-visible fields like `new_state`
 
 6. **Action**: What to do with matched events
    - `generate_sync_proposal`
