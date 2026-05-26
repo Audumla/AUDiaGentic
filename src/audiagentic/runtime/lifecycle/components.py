@@ -152,6 +152,7 @@ def install_component(
         _resolve_and_run_post_install(descriptor.post_install, project_root)
 
     fire_post_install(resolved_id, project_root)
+    _refresh_mcp_config_if_needed(descriptor, project_root, reason="component-installed")
     result = _component_result(
         resolved_id,
         reason="component-installed",
@@ -208,6 +209,7 @@ def uninstall_component(
         if mpath not in deleted:
             deleted.append(mpath)
     fire_post_uninstall(resolved_id, project_root)
+    _refresh_mcp_config_if_needed(descriptor, project_root, reason="component-uninstalled")
     return _component_result(
         resolved_id,
         reason="component-uninstalled",
@@ -233,11 +235,13 @@ def enable_component(component_id: str, project_root: Path) -> dict:
     resolved_id = resolve_component_id(component_id) or component_id
     if not is_installed(resolved_id, project_root):
         return {"ok": False, "error": f"component {component_id} is not installed"}
+    descriptor = get_descriptor(component_id)
     data = _read_marker(resolved_id, project_root)
     data["component-id"] = resolved_id
     data["enabled"] = True
     _write_marker(resolved_id, project_root, data)
     fire_post_enable(resolved_id, project_root)
+    _refresh_mcp_config_if_needed(descriptor, project_root, reason="component-enabled")
     return _component_result(resolved_id, reason="component-enabled", enabled=True)
 
 
@@ -245,9 +249,57 @@ def disable_component(component_id: str, project_root: Path) -> dict:
     resolved_id = resolve_component_id(component_id) or component_id
     if not is_installed(resolved_id, project_root):
         return {"ok": False, "error": f"component {component_id} is not installed"}
+    descriptor = get_descriptor(component_id)
     data = _read_marker(resolved_id, project_root)
     data["component-id"] = resolved_id
     data["enabled"] = False
     _write_marker(resolved_id, project_root, data)
     fire_post_disable(resolved_id, project_root)
+    _refresh_mcp_config_if_needed(descriptor, project_root, reason="component-disabled")
     return _component_result(resolved_id, reason="component-disabled", enabled=False)
+
+
+def _refresh_mcp_config_if_needed(descriptor, project_root: Path, *, reason: str) -> None:
+    """Refresh harness MCP config and propagate to providers if component declares MCP servers."""
+    if not descriptor.mcp_servers and not descriptor.external_mcp_servers:
+        return
+    try:
+        from audiagentic.runtime.harness import refresh_harness_config_if_installed
+        refresh_harness_config_if_installed(
+            project_root,
+            reason=reason,
+            component_id=descriptor.component_id,
+        )
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        _propagate_mcp_to_providers(descriptor, project_root)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _propagate_mcp_to_providers(descriptor, project_root: Path) -> None:
+    """Add component MCP servers to every provider that has mcp_config defined."""
+    import sys
+    from audiagentic.components.optional.providers.descriptors.registry import all_descriptors
+    from audiagentic.components.optional.providers.services.mcp import add_provider_mcp_server
+    from audiagentic.runtime.harness.paths import find_package_root
+
+    python = sys.executable.replace("\\", "/")
+    src_dir = str(find_package_root(Path(__file__)).parent).replace("\\", "/")
+
+    providers = all_descriptors()
+    for provider_id, pdesc in providers.items():
+        if pdesc.mcp_config is None:
+            continue
+        for mcp_def in (descriptor.mcp_servers or []):
+            if "providers" not in mcp_def.propagate:
+                continue
+            add_provider_mcp_server(
+                provider_id=provider_id,
+                name=mcp_def.name,
+                command=python,
+                project_root=project_root,
+                args=("-m", mcp_def.module) + tuple(mcp_def.args),
+                env={"PYTHONPATH": src_dir},
+            )

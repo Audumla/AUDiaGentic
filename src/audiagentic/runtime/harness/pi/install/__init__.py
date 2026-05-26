@@ -1,49 +1,31 @@
 from __future__ import annotations
 
-import json
 import shutil
 import subprocess
-from datetime import datetime, timezone
 from pathlib import Path
+
+from audiagentic.runtime.harness.reload import (
+    build_runtime_sync as _build_sync,
+)
+from audiagentic.runtime.harness.reload import (
+    runtime_reload_request_path,
+    write_reload_marker,
+)
 
 from . import constants as _c
 from .config import materialize_agent_config
 from .patches import apply_lockdown_patches
 
-
-def runtime_reload_request_path(project_root: Path) -> Path:
-    return project_root / ".audiagentic" / "runtime" / "harness" / "reload-request.json"
-
-
-def _runtime_action_for_reason(reason: str) -> str:
-    if reason in {
-        "component-installed",
-        "component-uninstalled",
-        "component-enabled",
-        "component-disabled",
-        "manual-refresh",
-        "mcp-refresh-tool",
-    }:
-        return "reload_required"
-    if reason in {"session-ui-visibility-updated"}:
-        return "reload_required"
-    return "refresh_required"
+_TARGET = "pi-runtime"
 
 
 def build_runtime_sync(
     *,
     reason: str,
     component_id: str | None = None,
-    target: str = "pi-runtime",
+    target: str = _TARGET,
 ) -> dict[str, object]:
-    payload: dict[str, object] = {
-        "target": target,
-        "action": _runtime_action_for_reason(reason),
-        "reason": reason,
-    }
-    if component_id:
-        payload["component_id"] = component_id
-    return payload
+    return _build_sync(reason=reason, component_id=component_id, target=target)
 
 
 def request_runtime_reload(
@@ -52,15 +34,7 @@ def request_runtime_reload(
     reason: str,
     component_id: str | None = None,
 ) -> Path:
-    """Write a structured runtime action marker for the active Pi session."""
-    path = runtime_reload_request_path(project_root)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "requested_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        **build_runtime_sync(reason=reason, component_id=component_id),
-    }
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-    return path
+    return write_reload_marker(project_root, reason=reason, component_id=component_id, target=_TARGET)
 
 
 def install_to(target: Path, project_root: Path | None = None) -> int:
@@ -79,18 +53,22 @@ def install_to(target: Path, project_root: Path | None = None) -> int:
     _c._print("  Place .gguf model files here.")
 
     npm = _c._npm()
+    pi_cfg = _c.load_pi_config(project_root=project_root)
+    agent_cfg = pi_cfg.get("agent", {})
+    agent_version = _c.AGENT_VERSION or agent_cfg.get("version", "latest")
+    mcp_adapter_version = _c.AGENT_MCP_ADAPTER_VERSION or agent_cfg.get("mcp_adapter_version", "latest")
 
-    _c._print(f"Installing AudiaGentic agent {_c.AGENT_VERSION} into {npm_dir}")
+    _c._print(f"Installing AudiaGentic agent {agent_version} into {npm_dir}")
     subprocess.run(
         [npm, "install", "--prefix", str(npm_dir),
-         f"@earendil-works/pi-coding-agent@{_c.AGENT_VERSION}"],
+         f"@earendil-works/pi-coding-agent@{agent_version}"],
         check=True,
     )
 
     _c._print(f"Installing MCP adapter into {npm_dir}")
     subprocess.run(
         [npm, "install", "--prefix", str(npm_dir),
-         f"pi-mcp-adapter@{_c.AGENT_MCP_ADAPTER_VERSION}"],
+         f"pi-mcp-adapter@{mcp_adapter_version}"],
         check=True,
     )
     apply_lockdown_patches(npm_dir, project_root=project_root)
@@ -117,6 +95,26 @@ def refresh_materialized_agent_config(target: Path, project_root: Path | None = 
     harness_cfg = _c.load_harness_config(project_root=project_root)
     materialize_agent_config(target, harness_cfg, project_root=project_root)
     return 0
+
+
+def mcp_config_path(project_root: Path | None = None) -> Path:
+    from audiagentic.runtime.harness.pi.mcp_format import pi_mcp_path
+    return pi_mcp_path()
+
+
+def read_mcp_config(path: Path) -> dict:
+    from audiagentic.runtime.harness.pi.mcp_format import read_pi_mcp_json
+    return read_pi_mcp_json(path)
+
+
+def write_mcp_config(path: Path, entries: dict) -> None:
+    from audiagentic.runtime.harness.pi.mcp_format import write_pi_mcp_json
+    write_pi_mcp_json(path, entries)
+
+
+def remove_mcp_config(path: Path, name: str) -> bool:
+    from audiagentic.runtime.harness.pi.mcp_format import remove_pi_mcp_json
+    return remove_pi_mcp_json(path, name)
 
 
 def refresh_harness_config_if_installed(

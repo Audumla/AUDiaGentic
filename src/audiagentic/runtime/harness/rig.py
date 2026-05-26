@@ -1,3 +1,9 @@
+"""Shared embedded rig lifecycle management.
+
+Both pi and opencode harnesses use the same embedded rig (llama-server).
+This module owns launch, reuse detection, cleanup, and server queries so
+neither harness duplicates that logic or imports from the other.
+"""
 from __future__ import annotations
 
 import json
@@ -15,8 +21,8 @@ def launch_rig_if_needed(
 ) -> tuple[str, str, int | None, bool]:
     """Return (endpoint, model, rig_pid, manages_rig).
 
-    For embedded rig: model is the configurable model ID passed to Pi.
-    For external backend: model is the model name from config/env, passed through unchanged.
+    For embedded rig: model is the configurable model ID passed to the agent.
+    For external backend: model is the model name from config/env, unchanged.
     manages_rig is True when connected to an embedded rig (started now or reused).
     rig_pid is set only when *this* call started the rig; None means reused or external.
     """
@@ -25,16 +31,15 @@ def launch_rig_if_needed(
     if not model_profile.get("model_file"):
         return f"http://127.0.0.1:{rig_port}/v1", model, None, False
 
+    from audiagentic.foundation.system.process import StartupLock
+    from audiagentic.runtime.home import global_harness_runtime
     from audiagentic.runtime.rig.registry import (
-        StartupLock,
         ensure_rig_state,
         reap_orphan_rigs,
         write_rig_state,
     )
 
-    from .context import env_with_pythonpath
-
-    with StartupLock():
+    with StartupLock(global_harness_runtime() / "rig" / "start.lock"):
         state = ensure_rig_state(rig_port, model=profile_name)
         if state is not None:
             endpoint = str(state["endpoint"])
@@ -43,7 +48,7 @@ def launch_rig_if_needed(
 
         reap_orphan_rigs()
 
-        env = env_with_pythonpath()
+        env = os.environ.copy()
         completed = subprocess.run(
             [sys.executable, "-m", "audiagentic.runtime.rig.embedded.launch",
              "--model-profile", profile_name, "--port", str(rig_port), "--background", "--json"],
@@ -66,27 +71,16 @@ def launch_rig_if_needed(
         return endpoint, model_id, pid, True
 
 
-def cleanup_rig(pid: int | None) -> None:
-    import os
-    import subprocess
-    if not pid:
-        return
-    if os.name == "nt":
-        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-        return
-    try:
-        os.kill(pid, 9)
-    except OSError:
-        pass
 
+from audiagentic.runtime.rig.models import (
+    load_model_profile,
+    query_server_model,
+    query_server_version,
+)
 
-def cleanup_process_tree(pid: int) -> None:
-    import os
-    import subprocess
-    if os.name == "nt":
-        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-        return
-    try:
-        os.kill(pid, 9)
-    except OSError:
-        pass
+__all__ = [
+    "launch_rig_if_needed",
+    "load_model_profile",
+    "query_server_model",
+    "query_server_version",
+]

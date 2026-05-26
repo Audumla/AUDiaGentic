@@ -4,6 +4,7 @@ import json
 import shutil
 from pathlib import Path
 
+from audiagentic.runtime.harness.paths import _RIG_CONFIG
 from audiagentic.runtime.rig.embedded.config import load_rig_model, resolve_profile_definition
 
 from . import constants as _c
@@ -86,8 +87,8 @@ def _resolve_project_root(project_root: Path | None = None) -> Path:
 
 def _build_mcp_config(harness_cfg: dict, *, project_root: Path | None = None) -> dict:
     """Build pi mcp.json from installed components via the pi harness adaptor."""
+    from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
     from audiagentic.runtime.harness.pi.mcp_format import build_pi_mcp_dict
-    from audiagentic.runtime.mcp.config_builder import collect_mcp_servers
 
     enabled = harness_cfg.get("mcp", {}).get("enabled", True)
     if not enabled:
@@ -140,9 +141,11 @@ def _build_settings_config(pi_cfg: dict, target: Path) -> dict:
 
 def _build_system_md(target: Path, *, project_root: Path | None = None) -> None:
     """Build SYSTEM.md with dynamic tool list from installed components."""
-    from audiagentic.runtime.mcp.config_builder import (
-        apply_system_md_injections,
-        build_system_md_injections,
+    from audiagentic.runtime.harness.system_prompt import (
+        apply_system_prompt_injections as apply_system_md_injections,
+    )
+    from audiagentic.runtime.harness.system_prompt import (
+        build_system_prompt_injections as build_system_md_injections,
     )
 
     # Read the base SYSTEM.md template
@@ -176,6 +179,10 @@ def materialize_agent_config(
 
     _build_system_md(target, project_root=project_root)
 
+    stale = agent_dir / "SYSTEM.md"
+    if stale.exists():
+        stale.unlink()
+
     append_src = _c._TEMPLATES_DIR / "APPEND_SYSTEM.md"
     if append_src.exists():
         shutil.copy2(append_src, agent_dir / "APPEND_SYSTEM.md")
@@ -189,13 +196,13 @@ def materialize_agent_config(
         raise SystemExit("No model configured. Set 'model' in ag.yaml or via AUDIAGENTIC_PI_MODEL env var.")
     model_profile: dict = {}
     model_id = model_name
-    if _c._RIG_CONFIG.exists():
-        profile_name, rig_model_id = load_rig_model(_c._RIG_CONFIG)
+    if _RIG_CONFIG.exists():
+        profile_name, rig_model_id = load_rig_model(_RIG_CONFIG)
         if model_name == rig_model_id:
             model_id = rig_model_id
-            model_profile = resolve_profile_definition(profile_name, _c._RIG_CONFIG)
+            model_profile = resolve_profile_definition(profile_name, _RIG_CONFIG)
         else:
-            model_profile = resolve_profile_definition(model_name, _c._RIG_CONFIG)
+            model_profile = resolve_profile_definition(model_name, _RIG_CONFIG)
 
     (agent_dir / "models.json").write_text(
         json.dumps(_build_models_config(harness_cfg, model_id, model_profile), indent=2) + "\n",
