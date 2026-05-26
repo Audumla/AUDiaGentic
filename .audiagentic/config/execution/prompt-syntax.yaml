@@ -5,27 +5,31 @@ canonical-tags:
   - ag-plan
   - ag-implement
   - ag-review
-  - ag-audit
+  - ag-ledger
   - ag-check-in-prep
 tag-aliases:
   # new short forms
   agp: ag-plan
   agi: ag-implement
   agr: ag-review
-  aga: ag-audit
+  agl: ag-ledger
   agc: ag-check-in-prep
   # backward-compat short forms
   p: ag-plan
   i: ag-implement
   r: ag-review
-  a: ag-audit
+  l: ag-ledger
   c: ag-check-in-prep
   # backward-compat full names
   plan: ag-plan
   implement: ag-implement
   review: ag-review
-  audit: ag-audit
+  ledger: ag-ledger
   check-in-prep: ag-check-in-prep
+  # legacy audit aliases retained for compatibility
+  aga: ag-ledger
+  a: ag-ledger
+  audit: ag-ledger
 provider-aliases:
   local-openai: local-openai
   lo: local-openai
@@ -62,9 +66,9 @@ combined-aliases:
   agi-cln: ag-implement provider=cline
   agi-cld: ag-implement provider=claude
   agi-cx: ag-implement provider=codex
-  aga-cln: ag-audit provider=cline
-  aga-cld: ag-audit provider=claude
-  aga-cx: ag-audit provider=codex
+  agl-cln: ag-ledger provider=cline
+  agl-cld: ag-ledger provider=claude
+  agl-cx: ag-ledger provider=codex
   agc-cln: ag-check-in-prep provider=cline
   agc-cld: ag-check-in-prep provider=claude
   agc-cx: ag-check-in-prep provider=codex
@@ -78,9 +82,9 @@ combined-aliases:
   r-cln: ag-review provider=cline
   r-cld: ag-review provider=claude
   r-cx: ag-review provider=codex
-  a-cln: ag-audit provider=cline
-  a-cld: ag-audit provider=claude
-  a-cx: ag-audit provider=codex
+  l-cln: ag-ledger provider=cline
+  l-cld: ag-ledger provider=claude
+  l-cx: ag-ledger provider=codex
   c-cln: ag-check-in-prep provider=cline
   c-cld: ag-check-in-prep provider=claude
   c-cx: ag-check-in-prep provider=codex
@@ -88,13 +92,22 @@ combined-aliases:
   p-opc: ag-plan provider=opencode
   i-opc: ag-implement provider=opencode
   r-opc: ag-review provider=opencode
-  a-opc: ag-audit provider=opencode
+  l-opc: ag-ledger provider=opencode
   c-opc: ag-check-in-prep provider=opencode
   agp-opc: ag-plan provider=opencode
   agi-opc: ag-implement provider=opencode
   agr-opc: ag-review provider=opencode
-  aga-opc: ag-audit provider=opencode
+  agl-opc: ag-ledger provider=opencode
   agc-opc: ag-check-in-prep provider=opencode
+  # legacy audit combined aliases retained for compatibility
+  aga-cln: ag-ledger provider=cline
+  aga-cld: ag-ledger provider=claude
+  aga-cx: ag-ledger provider=codex
+  a-cln: ag-ledger provider=cline
+  a-cld: ag-ledger provider=claude
+  a-cx: ag-ledger provider=codex
+  a-opc: ag-ledger provider=opencode
+  aga-opc: ag-ledger provider=opencode
 profiles:
   shared:
     prompt-controls:

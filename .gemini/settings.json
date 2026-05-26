@@ -5,7 +5,10 @@
   "_hook_notes": "Gemini CLI does not expose a native BeforeAgent hook in the current version. The repository uses the fallback bridge path exclusively for prompt-trigger launches.",
   "bridge": {
     "path": "tools/gemini_prompt_trigger_bridge.py",
-    "args": ["--project-root", "."]
+    "args": [
+      "--project-root",
+      "."
+    ]
   },
   "commands": {
     "location": ".gemini/commands/",
@@ -13,7 +16,7 @@
       "ag-plan.md",
       "ag-implement.md",
       "ag-review.md",
-      "ag-audit.md",
+      "ag-ledger.md",
       "ag-check-in-prep.md"
     ]
   },
@@ -21,11 +24,23 @@
     "ag-plan": "Planning and execution strategy",
     "ag-implement": "Implementation work",
     "ag-review": "Read-focused validation and review",
-    "ag-audit": "Documentation and state consistency audit",
+    "ag-ledger": "Ledger state, release artifacts, and consistency checks",
     "ag-check-in-prep": "Check-in preparation"
   },
   "fallback_path": {
     "enabled": true,
     "description": "Use the bridge for all prompt-trigger launches since native hook is unavailable"
+  },
+  "mcpServers": {
+    "lsp-mcp": {
+      "command": "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
+      "args": [
+        "-m",
+        "audiagentic.components.optional.coding_lsp.mcp_server"
+      ],
+      "env": {
+        "PYTHONPATH": "H:/development/projects/AUDia/AUDiaGentic/src"
+      }
+    }
   }
 }

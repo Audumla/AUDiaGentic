@@ -1,0 +1,15 @@
+{
+  "mcpServers": [
+    {
+      "name": "lsp-mcp",
+      "command": "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
+      "args": [
+        "-m",
+        "audiagentic.components.optional.coding_lsp.mcp_server"
+      ],
+      "env": {
+        "PYTHONPATH": "H:/development/projects/AUDia/AUDiaGentic/src"
+      }
+    }
+  ]
+}
