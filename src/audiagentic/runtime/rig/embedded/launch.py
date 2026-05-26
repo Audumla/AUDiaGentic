@@ -8,13 +8,13 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from audiagentic.foundation.system.process import candidate_ports
 from audiagentic.runtime.rig.embedded.config import (
     ModelProfile,
     resolve_model_profile,
 )
 from audiagentic.runtime.rig.embedded.process import (
     build_command,
-    candidate_ports,
     resolve_platform_dirs,
     wait_for_health,
 )
