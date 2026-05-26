@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 from pathlib import Path
 
+from audiagentic.runtime.harness.rig import launch_rig_if_needed
 from audiagentic.runtime.rig.embedded.config import load_rig_model
+from audiagentic.runtime.rig.models import (
+    load_model_profile,
+    query_server_model,
+    query_server_version,
+)
 
 from .agent_run import (
     check_endpoint,
     direct_mcp_smoke,
-    query_server_model,
-    query_server_version,
     run_agent,
 )
 from .command import _build_run_env, build_agent_command
@@ -23,22 +26,9 @@ from .context import (
     require_harness_rig_port,
     resolve_agent_bin,
 )
-from .models import load_model_profile
-from .rig import cleanup_process_tree, cleanup_rig, launch_rig_if_needed
 
 
-@dataclass
-class RunnerParams:
-    """Harness-agnostic runner parameters.
-
-    Translated to harness-specific args by the runner implementation.
-    """
-    prompt: str | None = None
-    mode: str | None = None           # "text" | "json"
-    verbose: bool = False
-
-
-def translate_agent_args(params: RunnerParams) -> list[str]:
+def translate_agent_args(params) -> list[str]:
     """Translate harness-agnostic RunnerParams to PI agent CLI flags.
 
     This is the harness-specific translation layer. If we swap to a

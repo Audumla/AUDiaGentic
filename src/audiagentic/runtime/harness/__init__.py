@@ -12,21 +12,29 @@ in ag.yaml (default: ``pi``). Adding a new harness means:
 from __future__ import annotations
 
 import importlib
+from dataclasses import dataclass
 from pathlib import Path
 
-# Re-export concrete types from pi — these are the active harness types until
-# a second harness is introduced, at which point RunnerParams moves to this
-# module (it is harness-agnostic) and AgentContext becomes a protocol.
-from .pi.runner import AgentContext, RunnerParams
+
+@dataclass
+class RunnerParams:
+    """Harness-agnostic runner parameters.
+
+    Each harness's translate_agent_args converts these to CLI flags.
+    """
+    prompt: str | None = None
+    mode: str | None = None   # "text" | "json"
+    verbose: bool = False
+
 
 # Registry: harness type name → base module path.
 _REGISTRY: dict[str, str] = {
     "pi": "audiagentic.runtime.harness.pi",
-    # "opencode": "audiagentic.runtime.harness.opencode",  # future
+    "opencode": "audiagentic.runtime.harness.opencode",
 }
 
 def _harness_cfg_path() -> Path:
-    from .pi.install.constants import _HARNESS_CONFIG
+    from .paths import _HARNESS_CONFIG
     return _HARNESS_CONFIG
 
 
@@ -66,11 +74,13 @@ def build_runtime_sync(
     *,
     reason: str,
     component_id: str | None = None,
-    target: str = "pi-runtime",
+    target: str | None = None,
 ) -> dict[str, object]:
-    return _mod("install").build_runtime_sync(
-        reason=reason, component_id=component_id, target=target
-    )
+    mod = _mod("install")
+    kw: dict = {"reason": reason, "component_id": component_id}
+    if target is not None:
+        kw["target"] = target
+    return mod.build_runtime_sync(**kw)
 
 
 def refresh_harness_config_if_installed(
@@ -107,7 +117,7 @@ def request_runtime_reload(
 
 def build_global_context(
     *, project_root: Path, agent_runtime: Path, enable_mcp: bool
-) -> AgentContext:
+):
     return _mod("runner", project_root).build_global_context(
         project_root=project_root,
         agent_runtime=agent_runtime,
@@ -115,7 +125,7 @@ def build_global_context(
     )
 
 
-def run_agent(ctx: AgentContext, params: RunnerParams, **kw):
+def run_agent(ctx, params: RunnerParams, **kw):
     return _mod("runner", ctx.project_root).run_agent(ctx, params, **kw)
 
 
@@ -127,10 +137,28 @@ def env_flag(name: str, default: bool = False) -> bool:
     return _mod("runner").env_flag(name, default)
 
 
+# --- MCP config dispatch ---
+
+def mcp_config_path(project_root: Path | None = None) -> Path:
+    return _mod("install", project_root).mcp_config_path(project_root)
+
+
+def read_mcp_config(path: Path) -> dict:
+    return _mod("install").read_mcp_config(path)
+
+
+def write_mcp_config(path: Path, entries: dict) -> None:
+    return _mod("install").write_mcp_config(path, entries)
+
+
+def remove_mcp_config(path: Path, name: str) -> bool:
+    return _mod("install").remove_mcp_config(path, name)
+
+
 # --- harness-specific helpers (pi-only until generalised) ---
 
 def query_rig_server_version(bin_dir: Path, timeout: float = 10.0) -> str | None:
-    from .pi.runner.agent_run import query_server_version
+    from audiagentic.runtime.rig.models import query_server_version
     return query_server_version(bin_dir, timeout=timeout)
 
 
@@ -138,7 +166,7 @@ def load_active_profile(
     profiles_path: Path | None,
     model: str,
 ) -> tuple[str, dict[str, object]]:
-    from .pi.runner.models import load_model_profile
+    from audiagentic.runtime.rig.models import load_model_profile
     return load_model_profile(profiles_path, model)
 
 

@@ -1,0 +1,61 @@
+"""Harness-generic runtime reload marker protocol.
+
+Both pi and opencode write the same reload-request.json structure so that
+session monitors can detect config changes without harness-specific logic.
+"""
+from __future__ import annotations
+
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+def _runtime_action_for_reason(reason: str) -> str:
+    if reason in {
+        "component-installed",
+        "component-uninstalled",
+        "component-enabled",
+        "component-disabled",
+        "manual-refresh",
+        "mcp-refresh-tool",
+        "session-ui-visibility-updated",
+    }:
+        return "reload_required"
+    return "refresh_required"
+
+
+def runtime_reload_request_path(project_root: Path) -> Path:
+    return project_root / ".audiagentic" / "runtime" / "harness" / "reload-request.json"
+
+
+def build_runtime_sync(
+    *,
+    reason: str,
+    component_id: str | None = None,
+    target: str,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "target": target,
+        "action": _runtime_action_for_reason(reason),
+        "reason": reason,
+    }
+    if component_id:
+        payload["component_id"] = component_id
+    return payload
+
+
+def write_reload_marker(
+    project_root: Path,
+    *,
+    reason: str,
+    component_id: str | None = None,
+    target: str,
+) -> Path:
+    path = runtime_reload_request_path(project_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "requested_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        **build_runtime_sync(reason=reason, component_id=component_id, target=target),
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    return path

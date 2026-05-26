@@ -13,8 +13,8 @@ from audiagentic.runtime.harness.pi.install.config import (
     _build_settings_config,
     materialize_agent_config,
 )
+from audiagentic.runtime.harness.pi.system_md import build_system_md_injections
 from audiagentic.runtime.lifecycle.components import install_component
-from audiagentic.runtime.mcp.config_builder import build_system_md_injections
 
 
 def test_build_system_md_injections_uses_explicit_project_root(
@@ -48,7 +48,7 @@ def test_materialize_agent_config_rebuilds_mcp_from_installed_components(
     harness_root.mkdir()
 
     register_all_components()
-    harness_cfg = {"model": "test-model"}
+    harness_cfg = {"rig": {"model": "qwen3.5-0.8b", "port": 42001, "provider": "audiagentic"}}
 
     materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
     initial = json.loads((harness_root / "agent" / "mcp.json").read_text(encoding="utf-8"))
@@ -70,7 +70,7 @@ def test_providers_component_uses_optional_server_module_in_mcp_config(
     harness_root.mkdir()
 
     register_all_components()
-    harness_cfg = {"model": "test-model"}
+    harness_cfg = {"rig": {"model": "qwen3.5-0.8b", "port": 42001, "provider": "audiagentic"}}
 
     install_component("providers", project_root)
     materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
@@ -92,7 +92,7 @@ def test_planning_component_uses_optional_server_module_in_mcp_config(
     harness_root.mkdir()
 
     register_all_components()
-    harness_cfg = {"model": "test-model"}
+    harness_cfg = {"rig": {"model": "qwen3.5-0.8b", "port": 42001, "provider": "audiagentic"}}
 
     install_component("planning", project_root)
     materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
@@ -114,16 +114,16 @@ def test_ledger_component_uses_optional_server_module_in_mcp_config(
     harness_root.mkdir()
 
     register_all_components()
-    harness_cfg = {"model": "test-model"}
+    harness_cfg = {"rig": {"model": "qwen3.5-0.8b", "port": 42001, "provider": "audiagentic"}}
 
     install_component("agent-ledger", project_root)
     materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
     payload = json.loads((harness_root / "agent" / "mcp.json").read_text(encoding="utf-8"))
 
-    ledger = payload["mcpServers"]["audiagentic-release-please"]
+    ledger = payload["mcpServers"]["audiagentic-ledger-write"]
     assert ledger["args"] == [
         "-m",
-        "audiagentic.components.optional.ledger.server",
+        "audiagentic.components.optional.ledger.ledger_write_mcp",
     ]
 
 
@@ -133,7 +133,7 @@ def test_component_mcp_metadata_loads_from_yaml() -> None:
     project_decl = get_mcp_server_declaration("project", "audiagentic-project")
     session_decl = get_mcp_server_declaration("session", "audiagentic-session")
     planning_decl = get_mcp_server_declaration("planning", "audiagentic-planning")
-    ledger_decl = get_mcp_server_declaration("agent-ledger", "audiagentic-release-please")
+    ledger_decl = get_mcp_server_declaration("agent-ledger", "audiagentic-ledger-write")
 
     assert project_decl is not None
     assert "list_components" in project_decl.instructions
@@ -148,8 +148,7 @@ def test_component_mcp_metadata_loads_from_yaml() -> None:
     assert "planning_summary" in planning_decl.tool_descriptions
 
     assert ledger_decl is not None
-    assert ledger_decl.module == "audiagentic.components.optional.ledger.server"
-    assert "release_please_status" in ledger_decl.tool_descriptions
+    assert ledger_decl.module == "audiagentic.components.optional.ledger.ledger_write_mcp"
 
 
 def test_component_install_refreshes_materialized_agent_config(
