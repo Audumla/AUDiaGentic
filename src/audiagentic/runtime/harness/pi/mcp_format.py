@@ -17,7 +17,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from audiagentic.runtime.mcp import McpServerEntry
+from audiagentic.foundation.mcp import McpServerEntry
 
 _PI_SETTINGS_ENABLED: dict[str, Any] = {
     "toolPrefix": "mcp",
