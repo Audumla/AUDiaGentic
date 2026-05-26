@@ -21,8 +21,8 @@ except ImportError:
 from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
+from audiagentic.foundation.mcp.component_server import run_blocking_with_output
 from audiagentic.foundation.output import ComponentOutputEvent
-from audiagentic.runtime.mcp.server import run_blocking_with_output
 
 register_all_components()
 

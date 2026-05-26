@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.invoke.base import InvocationRecipe
-from audiagentic.runtime.mcp import McpServerEntry
+from audiagentic.foundation.mcp import McpServerEntry
 
 
 @dataclass(frozen=True)

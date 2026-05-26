@@ -4,8 +4,12 @@ import json
 import subprocess
 from typing import Any
 
+from audiagentic.components.optional.providers.adapters.mcp_json import (
+    read_mcp_json,
+    remove_mcp_json,
+    write_mcp_json,
+)
 from audiagentic.foundation.invoke.toolchains import npm
-from audiagentic.runtime.mcp.formats import read_mcp_json, remove_mcp_json, write_mcp_json
 
 from ...descriptors.base import (
     AgentFile,
