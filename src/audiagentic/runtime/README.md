@@ -36,7 +36,7 @@ Manages the installed state of AUDiaGentic in a project:
 Durable persistence layer extracted from `execution/jobs/`:
 - `jobs_store.py` — job record read/write
 - `session_input_store.py` — session input event persistence
-- `reviews_store.py` — review bundle and report persistence
+- review bundle and report persistence remains in `execution/jobs/reviews.py`
 
 ## Dependency Note
 `runtime` must NOT import from `channels` or `execution`. It is a lower-level layer that both of those domains depend on.
