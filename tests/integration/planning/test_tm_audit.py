@@ -82,9 +82,16 @@ def test_tm_audit_fix_repairs_and_logs(tmp_path: Path) -> None:
     assert result.returncode == 0
     payload = json.loads(result.stdout)
     assert payload["fixes_applied"] > 0
-    log_path = tmp_path / ".audiagentic" / "planning" / "meta" / "propagation_log.json"
+    log_path = tmp_path / ".audiagentic" / "planning" / "meta" / "propagation_log.jsonl"
     assert log_path.exists()
-    log_entries = json.loads(log_path.read_text(encoding="utf-8"))
-    assert any(entry.get("fixed_by_audit") for entry in log_entries)
+    log_entries = [
+        json.loads(line)
+        for line in log_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert any(
+        entry.get("attributes", {}).get("workflow.fixed_by_audit")
+        for entry in log_entries
+    )
     api = PlanningAPI(tmp_path)
     assert api.lookup(wp_id).data["state"] == "ready"

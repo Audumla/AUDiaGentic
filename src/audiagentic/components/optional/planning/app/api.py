@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.foundation.event import EventLog, EventService
+from audiagentic.foundation.event import EventService, StructuredLog
 from audiagentic.foundation.workflow import FrontmatterBuilder, ItemView, StateMachine
 
 from ..fs.scan import scan_items
@@ -33,7 +33,7 @@ class PlanningAPI:
         self.test_mode = test_mode
         self.config = Config(self.root)
         self.paths = Paths(self.root)
-        self.events = EventLog(self.root / ".audiagentic/planning/events/events.jsonl")
+        self.events = StructuredLog(self.root / ".audiagentic/planning/events/events.jsonl")
         self.claims_store = Claims(self.root / ".audiagentic/planning/claims/claims.json")
         self.indexer = Indexer(self.root)
         self.validator = Validator(self.root)
@@ -68,10 +68,12 @@ class PlanningAPI:
             config_path = (
                 self.root / ".audiagentic" / "planning" / "config" / "state_propagation.yaml"
             )
+            log_path = self.root / ".audiagentic" / "planning" / "meta" / "propagation_log.jsonl"
             self._propagation_engine = StatePropagationEngine(
                 ctx=self,
                 enabled=True,
                 config_path=config_path,
+                log_path=log_path,
             )
             bus = get_bus()
             self._propagation_subscription = bus.subscribe(
@@ -111,9 +113,9 @@ class PlanningAPI:
         if not item_id or not new_state:
             return
         propagation_depth = metadata.get("propagation_depth", 0)
-        max_depth = 10
-        if self._propagation_engine._config:
-            max_depth = self._propagation_engine._config.get("global", {}).get("max_depth", 10)
+        max_depth = self._propagation_engine.workflow_config.get("global", {}).get(
+            "max_depth", 10
+        )
         if propagation_depth >= max_depth:
             return
         propagations = self._propagation_engine.propagate(item_id, new_state, metadata)

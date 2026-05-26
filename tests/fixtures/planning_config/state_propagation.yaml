@@ -134,35 +134,35 @@ kinds:
         new_state: null
 
 # Rule definitions: logic for each rule type
-# These are registered in propagation_rules.py and referenced by name here
+# These are registered in propagation/rules.py and referenced by dotted path here
 rules:
   # No propagation
   none:
     enabled: true
     description: "No state propagation"
-    logic: "audiagentic.foundation.workflow.propagation_rules.rule_none"
+    logic: "audiagentic.foundation.workflow.propagation.rules.rule_none"
 
   parent_in_set:
     enabled: true
     description: "Set parent to new_state when parent is in configured state set"
-    logic: "audiagentic.foundation.workflow.propagation_rules.rule_parent_in_set"
+    logic: "audiagentic.foundation.workflow.propagation.rules.rule_parent_in_set"
 
   all_children_in_set:
     enabled: true
     description: "Set parent to new_state when all sibling children are in configured state set"
-    logic: "audiagentic.foundation.workflow.propagation_rules.rule_all_children_in_set"
+    logic: "audiagentic.foundation.workflow.propagation.rules.rule_all_children_in_set"
 
   parent_not_in_set:
     enabled: true
     description: "Set parent to new_state when parent is not in configured state set"
-    logic: "audiagentic.foundation.workflow.propagation_rules.rule_parent_not_in_set"
+    logic: "audiagentic.foundation.workflow.propagation.rules.rule_parent_not_in_set"
 
 # Action definitions: additional logic to run after propagation
 actions:
   complete_parent:
     enabled: true
     description: "Complete parent when all related children are in configured state set"
-    logic: "audiagentic.foundation.workflow.propagation_rules.action_complete_parent"
+    logic: "audiagentic.foundation.workflow.propagation.rules.action_complete_parent"
 
 # Workflow-specific configurations
 # Each workflow can override global/kind settings for specific use cases

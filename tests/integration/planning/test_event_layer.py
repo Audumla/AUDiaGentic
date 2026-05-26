@@ -48,19 +48,6 @@ def event_store():
         yield store
 
 
-@pytest.fixture
-def knowledge_api():
-    """Create knowledge API instance (not yet implemented)."""
-    # KnowledgeAPI not yet implemented - skip for now
-    yield None
-
-
-# NOTE: TestFullPropagationChain, TestRollbackPropagation, and TestConflictResolution
-# classes were removed during the config-driven refactoring (task-0279).
-# The old _task_to_wp() method was removed - propagation is now fully config-driven
-# and tested in test_propagation.py and test_healing.py.
-
-
 class TestReplaySafety:
     """Test replay safety mechanisms."""
 
@@ -71,10 +58,13 @@ class TestReplaySafety:
         # Create request and task
         request = planning_api.new("request", "Test Request", "Test request", source="test")
         spec = planning_api.new(
-            "spec", "Test Spec", "Test specification", request_refs=[request.data["id"]]
+            "spec",
+            "Test Spec",
+            "Test specification",
+            refs={"request_refs": [request.data["id"]]},
         )
-        planning_api.new("plan", "Test Plan", "Test plan", spec=spec.data["id"])
-        task = planning_api.new("task", "Test Task", "Test task", spec=spec.data["id"])
+        planning_api.new("plan", "Test Plan", "Test plan", refs={"spec": spec.data["id"]})
+        task = planning_api.new("task", "Test Task", "Test task", refs={"spec": spec.data["id"]})
 
         # Set task to ready, in_progress, then done
         planning_api.state(task.data["id"], "ready")

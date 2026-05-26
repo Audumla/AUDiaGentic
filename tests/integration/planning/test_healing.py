@@ -98,15 +98,15 @@ rules:
   parent_in_set:
     enabled: true
     description: "Set parent to new_state when parent is in configured state set"
-    logic: "audiagentic.foundation.workflow.propagation_rules.rule_parent_in_set"
+    logic: "audiagentic.foundation.workflow.propagation.rules.rule_parent_in_set"
   all_children_in_set:
     enabled: true
     description: "Set to target state when all children are in configured state set"
-    logic: "audiagentic.foundation.workflow.propagation_rules.rule_all_children_in_set"
+    logic: "audiagentic.foundation.workflow.propagation.rules.rule_all_children_in_set"
   none:
     enabled: true
     description: "No state propagation"
-    logic: "audiagentic.foundation.workflow.propagation_rules.rule_none"
+    logic: "audiagentic.foundation.workflow.propagation.rules.rule_none"
 """)
 
 
@@ -117,7 +117,10 @@ def _create_request_and_spec(planning_api: PlanningAPI) -> tuple[str, str]:
     )
     request_id = request.data["id"]
     spec = planning_api.new(
-        "spec", label="Test Spec", summary="Test specification", request_refs=[request_id]
+        "spec",
+        label="Test Spec",
+        summary="Test specification",
+        refs={"request_refs": [request_id]},
     )
     return request_id, spec.data["id"]
 
@@ -125,11 +128,11 @@ def _create_request_and_spec(planning_api: PlanningAPI) -> tuple[str, str]:
 def _create_task_hierarchy(planning_api: PlanningAPI) -> tuple[str, str, str, str, str]:
     """Create valid request -> spec -> plan -> wp -> task chain."""
     request_id, spec_id = _create_request_and_spec(planning_api)
-    plan = planning_api.new("plan", label="Test Plan", summary="Test plan", spec=spec_id)
+    plan = planning_api.new("plan", label="Test Plan", summary="Test plan", refs={"spec": spec_id})
     plan_id = plan.data["id"]
-    wp = planning_api.new("wp", label="Test WP", summary="Test WP", plan=plan_id)
+    wp = planning_api.new("wp", label="Test WP", summary="Test WP", refs={"plan": plan_id})
     wp_id = wp.data["id"]
-    task = planning_api.new("task", label="Test Task", summary="Test task", spec=spec_id)
+    task = planning_api.new("task", label="Test Task", summary="Test task", refs={"spec": spec_id})
     task_id = task.data["id"]
     planning_api.relink(wp_id, "task_refs", task_id)
     return request_id, spec_id, plan_id, wp_id, task_id
@@ -267,11 +270,11 @@ rules:
   parent_in_set:
     enabled: true
     description: "Set parent to new_state when parent is in configured state set"
-    logic: "audiagentic.foundation.workflow.propagation_rules.rule_parent_in_set"
+    logic: "audiagentic.foundation.workflow.propagation.rules.rule_parent_in_set"
   none:
     enabled: true
     description: "No state propagation"
-    logic: "audiagentic.foundation.workflow.propagation_rules.rule_none"
+    logic: "audiagentic.foundation.workflow.propagation.rules.rule_none"
 
 healing:
   enabled: true
