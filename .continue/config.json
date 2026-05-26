@@ -1,0 +1,15 @@
+{
+  "mcpServers": [
+    {
+      "name": "lsp-mcp",
+      "command": "C:/example-home/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
+      "args": [
+        "-m",
+        "audiagentic.components.optional.coding_lsp.mcp_server"
+      ],
+      "env": {
+        "PYTHONPATH": "C:/example-dev-root/audiagentic/src"
+      }
+    }
+  ]
+}

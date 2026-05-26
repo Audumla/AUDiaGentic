@@ -3,8 +3,8 @@
 
 Canonical tags:
 
-- `ag-audit` (aliases: `aga`, `a`)
 - `ag-implement` (aliases: `agi`, `i`)
+- `ag-ledger` (aliases: `agl`, `l`)
 - `ag-plan` (aliases: `agp`, `p`)
 - `ag-review` (aliases: `agr`, `r`)
 
@@ -25,12 +25,12 @@ Tag and provider aliases are centralized in the tag registry and
 
 Tag aliases:
 
-- `aga` -> `ag-audit`
-- `a` -> `ag-audit`
-- `audit` -> `ag-audit`
 - `agi` -> `ag-implement`
 - `i` -> `ag-implement`
 - `implement` -> `ag-implement`
+- `agl` -> `ag-ledger`
+- `l` -> `ag-ledger`
+- `ledger` -> `ag-ledger`
 - `agp` -> `ag-plan`
 - `p` -> `ag-plan`
 - `plan` -> `ag-plan`
@@ -48,14 +48,14 @@ Provider aliases:
 - `cp` -> `copilot`
 <!-- AUDIAGENTIC:END agent-jobs/tag-shortcuts -->
 
-<!-- AUDIAGENTIC:BEGIN ag-audit/doctrine -->
-# Audit action doctrine
+<!-- AUDIAGENTIC:BEGIN ag-ledger/doctrine -->
+# Ledger action doctrine
 
-When the audit action is triggered: check tracked docs, release artifacts,
-and state consistency across the project. Note specific drift, missing evidence,
-or broken invariants. Do not mutate tracked docs or code without explicit approval.
-Report all drift — do not hide findings.
-<!-- AUDIAGENTIC:END ag-audit/doctrine -->
+When the ledger action is triggered: check ledger state, tracked docs,
+release artifacts, and state consistency across the project. Note specific drift,
+missing evidence, or broken invariants. Do not mutate tracked docs or code without
+explicit approval. Report all drift — do not hide findings.
+<!-- AUDIAGENTIC:END ag-ledger/doctrine -->
 
 <!-- AUDIAGENTIC:BEGIN ag-implement/doctrine -->
 # Implement action doctrine
