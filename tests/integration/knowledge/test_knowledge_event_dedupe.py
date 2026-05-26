@@ -97,20 +97,36 @@ def test_scan_events_does_not_rediscover_pruned_old_stream_lines(tmp_path: Path)
     stream = tmp_path / ".audiagentic" / "planning" / "events" / "events.jsonl"
     entries = [
         {
-            "event": "planning.item.state.changed",
-            "id": "task-1",
-            "subject": {"kind": "task", "id": "task-1"},
-            "old_state": "in_progress",
-            "new_state": "done",
-            "metadata": {"triggered_by": "manual"},
+            "timestamp": "2026-04-17T09:00:00+00:00",
+            "severity_text": "INFO",
+            "body": "planning.item.state.changed",
+            "attributes": {
+                "event.id": "evt-1",
+                "event.name": "planning.item.state.changed",
+                "subject": {"kind": "task", "id": "task-1"},
+                "payload": {
+                    "id": "task-1",
+                    "old_state": "in_progress",
+                    "new_state": "done",
+                },
+                "metadata": {"triggered_by": "manual"},
+            },
         },
         {
-            "event": "planning.item.state.changed",
-            "id": "task-2",
-            "subject": {"kind": "task", "id": "task-2"},
-            "old_state": "in_progress",
-            "new_state": "verified",
-            "metadata": {"triggered_by": "manual"},
+            "timestamp": "2026-04-17T09:00:01+00:00",
+            "severity_text": "INFO",
+            "body": "planning.item.state.changed",
+            "attributes": {
+                "event.id": "evt-2",
+                "event.name": "planning.item.state.changed",
+                "subject": {"kind": "task", "id": "task-2"},
+                "payload": {
+                    "id": "task-2",
+                    "old_state": "in_progress",
+                    "new_state": "verified",
+                },
+                "metadata": {"triggered_by": "manual"},
+            },
         },
     ]
     stream.write_text(

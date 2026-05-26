@@ -293,16 +293,21 @@ def _build_runtime_planning_event(
     new_state: str,
 ) -> EventRecord | None:
     """Build a synthetic EventRecord for in-process planning state changes."""
+    observed_at = now_utc().isoformat()
     raw_event = {
-        "event": event_type,
-        "event_name": event_type,
-        "id": item_id,
-        "subject": {"kind": kind, "id": item_id},
-        **payload,
-        "metadata": metadata,
+        "timestamp": observed_at,
+        "severity_text": "INFO",
+        "body": event_type,
+        "attributes": {
+            "event.name": event_type,
+            "payload": payload,
+            "metadata": metadata,
+            "subject": {"kind": kind, "id": item_id},
+        },
     }
     correlation_id = metadata.get("correlation_id", "manual")
     event_id = f"runtime-planning::{event_type}::{kind}::{item_id}::{new_state}::{correlation_id}"
+    raw_event["attributes"]["event.id"] = event_id
 
     state = load_event_state(config)
     processed = set(str(x) for x in state.get("processed_event_ids", []) or [])
@@ -320,7 +325,7 @@ def _build_runtime_planning_event(
         event_name=event_type,
         source_path=".audiagentic/planning/events/events.jsonl",
         status=new_state,
-        observed_at=now_utc().isoformat(),
+        observed_at=observed_at,
         affected_pages=affected_pages,
         summary=f"Planning {kind} {item_id} state changed to {new_state}",
         details={
