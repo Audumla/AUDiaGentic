@@ -42,10 +42,11 @@ class McpServerDeclaration:
     name: str
     module: str
     args: tuple[str, ...] = ()
-    direct_tools: list[str] | bool = field(default_factory=list)
+    direct_tools: list[str, ...] = field(default_factory=list)
     description: str = ""
     instructions: str = ""
     tool_descriptions: dict[str, str] = field(default_factory=dict)
+    propagate: str = "audiagentic"  # "audiagentic" | "providers" | "audiagentic,providers"
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,7 @@ class ExternalMcpServerDeclaration:
     instructions: str = ""
     requires: tuple[str, ...] = ()   # CLI tool names checked via shutil.which
     probe: tuple[str, ...] = ()      # command to run to verify server is usable (returncode 0 = ok)
+    propagate: str = "audiagentic"  # "audiagentic" | "providers" | "audiagentic,providers"
 
 
 @dataclass(frozen=True)
@@ -70,6 +72,7 @@ class HarnessInstruction:
     section: str
     content: str
     description: str = ""
+    propagate: str = "audiagentic"  # "audiagentic" | "providers" | "audiagentic,providers"
 
 
 @dataclass(frozen=True)

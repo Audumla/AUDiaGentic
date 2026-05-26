@@ -51,6 +51,7 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
             description=ms.get("description", ""),
             instructions=ms.get("instructions", ""),
             tool_descriptions=ms.get("tool-descriptions") or {},
+            propagate=ms.get("propagate", "audiagentic"),
         )
         for ms in (data.get("mcp-servers") or [])
     )
@@ -65,6 +66,7 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
             instructions=ms.get("instructions", ""),
             requires=tuple(ms.get("requires") or []),
             probe=tuple(ms.get("probe") or []),
+            propagate=ms.get("propagate", "audiagentic"),
         )
         for ms in (data.get("external-mcp-servers") or [])
     )
@@ -74,6 +76,7 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
             section=hi["section"],
             content=hi["content"],
             description=hi.get("description", ""),
+            propagate=hi.get("propagate", "audiagentic"),
         )
         for hi in (data.get("harness-instructions") or [])
     )
