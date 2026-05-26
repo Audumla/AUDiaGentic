@@ -1,6 +1,6 @@
 """Generic event service.
 
-Publishes events to both the local EventLog and the shared EventBus.
+Publishes events to both the local structured log and the shared EventBus.
 No workflow-specific logic (propagation, automation) lives here.
 """
 
@@ -10,6 +10,7 @@ import warnings
 from typing import Any
 
 from .bus import DeliveryMode, get_bus
+from .envelope import EventEnvelope
 
 
 class EventService:
@@ -20,10 +21,10 @@ class EventService:
     """
 
     def __init__(self, event_log):
-        """Initialize with an EventLog instance.
+        """Initialize with structured event log.
 
         Args:
-            event_log: EventLog instance for local persistence.
+            event_log: StructuredLog-like instance for local persistence.
         """
         self.event_log = event_log
 
@@ -42,14 +43,18 @@ class EventService:
             metadata: Optional metadata dict.
             mode: Delivery mode override ("sync" or "async"). Defaults to async.
         """
-        self.event_log.emit(event_type, payload)
+        envelope = EventEnvelope(
+            type=event_type,
+            payload=payload,
+            metadata=metadata or {},
+            source_component=str((metadata or {}).get("source_component", "unknown")),
+        )
+        self.event_log.emit_event(envelope)
 
         try:
             bus = get_bus()
-            bus.publish(
-                event_type=event_type,
-                payload=payload,
-                metadata=metadata or {},
+            bus.publish_envelope(
+                envelope,
                 mode=(DeliveryMode(mode) if mode else DeliveryMode.ASYNC),
             )
         except Exception as e:

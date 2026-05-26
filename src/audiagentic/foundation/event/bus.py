@@ -11,16 +11,16 @@ from __future__ import annotations
 
 import logging
 import threading
+import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
 from .envelope import EventEnvelope
 from .exceptions import CycleDetectedError
-from .queue import AsyncQueue
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class SubscriptionHandle:
 
     pattern: str
     handler: Callable[[str, dict[str, Any], dict[str, Any]], None]
-    _id: int = field(default_factory=lambda: id(SubscriptionHandle))
+    _id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     def __hash__(self) -> int:
         return hash(self._id)
@@ -104,12 +104,12 @@ class EventBus(EventBusProtocol):
         source_component: str = "default",
         max_depth: int = 10,
         async_executor: ThreadPoolExecutor | None = None,
-        async_queue: AsyncQueue | None = None,
     ) -> None:
         self._source_component = source_component
         self._max_depth = max_depth
         self._async_executor = async_executor or ThreadPoolExecutor(max_workers=4)
-        self._async_queue = async_queue or AsyncQueue.get_instance()
+        self._pending_async: set[Future] = set()
+        self._pending_lock = threading.Lock()
 
         self._subscriptions: dict[str, list[SubscriptionHandle]] = {}
         self._subscription_lock = threading.Lock()
@@ -132,7 +132,14 @@ class EventBus(EventBusProtocol):
             metadata=metadata,
             source_component=self._source_component,
         )
+        self.publish_envelope(envelope, mode=mode)
 
+    def publish_envelope(
+        self,
+        envelope: EventEnvelope,
+        mode: DeliveryMode = DeliveryMode.SYNC,
+    ) -> None:
+        """Publish an already-created canonical event envelope."""
         self._check_cycle(envelope)
 
         if mode == DeliveryMode.SYNC:
@@ -181,14 +188,10 @@ class EventBus(EventBusProtocol):
 
     def _dispatch_async(self, envelope: EventEnvelope) -> None:
         """Dispatch event asynchronously to all matching subscribers."""
-        self._async_queue.enqueue(
-            event_type=envelope.type,
-            payload=envelope.payload,
-            metadata=envelope.metadata,
-        )
-
-        if not self._async_queue._running:
-            self._async_queue.start()
+        future = self._async_executor.submit(self._dispatch_sync, envelope)
+        with self._pending_lock:
+            self._pending_async.add(future)
+        future.add_done_callback(self._discard_pending_async)
 
     def _find_matching_subscribers(self, event_type: str) -> list[SubscriptionHandle]:
         """Find all subscribers matching the event type."""
@@ -262,6 +265,17 @@ class EventBus(EventBusProtocol):
     def close(self) -> None:
         """Close the event bus and cleanup resources."""
         self._async_executor.shutdown(wait=True)
+
+    def wait_idle(self, timeout: float | None = None) -> None:
+        """Wait for currently queued async subscriber work to finish."""
+        with self._pending_lock:
+            pending = set(self._pending_async)
+        if pending:
+            wait(pending, timeout=timeout)
+
+    def _discard_pending_async(self, future: Future) -> None:
+        with self._pending_lock:
+            self._pending_async.discard(future)
 
 
 # Singleton
