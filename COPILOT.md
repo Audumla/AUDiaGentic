@@ -12,15 +12,6 @@ This repository uses AUDiaGentic workflow jobs.
 - Preserve raw prompt text in provenance metadata.
 - Keep provenance visible: provider id, surface, and session id should survive normalization.
 
-<!-- AUDIAGENTIC:BEGIN ag-audit/doctrine -->
-## Audit action doctrine
-
-When the audit action is triggered: check tracked docs, release artifacts,
-and state consistency across the project. Note specific drift, missing evidence,
-or broken invariants. Do not mutate tracked docs or code without explicit approval.
-Report all drift — do not hide findings.
-<!-- AUDIAGENTIC:END ag-audit/doctrine -->
-
 <!-- AUDIAGENTIC:BEGIN ag-implement/doctrine -->
 ## Implement action doctrine
 
@@ -29,6 +20,15 @@ work within the stated scope. Do not broaden scope beyond the requested change.
 Prefer shared helpers, repository-owned scripts, and existing patterns.
 Run verification steps (type checks, tests) when available before declaring done.
 <!-- AUDIAGENTIC:END ag-implement/doctrine -->
+
+<!-- AUDIAGENTIC:BEGIN ag-ledger/doctrine -->
+## Ledger action doctrine
+
+When the ledger action is triggered: check ledger state, tracked docs,
+release artifacts, and state consistency across the project. Note specific drift,
+missing evidence, or broken invariants. Do not mutate tracked docs or code without
+explicit approval. Report all drift — do not hide findings.
+<!-- AUDIAGENTIC:END ag-ledger/doctrine -->
 
 <!-- AUDIAGENTIC:BEGIN ag-plan/doctrine -->
 ## Plan action doctrine
@@ -71,8 +71,8 @@ requested. Do not broaden review into feature-scope changes.
 
 Canonical tags:
 
-- `ag-audit` (aliases: `aga`, `a`)
 - `ag-implement` (aliases: `agi`, `i`)
+- `ag-ledger` (aliases: `agl`, `l`)
 - `ag-plan` (aliases: `agp`, `p`)
 - `ag-review` (aliases: `agr`, `r`)
 
@@ -93,12 +93,12 @@ Tag and provider aliases are centralized in the tag registry and
 
 Tag aliases:
 
-- `aga` -> `ag-audit`
-- `a` -> `ag-audit`
-- `audit` -> `ag-audit`
 - `agi` -> `ag-implement`
 - `i` -> `ag-implement`
 - `implement` -> `ag-implement`
+- `agl` -> `ag-ledger`
+- `l` -> `ag-ledger`
+- `ledger` -> `ag-ledger`
 - `agp` -> `ag-plan`
 - `p` -> `ag-plan`
 - `plan` -> `ag-plan`
@@ -115,16 +115,6 @@ Provider aliases:
 - `opc` -> `opencode`
 - `cp` -> `copilot`
 <!-- AUDIAGENTIC:END agent-jobs/tag-shortcuts -->
-
-<!-- AUDIAGENTIC:BEGIN source-control/doctrine -->
-## Source control doctrine
-
-Use the source control component for all git and GitHub operations.
-If the agent-ledger component is installed, record a change event to the
-ledger before committing using the audiagentic-ledger-write MCP tool
-(record_change_event).
-Do not invoke git or GitHub APIs directly — use the MCP tools.
-<!-- AUDIAGENTIC:END source-control/doctrine -->
 
 <!-- AUDIAGENTIC:BEGIN agent-ledger/process -->
 ## Agent ledger process
@@ -144,3 +134,13 @@ After completing substantive implementation work, record a change event to the l
 using the audiagentic-ledger-write MCP tool (record_change_event).
 Do not skip this step — the ledger is the authoritative record for release tracking.
 <!-- AUDIAGENTIC:END agent-ledger/write-instruction -->
+
+<!-- AUDIAGENTIC:BEGIN source-control/doctrine -->
+## Source control doctrine
+
+Use the source control component for all git and GitHub operations.
+If the agent-ledger component is installed, record a change event to the
+ledger before committing using the audiagentic-ledger-write MCP tool
+(record_change_event).
+Do not invoke git or GitHub APIs directly — use the MCP tools.
+<!-- AUDIAGENTIC:END source-control/doctrine -->
