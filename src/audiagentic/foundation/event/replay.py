@@ -53,12 +53,7 @@ class ReplayService:
             envelope.is_replay = True
 
             if self._dispatch_on_replay:
-                self._bus.publish(
-                    event_type=envelope.type,
-                    payload=envelope.payload,
-                    metadata=envelope.metadata,
-                    mode=DeliveryMode.SYNC,
-                )
+                self._bus.publish_envelope(envelope, mode=DeliveryMode.SYNC)
 
             count += 1
 

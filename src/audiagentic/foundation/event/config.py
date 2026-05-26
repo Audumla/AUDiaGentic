@@ -21,16 +21,6 @@ class EventStoreConfig:
 
 
 @dataclass
-class AsyncQueueConfig:
-    """Async queue configuration."""
-
-    enabled: bool = True
-    max_queue_size: int = 10000
-    shutdown_timeout: int = 30
-    persist_on_checkpoint: bool = False
-
-
-@dataclass
 class CycleDetectionConfig:
     """Cycle detection configuration."""
 
@@ -52,14 +42,12 @@ class EventConfig:
     Attributes:
         root: Project root directory (auto-detected if None)
         event_store: Event store configuration
-        async_queue: Async queue configuration
         cycle_detection: Cycle detection configuration
         replay: Replay configuration
     """
 
     root: Path | None = None
     event_store: EventStoreConfig = field(default_factory=EventStoreConfig)
-    async_queue: AsyncQueueConfig = field(default_factory=AsyncQueueConfig)
     cycle_detection: CycleDetectionConfig = field(default_factory=CycleDetectionConfig)
     replay: ReplayConfig = field(default_factory=ReplayConfig)
 
@@ -93,18 +81,6 @@ def load_config(root: Path | None = None) -> EventConfig:
                     retention_days=data.get("runtime", {})
                     .get("event_store", {})
                     .get("retention_days", 365),
-                ),
-                async_queue=AsyncQueueConfig(
-                    enabled=data.get("runtime", {}).get("async_queue", {}).get("enabled", True),
-                    max_queue_size=data.get("runtime", {})
-                    .get("async_queue", {})
-                    .get("max_queue_size", 10000),
-                    shutdown_timeout=data.get("runtime", {})
-                    .get("async_queue", {})
-                    .get("shutdown_timeout", 30),
-                    persist_on_checkpoint=data.get("runtime", {})
-                    .get("async_queue", {})
-                    .get("persist_on_checkpoint", False),
                 ),
                 cycle_detection=CycleDetectionConfig(
                     max_depth=data.get("runtime", {})
