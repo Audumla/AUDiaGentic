@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "servers": {
+    "python": {
+      "command": [
+        "pyright-langserver",
+        "--stdio"
+      ],
+      "fileExtensions": [
+        ".py",
+        ".pyi"
+      ],
+      "workspaceConfigFiles": [
+        "pyrightconfig.json"
+      ]
+    }
+  }
+}
