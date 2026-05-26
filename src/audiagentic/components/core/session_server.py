@@ -390,13 +390,13 @@ def build_server() -> FastMCP:
         import contextlib
         import io
 
+        from audiagentic.foundation.mcp.component_server import run_blocking_with_output
         from audiagentic.foundation.output import ComponentOutputEvent
-        from audiagentic.runtime.mcp.server import run_blocking_with_output
+        from audiagentic.foundation.system.process import kill_pid
         from audiagentic.runtime.rig.embedded.binaries import update_binaries as _update
         from audiagentic.runtime.rig.embedded.launch import runtime_bin_dir, start_embedded_rig
         from audiagentic.runtime.rig.registry import (
             _clear_rig_state,
-            _kill_pid,
             ensure_rig_state,
             read_rig_state,
             write_rig_state,
@@ -426,7 +426,7 @@ def build_server() -> FastMCP:
                         sink(ComponentOutputEvent(message="[rig] updating embedded rig binaries"))
 
                 if active_state and active_profile:
-                    _kill_pid(int(active_state["pid"]))
+                    kill_pid(int(active_state["pid"]))
                     deadline = time.time() + 15.0
                     while time.time() < deadline:
                         try:

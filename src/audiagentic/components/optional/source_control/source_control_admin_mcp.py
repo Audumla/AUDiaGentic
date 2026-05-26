@@ -19,7 +19,7 @@ from audiagentic.foundation.dependencies import (
     install_system_dependencies,
     uninstall_system_dependencies,
 )
-from audiagentic.runtime.mcp.server import mcp_server, run_blocking_with_output
+from audiagentic.foundation.mcp.component_server import mcp_server, run_blocking_with_output
 
 mcp = mcp_server(__name__)
 
