@@ -7,14 +7,14 @@ class QueueService:
 
     def claim(self, kind: str, id_: str, holder: str, ttl: int | None = None):
         rec = self.api.claims_store.claim(kind, id_, holder, ttl)
-        self.api.events.emit(f"{kind}.claimed", rec)
+        self.api.event_service.publish(f"{kind}.claimed", rec)
         self.api.index()
         return rec
 
     def unclaim(self, id_: str):
         ok = self.api.claims_store.unclaim(id_)
         if ok:
-            self.api.events.emit("planning.unclaimed", {"id": id_})
+            self.api.event_service.publish("planning.unclaimed", {"id": id_})
             self.api.index()
         return ok
 

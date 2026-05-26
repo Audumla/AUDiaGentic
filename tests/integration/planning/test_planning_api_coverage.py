@@ -449,7 +449,8 @@ class TestStateTransitions:
         events_path = root / ".audiagentic" / "planning" / "events" / "events.jsonl"
         events = [json.loads(line) for line in events_path.read_text().splitlines() if line.strip()]
         assert any(
-            e.get("event") == "planning.item.state.changed" and e.get("id") == spec.data["id"]
+            e.get("body") == "planning.item.state.changed"
+            and e.get("attributes", {}).get("payload", {}).get("id") == spec.data["id"]
             for e in events
         )
 
@@ -756,7 +757,8 @@ class TestEventEmission:
         events_path = root / ".audiagentic" / "planning" / "events" / "events.jsonl"
         events = [json.loads(line) for line in events_path.read_text().splitlines() if line.strip()]
         assert any(
-            e.get("event") == "planning.item.state.changed" and e.get("id") == spec.data["id"]
+            e.get("body") == "planning.item.state.changed"
+            and e.get("attributes", {}).get("payload", {}).get("id") == spec.data["id"]
             for e in events
         )
 
@@ -767,7 +769,8 @@ class TestEventEmission:
         events_path = root / ".audiagentic" / "planning" / "events" / "events.jsonl"
         events = [json.loads(line) for line in events_path.read_text().splitlines() if line.strip()]
         assert any(
-            e.get("event") == "planning.item.created" and e.get("id") == req.data["id"]
+            e.get("body") == "planning.item.created"
+            and e.get("attributes", {}).get("payload", {}).get("id") == req.data["id"]
             for e in events
         )
 
@@ -779,7 +782,8 @@ class TestEventEmission:
         events_path = root / ".audiagentic" / "planning" / "events" / "events.jsonl"
         events = [json.loads(line) for line in events_path.read_text().splitlines() if line.strip()]
         assert any(
-            e.get("event") == "planning.item.updated" and e.get("id") == spec.data["id"]
+            e.get("body") == "planning.item.updated"
+            and e.get("attributes", {}).get("payload", {}).get("id") == spec.data["id"]
             for e in events
         )
 
