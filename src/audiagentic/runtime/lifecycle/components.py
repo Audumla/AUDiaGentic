@@ -1,9 +1,12 @@
 """Component-level lifecycle operations — install, uninstall, enable, disable."""
 from __future__ import annotations
 
+import logging
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from audiagentic.foundation.components.base import (
     MODE_CREATE_IF_MISSING,
@@ -55,7 +58,8 @@ def _read_marker(component_id: str, project_root: Path) -> dict:
     path = _get_marker_path(component_id, project_root)
     try:
         return load_yaml_file(path)
-    except Exception:  # noqa: BLE001
+    except Exception:
+        logger.warning("Failed to read marker for %s", component_id, exc_info=True)
         return {}
 
 
@@ -270,17 +274,18 @@ def _refresh_mcp_config_if_needed(descriptor, project_root: Path, *, reason: str
             reason=reason,
             component_id=descriptor.component_id,
         )
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception:
+        logger.warning("Failed to refresh harness config for %s: %s", descriptor.component_id, exc_info=True)
     try:
         _propagate_mcp_to_providers(descriptor, project_root)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception:
+        logger.warning("Failed to propagate MCP config for %s: %s", descriptor.component_id, exc_info=True)
 
 
 def _propagate_mcp_to_providers(descriptor, project_root: Path) -> None:
     """Add component MCP servers to every provider that has mcp_config defined."""
     import sys
+
     from audiagentic.components.optional.providers.descriptors.registry import all_descriptors
     from audiagentic.components.optional.providers.services.mcp import add_provider_mcp_server
     from audiagentic.runtime.harness.paths import find_package_root

@@ -7,8 +7,11 @@ Opencode is installed as an npm package — no runtime directory to populate.
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from audiagentic.runtime.harness.reload import (
     build_runtime_sync as _build_sync,
@@ -218,9 +221,9 @@ def refresh_harness_config_if_installed(
         harness_cfg = load_harness_config(project_root=project_root)
         materialize_agent_config(project_root, harness_cfg, project_root=project_root)
     except Exception:
-        pass
+        logger.warning("Failed to refresh opencode harness config for %s", component_id, exc_info=True)
     try:
         request_runtime_reload(project_root, reason=reason, component_id=component_id)
     except Exception:
-        pass
+        logger.warning("Failed to request runtime reload for opencode %s", component_id, exc_info=True)
     return True

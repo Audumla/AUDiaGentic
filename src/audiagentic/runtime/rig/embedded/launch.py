@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import subprocess
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from audiagentic.foundation.system.process import candidate_ports
 from audiagentic.runtime.rig.embedded.config import (
@@ -61,7 +64,7 @@ def runtime_bin_dir() -> Path:
         if project_bin.exists():
             return project_bin
     except Exception:
-        pass
+        logger.warning("Failed to find repo root", exc_info=True)
     return global_harness_runtime() / "rig" / "bin"
 
 

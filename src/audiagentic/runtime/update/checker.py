@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 GITHUB_REPO = "Audumla/AUDiaGentic"
 _RELEASES_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
@@ -15,11 +18,12 @@ def current_version() -> str:
     try:
         from importlib.metadata import version
         return version("audiagentic")
-    except Exception:  # noqa: BLE001
+    except Exception:
         try:
             from audiagentic import __version__
             return __version__
-        except Exception:  # noqa: BLE001
+        except Exception:
+            logger.warning("Could not determine current version", exc_info=True)
             return "0.0.0"
 
 
@@ -34,7 +38,8 @@ def _read_cache() -> dict:
         return {}
     try:
         return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001
+    except Exception:
+        logger.warning("Failed to read update cache", exc_info=True)
         return {}
 
 
@@ -43,14 +48,15 @@ def _write_cache(data: dict) -> None:
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception:
+        logger.warning("Failed to write update cache", exc_info=True)
 
 
 def _version_tuple(v: str) -> tuple[int, ...]:
     try:
         return tuple(int(x) for x in v.split("."))
-    except Exception:  # noqa: BLE001
+    except Exception:
+        logger.warning("Invalid version string: %s", v)
         return (0,)
 
 
@@ -68,7 +74,8 @@ def fetch_latest_version(timeout: int = 5) -> str | None:
             data = json.loads(resp.read().decode("utf-8"))
             tag = data.get("tag_name", "")
             return tag.lstrip("v") if tag else None
-    except Exception:  # noqa: BLE001
+    except Exception:
+        logger.warning("Failed to fetch latest version from GitHub", exc_info=True)
         return None
 
 
@@ -87,7 +94,8 @@ def _is_install_failed_recently(version: str, cache: dict) -> bool:
         return False
     try:
         return datetime.now(timezone.utc) - datetime.fromisoformat(failed_at) < _CHECK_INTERVAL
-    except Exception:  # noqa: BLE001
+    except Exception:
+        logger.warning("Failed to parse failed install timestamp for %s", version, exc_info=True)
         return False
 
 
@@ -119,8 +127,8 @@ def check_update(*, force: bool = False) -> dict | None:
                     if _version_tuple(latest) <= _version_tuple(current):
                         return None
                     return {"latest": latest, "current": current}
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception:
+                logger.warning("Failed to parse cache timestamp", exc_info=True)
 
     latest = fetch_latest_version()
     cache["checked_at"] = datetime.now(timezone.utc).isoformat()
