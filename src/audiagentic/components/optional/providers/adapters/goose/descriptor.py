@@ -1,4 +1,4 @@
-from audiagentic.foundation.invoke.toolchains import brew
+from audiagentic.foundation.invoke.recipes.shell import ShellRecipe
 
 from ...descriptors.base import (
     AgentFile,
@@ -17,11 +17,19 @@ register(ProviderDescriptor(
     url="https://block.github.io/goose",
     cli_probe=["goose", "--version"],
     cli_install=CliInstallRecipe(
-        package_manager="brew",
-        package_name="block-goose-cli",
+        package_manager="script",
+        package_name="https://github.com/block/goose/releases/download/stable/download_cli.sh",
         executable="goose",
-        install=brew.install("block-goose-cli"),
-        uninstall=brew.uninstall("block-goose-cli"),
+        install=ShellRecipe((
+            "bash",
+            "-lc",
+            "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash",
+        )),
+        uninstall=ShellRecipe((
+            "bash",
+            "-lc",
+            "rm -f \"$HOME/.local/bin/goose\"",
+        )),
     ),
     vscode_extensions=(),
     permissions=ProviderPermissions(

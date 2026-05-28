@@ -10,10 +10,16 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.invoke.context import InvocationContext
 from audiagentic.foundation.invoke.result import InvocationResult
 from audiagentic.foundation.output import ComponentOutputEvent, ComponentOutputSink
+from audiagentic.foundation.workflow.invocation import WorkflowInvocationResult
 
 from ..descriptors.base import CliInstallRecipe, ProviderDescriptor
 from ..descriptors.registry import _probe_cli, all_descriptors, get_descriptor
 from ..surfaces.manager import apply_provider_surfaces, prune_provider_surfaces
+from ..workflow import (
+    supports_provider_cli_workflow,
+    workflow_provider_cli_plan,
+    workflow_provider_cli_run,
+)
 
 
 def _emit(output: ComponentOutputSink | None, message: str, **data: Any) -> None:
@@ -87,6 +93,22 @@ def _result(
     return payload
 
 
+def _invocation_result_from_workflow(
+    result: WorkflowInvocationResult,
+    *,
+    step_id: str,
+) -> InvocationResult:
+    step = result.outputs.get(step_id, {})
+    return InvocationResult(
+        status=result.status,
+        command=step.get("command"),
+        returncode=step.get("returncode"),
+        stdout=step.get("stdout", ""),
+        stderr=step.get("stderr", ""),
+        reason=result.reason or step.get("reason"),
+    )
+
+
 def provider_cli_plan(provider_id: str, action: str) -> dict[str, Any]:
     descriptor = _descriptor(provider_id)
     recipe = descriptor.cli_install
@@ -98,6 +120,10 @@ def provider_cli_plan(provider_id: str, action: str) -> dict[str, Any]:
             recipe=None,
             reason="provider has no installable CLI recipe",
         )
+    if supports_provider_cli_workflow(provider_id):
+        workflow_result = workflow_provider_cli_plan(provider_id, action=action, descriptor=descriptor)
+        inv = _invocation_result_from_workflow(workflow_result, step_id=action)
+        return _result(provider_id=provider_id, action=action, status=inv.status, recipe=recipe, invocation=inv)
     ctx = InvocationContext(dry_run=True)
     inv = recipe.install.plan(ctx) if action == "install" else recipe.uninstall.plan(ctx)
     return _result(provider_id=provider_id, action=action, status="planned", recipe=recipe, invocation=inv)
@@ -121,6 +147,34 @@ def install_provider_cli(
             recipe=None,
             reason="provider has no installable CLI recipe",
         )
+    if supports_provider_cli_workflow(provider_id):
+        _emit(on_progress, f"Installing {provider_id}...", provider_id=provider_id, action="install")
+        workflow_result, probe, status, workflow_events = workflow_provider_cli_run(
+            provider_id,
+            action="install",
+            descriptor=descriptor,
+            dry_run=dry_run,
+            timeout=timeout,
+            project_root=project_root,
+            on_progress=on_progress,
+            probe_fn=_probe_provider_cli_after_install,
+        )
+        inv = _invocation_result_from_workflow(workflow_result, step_id="install")
+        result = _result(
+            provider_id=provider_id,
+            action="install",
+            status=status,
+            recipe=recipe,
+            invocation=inv,
+            probe=probe,
+        )
+        result["workflow-events"] = workflow_events
+        if status == "installed" and project_root is not None:
+            _seed_provider_config(project_root, provider_id, descriptor, enabled=True)
+            _emit(on_progress, "Applying provider surfaces...", provider_id=provider_id, action="install")
+            result["surfaces"] = apply_provider_surfaces(project_root, provider_id=provider_id)
+        _emit(on_progress, f"{provider_id}: {status}", provider_id=provider_id, action="install", status=status)
+        return result
     ctx = InvocationContext(project_root=project_root, dry_run=dry_run, timeout=timeout, on_progress=on_progress)
     _emit(on_progress, f"Installing {provider_id}...", provider_id=provider_id, action="install")
     inv = recipe.install.run(ctx)
@@ -156,6 +210,38 @@ def uninstall_provider_cli(
             recipe=None,
             reason="provider has no installable CLI recipe",
         )
+    if supports_provider_cli_workflow(provider_id):
+        _emit(on_progress, f"Uninstalling {provider_id}...", provider_id=provider_id, action="uninstall")
+        workflow_result, probe, status, workflow_events = workflow_provider_cli_run(
+            provider_id,
+            action="uninstall",
+            descriptor=descriptor,
+            dry_run=dry_run,
+            timeout=timeout,
+            project_root=project_root,
+            on_progress=on_progress,
+            probe_fn=_probe_provider_cli,
+        )
+        inv = _invocation_result_from_workflow(workflow_result, step_id="uninstall")
+        result = _result(
+            provider_id=provider_id,
+            action="uninstall",
+            status=status,
+            recipe=recipe,
+            invocation=inv,
+            probe=probe,
+        )
+        result["workflow-events"] = workflow_events
+        if status == "uninstalled" and project_root is not None:
+            from audiagentic.components.optional.providers.services.provider_config import (
+                set_provider_enabled,
+            )
+
+            set_provider_enabled(project_root, provider_id, enabled=False)
+            _emit(on_progress, "Pruning provider surfaces...", provider_id=provider_id, action="uninstall")
+            result["surfaces"] = prune_provider_surfaces(project_root, provider_id=provider_id)
+        _emit(on_progress, f"{provider_id}: {status}", provider_id=provider_id, action="uninstall", status=status)
+        return result
     ctx = InvocationContext(project_root=project_root, dry_run=dry_run, timeout=timeout, on_progress=on_progress)
     _emit(on_progress, f"Uninstalling {provider_id}...", provider_id=provider_id, action="uninstall")
     inv = recipe.uninstall.run(ctx)
