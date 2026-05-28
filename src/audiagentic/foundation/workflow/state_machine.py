@@ -18,6 +18,8 @@ from .util import extract_ref_ids
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_STATE_CHANGE_EVENT = "workflow.item.state.changed"
+
 
 class StateMachine:
     def __init__(self, ctx: WorkflowContext):
@@ -75,11 +77,20 @@ class StateMachine:
             event_metadata.update(metadata)
 
         self.ctx._publish_event(
-            "planning.item.state.changed", event_payload, event_metadata, mode="sync"
+            self._state_change_event_type(), event_payload, event_metadata, mode="sync"
         )
 
         self.ctx.index()
         return self.ctx._find(id_)
+
+    def _state_change_event_type(self) -> str:
+        configured = getattr(self.ctx.config, "state_change_event_type", None)
+        if configured is None:
+            return DEFAULT_STATE_CHANGE_EVENT
+        event_type = configured()
+        if not isinstance(event_type, str) or not event_type:
+            raise ValueError("state_change_event_type must return a non-empty string")
+        return event_type
 
     def apply_action(
         self,
