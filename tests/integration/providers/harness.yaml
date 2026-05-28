@@ -1,0 +1,9 @@
+providers:
+  pi:
+    use_project_root: true
+    trust_install_probe: true
+  plandex:
+    docker_skip_reason: brew tap install currently requires interactive GitHub access in Docker
+  roo:
+    require_code_cli: true
+    trust_install_probe: true

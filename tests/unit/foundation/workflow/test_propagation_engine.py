@@ -1,6 +1,6 @@
 """Unit tests for foundation/workflow/propagation/engine.py.
 
-Tests use FakeContext exclusively — zero dependency on planning components.
+Tests use FakeContext exclusively — zero dependency on host components.
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ def _engine(ctx: FakeContext, config: dict | None = None, tmp_path: Path | None 
     root = tmp_path or Path(tempfile.mkdtemp())
     p = root / "propagation.yaml"
     p.write_text(yaml.safe_dump(cfg), encoding="utf-8")
-    log_path = root / ".audiagentic" / "planning" / "meta" / "propagation_log.jsonl"
+    log_path = root / ".audiagentic" / "workflow" / "meta" / "propagation_log.jsonl"
     return StatePropagationEngine(ctx=ctx, enabled=True, config_path=p, log_path=log_path)
 
 
@@ -237,7 +237,7 @@ def test_apply_propagation_invalid_transition_logs_normalized_reason(tmp_path: P
     engine = _engine(ctx, tmp_path=tmp_path)
     engine.apply_propagation("p-1", "cancelled", "s-1", "done", {})
 
-    log_path = tmp_path / ".audiagentic" / "planning" / "meta" / "propagation_log.jsonl"
+    log_path = tmp_path / ".audiagentic" / "workflow" / "meta" / "propagation_log.jsonl"
     entries = [
         json.loads(line)
         for line in log_path.read_text(encoding="utf-8").splitlines()
@@ -345,4 +345,3 @@ def test_apply_propagation_increments_depth_in_metadata() -> None:
     engine = _engine(ctx)
     engine.apply_propagation("p-1", "done", "t-1", "done", {"propagation_depth": 1})
     assert captured[0]["propagation_depth"] == 2
-
