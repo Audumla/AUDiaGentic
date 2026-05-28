@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from audiagentic.components.optional.coding_lsp.mcp_server import _parse_position
 
 

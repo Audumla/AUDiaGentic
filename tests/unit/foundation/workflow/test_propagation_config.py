@@ -76,18 +76,16 @@ def test_bind_callables_already_callable_unchanged() -> None:
     assert config["rules"]["x"]["logic"] is sentinel
 
 
-def test_bind_callables_invalid_path_installs_fallback(caplog) -> None:
+def test_bind_callables_invalid_path_raises() -> None:
     config = {"rules": {"bad": {"logic": "audiagentic.does.not.exist.fn"}}}
-    with caplog.at_level("WARNING"):
+    with pytest.raises(ValueError, match="Failed to load rules bad"):
         bind_callables(config)
-    assert callable(config["rules"]["bad"]["logic"])
-    assert config["rules"]["bad"]["logic"]() is False
 
 
-def test_bind_callables_invalid_action_installs_empty_list_fallback() -> None:
+def test_bind_callables_invalid_action_raises() -> None:
     config = {"actions": {"bad": {"logic": "audiagentic.does.not.exist.fn"}}}
-    bind_callables(config)
-    assert config["actions"]["bad"]["logic"]() == []
+    with pytest.raises(ValueError, match="Failed to load actions bad"):
+        bind_callables(config)
 
 
 def test_bind_callables_no_logic_key_unchanged() -> None:
