@@ -7,6 +7,7 @@ ID format: ``{prefix}-{n}`` where n is a raw integer with no zero-padding.
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from pathlib import Path
@@ -40,19 +41,7 @@ def _next_id_config_mode(counter_path: Path, id_prefix: str) -> str:
     lock_file = counter_path.parent / f"{counter_path.stem}.lock"
 
     with _process_lock:
-        deadline = time.monotonic() + _LOCK_TIMEOUT
-        while True:
-            try:
-                lock_file.touch(exist_ok=False)
-                break
-            except FileExistsError:
-                if time.monotonic() > deadline:
-                    raise TimeoutError(
-                        f"Could not acquire ID lock for {id_prefix!r} within {_LOCK_TIMEOUT:.0f}s"
-                    )
-                time.sleep(_LOCK_POLL)
-
-        try:
+        with _IdLock(lock_file, timeout=_LOCK_TIMEOUT):
             if counter_path.exists():
                 try:
                     data = json.loads(counter_path.read_text(encoding="utf-8"))
@@ -65,7 +54,55 @@ def _next_id_config_mode(counter_path: Path, id_prefix: str) -> str:
             n += 1
             counter_path.write_text(json.dumps({"counter": n}, indent=2), encoding="utf-8")
 
-        finally:
-            lock_file.unlink(missing_ok=True)
-
     return _format_id(id_prefix, n)
+
+
+class _IdLock:
+    """Atomic PID lock for workflow counter files."""
+
+    def __init__(self, path: Path, timeout: float) -> None:
+        self._path = path
+        self._timeout = timeout
+        self._fd: int | None = None
+
+    def __enter__(self) -> _IdLock:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        deadline = time.monotonic() + self._timeout
+        while time.monotonic() < deadline:
+            try:
+                self._fd = os.open(str(self._path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(self._fd, str(os.getpid()).encode())
+                return self
+            except FileExistsError:
+                if self._clear_if_stale():
+                    continue
+                time.sleep(_LOCK_POLL)
+        raise TimeoutError(f"Could not acquire ID lock: {self._path}")
+
+    def __exit__(self, *_: object) -> None:
+        if self._fd is not None:
+            try:
+                os.close(self._fd)
+            except OSError:
+                pass
+            self._fd = None
+        self._path.unlink(missing_ok=True)
+
+    def _clear_if_stale(self) -> bool:
+        try:
+            holder = int(self._path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            self._path.unlink(missing_ok=True)
+            return True
+        if _pid_alive(holder):
+            return False
+        self._path.unlink(missing_ok=True)
+        return True
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False

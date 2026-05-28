@@ -1,233 +1,146 @@
 # foundation/workflow/
 
-Generic workflow infrastructure for state machines, config-driven state propagation, lifecycle actions, and item management. Used by planning and other workflow-driven components.
+Generic workflow infrastructure for resource lifecycle state machines,
+config-driven state propagation, lifecycle actions, relationship handling, and
+item creation templates.
 
 ## Purpose
 
-The workflow layer provides the engine that drives planning item lifecycles: state transitions, propagation rules, lifecycle actions, frontmatter assembly, and relationship management. All behavior is **config-driven** — no hardcoded state names, transitions, or propagation rules in the code.
+The workflow layer provides reusable lifecycle mechanics for any host component
+that manages stateful resources. The host owns storage, configuration, event
+subscription, and side effects. The workflow package only validates transitions,
+calculates related state changes, and delegates reads/writes/events through
+protocol interfaces.
 
-**Key design principle:** The workflow engine is passive infrastructure. It provides methods for calculating and applying changes, but does NOT subscribe to events or trigger actions automatically. The owner component (planning) registers event handlers that call these utilities.
+Core rule: workflow code has no dependency on any host component or concrete
+storage backend.
 
 ## Architecture
 
-```
-PlanningAPI (owner)
-    │
-    ├── StateMachine          ─→ validates transitions, applies lifecycle actions
-    ├── StatePropagationEngine ─→ calculates state propagations (passive, config-driven)
-    ├── WorkflowActionExecutor ─→ batch item creation via config templates
-    ├── FrontmatterBuilder    ─→ assembles frontmatter from config defaults
-    └── Relationships         ─→ rel_list management
-```
-
-## Components
-
-### StateMachine (`state_machine.py`)
-
-Config-driven state transition engine. Validates transitions against configured workflows, applies lifecycle actions, tracks state history, and emits events.
-
-- `state(id_, new_state, reason, actor, metadata)` — transition an item to a new state
-  - Validates against workflow config
-  - Applies lifecycle action metadata
-  - Publishes `planning.item.state.changed` event (SYNC)
-  - Triggers cascade rules if configured
-  - Rebuilds index
-- `apply_action(name, id_, reason, actor, metadata)` — apply a named lifecycle action (e.g., `archive`, `supersede`)
-- `apply_metadata(data, event_payload, metadata_rules, timestamp, actor, reason)` — apply lifecycle action metadata tokens
-- `cascade(id_, kind, action, actor, reason)` — cascade state changes to related items
-- `is_terminal(id_)` — check if item is in a terminal state
-
-**Lifecycle metadata tokens:** `{now}`, `{actor}`, `{actor_or_system}`, `{reason}`, `{reason_or_empty}`, `{null}`
-
-### StatePropagationEngine (`propagation.py`)
-
-Config-driven state propagation engine. **This is a passive utility** — it calculates propagations but does NOT subscribe to events. The owner component (planning) registers event handlers and calls `propagate()` / `apply_propagation()`.
-
-**Usage pattern:**
-```python
-# In planning component __init__:
-self._propagation_engine = StatePropagationEngine(
-    ctx=self,
-    config_path=self.root / ".audiagentic" / "planning" / "config" / "state_propagation.yaml",
-)
-
-# Register event handler:
-self._bus.subscribe("planning.item.state.changed", self._on_state_change)
-
-# In _on_state_change handler:
-propagations = self._propagation_engine.propagate(item_id, new_state)
-for target_id, target_kind, target_state in propagations:
-    self._propagation_engine.apply_propagation(
-        target_id=target_id,
-        target_state=target_state,
-        source_id=item_id,
-        source_state=new_state,
-        metadata=metadata,
-    )
+```text
+Host component
+    |
+    +-- StateMachine             -> validates transitions and lifecycle actions
+    +-- StatePropagationEngine   -> calculates passive parent/child propagation
+    +-- WorkflowActionExecutor   -> creates related resources from templates
+    +-- FrontmatterBuilder       -> assembles item metadata from config defaults
+    +-- Relationships            -> manages reference-list values
 ```
 
-**Key methods:**
-- `propagate(item_id, new_state, metadata)` — returns list of `(target_id, target_kind, target_state)` tuples
-- `apply_propagation(target_id, target_state, source_id, source_state, metadata)` — applies a propagation via the planning API
-- `validate_hierarchy(item_id)` — validates state consistency for an item and its hierarchy
-- `heal_hierarchy(item_id, auto_fix)` — attempts to fix state inconsistencies
-- `load_workflow_config()` — loads propagation config from YAML
+## StateMachine
 
-**Propagation config structure:**
-```yaml
-global:
-  enabled: true
-  max_depth: 10
+`state_machine.py` validates state transitions against host-provided workflow
+config, applies lifecycle metadata, persists through the host context, publishes
+the configured state-change event, and applies immediate lifecycle cascades.
 
-kinds:
-  task:
-    enabled: true
-    parent_kind: wp
-    parent_field: task_refs
-    state_rules:
-      done:
-        rule: all_children_in_set
-        new_state: done
-        when:
-          state_set: complete
-        actions:
-          - action: complete_parent
-            required_state_set: complete
-            parent_field: wp_ref
-            target_state: done
-            parent_blocking_set: terminal
+Key methods:
 
-rules:
-  all_children_in_set:
-    enabled: true
-    logic: audiagentic.foundation.workflow.propagation.rules.rule_all_children_in_set
+- `state(id_, new_state, reason, actor, metadata)` transitions one resource.
+- `apply_action(name, id_, reason, actor, metadata)` applies a named lifecycle action.
+- `is_terminal(id_)` checks membership in the configured `terminal` state set.
 
-actions:
-  complete_parent:
-    enabled: true
-    logic: audiagentic.foundation.workflow.propagation.rules.action_complete_parent
+Lifecycle metadata tokens:
 
-healing:
-  auto_fix: false
-  log_only: true
-```
+- `now`
+- `actor`
+- `actor_or_system`
+- `reason`
+- `reason_or_empty`
+- `null`
 
-### Propagation Rules (`propagation/rules.py`)
+Immediate cascade is relationship-scoped. A lifecycle action can cascade from a
+source kind to related target kinds, but targets are resolved only through
+configured reference fields.
 
-Configurable rule implementations referenced by name in propagation config:
+## StatePropagationEngine
 
-- **rule_none** — no propagation
-- **rule_parent_in_set** — propagate when parent state is in a configured semantic set
-- **rule_all_children_in_set** — propagate when all sibling children are in a configured semantic set
-- **rule_parent_not_in_set** — propagate when parent state is NOT in a configured semantic set
-- **action_complete_parent** — complete parent when all children are in the required state set
+`propagation/engine.py` is a passive propagation utility. It does not subscribe
+to events. A host calls `propagate()` after a state change, then applies returned
+transitions with `apply_propagation()`.
 
-All rules operate on **semantic state sets** (e.g., `complete`, `active`, `terminal`), not hardcoded state names.
+Key methods:
 
-### WorkflowActionExecutor (`actions.py`)
+- `propagate(item_id, new_state, metadata)` returns target transition tuples.
+- `apply_propagation(target_id, target_state, source_id, source_state, metadata)` applies one propagation.
+- `validate_hierarchy(item_id)` validates parent/child state consistency.
+- `heal_hierarchy(item_id, auto_fix)` suggests or applies safe consistency fixes.
 
-Generic executor for config-driven workflow actions. Creates items in batches based on config templates with placeholder rendering.
+Propagation rules use semantic state sets such as `initial`, `active`,
+`blocked`, `complete`, and `terminal`, not hardcoded state names.
 
-- `execute(action_name, context)` — execute a workflow action (creates items, applies updates)
-- `render(value, context)` — render `{placeholder}` templates against context dict
+## Rules
 
-**Placeholder rules:**
-- Single placeholder (`{key}`) returns the original typed value
-- Mixed text uses `str.format(**context)`
-- Lists and dicts render recursively
-- Unknown placeholder raises `ValueError`
+`propagation/rules.py` contains built-in generic rule functions:
 
-### FrontmatterBuilder (`frontmatter.py`)
+- `rule_none`
+- `rule_parent_in_set`
+- `rule_parent_not_in_set`
+- `rule_all_children_in_set`
+- `action_complete_parent`
 
-Assembles frontmatter dicts from config defaults and provided values. Handles reference field coercion, seeded references, and creation extra fields.
+Rules receive the engine plus IDs/config and operate only through workflow
+interfaces.
 
-- `build(kind, id_, label, summary, ...)` — returns complete frontmatter dict
-- `_coerce_reference_value(field, value)` — coerces values to match field shape (scalar_ref, scalar_ref_list, rel_list)
+## WorkflowActionExecutor
 
-### Relationships (`rel.py`)
+`actions.py` executes config-defined creation/update templates.
 
-Utility for managing `rel_list` reference fields (lists of `{ref, seq, display}` dicts).
+- `execute(action_name, context)` creates related resources and applies updates.
+- `render(value, context)` renders placeholders recursively.
 
-- `ensure_rel_list(current, ref, seq, display)` — adds or updates a reference, maintains sort order by `seq` then `ref`
+Placeholder behavior:
 
-### ID Generation (`id_gen.py`)
+- `{key}` returns the original typed value.
+- Mixed text uses `str.format(**context)`.
+- Unknown placeholders raise `ValueError`.
 
-Thread-safe, process-safe sequential ID generation with file-based locking.
+## FrontmatterBuilder
 
-- `next_id(counter_path, id_prefix)` — returns next ID (e.g., `request-1`, `task-42`)
-- Uses `.lock` files for process safety
-- IDs are raw integers, no zero-padding
+`frontmatter.py` assembles item metadata from host config defaults and provided
+values. It supports scalar refs, scalar ref lists, and relationship lists.
 
-### ItemView (`item.py`)
+This helper is item-metadata oriented. Hosts that do not use frontmatter can
+skip it and implement their own resource builder while still using the state and
+propagation engines.
 
-Neutral DTO for workflow items: `kind`, `path`, `data` (frontmatter dict), `body` (markdown body).
+## Relationships
 
-### Interfaces (`interfaces.py`)
+`rel.py` provides `Relationships.ensure_rel_list()` for list values shaped as
+`{"ref": "...", "seq": ..., "display": "..."}`.
 
-Protocol definitions for the workflow engine's dependencies:
+## ID Generation
 
-- **WorkflowConfig** — config methods the engine needs: `initial_state()`, `workflow_for()`, `state_in_set()`, `lifecycle_action()`, `reference_fields()`, etc.
-- **WorkflowContext** — runtime operations: `lookup()`, `_scan()`, `_find()`, `_publish_event()`, `new()`, `relink()`, `index()`
-- **WorkflowItemAPI** (in `propagation/api.py`) — minimal interface for propagation engine: `lookup()`, `state()`, `_scan()`
+`id_gen.py` provides `next_id(counter_path, id_prefix)` for file-backed,
+process-safe sequential IDs. Hosts with database or service-assigned IDs can
+ignore this helper.
 
-### Utilities (`util.py`)
+## Interfaces
 
-- `slugify(s)` — lowercase, alphanumeric, hyphen-separated
-- `now_iso()` — UTC ISO 8601 timestamp
-- `body_has_section(body, section)` — checks for `# section` or `## section` in markdown body
+`interfaces.py` defines the host contracts:
 
-## Semantic State Sets
-
-The propagation engine uses semantic state sets defined in workflow config, not hardcoded state names. Common sets:
-
-- **initial** — starting states (e.g., `draft`, `captured`)
-- **active** — work-in-progress states (e.g., `ready`, `in_progress`, `review`)
-- **blocked** — impeded states (e.g., `blocked`)
-- **complete** — successfully finished (e.g., `done`, `verified`)
-- **terminal** — end states, no further transitions (e.g., `done`, `cancelled`, `archived`, `superseded`)
-- **closed** — all terminal states
-
-State priority is numeric; propagation only upgrades (higher priority), never downgrades.
-
-## Config-Driven Design
-
-All workflow behavior is driven by configuration files:
-
-1. **Workflow definitions** — states, transitions, state sets (in planning config)
-2. **Lifecycle actions** — metadata, events, cascades (in planning config)
-3. **Propagation rules** — which states propagate, to which parents (in `state_propagation.yaml`)
-4. **Workflow actions** — batch creation templates (in planning config)
-
-No state names, transitions, or propagation rules are hardcoded in the code. Adding a new workflow requires only config changes, not code changes.
-
-## Standard References
-
-- **standard-10** (Component architecture standard) — requirements 11-19 cover config-driven design, no hardcoded values, pluggable rule implementations, and passive utilities
-- **standard-12** (Event subscription configuration standard) — event type conventions and handler patterns used by workflow events
+- `WorkflowConfig` supplies states, transitions, semantic state sets, lifecycle
+  actions, event type, and reference metadata.
+- `WorkflowContext` supplies lookup/scan/find, save, event publishing, creation,
+  relinking, state transition, and index refresh.
+- `propagation/api.py` defines the smaller `WorkflowItemAPI` protocol used by
+  propagation.
 
 ## File Map
 
 | File | Responsibility |
 |------|----------------|
-| `state_machine.py` | State transitions, lifecycle actions, cascade, metadata tokens |
-| `propagation/engine.py` | StatePropagationEngine — orchestration of `propagate()` / `apply_propagation()` |
-| `propagation/config.py` | YAML loader, validator, dotted-path callable importer |
-| `propagation/parents.py` | Direct + reverse parent/child ref resolution (`extract_ref_ids` lives in `util.py`) |
-| `propagation/rules.py` | Configurable rule and action implementations |
-| `propagation/healing.py` | `validate_hierarchy`, `heal_hierarchy` |
-| `propagation/log.py` | Propagation attempt audit log |
-| `propagation/api.py` | `WorkflowItemAPI` protocol (minimal host interface) |
-| `actions.py` | WorkflowActionExecutor — batch item creation with placeholder rendering |
-| `frontmatter.py` | FrontmatterBuilder — assembles frontmatter from config defaults |
-| `rel.py` | Relationships — rel_list management |
-| `id_gen.py` | Thread-safe sequential ID generation with file locking |
-| `item.py` | ItemView DTO |
-| `interfaces.py` | WorkflowConfig, WorkflowContext protocols |
-| `util.py` | `slugify`, `now_iso`, `body_has_section`, `extract_ref_ids` |
-
-### Host coupling
-
-The engine never reads or writes item files directly. The host's
-`WorkflowContext` supplies `_find` / `lookup` / `_scan` for reads, `save(item)`
-for writes, and `_publish_event` for events. The package has no dependency on
-any concrete host module.
+| `state_machine.py` | State transitions, lifecycle actions, immediate cascades |
+| `propagation/engine.py` | Passive state propagation orchestration |
+| `propagation/config.py` | YAML loader, validator, callable resolver |
+| `propagation/parents.py` | Parent/child reference resolution |
+| `propagation/rules.py` | Built-in propagation rules and actions |
+| `propagation/healing.py` | Hierarchy validation and opt-in healing |
+| `propagation/log.py` | Structured propagation audit log |
+| `propagation/api.py` | Minimal propagation host protocol |
+| `actions.py` | Template-driven workflow action executor |
+| `frontmatter.py` | Metadata/frontmatter builder helper |
+| `rel.py` | Relationship-list helper |
+| `id_gen.py` | File-backed sequential ID generation |
+| `item.py` | `ItemView` DTO |
+| `interfaces.py` | Workflow host protocols |
+| `util.py` | Small generic helpers |
