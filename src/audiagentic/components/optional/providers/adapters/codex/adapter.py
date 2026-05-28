@@ -6,12 +6,14 @@ import json
 import logging
 import os
 import re
-import shutil
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.optional.providers.adapters.cli import require_executable
+from audiagentic.components.optional.providers.protocols.streaming.base_extractor import (
+    BaseEventExtractor,
+)
 from audiagentic.components.optional.providers.protocols.streaming.completion import (
     NormalizationMethod,
     ResultSource,
@@ -21,120 +23,36 @@ from audiagentic.components.optional.providers.protocols.streaming.completion im
     try_extract_json_from_stdout,
 )
 from audiagentic.components.optional.providers.protocols.streaming.provider_streaming import (
-    build_provider_stream_sinks,
+    build_extractor_stream_sinks,
     run_streaming_command,
-)
-from audiagentic.components.optional.providers.protocols.streaming.sinks import (
-    NormalizedEventSink,
-    StreamSink,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 logger = logging.getLogger(__name__)
 
 
-class CodexEventExtractor:
-    """Extract Codex milestone events from stream output.
+class CodexEventExtractor(BaseEventExtractor):
+    """Parse Codex milestone lines into canonical provider-stream-event records."""
 
-    This sink parses Codex wrapper milestone lines and translates them into
-    canonical provider-stream-event records before forwarding to NormalizedEventSink.
-    """
+    extractor_name = "codex-milestone"
 
-    # Patterns for Codex milestone lines
     MILESTONE_PATTERNS = {
-        "task-start": re.compile(
-            r"^\[MILESTONE\]\s*task-start:\s*(.+)$", re.IGNORECASE
-        ),
-        "task-progress": re.compile(
-            r"^\[MILESTONE\]\s*task-progress:\s*(.+)$", re.IGNORECASE
-        ),
-        "task-complete": re.compile(
-            r"^\[MILESTONE\]\s*task-complete:\s*(.+)$", re.IGNORECASE
-        ),
+        "task-start": re.compile(r"^\[MILESTONE\]\s*task-start:\s*(.+)$", re.IGNORECASE),
+        "task-progress": re.compile(r"^\[MILESTONE\]\s*task-progress:\s*(.+)$", re.IGNORECASE),
+        "task-complete": re.compile(r"^\[MILESTONE\]\s*task-complete:\s*(.+)$", re.IGNORECASE),
         "error": re.compile(r"^\[ERROR\]\s*(.+)$", re.IGNORECASE),
     }
 
-    def __init__(
-        self,
-        event_sink: NormalizedEventSink,
-        job_id: str | None = None,
-        provider_id: str = "codex",
-    ) -> None:
-        self.event_sink = event_sink
-        self.job_id = job_id
-        self.provider_id = provider_id
-
     def write(self, line: str) -> None:
-        """Process a line and extract Codex events."""
         text = line.rstrip("\r\n")
         if not text:
             return
-
-        # Check for milestone patterns
         for event_kind, pattern in self.MILESTONE_PATTERNS.items():
             match = pattern.match(text)
             if match:
-                message = match.group(1).strip()
-                self._emit_event(event_kind, message)
+                self._emit_event(event_kind, match.group(1).strip())
                 return
-
-        # Pass through non-milestone lines as task-progress
         self._emit_event("task-progress", text)
-
-    def _emit_event(self, event_kind: str, message: str) -> None:
-        """Emit a canonical event through the underlying sink."""
-        self.event_sink.write_event(
-            {
-                "contract-version": "v1",
-                "job-id": self.job_id,
-                "provider-id": self.provider_id,
-                "event-kind": event_kind,
-                "message": message,
-                "timestamp": _utc_now(),
-                "details": {"extractor": "codex-milestone"},
-            }
-        )
-
-    def flush(self) -> None:
-        self.event_sink.flush()
-
-    def close(self) -> None:
-        self.event_sink.close()
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def build_codex_stream_sinks(
-    *,
-    packet_ctx: dict[str, Any],
-    stream_controls: dict[str, Any] | None = None,
-) -> tuple[list[StreamSink], list[StreamSink]]:
-    """Build Codex-specific stream sinks with event extraction.
-
-    This adds CodexEventExtractor on top of the standard sinks to parse
-    Codex milestone lines into canonical events.
-    """
-    # Build base sinks
-    stdout_sinks, stderr_sinks = build_provider_stream_sinks(
-        packet_ctx=packet_ctx,
-        stream_controls=stream_controls,
-    )
-
-    # Find the NormalizedEventSink for stdout and wrap it with CodexEventExtractor
-    job_id = packet_ctx.get("job-id")
-    for i, sink in enumerate(stdout_sinks):
-        if isinstance(sink, NormalizedEventSink):
-            # Replace with CodexEventExtractor that wraps the original sink
-            stdout_sinks[i] = CodexEventExtractor(
-                event_sink=sink,
-                job_id=job_id,
-                provider_id="codex",
-            )
-            break
-
-    return stdout_sinks, stderr_sinks
 
 
 def _find_packet_doc(working_root: str | None, packet_id: str | None) -> Path | None:
@@ -152,8 +70,7 @@ def _find_packet_doc(working_root: str | None, packet_id: str | None) -> Path | 
 
 def _packet_doc_excerpt(path: Path, *, max_lines: int = 80) -> str:
     lines = path.read_text(encoding="utf-8").splitlines()
-    excerpt = lines[:max_lines]
-    return "\n".join(excerpt).strip()
+    return "\n".join(lines[:max_lines]).strip()
 
 
 def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> str:
@@ -192,12 +109,6 @@ def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> s
 def _parse_codex_completion(
     last_message: str, stdout: str, stderr: str, returncode: int
 ) -> tuple[dict[str, Any] | None, ResultSource]:
-    """Parse Codex completion from last message or stdout.
-
-    Returns:
-        tuple[dict[str, Any] | None, ResultSource]: (parsed_data, source)
-    """
-    # Try to parse last_message as JSON
     if last_message:
         try:
             data = json.loads(last_message)
@@ -208,7 +119,6 @@ def _parse_codex_completion(
         except json.JSONDecodeError:
             pass
 
-    # Try to parse stdout as JSON
     if stdout:
         try:
             data = json.loads(stdout)
@@ -219,7 +129,6 @@ def _parse_codex_completion(
         except json.JSONDecodeError:
             pass
 
-    # Try to extract JSON block from stdout
     extracted = try_extract_json_from_stdout(stdout)
     if extracted:
         if "kind" not in extracted:
@@ -229,20 +138,8 @@ def _parse_codex_completion(
     return None, ResultSource.STDOUT_TEXT
 
 
-def _codex_executable() -> str:
-    executable = shutil.which("codex")
-    if executable is None:
-        raise AudiaGenticError(
-            code="PRV-EXTERNAL-001",
-            kind="external",
-            message="codex command is not available on PATH",
-            details={"provider-id": "codex"},
-        )
-    return executable
-
-
 def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, Any]:
-    executable = _codex_executable()
+    executable = require_executable("codex", "codex")
     prompt = _build_prompt(packet_ctx, provider_cfg)
     default_model = provider_cfg.get("default-model")
     working_root = packet_ctx.get("working-root")
@@ -252,9 +149,7 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
     ephemeral = bool(execution_policy.get("ephemeral", True))
     full_auto = bool(execution_policy.get("full-auto", True))
 
-    fd, last_message_path = tempfile.mkstemp(
-        prefix="codex-last-message-", suffix=".txt"
-    )
+    fd, last_message_path = tempfile.mkstemp(prefix="codex-last-message-", suffix=".txt")
     os.close(fd)
     output_path = Path(last_message_path)
     command = [
@@ -273,7 +168,8 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
     command.append(prompt)
 
     stream_controls = packet_ctx.get("stream-controls", {})
-    stdout_sinks, stderr_sinks = build_codex_stream_sinks(
+    stdout_sinks, stderr_sinks = build_extractor_stream_sinks(
+        CodexEventExtractor,
         packet_ctx=packet_ctx,
         stream_controls=stream_controls,
     )
@@ -314,12 +210,10 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
     stderr_text = (completed.stderr or "").strip()
     output_text = last_message or stdout_text
 
-    # Parse structured completion
     parsed_data, result_source = _parse_codex_completion(
         last_message, stdout_text, stderr_text, completed.returncode
     )
 
-    # Build canonical completion
     if parsed_data and result_source != ResultSource.STDOUT_TEXT:
         completion = normalize_provider_result(
             provider_id="codex",
@@ -343,7 +237,6 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
             returncode=completed.returncode,
         )
 
-    # Persist completion
     working_root_path = Path(working_root) if working_root else None
     if working_root_path and packet_ctx.get("job-id"):
         try:
