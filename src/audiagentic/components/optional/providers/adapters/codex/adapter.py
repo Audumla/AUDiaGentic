@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -28,6 +29,8 @@ from audiagentic.components.optional.providers.protocols.streaming.sinks import 
     StreamSink,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+logger = logging.getLogger(__name__)
 
 
 class CodexEventExtractor:
@@ -346,7 +349,7 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
         try:
             persist_completion(working_root_path, packet_ctx.get("job-id"), completion)
         except AudiaGenticError:
-            pass
+            logger.warning("Failed to persist completion", exc_info=True)
 
     return {
         "provider-id": packet_ctx.get("provider-id", "codex"),

@@ -1,8 +1,11 @@
 """Ledger archive — merge current release into historical ledger and reset current."""
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_ndjson, atomic_write_text, load_ndjson
@@ -23,7 +26,8 @@ def _purge_fragments(project_root: Path, event_ids: set[str]) -> int:
         try:
             import json as _json
             eid = _json.loads(path.read_text(encoding="utf-8")).get("event-id")
-        except Exception:  # noqa: BLE001
+        except Exception:
+            logger.warning("Failed to parse fragment %s", path, exc_info=True)
             eid = path.stem
         if eid in event_ids:
             path.unlink()

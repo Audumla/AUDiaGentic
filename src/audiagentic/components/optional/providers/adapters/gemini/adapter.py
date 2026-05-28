@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,8 @@ from audiagentic.components.optional.providers.protocols.streaming.sinks import 
     StreamSink,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+logger = logging.getLogger(__name__)
 
 
 class GeminiEventExtractor:
@@ -173,7 +176,7 @@ def _handle_prompt_tags(
             return request.get("prompt-body", "").strip(), result.get("job-id")
     except AudiaGenticError:
         # If parsing fails, we let it pass through to the provider unless it's a hard error
-        pass
+        logger.warning("Prompt tag parsing failed, proceeding with original prompt", exc_info=True)
 
     return None, None
 
@@ -333,8 +336,8 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
     if working_root_path and packet_ctx.get("job-id"):
         try:
             persist_completion(working_root_path, packet_ctx.get("job-id"), completion)
-        except AudiaGenticError:
-            pass
+        except AudiaGenticError as exc:
+            logger.warning("Failed to persist completion: %s", exc)
 
     return {
         "provider-id": packet_ctx.get("provider-id", "gemini"),
