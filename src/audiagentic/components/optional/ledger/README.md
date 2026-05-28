@@ -28,10 +28,6 @@ Governs the release lifecycle:
 - **current_summary.py**: Release summary generation
 - **bootstrap.py**: Release workflow initialization
 
-## Boundary with execution/jobs/
-
-`execution/jobs/release_bridge.py` publishes job completion events to the release ledger via `record_change_event()`. This is a one-way bridge (execution → release).
-
 ## Must not own
 
 - Job orchestration

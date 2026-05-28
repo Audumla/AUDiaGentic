@@ -12,6 +12,7 @@ from audiagentic.components.optional.release.release_please import manage as _rp
 from audiagentic.components.optional.release.release_please.finalize import render_release_docs
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import load_ndjson
+from audiagentic.runtime.lifecycle.components import DEFAULT_VERSION
 
 
 def get_status(project_root: Path) -> dict[str, Any]:
@@ -24,7 +25,7 @@ def install(
     release_type: str = "python",
     branch: str = "main",
     python_version: str = "3.13",
-    initial_version: str = "0.1.0",
+    initial_version: str = DEFAULT_VERSION,
 ) -> dict[str, Any]:
     """Install release-please into the target project."""
     return _rp_install.install(project_root, release_type, branch, python_version, initial_version)

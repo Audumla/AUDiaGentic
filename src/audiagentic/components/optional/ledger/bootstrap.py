@@ -12,6 +12,7 @@ from audiagentic.foundation.components.ids import COMPONENT_PROJECT
 from audiagentic.paths import REPO_ROOT
 from audiagentic.runtime.config import load_yaml_file, save_yaml_file
 from audiagentic.runtime.lifecycle.baseline_sync import ensure_project_layout, sync_managed_baseline
+from audiagentic.runtime.lifecycle.components import DEFAULT_VERSION
 from audiagentic.runtime.lifecycle.detector import detect_installed_state
 
 
@@ -41,7 +42,7 @@ def bootstrap_ledger(project_root: Path) -> dict[str, Any]:
         "installation-kind": "fresh" if current_marker is None else "update",
         "installed-at": (current_marker or {}).get("installed-at", now),
         "last-lifecycle-action": "ledger-bootstrap",
-        "version": (current_marker or {}).get("version") or "0.1.0",
+        "version": (current_marker or {}).get("version") or DEFAULT_VERSION,
     }
     save_yaml_file(marker_path, updated_marker, sort_keys=True)
 

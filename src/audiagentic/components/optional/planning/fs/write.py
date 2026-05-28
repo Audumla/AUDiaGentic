@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import tempfile
 from pathlib import Path
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 def dump_markdown(path: Path, data: dict, body: str) -> None:
@@ -26,6 +29,7 @@ def dump_markdown(path: Path, data: dict, body: str) -> None:
         # Atomic rename (same filesystem)
         shutil.move(tmp_path, str(path))
     except Exception:
+        logger.warning("Failed to write %s", path, exc_info=True)
         # Clean up temp file on failure
         if Path(tmp_path).exists():
             Path(tmp_path).unlink(missing_ok=True)

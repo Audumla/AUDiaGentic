@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from audiagentic.foundation.workflow import next_id
+
+logger = logging.getLogger(__name__)
 
 from ...fs.write import dump_markdown
 
@@ -344,6 +347,7 @@ class ItemCreatorService:
             )
             self.api.update_content(id_, content)
         except Exception:
+            logger.warning("Failed to create item %s", id_, exc_info=True)
             if "path" in locals() and Path(path).exists():
                 Path(path).unlink(missing_ok=True)
             raise

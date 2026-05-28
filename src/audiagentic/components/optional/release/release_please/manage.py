@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from audiagentic.foundation.io import atomic_write_text
 
@@ -68,7 +71,7 @@ def status(project_root: Path) -> dict[str, Any]:
         try:
             manifest_version = json.loads(manifest_path.read_text(encoding="utf-8")).get(".")
         except Exception:
-            pass
+            logger.warning("Failed to read release manifest", exc_info=True)
 
     config_release_type: str | None = None
     config_path = project_root / "release-please-config.json"
@@ -77,7 +80,7 @@ def status(project_root: Path) -> dict[str, Any]:
             cfg = json.loads(config_path.read_text(encoding="utf-8"))
             config_release_type = cfg.get("release-type") or cfg.get("packages", {}).get(".", {}).get("release-type")
         except Exception:
-            pass
+            logger.warning("Failed to read release config", exc_info=True)
 
     return {
         "installed": all(v == "present" for v in files.values()),
