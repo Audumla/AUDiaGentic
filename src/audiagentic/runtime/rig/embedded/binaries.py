@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import shutil
 import subprocess
@@ -12,6 +13,8 @@ import urllib.request
 import zipfile
 from pathlib import Path
 from typing import NamedTuple
+
+logger = logging.getLogger(__name__)
 
 from audiagentic.foundation.system.process import executable_command
 
@@ -70,7 +73,7 @@ def _find_asset_for_platform(release: dict, plat: str) -> ReleaseInfo | None:
                     if sha_match:
                         sha256 = sha_match.group(0)
                 except Exception:
-                    pass
+                    logger.warning("Failed to read SHA256 for %s", sha_name)
 
             return ReleaseInfo(
                 tag=tag,
