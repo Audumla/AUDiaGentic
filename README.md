@@ -34,6 +34,10 @@ The build-status registry is the live operational starting point for all work.
 
 ## Validation and Maintenance
 
+Primary test environment guide:
+
+- `docs/testing/TEST_ENVIRONMENT.md`
+
 ### Docker Test Path
 
 Use the existing Docker base image as the normal test path. Do not rebuild test

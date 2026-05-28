@@ -1,0 +1,13 @@
+{
+  "theme": "dark",
+  "extensions": [
+    "extensions/footer.ts",
+    "extensions/follow_up_actions.ts"
+  ],
+  "quietStartup": true,
+  "collapseChangelog": true,
+  "hideThinkingBlock": true,
+  "defaultThinkingLevel": "False",
+  "editorPaddingX": 0,
+  "audiagenticHideToolUse": true
+}
