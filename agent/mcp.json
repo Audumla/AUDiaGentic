@@ -1,0 +1,108 @@
+{
+  "settings": {
+    "toolPrefix": "mcp",
+    "idleTimeout": 10,
+    "directTools": true
+  },
+  "mcpServers": {
+    "audiagentic-project": {
+      "command": "C:/example-home/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
+      "args": [
+        "-m",
+        "audiagentic.components.core.project_server"
+      ],
+      "lifecycle": "lazy",
+      "env": {
+        "PYTHONPATH": "C:/example-dev-root/audiagentic/src"
+      }
+    },
+    "audiagentic-session": {
+      "command": "C:/example-home/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
+      "args": [
+        "-m",
+        "audiagentic.components.core.session_server",
+        "--readonly",
+        "--smoke-only"
+      ],
+      "lifecycle": "lazy",
+      "env": {
+        "PYTHONPATH": "C:/example-dev-root/audiagentic/src"
+      }
+    },
+    "audiagentic-ledger-write": {
+      "command": "C:/example-home/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
+      "args": [
+        "-m",
+        "audiagentic.components.optional.ledger.ledger_write_mcp"
+      ],
+      "lifecycle": "lazy",
+      "env": {
+        "PYTHONPATH": "C:/example-dev-root/audiagentic/src"
+      }
+    },
+    "audiagentic-ledger-admin": {
+      "command": "C:/example-home/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
+      "args": [
+        "-m",
+        "audiagentic.components.optional.ledger.ledger_admin_mcp"
+      ],
+      "lifecycle": "lazy",
+      "env": {
+        "PYTHONPATH": "C:/example-dev-root/audiagentic/src"
+      }
+    },
+    "lsp-mcp": {
+      "command": "C:/example-home/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
+      "args": [
+        "-m",
+        "audiagentic.components.optional.coding_lsp.mcp_server"
+      ],
+      "lifecycle": "lazy",
+      "env": {
+        "PYTHONPATH": "C:/example-dev-root/audiagentic/src"
+      }
+    },
+    "audiagentic-providers": {
+      "command": "C:/example-home/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
+      "args": [
+        "-m",
+        "audiagentic.components.optional.providers.server"
+      ],
+      "lifecycle": "lazy",
+      "env": {
+        "PYTHONPATH": "C:/example-dev-root/audiagentic/src"
+      }
+    },
+    "audiagentic-source-control": {
+      "command": "C:/example-home/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
+      "args": [
+        "-m",
+        "audiagentic.components.optional.source_control.source_control_admin_mcp"
+      ],
+      "lifecycle": "lazy",
+      "env": {
+        "PYTHONPATH": "C:/example-dev-root/audiagentic/src"
+      }
+    },
+    "git": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-git",
+        "--repository",
+        "."
+      ],
+      "lifecycle": "lazy"
+    },
+    "github": {
+      "command": "gh",
+      "args": [
+        "mcp",
+        "serve"
+      ],
+      "lifecycle": "lazy",
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    }
+  }
+}
