@@ -7,10 +7,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Iterable
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from .config import KnowledgeConfig
 from .diffing import normalize_text, summarize_structured_change, unified_diff_excerpt
@@ -447,6 +450,7 @@ def _find_existing_event_proposal(
 
             proposal = yaml.safe_load(proposal_path.read_text(encoding="utf-8")) or {}
         except Exception:
+            logger.warning("Failed to parse proposal %s", proposal_path, exc_info=True)
             continue
         if not isinstance(proposal, dict):
             continue

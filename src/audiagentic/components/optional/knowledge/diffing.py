@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import difflib
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_text(path: Path, text: str) -> str:
@@ -18,6 +21,7 @@ def normalize_text(path: Path, text: str) -> str:
             data = json.loads(text)
             return json.dumps(data, indent=2, sort_keys=True) + '\n'
     except Exception:
+        logger.warning("Failed to normalize %s", path, exc_info=True)
         return text
     return text
 
@@ -48,6 +52,7 @@ def _safe_yaml(text: str | None) -> Any:
     try:
         return yaml.safe_load(text or '')
     except Exception:
+        logger.warning("Failed to parse YAML", exc_info=True)
         return None
 
 
@@ -55,6 +60,7 @@ def _safe_json(text: str | None) -> Any:
     try:
         return json.loads(text or '')
     except Exception:
+        logger.warning("Failed to parse JSON", exc_info=True)
         return None
 
 

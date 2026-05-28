@@ -135,8 +135,8 @@ class FileEventStore:
 
                 events.append(envelope)
 
-            except Exception as e:
-                logger.warning("Failed to parse event file %s: %s", filepath, e)
+            except Exception:
+                logger.warning("Failed to parse event file %s", filepath, exc_info=True)
 
         # Sort by timestamp
         events.sort(key=lambda e: e.occurred_at)
@@ -194,7 +194,7 @@ class FileEventStore:
                 if filepath.stat().st_mtime < cutoff:
                     filepath.unlink()
                     removed += 1
-            except Exception as e:
-                logger.warning("Failed to remove old event file %s: %s", filepath, e)
+            except Exception:
+                logger.warning("Failed to remove old event file %s", filepath, exc_info=True)
 
         return removed

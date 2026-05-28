@@ -27,8 +27,8 @@ def load_config(path: Path | None) -> dict[str, Any]:
     try:
         with path.open(encoding="utf-8") as f:
             config = yaml.safe_load(f) or {}
-    except Exception as exc:
-        logger.error("Failed to load propagation config: %s. Propagation disabled.", exc)
+    except Exception:
+        logger.error("Failed to load propagation config. Propagation disabled.", exc_info=True)
         return {"global": {"enabled": False}}
 
     bind_callables(config)
@@ -37,7 +37,7 @@ def load_config(path: Path | None) -> dict[str, Any]:
 
 def bind_callables(config: dict[str, Any]) -> None:
     """Resolve ``logic:`` references on rules and actions into real callables."""
-    for section, fallback in (("rules", _false), ("actions", _empty_list)):
+    for section in ("rules", "actions"):
         entries = config.get(section, {})
         for name, entry in entries.items():
             logic = entry.get("logic")
@@ -47,8 +47,7 @@ def bind_callables(config: dict[str, Any]) -> None:
                 try:
                     entry["logic"] = _import_callable(logic)
                 except (ImportError, AttributeError, ValueError) as exc:
-                    logger.warning("Failed to load %s %s: %s", section, name, exc)
-                    entry["logic"] = fallback
+                    raise ValueError(f"Failed to load {section} {name}: {exc}") from exc
 
 
 def _import_callable(ref: str) -> Callable:
@@ -60,14 +59,6 @@ def _import_callable(ref: str) -> Callable:
     if not callable(func):
         raise AttributeError(f"{ref} is not callable")
     return func
-
-
-def _false(*args: Any, **kwargs: Any) -> bool:
-    return False
-
-
-def _empty_list(*args: Any, **kwargs: Any) -> list:
-    return []
 
 
 def validate(config: dict[str, Any], states_for_kind: Callable[[str], list[str]] | None) -> list[str]:

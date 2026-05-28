@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from jsonschema import Draft202012Validator
 
@@ -96,7 +99,8 @@ def _list_pending(project_root: Path, project_id: str, kind: str, source_id: str
     for path in root.glob("*.json"):
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001
+        except Exception:
+            logger.warning("Failed to parse approval file %s", path, exc_info=True)
             continue
         if payload.get("state") != "pending":
             continue

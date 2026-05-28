@@ -1,6 +1,9 @@
 ﻿from __future__ import annotations
 
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from audiagentic.runtime.config import load_yaml_file
 from audiagentic.runtime.home import audiagentic_home
@@ -88,7 +91,8 @@ def is_enabled(component_id: str, project_root: Path) -> bool:
         return False
     try:
         data = load_yaml_file(mpath)
-    except Exception:  # noqa: BLE001
+    except Exception:
+        logger.warning("Failed to read marker for %s", component_id, exc_info=True)
         return False
     return bool(data.get("enabled", True))
 
@@ -108,6 +112,7 @@ def get_external_probe_results(component_id: str, project_root: Path) -> dict[st
         return {}
     try:
         data = load_yaml_file(mpath)
-    except Exception:  # noqa: BLE001
+    except Exception:
+        logger.warning("Failed to read marker for %s", component_id, exc_info=True)
         return {}
     return dict(data.get("external-mcp-probe", {}))

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections import Counter
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from .config import KnowledgeConfig
 from .markdown_io import load_page_by_id, save_page, sidecar_for_page
@@ -150,6 +153,7 @@ def import_ndjson_events(*, config: KnowledgeConfig, item: dict[str, Any], sourc
         try:
             payload = json.loads(line)
         except Exception:
+            logger.warning("Failed to parse event line in %s", source_path, exc_info=True)
             continue
         event_type = str(payload.get('event_type') or payload.get('type') or 'unknown')
         event_types[event_type] += 1
@@ -173,6 +177,7 @@ def import_json_snapshot(*, config: KnowledgeConfig, item: dict[str, Any], sourc
     try:
         data = json.loads(text)
     except Exception:
+        logger.warning("Failed to parse JSON snapshot %s", source_path, exc_info=True)
         data = {}
     keys = sorted(str(k) for k in data.keys()) if isinstance(data, dict) else []
     summary = f'Current-state summary of JSON snapshot {source_path.name}.'

@@ -1,11 +1,14 @@
 ﻿"""Download and install a new audiagentic version from GitHub Releases."""
 from __future__ import annotations
 
+import logging
 import subprocess
 import sys
 import tempfile
 import urllib.request
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 GITHUB_REPO = "Audumla/AUDiaGentic"
 
@@ -83,7 +86,8 @@ def _schedule_post_exit_install(wheel: Path, version: str) -> dict:
             creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS,
             close_fds=True,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception:
+        logger.error("Failed to spawn updater script", exc_info=True)
         script_path.unlink(missing_ok=True)
         return {
             "ok": False,
@@ -110,7 +114,8 @@ def install_version(version: str) -> dict:
 
     try:
         wheel = _download_wheel(url, version)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
+        logger.error("Download failed for version %s", version, exc_info=True)
         return {"ok": False, "error": f"download failed: {exc}"}
 
     # On Windows frozen exe: schedule post-exit install instead of attempting
@@ -141,7 +146,8 @@ def install_version(version: str) -> dict:
         from audiagentic.runtime.harness import install_to
         from audiagentic.runtime.home import global_harness_runtime
         install_to(global_harness_runtime())
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
+        logger.warning("Harness config refresh failed during update", exc_info=True)
         return {"ok": True, "version": version, "harness_warning": str(exc)}
 
     return {"ok": True, "version": version}
