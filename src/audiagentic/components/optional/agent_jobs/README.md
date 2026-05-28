@@ -9,7 +9,6 @@ The active core of job orchestration. Contains all modules that drive a prompt r
 - Packet execution and result collection
 - Job control (cancel, stop, kill)
 - Approval and review orchestration
-- Release bridge (signals release domain on job completion)
 
 ## Must NOT Own
 - Job record I/O (→ `runtime/state/jobs_store.py`)
@@ -36,4 +35,3 @@ The active core of job orchestration. Contains all modules that drive a prompt r
 | `reviews.py` | Build and validate review reports and bundles |
 | `records.py` | Job record construction (not persistence) |
 | `profiles.py` | Workflow profile loading and application |
-| `release_bridge.py` | Signal release domain on job completion |

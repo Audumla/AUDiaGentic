@@ -62,7 +62,6 @@ _LSP_DEPENDENCIES: dict[str, DependencySpec] = {
         check=lambda: tool_available("pyright-langserver"),
         install=uv.install("pyright"),
         uninstall=uv.uninstall("pyright"),
-        requires=("uv",),
     ),
     "typescript-language-server": DependencySpec(
         id="typescript-language-server",
