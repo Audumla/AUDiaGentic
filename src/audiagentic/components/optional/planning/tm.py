@@ -138,12 +138,14 @@ def _run_audit(api, root: Path, *, auto_fix: bool, verbose: bool) -> tuple[dict,
 
 def main():
     from audiagentic.components.optional.planning.app.api import PlanningAPI
+    from audiagentic.foundation.logging import bootstrap
 
     pre = argparse.ArgumentParser(add_help=False)
     pre.add_argument("--root", default=None)
     known, _ = pre.parse_known_args()
 
     root = Path(known.root).resolve() if known.root else _find_project_root()
+    bootstrap("planning-tm", project_root=root)
 
     api = PlanningAPI(root)
 
