@@ -7,13 +7,15 @@ from __future__ import annotations
 
 import json
 import shutil
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.system.probe import ProbeSpec, probe_binary
 
 from .lsp_lifecycle import ServerConfig
+
+CODING_LSP_DIR = Path(".coding-lsp")
 
 # ── default server specs ────────────────────────────────────────────────────
 
@@ -145,7 +147,7 @@ def discover_language_servers(project_root: Path | str) -> dict[str, bool]:
     if isinstance(project_root, str):
         project_root = Path(project_root)
 
-    lsp_path = project_root / ".coding-lsp" / "lsp.json"
+    lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
     explicit = read_lsp_config(lsp_path)
     detected = detect_project_languages(project_root)
     servers = merge_server_configs(explicit, detected)
