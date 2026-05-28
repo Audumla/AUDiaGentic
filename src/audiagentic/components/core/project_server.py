@@ -22,6 +22,7 @@ from audiagentic.foundation.components.hooks import get_component_status
 from audiagentic.foundation.components.ids import COMPONENT_PROJECT, COMPONENT_PROVIDERS
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
+from audiagentic.foundation.mcp.component_server import log_tool_call
 from audiagentic.runtime.harness import (
     build_runtime_sync,
     refresh_harness_config_if_installed,
@@ -81,6 +82,7 @@ def build_server() -> FastMCP:
     )
 
     @mcp.tool(description=_tool_description("project_status", "Return the current project installation state and installed components."))
+    @log_tool_call
     def project_status() -> dict[str, Any]:
         project_root = _project_root()
         state = detect_installed_state(project_root)
@@ -109,6 +111,7 @@ def build_server() -> FastMCP:
         }
 
     @mcp.tool(description=_tool_description("list_components", "List all registered AUDiaGentic components with install and enabled status."))
+    @log_tool_call
     def list_components() -> list[dict[str, Any]]:
         project_root = _project_root()
         rows: list[dict[str, Any]] = []
@@ -131,6 +134,7 @@ def build_server() -> FastMCP:
         return rows
 
     @mcp.tool(description=_tool_description("install_component_tool", "Install a component into the target project."))
+    @log_tool_call
     def install_component_tool(component_id: str) -> dict[str, Any]:
         project_root = _project_root()
         result = install_component(component_id, project_root)
@@ -139,6 +143,7 @@ def build_server() -> FastMCP:
         return result
 
     @mcp.tool(description=_tool_description("uninstall_component_tool", "Uninstall a component from the target project."))
+    @log_tool_call
     def uninstall_component_tool(component_id: str, remove_configs: bool = False) -> dict[str, Any]:
         project_root = _project_root()
         descriptor = all_descriptors().get(component_id)
@@ -150,6 +155,7 @@ def build_server() -> FastMCP:
         return result
 
     @mcp.tool(description=_tool_description("enable_component_tool", "Enable a component in the target project."))
+    @log_tool_call
     def enable_component_tool(component_id: str) -> dict[str, Any]:
         project_root = _project_root()
         result = enable_component(component_id, project_root)
@@ -158,6 +164,7 @@ def build_server() -> FastMCP:
         return result
 
     @mcp.tool(description=_tool_description("disable_component_tool", "Disable a component in the target project."))
+    @log_tool_call
     def disable_component_tool(component_id: str) -> dict[str, Any]:
         project_root = _project_root()
         result = disable_component(component_id, project_root)
@@ -166,6 +173,7 @@ def build_server() -> FastMCP:
         return result
 
     @mcp.tool(description=_tool_description("read_project_file", "Read a file inside the project .audiagentic directory."))
+    @log_tool_call
     def read_project_file(relative_path: str) -> dict[str, Any]:
         project_root = _project_root()
         rel = Path(relative_path)
@@ -190,6 +198,7 @@ def build_server() -> FastMCP:
         return {"path": relative_path, "content": text}
 
     @mcp.tool(description=_tool_description("runtime_sync_contract", "Return AUDiaGentic runtime sync contract and supported actions for Pi-aware clients."))
+    @log_tool_call
     def runtime_sync_contract() -> dict[str, Any]:
         return {
             "target": "pi-runtime",
