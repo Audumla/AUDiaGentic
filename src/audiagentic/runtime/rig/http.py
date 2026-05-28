@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -38,7 +41,7 @@ def require_models_endpoint(endpoint: str, timeout: float = 15.0) -> ModelsProbe
             if isinstance(error, dict):
                 detail = error.get("message") or detail
         except Exception:
-            pass
+            logger.warning("Failed to parse error response from %s", status_url, exc_info=True)
         raise SystemExit(f"Rig not ready: {status_url} -> HTTP {exc.code}: {detail}") from exc
     except (URLError, OSError, TimeoutError) as exc:
         raise SystemExit(f"Rig unavailable: {status_url}: {exc}") from exc

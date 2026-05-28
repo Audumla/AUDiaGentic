@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import re
 import shutil
@@ -26,6 +27,8 @@ import sys
 from pathlib import Path
 
 from audiagentic.foundation.components.ids import COMPONENT_SESSION
+
+logger = logging.getLogger(__name__)
 
 
 def _status(msg: str) -> None:
@@ -54,7 +57,7 @@ def _cmd_install(target: Path, project_root: Path) -> int:
             register_all_components()
             install_component(COMPONENT_SESSION, project_root)
         except Exception:
-            pass
+            logger.warning("Failed to auto-install session component", exc_info=True)
         print("\nInstall complete. Run 'audiagentic' from any project directory.", flush=True)
         if target != global_harness_runtime():
             print(f"Set AUDIAGENTIC_HOME={target.parent} to use this location.", flush=True)
@@ -91,11 +94,11 @@ def _cmd_component(args: argparse.Namespace, project_root: Path) -> int:
         try:
             refresh_materialized_agent_config(harness_runtime, project_root=project_root)
         except Exception:
-            pass
+            logger.warning("Failed to refresh agent config for %s", component_id, exc_info=True)
         try:
             request_runtime_reload(project_root, reason=reason, component_id=component_id)
         except Exception:
-            pass
+            logger.warning("Failed to request runtime reload for %s", component_id, exc_info=True)
 
     sub = args.component_cmd
 
@@ -273,7 +276,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
             from audiagentic.runtime.update.prompt import maybe_prompt_update
             maybe_prompt_update(project_root)
     except Exception:
-        pass
+        logger.warning("Auto-update check failed", exc_info=True)
 
     # Sync providers.yaml with actual host state on first run only.
     # Subsequent reconciliations are available via the provider MCP server.
@@ -295,7 +298,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
 
             reconcile_all_providers(project_root=project_root, on_provider=_on_provider)
     except Exception:
-        pass
+        logger.warning("Provider reconciliation failed", exc_info=True)
 
     _status("refreshing agent config...")
     try:
@@ -303,7 +306,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
 
         refresh_materialized_agent_config(harness_runtime, project_root=project_root)
     except Exception:
-        pass
+        logger.warning("Failed to refresh agent config", exc_info=True)
 
     _status("starting agent...")
     enable_mcp = env_flag("AUDIAGENTIC_AG_ENABLE_MCP")
@@ -409,6 +412,17 @@ def main(argv: list[str] | None = None) -> int:
     args, remaining = parser.parse_known_args(argv)
 
     project_root = Path(args.project).resolve() if args.project else Path.cwd()
+
+    import atexit
+
+    from audiagentic.foundation.logging import bootstrap as _log_bootstrap
+    _log_bootstrap("harness", project_root=project_root)
+    logger.info("audiagentic started", extra={"project_root": str(project_root), "command": args.command})
+
+    def _log_exit() -> None:
+        logger.info("audiagentic exit", extra={"project_root": str(project_root), "command": args.command})
+
+    atexit.register(_log_exit)
 
     if args.command == "install":
         target = Path(args.target).resolve() if args.target else global_harness_runtime()

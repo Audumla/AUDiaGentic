@@ -224,8 +224,8 @@ class StatePropagationEngine:
             return False
         try:
             return logic(self, child_id, parent_id, new_state, state_rules.get("when"))
-        except Exception as exc:
-            logger.error("Rule %s failed: %s", rule, exc)
+        except Exception:
+            logger.error("Rule %s failed", rule, exc_info=True)
             return False
 
     def _execute_action(
@@ -243,8 +243,8 @@ class StatePropagationEngine:
             return []
         try:
             return logic(self, item_id, action_entry, state_rules)
-        except Exception as exc:
-            logger.error("Action %s failed: %s", action_name, exc)
+        except Exception:
+            logger.error("Action %s failed", action_name, exc_info=True)
             return []
 
     def _max_depth(self) -> int:

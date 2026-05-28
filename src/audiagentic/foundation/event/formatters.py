@@ -32,8 +32,8 @@ class CodeFormatter:
             self._format_files(files)
             logger.info("Formatted %d files for task %s", len(files), task_id)
 
-        except Exception as e:
-            logger.warning("Code formatting failed for task %s: %s", task_id, e)
+        except Exception:
+            logger.warning("Code formatting failed for task %s", task_id, exc_info=True)
 
     def _get_task_files(self, task_id: str) -> list[Path]:
         """Get files modified by a task."""

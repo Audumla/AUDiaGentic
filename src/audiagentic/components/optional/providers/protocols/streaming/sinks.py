@@ -36,7 +36,7 @@ class StreamSink(Protocol):
     def close(self) -> None: ...
 
 
-_logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -91,7 +91,7 @@ class InMemorySink:
                 and self._current_bytes + line_bytes >= self.warning_threshold_bytes
                 and not self._warning_emitted
             ):
-                _logger.warning(
+                logger.warning(
                     "in-memory sink approaching threshold: %d bytes",
                     self.warning_threshold_bytes,
                 )
@@ -220,11 +220,11 @@ class NormalizedEventSink:
                         f"normalized event failed schema validation: {error_msgs}"
                     )
                 elif self.invalid_event_policy == "quarantine":
-                    _logger.warning("quarantining invalid event: %s", error_msgs)
+                    logger.warning("quarantining invalid event: %s", error_msgs)
                     self._quarantine_event(record, error_msgs)
                     return
                 elif self.invalid_event_policy == "warn":
-                    _logger.warning("skipping invalid event: %s", error_msgs)
+                    logger.warning("skipping invalid event: %s", error_msgs)
                     return
 
         if self.event_write_policy == "locked-append":

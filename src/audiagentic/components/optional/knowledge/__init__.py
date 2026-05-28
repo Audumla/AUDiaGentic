@@ -3,7 +3,11 @@
 Deterministic knowledge state management with event-driven sync.
 """
 
+import logging
+
 __version__ = "0.7.0"
+
+logger = logging.getLogger(__name__)
 
 # Tracks the active knowledge subscription handle. Ensures setup_event_subscriptions()
 # is idempotent — multiple PlanningAPI instances (e.g. in tm_helper) don't stack up
@@ -38,6 +42,6 @@ def setup_event_subscriptions() -> None:
             "planning.item.state.changed", on_planning_state_change
         )
     except ImportError:
-        pass
+        logger.warning("Knowledge events unavailable; skipping subscription.", exc_info=True)
     except Exception:
-        pass
+        logger.error("Failed to subscribe knowledge events", exc_info=True)

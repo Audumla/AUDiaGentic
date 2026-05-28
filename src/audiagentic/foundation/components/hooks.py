@@ -13,7 +13,7 @@ from .registry import all_descriptors
 LifecycleHook = Callable[[str, dict[str, Any], dict[str, Any]], None]
 
 _INITIALIZED = False
-_log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @cache
@@ -42,7 +42,7 @@ def invoke_hook(
     """
     fn = _resolve_hook(hook_path)
     if fn is None:
-        _log.warning("%s: could not resolve '%s'", failure_label, hook_path)
+        logger.warning("%s: could not resolve '%s'", failure_label, hook_path)
         return None
     try:
         return fn(*args, **kwargs)

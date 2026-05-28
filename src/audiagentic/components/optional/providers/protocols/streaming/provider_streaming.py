@@ -19,7 +19,7 @@ from audiagentic.components.optional.providers.protocols.streaming.sinks import 
     StreamSink,
 )
 
-_logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -101,7 +101,7 @@ def validate_stream_controls(
                 f"invalid sink-error-policy: {result.get('sink-error-policy')}"
             )
         elif policy == "warn":
-            _logger.warning(
+            logger.warning(
                 "invalid sink-error-policy, using default: %s",
                 result.get("sink-error-policy"),
             )
@@ -114,7 +114,7 @@ def validate_stream_controls(
                 f"invalid termination-policy: {result.get('termination-policy')}"
             )
         elif policy == "warn":
-            _logger.warning(
+            logger.warning(
                 "invalid termination-policy, using default: %s",
                 result.get("termination-policy"),
             )
@@ -246,7 +246,7 @@ def run_streaming_command(
 
             if timeout_warning_seconds and not warning_emitted:
                 if elapsed >= timeout_warning_seconds:
-                    _logger.warning(
+                    logger.warning(
                         "stream timeout warning: %.1fs exceeded for command %s",
                         timeout_warning_seconds,
                         command[0] if command else "unknown",
@@ -263,7 +263,7 @@ def run_streaming_command(
                         process.kill()
                         process.wait()
                 elif termination_policy == "warn-only":
-                    _logger.warning(
+                    logger.warning(
                         "stream timeout reached (%.1fs) but termination-policy is warn-only; process will continue",
                         timeout_seconds,
                     )
