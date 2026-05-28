@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 from typing import Any
 
@@ -21,6 +22,39 @@ from ...descriptors.base import (
     VsCodeExtension,
 )
 from ...descriptors.registry import register
+
+
+def _opencode_probe(_descriptor) -> dict:
+    command = ["opencode", "--version"]
+    executable = shutil.which("opencode")
+    if executable is None:
+        return {
+            "available": False,
+            "command": command,
+            "executable": None,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "command not found",
+        }
+    try:
+        completed = subprocess.run(command, check=False, capture_output=True, text=True, timeout=15)
+        return {
+            "available": completed.returncode == 0,
+            "command": command,
+            "executable": executable,
+            "returncode": completed.returncode,
+            "stdout": completed.stdout.strip(),
+            "stderr": completed.stderr.strip(),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "available": True,
+            "command": command,
+            "executable": executable,
+            "returncode": None,
+            "stdout": "",
+            "stderr": str(exc),
+        }
 
 
 def _fetch_opencode_catalog(provider_cfg: dict[str, Any]) -> list[dict[str, Any]]:
@@ -87,6 +121,7 @@ register(ProviderDescriptor(
         executable="opencode",
         install=npm.install("opencode-ai"),
         uninstall=npm.uninstall("opencode-ai"),
+        probe_fn=_opencode_probe,
     ),
     vscode_extensions=(
         VsCodeExtension("sst-dev.opencode", "OpenCode"),
