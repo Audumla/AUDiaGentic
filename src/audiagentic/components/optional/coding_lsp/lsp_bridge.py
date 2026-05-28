@@ -5,13 +5,13 @@ headers, and dispatches responses to awaiting futures.
 """
 from __future__ import annotations
 
-import asyncio
 import json
+import logging
 import subprocess
 import threading
-import time
-from collections.abc import Awaitable
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 _LSP_CONTENT_HEADER = b"Content-Length:"
 _CRLF = b"\r\n"
@@ -153,6 +153,7 @@ class LspJsonRpc:
                         self._responses[rid] = msg
                         self._pending[rid].set()
         except Exception:
+            logger.error("LSP bridge reader thread exited unexpectedly", exc_info=True)
             if self._process and self._process.poll() is not None:
                 with self._lock:
                     for ev in self._pending.values():
@@ -199,7 +200,7 @@ class LspJsonRpc:
                 line.extend(byte)
                 byte = stream.read(1)
             return bytes(line)
-        except (OSError, IOError):
+        except OSError:
             return None
 
     def _read_exact(self, stream: subprocess.PIPE, length: int) -> bytes | None:

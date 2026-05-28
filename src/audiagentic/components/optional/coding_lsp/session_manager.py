@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import (
+    CODING_LSP_DIR,
     discover_language_servers,
     merge_server_configs,
     read_lsp_config,
@@ -71,7 +72,7 @@ class SessionManager:
                 return session, language
 
         # Discover and create
-        lsp_path = Path(project_root) / ".coding-lsp" / "lsp.json"
+        lsp_path = Path(project_root) / CODING_LSP_DIR / "lsp.json"
         explicit = read_lsp_config(lsp_path)
         detected = {}  # already detected at startup
         servers = merge_server_configs(explicit, detected)

@@ -5,23 +5,25 @@ Subscribes to component lifecycle events.
 """
 from __future__ import annotations
 
-import shutil
+import logging
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.event import get_bus
+logger = logging.getLogger(__name__)
+
 from audiagentic.components.optional.coding_lsp.config import (
-    detect_project_languages,
+    CODING_LSP_DIR,
     discover_language_servers,
-    read_lsp_config,
     write_lsp_config,
 )
-from audiagentic.foundation.dependencies import detect_missing
 from audiagentic.components.optional.coding_lsp.lsp_dependencies import get_lsp_dependencies
+from audiagentic.foundation.components.ids import COMPONENT_CODING_LSP
+from audiagentic.foundation.dependencies import detect_missing
+from audiagentic.foundation.event import get_bus
 from audiagentic.runtime.lifecycle.observers import (
+    COMPONENT_DISABLED,
     COMPONENT_ENABLED,
     COMPONENT_INSTALLED,
-    COMPONENT_DISABLED,
     COMPONENT_UNINSTALLED,
 )
 
@@ -36,7 +38,7 @@ LSP_DEPENDENCY_IDS = list(get_lsp_dependencies().keys())
 def _on_lifecycle_event(event_type: str, payload: dict[str, Any], metadata: dict[str, Any]) -> None:
     component_id = payload.get("component_id")
     project_root = payload.get("project_root")
-    if component_id != "coding-lsp" or not isinstance(project_root, Path):
+    if component_id != COMPONENT_CODING_LSP or not isinstance(project_root, Path):
         return
 
     if event_type == COMPONENT_INSTALLED:
@@ -49,7 +51,7 @@ def _on_lifecycle_event(event_type: str, payload: dict[str, Any], metadata: dict
 
 def _on_installed(project_root: Path) -> None:
     """Create .coding-lsp/ structure and copy lsp.json template if missing."""
-    coding_lsp_dir = project_root / ".coding-lsp"
+    coding_lsp_dir = project_root / CODING_LSP_DIR
     coding_lsp_dir.mkdir(parents=True, exist_ok=True)
     (coding_lsp_dir / "logs").mkdir(parents=True, exist_ok=True)
 
@@ -69,6 +71,7 @@ def _on_enabled(project_root: Path) -> None:
     try:
         available = discover_language_servers(project_root)
     except Exception:
+        logger.warning("Failed to discover language servers", exc_info=True)
         available = {}
 
 
