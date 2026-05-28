@@ -1,8 +1,11 @@
 """Interactive update prompt for the audiagentic CLI."""
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def _ask(question: str) -> str:
@@ -58,8 +61,8 @@ def maybe_prompt_update(project_root: Path | None = None) -> None:
                 record_failed_install(info["latest"])
                 if not result.get("locked"):
                     print(f"\n  Update failed: {result.get('error')}. Continuing with current version.\n")
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception:
+        logger.warning("Update failed unexpectedly", exc_info=True)
 
 
 def run_update_now() -> int:

@@ -5,8 +5,11 @@ Used by any harness that launches the embedded rig.
 """
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def load_model_profile(
@@ -77,7 +80,7 @@ def query_server_version(bin_dir: Path, timeout: float = 10.0) -> str | None:
         if result.returncode == 0:
             return (result.stdout + result.stderr).strip().split("\n")[0]
     except Exception:
-        pass
+        logger.warning("Failed to get server version from %s", bin_dir, exc_info=True)
     return None
 
 
