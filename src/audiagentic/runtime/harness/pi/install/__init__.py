@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import logging
+import os
 import shutil
 import subprocess
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from audiagentic.runtime.harness.reload import (
     build_runtime_sync as _build_sync,
@@ -17,6 +21,14 @@ from .config import materialize_agent_config
 from .patches import apply_lockdown_patches
 
 _TARGET = "pi-runtime"
+
+
+def _npm_env() -> dict[str, str]:
+    env = os.environ.copy()
+    # Node 22 in Docker can intermittently crash compiling large npm installs.
+    # JIT-less mode is slower but materially more stable for deterministic tests.
+    env.setdefault("NODE_OPTIONS", "--jitless")
+    return env
 
 
 def build_runtime_sync(
@@ -63,6 +75,7 @@ def install_to(target: Path, project_root: Path | None = None) -> int:
         [npm, "install", "--prefix", str(npm_dir),
          f"@earendil-works/pi-coding-agent@{agent_version}"],
         check=True,
+        env=_npm_env(),
     )
 
     _c._print(f"Installing MCP adapter into {npm_dir}")
@@ -70,6 +83,7 @@ def install_to(target: Path, project_root: Path | None = None) -> int:
         [npm, "install", "--prefix", str(npm_dir),
          f"pi-mcp-adapter@{mcp_adapter_version}"],
         check=True,
+        env=_npm_env(),
     )
     apply_lockdown_patches(npm_dir, project_root=project_root)
 
@@ -134,9 +148,9 @@ def refresh_harness_config_if_installed(
     try:
         refresh_materialized_agent_config(harness_runtime, project_root=project_root)
     except Exception:
-        pass
+        logger.warning("Failed to refresh agent config for %s", component_id, exc_info=True)
     try:
         request_runtime_reload(project_root, reason=reason, component_id=component_id)
     except Exception:
-        pass
+        logger.warning("Failed to request runtime reload for %s", component_id, exc_info=True)
     return True
