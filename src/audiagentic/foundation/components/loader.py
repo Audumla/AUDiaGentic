@@ -1,7 +1,10 @@
 """Load and register ComponentDescriptors from YAML config files."""
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from audiagentic.runtime.config import load_yaml_file
 
@@ -129,8 +132,8 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
         if descriptor.lifecycle_observer:
             try:
                 __import__(descriptor.lifecycle_observer)
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception:
+                logger.warning("Failed to import lifecycle observer for %s", descriptor.component_id, exc_info=True)
     initialize_lifecycle_hook_dispatch()
     return descriptors
 

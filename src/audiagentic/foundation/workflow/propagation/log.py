@@ -55,5 +55,5 @@ class PropagationLog:
                 severity_text="ERROR" if status == "failed" else "INFO",
                 attributes=attributes,
             )
-        except Exception as exc:
-            logger.warning("Failed to write propagation log entry for %s: %s", target_id, exc)
+        except Exception:
+            logger.warning("Failed to write propagation log entry for %s", target_id, exc_info=True)

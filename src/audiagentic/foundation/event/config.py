@@ -96,8 +96,8 @@ def load_config(root: Path | None = None) -> EventConfig:
                     .get("dispatch_on_replay", False),
                 ),
             )
-        except Exception as e:
-            logger.warning("Failed to load config from %s: %s, using defaults", config_path, e)
+        except Exception:
+            logger.warning("Failed to load config from %s, using defaults", config_path, exc_info=True)
             return EventConfig(root=root)
     else:
         logger.debug("Config file not found at %s, using defaults", config_path)
