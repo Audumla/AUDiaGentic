@@ -1,3 +1,5 @@
+import shutil
+
 from audiagentic.foundation.invoke.toolchains import npm
 
 from ...descriptors.base import (
@@ -11,6 +13,28 @@ from ...descriptors.base import (
 from ...descriptors.registry import register
 from .mcp_format import read_continue_json, remove_continue_json, write_continue_json
 
+
+def _continue_probe(_descriptor) -> dict:
+    command = ["cn", "--version"]
+    executable = shutil.which("cn")
+    if executable is None:
+        return {
+            "available": False,
+            "command": command,
+            "executable": None,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "command not found",
+        }
+    return {
+        "available": True,
+        "command": command,
+        "executable": executable,
+        "returncode": 0,
+        "stdout": "",
+        "stderr": "",
+    }
+
 register(ProviderDescriptor(
     provider_id="continue",
     display_name="Continue",
@@ -23,6 +47,7 @@ register(ProviderDescriptor(
         executable="cn",
         install=npm.install("@continuedev/cli"),
         uninstall=npm.uninstall("@continuedev/cli"),
+        probe_fn=_continue_probe,
     ),
     vscode_extensions=(
         VsCodeExtension("Continue.continue", "Continue"),

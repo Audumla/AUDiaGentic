@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+import shutil
+import subprocess
+
 from audiagentic.components.optional.providers.adapters.mcp_json import (
     read_mcp_json,
     remove_mcp_json,
@@ -14,6 +19,48 @@ from ...descriptors.base import (
 )
 from ...descriptors.registry import register
 
+
+def _qwen_probe(_descriptor) -> dict:
+    command = ["qwen", "--version"]
+    executable = shutil.which("qwen")
+    if executable is None:
+        return {
+            "available": False,
+            "command": command,
+            "executable": None,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "command not found",
+        }
+    try:
+        completed = subprocess.run(command, check=False, capture_output=True, text=True, timeout=15)
+        if completed.returncode == 0:
+            return {
+                "available": True,
+                "command": command,
+                "executable": executable,
+                "returncode": completed.returncode,
+                "stdout": completed.stdout.strip(),
+                "stderr": completed.stderr.strip(),
+            }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "available": True,
+            "command": command,
+            "executable": executable,
+            "returncode": None,
+            "stdout": "",
+            "stderr": str(exc),
+        }
+    return {
+        "available": True,
+        "command": command,
+        "executable": executable,
+        "returncode": completed.returncode,
+        "stdout": completed.stdout.strip(),
+        "stderr": completed.stderr.strip(),
+    }
+
 register(ProviderDescriptor(
     provider_id="qwen",
     display_name="Qwen (Alibaba)",
@@ -26,6 +73,7 @@ register(ProviderDescriptor(
         executable="qwen",
         install=npm.install("@qwen-code/qwen-code"),
         uninstall=npm.uninstall("@qwen-code/qwen-code"),
+        probe_fn=_qwen_probe,
     ),
     vscode_extensions=(
         VsCodeExtension("qwenlm.qwen-code-vscode-ide-companion", "Qwen Code Companion"),
