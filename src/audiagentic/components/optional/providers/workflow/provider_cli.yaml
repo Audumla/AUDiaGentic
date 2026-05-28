@@ -1,0 +1,264 @@
+workflow:
+  profiles:
+    provider-cli-base:
+      kind: provider-cli
+      event_type: providers.cli.state.changed
+      states:
+        initial: missing
+        values:
+          - missing
+          - installing
+          - installed
+          - failed
+          - uninstalling
+          - uninstalled
+          - skipped
+        transitions:
+          missing: [installing, skipped]
+          installing: [installed, failed]
+          installed: [uninstalling, failed]
+          failed: [installing, skipped]
+          uninstalling: [uninstalled, failed]
+          uninstalled: [installing]
+          skipped: []
+      state_sets:
+        initial: [missing]
+        active: [installing, uninstalling]
+        complete: [installed, uninstalled]
+        failed: [failed]
+        terminal: [skipped]
+
+  resources:
+    provider-cli.aider:
+      extends: provider-cli-base
+      provider-id: aider
+      package-manager: uv-tool
+      package-name: aider-chat
+      executable: aider
+      recipes:
+        install:
+          type: shell
+          command: ["uv", "tool", "install", "--force", "--python", "python3.12", "--with", "pip", "{package_name}@latest"]
+        uninstall:
+          type: shell
+          command: ["uv", "tool", "uninstall", "{package_name}"]
+      actions: &provider_cli_actions
+        install:
+          recipe: install
+          start_state: installing
+          success_state: installed
+          failure_state: failed
+          legacy_success_status: installed
+          initial_state: missing
+          probe_available: true
+        uninstall:
+          recipe: uninstall
+          start_state: uninstalling
+          success_state: uninstalled
+          failure_state: failed
+          legacy_success_status: uninstalled
+          initial_state: installed
+          probe_available: false
+
+    provider-cli.claude:
+      extends: provider-cli-base
+      provider-id: claude
+      package-manager: npm
+      package-name: "@anthropic-ai/claude-code"
+      executable: claude
+      recipes:
+        install:
+          type: shell
+          timeout: 120
+          command: ["npm", "install", "-g", "{package_name}"]
+        uninstall:
+          type: shell
+          command: ["npm", "uninstall", "-g", "{package_name}"]
+      actions: *provider_cli_actions
+
+    provider-cli.cline:
+      extends: provider-cli-base
+      provider-id: cline
+      package-manager: npm
+      package-name: cline
+      executable: cline
+      recipes:
+        install:
+          type: shell
+          timeout: 120
+          command: ["npm", "install", "-g", "{package_name}"]
+        uninstall:
+          type: shell
+          command: ["npm", "uninstall", "-g", "{package_name}"]
+      actions: *provider_cli_actions
+
+    provider-cli.codex:
+      extends: provider-cli-base
+      provider-id: codex
+      package-manager: npm
+      package-name: "@openai/codex"
+      executable: codex
+      recipes:
+        install:
+          type: shell
+          timeout: 120
+          command: ["npm", "install", "-g", "{package_name}"]
+        uninstall:
+          type: shell
+          command: ["npm", "uninstall", "-g", "{package_name}"]
+      actions: *provider_cli_actions
+
+    provider-cli.continue:
+      extends: provider-cli-base
+      provider-id: continue
+      package-manager: npm
+      package-name: "@continuedev/cli"
+      executable: cn
+      recipes:
+        install:
+          type: shell
+          timeout: 120
+          command: ["npm", "install", "-g", "{package_name}"]
+        uninstall:
+          type: shell
+          command: ["npm", "uninstall", "-g", "{package_name}"]
+      actions: *provider_cli_actions
+
+    provider-cli.copilot:
+      extends: provider-cli-base
+      provider-id: copilot
+      package-manager: npm
+      package-name: "@github/copilot"
+      executable: copilot
+      recipes:
+        install:
+          type: shell
+          timeout: 120
+          command: ["npm", "install", "-g", "{package_name}"]
+        uninstall:
+          type: shell
+          command: ["npm", "uninstall", "-g", "{package_name}"]
+      actions: *provider_cli_actions
+
+    provider-cli.gemini:
+      extends: provider-cli-base
+      provider-id: gemini
+      package-manager: npm
+      package-name: "@google/gemini-cli"
+      executable: gemini
+      recipes:
+        install:
+          type: shell
+          timeout: 120
+          command: ["npm", "install", "-g", "{package_name}"]
+        uninstall:
+          type: shell
+          command: ["npm", "uninstall", "-g", "{package_name}"]
+      actions: *provider_cli_actions
+
+    provider-cli.goose:
+      extends: provider-cli-base
+      provider-id: goose
+      package-manager: script
+      package-name: https://github.com/block/goose/releases/download/stable/download_cli.sh
+      executable: goose
+      recipes:
+        install:
+          type: shell
+          command: ["bash", "-lc", "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash"]
+        uninstall:
+          type: shell
+          command: ["bash", "-lc", "rm -f \"$HOME/.local/bin/goose\""]
+      actions: *provider_cli_actions
+
+    provider-cli.openhands:
+      extends: provider-cli-base
+      provider-id: openhands
+      package-manager: uv-tool
+      package-name: openhands
+      executable: openhands
+      recipes:
+        install:
+          type: shell
+          command: ["uv", "tool", "install", "--python", "3.12", "{package_name}"]
+        uninstall:
+          type: shell
+          command: ["uv", "tool", "uninstall", "{package_name}"]
+      actions: *provider_cli_actions
+
+    provider-cli.opencode:
+      extends: provider-cli-base
+      provider-id: opencode
+      package-manager: npm
+      package-name: opencode-ai
+      executable: opencode
+      recipes:
+        install:
+          type: shell
+          timeout: 120
+          command: ["npm", "install", "-g", "{package_name}"]
+        uninstall:
+          type: shell
+          command: ["npm", "uninstall", "-g", "{package_name}"]
+      actions: *provider_cli_actions
+
+    provider-cli.pi:
+      extends: provider-cli-base
+      provider-id: pi
+      package-manager: pi-harness
+      package-name: audiagentic-pi-harness
+      executable: pi
+      recipes:
+        install:
+          type: callable
+          target: "audiagentic.components.optional.providers.adapters.pi.descriptor:_pi_install"
+        uninstall:
+          type: callable
+          target: "audiagentic.components.optional.providers.adapters.pi.descriptor:_pi_uninstall"
+      actions: *provider_cli_actions
+
+    provider-cli.plandex:
+      extends: provider-cli-base
+      provider-id: plandex
+      package-manager: brew
+      package-name: plandex-ai/tap/plandex
+      executable: plandex
+      recipes:
+        install:
+          type: shell
+          command: ["brew", "install", "{package_name}"]
+        uninstall:
+          type: shell
+          command: ["brew", "uninstall", "plandex"]
+      actions: *provider_cli_actions
+
+    provider-cli.qwen:
+      extends: provider-cli-base
+      provider-id: qwen
+      package-manager: npm
+      package-name: "@qwen-code/qwen-code"
+      executable: qwen
+      recipes:
+        install:
+          type: shell
+          timeout: 120
+          command: ["npm", "install", "-g", "{package_name}"]
+        uninstall:
+          type: shell
+          command: ["npm", "uninstall", "-g", "{package_name}"]
+      actions: *provider_cli_actions
+
+    provider-cli.roo:
+      extends: provider-cli-base
+      provider-id: roo
+      package-manager: vscode
+      package-name: RooVeterinaryInc.roo-cline
+      executable: code
+      recipes:
+        install:
+          type: shell
+          command: ["code", "--install-extension", "{package_name}", "--force"]
+        uninstall:
+          type: shell
+          command: ["code", "--uninstall-extension", "{package_name}"]
+      actions: *provider_cli_actions
