@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from audiagentic.foundation.components.loader import register_from_yaml
 
 
@@ -17,8 +15,10 @@ def test_coding_lsp_yaml_loads() -> None:
     descriptor = register_from_yaml(path)
     assert descriptor.component_id == "coding-lsp"
     assert descriptor.display_name == "Coding LSP"
-    assert len(descriptor.mcp_servers) == 1
-    assert descriptor.mcp_servers[0].name == "lsp-mcp"
+    assert len(descriptor.mcp_servers) == 2
+    names = {s.name for s in descriptor.mcp_servers}
+    assert "lsp-config-mcp" in names
+    assert "lsp-mcp" in names
 
 
 def test_coding_lsp_has_lifecycle_observer() -> None:

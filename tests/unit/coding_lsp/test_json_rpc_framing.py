@@ -2,15 +2,11 @@ from __future__ import annotations
 
 import json
 import subprocess
-import threading
-import time
 
 import pytest
 
 from audiagentic.components.optional.coding_lsp.lsp_bridge import (
-    LspError,
     LspJsonRpc,
-    LspServerError,
 )
 
 
@@ -23,7 +19,6 @@ class _MockLspServer:
         self.request_count = 0
 
     def run(self, stdin: subprocess.PIPE, stdout: subprocess.PIPE) -> None:
-        import sys
         self._stdin = stdin
         self._stdout = stdout
         header_buf = bytearray()

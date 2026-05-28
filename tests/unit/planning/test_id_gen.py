@@ -64,6 +64,15 @@ def test_config_mode_resumes_from_seeded_counter(tmp_path: Path) -> None:
     assert _next_id_config_mode(counter_path, "task") == "task-346"
 
 
+def test_config_mode_recovers_stale_pid_lock(tmp_path: Path) -> None:
+    counter_path = tmp_path / "task.json"
+    lock_path = tmp_path / "task.lock"
+    lock_path.write_text("999999999", encoding="utf-8")
+
+    assert _next_id_config_mode(counter_path, "task") == "task-1"
+    assert not lock_path.exists()
+
+
 def test_config_mode_thread_safety(tmp_path: Path) -> None:
     counter_path = tmp_path / "task.json"
     results: list[str] = []

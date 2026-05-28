@@ -1,12 +1,16 @@
 """Integration tests for LSP bridge with real pyright."""
 from __future__ import annotations
 
+import pytest
 from tests.integration.coding_lsp.conftest import requires_pyright
 
 from audiagentic.components.optional.coding_lsp.lsp_bridge import LspJsonRpc
 
 
 @requires_pyright
+@pytest.mark.slow
+@pytest.mark.requires_uv
+@pytest.mark.timeout(60)
 def test_pyright_initialize():
     """Test that pyright-langserver initializes successfully."""
     bridge = LspJsonRpc()
@@ -29,13 +33,17 @@ def test_pyright_initialize():
 
 
 @requires_pyright
+@pytest.mark.slow
+@pytest.mark.requires_uv
+@pytest.mark.timeout(90)
 def test_pyright_workspace_symbols():
     """Test workspace/symbol request against pyright."""
+    from pathlib import Path
+
     from audiagentic.components.optional.coding_lsp.lsp_lifecycle import (
         LspSession,
         ServerConfig,
     )
-    from pathlib import Path
 
     project_root = Path(__file__).resolve().parents[2]
     config = ServerConfig(

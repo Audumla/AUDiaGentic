@@ -9,10 +9,19 @@ Tests every registered provider descriptor to ensure:
 """
 from __future__ import annotations
 
+import os
 import shutil
-import subprocess
 
 import pytest
+from tests.integration.providers.harness import (
+    assert_health_ok,
+    assert_install_result_ok,
+    assert_uninstall_result_ok,
+    cleanup_provider,
+    install_provider,
+    provider_ids,
+    uninstall_provider,
+)
 
 from audiagentic.components.optional.providers.descriptors.base import (
     CliInstallRecipe,
@@ -22,10 +31,6 @@ from audiagentic.components.optional.providers.descriptors.registry import (
     all_descriptors,
     get_descriptor,
 )
-from audiagentic.components.optional.providers.services.lifecycle import (
-    install_provider_cli,
-    uninstall_provider_cli,
-)
 from audiagentic.foundation.invoke.recipes.shell import ShellRecipe
 from audiagentic.foundation.invoke.toolchains import (
     brew,
@@ -34,6 +39,15 @@ from audiagentic.foundation.invoke.toolchains import (
     uv,
     vscode,
 )
+
+pytestmark = [
+    pytest.mark.mutates_host,
+    pytest.mark.opt_in,
+    pytest.mark.skipif(
+        os.environ.get("AUDIAGENTIC_REAL_PROVIDER_CLI_TESTS") != "1",
+        reason="real provider CLI install tests are opt-in only",
+    ),
+]
 
 # ---------------------------------------------------------------------------
 # Descriptor registry tests
@@ -177,9 +191,8 @@ class TestToolchainFactories:
 # npm provider install/uninstall roundtrip tests
 # ---------------------------------------------------------------------------
 
-# Known problematic providers that install but have binary/runtime issues
-_KNOWN_PROBLEMATIC = {"continue", "qwen", "gemini", "opencode", "openhands"}  # segfaults or help timeout on CLI invocation
-_KNOWN_SLOW_INSTALL = {"cline"}  # npm install times out at 600s
+# Known problematic providers that still need external environment support
+_KNOWN_PROBLEMATIC = set()
 
 
 def _get_npm_providers() -> list[tuple[str, ProviderDescriptor]]:
@@ -188,39 +201,23 @@ def _get_npm_providers() -> list[tuple[str, ProviderDescriptor]]:
     return [
         (pid, desc)
         for pid, desc in sorted(descriptors.items())
-        if desc.cli_install and desc.cli_install.package_manager == "npm" and pid not in _KNOWN_PROBLEMATIC and pid not in _KNOWN_SLOW_INSTALL
+        if desc.cli_install and desc.cli_install.package_manager == "npm" and pid not in _KNOWN_PROBLEMATIC
     ]
-
-
-def _cli_help_command(executable: str, help_flags: list[str]) -> list[str]:
-    """Build a CLI help command, trying common flags."""
-    for flag in help_flags:
-        cmd = [executable, flag]
-        try:
-            result = subprocess.run(
-                cmd, check=False, capture_output=True, text=True, timeout=30,
-            )
-            if result.returncode == 0:
-                return cmd
-        except (FileNotFoundError, OSError):
-            continue
-    return [executable, "--help"]
 
 
 class TestNpmProviderInstallUninstall:
     """Install/uninstall roundtrip for all npm-based providers."""
 
     @pytest.mark.parametrize("provider_id", [pid for pid, _ in _get_npm_providers()])
+    @pytest.mark.timeout(1200)
     def test_install_uninstall_roundtrip(self, provider_id: str) -> None:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
         executable = desc.cli_install.executable
 
         # Install
-        install_result = install_provider_cli(provider_id, timeout=600)
-        assert install_result["status"] == "installed", (
-            f"{provider_id} install failed: {install_result.get('reason', install_result)}"
-        )
+        install_result = install_provider(provider_id)
+        assert_install_result_ok(provider_id, install_result)
 
         # Verify executable is on PATH
         assert shutil.which(executable) is not None, (
@@ -228,10 +225,8 @@ class TestNpmProviderInstallUninstall:
         )
 
         # Uninstall
-        uninstall_result = uninstall_provider_cli(provider_id, timeout=600)
-        assert uninstall_result["status"] == "uninstalled", (
-            f"{provider_id} uninstall failed: {uninstall_result.get('reason', uninstall_result)}"
-        )
+        uninstall_result = uninstall_provider(provider_id)
+        assert_uninstall_result_ok(provider_id, uninstall_result)
 
         # Verify executable is no longer on PATH
         assert shutil.which(executable) is None, (
@@ -239,6 +234,7 @@ class TestNpmProviderInstallUninstall:
         )
 
     @pytest.mark.parametrize("provider_id", [pid for pid, _ in _get_npm_providers()])
+    @pytest.mark.timeout(1200)
     def test_installed_cli_invokes_help(self, provider_id: str) -> None:
         """After install, the CLI executable must respond to a help flag."""
         desc = get_descriptor(provider_id)
@@ -246,29 +242,13 @@ class TestNpmProviderInstallUninstall:
         executable = desc.cli_install.executable
 
         # Install
-        install_result = install_provider_cli(provider_id, timeout=600)
-        assert install_result["status"] == "installed", (
-            f"{provider_id} install failed: {install_result.get('reason', install_result)}"
-        )
+        install_result = install_provider(provider_id)
+        assert_install_result_ok(provider_id, install_result)
 
         try:
-            # Find the right help flag for this executable
-            help_cmd = _cli_help_command(executable, ["--help", "-h", "/?", "--version"])
-            result = subprocess.run(
-                help_cmd, check=False, capture_output=True, text=True, timeout=30,
-            )
-            assert result.returncode == 0, (
-                f"{executable} {help_cmd[-1]} returned {result.returncode}: "
-                f"stdout={result.stdout[:500]} stderr={result.stderr[:500]}"
-            )
-            # Verify output is non-empty (some CLIs return 0 with empty output on --help)
-            output = (result.stdout + result.stderr).strip()
-            assert len(output) > 0, (
-                f"{executable} --help produced no output"
-            )
+            assert_health_ok(provider_id, install_result)
         finally:
-            # Always clean up
-            uninstall_provider_cli(provider_id, timeout=600)
+            cleanup_provider(provider_id)
 
 
 # ---------------------------------------------------------------------------
@@ -276,19 +256,17 @@ class TestNpmProviderInstallUninstall:
 # ---------------------------------------------------------------------------
 
 # Providers that need GitHub auth for their brew tap
-_KNOWN_BREW_AUTH = {"plandex", "goose"}  # plandex-ai/tap requires GitHub credentials; block-goose-cli brew API issue
+_KNOWN_BREW_AUTH = {"plandex"}
 
 
 def _get_brew_providers() -> list[str]:
     """Return provider IDs using brew."""
-    return [pid for pid, desc in all_descriptors().items()
-            if desc.cli_install and desc.cli_install.package_manager == "brew" and pid not in _KNOWN_BREW_AUTH]
+    return [pid for pid in provider_ids(package_manager="brew") if pid not in _KNOWN_BREW_AUTH]
 
 
 def _get_uv_providers() -> list[str]:
     """Return provider IDs using uv-tool."""
-    return [pid for pid, desc in all_descriptors().items()
-            if desc.cli_install and desc.cli_install.package_manager == "uv-tool"]
+    return provider_ids(package_manager="uv-tool")
 
 
 class TestBrewProviderInstallUninstall:
@@ -300,31 +278,17 @@ class TestBrewProviderInstallUninstall:
         assert desc.cli_install is not None
         executable = desc.cli_install.executable
 
-        install_result = install_provider_cli(provider_id, timeout=600)
-        assert install_result["status"] == "installed", (
-            f"{provider_id} install failed: {install_result.get('reason', install_result)}"
-        )
+        install_result = install_provider(provider_id)
+        assert_install_result_ok(provider_id, install_result)
 
         assert shutil.which(executable) is not None, (
             f"{executable} not found on PATH after install"
         )
 
-        # Verify CLI works
-        help_cmd = _cli_help_command(executable, ["--help", "-h", "--version"])
-        result = subprocess.run(
-            help_cmd, check=False, capture_output=True, text=True, timeout=30,
-        )
-        assert result.returncode == 0, (
-            f"{executable} {help_cmd[-1]} returned {result.returncode}: "
-            f"stderr={result.stderr[:500]}"
-        )
-        output = (result.stdout + result.stderr).strip()
-        assert len(output) > 0, f"{executable} --help produced no output"
+        assert_health_ok(provider_id, install_result)
 
-        uninstall_result = uninstall_provider_cli(provider_id, timeout=600)
-        assert uninstall_result["status"] == "uninstalled", (
-            f"{provider_id} uninstall failed: {uninstall_result.get('reason', uninstall_result)}"
-        )
+        uninstall_result = uninstall_provider(provider_id)
+        assert_uninstall_result_ok(provider_id, uninstall_result)
 
         assert shutil.which(executable) is None, (
             f"{executable} still found on PATH after uninstall"
@@ -336,35 +300,23 @@ class TestUvProviderInstallUninstall:
 
     @pytest.mark.parametrize("provider_id", _get_uv_providers())
     def test_install_uninstall_roundtrip(self, provider_id: str) -> None:
+        if shutil.which("uv") is None:
+            pytest.skip("uv not available on PATH in this test environment")
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
         executable = desc.cli_install.executable
 
-        install_result = install_provider_cli(provider_id, timeout=600)
-        assert install_result["status"] == "installed", (
-            f"{provider_id} install failed: {install_result.get('reason', install_result)}"
-        )
+        install_result = install_provider(provider_id)
+        assert_install_result_ok(provider_id, install_result)
 
         assert shutil.which(executable) is not None, (
             f"{executable} not found on PATH after install"
         )
 
-        # Verify CLI works
-        help_cmd = _cli_help_command(executable, ["--help", "-h", "--version"])
-        result = subprocess.run(
-            help_cmd, check=False, capture_output=True, text=True, timeout=30,
-        )
-        assert result.returncode == 0, (
-            f"{executable} {help_cmd[-1]} returned {result.returncode}: "
-            f"stderr={result.stderr[:500]}"
-        )
-        output = (result.stdout + result.stderr).strip()
-        assert len(output) > 0, f"{executable} --help produced no output"
+        assert_health_ok(provider_id, install_result)
 
-        uninstall_result = uninstall_provider_cli(provider_id, timeout=600)
-        assert uninstall_result["status"] == "uninstalled", (
-            f"{provider_id} uninstall failed: {uninstall_result.get('reason', uninstall_result)}"
-        )
+        uninstall_result = uninstall_provider(provider_id)
+        assert_uninstall_result_ok(provider_id, uninstall_result)
 
         assert shutil.which(executable) is None, (
             f"{executable} still found on PATH after uninstall"
@@ -374,10 +326,11 @@ class TestUvProviderInstallUninstall:
 class TestProviderInstallRecipes:
     """Validate each provider's install/uninstall recipe matches expected package manager."""
 
-    NPM_PROVIDERS = {"claude", "codex", "cline", "gemini", "opencode", "qwen"}  # continue has binary issues
-    BREW_PROVIDERS = {"goose", "plandex"}
+    NPM_PROVIDERS = {"claude", "codex", "cline", "continue", "copilot", "gemini", "opencode", "qwen"}
+    BREW_PROVIDERS = {"plandex"}
+    SCRIPT_PROVIDERS = {"goose"}
     UV_PROVIDERS = {"openhands", "aider"}
-    GH_EXTENSION_PROVIDERS = {"copilot"}
+    GH_EXTENSION_PROVIDERS = set()
     VSCODE_PROVIDERS = {"roo"}
     PI_PROVIDERS = {"pi"}
     NO_INSTALL_PROVIDERS = {"local-openai"}
@@ -401,6 +354,16 @@ class TestProviderInstallRecipes:
         assert isinstance(desc.cli_install.uninstall, ShellRecipe)
         assert desc.cli_install.install.command[0] == "brew"
         assert desc.cli_install.uninstall.command[0] == "brew"
+
+    @pytest.mark.parametrize("provider_id", SCRIPT_PROVIDERS)
+    def test_script_provider_recipe(self, provider_id: str) -> None:
+        desc = get_descriptor(provider_id)
+        assert desc.cli_install is not None
+        assert desc.cli_install.package_manager == "script"
+        assert isinstance(desc.cli_install.install, ShellRecipe)
+        assert isinstance(desc.cli_install.uninstall, ShellRecipe)
+        assert desc.cli_install.install.command[0] == "bash"
+        assert desc.cli_install.uninstall.command[0] == "bash"
 
     @pytest.mark.parametrize("provider_id", UV_PROVIDERS)
     def test_uv_provider_recipe(self, provider_id: str) -> None:

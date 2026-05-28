@@ -1,6 +1,6 @@
 """Unit tests for foundation/workflow/state_machine.py.
 
-All tests use FakeContext — no PlanningAPI, no filesystem, no event bus.
+All tests use FakeContext — no host component, filesystem, or event bus.
 """
 
 from __future__ import annotations
@@ -8,6 +8,7 @@ from __future__ import annotations
 import pytest
 
 from audiagentic.foundation.workflow import StateMachine
+from audiagentic.foundation.workflow.state_machine import DEFAULT_STATE_CHANGE_EVENT
 
 from .conftest import FakeConfig, FakeContext
 
@@ -57,7 +58,7 @@ def test_valid_transition_publishes_state_changed_event() -> None:
     ctx.add_item("t-1", "task", state="draft")
     sm = StateMachine(ctx)
     sm.state("t-1", "active")
-    ev = ctx.last_event("planning.item.state.changed")
+    ev = ctx.last_event(DEFAULT_STATE_CHANGE_EVENT)
     assert ev is not None
     assert ev["payload"]["old_state"] == "draft"
     assert ev["payload"]["new_state"] == "active"
@@ -203,7 +204,7 @@ def test_metadata_token_included_in_event_payload() -> None:
     ctx = _ctx_with_action(("draft", "active"), {"changed_by": "actor"})
     ctx.add_item("t-1", "task", state="draft")
     StateMachine(ctx).state("t-1", "active", actor="alice")
-    ev = ctx.last_event("planning.item.state.changed")
+    ev = ctx.last_event(DEFAULT_STATE_CHANGE_EVENT)
     assert ev["payload"].get("changed_by") == "alice"
 
 
@@ -231,7 +232,7 @@ def test_action_event_suffix_fires_before_state_changed() -> None:
     ctx.add_item("t-1", "task", state="draft")
     StateMachine(ctx).state("t-1", "active")
     types = [e["type"] for e in ctx.events]
-    assert types.index("task.activated") < types.index("planning.item.state.changed")
+    assert types.index("task.activated") < types.index(DEFAULT_STATE_CHANGE_EVENT)
 
 
 # ── apply_action ─────────────────────────────────────────────────────────────
@@ -338,11 +339,11 @@ def test_cascade_passes_depth_one_when_no_prior_metadata() -> None:
     ctx.add_item("plan-1", "plan", state="active")
     ctx.add_item("t-1", "task", state="active", plan_ref="plan-1")
     StateMachine(ctx).state("plan-1", "cancelled")
-    # The cascade state change for t-1 emits planning.item.state.changed with the
+    # The cascade state change for t-1 emits state.changed with the
     # cascade metadata merged into event_metadata.
     t1_events = [
         e for e in ctx.events
-        if e["type"] == "planning.item.state.changed"
+        if e["type"] == DEFAULT_STATE_CHANGE_EVENT
         and e["payload"].get("id") == "t-1"
     ]
     assert t1_events, "No state.changed event for t-1"
@@ -362,7 +363,7 @@ def test_cascade_increments_depth_from_incoming_metadata() -> None:
     StateMachine(ctx).state("plan-1", "cancelled", metadata={"propagation_depth": 2})
     t1_events = [
         e for e in ctx.events
-        if e["type"] == "planning.item.state.changed"
+        if e["type"] == DEFAULT_STATE_CHANGE_EVENT
         and e["payload"].get("id") == "t-1"
     ]
     assert t1_events, "No state.changed event for t-1"
@@ -395,7 +396,7 @@ def test_cascade_depth_flows_through_two_level_chain() -> None:
     def _depth_for(item_id: str) -> int | None:
         events = [
             e for e in ctx.events
-            if e["type"] == "planning.item.state.changed"
+            if e["type"] == DEFAULT_STATE_CHANGE_EVENT
             and e["payload"].get("id") == item_id
         ]
         return (events[0]["metadata"] or {}).get("propagation_depth") if events else None
