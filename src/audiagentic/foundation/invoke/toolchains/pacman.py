@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from ..recipes.shell import ShellRecipe
+from .detect import privilege_prefix
 
 
 def install(package: str) -> ShellRecipe:
-    return ShellRecipe(("sudo", "pacman", "-S", "--noconfirm", package))
+    return ShellRecipe((*privilege_prefix(), "pacman", "-S", "--noconfirm", package))
 
 
 def remove(package: str) -> ShellRecipe:
-    return ShellRecipe(("sudo", "pacman", "-R", "--noconfirm", package))
+    return ShellRecipe((*privilege_prefix(), "pacman", "-R", "--noconfirm", package))
