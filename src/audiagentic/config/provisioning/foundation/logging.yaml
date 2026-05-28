@@ -1,0 +1,49 @@
+# AUDiaGentic foundation logging — package defaults.
+#
+# Override hierarchy (deep-merge, lowest priority first):
+#   1. This file              — package defaults
+#   2. User-global            — ~/.audiagentic/config/foundation/logging.yaml
+#   3. Project-local          — <project>/.audiagentic/config/foundation/logging.yaml
+#   4. Machine-local          — <project>/.audiagentic/config/foundation/logging.local.yaml
+#   5. Env vars               — highest priority, always applied last
+#
+# To create a project or local override, copy relevant sections to the
+# appropriate path listed above. All fields are optional in override files —
+# omitted fields inherit from the layer below.
+#
+# Set exclusive_local: true in the project-local file to skip the user-global tier.
+
+logging:
+  level: INFO              # DEBUG | INFO | WARNING | ERROR | CRITICAL
+  format: json             # json | dev
+  dir: null                # null = stdout/stderr only; path = also write to rotating file
+
+  diagnostic:
+    backup_count: 30       # days of daily-rotated log files to keep
+
+  ai_audit:
+    enabled: false         # off by default — zero overhead when disabled
+    level: full            # full | summary | metadata_only
+    redact: true           # strip API keys, bearer tokens, email patterns from audit log
+    backup_count: 7        # days
+    # Regex patterns applied to audit log content when redact: true.
+    # Lists union across config layers — add patterns in project/local overrides without losing defaults.
+    redact_patterns:
+      - 'Bearer\s+\S+'
+      - '\bsk-[A-Za-z0-9_\-]{10,}\b'
+      - '\bghp_[A-Za-z0-9_]{10,}\b'
+      - '\bgho_[A-Za-z0-9_]{10,}\b'
+      - '\bxoxb-[A-Za-z0-9\-]+'
+      - '[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}'
+
+  # Per-logger level overrides. Dict-merge across layers: later layer wins per key.
+  # Example:
+  #   audiagentic.components.optional.planning: DEBUG
+  loggers: {}
+
+  # Loggers forced to WARNING regardless of root level. Lists union across layers.
+  silenced:
+    - mcp
+    - asyncio
+    - httpx
+    - urllib3
