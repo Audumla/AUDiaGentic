@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from audiagentic.runtime.lifecycle.components import DEFAULT_VERSION
+
 _TEMPLATES = Path(__file__).parent / "templates"
 
 SUPPORTED_RELEASE_TYPES = ["python", "node", "java", "go", "rust", "simple"]
@@ -20,7 +22,7 @@ def install(
     release_type: str = "python",
     branch: str = "main",
     python_version: str = "3.13",
-    initial_version: str = "0.1.0",
+    initial_version: str = DEFAULT_VERSION,
 ) -> dict[str, list[str]]:
     if release_type not in SUPPORTED_RELEASE_TYPES:
         raise ValueError(f"Unsupported release_type '{release_type}'. Choose from: {SUPPORTED_RELEASE_TYPES}")

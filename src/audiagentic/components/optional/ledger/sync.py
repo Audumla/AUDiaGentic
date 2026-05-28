@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import socket
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_ndjson, load_ndjson

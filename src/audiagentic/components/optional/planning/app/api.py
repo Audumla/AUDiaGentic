@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from audiagentic.foundation.event import EventService, StructuredLog
 from audiagentic.foundation.workflow import FrontmatterBuilder, ItemView, StateMachine
@@ -77,11 +80,11 @@ class PlanningAPI:
             )
             bus = get_bus()
             self._propagation_subscription = bus.subscribe(
-                "planning.item.state.changed",
+                self.config.state_change_event_type(),
                 self._on_state_change_for_propagation,
             )
         except Exception:
-            pass  # Propagation is optional; log warning in production
+            logger.warning("Failed to initialize state propagation engine", exc_info=True)
 
     def _scan(self):
         return scan_items(self.root)
