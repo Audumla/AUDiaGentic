@@ -9,8 +9,8 @@ import os
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.mcp.component_server import mcp_server, run_blocking_with_output
 from audiagentic.components.optional.coding_lsp.config import (
+    CODING_LSP_DIR,
     available_language_specs,
     discover_language_servers,
     read_lsp_config,
@@ -18,6 +18,11 @@ from audiagentic.components.optional.coding_lsp.config import (
 )
 from audiagentic.components.optional.coding_lsp.lsp_dependencies import get_lsp_dependencies
 from audiagentic.foundation.dependencies import detect_missing, install_dependencies
+from audiagentic.foundation.mcp.component_server import (
+    log_tool_call,
+    mcp_server,
+    run_blocking_with_output,
+)
 
 mcp = mcp_server(__name__)
 
@@ -27,10 +32,11 @@ def _project_root() -> Path:
 
 
 @mcp.tool()
+@log_tool_call
 def lsp_config_status(root: str = ".") -> dict[str, Any]:
     """Show configured, detected, and available language servers for a project."""
     project_root = Path(root).resolve()
-    lsp_path = project_root / ".coding-lsp" / "lsp.json"
+    lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
     configured = read_lsp_config(lsp_path)
     available = discover_language_servers(project_root)
     deps = get_lsp_dependencies()
@@ -44,10 +50,11 @@ def lsp_config_status(root: str = ".") -> dict[str, Any]:
 
 
 @mcp.tool()
+@log_tool_call
 def lsp_add_language(root: str, language: str) -> dict[str, Any]:
     """Add a language server to the project's lsp.json configuration."""
     project_root = Path(root).resolve()
-    lsp_path = project_root / ".coding-lsp" / "lsp.json"
+    lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
     specs = available_language_specs()
     if language not in specs:
         return {"ok": False, "error": f"Unknown language: {language}. Available: {list(specs.keys())}"}
@@ -58,10 +65,11 @@ def lsp_add_language(root: str, language: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+@log_tool_call
 def lsp_remove_language(root: str, language: str) -> dict[str, Any]:
     """Remove a language server from the project's lsp.json configuration."""
     project_root = Path(root).resolve()
-    lsp_path = project_root / ".coding-lsp" / "lsp.json"
+    lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
     configured = read_lsp_config(lsp_path)
     if language not in configured:
         return {"ok": False, "error": f"Language not configured: {language}"}
@@ -71,6 +79,7 @@ def lsp_remove_language(root: str, language: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+@log_tool_call
 def lsp_list_languages() -> dict[str, Any]:
     """List all available language server options with default configurations."""
     specs = available_language_specs()
@@ -81,6 +90,7 @@ def lsp_list_languages() -> dict[str, Any]:
 
 
 @mcp.tool()
+@log_tool_call
 async def lsp_install_dependencies(names: list[str]) -> dict[str, Any]:
     """Install missing LSP language server dependencies.
 
@@ -97,7 +107,8 @@ async def lsp_install_dependencies(names: list[str]) -> dict[str, Any]:
 
 
 @mcp.tool()
-async def lsp_list_missing() -> dict[str, Any]:
+@log_tool_call
+def lsp_list_missing() -> dict[str, Any]:
     """List missing LSP language server dependencies for the current project."""
     project_root = _project_root()
     deps = get_lsp_dependencies()
@@ -111,6 +122,8 @@ async def lsp_list_missing() -> dict[str, Any]:
 
 def main() -> None:
     """Entry point for standalone invocation."""
+    from audiagentic.foundation.logging import bootstrap
+    bootstrap("coding-lsp-config")
     mcp.run()
 
 

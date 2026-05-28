@@ -5,6 +5,7 @@
 /.audiagentic/runtime/
 /.audiagentic/sessions/
 /.audiagentic/logs/
+/.audiagentic/config/foundation/logging.local.yaml
 /.audiagentic/planning/extracts/
 /.audiagentic/planning/indexes/
 /.audiagentic/planning/meta/
