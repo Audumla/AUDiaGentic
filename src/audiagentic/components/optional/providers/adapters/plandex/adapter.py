@@ -2,22 +2,9 @@
 
 from __future__ import annotations
 
-import shutil
 from typing import Any
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError
-
-
-def _plandex_executable() -> str:
-    executable = shutil.which("plandex") or shutil.which("pdx")
-    if executable is None:
-        raise AudiaGenticError(
-            code="PRV-EXTERNAL-033",
-            kind="external",
-            message="plandex command is not available on PATH",
-            details={"provider-id": "plandex"},
-        )
-    return executable
+from audiagentic.components.optional.providers.adapters.cli import require_executable
 
 
 def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, Any]:
@@ -26,6 +13,6 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
         "status": "stubbed",
         "execution-mode": provider_cfg.get("access-mode", "cli"),
         "model": provider_cfg.get("default-model"),
-        "executable": _plandex_executable(),
+        "executable": require_executable("plandex", "plandex", "pdx"),
         "output": "Plandex adapter is registered; execution bridge not wired yet.",
     }
