@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from audiagentic.components.optional.providers.protocols.streaming._utils import (
+    _utc_now_us as _utc_now,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import read_schema
 
@@ -163,9 +165,6 @@ class ProviderCompletion:
             created_at=data.get("created-at"),
         )
 
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 def try_extract_json_from_stdout(stdout: str) -> dict[str, Any] | None:
