@@ -670,6 +670,10 @@ class Config:
             raise ValueError(f"workflow action '{name}' is not configured")
         return dict(actions[name])
 
+    def state_change_event_type(self) -> str:
+        """Event emitted by the generic workflow state machine for this host."""
+        return "planning.item.state.changed"
+
     def queue_defaults(self) -> dict:
         """Get default kind/state for queue listing."""
         defaults = self.planning.get("planning", {}).get("queue_defaults", {})
