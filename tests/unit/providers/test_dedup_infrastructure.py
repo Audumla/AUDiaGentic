@@ -4,10 +4,7 @@ from __future__ import annotations
 import pytest
 
 from audiagentic.components.optional.providers.adapters.cli import require_executable
-from audiagentic.components.optional.providers.protocols.streaming._utils import (
-    _utc_now,
-    _utc_now_us,
-)
+from audiagentic.components.optional.providers.protocols.streaming._utils import _utc_now
 from audiagentic.components.optional.providers.protocols.streaming.base_extractor import (
     BaseEventExtractor,
 )
@@ -22,23 +19,14 @@ def test_utc_now_format() -> None:
     assert "+00:00" not in ts
 
 
-def test_utc_now_us_format() -> None:
-    ts = _utc_now_us()
+def test_utc_now_has_microsecond_precision() -> None:
+    ts = _utc_now()
     assert ts.endswith("Z")
     assert "T" in ts
-    # microsecond precision: 6 fractional digits
+    assert "+00:00" not in ts
+    # always 6 fractional digits
     frac = ts.split(".")[1].rstrip("Z")
     assert len(frac) == 6
-
-
-def test_utc_now_values_differ_from_us() -> None:
-    # Both are valid ISO strings; _utc_now_us has microsecond precision
-    ts = _utc_now()
-    ts_us = _utc_now_us()
-    frac_us = ts_us.split(".")[1].rstrip("Z")
-    assert len(frac_us) == 6  # always microseconds
-    frac = ts.split(".")[1].rstrip("Z")
-    assert len(frac) == 6  # datetime.isoformat() also emits microseconds by default
 
 
 # ── BaseEventExtractor enforcement ──────────────────────────────────────────
