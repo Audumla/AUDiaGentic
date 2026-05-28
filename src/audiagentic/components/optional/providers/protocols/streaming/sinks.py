@@ -7,12 +7,12 @@ import logging
 import sys
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol, TextIO
 
 from jsonschema import Draft202012Validator
 
+from audiagentic.components.optional.providers.protocols.streaming._utils import _utc_now
 from audiagentic.foundation.contracts.schema_registry import read_schema
 
 # Per-path locks for coordinated writes to the same file
@@ -255,5 +255,3 @@ class NormalizedEventSink:
         return None
 
 
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
