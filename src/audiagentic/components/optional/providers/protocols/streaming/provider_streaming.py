@@ -11,6 +11,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TextIO
 
+from audiagentic.components.optional.providers.protocols.streaming.base_extractor import (
+    BaseEventExtractor,
+)
 from audiagentic.components.optional.providers.protocols.streaming.sinks import (
     ConsoleSink,
     InMemorySink,
@@ -179,6 +182,35 @@ def build_provider_stream_sinks(
     if tee_console:
         stdout_sinks.append(ConsoleSink())
         stderr_sinks.append(ConsoleSink(console=sys.stderr))
+    return stdout_sinks, stderr_sinks
+
+
+def build_extractor_stream_sinks(
+    extractor_cls: type[BaseEventExtractor],
+    *,
+    packet_ctx: dict[str, Any],
+    stream_controls: dict[str, Any] | None = None,
+) -> tuple[list[StreamSink], list[StreamSink]]:
+    """Build stream sinks with an extractor wrapping the stdout NormalizedEventSink.
+
+    Finds the NormalizedEventSink in stdout_sinks produced by build_provider_stream_sinks
+    and prepends an instance of extractor_cls that feeds into it.
+    """
+    stdout_sinks, stderr_sinks = build_provider_stream_sinks(
+        packet_ctx=packet_ctx,
+        stream_controls=stream_controls,
+    )
+    event_sink = next(
+        (s for s in stdout_sinks if isinstance(s, NormalizedEventSink)), None
+    )
+    if event_sink is not None:
+        extractor = extractor_cls(
+            event_sink=event_sink,
+            job_id=str(packet_ctx.get("job-id", "")),
+            provider_id=str(packet_ctx.get("provider-id", "")),
+        )
+        stdout_sinks = [s for s in stdout_sinks if s is not event_sink]
+        stdout_sinks.append(extractor)
     return stdout_sinks, stderr_sinks
 
 
