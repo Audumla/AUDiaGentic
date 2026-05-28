@@ -1,6 +1,6 @@
 """Shared fake WorkflowConfig and WorkflowContext for foundation/workflow unit tests.
 
-No PlanningAPI, no filesystem, no event bus. Tests in this package depend only on
+No host API, no filesystem, no event bus. Tests in this package depend only on
 ``audiagentic.foundation.workflow`` — zero coupling to any host component.
 """
 
@@ -106,7 +106,7 @@ class FakeConfig:
 # ── Fake context ──────────────────────────────────────────────────────────────
 
 class FakeContext:
-    """In-memory WorkflowContext — no filesystem, no event bus, no planning code."""
+    """In-memory WorkflowContext — no filesystem, no event bus, no host code."""
 
     def __init__(
         self,

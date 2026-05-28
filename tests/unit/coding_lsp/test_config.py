@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from audiagentic.components.optional.coding_lsp.config import (
     detect_project_languages,
     discover_language_servers,

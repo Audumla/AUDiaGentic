@@ -3,10 +3,8 @@ from __future__ import annotations
 import time
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from audiagentic.components.optional.coding_lsp.session_manager import SessionManager
 from audiagentic.components.optional.coding_lsp.lsp_lifecycle import ServerConfig
+from audiagentic.components.optional.coding_lsp.session_manager import SessionManager
 
 
 def _python_config() -> ServerConfig:

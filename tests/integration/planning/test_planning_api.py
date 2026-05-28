@@ -145,6 +145,34 @@ def test_archive_request_cascades_to_sole_spec_and_task(planning_root):
     assert api._find(task.data["id"]).data["state"] == "archived"
 
 
+def test_archive_request_cascade_ignores_unrelated_specs_and_tasks(planning_root):
+    _, api = planning_root
+    request_a = api.new("request", label="Cascade request A", summary="S", source="test")
+    request_b = api.new("request", label="Cascade request B", summary="S", source="test")
+    spec_a = api.new("spec", label="Spec A", summary="S", refs={"request_refs": [request_a.data["id"]]})
+    spec_b = api.new("spec", label="Spec B", summary="S", refs={"request_refs": [request_b.data["id"]]})
+    task_a = api.new(
+        "task",
+        label="Task A",
+        summary="S",
+        refs={"spec": spec_a.data["id"], "request_refs": [request_a.data["id"]]},
+    )
+    task_b = api.new(
+        "task",
+        label="Task B",
+        summary="S",
+        refs={"spec": spec_b.data["id"], "request_refs": [request_b.data["id"]]},
+    )
+    api.state(request_a.data["id"], "distilled")
+
+    api.state(request_a.data["id"], "archived", reason="historical")
+
+    assert api._find(spec_a.data["id"]).data["state"] == "archived"
+    assert api._find(task_a.data["id"]).data["state"] == "archived"
+    assert api._find(spec_b.data["id"]).data["state"] == "draft"
+    assert api._find(task_b.data["id"]).data["state"] == "draft"
+
+
 def test_archive_spec_cascades_to_sole_plan_and_task(planning_root):
     _, api = planning_root
     request = api.new("request", label="Cascade request", summary="S", source="test")
@@ -156,6 +184,24 @@ def test_archive_spec_cascades_to_sole_plan_and_task(planning_root):
 
     assert api._find(plan.data["id"]).data["state"] == "archived"
     assert api._find(task.data["id"]).data["state"] == "archived"
+
+
+def test_archive_spec_cascade_ignores_unrelated_plans_and_tasks(planning_root):
+    _, api = planning_root
+    request = api.new("request", label="Cascade request", summary="S", source="test")
+    spec_a = api.new("spec", label="Spec A", summary="S", refs={"request_refs": [request.data["id"]]})
+    spec_b = api.new("spec", label="Spec B", summary="S", refs={"request_refs": [request.data["id"]]})
+    plan_a = api.new("plan", label="Plan A", summary="P", refs={"spec": spec_a.data["id"]})
+    plan_b = api.new("plan", label="Plan B", summary="P", refs={"spec": spec_b.data["id"]})
+    task_a = api.new("task", label="Task A", summary="S", refs={"spec": spec_a.data["id"]})
+    task_b = api.new("task", label="Task B", summary="S", refs={"spec": spec_b.data["id"]})
+
+    api.state(spec_a.data["id"], "archived", reason="obsolete")
+
+    assert api._find(plan_a.data["id"]).data["state"] == "archived"
+    assert api._find(task_a.data["id"]).data["state"] == "archived"
+    assert api._find(plan_b.data["id"]).data["state"] == "draft"
+    assert api._find(task_b.data["id"]).data["state"] == "draft"
 
 
 def test_archived_item_rejects_update_operations(planning_root):
