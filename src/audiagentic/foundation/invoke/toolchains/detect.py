@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 
@@ -7,6 +8,23 @@ import sys
 def tool_available(name: str) -> bool:
     """Return True if the named executable is on PATH."""
     return shutil.which(name) is not None
+
+
+def privilege_prefix() -> tuple[str, ...]:
+    """Return ('sudo',) when not running as root, empty tuple otherwise.
+
+    Used by system package manager recipes (apt, dnf, pacman) so the same
+    recipe works both on normal user accounts and inside Docker containers
+    where the process already runs as root and sudo is absent.
+    """
+    if sys.platform.startswith("win"):
+        return ()
+    try:
+        if os.getuid() == 0:
+            return ()
+    except AttributeError:
+        return ()
+    return ("sudo",)
 
 
 def detect_pkg_manager() -> str | None:

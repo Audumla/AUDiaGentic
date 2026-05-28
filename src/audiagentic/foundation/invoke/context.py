@@ -12,7 +12,7 @@ ProgressCallback = ComponentOutputSink
 class InvocationContext:
     project_root: Path | None = None
     dry_run: bool = False
-    timeout: int = 300
+    timeout: int = 600
     on_progress: ProgressCallback | None = None
 
     def progress(self, message: str, *, progress: float | None = None, total: float | None = None) -> None:
