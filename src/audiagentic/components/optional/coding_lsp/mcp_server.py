@@ -15,12 +15,14 @@ except ImportError:
     FastMCP = None  # type: ignore[misc, assignment]
 
 from audiagentic.components.optional.coding_lsp.config import (
+    CODING_LSP_DIR,
     detect_project_languages,
     merge_server_configs,
     read_lsp_config,
     resolve_server_for_file,
 )
 from audiagentic.components.optional.coding_lsp.session_manager import SessionManager
+from audiagentic.foundation.mcp.component_server import log_tool_call
 
 _session_manager = SessionManager()
 mcp = FastMCP("lsp-mcp") if FastMCP else None  # type: ignore[call-arg]
@@ -49,10 +51,11 @@ def _file_to_uri(file_path: str | Path) -> str:
 # ── MCP tools ───────────────────────────────────────────────────────────────
 
 @mcp.tool()  # type: ignore[operator]
+@log_tool_call
 def lsp_symbols(query: str, root: str = ".") -> list[dict[str, Any]]:
     """Search for workspace-level symbols matching a query."""
     project_root = Path(root).resolve()
-    lsp_path = project_root / ".coding-lsp" / "lsp.json"
+    lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
     explicit = read_lsp_config(lsp_path)
     detected = detect_project_languages(project_root)
     servers = merge_server_configs(explicit, detected)
@@ -68,6 +71,7 @@ def lsp_symbols(query: str, root: str = ".") -> list[dict[str, Any]]:
 
 
 @mcp.tool()  # type: ignore[operator]
+@log_tool_call
 def lsp_doc_symbols(file: str) -> list[dict[str, Any]]:
     """Get document symbols (outline) for a file."""
     uri = _file_to_uri(file)
@@ -82,6 +86,7 @@ def lsp_doc_symbols(file: str) -> list[dict[str, Any]]:
 
 
 @mcp.tool()  # type: ignore[operator]
+@log_tool_call
 def lsp_definition(file: str, position: str) -> list[dict[str, Any]]:
     """Go to definition at a file position. Position format: 'line:column' (1-based)."""
     uri = _file_to_uri(file)
@@ -97,6 +102,7 @@ def lsp_definition(file: str, position: str) -> list[dict[str, Any]]:
 
 
 @mcp.tool()  # type: ignore[operator]
+@log_tool_call
 def lsp_hover(file: str, position: str) -> dict[str, Any] | None:
     """Get hover/type information at a file position. Position format: 'line:column' (1-based)."""
     uri = _file_to_uri(file)
@@ -112,6 +118,7 @@ def lsp_hover(file: str, position: str) -> dict[str, Any] | None:
 
 
 @mcp.tool()  # type: ignore[operator]
+@log_tool_call
 def lsp_references(file: str, position: str, include_declaration: bool = True) -> list[dict[str, Any]]:
     """Find all references to a symbol at a file position. Position format: 'line:column' (1-based)."""
     uri = _file_to_uri(file)
@@ -127,6 +134,7 @@ def lsp_references(file: str, position: str, include_declaration: bool = True) -
 
 
 @mcp.tool()  # type: ignore[operator]
+@log_tool_call
 def lsp_diagnostics(root: str = ".", fresh: bool = False) -> dict[str, list[dict[str, Any]]]:
     """Get diagnostics for all open files in a project."""
     project_root = Path(root).resolve()
@@ -138,6 +146,7 @@ def lsp_diagnostics(root: str = ".", fresh: bool = False) -> dict[str, list[dict
 
 
 @mcp.tool()  # type: ignore[operator]
+@log_tool_call
 def lsp_rename_preview(file: str, position: str, new_name: str) -> dict[str, Any] | None:
     """Preview a rename operation. Returns workspace edit without applying. Position format: 'line:column' (1-based)."""
     uri = _file_to_uri(file)
@@ -155,7 +164,7 @@ def lsp_rename_preview(file: str, position: str, new_name: str) -> dict[str, Any
 # ── internal helpers ────────────────────────────────────────────────────────
 
 def _discover_servers(project_root: Path) -> dict[str, Any]:
-    lsp_path = project_root / ".coding-lsp" / "lsp.json"
+    lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
     explicit = read_lsp_config(lsp_path)
     detected = detect_project_languages(project_root)
     return merge_server_configs(explicit, detected)
@@ -181,6 +190,8 @@ def _lang_to_id(language: str) -> str:
 
 def main() -> None:
     """Entry point for harness invocation."""
+    from audiagentic.foundation.logging import bootstrap
+    bootstrap("coding-lsp")
     if mcp is None:
         raise ImportError("mcp package not installed")
     mcp.run()

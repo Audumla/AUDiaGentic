@@ -19,7 +19,11 @@ from audiagentic.foundation.dependencies import (
     install_system_dependencies,
     uninstall_system_dependencies,
 )
-from audiagentic.foundation.mcp.component_server import mcp_server, run_blocking_with_output
+from audiagentic.foundation.mcp.component_server import (
+    log_tool_call,
+    mcp_server,
+    run_blocking_with_output,
+)
 
 mcp = mcp_server(__name__)
 
@@ -29,6 +33,7 @@ def _project_root() -> Path:
 
 
 @mcp.tool()
+@log_tool_call
 def get_source_control_status() -> dict:
     """Return availability of git, gh CLI, and official MCP servers."""
     missing = detect_missing(SYSTEM_DEPENDENCIES, SOURCE_CONTROL_DEPENDENCY_IDS)
@@ -36,6 +41,7 @@ def get_source_control_status() -> dict:
 
 
 @mcp.tool()
+@log_tool_call
 async def install_dependencies(names: list[str], ctx: Context = None) -> dict:
     """Install source-control dependencies (git, gh, gh-mcp, uv) via host package manager.
 
@@ -51,6 +57,7 @@ async def install_dependencies(names: list[str], ctx: Context = None) -> dict:
 
 
 @mcp.tool()
+@log_tool_call
 async def uninstall_dependencies(names: list[str], ctx: Context = None) -> dict:
     """Uninstall source-control dependencies via host package manager.
 
@@ -65,6 +72,8 @@ async def uninstall_dependencies(names: list[str], ctx: Context = None) -> dict:
 
 
 def main() -> None:
+    from audiagentic.foundation.logging import bootstrap
+    bootstrap("source-control")
     mcp.run()
 
 

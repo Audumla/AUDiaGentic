@@ -1,17 +1,23 @@
 """MCP server base for component API servers.
 
-Provides the FastMCP factory (name resolved from component config) and
+Provides the FastMCP factory (name resolved from component config),
 async output bridging so component MCP servers can stream progress and
-log events without coupling to the transport layer.
+log events without coupling to the transport layer, and the
+log_tool_call decorator for automatic tool call tracing.
 """
 from __future__ import annotations
 
 import asyncio
+import functools
+import logging
 import os
 import queue
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
+
+logger = logging.getLogger(__name__)
 
 from audiagentic.foundation.output import (
     ComponentOutputEvent,
@@ -27,6 +33,73 @@ except ImportError:  # pragma: no cover
     Context = Any  # type: ignore[misc, assignment]
 
 T = TypeVar("T")
+
+
+def log_tool_call(func: Callable) -> Callable:
+    """Decorator that adds entry/exit/error logging to an MCP tool function.
+
+    Stacking order — @mcp.tool() must be outermost, @log_tool_call innermost:
+
+        @mcp.tool()
+        @log_tool_call
+        def my_tool(...): ...
+
+    Logs tool name + correlation ID at DEBUG on entry; duration_ms at INFO on
+    success; full traceback at ERROR on failure. Args are never logged —
+    they may contain secrets, API keys, or user PII (security invariant).
+    """
+    if asyncio.iscoroutinefunction(func):
+        @functools.wraps(func)
+        async def _async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            logger.debug(
+                "tool call start",
+                extra={"tool": func.__name__},
+            )
+            t0 = time.monotonic()
+            try:
+                result = await func(*args, **kwargs)
+                logger.info(
+                    "tool call done",
+                    extra={
+                        "tool": func.__name__,
+                        "duration_ms": int((time.monotonic() - t0) * 1000),
+                    },
+                )
+                return result
+            except Exception:
+                logger.error(
+                    "tool call failed",
+                    extra={"tool": func.__name__},
+                    exc_info=True,
+                )
+                raise
+        return _async_wrapper
+
+    @functools.wraps(func)
+    def _sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+        logger.debug(
+            "tool call start",
+            extra={"tool": func.__name__},
+        )
+        t0 = time.monotonic()
+        try:
+            result = func(*args, **kwargs)
+            logger.info(
+                "tool call done",
+                extra={
+                    "tool": func.__name__,
+                    "duration_ms": int((time.monotonic() - t0) * 1000),
+                },
+            )
+            return result
+        except Exception:
+            logger.error(
+                "tool call failed",
+                extra={"tool": func.__name__},
+                exc_info=True,
+            )
+            raise
+    return _sync_wrapper
 
 
 def project_root_from_env() -> Path:
@@ -46,8 +119,8 @@ def _resolve_mcp_server_name(module_name: str) -> str:
             for server in descriptor.mcp_servers:
                 if server.module == module_name:
                     return server.name
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception:
+        logger.warning("Failed to resolve MCP server name for %s", module_name, exc_info=True)
     return module_name
 
 
