@@ -18,7 +18,7 @@ except ImportError:
 from audiagentic.foundation.components.ids import COMPONENT_PLANNING
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
-from audiagentic.foundation.mcp.component_server import project_root_from_env
+from audiagentic.foundation.mcp.component_server import log_tool_call, project_root_from_env
 
 from .api import (
     planning_events as _planning_events,
@@ -67,18 +67,22 @@ def build_server() -> FastMCP:
     )
 
     @mcp.tool(description=_tool_description("planning_status", "Return planning component installation status for the project."))
+    @log_tool_call
     def planning_status() -> dict[str, Any]:
         return _planning_status(project_root_from_env())
 
     @mcp.tool(description=_tool_description("planning_summary", "Return item counts per planning kind and current ID counters."))
+    @log_tool_call
     def planning_summary() -> dict[str, Any]:
         return _planning_summary(project_root_from_env())
 
     @mcp.tool(description=_tool_description("planning_index", "Read a specific planning index."))
+    @log_tool_call
     def planning_index(index_name: str) -> dict[str, Any]:
         return _planning_index(project_root_from_env(), index_name)
 
     @mcp.tool(description=_tool_description("planning_events", "Return recent planning events from events.jsonl."))
+    @log_tool_call
     def planning_events(limit: int = 20) -> dict[str, Any]:
         return _planning_events(project_root_from_env(), limit=limit)
 
@@ -86,6 +90,8 @@ def build_server() -> FastMCP:
 
 
 def main() -> int:
+    from audiagentic.foundation.logging import bootstrap
+    bootstrap("planning")
     build_server().run()
     return 0
 

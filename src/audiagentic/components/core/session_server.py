@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import platform
 import sys
@@ -15,6 +16,8 @@ import time
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -26,6 +29,7 @@ except ImportError:  # pragma: no cover - exercised by missing optional dep only
 from audiagentic.foundation.components.ids import COMPONENT_SESSION
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
+from audiagentic.foundation.mcp.component_server import log_tool_call
 from audiagentic.runtime.config import load_layered_config, load_yaml_file, save_yaml_file
 
 register_all_components()
@@ -291,6 +295,7 @@ def _get_endpoint_info() -> dict[str, Any]:
             with urllib.request.urlopen(f"{base_url}/models", timeout=5) as resp:
                 info["endpoint_reachable"] = resp.status == 200
         except Exception:
+            logger.warning("Failed to reach endpoint at %s", base_url)
             info["endpoint_reachable"] = False
     else:
         info["base_url"] = None
@@ -310,6 +315,7 @@ def build_server() -> FastMCP:
     )
 
     @mcp.tool(description=_tool_description("status", "Show the current AUDiaGentic harness status: versions, model, endpoint, auto-update, and environment info."))
+    @log_tool_call
     def status() -> dict[str, Any]:
         auto_update: dict[str, Any] = {}
         try:
@@ -340,10 +346,12 @@ def build_server() -> FastMCP:
         }
 
     @mcp.tool(description=_tool_description("config", "Show the current AUDiaGentic harness configuration: ag.yaml settings and generated agent model config."))
+    @log_tool_call
     def config() -> dict[str, Any]:
         return _get_config_info()
 
     @mcp.tool(description=_tool_description("set_auto_update", "Enable or disable auto-update checks at launch."))
+    @log_tool_call
     def set_auto_update(enabled: bool) -> dict[str, Any]:
         import os
         env_var = "AUDIAGENTIC_AUTO_UPDATE_ENABLED"
@@ -351,10 +359,12 @@ def build_server() -> FastMCP:
         return {"ok": True, "auto_update_enabled": enabled, "env": env_var}
 
     @mcp.tool(description=_tool_description("cli_visibility", "Show current CLI visibility settings for thinking blocks and tool or MCP blocks."))
+    @log_tool_call
     def cli_visibility() -> dict[str, Any]:
         return _effective_cli_visibility(_project_root())
 
     @mcp.tool(description=_tool_description("set_cli_visibility", "Set CLI visibility for thinking blocks and tool or MCP blocks, then request an in-session reload."))
+    @log_tool_call
     def set_cli_visibility(
         show_thinking_blocks: bool | None = None,
         show_tool_blocks: bool | None = None,
@@ -373,6 +383,7 @@ def build_server() -> FastMCP:
             return {"ok": False, "error": str(exc)}
 
     @mcp.tool(description=_tool_description("refresh_harness_config", "Regenerate mcp.json and SYSTEM.md from current component state, then request in-session reload."))
+    @log_tool_call
     def refresh_harness_config() -> dict[str, Any]:
         from audiagentic.runtime.harness import (
             build_runtime_sync,
@@ -386,6 +397,7 @@ def build_server() -> FastMCP:
         }
 
     @mcp.tool(description=_tool_description("update_embedded_rig", "Update the embedded rig's llama-server binary to the latest ggml-org/llama.cpp release."))
+    @log_tool_call
     async def update_embedded_rig(ctx: Context) -> dict[str, Any]:
         import contextlib
         import io
