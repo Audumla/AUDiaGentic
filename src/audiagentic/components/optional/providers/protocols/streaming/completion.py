@@ -10,9 +10,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from audiagentic.components.optional.providers.protocols.streaming._utils import (
-    _utc_now_us as _utc_now,
-)
+from audiagentic.components.optional.providers.protocols.streaming._utils import _utc_now
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import read_schema
 
