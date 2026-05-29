@@ -16,7 +16,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 def test_opencode_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(opencode.shutil, "which", lambda _: r"C:\\Tools\\opencode.exe")
+    monkeypatch.setattr(opencode, "require_executable", lambda _provider_id, _command: r"C:\\Tools\\opencode.exe")
 
     def fake_run_streaming_command(
         command,
@@ -72,7 +72,7 @@ def test_opencode_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_opencode_adapter_handles_empty_or_non_json_output(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(opencode.shutil, "which", lambda _: r"C:\\Tools\\opencode.exe")
+    monkeypatch.setattr(opencode, "require_executable", lambda _provider_id, _command: r"C:\\Tools\\opencode.exe")
 
     def fake_run_streaming_command(
         command,
@@ -108,7 +108,7 @@ def test_opencode_adapter_handles_empty_or_non_json_output(monkeypatch, tmp_path
 
 
 def test_opencode_adapter_raises_on_non_zero_return(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(opencode.shutil, "which", lambda _: r"C:\\Tools\\opencode.exe")
+    monkeypatch.setattr(opencode, "require_executable", lambda _provider_id, _command: r"C:\\Tools\\opencode.exe")
 
     def fake_run_streaming_command(
         command,
@@ -148,9 +148,19 @@ def test_opencode_adapter_raises_on_non_zero_return(monkeypatch, tmp_path: Path)
 
 
 def test_opencode_adapter_requires_command(monkeypatch) -> None:
-    monkeypatch.setattr(opencode.shutil, "which", lambda _: None)
-
     try:
+        monkeypatch.setattr(
+            opencode,
+            "require_executable",
+            lambda _provider_id, _command: (_ for _ in ()).throw(
+                AudiaGenticError(
+                    code="PRV-EXTERNAL-011",
+                    kind="external",
+                    message="missing",
+                    details={"provider-id": "opencode"},
+                )
+            ),
+        )
         opencode.run({"provider-id": "opencode"}, {"default-model": "openai/gpt-5"})
     except AudiaGenticError as exc:
         assert exc.code == "PRV-EXTERNAL-011"

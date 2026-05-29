@@ -29,7 +29,7 @@ def test_copilot_adapter_contract(monkeypatch, tmp_path: Path) -> None:
         def wait(self) -> int:
             return 0
 
-    monkeypatch.setattr(copilot.shutil, "which", lambda name: "/fake/gh")
+    monkeypatch.setattr(copilot, "require_executable", lambda _provider_id, _command: "/fake/gh")
     monkeypatch.setattr(streaming.subprocess, "Popen", lambda *a, **kw: FakeProcess())
 
     result = copilot.run(

@@ -16,7 +16,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 def test_qwen_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(qwen.shutil, "which", lambda _: r"C:\\Tools\\qwen.exe")
+    monkeypatch.setattr(qwen, "require_executable", lambda _provider_id, _command: r"C:\\Tools\\qwen.exe")
 
     def fake_run_streaming_command(
         command,
@@ -70,9 +70,14 @@ def test_qwen_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_qwen_adapter_requires_command(monkeypatch) -> None:
-    monkeypatch.setattr(qwen.shutil, "which", lambda _: None)
-
     try:
+        monkeypatch.setattr(
+            qwen,
+            "require_executable",
+            lambda _provider_id, _command: (_ for _ in ()).throw(
+                AudiaGenticError(code="PRV-EXTERNAL-007", kind="external", message="missing")
+            ),
+        )
         qwen.run({"provider-id": "qwen"}, {"default-model": "qwen-coder"})
     except AudiaGenticError as exc:
         assert exc.code == "PRV-EXTERNAL-007"

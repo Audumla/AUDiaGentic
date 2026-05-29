@@ -25,7 +25,7 @@ def test_gemini_adapter_recognizes_tag(monkeypatch, tmp_path: Path) -> None:
         )
 
         captured: dict[str, object] = {}
-        monkeypatch.setattr(gemini.shutil, "which", lambda _: "gemini")
+        monkeypatch.setattr(gemini, "require_executable", lambda _provider_id, _command: "gemini")
 
         def fake_run_streaming_command(
             command,

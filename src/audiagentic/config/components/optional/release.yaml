@@ -53,7 +53,7 @@ harness-instructions:
       - `update_release_please_workflow` — Update release workflow
       - `finalize_release` — Archive ledger and render release documents
 
-surface-contributions:
+contributions:
   - id: release/doctrine
     owner: release
     kind: rule
