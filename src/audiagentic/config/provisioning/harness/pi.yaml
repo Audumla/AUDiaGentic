@@ -14,7 +14,7 @@
 # Use "latest" to always pull the current release.
 # Overridden by env vars: AUDIAGENTIC_PI_AGENT_VERSION, AUDIAGENTIC_PI_MCP_ADAPTER_VERSION
 agent:
-  version: latest
+  version: "0.77.0"
   mcp_adapter_version: latest
 
 # --- Built-in tool access control ---
