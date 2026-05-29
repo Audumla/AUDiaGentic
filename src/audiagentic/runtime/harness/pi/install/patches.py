@@ -393,8 +393,8 @@ def _patch_mcp_direct_tools_progress(npm_dir: Path) -> None:
         )
 
     sync_notice_marker = "      const result = await resultPromise;\n"
-    sync_notice_block = (
-        "      const result = await resultPromise;\n"
+    # Old block (notify only) — upgrade to auto-reload block if found.
+    sync_notice_old = (
         "      const sync = getRuntimeSyncHint(result as { structuredContent?: unknown });\n"
         "      if (sync && ctx?.hasUI) {\n"
         "        const notice = formatRuntimeSyncNotice(sync);\n"
@@ -402,8 +402,35 @@ def _patch_mcp_direct_tools_progress(npm_dir: Path) -> None:
         "        ctx.ui.setStatus(\"audiagentic-runtime-action\", notice);\n"
         "      }\n"
     )
-    if "const sync = getRuntimeSyncHint(result as { structuredContent?: unknown });" not in source and sync_notice_marker in source:
-        source = source.replace(sync_notice_marker, sync_notice_block, 1)
+    # New block: reload_required triggers ctx.reload() after streaming ends;
+    # restart_required shows a warning; refresh_required shows a quiet notice.
+    sync_notice_new = (
+        "      const sync = getRuntimeSyncHint(result as { structuredContent?: unknown });\n"
+        "      if (sync) {\n"
+        "        if (sync.action === \"restart_required\") {\n"
+        "          if (ctx?.hasUI) {\n"
+        "            const notice = formatRuntimeSyncNotice(sync);\n"
+        "            ctx.ui.notify(notice, \"warning\");\n"
+        "            ctx.ui.setStatus(\"audiagentic-runtime-action\", notice);\n"
+        "          }\n"
+        "        } else if (sync.action === \"reload_required\" && ctx?.reload) {\n"
+        "          if (ctx.hasUI) ctx.ui.setStatus(\"audiagentic-runtime-action\", \"AUDiaGentic runtime updated — reloading...\");\n"
+        "          setTimeout(async () => {\n"
+        "            try { await ctx.reload(); } catch { /* ctx may be stale if another reload already ran */ }\n"
+        "          }, 1500);\n"
+        "        } else if (sync.action !== \"reload_required\" && ctx?.hasUI) {\n"
+        "          ctx.ui.notify(formatRuntimeSyncNotice(sync), \"info\");\n"
+        "          ctx.ui.setStatus(\"audiagentic-runtime-action\", formatRuntimeSyncNotice(sync));\n"
+        "        }\n"
+        "      }\n"
+    )
+    if sync_notice_new not in source:
+        if sync_notice_old in source:
+            # Upgrade existing notify-only block to auto-reload block.
+            source = source.replace(sync_notice_old, sync_notice_new, 1)
+        elif sync_notice_marker in source:
+            # First-time injection.
+            source = source.replace(sync_notice_marker, sync_notice_marker + sync_notice_new, 1)
 
     success_details_old = '        details: { server: spec.serverName, tool: spec.originalName, uiOpen: true },\n'
     success_details_new = (
