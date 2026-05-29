@@ -21,8 +21,6 @@ def render_contributions(
 ) -> list[SurfaceBlock]:
     blocks: list[SurfaceBlock] = []
     for contribution in contributions:
-        if contribution.kind != "rule":
-            continue
         blocks.append(
             SurfaceBlock(
                 path=project_root / "AGENTS.md",

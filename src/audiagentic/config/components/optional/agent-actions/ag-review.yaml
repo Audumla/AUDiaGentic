@@ -1,5 +1,14 @@
-type: agent-action
+type: action
 contract-version: v1
+id: ag-review/doctrine
+title: Review action doctrine
+content:
+  body: |
+    When the review action is triggered: perform read-focused validation and
+    completeness review. Identify blockers, missing tests, contract mismatches,
+    and drift from tracked docs. Do not add implementation work unless explicitly
+    requested. Do not broaden review into feature-scope changes.
+
 tag-id: ag-review
 display-name: Review
 description: Perform read-focused validation and completeness review without adding implementation work
@@ -26,19 +35,8 @@ is-generic-tag: false
 is-review-tag: true
 skill-content-file: ag-review-skill.md
 
-surface-contributions:
-  - id: ag-review/doctrine
-    kind: rule
-    title: Review action doctrine
-    content:
-      body: |
-        When the review action is triggered: perform read-focused validation and
-        completeness review. Identify blockers, missing tests, contract mismatches,
-        and drift from tracked docs. Do not add implementation work unless explicitly
-        requested. Do not broaden review into feature-scope changes.
-
+instructions:
   - id: ag-review/review-doctrine
-    kind: rule
     title: Review doctrine
     content:
       body: |

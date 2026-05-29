@@ -275,11 +275,11 @@ def _refresh_mcp_config_if_needed(descriptor, project_root: Path, *, reason: str
             component_id=descriptor.component_id,
         )
     except Exception:
-        logger.warning("Failed to refresh harness config for %s: %s", descriptor.component_id, exc_info=True)
+        logger.warning("Failed to refresh harness config for %s", descriptor.component_id, exc_info=True)
     try:
         _propagate_mcp_to_providers(descriptor, project_root)
     except Exception:
-        logger.warning("Failed to propagate MCP config for %s: %s", descriptor.component_id, exc_info=True)
+        logger.warning("Failed to propagate MCP config for %s", descriptor.component_id, exc_info=True)
 
 
 def _propagate_mcp_to_providers(descriptor, project_root: Path) -> None:

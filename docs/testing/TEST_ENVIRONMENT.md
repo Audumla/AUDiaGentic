@@ -5,6 +5,10 @@ This repo uses two test modes:
 - local fast tests for unit and non-mutating integration work
 - Docker-gated tests for anything that installs tools, writes lifecycle state, or mutates runtime environments
 
+Related structure guide:
+
+- `docs/testing/TEST_ARCHITECTURE.md`
+
 This document is source of truth for agents and developers extending tests.
 
 ## Core Rules
