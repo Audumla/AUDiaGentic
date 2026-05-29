@@ -112,6 +112,8 @@ def _patch_tool_execution(npm_dir: Path) -> None:
 
 
 def _patch_update_notification(npm_dir: Path) -> None:
+    import re as _re
+
     target = (
         _c._audiagentic_pkg_dir(npm_dir)
         / "dist" / "modes" / "interactive" / "interactive-mode.js"
@@ -120,29 +122,33 @@ def _patch_update_notification(npm_dir: Path) -> None:
         raise SystemExit(f"AudiaGentic agent install incomplete — not found: {target}")
     source = target.read_text(encoding="utf-8")
 
-    old_version_check = (
-        "        // Start version check asynchronously\n"
-        "        checkForNewPiVersion(this.version).then((newVersion) => {\n"
-        "            if (newVersion) {\n"
-        "                this.showNewVersionNotification(newVersion);\n"
-        "            }\n"
-        "        });"
-    )
+    # Match the version-check block regardless of the callback variable name.
     new_version_check = "        // Pi version check suppressed by AUDiaGentic harness — use 'audiagentic update' instead."
-    if new_version_check not in source and old_version_check in source:
-        source = source.replace(old_version_check, new_version_check, 1)
+    if new_version_check not in source:
+        source = _re.sub(
+            r"[ \t]*// Start version check asynchronously\n"
+            r"[ \t]*checkForNewPiVersion\(this\.version\)\.then\(\(\w+\) => \{\n"
+            r"[ \t]*if \(\w+\) \{\n"
+            r"[ \t]*this\.showNewVersionNotification\(\w+\);\n"
+            r"[ \t]*\}\n"
+            r"[ \t]*\}\);",
+            new_version_check,
+            source,
+        )
 
-    old_pkg_check = (
-        "        // Start package update check asynchronously\n"
-        "        this.checkForPackageUpdates().then((updates) => {\n"
-        "            if (updates.length > 0) {\n"
-        "                this.showPackageUpdateNotification(updates);\n"
-        "            }\n"
-        "        });"
-    )
+    # Match the package-update block regardless of the callback variable name.
     new_pkg_check = "        // Package update notifications suppressed by AUDiaGentic harness."
-    if new_pkg_check not in source and old_pkg_check in source:
-        source = source.replace(old_pkg_check, new_pkg_check, 1)
+    if new_pkg_check not in source:
+        source = _re.sub(
+            r"[ \t]*// Start package update check asynchronously\n"
+            r"[ \t]*this\.checkForPackageUpdates\(\)\.then\(\(\w+\) => \{\n"
+            r"[ \t]*if \(\w+\.length > 0\) \{\n"
+            r"[ \t]*this\.showPackageUpdateNotification\(\w+\);\n"
+            r"[ \t]*\}\n"
+            r"[ \t]*\}\);",
+            new_pkg_check,
+            source,
+        )
 
     target.write_text(source, encoding="utf-8")
 
