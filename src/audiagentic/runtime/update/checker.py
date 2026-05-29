@@ -88,15 +88,13 @@ def record_failed_install(version: str) -> None:
     _write_cache(cache)
 
 
-def _is_install_failed_recently(version: str, cache: dict) -> bool:
-    failed_at = cache.get("failed_installs", {}).get(version)
-    if not failed_at:
-        return False
-    try:
-        return datetime.now(timezone.utc) - datetime.fromisoformat(failed_at) < _CHECK_INTERVAL
-    except Exception:
-        logger.warning("Failed to parse failed install timestamp for %s", version, exc_info=True)
-        return False
+def _is_install_failed(version: str, cache: dict) -> bool:
+    """True if a prior install attempt for this version was recorded.
+
+    Failed installs suppress auto-prompts permanently; the user can still retry
+    via an explicit ``audiagentic update`` command.
+    """
+    return version in cache.get("failed_installs", {})
 
 
 def check_update(*, force: bool = False) -> dict | None:
@@ -122,7 +120,7 @@ def check_update(*, force: bool = False) -> dict | None:
                         return None
                     if latest in cache.get("skipped_versions", []):
                         return None
-                    if _is_install_failed_recently(latest, cache):
+                    if _is_install_failed(latest, cache):
                         return None
                     if _version_tuple(latest) <= _version_tuple(current):
                         return None
@@ -140,7 +138,7 @@ def check_update(*, force: bool = False) -> dict | None:
         return None
     if latest in cache.get("skipped_versions", []):
         return None
-    if _is_install_failed_recently(latest, cache):
+    if _is_install_failed(latest, cache):
         return None
     if _version_tuple(latest) <= _version_tuple(current):
         return None
