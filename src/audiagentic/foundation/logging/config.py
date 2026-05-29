@@ -69,6 +69,7 @@ class AiAuditConfig:
 class LoggingConfig:
     level: str = "INFO"
     format: str = "json"
+    console: bool = True   # False = suppress stderr handler; logs go to file only
     dir: Path | None = None
     diagnostic: DiagnosticConfig = field(default_factory=DiagnosticConfig)
     ai_audit: AiAuditConfig = field(default_factory=AiAuditConfig)
@@ -123,6 +124,8 @@ def _apply_env_overrides(raw: dict[str, Any]) -> dict[str, Any]:
         log["level"] = val
     if val := os.environ.get("AUDIAGENTIC_LOG_FORMAT"):
         log["format"] = val
+    if val := os.environ.get("AUDIAGENTIC_LOG_CONSOLE"):
+        log["console"] = val.lower() not in ("0", "false", "off", "no")
     if val := os.environ.get("AUDIAGENTIC_LOG_DIR"):
         log["dir"] = val
 
@@ -156,6 +159,7 @@ def _dict_to_config(
     return LoggingConfig(
         level=str(log.get("level", "INFO")).upper(),
         format=str(log.get("format", "json")).lower(),
+        console=bool(log.get("console", True)),
         dir=Path(dir_val) if dir_val else None,
         diagnostic=DiagnosticConfig(
             backup_count=int(diag.get("backup_count", 30)),
@@ -369,10 +373,11 @@ def configure_logging(project_root: Path | None = None) -> None:
     else:
         formatter = _CorrelationJsonFormatter()
 
-    # Stream handler (always)
-    stream_handler = logging.StreamHandler(sys.stderr)
-    stream_handler.setFormatter(formatter)
-    root.addHandler(stream_handler)
+    # Stream handler (suppressed when console: false and a file dir is set)
+    if cfg.console or cfg.dir is None:
+        stream_handler = logging.StreamHandler(sys.stderr)
+        stream_handler.setFormatter(formatter)
+        root.addHandler(stream_handler)
 
     # File handler (when dir is set)
     if cfg.dir is not None:

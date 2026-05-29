@@ -49,6 +49,21 @@ def request_runtime_reload(
     return write_reload_marker(project_root, reason=reason, component_id=component_id, target=_TARGET)
 
 
+def _validate_agent_install(npm_dir: Path) -> None:
+    """Verify that the agent install is complete — detect empty dist/ in nested packages."""
+    pi_pkg = npm_dir / "node_modules" / "@earendil-works" / "pi-coding-agent"
+    if not pi_pkg.exists():
+        raise SystemExit(f"Agent install failed: {pi_pkg} not found after npm install")
+    # Walk nested @earendil-works packages and check that each dist/ is non-empty.
+    for pkg_dir in (pi_pkg / "node_modules" / "@earendil-works").glob("*"):
+        dist = pkg_dir / "dist"
+        if dist.exists() and not any(dist.iterdir()):
+            raise SystemExit(
+                f"Agent install incomplete: {pkg_dir.name}/dist is empty.\n"
+                f"Run: npm install --prefix {npm_dir} to retry."
+            )
+
+
 def install_to(target: Path, project_root: Path | None = None) -> int:
     npm_dir = target / "cli"
 
@@ -70,21 +85,23 @@ def install_to(target: Path, project_root: Path | None = None) -> int:
     agent_version = _c.AGENT_VERSION or agent_cfg.get("version", "latest")
     mcp_adapter_version = _c.AGENT_MCP_ADAPTER_VERSION or agent_cfg.get("mcp_adapter_version", "latest")
 
-    _c._print(f"Installing AudiaGentic agent {agent_version} into {npm_dir}")
+    # Install both packages in one npm install call so npm resolves the full
+    # dependency tree in a single pass. Sequential installs cause npm to
+    # reorganize the tree on the second call, which can leave nested package
+    # dist/ directories empty (observed with pi-tui on Node 22+).
+    _c._print(
+        f"Installing AudiaGentic agent {agent_version} + MCP adapter {mcp_adapter_version} into {npm_dir}"
+    )
     subprocess.run(
-        [npm, "install", "--prefix", str(npm_dir),
-         f"@earendil-works/pi-coding-agent@{agent_version}"],
+        [
+            npm, "install", "--prefer-offline", "--prefix", str(npm_dir),
+            f"@earendil-works/pi-coding-agent@{agent_version}",
+            f"pi-mcp-adapter@{mcp_adapter_version}",
+        ],
         check=True,
         env=_npm_env(),
     )
-
-    _c._print(f"Installing MCP adapter into {npm_dir}")
-    subprocess.run(
-        [npm, "install", "--prefix", str(npm_dir),
-         f"pi-mcp-adapter@{mcp_adapter_version}"],
-        check=True,
-        env=_npm_env(),
-    )
+    _validate_agent_install(npm_dir)
     apply_lockdown_patches(npm_dir, project_root=project_root)
 
     harness_cfg = _c.load_harness_config(project_root=project_root)
