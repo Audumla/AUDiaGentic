@@ -1,4 +1,4 @@
-"""TagDescriptor — metadata for a single prompt-trigger tag."""
+"""ActionDescriptor — metadata for a single prompt-trigger action."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,49 +6,46 @@ from pathlib import Path
 
 
 @dataclass(frozen=True)
-class TagFile:
-    """A project file managed by this tag."""
+class ActionFile:
+    """A project file managed by this action."""
     rel_path: str
     lifecycle: str
     description: str = ""
 
 
 @dataclass(frozen=True)
-class TagSurfaceContribution:
-    """A rule/content block pushed into every installed provider surface."""
+class ActionInstruction:
+    """An instruction block pushed into every installed provider surface."""
     contribution_id: str
-    kind: str
     title: str
     body: str
     preferred_targets: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
-class TagPrompt:
-    """A prompt template shipped with this tag."""
+class ActionPrompt:
+    """A prompt template shipped with this action."""
     name: str
-    content_file: str   # relative to the tag's config directory
+    content_file: str   # relative to the action's config directory
 
 
 @dataclass(frozen=True)
-class TagDescriptor:
-    """Full definition of a prompt-trigger tag.
+class ActionDescriptor:
+    """Full definition of a prompt-trigger action.
 
-    Loaded from config/agent-actions/tags/<name>/descriptor.yaml.
-    Neither the tag nor the loading code references specific providers.
+    Loaded from a component's declared actions config YAML.
+    Neither the action nor the loading code references specific providers.
     """
     tag_id: str
     display_name: str
     description: str
-    # skill.md path, relative to this tag's config directory
     skill_content_file: str
-    # absolute path to the tag's config directory (set by loader)
     config_dir: Path
     aliases: tuple[str, ...] = ()
     directives: tuple[str, ...] = ()
-    files: tuple[TagFile, ...] = ()
-    surface_contributions: tuple[TagSurfaceContribution, ...] = ()
-    prompts: tuple[TagPrompt, ...] = ()
+    files: tuple[ActionFile, ...] = ()
+    instructions: tuple[ActionInstruction, ...] = ()
+    prompts: tuple[ActionPrompt, ...] = ()
     requires_body: bool = True
     is_generic_tag: bool = False
     is_review_tag: bool = False
@@ -59,3 +56,10 @@ class TagDescriptor:
 
     def skill_content(self) -> str:
         return self.skill_path.read_text(encoding="utf-8")
+
+
+# Backwards-compatible aliases
+TagDescriptor = ActionDescriptor
+TagSurfaceContribution = ActionInstruction
+TagFile = ActionFile
+TagPrompt = ActionPrompt

@@ -25,7 +25,6 @@ class SkillDefinition:
 class SurfaceContribution:
     contribution_id: str
     owner_component: str
-    kind: str
     title: str
     body: str
     preferred_targets: tuple[str, ...] = ()

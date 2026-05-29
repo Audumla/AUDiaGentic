@@ -16,7 +16,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 def test_cline_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(cline.shutil, "which", lambda _: r"C:\\Tools\\cline.exe")
+    monkeypatch.setattr(cline, "require_executable", lambda _provider_id, _command: r"C:\\Tools\\cline.exe")
 
     def fake_run_streaming_command(
         command,
@@ -74,9 +74,19 @@ def test_cline_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_cline_adapter_requires_command(monkeypatch) -> None:
-    monkeypatch.setattr(cline.shutil, "which", lambda _: None)
-
     try:
+        monkeypatch.setattr(
+            cline,
+            "require_executable",
+            lambda _provider_id, _command: (_ for _ in ()).throw(
+                AudiaGenticError(
+                    code="PRV-EXTERNAL-009",
+                    kind="external",
+                    message="missing",
+                    details={"provider-id": "cline"},
+                )
+            ),
+        )
         cline.run({"provider-id": "cline"}, {"default-model": "cline-model"})
     except AudiaGenticError as exc:
         assert exc.code == "PRV-EXTERNAL-009"

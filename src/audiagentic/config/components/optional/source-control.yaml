@@ -72,10 +72,9 @@ harness-instructions:
 lifecycle-hook: audiagentic.components.optional.source_control.bootstrap.on_component_lifecycle
 status-hook: audiagentic.components.optional.source_control.bootstrap.status_payload
 
-surface-contributions:
+contributions:
   - id: source-control/doctrine
     owner: source-control
-    kind: rule
     title: Source control doctrine
     preferred-targets:
       - skill

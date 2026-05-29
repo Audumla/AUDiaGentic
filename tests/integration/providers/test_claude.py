@@ -16,7 +16,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 def test_claude_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(claude.shutil, "which", lambda _: r"C:\\Tools\\claude.exe")
+    monkeypatch.setattr(claude, "require_executable", lambda _provider_id, _command: r"C:\\Tools\\claude.exe")
 
     def fake_run_streaming_command(
         command,
@@ -66,9 +66,14 @@ def test_claude_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_claude_adapter_requires_command(monkeypatch) -> None:
-    monkeypatch.setattr(claude.shutil, "which", lambda _: None)
-
     try:
+        monkeypatch.setattr(
+            claude,
+            "require_executable",
+            lambda _provider_id, _command: (_ for _ in ()).throw(
+                AudiaGenticError(code="PRV-EXTERNAL-003", kind="external", message="missing")
+            ),
+        )
         claude.run({"provider-id": "claude"}, {"default-model": "claude-stub"})
     except AudiaGenticError as exc:
         assert exc.code == "PRV-EXTERNAL-003"

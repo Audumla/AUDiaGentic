@@ -1,294 +1,172 @@
-"""Integration tests: component lifecycle — install, surface validation, disable, enable, uninstall.
-
-Runs inside Docker (AUDIAGENTIC_DOCKER_TESTS=1). Each test exercises the full lifecycle of every
-registered component: install → verify surface → disable → verify disabled → enable → uninstall →
-verify cleanup. Components are discovered dynamically from the registry so new components are
-automatically covered.
-"""
+"""Integration tests: component lifecycle — install, disable, enable, uninstall."""
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[3]
-for _p in (str(_ROOT), str(_ROOT / "src")):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
 import pytest
-import yaml
-from tests.helpers import sandbox as sandbox_helper
-
-from audiagentic.foundation.components.base import MODE_CREATE_IF_MISSING, MODE_REQUIRED_MANAGED
-from audiagentic.foundation.components.loader import register_all_components
-from audiagentic.foundation.components.registry import all_descriptors, is_enabled, is_installed
-from audiagentic.runtime.lifecycle.components import (
+from tests.integration.lifecycle.harness import (
+    all_descriptors,
+    component_sandbox,
+    create_if_missing_paths,
     disable_component,
     enable_component,
-    install_component,
+    install_with_deps,
+    is_enabled,
+    is_installed,
+    marker_data,
+    marker_path,
+    project_component_ids,
+    required_managed_paths,
     uninstall_component,
+    user_config_paths,
 )
 
-register_all_components()
 
-
-def _component_ids() -> list[str]:
-    return sorted(all_descriptors().keys())
-
-
-def _project_component_ids() -> list[str]:
-    """Return only project-scoped, non-core components for project-level lifecycle tests."""
-    result = []
-    for cid in sorted(all_descriptors().keys()):
-        desc = all_descriptors()[cid]
-        if desc.scope != "project":
-            continue
-        if desc.core:
-            continue
-        result.append(cid)
-    return result
-
-
-def _install_with_deps(component_id: str, project_root: Path) -> None:
-    descriptor = all_descriptors()[component_id]
-    for dep in descriptor.depends_on:
-        if not is_installed(dep, project_root):
-            _install_with_deps(dep, project_root)
-    if not is_installed(component_id, project_root):
-        result = install_component(component_id, project_root)
-        assert result.get("ok") is True, f"install failed for {component_id}: {result}"
-
-
-# ---------------------------------------------------------------------------
-# Install: marker + declared files
-# ---------------------------------------------------------------------------
-
-@pytest.mark.parametrize("component_id", _project_component_ids())
+@pytest.mark.parametrize("component_id", project_component_ids())
 def test_install_writes_marker(component_id: str, tmp_path: Path) -> None:
-    sb = sandbox_helper.create(tmp_path, f"install-marker-{component_id}")
-    try:
-        _install_with_deps(component_id, sb.repo)
+    with component_sandbox(tmp_path, f"install-marker-{component_id}") as sb:
+        install_with_deps(component_id, sb.repo)
 
-        marker = sb.repo / ".audiagentic" / "components" / f"{component_id}.yaml"
+        marker = marker_path(component_id, sb.repo)
         assert marker.is_file(), f"marker missing after install: {marker}"
 
-        data = yaml.safe_load(marker.read_text(encoding="utf-8")) or {}
+        data = marker_data(component_id, sb.repo)
         assert data.get("component-id") == component_id
         assert data.get("enabled") is True
         assert "installed-at" in data
-    finally:
-        sb.cleanup()
 
 
-@pytest.mark.parametrize("component_id", _project_component_ids())
+@pytest.mark.parametrize("component_id", project_component_ids())
 def test_install_sets_is_installed(component_id: str, tmp_path: Path) -> None:
-    sb = sandbox_helper.create(tmp_path, f"install-state-{component_id}")
-    try:
-        _install_with_deps(component_id, sb.repo)
+    with component_sandbox(tmp_path, f"install-state-{component_id}") as sb:
+        install_with_deps(component_id, sb.repo)
         assert is_installed(component_id, sb.repo)
         assert is_enabled(component_id, sb.repo)
-    finally:
-        sb.cleanup()
 
 
-@pytest.mark.parametrize("component_id", _project_component_ids())
+@pytest.mark.parametrize("component_id", project_component_ids())
 def test_install_creates_required_managed_files(component_id: str, tmp_path: Path) -> None:
-    sb = sandbox_helper.create(tmp_path, f"install-files-{component_id}")
-    try:
-        _install_with_deps(component_id, sb.repo)
-        descriptor = all_descriptors()[component_id]
-        for cf in descriptor.files:
-            if cf.lifecycle == MODE_REQUIRED_MANAGED and not cf.recursive:
-                target = sb.repo / cf.rel_path
-                assert target.is_file(), f"{component_id}: required-managed file missing: {cf.rel_path}"
-    finally:
-        sb.cleanup()
+    with component_sandbox(tmp_path, f"install-files-{component_id}") as sb:
+        install_with_deps(component_id, sb.repo)
+        for target in required_managed_paths(component_id, sb.repo):
+            assert target.is_file(), f"{component_id}: required-managed file missing: {target}"
 
 
-@pytest.mark.parametrize("component_id", _project_component_ids())
+@pytest.mark.parametrize("component_id", project_component_ids())
 def test_install_creates_create_if_missing_files(component_id: str, tmp_path: Path) -> None:
-    """create-if-missing files (including the detection marker) must exist after install."""
-    sb = sandbox_helper.create(tmp_path, f"install-cim-{component_id}")
-    try:
-        _install_with_deps(component_id, sb.repo)
-        descriptor = all_descriptors()[component_id]
-        for cf in descriptor.files:
-            if cf.lifecycle == MODE_CREATE_IF_MISSING and not cf.recursive:
-                target = sb.repo / cf.rel_path
-                assert target.is_file(), f"{component_id}: create-if-missing file missing after install: {cf.rel_path}"
-    finally:
-        sb.cleanup()
+    with component_sandbox(tmp_path, f"install-cim-{component_id}") as sb:
+        install_with_deps(component_id, sb.repo)
+        for target in create_if_missing_paths(component_id, sb.repo):
+            assert target.is_file(), f"{component_id}: create-if-missing file missing after install: {target}"
 
 
-# ---------------------------------------------------------------------------
-# Disable / Enable
-# ---------------------------------------------------------------------------
-
-@pytest.mark.parametrize("component_id", _project_component_ids())
+@pytest.mark.parametrize("component_id", project_component_ids())
 def test_disable_sets_enabled_false(component_id: str, tmp_path: Path) -> None:
-    sb = sandbox_helper.create(tmp_path, f"disable-{component_id}")
-    try:
-        _install_with_deps(component_id, sb.repo)
+    with component_sandbox(tmp_path, f"disable-{component_id}") as sb:
+        install_with_deps(component_id, sb.repo)
         result = disable_component(component_id, sb.repo)
         assert result.get("ok") is True
         assert not is_enabled(component_id, sb.repo)
-
-        marker = sb.repo / ".audiagentic" / "components" / f"{component_id}.yaml"
-        data = yaml.safe_load(marker.read_text(encoding="utf-8")) or {}
-        assert data.get("enabled") is False
-    finally:
-        sb.cleanup()
+        assert marker_data(component_id, sb.repo).get("enabled") is False
 
 
-@pytest.mark.parametrize("component_id", _project_component_ids())
+@pytest.mark.parametrize("component_id", project_component_ids())
 def test_disable_does_not_remove_files(component_id: str, tmp_path: Path) -> None:
-    """Disable is state-only — declared files must still exist."""
-    sb = sandbox_helper.create(tmp_path, f"disable-files-{component_id}")
-    try:
-        _install_with_deps(component_id, sb.repo)
+    with component_sandbox(tmp_path, f"disable-files-{component_id}") as sb:
+        install_with_deps(component_id, sb.repo)
         disable_component(component_id, sb.repo)
-        descriptor = all_descriptors()[component_id]
-        for cf in descriptor.files:
-            if cf.lifecycle == MODE_REQUIRED_MANAGED and not cf.recursive:
-                target = sb.repo / cf.rel_path
-                assert target.is_file(), f"{component_id}: file disappeared after disable: {cf.rel_path}"
-    finally:
-        sb.cleanup()
+        for target in required_managed_paths(component_id, sb.repo):
+            assert target.is_file(), f"{component_id}: file disappeared after disable: {target}"
 
 
-@pytest.mark.parametrize("component_id", _project_component_ids())
+@pytest.mark.parametrize("component_id", project_component_ids())
 def test_enable_after_disable(component_id: str, tmp_path: Path) -> None:
-    sb = sandbox_helper.create(tmp_path, f"enable-{component_id}")
-    try:
-        _install_with_deps(component_id, sb.repo)
+    with component_sandbox(tmp_path, f"enable-{component_id}") as sb:
+        install_with_deps(component_id, sb.repo)
         disable_component(component_id, sb.repo)
         assert not is_enabled(component_id, sb.repo)
 
         result = enable_component(component_id, sb.repo)
         assert result.get("ok") is True
         assert is_enabled(component_id, sb.repo)
-
-        marker = sb.repo / ".audiagentic" / "components" / f"{component_id}.yaml"
-        data = yaml.safe_load(marker.read_text(encoding="utf-8")) or {}
-        assert data.get("enabled") is True
-    finally:
-        sb.cleanup()
+        assert marker_data(component_id, sb.repo).get("enabled") is True
 
 
-# ---------------------------------------------------------------------------
-# Uninstall: marker gone, managed files gone, configs preserved
-# ---------------------------------------------------------------------------
-
-@pytest.mark.parametrize("component_id", _project_component_ids())
+@pytest.mark.parametrize("component_id", project_component_ids())
 def test_uninstall_removes_marker(component_id: str, tmp_path: Path) -> None:
-    sb = sandbox_helper.create(tmp_path, f"uninstall-marker-{component_id}")
-    try:
-        _install_with_deps(component_id, sb.repo)
-        marker = sb.repo / ".audiagentic" / "components" / f"{component_id}.yaml"
+    with component_sandbox(tmp_path, f"uninstall-marker-{component_id}") as sb:
+        install_with_deps(component_id, sb.repo)
+        marker = marker_path(component_id, sb.repo)
         assert marker.is_file()
 
         uninstall_component(component_id, sb.repo)
 
         assert not marker.exists(), f"marker still present after uninstall: {marker}"
         assert not is_installed(component_id, sb.repo)
-    finally:
-        sb.cleanup()
 
 
-@pytest.mark.parametrize("component_id", _project_component_ids())
+@pytest.mark.parametrize("component_id", project_component_ids())
 def test_uninstall_removes_required_managed_files(component_id: str, tmp_path: Path) -> None:
-    sb = sandbox_helper.create(tmp_path, f"uninstall-rm-{component_id}")
-    try:
-        _install_with_deps(component_id, sb.repo)
-        descriptor = all_descriptors()[component_id]
-        required = [
-            sb.repo / cf.rel_path
-            for cf in descriptor.files
-            if cf.lifecycle == MODE_REQUIRED_MANAGED and not cf.recursive
-        ]
+    with component_sandbox(tmp_path, f"uninstall-rm-{component_id}") as sb:
+        install_with_deps(component_id, sb.repo)
+        required = required_managed_paths(component_id, sb.repo)
 
         uninstall_component(component_id, sb.repo)
 
         for path in required:
             assert not path.exists(), f"{component_id}: required-managed file not removed: {path}"
-    finally:
-        sb.cleanup()
 
 
-@pytest.mark.parametrize("component_id", _project_component_ids())
+@pytest.mark.parametrize("component_id", project_component_ids())
 def test_uninstall_preserves_create_if_missing_files(component_id: str, tmp_path: Path) -> None:
-    """User-seeded config files must survive a default uninstall."""
-    sb = sandbox_helper.create(tmp_path, f"uninstall-preserve-{component_id}")
-    try:
-        _install_with_deps(component_id, sb.repo)
-        descriptor = all_descriptors()[component_id]
-        config_paths = [
-            sb.repo / cf.rel_path
-            for cf in descriptor.files
-            if cf.lifecycle == MODE_CREATE_IF_MISSING
-            and cf.rel_path != descriptor.detection_marker
-            and not cf.recursive
-        ]
-        # Only check files that were actually created during install
-        existing_before = [p for p in config_paths if p.exists()]
+    with component_sandbox(tmp_path, f"uninstall-preserve-{component_id}") as sb:
+        install_with_deps(component_id, sb.repo)
+        existing_before = [path for path in user_config_paths(component_id, sb.repo) if path.exists()]
 
         uninstall_component(component_id, sb.repo)
 
         for path in existing_before:
             assert path.exists(), f"{component_id}: config file incorrectly removed: {path}"
-    finally:
-        sb.cleanup()
 
 
-@pytest.mark.parametrize("component_id", _project_component_ids())
+@pytest.mark.parametrize("component_id", project_component_ids())
 def test_uninstall_remove_configs_removes_create_if_missing_files(component_id: str, tmp_path: Path) -> None:
-    """remove_configs=True must remove create-if-missing files (and the marker)."""
-    sb = sandbox_helper.create(tmp_path, f"uninstall-force-{component_id}")
-    try:
-        _install_with_deps(component_id, sb.repo)
-        descriptor = all_descriptors()[component_id]
-        cim_paths = [
-            sb.repo / cf.rel_path
-            for cf in descriptor.files
-            if cf.lifecycle == MODE_CREATE_IF_MISSING and not cf.recursive
-        ]
-        existing_before = [p for p in cim_paths if p.exists()]
+    with component_sandbox(tmp_path, f"uninstall-force-{component_id}") as sb:
+        install_with_deps(component_id, sb.repo)
+        existing_before = [path for path in create_if_missing_paths(component_id, sb.repo) if path.exists()]
 
         uninstall_component(component_id, sb.repo, remove_configs=True)
 
-        marker = sb.repo / ".audiagentic" / "components" / f"{component_id}.yaml"
+        marker = marker_path(component_id, sb.repo)
         assert not marker.exists(), f"{component_id}: marker still present after forced uninstall"
         assert not is_installed(component_id, sb.repo)
         for path in existing_before:
             assert not path.exists(), f"{component_id}: create-if-missing file not removed with remove_configs=True: {path}"
-    finally:
-        sb.cleanup()
 
 
-# ---------------------------------------------------------------------------
-# Full round-trip: install → disable → enable → uninstall
-# ---------------------------------------------------------------------------
-
-@pytest.mark.parametrize("component_id", _project_component_ids())
+@pytest.mark.parametrize("component_id", project_component_ids())
 def test_full_lifecycle_roundtrip(component_id: str, tmp_path: Path) -> None:
-    sb = sandbox_helper.create(tmp_path, f"roundtrip-{component_id}")
-    try:
-        # Install
-        _install_with_deps(component_id, sb.repo)
+    with component_sandbox(tmp_path, f"roundtrip-{component_id}") as sb:
+        install_with_deps(component_id, sb.repo)
         assert is_installed(component_id, sb.repo)
         assert is_enabled(component_id, sb.repo)
 
-        # Disable — state only, files intact
         disable_component(component_id, sb.repo)
         assert is_installed(component_id, sb.repo)
         assert not is_enabled(component_id, sb.repo)
 
-        # Enable — restored
         enable_component(component_id, sb.repo)
         assert is_enabled(component_id, sb.repo)
 
-        # Uninstall — marker gone, is_installed False
         uninstall_component(component_id, sb.repo)
         assert not is_installed(component_id, sb.repo)
-    finally:
-        sb.cleanup()
+
+
+def test_project_component_selector_matches_registry_contract() -> None:
+    selected = set(project_component_ids())
+    expected = {
+        component_id
+        for component_id, descriptor in all_descriptors().items()
+        if descriptor.scope == "project" and not descriptor.core
+    }
+    assert selected == expected

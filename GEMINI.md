@@ -21,15 +21,6 @@ Prefer shared helpers, repository-owned scripts, and existing patterns.
 Run verification steps (type checks, tests) when available before declaring done.
 <!-- AUDIAGENTIC:END ag-implement/doctrine -->
 
-<!-- AUDIAGENTIC:BEGIN ag-ledger/doctrine -->
-## Ledger action doctrine
-
-When the ledger action is triggered: check ledger state, tracked docs,
-release artifacts, and state consistency across the project. Note specific drift,
-missing evidence, or broken invariants. Do not mutate tracked docs or code without
-explicit approval. Report all drift — do not hide findings.
-<!-- AUDIAGENTIC:END ag-ledger/doctrine -->
-
 <!-- AUDIAGENTIC:BEGIN ag-plan/doctrine -->
 ## Plan action doctrine
 
@@ -65,56 +56,6 @@ requested. Do not broaden review into feature-scope changes.
 - Do not broaden review into implementation work.
 - Keep tracked docs and release artifacts synchronized with the job record.
 <!-- AUDIAGENTIC:END ag-review/review-doctrine -->
-
-<!-- AUDIAGENTIC:BEGIN agent-jobs/canonical-rule -->
-## Canonical workflow tags
-
-Canonical tags:
-
-- `ag-implement` (aliases: `agi`, `i`)
-- `ag-ledger` (aliases: `agl`, `l`)
-- `ag-plan` (aliases: `agp`, `p`)
-- `ag-review` (aliases: `agr`, `r`)
-
-Rules:
-
-- Do not reinterpret these tags — route the raw tagged prompt through the repo-owned bridge.
-- Keep tag semantics identical to the shared AUDiaGentic launch contract.
-- Keep provenance visible: provider id, surface, and session id should survive normalization.
-- Tag definitions are managed in `config/components/optional/agent-actions/tags/`;
-  run `python -m audiagentic.components.optional.providers.skill_surfaces --project-root .` after adding, removing, or renaming tags.
-<!-- AUDIAGENTIC:END agent-jobs/canonical-rule -->
-
-<!-- AUDIAGENTIC:BEGIN agent-jobs/tag-shortcuts -->
-## Tag shortcuts and aliases
-
-Tag and provider aliases are centralized in the tag registry and
-`config/components/optional/agent-actions/tags/` and work in all surfaces.
-
-Tag aliases:
-
-- `agi` -> `ag-implement`
-- `i` -> `ag-implement`
-- `implement` -> `ag-implement`
-- `agl` -> `ag-ledger`
-- `l` -> `ag-ledger`
-- `ledger` -> `ag-ledger`
-- `agp` -> `ag-plan`
-- `p` -> `ag-plan`
-- `plan` -> `ag-plan`
-- `agr` -> `ag-review`
-- `r` -> `ag-review`
-- `review` -> `ag-review`
-
-Provider aliases:
-
-- `cx` -> `codex`
-- `cld` -> `claude`
-- `cln` -> `cline`
-- `gm` -> `gemini`
-- `opc` -> `opencode`
-- `cp` -> `copilot`
-<!-- AUDIAGENTIC:END agent-jobs/tag-shortcuts -->
 
 <!-- AUDIAGENTIC:BEGIN agent-ledger/process -->
 ## Agent ledger process
