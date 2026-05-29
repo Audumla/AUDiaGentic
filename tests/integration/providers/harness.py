@@ -73,12 +73,36 @@ def provider_ids(*, package_manager: str | None = None) -> list[str]:
     return ids
 
 
+def non_installable_provider_ids() -> list[str]:
+    return sorted(
+        provider_id
+        for provider_id, descriptor in all_descriptors().items()
+        if descriptor.cli_install is None
+    )
+
+
 def workflow_installable_provider_ids() -> list[str]:
     return provider_ids()
 
 
+def provider_under_test() -> str | None:
+    value = os.environ.get("AUDIAGENTIC_PROVIDER_UNDER_TEST")
+    return value.strip() if value and value.strip() else None
+
+
+def filtered_provider_ids(*, package_manager: str | None = None) -> list[str]:
+    ids = provider_ids(package_manager=package_manager)
+    current = provider_under_test()
+    if current is None:
+        return ids
+    return [provider_id for provider_id in ids if provider_id == current]
+
+
 def maybe_skip_provider(provider_id: str) -> None:
     policy = policy_for(provider_id)
+    current = provider_under_test()
+    if current is not None and provider_id != current:
+        pytest.skip(f"isolated provider run active for {current}")
     if policy.docker_skip_reason:
         pytest.skip(policy.docker_skip_reason)
     if policy.require_code_cli and shutil.which("code") is None:

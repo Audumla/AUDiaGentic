@@ -18,8 +18,9 @@ from tests.integration.providers.harness import (
     assert_install_result_ok,
     assert_uninstall_result_ok,
     cleanup_provider,
+    filtered_provider_ids,
     install_provider,
-    provider_ids,
+    non_installable_provider_ids,
     uninstall_provider,
 )
 
@@ -201,7 +202,10 @@ def _get_npm_providers() -> list[tuple[str, ProviderDescriptor]]:
     return [
         (pid, desc)
         for pid, desc in sorted(descriptors.items())
-        if desc.cli_install and desc.cli_install.package_manager == "npm" and pid not in _KNOWN_PROBLEMATIC
+        if desc.cli_install
+        and desc.cli_install.package_manager == "npm"
+        and pid not in _KNOWN_PROBLEMATIC
+        and pid in filtered_provider_ids(package_manager="npm")
     ]
 
 
@@ -261,12 +265,12 @@ _KNOWN_BREW_AUTH = {"plandex"}
 
 def _get_brew_providers() -> list[str]:
     """Return provider IDs using brew."""
-    return [pid for pid in provider_ids(package_manager="brew") if pid not in _KNOWN_BREW_AUTH]
+    return [pid for pid in filtered_provider_ids(package_manager="brew") if pid not in _KNOWN_BREW_AUTH]
 
 
 def _get_uv_providers() -> list[str]:
     """Return provider IDs using uv-tool."""
-    return provider_ids(package_manager="uv-tool")
+    return filtered_provider_ids(package_manager="uv-tool")
 
 
 class TestBrewProviderInstallUninstall:
@@ -326,16 +330,7 @@ class TestUvProviderInstallUninstall:
 class TestProviderInstallRecipes:
     """Validate each provider's install/uninstall recipe matches expected package manager."""
 
-    NPM_PROVIDERS = {"claude", "codex", "cline", "continue", "copilot", "gemini", "opencode", "qwen"}
-    BREW_PROVIDERS = {"plandex"}
-    SCRIPT_PROVIDERS = {"goose"}
-    UV_PROVIDERS = {"openhands", "aider"}
-    GH_EXTENSION_PROVIDERS = set()
-    VSCODE_PROVIDERS = {"roo"}
-    PI_PROVIDERS = {"pi"}
-    NO_INSTALL_PROVIDERS = {"local-openai"}
-
-    @pytest.mark.parametrize("provider_id", NPM_PROVIDERS)
+    @pytest.mark.parametrize("provider_id", filtered_provider_ids(package_manager="npm"))
     def test_npm_provider_recipe(self, provider_id: str) -> None:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
@@ -345,7 +340,7 @@ class TestProviderInstallRecipes:
         assert desc.cli_install.install.command[0] == "npm"
         assert desc.cli_install.uninstall.command[0] == "npm"
 
-    @pytest.mark.parametrize("provider_id", BREW_PROVIDERS)
+    @pytest.mark.parametrize("provider_id", filtered_provider_ids(package_manager="brew"))
     def test_brew_provider_recipe(self, provider_id: str) -> None:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
@@ -355,7 +350,7 @@ class TestProviderInstallRecipes:
         assert desc.cli_install.install.command[0] == "brew"
         assert desc.cli_install.uninstall.command[0] == "brew"
 
-    @pytest.mark.parametrize("provider_id", SCRIPT_PROVIDERS)
+    @pytest.mark.parametrize("provider_id", filtered_provider_ids(package_manager="script"))
     def test_script_provider_recipe(self, provider_id: str) -> None:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
@@ -365,7 +360,7 @@ class TestProviderInstallRecipes:
         assert desc.cli_install.install.command[0] == "bash"
         assert desc.cli_install.uninstall.command[0] == "bash"
 
-    @pytest.mark.parametrize("provider_id", UV_PROVIDERS)
+    @pytest.mark.parametrize("provider_id", filtered_provider_ids(package_manager="uv-tool"))
     def test_uv_provider_recipe(self, provider_id: str) -> None:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
@@ -375,7 +370,7 @@ class TestProviderInstallRecipes:
         assert desc.cli_install.install.command[0] == "uv"
         assert desc.cli_install.uninstall.command[0] == "uv"
 
-    @pytest.mark.parametrize("provider_id", GH_EXTENSION_PROVIDERS)
+    @pytest.mark.parametrize("provider_id", filtered_provider_ids(package_manager="gh-extension"))
     def test_gh_extension_provider_recipe(self, provider_id: str) -> None:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
@@ -385,7 +380,7 @@ class TestProviderInstallRecipes:
         assert desc.cli_install.install.command[0] == "gh"
         assert desc.cli_install.uninstall.command[0] == "gh"
 
-    @pytest.mark.parametrize("provider_id", VSCODE_PROVIDERS)
+    @pytest.mark.parametrize("provider_id", filtered_provider_ids(package_manager="vscode"))
     def test_vscode_provider_recipe(self, provider_id: str) -> None:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
@@ -395,7 +390,7 @@ class TestProviderInstallRecipes:
         assert desc.cli_install.install.command[0] == "code"
         assert desc.cli_install.uninstall.command[0] == "code"
 
-    @pytest.mark.parametrize("provider_id", PI_PROVIDERS)
+    @pytest.mark.parametrize("provider_id", filtered_provider_ids(package_manager="pi-harness"))
     def test_pi_provider_recipe(self, provider_id: str) -> None:
         from audiagentic.foundation.invoke.recipes.callable_ import CallableRecipe
         desc = get_descriptor(provider_id)
@@ -404,7 +399,7 @@ class TestProviderInstallRecipes:
         assert isinstance(desc.cli_install.install, CallableRecipe)
         assert isinstance(desc.cli_install.uninstall, CallableRecipe)
 
-    @pytest.mark.parametrize("provider_id", NO_INSTALL_PROVIDERS)
+    @pytest.mark.parametrize("provider_id", non_installable_provider_ids())
     def test_no_install_provider(self, provider_id: str) -> None:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is None

@@ -1,21 +1,21 @@
-"""Tag registry — in-process store of all loaded TagDescriptors."""
+"""Action registry — in-process store of all loaded ActionDescriptors."""
 from __future__ import annotations
 
-from .base import TagDescriptor
+from .base import ActionDescriptor
 
-_registry: dict[str, TagDescriptor] = {}
+_registry: dict[str, ActionDescriptor] = {}
 _loaded: bool = False
 
 
-def register(descriptor: TagDescriptor) -> None:
+def register(descriptor: ActionDescriptor) -> None:
     _registry[descriptor.tag_id] = descriptor
 
 
-def get_tag(tag_id: str) -> TagDescriptor | None:
+def get_tag(tag_id: str) -> ActionDescriptor | None:
     return _registry.get(tag_id)
 
 
-def all_tags() -> dict[str, TagDescriptor]:
+def all_tags() -> dict[str, ActionDescriptor]:
     return dict(_registry)
 
 
@@ -28,8 +28,8 @@ def _ensure_loaded() -> None:
     _loaded = True
 
 
-def all_tags_loaded() -> dict[str, TagDescriptor]:
-    """Return all tags, triggering YAML discovery on first call."""
+def all_tags_loaded() -> dict[str, ActionDescriptor]:
+    """Return all actions, triggering YAML discovery on first call."""
     _ensure_loaded()
     return all_tags()
 
@@ -40,11 +40,11 @@ def canonical_tag_ids() -> list[str]:
 
 
 def tag_alias_map() -> dict[str, str]:
-    """Return flat alias -> tag_id map across all registered tags."""
+    """Return flat alias -> tag_id map across all registered actions."""
     _ensure_loaded()
     result: dict[str, str] = {}
     for tag_id, descriptor in _registry.items():
-        result[tag_id] = tag_id   # identity alias
+        result[tag_id] = tag_id
         for alias in descriptor.aliases:
             result[alias] = tag_id
     return result

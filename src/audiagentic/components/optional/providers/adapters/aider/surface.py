@@ -42,7 +42,6 @@ def render_contributions(
             content=f"## {contribution.title}\n\n{contribution.body.strip()}",
         )
         for contribution in contributions
-        if contribution.kind == "rule"
     ]
 
 

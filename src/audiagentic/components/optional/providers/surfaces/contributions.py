@@ -17,24 +17,27 @@ def _as_strings(raw: Any) -> tuple[str, ...]:
 
 
 def _contributions_from_data(data: dict[str, Any], component_id: str) -> list[SurfaceContribution]:
+    # Unified `contributions:` key; fall back to legacy `surface-contributions:`.
+    raw_list = data.get("contributions") or data.get("surface-contributions") or []
     contributions: list[SurfaceContribution] = []
-    for raw in data.get("surface-contributions") or []:
+    for raw in raw_list:
         if not isinstance(raw, dict):
+            continue
+        # Skip file references — those are action files handled by the tag loader.
+        if "config" in raw:
             continue
         content = raw.get("content") or {}
         body = content.get("body") if isinstance(content, dict) else raw.get("body")
         if not isinstance(body, str):
             continue
         contribution_id = raw.get("id")
-        kind = raw.get("kind")
         title = raw.get("title") or raw.get("summary")
-        if not all(isinstance(item, str) and item for item in (contribution_id, kind, title)):
+        if not all(isinstance(item, str) and item for item in (contribution_id, title)):
             continue
         contributions.append(
             SurfaceContribution(
                 contribution_id=contribution_id,
                 owner_component=raw.get("owner") if isinstance(raw.get("owner"), str) else component_id,
-                kind=kind,
                 title=title,
                 body=body,
                 preferred_targets=_as_strings(raw.get("preferred-targets")),
@@ -59,12 +62,11 @@ def load_tag_surface_contributions(project_root: Path | None = None) -> list[Sur
 
     contributions: list[SurfaceContribution] = []
     for tag_id, descriptor in sorted(all_tags_loaded().items()):
-        for contrib in descriptor.surface_contributions:
+        for contrib in descriptor.instructions:
             contributions.append(
                 SurfaceContribution(
                     contribution_id=contrib.contribution_id,
-                    owner_component=f"prompt-trigger-tag:{tag_id}",
-                    kind=contrib.kind,
+                    owner_component=f"action:{tag_id}",
                     title=contrib.title,
                     body=contrib.body,
                     preferred_targets=contrib.preferred_targets,
@@ -140,14 +142,12 @@ def build_summary_contributions(project_root: Path | None = None) -> list[Surfac
         SurfaceContribution(
             contribution_id="agent-jobs/canonical-rule",
             owner_component=COMPONENT_AGENT_JOBS,
-            kind="rule",
             title="Canonical workflow tags",
             body=_build_canonical_tags_body(tags),
         ),
         SurfaceContribution(
             contribution_id="agent-jobs/tag-shortcuts",
             owner_component=COMPONENT_AGENT_JOBS,
-            kind="rule",
             title="Tag shortcuts and aliases",
             body=_build_tag_shortcuts_body(tags),
         ),
@@ -180,7 +180,10 @@ def load_surface_contributions(
     # Per-tag contributions from tag descriptors
     contributions.extend(load_tag_surface_contributions(project_root=project_root))
 
-    # Synthetic cross-tag summaries (canonical list + aliases cheatsheet)
-    contributions.extend(build_summary_contributions(project_root=project_root))
+    # Synthetic cross-tag summaries — only if agent-jobs component is installed+enabled
+    if project_root is None or (
+        is_installed("agent-jobs", project_root) and is_enabled("agent-jobs", project_root)
+    ):
+        contributions.extend(build_summary_contributions(project_root=project_root))
 
     return contributions

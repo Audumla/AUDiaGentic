@@ -47,10 +47,9 @@ harness-instructions:
       - `sync_ledger` — Merge pending fragments into the ledger
       - `get_audit_report` — Regenerate audit and check-in docs
 
-surface-contributions:
+contributions:
   - id: agent-ledger/process
     owner: agent-ledger
-    kind: rule
     title: Agent ledger process
     preferred-targets:
       - skill
@@ -66,7 +65,6 @@ surface-contributions:
 
   - id: agent-ledger/write-instruction
     owner: agent-ledger
-    kind: rule
     title: Ledger write instruction
     preferred-targets:
       - skill

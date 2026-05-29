@@ -85,7 +85,7 @@ workflow:
       recipes:
         install:
           type: shell
-          timeout: 120
+          timeout: 600
           command: ["npm", "install", "-g", "{package_name}"]
         uninstall:
           type: shell
@@ -117,7 +117,7 @@ workflow:
       recipes:
         install:
           type: shell
-          timeout: 120
+          timeout: 300
           command: ["npm", "install", "-g", "{package_name}"]
         uninstall:
           type: shell
@@ -149,7 +149,7 @@ workflow:
       recipes:
         install:
           type: shell
-          timeout: 120
+          timeout: 600
           command: ["npm", "install", "-g", "{package_name}"]
         uninstall:
           type: shell

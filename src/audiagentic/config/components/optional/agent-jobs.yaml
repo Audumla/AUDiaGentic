@@ -19,8 +19,7 @@ files:
     recursive: true
     description: Agent session input and review state
 
-agent-tags:
+contributions:
   - config: components/optional/agent-actions/ag-implement.yaml
   - config: components/optional/agent-actions/ag-plan.yaml
   - config: components/optional/agent-actions/ag-review.yaml
-  - config: components/optional/agent-actions/ag-ledger.yaml

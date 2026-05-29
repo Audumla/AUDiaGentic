@@ -31,7 +31,6 @@ def test_loads_release_ledger_surface_contribution() -> None:
 
     contribution = by_id["agent-ledger/process"]
     assert contribution.owner_component == "agent-ledger"
-    assert contribution.kind == "rule"
     assert "agent ledger process" in contribution.title.lower()
 
 
@@ -87,7 +86,6 @@ def test_plan_provider_surfaces_reports_changes(tmp_path: Path) -> None:
     assert result["files"][0]["changed"] is True
     block_ids = result["files"][0]["block-ids"]
     assert "agent-ledger/process" in block_ids
-    assert "agent-jobs/canonical-rule" in block_ids
 
 
 def test_prune_managed_blocks_removes_inactive_blocks() -> None:
@@ -136,7 +134,7 @@ def test_prune_managed_blocks_empty_doc_returns_empty() -> None:
 
 
 def test_prune_provider_surfaces_removes_stale_blocks(tmp_path: Path) -> None:
-    # Write surfaces so blocks exist on disk
+    _install_agent_ledger(tmp_path)
     apply_provider_surfaces(tmp_path, provider_id="cline")
     target = tmp_path / ".clinerules" / "audiagentic.md"
     assert target.exists()
@@ -162,6 +160,7 @@ def test_prune_provider_surfaces_removes_stale_blocks(tmp_path: Path) -> None:
 
 
 def test_prune_provider_surfaces_leaves_active_blocks(tmp_path: Path) -> None:
+    _install_agent_ledger(tmp_path)
     apply_provider_surfaces(tmp_path, provider_id="cline")
     target = tmp_path / ".clinerules" / "audiagentic.md"
     content_before = target.read_text(encoding="utf-8")

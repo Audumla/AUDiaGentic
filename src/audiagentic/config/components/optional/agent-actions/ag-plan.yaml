@@ -1,5 +1,13 @@
-type: agent-action
+type: action
 contract-version: v1
+id: ag-plan/doctrine
+title: Plan action doctrine
+content:
+  body: |
+    When the plan action is triggered: map the requested change into a concrete
+    execution plan with discrete steps. Identify dependencies, blockers, risks,
+    and review checkpoints. Do not implement — plan only.
+
 tag-id: ag-plan
 display-name: Plan
 description: Shape work into a concrete, scoped execution plan before any implementation starts
@@ -22,18 +30,8 @@ is-generic-tag: false
 is-review-tag: false
 skill-content-file: ag-plan-skill.md
 
-surface-contributions:
-  - id: ag-plan/doctrine
-    kind: rule
-    title: Plan action doctrine
-    content:
-      body: |
-        When the plan action is triggered: map the requested change into a concrete
-        execution plan with discrete steps. Identify dependencies, blockers, risks,
-        and review checkpoints. Do not implement — plan only.
-
+instructions:
   - id: ag-plan/planning-item-policy
-    kind: rule
     title: Planning item creation policy
     content:
       body: |

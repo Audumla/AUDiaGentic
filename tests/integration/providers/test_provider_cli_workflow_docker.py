@@ -8,15 +8,13 @@ from tests.integration.providers.harness import (
     assert_uninstall_result_ok,
     cleanup_provider,
     descriptor_for,
+    filtered_provider_ids,
     install_context_for,
     install_provider,
     maybe_skip_provider,
     uninstall_provider,
 )
 
-from audiagentic.components.optional.providers.descriptors.registry import (
-    all_descriptors,
-)
 from audiagentic.components.optional.providers.workflow import supports_provider_cli_workflow
 
 pytestmark = [
@@ -29,11 +27,7 @@ pytestmark = [
     ),
 ]
 
-INSTALLABLE_PROVIDER_IDS = sorted(
-    provider_id
-    for provider_id, descriptor in all_descriptors().items()
-    if descriptor.cli_install is not None
-)
+INSTALLABLE_PROVIDER_IDS = filtered_provider_ids()
 
 @pytest.mark.parametrize("provider_id", INSTALLABLE_PROVIDER_IDS)
 def test_every_installable_provider_is_workflow_backed(provider_id: str) -> None:

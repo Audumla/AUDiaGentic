@@ -1,5 +1,14 @@
-type: agent-action
+type: action
 contract-version: v1
+id: ag-implement/doctrine
+title: Implement action doctrine
+content:
+  body: |
+    When the implement action is triggered: carry out the requested implementation
+    work within the stated scope. Do not broaden scope beyond the requested change.
+    Prefer shared helpers, repository-owned scripts, and existing patterns.
+    Run verification steps (type checks, tests) when available before declaring done.
+
 tag-id: ag-implement
 display-name: Implement
 description: Carry out a requested code change within the contracted scope
@@ -22,17 +31,6 @@ requires-body: false
 is-generic-tag: false
 is-review-tag: false
 skill-content-file: ag-implement-skill.md
-
-surface-contributions:
-  - id: ag-implement/doctrine
-    kind: rule
-    title: Implement action doctrine
-    content:
-      body: |
-        When the implement action is triggered: carry out the requested implementation
-        work within the stated scope. Do not broaden scope beyond the requested change.
-        Prefer shared helpers, repository-owned scripts, and existing patterns.
-        Run verification steps (type checks, tests) when available before declaring done.
 
 prompts:
   - name: default
