@@ -3,7 +3,7 @@
 # Requires: docker, python3, pytest
 
 .PHONY: help test test-unit test-integration test-e2e test-docker test-lsp-docker \
-        test-providers-docker test-providers-real-docker \
+        test-providers-docker test-providers-real-docker test-provider-real-one \
         build-base build-test build-lsp-install-test clean-docker
 
 PYTHON     ?= python3
@@ -26,6 +26,7 @@ help:
 	@echo "  test-docker          Run all docker-based tests"
 	@echo "  test-providers-docker Run provider tests in docker"
 	@echo "  test-providers-real-docker Run opt-in real provider CLI tests in docker"
+	@echo "  test-provider-real-one PROVIDER=<id>  Run one real provider CLI test in isolated docker"
 	@echo "  test-lsp-docker      Run LSP installation test in docker"
 	@echo "  build-base           Build audia-test-base image"
 	@echo "  build-test           Build audiagentic-test image (requires base)"
@@ -51,13 +52,13 @@ test-slow:
 # ── Docker image build targets ───────────────────────────────────────────────
 
 build-base:
-	docker build -f Dockerfile.test-base -t $(BASE_IMAGE) .
+	docker build -f tests/docker/Dockerfile.test-base -t $(BASE_IMAGE) .
 
 build-test: build-base
-	docker build -f Dockerfile.test -t $(TEST_IMAGE) .
+	docker build -f tests/docker/Dockerfile.test -t $(TEST_IMAGE) .
 
 build-lsp-install: build-base
-	docker build -f Dockerfile.lsp-install-test -t $(LSP_IMAGE) .
+	docker build -f tests/docker/Dockerfile.lsp-install-test -t $(LSP_IMAGE) .
 
 # ── Docker test run targets ──────────────────────────────────────────────────
 
@@ -73,8 +74,12 @@ test-providers-docker: build-test
 
 # Runs real provider CLI install/uninstall coverage in Docker.
 # This mutates only the container environment, never the host.
+# Each provider runs in a fresh container for determinism.
 test-providers-real-docker: build-test
-	docker run --rm -e AUDIAGENTIC_REAL_PROVIDER_CLI_TESTS=1 $(TEST_IMAGE) pytest tests/integration/providers -q
+	$(PYTHON) tests/dev/run_provider_cli_isolated.py --image $(TEST_IMAGE)
+
+test-provider-real-one: build-test
+	$(PYTHON) tests/dev/run_provider_cli_isolated.py --image $(TEST_IMAGE) --provider $(PROVIDER)
 
 # Validates LSP dependency installation from a clean toolchain state.
 # Source is bind-mounted so no rebuild needed for code changes.

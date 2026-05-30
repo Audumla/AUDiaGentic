@@ -1,7 +1,7 @@
 *
 
-!Dockerfile.test
-!Dockerfile.provider-cli-test
+!tests/docker/
+!tests/docker/**
 !pyproject.toml
 !release-please-config.json
 !README.md

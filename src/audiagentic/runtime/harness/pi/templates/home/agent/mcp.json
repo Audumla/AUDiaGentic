@@ -5,11 +5,11 @@
     "directTools": true
   },
   "mcpServers": {
-    "audiagentic-session": {
+    "ag-session-mgmt": {
       "command": "__AUDIAGENTIC_PYTHON__",
       "args": [
         "-m",
-        "audiagentic.components.core.session_server",
+        "audiagentic.components.core.session_manage_mcp",
         "--readonly",
         "--smoke-only"
       ],
@@ -24,11 +24,11 @@
         "set_auto_update"
       ]
     },
-    "audiagentic-project": {
+    "ag-project-mgmt": {
       "command": "__AUDIAGENTIC_PYTHON__",
       "args": [
         "-m",
-        "audiagentic.components.core.project_server"
+        "audiagentic.components.core.project_manage_mcp"
       ],
       "env": {
         "PYTHONPATH": "__AUDIAGENTIC_SRC__",

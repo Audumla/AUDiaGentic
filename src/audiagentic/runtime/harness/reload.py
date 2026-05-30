@@ -10,17 +10,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-def _runtime_action_for_reason(reason: str) -> str:
+def _runtime_action_for_reason(reason: str, *, has_mcp_servers: bool = True) -> str:
+    if reason in {"manual-refresh", "mcp-refresh-tool", "session-ui-visibility-updated"}:
+        return "reload_required"
     if reason in {
         "component-installed",
         "component-uninstalled",
         "component-enabled",
         "component-disabled",
-        "manual-refresh",
-        "mcp-refresh-tool",
-        "session-ui-visibility-updated",
     }:
-        return "reload_required"
+        return "reload_required" if has_mcp_servers else "refresh_required"
     return "refresh_required"
 
 
@@ -33,10 +32,11 @@ def build_runtime_sync(
     reason: str,
     component_id: str | None = None,
     target: str,
+    has_mcp_servers: bool = True,
 ) -> dict[str, object]:
     payload: dict[str, object] = {
         "target": target,
-        "action": _runtime_action_for_reason(reason),
+        "action": _runtime_action_for_reason(reason, has_mcp_servers=has_mcp_servers),
         "reason": reason,
     }
     if component_id:
@@ -50,12 +50,13 @@ def write_reload_marker(
     reason: str,
     component_id: str | None = None,
     target: str,
+    has_mcp_servers: bool = True,
 ) -> Path:
     path = runtime_reload_request_path(project_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "requested_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        **build_runtime_sync(reason=reason, component_id=component_id, target=target),
+        **build_runtime_sync(reason=reason, component_id=component_id, target=target, has_mcp_servers=has_mcp_servers),
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     return path

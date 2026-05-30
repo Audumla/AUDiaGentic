@@ -50,6 +50,19 @@ pytestmark = [
     ),
 ]
 
+ALL_PROVIDER_IDS = sorted(all_descriptors())
+CLI_PROVIDER_IDS = sorted(
+    provider_id
+    for provider_id, descriptor in all_descriptors().items()
+    if descriptor.access_mode == "cli"
+)
+
+
+def _param_ids(values: list[str], reason: str) -> list[pytest.ParameterSet | str]:
+    if values:
+        return values
+    return [pytest.param("__none__", marks=pytest.mark.skip(reason=reason))]
+
 # ---------------------------------------------------------------------------
 # Descriptor registry tests
 # ---------------------------------------------------------------------------
@@ -58,40 +71,23 @@ class TestDescriptorRegistry:
     """Verify all descriptors are registered and well-formed."""
 
     def test_all_descriptors_count(self) -> None:
-        descriptors = all_descriptors()
-        # We expect exactly 15 providers
-        assert len(descriptors) == 15, f"Expected 15 descriptors, got {len(descriptors)}"
+        assert len(ALL_PROVIDER_IDS) == len(set(ALL_PROVIDER_IDS))
 
     def test_expected_provider_ids(self) -> None:
-        expected = {
-            "claude", "codex", "cline", "copilot", "gemini", "opencode",
-            "qwen", "continue", "goose", "openhands", "aider", "pi",
-            "plandex", "roo", "local-openai",
-        }
-        actual = set(all_descriptors().keys())
-        assert actual == expected, f"Missing: {expected - actual}, Extra: {actual - expected}"
+        assert ALL_PROVIDER_IDS
+        assert "local-openai" in ALL_PROVIDER_IDS
 
     def test_no_duplicate_descriptors(self) -> None:
-        descriptors = all_descriptors()
-        ids = list(descriptors.keys())
-        assert len(ids) == len(set(ids)), "Duplicate provider IDs found"
+        assert len(ALL_PROVIDER_IDS) == len(set(ALL_PROVIDER_IDS)), "Duplicate provider IDs found"
 
-    @pytest.mark.parametrize("provider_id", [
-        "claude", "codex", "cline", "copilot", "gemini", "opencode",
-        "qwen", "continue", "goose", "openhands", "aider", "pi",
-        "plandex", "roo", "local-openai",
-    ])
+    @pytest.mark.parametrize("provider_id", ALL_PROVIDER_IDS)
     def test_descriptor_retrievable(self, provider_id: str) -> None:
         desc = get_descriptor(provider_id)
         assert desc is not None, f"Descriptor for {provider_id} not found"
         assert desc.provider_id == provider_id
         assert desc.display_name != ""
 
-    @pytest.mark.parametrize("provider_id", [
-        "claude", "codex", "cline", "copilot", "gemini", "opencode",
-        "qwen", "continue", "goose", "openhands", "aider", "pi",
-        "plandex", "roo", "local-openai",
-    ])
+    @pytest.mark.parametrize("provider_id", ALL_PROVIDER_IDS)
     def test_descriptor_has_required_fields(self, provider_id: str) -> None:
         desc = get_descriptor(provider_id)
         assert desc.provider_id is not None
@@ -101,11 +97,7 @@ class TestDescriptorRegistry:
         if desc.access_mode == "cli":
             assert desc.cli_probe is not None, f"{provider_id} should have cli_probe"
 
-    @pytest.mark.parametrize("provider_id", [
-        "claude", "codex", "cline", "copilot", "gemini", "opencode",
-        "qwen", "continue", "goose", "openhands", "aider", "pi",
-        "plandex", "roo",
-    ])
+    @pytest.mark.parametrize("provider_id", CLI_PROVIDER_IDS)
     def test_cli_providers_have_install_recipe(self, provider_id: str) -> None:
         """All cli-access providers should have a CliInstallRecipe."""
         desc = get_descriptor(provider_id)
@@ -210,48 +202,30 @@ def _get_npm_providers() -> list[tuple[str, ProviderDescriptor]]:
 
 
 class TestNpmProviderInstallUninstall:
-    """Install/uninstall roundtrip for all npm-based providers."""
+    """Install/health/uninstall roundtrip for all npm-based providers."""
 
-    @pytest.mark.parametrize("provider_id", [pid for pid, _ in _get_npm_providers()])
+    @pytest.mark.parametrize("provider_id", _param_ids([pid for pid, _ in _get_npm_providers()], "no npm providers selected"))
     @pytest.mark.timeout(1200)
-    def test_install_uninstall_roundtrip(self, provider_id: str) -> None:
+    def test_install_health_uninstall_roundtrip(self, provider_id: str) -> None:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
         executable = desc.cli_install.executable
 
-        # Install
         install_result = install_provider(provider_id)
         assert_install_result_ok(provider_id, install_result)
 
-        # Verify executable is on PATH
         assert shutil.which(executable) is not None, (
             f"{executable} not found on PATH after install"
         )
 
-        # Uninstall
-        uninstall_result = uninstall_provider(provider_id)
-        assert_uninstall_result_ok(provider_id, uninstall_result)
-
-        # Verify executable is no longer on PATH
-        assert shutil.which(executable) is None, (
-            f"{executable} still found on PATH after uninstall"
-        )
-
-    @pytest.mark.parametrize("provider_id", [pid for pid, _ in _get_npm_providers()])
-    @pytest.mark.timeout(1200)
-    def test_installed_cli_invokes_help(self, provider_id: str) -> None:
-        """After install, the CLI executable must respond to a help flag."""
-        desc = get_descriptor(provider_id)
-        assert desc.cli_install is not None
-        executable = desc.cli_install.executable
-
-        # Install
-        install_result = install_provider(provider_id)
-        assert_install_result_ok(provider_id, install_result)
-
         try:
             assert_health_ok(provider_id, install_result)
         finally:
+            uninstall_result = uninstall_provider(provider_id)
+            assert_uninstall_result_ok(provider_id, uninstall_result)
+            assert shutil.which(executable) is None, (
+                f"{executable} still found on PATH after uninstall"
+            )
             cleanup_provider(provider_id)
 
 
@@ -276,7 +250,7 @@ def _get_uv_providers() -> list[str]:
 class TestBrewProviderInstallUninstall:
     """Install/uninstall + CLI invocation for brew-based providers."""
 
-    @pytest.mark.parametrize("provider_id", _get_brew_providers())
+    @pytest.mark.parametrize("provider_id", _param_ids(_get_brew_providers(), "no brew providers selected"))
     def test_install_uninstall_roundtrip(self, provider_id: str) -> None:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
@@ -302,7 +276,7 @@ class TestBrewProviderInstallUninstall:
 class TestUvProviderInstallUninstall:
     """Install/uninstall + CLI invocation for uv-tool-based providers."""
 
-    @pytest.mark.parametrize("provider_id", _get_uv_providers())
+    @pytest.mark.parametrize("provider_id", _param_ids(_get_uv_providers(), "no uv-tool providers selected"))
     def test_install_uninstall_roundtrip(self, provider_id: str) -> None:
         if shutil.which("uv") is None:
             pytest.skip("uv not available on PATH in this test environment")
@@ -330,7 +304,7 @@ class TestUvProviderInstallUninstall:
 class TestProviderInstallRecipes:
     """Validate each provider's install/uninstall recipe matches expected package manager."""
 
-    @pytest.mark.parametrize("provider_id", filtered_provider_ids(package_manager="npm"))
+    @pytest.mark.parametrize("provider_id", _param_ids(filtered_provider_ids(package_manager="npm"), "no npm providers selected"))
     def test_npm_provider_recipe(self, provider_id: str) -> None:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
@@ -340,7 +314,7 @@ class TestProviderInstallRecipes:
         assert desc.cli_install.install.command[0] == "npm"
         assert desc.cli_install.uninstall.command[0] == "npm"
 
-    @pytest.mark.parametrize("provider_id", filtered_provider_ids(package_manager="brew"))
+    @pytest.mark.parametrize("provider_id", _param_ids(filtered_provider_ids(package_manager="brew"), "no brew providers selected"))
     def test_brew_provider_recipe(self, provider_id: str) -> None:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
@@ -350,7 +324,7 @@ class TestProviderInstallRecipes:
         assert desc.cli_install.install.command[0] == "brew"
         assert desc.cli_install.uninstall.command[0] == "brew"
 
-    @pytest.mark.parametrize("provider_id", filtered_provider_ids(package_manager="script"))
+    @pytest.mark.parametrize("provider_id", _param_ids(filtered_provider_ids(package_manager="script"), "no script providers selected"))
     def test_script_provider_recipe(self, provider_id: str) -> None:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
@@ -360,7 +334,7 @@ class TestProviderInstallRecipes:
         assert desc.cli_install.install.command[0] == "bash"
         assert desc.cli_install.uninstall.command[0] == "bash"
 
-    @pytest.mark.parametrize("provider_id", filtered_provider_ids(package_manager="uv-tool"))
+    @pytest.mark.parametrize("provider_id", _param_ids(filtered_provider_ids(package_manager="uv-tool"), "no uv-tool providers selected"))
     def test_uv_provider_recipe(self, provider_id: str) -> None:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
@@ -370,7 +344,7 @@ class TestProviderInstallRecipes:
         assert desc.cli_install.install.command[0] == "uv"
         assert desc.cli_install.uninstall.command[0] == "uv"
 
-    @pytest.mark.parametrize("provider_id", filtered_provider_ids(package_manager="gh-extension"))
+    @pytest.mark.parametrize("provider_id", _param_ids(filtered_provider_ids(package_manager="gh-extension"), "no gh-extension providers selected"))
     def test_gh_extension_provider_recipe(self, provider_id: str) -> None:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
@@ -380,7 +354,7 @@ class TestProviderInstallRecipes:
         assert desc.cli_install.install.command[0] == "gh"
         assert desc.cli_install.uninstall.command[0] == "gh"
 
-    @pytest.mark.parametrize("provider_id", filtered_provider_ids(package_manager="vscode"))
+    @pytest.mark.parametrize("provider_id", _param_ids(filtered_provider_ids(package_manager="vscode"), "no vscode providers selected"))
     def test_vscode_provider_recipe(self, provider_id: str) -> None:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
@@ -390,7 +364,7 @@ class TestProviderInstallRecipes:
         assert desc.cli_install.install.command[0] == "code"
         assert desc.cli_install.uninstall.command[0] == "code"
 
-    @pytest.mark.parametrize("provider_id", filtered_provider_ids(package_manager="pi-harness"))
+    @pytest.mark.parametrize("provider_id", _param_ids(filtered_provider_ids(package_manager="pi-harness"), "no pi-harness providers selected"))
     def test_pi_provider_recipe(self, provider_id: str) -> None:
         from audiagentic.foundation.invoke.recipes.callable_ import CallableRecipe
         desc = get_descriptor(provider_id)

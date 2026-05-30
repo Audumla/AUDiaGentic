@@ -72,21 +72,32 @@ where = ["src"]
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
 testpaths = ["tests/unit", "tests/integration", "tests/e2e", "tests/deferred"]
-addopts = "-ra -q --tb=short --strict-markers --strict-config"
+addopts = "-ra -q --tb=short --strict-markers --strict-config --import-mode=importlib"
 timeout = 30
 markers = [
-    "dev: exercises local filesystem state; not collected in CI/release (run explicitly: pytest tests/dev/)",
-    "slow: takes more than 10 seconds; excluded from quick runs (pytest -m 'not slow')",
-    "docker: requires Docker daemon; run via make test-docker or pytest -m docker",
+    # Tier markers — auto-applied by tests/conftest.py based on directory path
+    "unit: pure in-process test; no real I/O, subprocess, or network",
+    "integration: real filesystem (tmp_path) or subprocess; no Docker required",
+    "e2e: full user-facing path; real CLI, network, or Docker",
+    # Speed
+    "slow: single test takes >10s; excluded from quick runs (pytest -m 'not slow')",
+    # Resource / environment dependencies
+    "requires_docker: needs a Docker daemon running (not just isolation)",
     "requires_network: needs outbound internet access",
     "requires_uv: needs uv on PATH",
     "requires_npm: needs npm on PATH",
     "requires_cargo: needs cargo on PATH",
-    "opt_in: explicitly opt-in tests; never part of default local runs",
-    "mutates_host: may change host-installed tools, PATH state, or global/user config",
+    "requires_gh: needs gh CLI on PATH",
+    # Behaviour / intent
+    "smoke: minimal sanity check; should pass in every environment",
+    "opt_in: destructive or expensive; never run by default",
+    "mutates_host: installs/removes packages on the real host; always gated by Docker",
+    # Legacy / extended markers (kept for backward compatibility)
+    "docker: alias for requires_docker; prefer requires_docker in new tests",
+    "dev: exercises local filesystem state; not collected in CI (run: pytest tests/dev/)",
     "mutates_project_fs: writes/deletes project files beyond ephemeral temp paths",
-    "long_running: expected runtime >60s",
-    "flaky_external: depends on unstable external systems/services",
+    "long_running: expected runtime >60s; pair with @pytest.mark.timeout(N)",
+    "flaky_external: depends on unstable external systems or services",
 ]
 
 [tool.coverage.run]

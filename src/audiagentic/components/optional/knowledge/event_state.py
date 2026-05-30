@@ -10,7 +10,7 @@ import hashlib
 import json
 from typing import Any
 
-from .config import KnowledgeConfig
+from .knowledge_config import KnowledgeConfig
 from .utils import dump_yaml, load_yaml_file, now_utc
 
 
@@ -208,3 +208,5 @@ def _matches_payload_filters(raw: dict[str, Any], filters: dict[str, Any]) -> bo
         if not any(token in haystack for token in tokens if token):
             return False
     return True
+
+

@@ -4,7 +4,7 @@ import time
 from unittest.mock import MagicMock, patch
 
 from audiagentic.components.optional.coding_lsp.lsp_lifecycle import ServerConfig
-from audiagentic.components.optional.coding_lsp.session_manager import SessionManager
+from audiagentic.components.optional.coding_lsp.lsp_session_manager import SessionManager
 
 
 def _python_config() -> ServerConfig:
@@ -24,7 +24,7 @@ def test_initial_status_empty() -> None:
 
 def test_get_or_create_initializes_session() -> None:
     mgr = SessionManager()
-    with patch("audiagentic.components.optional.coding_lsp.session_manager.LspSession") as MockSession:
+    with patch("audiagentic.components.optional.coding_lsp.lsp_session_manager.LspSession") as MockSession:
         mock = MagicMock()
         mock.is_ready.return_value = True
         MockSession.return_value = mock
@@ -35,7 +35,7 @@ def test_get_or_create_initializes_session() -> None:
 
 def test_get_or_create_reuses_existing() -> None:
     mgr = SessionManager()
-    with patch("audiagentic.components.optional.coding_lsp.session_manager.LspSession") as MockSession:
+    with patch("audiagentic.components.optional.coding_lsp.lsp_session_manager.LspSession") as MockSession:
         mock = MagicMock()
         mock.is_ready.return_value = True
         MockSession.return_value = mock
@@ -46,7 +46,7 @@ def test_get_or_create_reuses_existing() -> None:
 
 def test_shutdown_session() -> None:
     mgr = SessionManager()
-    with patch("audiagentic.components.optional.coding_lsp.session_manager.LspSession") as MockSession:
+    with patch("audiagentic.components.optional.coding_lsp.lsp_session_manager.LspSession") as MockSession:
         mock = MagicMock()
         mock.is_ready.return_value = True
         MockSession.return_value = mock
@@ -57,7 +57,7 @@ def test_shutdown_session() -> None:
 
 def test_shutdown_all() -> None:
     mgr = SessionManager()
-    with patch("audiagentic.components.optional.coding_lsp.session_manager.LspSession") as MockSession:
+    with patch("audiagentic.components.optional.coding_lsp.lsp_session_manager.LspSession") as MockSession:
         mock = MagicMock()
         mock.is_ready.return_value = True
         MockSession.return_value = mock
@@ -69,7 +69,7 @@ def test_shutdown_all() -> None:
 
 def test_idle_check_shuts_down_old_sessions() -> None:
     mgr = SessionManager()
-    with patch("audiagentic.components.optional.coding_lsp.session_manager.LspSession") as MockSession:
+    with patch("audiagentic.components.optional.coding_lsp.lsp_session_manager.LspSession") as MockSession:
         mock = MagicMock()
         mock.is_ready.return_value = True
         MockSession.return_value = mock
@@ -84,7 +84,7 @@ def test_idle_check_shuts_down_old_sessions() -> None:
 
 def test_idle_check_keeps_recent_sessions() -> None:
     mgr = SessionManager()
-    with patch("audiagentic.components.optional.coding_lsp.session_manager.LspSession") as MockSession:
+    with patch("audiagentic.components.optional.coding_lsp.lsp_session_manager.LspSession") as MockSession:
         mock = MagicMock()
         mock.is_ready.return_value = True
         MockSession.return_value = mock
@@ -95,7 +95,7 @@ def test_idle_check_keeps_recent_sessions() -> None:
 
 def test_status_reports_sessions() -> None:
     mgr = SessionManager()
-    with patch("audiagentic.components.optional.coding_lsp.session_manager.LspSession") as MockSession:
+    with patch("audiagentic.components.optional.coding_lsp.lsp_session_manager.LspSession") as MockSession:
         mock = MagicMock()
         mock.is_ready.return_value = True
         mock.server_config = _python_config()
@@ -104,3 +104,14 @@ def test_status_reports_sessions() -> None:
         status = mgr.status()
         assert status["project_roots"] == 1
         assert status["total_sessions"] == 1
+
+
+def test_get_diagnostics_for_project() -> None:
+    mgr = SessionManager()
+    with patch("audiagentic.components.optional.coding_lsp.lsp_session_manager.LspSession") as MockSession:
+        mock = MagicMock()
+        mock.is_ready.return_value = True
+        mock.get_diagnostics.return_value = {"file:///tmp/test.py": [{"message": "bad"}]}
+        MockSession.return_value = mock
+        mgr.get_or_create("/tmp", "python", _python_config())
+        assert mgr.get_diagnostics("/tmp") == {"file:///tmp/test.py": [{"message": "bad"}]}

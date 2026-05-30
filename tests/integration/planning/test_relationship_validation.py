@@ -11,7 +11,7 @@ for _p in (str(ROOT), str(ROOT / "src")):
 import pytest
 from tests.helpers.planning_testkit import seed_planning_config
 
-from audiagentic.components.optional.planning.app.api import PlanningAPI
+from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
 
 
 def _seed_planning_project(root: Path) -> None:
@@ -76,3 +76,4 @@ def test_wp_create_still_allows_deferred_task_linking(planning_api: PlanningAPI)
     wp = planning_api.new("wp", label="Loose WP", summary="Loose WP", refs={"plan": plan_id})
 
     assert wp.data["id"].startswith("wp-")
+

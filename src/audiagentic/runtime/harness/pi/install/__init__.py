@@ -36,8 +36,9 @@ def build_runtime_sync(
     reason: str,
     component_id: str | None = None,
     target: str = _TARGET,
+    has_mcp_servers: bool = True,
 ) -> dict[str, object]:
-    return _build_sync(reason=reason, component_id=component_id, target=target)
+    return _build_sync(reason=reason, component_id=component_id, target=target, has_mcp_servers=has_mcp_servers)
 
 
 def request_runtime_reload(
@@ -45,8 +46,9 @@ def request_runtime_reload(
     *,
     reason: str,
     component_id: str | None = None,
+    has_mcp_servers: bool = True,
 ) -> Path:
-    return write_reload_marker(project_root, reason=reason, component_id=component_id, target=_TARGET)
+    return write_reload_marker(project_root, reason=reason, component_id=component_id, target=_TARGET, has_mcp_servers=has_mcp_servers)
 
 
 def _validate_agent_install(npm_dir: Path) -> None:
@@ -171,3 +173,5 @@ def refresh_harness_config_if_installed(
     except Exception:
         logger.warning("Failed to request runtime reload for %s", component_id, exc_info=True)
     return True
+
+

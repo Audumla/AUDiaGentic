@@ -59,9 +59,9 @@ _ROOT = _find_project_root()
 _current_root = None  # Override for set_root()
 _api = None  # Lazy API instance
 
-from audiagentic.components.optional.planning.app.api import PlanningAPI
 from audiagentic.components.optional.planning.app.config import Config
 from audiagentic.components.optional.planning.app.docs_mgr import DocumentationManager
+from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
 from audiagentic.components.optional.planning.app.section_registry import split_section_path
 from audiagentic.components.optional.planning.fs.read import parse_markdown
 from audiagentic.components.optional.planning.fs.write import dump_markdown
@@ -1719,3 +1719,4 @@ def planning_config_summary(
         out["guidance_levels_detail"] = guidance_levels
 
     return out
+

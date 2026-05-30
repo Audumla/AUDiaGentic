@@ -5,7 +5,7 @@ from typing import Any
 
 import yaml
 
-from audiagentic.foundation.components.ids import COMPONENT_AGENT_ACTIONS, COMPONENT_AGENT_JOBS
+from audiagentic.foundation.components.ids import COMPONENT_AGENT_JOBS
 
 from .base import SurfaceContribution
 
@@ -49,15 +49,18 @@ def _contributions_from_data(data: dict[str, Any], component_id: str) -> list[Su
 def load_tag_surface_contributions(project_root: Path | None = None) -> list[SurfaceContribution]:
     """Load surface contributions declared in each tag's descriptor.yaml.
 
-    Tags are optional parts of the agent-actions component, not separate components.
-    If project_root is given, contributions are only included when agent-actions is installed.
+    Tags are optional parts of the agent-jobs component, not separate components.
+    If project_root is given, contributions are only included when agent-jobs is installed and enabled.
     """
     from audiagentic.components.optional.providers.tags.registry import (  # noqa: PLC0415
         all_tags_loaded,
     )
-    from audiagentic.foundation.components.registry import is_installed  # noqa: PLC0415
+    from audiagentic.foundation.components.registry import is_enabled, is_installed  # noqa: PLC0415
 
-    if project_root is not None and not is_installed(COMPONENT_AGENT_ACTIONS, project_root):
+    if project_root is not None and not (
+        is_installed(COMPONENT_AGENT_JOBS, project_root)
+        and is_enabled(COMPONENT_AGENT_JOBS, project_root)
+    ):
         return []
 
     contributions: list[SurfaceContribution] = []
@@ -90,7 +93,7 @@ def _build_canonical_tags_body(tags: dict) -> str:
         "- Do not reinterpret these tags — route the raw tagged prompt through the repo-owned bridge.",
         "- Keep tag semantics identical to the shared AUDiaGentic launch contract.",
         "- Keep provenance visible: provider id, surface, and session id should survive normalization.",
-        "- Tag definitions are managed in `config/components/optional/agent-actions/tags/`;",
+        "- Tag definitions are managed in `config/components/optional/agent-jobs/tags/`;",
         "  run `python -m audiagentic.components.optional.providers.skill_surfaces --project-root .`"
         " after adding, removing, or renaming tags.",
     ]
@@ -101,7 +104,7 @@ def _build_tag_shortcuts_body(tags: dict) -> str:
     """Build the aliases cheatsheet body from all loaded tags."""
     lines = [
         "Tag and provider aliases are centralized in the tag registry and",
-        "`config/components/optional/agent-actions/tags/` and work in all surfaces.\n",
+        "`config/components/optional/agent-jobs/tags/` and work in all surfaces.\n",
         "Tag aliases:\n",
     ]
     for tag_id in sorted(tags):

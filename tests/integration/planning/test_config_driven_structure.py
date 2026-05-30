@@ -27,8 +27,8 @@ root = bootstrap()
 
 from tests.helpers.planning_testkit import seed_planning_config
 
-from audiagentic.components.optional.planning.app.api import PlanningAPI
 from audiagentic.components.optional.planning.app.config import Config
+from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
 
 
 class TestConfigRequiredSections:
@@ -630,3 +630,4 @@ class TestBackwardCompatibility:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+

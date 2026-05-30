@@ -5,7 +5,7 @@ from typing import Any
 
 import yaml
 
-from .config import KnowledgeConfig
+from .knowledge_config import KnowledgeConfig
 from .markdown_io import load_page, load_page_by_id, save_page, sidecar_for_page
 from .models import KnowledgePage, PatchResult, Section
 
@@ -119,3 +119,5 @@ def _create_page(config: KnowledgeConfig, action: dict[str, Any]) -> None:
         raise PatchError(f'Page already exists: {content_path}')
     page_sections = [Section(title=str(s['title']), body=str(s.get('body', '')).strip()) for s in sections]
     save_page(KnowledgePage(content_path, meta_path, {str(k): v for k, v in metadata.items()}, page_sections, ''))
+
+

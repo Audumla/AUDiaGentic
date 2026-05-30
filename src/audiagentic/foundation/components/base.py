@@ -41,6 +41,7 @@ from dataclasses import field
 class McpServerDeclaration:
     name: str
     module: str
+    managed_id: str | None = None
     args: tuple[str, ...] = ()
     direct_tools: list[str, ...] = field(default_factory=list)
     description: str = ""
@@ -58,6 +59,7 @@ class ExternalMcpServerDeclaration:
     """
     name: str
     command: str
+    managed_id: str | None = None
     args: tuple[str, ...] = ()
     env: dict[str, str] = field(default_factory=dict)
     description: str = ""

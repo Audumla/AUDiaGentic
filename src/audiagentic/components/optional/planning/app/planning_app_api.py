@@ -1,0 +1,327 @@
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+from audiagentic.foundation.event import EventService, StructuredLog
+from audiagentic.foundation.workflow import FrontmatterBuilder, ItemView, StateMachine
+
+from ..fs.scan import scan_items
+from ..fs.write import dump_markdown
+from .claims import Claims
+from .compact_mgr import Compactor
+from .config import Config
+from .ext_mgr import Extracts
+from .idx_mgr import Indexer
+from .paths import Paths
+from .rec_mgr import Reconcile
+from .rel_config import RelationshipConfig
+from .services.content_service import ContentService
+from .services.item_creator import ItemCreatorService
+from .services.item_reader import ItemReaderService
+from .services.maintenance_service import MaintenanceService
+from .services.planning_supersede import PlanningSupersedeService
+from .services.policy_service import PolicyService
+from .services.queue_service import QueueService
+from .services.relationship_service import RelationshipService
+from .services.workflow_actions_service import WorkflowActionsService
+from .val_mgr import Validator
+
+
+class PlanningAPI:
+    def __init__(self, root: Path, test_mode: bool = False):
+        self.root = Path(root)
+        self.test_mode = test_mode
+        self.config = Config(self.root)
+        self.paths = Paths(self.root)
+        self.events = StructuredLog(self.root / ".audiagentic/planning/events/events.jsonl")
+        self.claims_store = Claims(self.root / ".audiagentic/planning/claims/claims.json")
+        self.indexer = Indexer(self.root)
+        self.validator = Validator(self.root)
+        self.relationship_config = RelationshipConfig(self.config)
+        self.extracts = Extracts(self.root, api_getter=lambda: self)
+        self.reconciler = Reconcile(self.root)
+        self.compactor = Compactor(self.root)
+        self.reader = ItemReaderService(self)
+        self.maintenance = MaintenanceService(self)
+        self.frontmatter_builder = FrontmatterBuilder(self.config)
+        self.creator = ItemCreatorService(self)
+        self.relationships = RelationshipService(self)
+        self.lifecycle = StateMachine(self)
+        self.policy = PolicyService(self)
+        self.planning_supersede = PlanningSupersedeService(self)
+        self.content = ContentService(self)
+        self.queue = QueueService(self)
+        self.workflow_actions = WorkflowActionsService(self)
+        # Event infrastructure - generic, from foundation/event
+        self.event_service = EventService(self.events)
+        # Planning-specific propagation subscriber
+        self._propagation_engine = None
+        self._propagation_subscription = None
+        self._init_propagation()
+
+    def _init_propagation(self) -> None:
+        """Initialize planning-specific state propagation subscriber."""
+        try:
+            from audiagentic.foundation.event import get_bus
+            from audiagentic.foundation.workflow import StatePropagationEngine
+
+            config_path = (
+                self.root / ".audiagentic" / "planning" / "config" / "state_propagation.yaml"
+            )
+            log_path = self.root / ".audiagentic" / "planning" / "meta" / "propagation_log.jsonl"
+            self._propagation_engine = StatePropagationEngine(
+                ctx=self,
+                enabled=True,
+                config_path=config_path,
+                log_path=log_path,
+            )
+            bus = get_bus()
+            self._propagation_subscription = bus.subscribe(
+                self.config.state_change_event_type(),
+                self._on_state_change_for_propagation,
+            )
+        except Exception:
+            logger.warning("Failed to initialize state propagation engine", exc_info=True)
+
+    def _scan(self):
+        return scan_items(self.root)
+
+    def save(self, item: ItemView) -> None:
+        """Persist an ItemView's frontmatter and body back to disk."""
+        dump_markdown(item.path, item.data, item.body)
+
+    def _publish_event(
+        self,
+        event_type: str,
+        payload: dict,
+        metadata: dict | None = None,
+        mode=None,
+    ) -> None:
+        self.event_service.publish(event_type, payload, metadata=metadata, mode=mode)
+
+    def _on_state_change_for_propagation(
+        self,
+        event_type: str,
+        payload: dict,
+        metadata: dict,
+    ) -> None:
+        """Handle state change events for propagation."""
+        if not self._propagation_engine:
+            return
+        item_id = payload.get("id")
+        new_state = payload.get("new_state")
+        if not item_id or not new_state:
+            return
+        propagation_depth = metadata.get("propagation_depth", 0)
+        max_depth = self._propagation_engine.workflow_config.get("global", {}).get(
+            "max_depth", 10
+        )
+        if propagation_depth >= max_depth:
+            return
+        propagations = self._propagation_engine.propagate(item_id, new_state, metadata)
+        if not propagations:
+            return
+        for target_id, target_kind, target_state in propagations:
+            self._propagation_engine.apply_propagation(
+                target_id=target_id,
+                target_state=target_state,
+                source_id=item_id,
+                source_state=new_state,
+                metadata=metadata,
+            )
+
+    def lookup(self, id_: str) -> ItemView:
+        return self.reader.lookup(id_)
+
+    def head(self, id_: str) -> dict[str, object]:
+        return self.reader.head(id_)
+
+    def _find(self, id_: str):
+        return self.reader.find(id_)
+
+    def validate(self, raise_on_error: bool = False):
+        return self.maintenance.validate(raise_on_error=raise_on_error)
+
+    def index(self):
+        self.maintenance.index()
+
+    def rebaseline(self) -> dict:
+        return self.maintenance.rebaseline()
+
+    def clean_indexes(self) -> dict:
+        return self.maintenance.clean_indexes()
+
+    def maintain(self) -> dict:
+        return self.maintenance.maintain()
+
+    def compact(self) -> dict:
+        return self.maintenance.compact()
+
+    def reconcile(self):
+        return self.maintenance.reconcile()
+
+    def new(
+        self,
+        kind: str,
+        label: str,
+        summary: str,
+        domain: str | None = None,
+        workflow: str | None = None,
+        refs: dict[str, object] | None = None,
+        fields: dict[str, object] | None = None,
+        profile: str | None = None,
+        guidance: str | None = None,
+        current_understanding: str | None = None,
+        open_questions: list[str] | None = None,
+        source: str | None = None,
+        context: str | None = None,
+        check_duplicates: bool = True,
+    ) -> ItemView:
+        return self.creator.new(
+            kind=kind,
+            label=label,
+            summary=summary,
+            domain=domain,
+            workflow=workflow,
+            refs=refs,
+            fields=fields,
+            profile=profile,
+            guidance=guidance,
+            current_understanding=current_understanding,
+            open_questions=open_questions,
+            source=source,
+            context=context,
+            check_duplicates=check_duplicates,
+        )
+
+    def create_with_content(
+        self,
+        kind: str,
+        label: str,
+        summary: str,
+        content: str,
+        source: str | None = None,
+        domain: str | None = None,
+        workflow: str | None = None,
+        refs: dict[str, object] | None = None,
+        fields: dict[str, object] | None = None,
+        check_duplicates: bool = True,
+    ):
+        """Create planning object with full content.
+
+        Args:
+            kind: Configured planning object type
+            label: Object label
+            summary: Object summary
+            content: Full markdown content (without YAML frontmatter)
+            domain: Optional configured domain value
+            refs: Input refs keyed by names from planning.creation.seed_reference_fields
+            fields: Extra frontmatter fields
+            workflow: Workflow name
+        """
+        return self.creator.create_with_content(
+            kind=kind,
+            label=label,
+            summary=summary,
+            content=content,
+            source=source,
+            domain=domain,
+            workflow=workflow,
+            refs=refs,
+            fields=fields,
+            check_duplicates=check_duplicates,
+        )
+
+    def update(
+        self,
+        id_: str,
+        label: str | None = None,
+        summary: str | None = None,
+        body_append: str | None = None,
+    ):
+        return self.content.update(id_, label=label, summary=summary, body_append=body_append)
+
+    def get_content(self, id_: str) -> str:
+        return self.content.get_content(id_)
+
+    def update_content(
+        self,
+        id_: str,
+        content: str,
+        mode: str = "replace",
+        section: str | None = None,
+        position: int | None = None,
+    ):
+        return self.content.update_content(
+            id_,
+            content,
+            mode=mode,
+            section=section,
+            position=position,
+        )
+
+    def move(self, id_: str, domain: str):
+        return self.content.move(id_, domain)
+
+    def state(
+        self,
+        id_: str,
+        new_state: str,
+        reason: str | None = None,
+        actor: str | None = None,
+        metadata: dict | None = None,
+    ):
+        return self.lifecycle.state(id_, new_state, reason=reason, actor=actor, metadata=metadata)
+
+    def relink(
+        self,
+        src_id: str,
+        field: str,
+        dst_id: str,
+        seq: int | None = None,
+        display: str | None = None,
+    ):
+        return self.relationships.relink(src_id, field, dst_id, seq=seq, display=display)
+
+    def run_workflow_action(self, action_name: str, context: dict):
+        return self.workflow_actions.execute_action(action_name, context)
+
+    def claim(self, kind: str, id_: str, holder: str, ttl: int | None = None):
+        return self.queue.claim(kind, id_, holder, ttl)
+
+    def unclaim(self, id_: str):
+        return self.queue.unclaim(id_)
+
+    def claims(self, kind: str | None = None):
+        return self.queue.claims(kind)
+
+    def next_items(
+        self, kind: str | None = None, state: str | None = None, domain: str | None = None
+    ):
+        return self.queue.next_items(kind=kind, state=state, domain=domain)
+
+    def effective_refs(self, id_: str, field: str | None = None):
+        return self.workflow_actions.effective_refs(id_, field=field)
+
+    def dump_all(self, output_dir: str | None = None, format_: str = "json") -> dict:
+        return self.workflow_actions.dump_all(output_dir=output_dir, format_=format_)
+
+    def sync_id_counters(self) -> None:
+        """Seed persisted counters from existing docs. Run once after install."""
+        from .id_gen import sync_counter
+
+        for kind in self.config.all_kinds():
+            sync_counter(self.root, kind)
+
+    def delete(
+        self,
+        id_: str,
+        hard: bool = False,
+        reason: str | None = None,
+    ) -> dict:
+        return self.content.delete(id_, hard=hard, reason=reason)
+
+

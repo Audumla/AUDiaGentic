@@ -11,10 +11,11 @@ files:
     lifecycle: create-if-missing
     description: Installation marker
 mcp-servers:
-  - name: audiagentic-source-control
-    module: audiagentic.components.optional.source_control.source_control_admin_mcp
+  - name: ag-sc-mgmt
+    module: audiagentic.components.optional.source_control.source_control_manage_mcp
     direct-tools: [get_source_control_status, install_dependencies, uninstall_dependencies]
     description: Source control component management
+    propagate: audiagentic
     instructions: >
       Use get_source_control_status to check git, gh CLI, gh mcp extension, and uv (uvx).
       The status includes a missing-dependencies list. If any are missing and the user
@@ -52,14 +53,14 @@ external-mcp-servers:
 harness-instructions:
   - section: "What you can do"
     content: |
-      ### audiagentic-source-control
+      ### ag-sc-mgmt
       - `get_source_control_status` — Check git, gh, gh-mcp, uv availability and list missing dependencies
       - `install_dependencies` — Install missing dependencies (git, gh, gh-mcp, uv) after user confirms
       - `uninstall_dependencies` — Uninstall named dependencies (explicit user action; not on component uninstall)
 
       When installing the source-control component: check missing-dependencies, ASK the user
-      which to install, then call install_dependencies. Then run mcp_refresh_harness_config
-      so the new git/github MCP servers appear in mcp.json.
+      which to install, then call install_dependencies. The harness config and mcp.json are
+      refreshed automatically after install — no manual refresh step is needed.
 
       ### Official MCP servers (installed by this component)
 
@@ -69,8 +70,8 @@ harness-instructions:
       **github** (`gh mcp serve` via GitHub CLI)
       - GitHub operations: pull requests, issues, releases, workflow dispatch, code search
 
-lifecycle-hook: audiagentic.components.optional.source_control.bootstrap.on_component_lifecycle
-status-hook: audiagentic.components.optional.source_control.bootstrap.status_payload
+lifecycle-hook: audiagentic.components.optional.source_control.source_control_bootstrap.on_component_lifecycle
+status-hook: audiagentic.components.optional.source_control.source_control_bootstrap.status_payload
 
 contributions:
   - id: source-control/doctrine
@@ -81,8 +82,6 @@ contributions:
       - instruction
     content:
       body: |
-        Use the source control component for all git and GitHub operations.
-        If the agent-ledger component is installed, record a change event to the
-        ledger before committing using the audiagentic-ledger-write MCP tool
-        (record_change_event).
         Do not invoke git or GitHub APIs directly — use the MCP tools.
+
+

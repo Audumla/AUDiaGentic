@@ -24,6 +24,7 @@ from audiagentic.components.optional.providers.services.mcp import (
     list_provider_mcp_servers,
     reload_provider_mcp,
     remove_provider_mcp_server,
+    sync_managed_provider_mcp,
 )
 from audiagentic.foundation.mcp import McpServerEntry
 
@@ -263,14 +264,81 @@ class TestReloadProviderMcp:
         assert result["ok"] is False
 
 
+class TestSyncManagedProviderMcp:
+    def test_preserves_external_entries(self, tmp_path: Path) -> None:
+        path = tmp_path / ".mcp.json"
+        path.write_text(json.dumps({
+            "mcpServers": {
+                "external-server": {"command": "node", "args": ["custom.js"]},
+            }
+        }))
+
+        entry = McpServerEntry(name="ag-project-mgmt", command="python", args=("-m", "mod"))
+        result = sync_managed_provider_mcp(
+            "claude",
+            tmp_path,
+            {"project.ag-project-mgmt": ("ag-project-mgmt", entry)},
+        )
+
+        assert result["ok"] is True
+        data = json.loads(path.read_text())
+        assert "external-server" in data["mcpServers"]
+        assert "ag-project-mgmt" in data["mcpServers"]
+
+    def test_renames_owned_entry_by_managed_id(self, tmp_path: Path) -> None:
+        old_entry = McpServerEntry(name="ag-project-mgmt", command="python", args=("-m", "old"))
+        sync_managed_provider_mcp(
+            "claude",
+            tmp_path,
+            {"project.ag-project-mgmt": ("ag-project-mgmt", old_entry)},
+        )
+
+        new_entry = McpServerEntry(name="ag-project", command="python", args=("-m", "new"))
+        result = sync_managed_provider_mcp(
+            "claude",
+            tmp_path,
+            {"project.ag-project-mgmt": ("ag-project", new_entry)},
+        )
+
+        assert result["ok"] is True
+        data = json.loads((tmp_path / ".mcp.json").read_text())
+        assert "ag-project" in data["mcpServers"]
+        assert "ag-project-mgmt" not in data["mcpServers"]
+
+    def test_collision_with_external_name_is_reported(self, tmp_path: Path) -> None:
+        path = tmp_path / ".mcp.json"
+        path.write_text(json.dumps({
+            "mcpServers": {
+                "ag-project-mgmt": {"command": "node", "args": ["external.js"]},
+            }
+        }))
+
+        entry = McpServerEntry(name="ag-project-mgmt", command="python", args=("-m", "mod"))
+        result = sync_managed_provider_mcp(
+            "claude",
+            tmp_path,
+            {"project.ag-project-mgmt": ("ag-project-mgmt", entry)},
+        )
+
+        assert result["ok"] is False
+        assert result["collisions"]
+        data = json.loads(path.read_text())
+        assert data["mcpServers"]["ag-project-mgmt"]["command"] == "node"
+
+
 class TestMcpConfigSpecOnDescriptors:
     def test_file_watch_providers_have_mcp_json(self) -> None:
         from audiagentic.components.optional.providers.descriptors.registry import get_descriptor
-        for pid in ("claude", "opencode", "qwen"):
+        for pid in ("claude", "qwen"):
             desc = get_descriptor(pid)
             assert desc.mcp_config is not None, f"{pid} missing mcp_config"
-            assert desc.mcp_config.format == "mcp-json"
+            assert desc.mcp_config.format == "mcp-json", f"{pid}: expected mcp-json, got {desc.mcp_config.format}"
             assert desc.mcp_config.refresh_mode == "file-watch"
+        # opencode uses its own JSON format
+        opencode = get_descriptor("opencode")
+        assert opencode.mcp_config is not None
+        assert opencode.mcp_config.format == "opencode-mcp"
+        assert opencode.mcp_config.refresh_mode == "file-watch"
 
     def test_restart_required_providers(self) -> None:
         from audiagentic.components.optional.providers.descriptors.registry import get_descriptor

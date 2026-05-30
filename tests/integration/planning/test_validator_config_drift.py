@@ -11,7 +11,7 @@ for _p in (str(ROOT), str(ROOT / "src")):
 import yaml
 from tests.helpers.planning_testkit import seed_planning_config
 
-from audiagentic.components.optional.planning.app.api import PlanningAPI
+from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
 
 
 def _seed_planning_project(root: Path) -> None:
@@ -138,3 +138,4 @@ def test_validate_rel_list_string_entries_are_actionable(tmp_path: Path) -> None
     errors = api.validate()
 
     assert any("task_refs must be a list of objects with 'ref'" in e for e in errors)
+

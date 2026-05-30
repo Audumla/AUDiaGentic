@@ -8,7 +8,6 @@ from pathlib import Path
 
 import yaml
 
-from audiagentic.components.optional.knowledge.config import load_config
 from audiagentic.components.optional.knowledge.event_state import (
     _fingerprint_text,
     _lookup_dotted,
@@ -17,6 +16,7 @@ from audiagentic.components.optional.knowledge.event_state import (
     prune_event_state,
     save_event_state,
 )
+from audiagentic.components.optional.knowledge.knowledge_config import load_config
 from audiagentic.paths import REPO_ROOT
 
 
@@ -182,3 +182,4 @@ def test_matches_payload_filters_contains_any_no_match():
 def test_matches_payload_filters_empty_filters():
     raw = {"anything": "here"}
     assert _matches_payload_filters(raw, {})
+
