@@ -14,9 +14,14 @@ from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
     resolve_server_for_file,
     write_lsp_config,
 )
-from audiagentic.components.optional.coding_lsp.lsp_dependencies import get_lsp_dependencies
 from audiagentic.components.optional.coding_lsp.lsp_session_manager import SessionManager
-from audiagentic.foundation.dependencies import detect_missing, install_dependencies
+from audiagentic.foundation.dependencies import (
+    detect_missing,
+    install_dependencies,
+    load_component_dependencies,
+)
+
+_LSP_DEPS = load_component_dependencies("coding-lsp")
 
 _session_manager = SessionManager()
 
@@ -135,7 +140,7 @@ def config_status(root: str = ".") -> dict[str, Any]:
     project_root = resolve_project_root(root)
     lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
     configured = read_lsp_config(lsp_path)
-    deps = get_lsp_dependencies()
+    deps = _LSP_DEPS
     missing_deps = detect_missing(deps, configured_dependency_ids(project_root))
 
     language_status: dict[str, dict[str, Any]] = {}
@@ -193,7 +198,7 @@ def list_languages() -> dict[str, Any]:
 
 
 async def install_lsp_dependencies(names: list[str], *, run_with_output) -> dict[str, Any]:
-    deps = get_lsp_dependencies()
+    deps = _LSP_DEPS
     return await run_with_output(
         ctx=None,
         logger="coding-lsp.dependencies.install",
@@ -204,7 +209,7 @@ async def install_lsp_dependencies(names: list[str], *, run_with_output) -> dict
 
 def list_missing(root: str = ".") -> dict[str, Any]:
     project_root = resolve_project_root(root)
-    deps = get_lsp_dependencies()
+    deps = _LSP_DEPS
     missing = detect_missing(deps, configured_dependency_ids(project_root))
     return {
         "project_root": str(project_root),

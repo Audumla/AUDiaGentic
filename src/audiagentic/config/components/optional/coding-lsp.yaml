@@ -6,6 +6,38 @@ description: Language server protocol bridge for AI-assisted code navigation and
 lifecycle-observer: audiagentic.components.optional.coding_lsp.coding_lsp_bootstrap
 status-hook: audiagentic.components.optional.coding_lsp.coding_lsp_bootstrap.status_payload
 detection-marker: .audiagentic/components/coding-lsp.yaml
+
+dependencies:
+  pyright:
+    display-name: Pyright (Python LSP)
+    check: binary:pyright-langserver
+    toolchain: uv
+    package: pyright
+
+  typescript-language-server:
+    display-name: TypeScript Language Server
+    check: binary:typescript-language-server
+    toolchain: npm
+    package: typescript-language-server
+
+  rust-analyzer:
+    display-name: Rust Analyzer
+    check: binary:rust-analyzer
+    toolchain: cargo
+    package: rust-analyzer
+
+  clangd:
+    display-name: Clangd (C/C++ LSP)
+    check: binary:clangd
+    packages:
+      winget: LLVM.LLVM
+      scoop: clangd
+      choco: llvm
+      brew: clangd
+      apt: clangd
+      dnf: clangd
+      pacman: clangd
+
 files:
   - path: .audiagentic/components/coding-lsp.yaml
     lifecycle: create-if-missing
