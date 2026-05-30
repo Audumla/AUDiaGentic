@@ -3,8 +3,8 @@ contract-version: v1
 id: coding-lsp
 display-name: Coding LSP
 description: Language server protocol bridge for AI-assisted code navigation and editing
-lifecycle-observer: audiagentic.components.optional.coding_lsp.bootstrap
-status-hook: audiagentic.components.optional.coding_lsp.bootstrap.status_payload
+lifecycle-observer: audiagentic.components.optional.coding_lsp.coding_lsp_bootstrap
+status-hook: audiagentic.components.optional.coding_lsp.coding_lsp_bootstrap.status_payload
 detection-marker: .audiagentic/components/coding-lsp.yaml
 files:
   - path: .audiagentic/components/coding-lsp.yaml
@@ -15,11 +15,74 @@ files:
     recursive: true
     description: MCP server and session logs
 mcp-servers:
-  - name: lsp-config-mcp
-    module: audiagentic.components.optional.coding_lsp.config_mcp
+  - name: ag-lsp-mgmt
+    module: audiagentic.components.optional.coding_lsp.lsp_manage_mcp
     description: LSP server configuration — manage language server settings
     propagate: audiagentic
-  - name: lsp-mcp
-    module: audiagentic.components.optional.coding_lsp.mcp_server
+    instructions: >
+      Use lsp_config_status to see which languages are configured and whether
+      their server binaries are installed.
+      Use lsp_add_language to add support for a language detected in the project.
+      Use lsp_install_dependencies to install a missing language server binary.
+      Use lsp_remove_language to remove a language from the project configuration.
+      Do not suggest installing a language server unless the project uses that language
+      or the user explicitly requests it.
+
+  - name: ag-lsp
+    module: audiagentic.components.optional.coding_lsp.lsp_mcp
     description: LSP code intelligence — symbols, definitions, diagnostics
     propagate: providers
+    instructions: >
+      Use these tools for precise code navigation and intelligence.
+      lsp_symbols: search workspace symbols by name — use before grep for symbol lookups.
+      lsp_definition: go to definition at a file position (format: line:column, 1-based).
+      lsp_hover: get type/documentation at a position.
+      lsp_references: find all references to a symbol.
+      lsp_doc_symbols: get the symbol outline for a file.
+      lsp_diagnostics: get type errors and warnings for open files.
+      lsp_rename_preview: preview a rename refactor without applying it.
+      These tools only work for languages configured in the project's lsp.json.
+      Check lsp_config_status if a tool returns no results for a language.
+
+harness-instructions:
+  - section: "What you can do"
+    propagate: audiagentic
+    content: |
+      ### ag-lsp-mgmt
+      - `lsp_config_status` — Show configured languages and whether their server binaries are installed
+      - `lsp_add_language` — Add a language to the project (auto-configures defaults from the language spec)
+      - `lsp_remove_language` — Remove a language from the project configuration
+      - `lsp_list_languages` — List all supported languages with their default server commands
+      - `lsp_list_missing` — List configured languages whose server binaries are not installed
+      - `lsp_install_dependencies` — Install a missing language server binary (confirm with user first)
+
+      Languages are installed on request or auto-detected at component install time.
+      Do not suggest installing a language server unless the project uses that language
+      or the user explicitly requests it.
+
+contributions:
+  - id: coding-lsp/usage
+    owner: coding-lsp
+    title: Code intelligence via LSP
+    preferred-targets:
+      - instruction
+    content:
+      body: |
+        The coding-lsp component provides language server protocol tools for code intelligence.
+        Use LSP tools instead of text search when doing symbol lookup, go-to-definition,
+        hover documentation, or finding all references — they are more precise.
+
+        Available tools (ag-lsp server):
+        - `lsp_symbols` — search workspace symbols by name
+        - `lsp_definition` — go to definition at file:line:column
+        - `lsp_hover` — type and documentation at a position
+        - `lsp_references` — all references to a symbol
+        - `lsp_doc_symbols` — file symbol outline
+        - `lsp_diagnostics` — type errors and warnings
+        - `lsp_rename_preview` — preview rename refactor
+
+        Position format for all tools: "line:column" (1-based).
+        These tools only operate on languages configured in .coding-lsp/lsp.json.
+        Use `lsp_config_status` (ag-lsp-mgmt server) to check which languages are active.
+
+

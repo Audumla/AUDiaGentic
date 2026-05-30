@@ -96,7 +96,9 @@ def _cmd_component(args: argparse.Namespace, project_root: Path) -> int:
         except Exception:
             logger.warning("Failed to refresh agent config for %s", component_id, exc_info=True)
         try:
-            request_runtime_reload(project_root, reason=reason, component_id=component_id)
+            desc = get_descriptor(component_id) if component_id else None
+            has_mcp = bool(desc and (desc.mcp_servers or desc.external_mcp_servers))
+            request_runtime_reload(project_root, reason=reason, component_id=component_id, has_mcp_servers=has_mcp)
         except Exception:
             logger.warning("Failed to request runtime reload for %s", component_id, exc_info=True)
 
@@ -435,7 +437,7 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_update()
 
     if args.command == "release-bootstrap":
-        from audiagentic.components.optional.ledger import bootstrap as release_bootstrap
+        from audiagentic.components.optional.ledger import ledger_bootstrap as release_bootstrap
         bootstrap_root = Path(args.project_root).resolve() if args.project_root else project_root
         result = release_bootstrap.bootstrap_ledger(bootstrap_root)
         print(json.dumps(result, indent=2, sort_keys=True))
@@ -448,7 +450,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "refresh":
-        from audiagentic.runtime.harness import refresh_harness_config_if_installed
+        from audiagentic.runtime.harness import (
+            build_runtime_sync,
+            refresh_harness_config_if_installed,
+        )
         refreshed = refresh_harness_config_if_installed(project_root, reason="manual-refresh")
         if not refreshed:
             print("Harness not installed. Run: audiagentic install", file=sys.stderr)

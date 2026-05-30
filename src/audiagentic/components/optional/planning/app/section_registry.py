@@ -41,3 +41,5 @@ def split_section_path(section_path: str) -> list[str]:
     # Support both . and / as delimiters; normalize to dots
     path = section_path.replace("/", ".")
     return [part.strip() for part in path.split(".") if part.strip()]
+
+

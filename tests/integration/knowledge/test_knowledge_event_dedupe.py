@@ -6,7 +6,6 @@ from pathlib import Path
 
 import yaml
 
-from audiagentic.components.optional.knowledge.config import load_config
 from audiagentic.components.optional.knowledge.event_handlers import (
     on_planning_state_change,
     process_events,
@@ -16,6 +15,7 @@ from audiagentic.components.optional.knowledge.event_scanner import (
     scan_events,
 )
 from audiagentic.components.optional.knowledge.event_state import prune_event_state
+from audiagentic.components.optional.knowledge.knowledge_config import load_config
 from audiagentic.components.optional.knowledge.models import EventRecord
 from audiagentic.paths import REPO_ROOT
 
@@ -189,3 +189,4 @@ def test_transient_event_proposal_recommends_reject_no_doc_change(
     assert proposal["recommendation"] == "reject_no_doc_change"
     assert proposal["assessment"]["likely_requires_doc_change"] is False
     assert proposal["actions"] == []
+

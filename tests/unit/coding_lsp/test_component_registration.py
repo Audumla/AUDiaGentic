@@ -17,17 +17,18 @@ def test_coding_lsp_yaml_loads() -> None:
     assert descriptor.display_name == "Coding LSP"
     assert len(descriptor.mcp_servers) == 2
     names = {s.name for s in descriptor.mcp_servers}
-    assert "lsp-config-mcp" in names
-    assert "lsp-mcp" in names
+    assert "ag-lsp-mgmt" in names
+    assert "ag-lsp" in names
 
 
 def test_coding_lsp_has_lifecycle_observer() -> None:
     path = _coding_lsp_yaml_path()
     descriptor = register_from_yaml(path)
-    assert descriptor.lifecycle_observer == "audiagentic.components.optional.coding_lsp.bootstrap"
+    assert descriptor.lifecycle_observer == "audiagentic.components.optional.coding_lsp.coding_lsp_bootstrap"
 
 
 def test_coding_lsp_has_detection_marker() -> None:
     path = _coding_lsp_yaml_path()
     descriptor = register_from_yaml(path)
     assert descriptor.detection_marker == ".audiagentic/components/coding-lsp.yaml"
+

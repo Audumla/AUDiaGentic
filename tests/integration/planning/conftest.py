@@ -62,8 +62,9 @@ def reset_event_bus_subscriptions():
 
     # Reset propagation registry so next test's PlanningAPI registers fresh.
     try:
-        import audiagentic.components.optional.planning.app.api as _api
+        import audiagentic.components.optional.planning.app.planning_app_api as _api
 
         _api._propagation_subscriptions.clear()
     except Exception:
         pass
+

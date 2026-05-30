@@ -1,122 +1,7 @@
-<!-- AUDIAGENTIC:BEGIN agent-jobs/canonical-rule -->
-# Canonical workflow tags
-
-Canonical tags:
-
-- `ag-implement` (aliases: `agi`, `i`)
-- `ag-ledger` (aliases: `agl`, `l`)
-- `ag-plan` (aliases: `agp`, `p`)
-- `ag-review` (aliases: `agr`, `r`)
-
-Rules:
-
-- Do not reinterpret these tags — route the raw tagged prompt through the repo-owned bridge.
-- Keep tag semantics identical to the shared AUDiaGentic launch contract.
-- Keep provenance visible: provider id, surface, and session id should survive normalization.
-- Tag definitions are managed in `config/components/optional/agent-actions/tags/`;
-  run `python -m audiagentic.components.optional.providers.skill_surfaces --project-root .` after adding, removing, or renaming tags.
-<!-- AUDIAGENTIC:END agent-jobs/canonical-rule -->
-
-<!-- AUDIAGENTIC:BEGIN agent-jobs/tag-shortcuts -->
-# Tag shortcuts and aliases
-
-Tag and provider aliases are centralized in the tag registry and
-`config/components/optional/agent-actions/tags/` and work in all surfaces.
-
-Tag aliases:
-
-- `agi` -> `ag-implement`
-- `i` -> `ag-implement`
-- `implement` -> `ag-implement`
-- `agl` -> `ag-ledger`
-- `l` -> `ag-ledger`
-- `ledger` -> `ag-ledger`
-- `agp` -> `ag-plan`
-- `p` -> `ag-plan`
-- `plan` -> `ag-plan`
-- `agr` -> `ag-review`
-- `r` -> `ag-review`
-- `review` -> `ag-review`
-
-Provider aliases:
-
-- `cx` -> `codex`
-- `cld` -> `claude`
-- `cln` -> `cline`
-- `gm` -> `gemini`
-- `opc` -> `opencode`
-- `cp` -> `copilot`
-<!-- AUDIAGENTIC:END agent-jobs/tag-shortcuts -->
-
-<!-- AUDIAGENTIC:BEGIN ag-ledger/doctrine -->
-# Ledger action doctrine
-
-When the ledger action is triggered: check ledger state, tracked docs,
-release artifacts, and state consistency across the project. Note specific drift,
-missing evidence, or broken invariants. Do not mutate tracked docs or code without
-explicit approval. Report all drift — do not hide findings.
-<!-- AUDIAGENTIC:END ag-ledger/doctrine -->
-
-<!-- AUDIAGENTIC:BEGIN ag-implement/doctrine -->
-# Implement action doctrine
-
-When the implement action is triggered: carry out the requested implementation
-work within the stated scope. Do not broaden scope beyond the requested change.
-Prefer shared helpers, repository-owned scripts, and existing patterns.
-Run verification steps (type checks, tests) when available before declaring done.
-<!-- AUDIAGENTIC:END ag-implement/doctrine -->
-
-<!-- AUDIAGENTIC:BEGIN ag-plan/doctrine -->
-# Plan action doctrine
-
-When the plan action is triggered: map the requested change into a concrete
-execution plan with discrete steps. Identify dependencies, blockers, risks,
-and review checkpoints. Do not implement — plan only.
-<!-- AUDIAGENTIC:END ag-plan/doctrine -->
-
-<!-- AUDIAGENTIC:BEGIN ag-plan/planning-item-policy -->
-# Planning item creation policy
-
-Planning items (requests, specs, plans, tasks) can only be created with explicit user approval.
-
-- Do not autonomously create planning items during analysis, review, or exploration work.
-- If analysis suggests a new request or spec is needed, report findings and ask for approval.
-- Use the plan action to signal planning work that requires user direction.
-- Only create planning items in response to explicit user instruction or approved workflow prompts.
-<!-- AUDIAGENTIC:END ag-plan/planning-item-policy -->
-
-<!-- AUDIAGENTIC:BEGIN ag-review/doctrine -->
-# Review action doctrine
-
-When the review action is triggered: perform read-focused validation and
-completeness review. Identify blockers, missing tests, contract mismatches,
-and drift from tracked docs. Do not add implementation work unless explicitly
-requested. Do not broaden review into feature-scope changes.
-<!-- AUDIAGENTIC:END ag-review/doctrine -->
-
-<!-- AUDIAGENTIC:BEGIN ag-review/review-doctrine -->
-# Review doctrine
-
-- Review prompts should stay read-focused unless the normalized request explicitly allows more.
-- Do not broaden review into implementation work.
-- Keep tracked docs and release artifacts synchronized with the job record.
-<!-- AUDIAGENTIC:END ag-review/review-doctrine -->
-
-<!-- AUDIAGENTIC:BEGIN source-control/doctrine -->
-# Source control doctrine
-
-Use the source control component for all git and GitHub operations.
-If the agent-ledger component is installed, record a change event to the
-ledger before committing using the audiagentic-ledger-write MCP tool
-(record_change_event).
-Do not invoke git or GitHub APIs directly — use the MCP tools.
-<!-- AUDIAGENTIC:END source-control/doctrine -->
-
 <!-- AUDIAGENTIC:BEGIN agent-ledger/process -->
 # Agent ledger process
 
 For release-affecting work, follow AUDiaGentic agent ledger process.
-
 - Check release ledger state before changing release notes, changelog fragments, or release workflow files.
 - Keep release artifacts and job records synchronized with implementation and review outcomes.
 - Add or update the release ledger fragment when behavior, public workflow, or generated release output changes.
@@ -127,6 +12,33 @@ For release-affecting work, follow AUDiaGentic agent ledger process.
 # Ledger write instruction
 
 After completing substantive implementation work, record a change event to the ledger
-using the audiagentic-ledger-write MCP tool (record_change_event).
+using the ag-ledger MCP tool (record_change_event).
 Do not skip this step — the ledger is the authoritative record for release tracking.
 <!-- AUDIAGENTIC:END agent-ledger/write-instruction -->
+
+<!-- AUDIAGENTIC:BEGIN source-control/doctrine -->
+# Source control doctrine
+
+Do not invoke git or GitHub APIs directly — use the MCP tools.
+<!-- AUDIAGENTIC:END source-control/doctrine -->
+
+<!-- AUDIAGENTIC:BEGIN coding-lsp/usage -->
+# Code intelligence via LSP
+
+The coding-lsp component provides language server protocol tools for code intelligence.
+Use LSP tools instead of text search when doing symbol lookup, go-to-definition,
+hover documentation, or finding all references — they are more precise.
+
+Available tools (ag-lsp server):
+- `lsp_symbols` — search workspace symbols by name
+- `lsp_definition` — go to definition at file:line:column
+- `lsp_hover` — type and documentation at a position
+- `lsp_references` — all references to a symbol
+- `lsp_doc_symbols` — file symbol outline
+- `lsp_diagnostics` — type errors and warnings
+- `lsp_rename_preview` — preview rename refactor
+
+Position format for all tools: "line:column" (1-based).
+These tools only operate on languages configured in .coding-lsp/lsp.json.
+Use `lsp_config_status` (ag-lsp-mgmt server) to check which languages are active.
+<!-- AUDIAGENTIC:END coding-lsp/usage -->

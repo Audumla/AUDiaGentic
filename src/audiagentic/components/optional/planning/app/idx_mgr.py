@@ -108,3 +108,5 @@ class Indexer:
             dispatch_path.write_text(
                 json.dumps({**meta, "entries": []}, indent=2), encoding="utf-8"
             )
+
+

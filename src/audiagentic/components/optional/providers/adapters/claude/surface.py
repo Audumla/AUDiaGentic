@@ -10,7 +10,6 @@ from ...surfaces.base import (
     apply_managed_header,
     render_frontmatter_skill,
     render_instruction_file,
-    render_rules_file,
     resolve_tag_path,
 )
 from ...surfaces.registry import register_contribution_renderer, register_renderer
@@ -25,13 +24,14 @@ def render_contributions(
 ) -> list[SurfaceBlock]:
     blocks: list[SurfaceBlock] = []
     for contribution in contributions:
-        blocks.append(
-            SurfaceBlock(
-                path=project_root / "CLAUDE.md",
-                block_id=contribution.contribution_id,
-                content=f"## {contribution.title}\n\n{contribution.body.strip()}",
-            )
-        )
+        if "rule" in contribution.preferred_targets:
+            filename = contribution.contribution_id.split("/")[-1]
+            path = project_root / ".claude" / "rules" / f"{filename}.md"
+            content = contribution.body.strip()
+        else:
+            path = project_root / "CLAUDE.md"
+            content = f"## {contribution.title}\n\n{contribution.body.strip()}"
+        blocks.append(SurfaceBlock(path=path, block_id=contribution.contribution_id, content=content))
     return blocks
 
 
@@ -55,9 +55,6 @@ def render(
     surfaces[project_root / "CLAUDE.md"] = render_instruction_file(
         provider_id="claude",
         instruction_file="CLAUDE.md",
-        adapter_dir=_ADAPTER_DIR,
-    )
-    surfaces[project_root / ".claude" / "rules" / "prompt-tags.md"] = render_rules_file(
         adapter_dir=_ADAPTER_DIR,
     )
     return surfaces

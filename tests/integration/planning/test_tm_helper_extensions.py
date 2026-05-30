@@ -56,7 +56,7 @@ def _seed_helper_project(root: Path) -> None:
 
 @pytest.fixture()
 def helper_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    from audiagentic.components.optional.planning.app.api import PlanningAPI
+    from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
 
     _seed_helper_project(tmp_path)
     monkeypatch.setattr(tm, "_ROOT", tmp_path)
@@ -335,3 +335,4 @@ def test_tm_helper_state_supports_archive_metadata_and_list_filtering(
     assert shown["archived_at"] is not None
     assert task["id"] not in active_ids
     assert task["id"] in all_ids
+

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from audiagentic.components.optional.knowledge.config import load_config
+from audiagentic.components.optional.knowledge.knowledge_config import load_config
 from audiagentic.components.optional.knowledge.lifecycle import (
     accept_proposal,
     apply_proposal,
@@ -230,3 +230,4 @@ def test_accept_then_apply_review_update_generates_patch_actions(tmp_path: Path)
     archived_payload = yaml.safe_load(archived.read_text(encoding="utf-8"))
     assert archived_payload["status"] == "merged"
     assert archived_payload["patch_actions"]
+

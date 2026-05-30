@@ -29,3 +29,5 @@ def sync_counter(root: Path, kind: str) -> None:
                 pass
 
     counter_path.write_text(json.dumps({"counter": max_n}, indent=2), encoding="utf-8")
+
+

@@ -4,9 +4,9 @@ from dataclasses import asdict
 from typing import Any
 
 from .capability import doctor
-from .config import KnowledgeConfig
 from .events import process_events, record_event_baseline, scan_events
 from .importers import scaffold_page, seed_from_manifest
+from .knowledge_config import KnowledgeConfig
 from .search import search_pages
 from .sync import (
     apply_all_proposals,
@@ -150,3 +150,5 @@ def action_doctor(
     *, config: KnowledgeConfig, action_id: str, action_args: dict[str, Any]
 ) -> dict[str, Any]:
     return {"action_id": action_id, "result": doctor(config)}
+
+

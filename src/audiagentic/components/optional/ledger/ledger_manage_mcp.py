@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from audiagentic.components.optional.ledger import api
+from audiagentic.components.optional.ledger import ledger_api
 from audiagentic.foundation.mcp.component_server import log_tool_call, mcp_server
 
 mcp = mcp_server(__name__)
@@ -18,7 +18,7 @@ def _project_root() -> Path:
 @log_tool_call
 def get_ledger_status() -> dict:
     """Return ledger installation state, fragment count, and last sync time."""
-    return api.get_status(_project_root())
+    return ledger_api.get_status(_project_root())
 
 
 def main() -> None:

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from tests.helpers.planning_testkit import seed_planning_config
 
-from audiagentic.components.optional.planning.app.api import PlanningAPI
+from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
 
 
 class TestConfigCounterIsolation:
@@ -45,3 +45,4 @@ class TestConfigCounterIsolation:
 
         assert first.data["id"] == "standard-1"
         assert second.data["id"] == "standard-1"
+

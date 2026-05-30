@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from audiagentic.components.optional.knowledge.config import load_config
+from audiagentic.components.optional.knowledge.knowledge_config import load_config
 from audiagentic.components.optional.knowledge.llm import load_llm_job_state
 from audiagentic.components.optional.knowledge.models import DriftItem
 from audiagentic.components.optional.knowledge.sync import (
@@ -273,3 +273,4 @@ def test_cleanup_lifecycle_archives_older_duplicate_pending_proposals(tmp_path: 
     assert archived_payload["duplicate_of"] == "20260417T020000Z-tool-cli-event-review"
     assert archived_payload["duplicate_of_path"] == "docs/knowledge/data/proposals/20260417T020000Z-tool-cli-event-review.yml"
     assert archived.relative_to(config.root).as_posix() in result["duplicates"]["archived_duplicates"]
+

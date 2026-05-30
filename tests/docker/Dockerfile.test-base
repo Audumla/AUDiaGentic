@@ -1,0 +1,55 @@
+FROM node:22-bookworm-slim
+
+# Clear node:22 default CMD so derived images don't accidentally run `node`
+ENTRYPOINT []
+CMD ["bash"]
+
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PATH="/root/.local/bin:/root/.cargo/bin:/venv/bin:${PATH}"
+
+# Python + system deps (node already installed)
+# build-essential: required for cargo compilation (rust-analyzer)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-pip python3-venv python3-dev \
+        git ca-certificates curl gpg gnupg wget libgomp1 \
+        build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# uv (pyright, openhands, aider)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Python test/runtime tooling required by Docker test harness
+RUN python3 -m pip install --no-cache-dir --break-system-packages --no-compile \
+        "setuptools>=67" wheel pytest pytest-timeout jsonschema
+
+# Rust toolchain — cargo (rust-analyzer)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --default-toolchain stable --profile minimal
+
+# GitHub CLI (copilot)
+RUN (curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null) \
+    && (echo "deb [signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/githubcli.list) \
+    && apt-get update && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# VS Code CLI (roo)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends wget gpg \
+    && wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft.gpg \
+    && printf "Types: deb\nURIs: https://packages.microsoft.com/repos/code\nSuites: stable\nComponents: main\nArchitectures: amd64\nSigned-By: /usr/share/keyrings/microsoft.gpg\n" > /etc/apt/sources.list.d/vscode.sources \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends code \
+    && printf '#!/bin/sh\nexport DONT_PROMPT_WSL_INSTALL=1\nunset WSL_DISTRO_NAME WSL_INTEROP WSLENV\nexec /usr/bin/code --no-sandbox --user-data-dir /tmp/vscode-data "$@"\n' > /usr/local/bin/code \
+    && chmod +x /usr/local/bin/code \
+    && rm -rf /var/lib/apt/lists/*
+
+# Verify all toolchains
+RUN uv --version && cargo --version && gh --version && node --version && code --version
+
+# Set PYTHONPYCACHEPREFIX AFTER all build steps so build-time .pyc files
+# are NOT written here (they'd be stale bytecode baked into the image).
+# At runtime this redirects .pyc away from bind-mounted source, preventing
+# cross-platform bytecode mismatches (Windows vs Linux Python).
+ENV PYTHONPYCACHEPREFIX=/tmp/pycache

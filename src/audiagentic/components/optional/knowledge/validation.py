@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from .config import KnowledgeConfig
+from .knowledge_config import KnowledgeConfig
 from .markdown_io import (
     iter_markdown_files,
     iter_sidecars,
@@ -154,3 +154,5 @@ def _load_archive_ids(config: KnowledgeConfig) -> set[str]:
         except ValueError:
             continue
     return ids
+
+

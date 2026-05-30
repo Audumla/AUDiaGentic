@@ -27,12 +27,6 @@ from audiagentic.runtime.harness import (
     build_runtime_sync,
     refresh_harness_config_if_installed,
 )
-from audiagentic.runtime.lifecycle.components import (
-    disable_component,
-    enable_component,
-    install_component,
-    uninstall_component,
-)
 from audiagentic.runtime.lifecycle.detector import detect_installed_state, get_project_version_info
 
 register_all_components()
@@ -52,36 +46,26 @@ def _project_root() -> Path:
 
 
 def _server_decl():
-    return get_mcp_server_declaration(COMPONENT_PROJECT, "audiagentic-project-manage")
+    return get_mcp_server_declaration(COMPONENT_PROJECT, "ag-project-mgmt")
 
 
 def _server_instructions() -> str:
     decl = _server_decl()
-    return (
-        decl.instructions
-        if decl and decl.instructions
-        else (
-            "AUDiaGentic project component server. "
-            "Use project_status to inspect the target project, "
-            "list_components to see all registered components and their status."
-        )
-    )
+    return decl.instructions if decl else ""
 
 
-def _tool_description(name: str, fallback: str) -> str:
+def _tool_description(name: str) -> str:
     decl = _server_decl()
-    if decl and name in decl.tool_descriptions:
-        return decl.tool_descriptions[name]
-    return fallback
+    return decl.tool_descriptions.get(name, "") if decl else ""
 
 
 def build_server() -> FastMCP:
     mcp = FastMCP(
-        "audiagentic-project-manage",
+        "ag-project-mgmt",
         instructions=_server_instructions(),
     )
 
-    @mcp.tool(description=_tool_description("project_status", "Return the current project installation state and installed components."))
+    @mcp.tool(description=_tool_description("project_status"))
     @log_tool_call
     def project_status() -> dict[str, Any]:
         project_root = _project_root()
@@ -110,7 +94,7 @@ def build_server() -> FastMCP:
             "component_details": component_details,
         }
 
-    @mcp.tool(description=_tool_description("list_components", "List all registered AUDiaGentic components with install and enabled status."))
+    @mcp.tool(description=_tool_description("list_components"))
     @log_tool_call
     def list_components() -> list[dict[str, Any]]:
         project_root = _project_root()
@@ -133,9 +117,9 @@ def build_server() -> FastMCP:
             rows.append(row)
         return rows
 
-    @mcp.tool(description=_tool_description("install_component_tool", "Install a component into the target project."))
+    @mcp.tool(description=_tool_description("install_component"))
     @log_tool_call
-    def install_component_tool(component_id: str) -> dict[str, Any]:
+    def install_component(component_id: str) -> dict[str, Any]:
         project_root = _project_root()
         result = install_component(component_id, project_root)
         if result.get("ok", True):
@@ -143,9 +127,9 @@ def build_server() -> FastMCP:
             result = {**result, "harness_config_refreshed": refreshed}
         return result
 
-    @mcp.tool(description=_tool_description("uninstall_component_tool", "Uninstall a component from the target project."))
+    @mcp.tool(description=_tool_description("uninstall_component"))
     @log_tool_call
-    def uninstall_component_tool(component_id: str, remove_configs: bool = False) -> dict[str, Any]:
+    def uninstall_component(component_id: str, remove_configs: bool = False) -> dict[str, Any]:
         project_root = _project_root()
         descriptor = all_descriptors().get(component_id)
         if descriptor and descriptor.core:
@@ -156,9 +140,9 @@ def build_server() -> FastMCP:
             result = {**result, "harness_config_refreshed": refreshed}
         return result
 
-    @mcp.tool(description=_tool_description("enable_component_tool", "Enable a component in the target project."))
+    @mcp.tool(description=_tool_description("enable_component"))
     @log_tool_call
-    def enable_component_tool(component_id: str) -> dict[str, Any]:
+    def enable_component(component_id: str) -> dict[str, Any]:
         project_root = _project_root()
         result = enable_component(component_id, project_root)
         if result.get("ok", True):
@@ -166,9 +150,9 @@ def build_server() -> FastMCP:
             result = {**result, "harness_config_refreshed": refreshed}
         return result
 
-    @mcp.tool(description=_tool_description("disable_component_tool", "Disable a component in the target project."))
+    @mcp.tool(description=_tool_description("disable_component"))
     @log_tool_call
-    def disable_component_tool(component_id: str) -> dict[str, Any]:
+    def disable_component(component_id: str) -> dict[str, Any]:
         project_root = _project_root()
         result = disable_component(component_id, project_root)
         if result.get("ok", True):
@@ -176,7 +160,7 @@ def build_server() -> FastMCP:
             result = {**result, "harness_config_refreshed": refreshed}
         return result
 
-    @mcp.tool(description=_tool_description("read_project_file", "Read a file inside the project .audiagentic directory."))
+    @mcp.tool(description=_tool_description("read_project_file"))
     @log_tool_call
     def read_project_file(relative_path: str) -> dict[str, Any]:
         project_root = _project_root()
@@ -201,7 +185,7 @@ def build_server() -> FastMCP:
                 pass
         return {"path": relative_path, "content": text}
 
-    @mcp.tool(description=_tool_description("runtime_sync_contract", "Return AUDiaGentic runtime sync contract and supported actions for Pi-aware clients."))
+    @mcp.tool(description=_tool_description("runtime_sync_contract"))
     @log_tool_call
     def runtime_sync_contract() -> dict[str, Any]:
         return {

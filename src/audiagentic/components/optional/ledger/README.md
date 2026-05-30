@@ -26,7 +26,7 @@ Governs the release lifecycle:
 - **sync.py**: Ledger merge and sync
 - **audit.py**: Audit and checkin report generation
 - **current_summary.py**: Release summary generation
-- **bootstrap.py**: Release workflow initialization
+- **ledger_bootstrap.py**: Release workflow initialization
 
 ## Must not own
 

@@ -7,7 +7,7 @@ import yaml
 
 
 def _load_yaml_resource(name: str) -> dict[str, Any]:
-    text = files("audiagentic.knowledge.runtime_data").joinpath(name).read_text(encoding="utf-8")
+    text = files("audiagentic.components.optional.knowledge.runtime_data").joinpath(name).read_text(encoding="utf-8")
     data = yaml.safe_load(text)
     return data if isinstance(data, dict) else {}
 

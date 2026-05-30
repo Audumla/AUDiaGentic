@@ -5,7 +5,7 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any
 
-from .config import KnowledgeConfig
+from .knowledge_config import KnowledgeConfig
 from .utils import load_yaml_file
 
 Handler = Callable[..., Any]
@@ -74,3 +74,5 @@ def load_llm_profiles(config: KnowledgeConfig) -> dict[str, dict[str, Any]]:
 
 def load_llm_task_policies(config: KnowledgeConfig) -> dict[str, dict[str, Any]]:
     return load_registry(config.llm_registry_file, 'task_policies')
+
+

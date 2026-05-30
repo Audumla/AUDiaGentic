@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
-from .config import KnowledgeConfig
+from .knowledge_config import KnowledgeConfig
 from .markdown_io import load_page_by_id
 from .registry import load_action_registry
 from .search import search_pages
@@ -74,3 +74,5 @@ def explain_navigation_contract(config: KnowledgeConfig) -> dict[str, Any]:
         'fallback_count': len(nav.get('fallbacks', [])),
         'deterministic_actions': sorted(actions.keys()),
     }
+
+

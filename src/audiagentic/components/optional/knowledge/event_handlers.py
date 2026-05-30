@@ -11,7 +11,6 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
-from .config import KnowledgeConfig
 from .event_scanner import (
     _write_event_proposal,
     scan_events,
@@ -25,6 +24,7 @@ from .event_state import (
     load_event_state,
     save_event_state,
 )
+from .knowledge_config import KnowledgeConfig
 from .models import EventRecord
 from .registry import load_event_action_registry, resolve_registry_handler
 from .sync import mark_pages_stale
@@ -247,7 +247,7 @@ def on_planning_state_change(
     # or template-install scenarios where cwd may not be the planning project root.
     root_str = metadata.get("project_root")
     root = Path(root_str) if root_str else Path.cwd()
-    from .config import load_config
+    from .knowledge_config import load_config
 
     config = load_config(root)
 
@@ -403,3 +403,5 @@ def _dispatch_on_replay_enabled(root: Path) -> bool:
     if not isinstance(raw, dict):
         return False
     return bool(raw.get("runtime", {}).get("replay", {}).get("dispatch_on_replay", False))
+
+

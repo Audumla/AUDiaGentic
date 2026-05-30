@@ -33,10 +33,11 @@ files:
     recursive: true
     description: Planning index files
 mcp-servers:
-  - name: audiagentic-planning
-    module: audiagentic.components.optional.planning.server
+  - name: ag-planning-mgmt
+    module: audiagentic.components.optional.planning.planning_manage_mcp
     direct-tools: [planning_status, planning_summary, planning_index, planning_events]
     description: Planning MCP server for planning system introspection
+    propagate: audiagentic
     instructions: >
       AUDiaGentic planning component server.
       Use planning_status to check whether planning is configured.
@@ -50,8 +51,9 @@ mcp-servers:
 harness-instructions:
   - section: "What you can do"
     content: |
-      ### audiagentic-planning
+      ### ag-planning-mgmt
       - `mcp_planning_status` — Check planning component status
       - `mcp_planning_summary` — Show planning item counts
       - `mcp_planning_index` — Read a specific planning index
       - `mcp_planning_events` — View recent planning events
+

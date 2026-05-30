@@ -67,7 +67,7 @@ def patch_provider_config(
     if path.exists():
         payload = load_yaml_file(path)
     else:
-        payload = {}
+        payload = {"contract-version": "v1"}
     providers = payload.setdefault("providers", {})
     if provider_id not in providers:
         providers[provider_id] = {}

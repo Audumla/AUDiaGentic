@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .config import KnowledgeConfig
+from .knowledge_config import KnowledgeConfig
 from .markdown_io import load_pages
 from .models import KnowledgePage
 
@@ -194,3 +194,5 @@ def refresh_index(config: KnowledgeConfig) -> dict[str, Any]:
         "validation_errors": errors,
         "status": "valid" if not errors else "invalid",
     }
+
+

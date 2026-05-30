@@ -18,7 +18,7 @@ root = bootstrap()
 from tests.helpers.planning_testkit import seed_planning_config
 
 import audiagentic.components.optional.planning.tm_helper as tm
-from audiagentic.components.optional.planning.app.api import PlanningAPI
+from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
 
 
 def test_validate_id():
@@ -203,3 +203,4 @@ if __name__ == "__main__":
 
         traceback.print_exc()
         sys.exit(1)
+

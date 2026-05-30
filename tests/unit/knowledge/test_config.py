@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from audiagentic.components.optional.knowledge.config import KnowledgeConfig, load_config
+from audiagentic.components.optional.knowledge.knowledge_config import KnowledgeConfig, load_config
 from audiagentic.paths import REPO_ROOT
 
 
@@ -77,3 +77,4 @@ def test_config_event_adapter_file_path(tmp_path: Path) -> None:
     _seed_project(tmp_path)
     config = load_config(tmp_path)
     assert config.event_adapter_file.is_absolute()
+

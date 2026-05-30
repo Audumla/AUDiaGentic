@@ -1,85 +1,6 @@
 {
   "mcpServers": {
-    "audiagentic-project": {
-      "type": "stdio",
-      "command": "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
-      "args": [
-        "-m",
-        "audiagentic.components.core.project_server"
-      ],
-      "env": {
-        "PYTHONPATH": "H:/development/projects/AUDia/AUDiaGentic/src"
-      }
-    },
-    "audiagentic-session": {
-      "type": "stdio",
-      "command": "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
-      "args": [
-        "-m",
-        "audiagentic.components.core.session_server",
-        "--readonly",
-        "--smoke-only"
-      ],
-      "env": {
-        "PYTHONPATH": "H:/development/projects/AUDia/AUDiaGentic/src"
-      }
-    },
-    "audiagentic-ledger-write": {
-      "type": "stdio",
-      "command": "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
-      "args": [
-        "-m",
-        "audiagentic.components.optional.ledger.ledger_write_mcp"
-      ],
-      "env": {
-        "PYTHONPATH": "H:/development/projects/AUDia/AUDiaGentic/src"
-      }
-    },
-    "audiagentic-ledger-admin": {
-      "type": "stdio",
-      "command": "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
-      "args": [
-        "-m",
-        "audiagentic.components.optional.ledger.ledger_admin_mcp"
-      ],
-      "env": {
-        "PYTHONPATH": "H:/development/projects/AUDia/AUDiaGentic/src"
-      }
-    },
-    "lsp-mcp": {
-      "command": "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
-      "args": [
-        "-m",
-        "audiagentic.components.optional.coding_lsp.mcp_server"
-      ],
-      "env": {
-        "PYTHONPATH": "H:/development/projects/AUDia/AUDiaGentic/src"
-      }
-    },
-    "audiagentic-providers": {
-      "type": "stdio",
-      "command": "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
-      "args": [
-        "-m",
-        "audiagentic.components.optional.providers.server"
-      ],
-      "env": {
-        "PYTHONPATH": "H:/development/projects/AUDia/AUDiaGentic/src"
-      }
-    },
-    "audiagentic-source-control": {
-      "type": "stdio",
-      "command": "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
-      "args": [
-        "-m",
-        "audiagentic.components.optional.source_control.source_control_admin_mcp"
-      ],
-      "env": {
-        "PYTHONPATH": "H:/development/projects/AUDia/AUDiaGentic/src"
-      }
-    },
     "git": {
-      "type": "stdio",
       "command": "uvx",
       "args": [
         "mcp-server-git",
@@ -88,7 +9,6 @@
       ]
     },
     "github": {
-      "type": "stdio",
       "command": "gh",
       "args": [
         "mcp",
@@ -96,6 +16,26 @@
       ],
       "env": {
         "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "ag-ledger": {
+      "command": "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
+      "args": [
+        "-m",
+        "audiagentic.components.optional.ledger.ledger_mcp"
+      ],
+      "env": {
+        "PYTHONPATH": "H:/development/projects/AUDia/AUDiaGentic/src"
+      }
+    },
+    "ag-lsp": {
+      "command": "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
+      "args": [
+        "-m",
+        "audiagentic.components.optional.coding_lsp.lsp_mcp"
+      ],
+      "env": {
+        "PYTHONPATH": "H:/development/projects/AUDia/AUDiaGentic/src"
       }
     }
   }

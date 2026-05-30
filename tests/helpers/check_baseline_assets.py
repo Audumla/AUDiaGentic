@@ -12,10 +12,17 @@ MANAGED_MARKDOWN_HEADER = "<!-- MANAGED_BY_AUDIAGENTIC: do not edit directly. --
 
 
 def _build_skill_surface_paths() -> list[str]:
-    """Expand skill-surfaces config over canonical tags to get expected paths."""
+    """Expand skill-surfaces config over canonical tags to get expected paths.
+
+    Only returns paths when agent-jobs is installed and enabled — skill files
+    are only generated when the component is active.
+    """
     try:
         from audiagentic.components.optional.agent_jobs.prompt_syntax import load_prompt_syntax
+        from audiagentic.foundation.components.registry import is_enabled, is_installed
     except ImportError:
+        return []
+    if not is_installed("agent-jobs", REPO_ROOT) or not is_enabled("agent-jobs", REPO_ROOT):
         return []
     syntax = load_prompt_syntax(REPO_ROOT)
     canonical_tags = syntax.get("canonical-tags") or []

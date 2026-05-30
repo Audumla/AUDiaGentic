@@ -137,7 +137,7 @@ def _run_audit(api, root: Path, *, auto_fix: bool, verbose: bool) -> tuple[dict,
 
 
 def main():
-    from audiagentic.components.optional.planning.app.api import PlanningAPI
+    from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
     from audiagentic.foundation.logging import bootstrap
 
     pre = argparse.ArgumentParser(add_help=False)
@@ -406,3 +406,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

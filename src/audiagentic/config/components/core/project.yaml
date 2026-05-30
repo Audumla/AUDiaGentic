@@ -25,10 +25,11 @@ files:
     recursive: true
     description: Managed prompt templates
 mcp-servers:
-  - name: audiagentic-project
-    module: audiagentic.components.core.project_server
-    direct-tools: [project_status, list_components, install_component_tool, uninstall_component_tool, enable_component_tool, disable_component_tool, read_project_file]
+  - name: ag-project-mgmt
+    module: audiagentic.components.core.project_manage_mcp
+    direct-tools: [project_status, list_components, install_component, uninstall_component, enable_component, disable_component, read_project_file]
     description: Project MCP server for project-level component management
+    propagate: audiagentic
     instructions: >
       AUDiaGentic project component server.
       Use project_status to inspect target project.
@@ -36,19 +37,19 @@ mcp-servers:
     tool-descriptions:
       project_status: Return current project installation state and installed components.
       list_components: List all registered AUDiaGentic components with install and enabled status.
-      install_component_tool: Install a component into target project.
-      uninstall_component_tool: Uninstall a component from target project.
-      enable_component_tool: Enable a component in target project.
-      disable_component_tool: Disable a component in target project.
+      install_component: Install a component into target project. Harness config is regenerated automatically — no manual refresh needed. The sync field in the result is a runtime hint for the harness adapter; the agent does not need to act on it.
+      uninstall_component: Uninstall a component from target project. Harness config is regenerated automatically — no manual refresh needed.
+      enable_component: Enable a component in target project. Harness config is regenerated automatically — no manual refresh needed.
+      disable_component: Disable a component in target project. Harness config is regenerated automatically — no manual refresh needed.
       read_project_file: Read a file inside project .audiagentic directory.
 harness-instructions:
   - section: "What you can do"
     content: |
-      ### audiagentic-project
+      ### ag-project-mgmt
       - `mcp_project_status` — Check project installation state
       - `mcp_list_components` — List all available components
-      - `mcp_install_component_tool` — Install a component
-      - `mcp_uninstall_component_tool` — Uninstall a component
-      - `mcp_enable_component_tool` — Enable a component
-      - `mcp_disable_component_tool` — Disable a component
+      - `mcp_install_component` — Install a component
+      - `mcp_uninstall_component` — Uninstall a component
+      - `mcp_enable_component` — Enable a component
+      - `mcp_disable_component` — Disable a component
       - `mcp_read_project_file` — Read a project file

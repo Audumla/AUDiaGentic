@@ -48,7 +48,7 @@ def _seed(root: Path) -> None:
 def pr(tmp_path: Path):
     """Return (root, api) for an isolated project."""
     _seed(tmp_path)
-    from audiagentic.components.optional.planning.app.api import PlanningAPI
+    from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
 
     return tmp_path, PlanningAPI(tmp_path)
 
@@ -1213,3 +1213,4 @@ class TestRequiredRefEnforcement:
         spec = api.new("spec", label="S", summary="S", refs={"request_refs": [req.data["id"]]})
         task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
         assert task.data["id"].startswith("task-")
+
