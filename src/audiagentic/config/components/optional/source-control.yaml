@@ -6,6 +6,56 @@ description: Source control — installs and manages official git and GitHub MCP
 detection-marker: .audiagentic/components/source-control.yaml
 depends-on:
   - project
+
+dependencies:
+  git:
+    display-name: Git
+    check: binary:git
+    packages:
+      winget: Git.Git
+      scoop: git
+      brew: git
+      apt: git
+      dnf: git
+      pacman: git
+      choco: git
+    extra-flags:
+      winget: [--accept-source-agreements, --accept-package-agreements]
+
+  gh:
+    display-name: GitHub CLI
+    check: binary:gh
+    packages:
+      winget: GitHub.cli
+      scoop: gh
+      brew: gh
+      apt: gh
+      dnf: gh
+      pacman: github-cli
+      choco: gh
+    extra-flags:
+      winget: [--accept-source-agreements, --accept-package-agreements]
+
+  uv:
+    display-name: uv
+    check: custom:audiagentic.foundation.dependencies.uv_available
+    packages:
+      winget: astral-sh.uv
+      scoop: uv
+      brew: uv
+    extra-flags:
+      winget: [--accept-source-agreements, --accept-package-agreements]
+    platform-fallback:
+      linux: [sh, -c, "curl -LsSf https://astral.sh/uv/install.sh | sh"]
+
+  gh-mcp:
+    display-name: GitHub MCP Extension
+    check: custom:audiagentic.foundation.dependencies.gh_mcp_available
+    requires: [gh]
+    toolchain: gh_extension
+    package: shuymn/gh-mcp
+    uninstall-package: gh-mcp
+
 files:
   - path: .audiagentic/components/source-control.yaml
     lifecycle: create-if-missing
