@@ -17,11 +17,12 @@ from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
 from audiagentic.components.optional.coding_lsp.lsp_session_manager import SessionManager
 from audiagentic.foundation.dependencies import (
     detect_missing,
-    install_dependencies,
-    load_component_dependencies,
+    load_component_probes,
+    load_component_workflow,
 )
+from audiagentic.foundation.workflow.invocation.steps import SequenceStep
 
-_LSP_DEPS = load_component_dependencies("coding-lsp")
+_LSP_PROBES = load_component_probes("coding-lsp")
 
 _session_manager = SessionManager()
 
@@ -140,7 +141,7 @@ def config_status(root: str = ".") -> dict[str, Any]:
     project_root = resolve_project_root(root)
     lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
     configured = read_lsp_config(lsp_path)
-    deps = _LSP_DEPS
+    deps = _LSP_PROBES
     missing_deps = detect_missing(deps, configured_dependency_ids(project_root))
 
     language_status: dict[str, dict[str, Any]] = {}
@@ -198,18 +199,20 @@ def list_languages() -> dict[str, Any]:
 
 
 async def install_lsp_dependencies(names: list[str], *, run_with_output) -> dict[str, Any]:
-    deps = _LSP_DEPS
+    workflow = load_component_workflow("coding-lsp", action="install")
+    filtered = tuple(s for s in workflow.steps if s.id in names) if names else workflow.steps
+    seq = SequenceStep(id="install", steps=filtered, fail_fast=False)
     return await run_with_output(
         ctx=None,
         logger="coding-lsp.dependencies.install",
         heartbeat_message="LSP dependency install still running...",
-        work=lambda output: install_dependencies(deps, names, on_progress=output),
+        work=lambda _: seq.run({}),
     )
 
 
 def list_missing(root: str = ".") -> dict[str, Any]:
     project_root = resolve_project_root(root)
-    deps = _LSP_DEPS
+    deps = _LSP_PROBES
     missing = detect_missing(deps, configured_dependency_ids(project_root))
     return {
         "project_root": str(project_root),

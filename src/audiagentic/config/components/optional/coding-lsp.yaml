@@ -10,26 +10,26 @@ detection-marker: .audiagentic/components/coding-lsp.yaml
 dependencies:
   pyright:
     display-name: Pyright (Python LSP)
-    check: binary:pyright-langserver
+    probe: binary:pyright-langserver
     toolchain: uv
     package: pyright
 
   typescript-language-server:
     display-name: TypeScript Language Server
-    check: binary:typescript-language-server
+    probe: binary:typescript-language-server
     toolchain: npm
     package: typescript-language-server
 
   rust-analyzer:
     display-name: Rust Analyzer
-    check: binary:rust-analyzer
+    probe: binary:rust-analyzer
     toolchain: cargo
     package: rust-analyzer
 
   clangd:
     display-name: Clangd (C/C++ LSP)
-    check: binary:clangd
-    packages:
+    probe: binary:clangd
+    via:
       winget: LLVM.LLVM
       scoop: clangd
       choco: llvm

@@ -24,7 +24,7 @@ toolchains:
     uninstall: [scoop, uninstall, "{package}"]
 
   winget:
-    install: [winget, install, --id, "{package}", -e]
+    install: [winget, install, --id, "{package}", -e, --accept-source-agreements, --accept-package-agreements]
     uninstall: [winget, uninstall, --id, "{package}", -e]
 
   gh_extension:

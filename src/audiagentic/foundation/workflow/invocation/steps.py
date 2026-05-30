@@ -206,6 +206,36 @@ class SequenceStep:
 
 
 @dataclass(frozen=True)
+class SelectStep:
+    """Dispatch to a variant based on a runtime selector function.
+
+    select(context) returns a key into variants. None → skipped (no variant
+    matched and no fallback). Missing key with a fallback → fallback runs.
+    """
+    id: str
+    select: Any  # Callable[[dict[str, Any]], str | None]
+    variants: dict[str, Any]  # dict[str, WorkflowStep]
+    fallback: Any | None = None  # WorkflowStep | None
+
+    def plan(self, context: dict[str, Any]) -> StepResult:
+        return StepResult(status="planned", reason="variant resolved at runtime")
+
+    def run(
+        self, context: dict[str, Any], answers: dict[str, WorkflowAnswer] | None = None
+    ) -> StepResult:
+        key = self.select(context)
+        if key is not None:
+            step = self.variants.get(key)
+            if step is not None:
+                return step.run(context, answers)
+        if self.fallback is not None:
+            return self.fallback.run(context, answers)
+        if key is None:
+            return StepResult(status="skipped", reason="no variant selected")
+        return StepResult(status="failed", reason=f"no variant for key {key!r}")
+
+
+@dataclass(frozen=True)
 class ConditionalStep:
     id: str
     condition_key: str
