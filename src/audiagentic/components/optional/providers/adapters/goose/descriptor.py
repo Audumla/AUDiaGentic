@@ -1,4 +1,4 @@
-from audiagentic.foundation.invoke.recipes.shell import ShellRecipe
+from audiagentic.foundation.workflow.invocation.steps import ShellStep
 
 from ...descriptors.base import (
     AgentFile,
@@ -20,12 +20,12 @@ register(ProviderDescriptor(
         package_manager="script",
         package_name="https://github.com/block/goose/releases/download/stable/download_cli.sh",
         executable="goose",
-        install=ShellRecipe((
+        install=ShellStep(id="install", command=(
             "bash",
             "-lc",
             "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash",
         )),
-        uninstall=ShellRecipe((
+        uninstall=ShellStep(id="uninstall", command=(
             "bash",
             "-lc",
             "rm -f \"$HOME/.local/bin/goose\"",
