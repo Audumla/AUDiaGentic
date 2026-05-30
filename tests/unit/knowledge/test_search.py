@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from audiagentic.components.optional.knowledge.config import load_config
+from audiagentic.components.optional.knowledge.knowledge_config import load_config
 from audiagentic.components.optional.knowledge.models import KnowledgePage, Section
 from audiagentic.components.optional.knowledge.search import (
     _build_snippet,
@@ -188,3 +188,4 @@ def test_search_pages_fuzzy_matches_typo(tmp_path: Path) -> None:
     results = search_pages(config, "architeture")
     page_ids = [r.page_id for r in results]
     assert "arch-guide" in page_ids, f"Expected fuzzy match, got: {page_ids}"
+

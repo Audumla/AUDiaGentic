@@ -15,7 +15,7 @@ from typing import Any
 
 import yaml
 
-from .config import KnowledgeConfig
+from .knowledge_config import KnowledgeConfig
 from .utils import load_yaml_file
 
 
@@ -332,3 +332,5 @@ def _dedupe_archive_path(path: Path) -> Path:
         if not candidate.exists():
             return candidate
         counter += 1
+
+

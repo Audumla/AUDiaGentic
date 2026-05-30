@@ -15,7 +15,6 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-from .config import KnowledgeConfig
 from .diffing import normalize_text, summarize_structured_change, unified_diff_excerpt
 from .event_state import (
     _adapter_source_kind,
@@ -29,6 +28,7 @@ from .event_state import (
     load_event_state,
     save_event_state,
 )
+from .knowledge_config import KnowledgeConfig
 from .markdown_io import load_page_by_id
 from .models import EventRecord
 from .utils import dump_yaml, now_utc
@@ -464,3 +464,5 @@ def _find_existing_event_proposal(
         if existing_key == dedupe_key:
             return proposal_path
     return None
+
+

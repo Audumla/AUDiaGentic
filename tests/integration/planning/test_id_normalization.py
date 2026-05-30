@@ -38,7 +38,7 @@ def _seed(root: Path) -> None:
 @pytest.fixture()
 def pr(tmp_path: Path):
     _seed(tmp_path)
-    from audiagentic.components.optional.planning.app.api import PlanningAPI
+    from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
 
     return tmp_path, PlanningAPI(tmp_path)
 
@@ -162,3 +162,4 @@ class TestErrorMessages:
         error_msg = str(exc_info.value)
         assert "tried exact match" in error_msg
         assert "request-99" not in error_msg
+

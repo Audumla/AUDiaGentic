@@ -21,6 +21,6 @@ Application layer for the planning domain. Provides the public API surface used 
 ## Key Modules
 | Module | Responsibility |
 |--------|---------------|
-| `api.py` | `PlanningAPI` — unified public interface |
+| `planning_app_api.py` | `PlanningAPI` — unified public interface |
 | `api_types.py` | Request and response type definitions |
 | `base_mgr.py` | Base manager contract (extended by fs/ managers) |

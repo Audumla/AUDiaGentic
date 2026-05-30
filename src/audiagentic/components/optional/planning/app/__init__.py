@@ -17,17 +17,20 @@ Key components:
 - Relationships: Cross-reference management
 
 See also:
-- api: Main PlanningAPI class
+- planning_app_api: Main PlanningAPI class
 - config: Configuration management
 - paths: Path resolution utilities
 """
 
-from .api import PlanningAPI
 from .config import Config
 from .paths import Paths
+from .planning_app_api import PlanningAPI
 
 __all__ = [
     "PlanningAPI",
     "Config",
     "Paths",
 ]
+
+
+

@@ -18,8 +18,8 @@ PROVIDER_COMMANDS = [
     ("codex",     "uninstall", ["npm", "uninstall",  "-g", "@openai/codex"]),
     ("continue",  "install",   ["npm", "install",   "-g", "@continuedev/cli"]),
     ("continue",  "uninstall", ["npm", "uninstall",  "-g", "@continuedev/cli"]),
-    ("copilot",   "install",   ["gh", "extension", "install", "github/gh-copilot"]),
-    ("copilot",   "uninstall", ["gh", "extension", "remove",  "github/gh-copilot"]),
+    ("copilot",   "install",   ["npm", "install",   "-g", "@github/copilot"]),
+    ("copilot",   "uninstall", ["npm", "uninstall",  "-g", "@github/copilot"]),
     ("gemini",    "install",   ["npm", "install",   "-g", "@google/gemini-cli"]),
     ("gemini",    "uninstall", ["npm", "uninstall",  "-g", "@google/gemini-cli"]),
     ("opencode",  "install",   ["npm", "install",   "-g", "opencode-ai"]),
@@ -32,8 +32,8 @@ PROVIDER_COMMANDS = [
     ("openhands", "install",   ["uv", "tool", "install", "--python", "3.12", "openhands"]),
     ("openhands", "uninstall", ["uv", "tool", "uninstall", "openhands"]),
     # brew providers
-    ("goose",     "install",   ["brew", "install",   "block-goose-cli"]),
-    ("goose",     "uninstall", ["brew", "uninstall", "block-goose-cli"]),
+    ("goose",     "install",   ["bash", "-lc", "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash"]),
+    ("goose",     "uninstall", ["bash", "-lc", 'rm -f "$HOME/.local/bin/goose"']),
 ]
 
 

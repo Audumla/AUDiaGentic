@@ -5,12 +5,14 @@ import asyncio
 import json
 import logging
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
 from audiagentic.foundation.logging.config import (
     LoggingConfig,
+    _SafeTimedRotatingFileHandler,
     configure_logging,
     load_logging_config,
     reset_logging_for_test,
@@ -172,7 +174,10 @@ def test_reset_allows_reconfigure():
 # File handler
 # ---------------------------------------------------------------------------
 
-def test_no_file_handler_when_dir_is_none():
+def test_no_file_handler_when_dir_is_none(monkeypatch):
+    import audiagentic.foundation.logging.config as config_mod
+
+    monkeypatch.setattr(config_mod, "load_logging_config", lambda project_root=None: LoggingConfig(dir=None))
     configure_logging()
     file_handlers = [
         h for h in logging.getLogger().handlers
@@ -192,12 +197,37 @@ def test_file_handler_created_when_dir_set(tmp_path, monkeypatch):
     assert (tmp_path / "logs" / "diagnostic.log").exists() or True  # created on first write
 
 
+def test_safe_file_handler_skips_locked_rollover(tmp_path, monkeypatch):
+    log_path = tmp_path / "diagnostic.log"
+    handler = _SafeTimedRotatingFileHandler(
+        filename=log_path,
+        when="midnight",
+        backupCount=3,
+        encoding="utf-8",
+    )
+    log_path.write_text("seed\n", encoding="utf-8")
+    handler.rolloverAt = int(time.time())
+
+    def _raise_permission_error(source: str, dest: str) -> None:
+        raise PermissionError(32, "file in use", source)
+
+    monkeypatch.setattr(handler, "rotate", _raise_permission_error)
+
+    handler.doRollover()
+
+    assert handler.rolloverAt > int(time.time())
+    assert handler.stream is not None
+    handler.close()
+
+
 # ---------------------------------------------------------------------------
 # Dev formatter
 # ---------------------------------------------------------------------------
 
 def test_dev_formatter_active_when_format_is_dev(monkeypatch):
     monkeypatch.setenv("AUDIAGENTIC_LOG_FORMAT", "dev")
+    monkeypatch.delenv("AUDIAGENTIC_LOG_DIR", raising=False)
+    monkeypatch.setenv("AUDIAGENTIC_LOG_CONSOLE", "true")
     configure_logging()
 
     from audiagentic.foundation.logging.config import _DevFormatter

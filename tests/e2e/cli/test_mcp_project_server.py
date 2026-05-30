@@ -30,7 +30,7 @@ def _mcp(*messages: dict, project_root: Path) -> list[dict]:
     # Keep AUDIAGENTIC_REPO_ROOT from container env (template root for baseline_sync).
     # The target project is passed via --project-root, not this env var.
     proc = subprocess.run(
-           [sys.executable, "-m", "audiagentic.components.core.project_server",
+           [sys.executable, "-m", "audiagentic.components.core.project_manage_mcp",
          "--project-root", str(project_root)],
         input=payload, text=True, encoding="utf-8", capture_output=True, timeout=30, env=env,
     )
@@ -66,9 +66,9 @@ def test_mcp_exposes_component_tools(tmp_path):
     resp = next(r for r in responses if r.get("id") == 2)
     names = {t["name"] for t in resp["result"]["tools"]}
     assert "list_components" in names
-    assert "install_component_tool" in names
-    assert "enable_component_tool" in names
-    assert "disable_component_tool" in names
+    assert "install_component" in names
+    assert "enable_component" in names
+    assert "disable_component" in names
     assert "project_status" in names
     assert "read_project_file" in names
 
@@ -100,7 +100,7 @@ def test_mcp_project_status_on_fresh_dir(tmp_path):
 
 
 def test_mcp_project_status_after_install(tmp_path):
-    _call("install_component_tool", {"component_id": "project"}, project_root=tmp_path)
+    _call("install_component", {"component_id": "project"}, project_root=tmp_path)
     result = _call("project_status", {}, project_root=tmp_path)
     payload = result if isinstance(result, dict) else result[0]
     assert payload["install_state"] == "installed"
@@ -111,7 +111,7 @@ def test_mcp_project_status_after_install(tmp_path):
 # ── install / disable / enable via MCP ───────────────────────────────────────
 
 def test_mcp_install_component(tmp_path):
-    result = _call("install_component_tool", {"component_id": "project"}, project_root=tmp_path)
+    result = _call("install_component", {"component_id": "project"}, project_root=tmp_path)
     payload = result if isinstance(result, dict) else result[0]
     assert payload["ok"] is True
     assert payload["component_id"] == "project"
@@ -120,17 +120,17 @@ def test_mcp_install_component(tmp_path):
 
 
 def test_mcp_disable_component(tmp_path):
-    _call("install_component_tool", {"component_id": "project"}, project_root=tmp_path)
-    result = _call("disable_component_tool", {"component_id": "project"}, project_root=tmp_path)
+    _call("install_component", {"component_id": "project"}, project_root=tmp_path)
+    result = _call("disable_component", {"component_id": "project"}, project_root=tmp_path)
     payload = result if isinstance(result, dict) else result[0]
     assert payload["ok"] is True
     assert payload["enabled"] is False
 
 
 def test_mcp_enable_component(tmp_path):
-    _call("install_component_tool", {"component_id": "project"}, project_root=tmp_path)
-    _call("disable_component_tool", {"component_id": "project"}, project_root=tmp_path)
-    result = _call("enable_component_tool", {"component_id": "project"}, project_root=tmp_path)
+    _call("install_component", {"component_id": "project"}, project_root=tmp_path)
+    _call("disable_component", {"component_id": "project"}, project_root=tmp_path)
+    result = _call("enable_component", {"component_id": "project"}, project_root=tmp_path)
     payload = result if isinstance(result, dict) else result[0]
     assert payload["ok"] is True
     assert payload["enabled"] is True
@@ -139,7 +139,7 @@ def test_mcp_enable_component(tmp_path):
 # ── read_project_file ─────────────────────────────────────────────────────────
 
 def test_mcp_read_project_file_after_install(tmp_path):
-    _call("install_component_tool", {"component_id": "project"}, project_root=tmp_path)
+    _call("install_component", {"component_id": "project"}, project_root=tmp_path)
     result = _call(
         "read_project_file",
         {"relative_path": ".audiagentic/config/project.yaml"},

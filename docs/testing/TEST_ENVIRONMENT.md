@@ -53,6 +53,7 @@ Docker provider tests:
 ```bash
 make test-providers-docker
 make test-providers-real-docker
+make test-provider-real-one PROVIDER=codex
 ```
 
 Full Docker suite:
@@ -119,6 +120,44 @@ Repository test collection skips `mutates_host` tests unless both env vars are s
 
 This protects local developer environments.
 
+## Official Real-CLI Path
+
+Shared-container real CLI runs are no longer preferred for maintenance work.
+
+Use fresh-container-per-provider isolation:
+
+```bash
+make test-providers-real-docker
+```
+
+Run one provider while iterating:
+
+```bash
+make test-provider-real-one PROVIDER=codex
+```
+
+Implementation entrypoint:
+
+- `tests/dev/run_provider_cli_isolated.py`
+
+This runner:
+
+- starts one clean container per provider
+- uses copy-based test image by default for determinism
+- retries failed providers once in a fresh container
+- sets real-test gating env vars
+- narrows collection with `AUDIAGENTIC_PROVIDER_UNDER_TEST`
+
+Use this path when debugging flaky CLI installs, probes, or uninstall flows.
+
+Use bind-mounted iteration only when you need fast local edits:
+
+```bash
+python tests/dev/run_provider_cli_isolated.py --image audiagentic-test:latest --provider codex --bind-mount
+```
+
+This is less deterministic than copy-based mode.
+
 ## Bind-Mounted Docker Iteration
 
 Best when changing Python code or tests without rebuilding image:
@@ -138,14 +177,16 @@ Note:
 
 - some workflows need patched `code` wrapper behavior already present in Docker test setup
 - if Docker image changed, rebuild first
+- prefer isolated provider runner for real install/uninstall coverage
+- prefer copy-based isolated runs for VS Code extension providers and flaky npm CLIs
 
 ## Rebuild Threshold
 
 Rebuild test images when any of these changed:
 
-- `Dockerfile.test-base`
-- `Dockerfile.test`
-- `Dockerfile.lsp-install-test`
+- `tests/docker/Dockerfile.test-base`
+- `tests/docker/Dockerfile.test`
+- `tests/docker/Dockerfile.lsp-install-test`
 - OS packages
 - preinstalled CLIs
 - Python package bootstrap in image
@@ -162,6 +203,11 @@ These are acceptable and documented:
 
 If a new skip appears, document reason or fix it.
 
+Known non-skip instability:
+
+- some npm-backed CLIs can still fail intermittently in exhaustive all-provider sweeps due upstream/native install crashes or network behavior
+- validate those providers individually before treating the issue as workflow regression
+
 ## Extension Pattern
 
 If another component family needs lifecycle/install testing:
@@ -173,3 +219,12 @@ If another component family needs lifecycle/install testing:
 5. add small unit tests for harness config contract
 
 This is preferred over copying provider test structure by hand.
+
+## Add New Harness Coverage
+
+When extending harness-driven tests:
+
+1. put selection/policy data in `harness.yaml` when logic is shared
+2. add unit tests that validate config keys reference real registry IDs
+3. add integration tests that consume harness selectors rather than hand-built lists
+4. add provider/component-specific tests only for behavior shared harness cannot express

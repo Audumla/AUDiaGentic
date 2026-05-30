@@ -14,7 +14,7 @@ for _p in (str(ROOT), str(ROOT / "src")):
 
 from tests.helpers.planning_testkit import seed_planning_config
 
-from audiagentic.components.optional.planning.app.api import PlanningAPI
+from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
 
 
 def _seed_planning_project(root: Path) -> None:
@@ -95,3 +95,4 @@ def test_tm_audit_fix_repairs_and_logs(tmp_path: Path) -> None:
     )
     api = PlanningAPI(tmp_path)
     assert api.lookup(wp_id).data["state"] == "ready"
+

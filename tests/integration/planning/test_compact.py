@@ -12,8 +12,8 @@ for _p in (str(ROOT), str(ROOT / "src")):
 
 from tests.helpers.planning_testkit import seed_planning_config
 
-from audiagentic.components.optional.planning.app.api import PlanningAPI
 from audiagentic.components.optional.planning.app.paths import Paths
+from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
 from audiagentic.components.optional.planning.fs.scan import scan_items
 from audiagentic.components.optional.planning.fs.write import dump_markdown
 
@@ -100,3 +100,4 @@ def test_compact_aborts_on_duplicate_ids(tmp_path: Path) -> None:
     assert any(item["category"] == "duplicate_id" for item in result["cannot_repair"])
     assert request_item.path.read_text(encoding="utf-8") == before_original
     assert duplicate_path.read_text(encoding="utf-8") == before_duplicate
+

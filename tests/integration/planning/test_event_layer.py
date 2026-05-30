@@ -29,7 +29,7 @@ def _seed_planning_project(root: Path) -> None:
 @pytest.fixture
 def planning_api():
     """Create planning API instance."""
-    from audiagentic.components.optional.planning.app.api import PlanningAPI
+    from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
 
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -115,3 +115,4 @@ class TestReplaySafety:
 #
 #         # Handler should not raise
 #         on_planning_state_change("task.done", payload, metadata)
+

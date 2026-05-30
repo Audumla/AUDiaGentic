@@ -345,6 +345,29 @@ class _DevFormatter(logging.Formatter):
         return out
 
 
+class _SafeTimedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
+    """Skip rollover when another Windows process still holds log file open."""
+
+    def doRollover(self) -> None:
+        try:
+            super().doRollover()
+        except PermissionError:
+            if self.stream:
+                try:
+                    self.stream.close()
+                except Exception:
+                    pass
+                self.stream = None
+
+            current_time = int(time.time())
+            self.rolloverAt = self.computeRollover(current_time)
+            while self.rolloverAt <= current_time:
+                self.rolloverAt += self.interval
+
+            if not self.delay:
+                self.stream = self._open()
+
+
 # ---------------------------------------------------------------------------
 # configure_logging
 # ---------------------------------------------------------------------------
@@ -384,7 +407,7 @@ def configure_logging(project_root: Path | None = None) -> None:
         try:
             cfg.dir.mkdir(parents=True, exist_ok=True)
             log_file = cfg.dir / "diagnostic.log"
-            file_handler = logging.handlers.TimedRotatingFileHandler(
+            file_handler = _SafeTimedRotatingFileHandler(
                 filename=log_file,
                 when="midnight",
                 backupCount=cfg.diagnostic.backup_count,

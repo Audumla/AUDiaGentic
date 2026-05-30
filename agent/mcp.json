@@ -5,22 +5,22 @@
     "directTools": true
   },
   "mcpServers": {
-    "audiagentic-project": {
+    "audiagentic-project-manage": {
       "command": "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
       "args": [
         "-m",
-        "audiagentic.components.core.project_server"
+        "audiagentic.components.core.project_manage_mcp"
       ],
       "lifecycle": "lazy",
       "env": {
         "PYTHONPATH": "H:/development/projects/AUDia/AUDiaGentic/src"
       }
     },
-    "audiagentic-session": {
+    "audiagentic-session-manage": {
       "command": "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
       "args": [
         "-m",
-        "audiagentic.components.core.session_server",
+        "audiagentic.components.core.session_manage_mcp",
         "--readonly",
         "--smoke-only"
       ],
@@ -40,11 +40,11 @@
         "PYTHONPATH": "H:/development/projects/AUDia/AUDiaGentic/src"
       }
     },
-    "audiagentic-ledger-admin": {
+    "audiagentic-ledger-manage": {
       "command": "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
       "args": [
         "-m",
-        "audiagentic.components.optional.ledger.ledger_admin_mcp"
+        "audiagentic.components.optional.ledger.ledger_manage_mcp"
       ],
       "lifecycle": "lazy",
       "env": {
@@ -62,22 +62,22 @@
         "PYTHONPATH": "H:/development/projects/AUDia/AUDiaGentic/src"
       }
     },
-    "audiagentic-providers": {
+    "audiagentic-providers-manage": {
       "command": "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
       "args": [
         "-m",
-        "audiagentic.components.optional.providers.server"
+        "audiagentic.components.optional.providers.manage_mcp"
       ],
       "lifecycle": "lazy",
       "env": {
         "PYTHONPATH": "H:/development/projects/AUDia/AUDiaGentic/src"
       }
     },
-    "audiagentic-source-control": {
+    "audiagentic-source-control-manage": {
       "command": "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
       "args": [
         "-m",
-        "audiagentic.components.optional.source_control.source_control_admin_mcp"
+        "audiagentic.components.optional.source_control.source_control_manage_mcp"
       ],
       "lifecycle": "lazy",
       "env": {

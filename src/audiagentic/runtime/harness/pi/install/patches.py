@@ -393,8 +393,7 @@ def _patch_mcp_direct_tools_progress(npm_dir: Path) -> None:
         )
 
     sync_notice_marker = "      const result = await resultPromise;\n"
-    # Old block (notify only) — upgrade to auto-reload block if found.
-    sync_notice_old = (
+    sync_notice_new = (
         "      const sync = getRuntimeSyncHint(result as { structuredContent?: unknown });\n"
         "      if (sync && ctx?.hasUI) {\n"
         "        const notice = formatRuntimeSyncNotice(sync);\n"
@@ -402,9 +401,8 @@ def _patch_mcp_direct_tools_progress(npm_dir: Path) -> None:
         "        ctx.ui.setStatus(\"audiagentic-runtime-action\", notice);\n"
         "      }\n"
     )
-    # New block: reload_required triggers ctx.reload() after streaming ends;
-    # restart_required shows a warning; refresh_required shows a quiet notice.
-    sync_notice_new = (
+    # Old block with auto-reload setTimeout — revert to simple notify.
+    sync_notice_old_complex = (
         "      const sync = getRuntimeSyncHint(result as { structuredContent?: unknown });\n"
         "      if (sync) {\n"
         "        if (sync.action === \"restart_required\") {\n"
@@ -425,11 +423,9 @@ def _patch_mcp_direct_tools_progress(npm_dir: Path) -> None:
         "      }\n"
     )
     if sync_notice_new not in source:
-        if sync_notice_old in source:
-            # Upgrade existing notify-only block to auto-reload block.
-            source = source.replace(sync_notice_old, sync_notice_new, 1)
+        if sync_notice_old_complex in source:
+            source = source.replace(sync_notice_old_complex, sync_notice_new, 1)
         elif sync_notice_marker in source:
-            # First-time injection.
             source = source.replace(sync_notice_marker, sync_notice_marker + sync_notice_new, 1)
 
     success_details_old = '        details: { server: spec.serverName, tool: spec.originalName, uiOpen: true },\n'

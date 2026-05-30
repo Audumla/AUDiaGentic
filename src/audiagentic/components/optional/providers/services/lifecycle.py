@@ -311,6 +311,16 @@ def _seed_provider_config(
     patch_provider_config(project_root, provider_id, seed)
 
 
+def _sync_provider_mcp(project_root: Path, on_progress: ComponentOutputSink | None = None) -> None:
+    """Sync all component MCP servers to provider configs — adds missing, removes stale."""
+    try:
+        from audiagentic.runtime.lifecycle.components import sync_all_provider_mcp_servers
+        sync_all_provider_mcp_servers(project_root)
+        _emit(on_progress, "MCP server configs synced")
+    except Exception:  # noqa: BLE001
+        _emit(on_progress, "MCP server config sync failed (non-fatal)", level="warning")
+
+
 def reconcile_provider(
     provider_id: str,
     *,
@@ -360,6 +370,7 @@ def reconcile_provider(
         _emit(on_progress, f"Enabling {provider_id} and applying surfaces")
         _seed_provider_config(project_root, provider_id, descriptor, enabled=True)
         surfaces_result = apply_provider_surfaces(project_root, provider_id=provider_id, on_progress=on_progress)
+        _sync_provider_mcp(project_root, on_progress)
         action_taken = "enabled"
         if fetch_catalog and descriptor.fetch_catalog_fn is not None:
             try:
@@ -379,6 +390,7 @@ def reconcile_provider(
         action_taken = "disabled"
     else:
         _emit(on_progress, f"{provider_id} already in sync ({('enabled' if currently_enabled else 'disabled')})")
+        _sync_provider_mcp(project_root, on_progress)
         action_taken = "ok"
 
     now_enabled = cli_available and action_taken in ("enabled", "ok")

@@ -2,30 +2,28 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "required": [
-    "contract-version",
     "event-id",
     "timestamp-utc",
     "project-id",
     "source",
     "change-class",
     "files",
-    "diff-stats",
     "technical-summary",
     "user-summary-candidate",
     "status"
   ],
   "properties": {
-    "contract-version": {
-      "const": "v1"
-    },
     "event-id": {
-      "type": "string"
+      "type": "string",
+      "description": "Unique ID, format chg_YYYYMMDD_HHMMSS_<short-desc>."
     },
     "timestamp-utc": {
-      "type": "string"
+      "type": "string",
+      "description": "ISO 8601 UTC timestamp of completion."
     },
     "project-id": {
-      "type": "string"
+      "type": "string",
+      "description": "Project identifier from config or environment."
     },
     "source": {
       "type": "object",
@@ -33,10 +31,9 @@
         "kind",
         "provider-id",
         "surface",
-        "session-id",
-        "job-id",
-        "packet-id"
+        "prompt-tag"
       ],
+      "description": "How and where this change was triggered.",
       "properties": {
         "kind": {
           "type": "string",
@@ -46,43 +43,50 @@
             "workflow-stage",
             "manual-script",
             "release-finalization"
-          ]
+          ],
+          "description": "Initiation method. 'interactive-prompt' for agent terminal/chat (most common). 'job-run' for automated jobs. 'workflow-stage' for job stages. 'manual-script' for CLI scripts. 'release-finalization' for archive steps."
         },
         "provider-id": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "description": "AI provider used (e.g. 'codex', 'claude'), or null."
         },
         "surface": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "description": "Interaction surface ('terminal', 'cli', 'web'), or null."
         },
         "session-id": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "description": "Conversation session ID if part of a named session. Null for ad-hoc."
         },
         "job-id": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "description": "Job ID if part of a structured job workflow. Null for ad-hoc."
         },
         "packet-id": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "description": "Packet/stage ID if produced by a specific packet within a job. A packet is a discrete task sent to an LLM provider. Null when not in a job."
         },
         "prompt-id": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "description": "Prompt ID if triggered by a specific prompt. Null for general work."
         },
         "prompt-tag": {
           "type": [
@@ -96,7 +100,8 @@
             "audit",
             "check-in-prep",
             null
-          ]
+          ],
+          "description": "Workflow tag that initiated work ('implement', 'plan', 'review', 'audit', 'check-in-prep')."
         },
         "target-kind": {
           "type": [
@@ -109,19 +114,22 @@
             "artifact",
             "adhoc",
             null
-          ]
+          ],
+          "description": "What this targets ('packet', 'job', 'artifact', 'adhoc')."
         },
         "target-ref": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "description": "Short kebab-case slug describing the work (e.g. 'windows-log-rollover-fix')."
         },
         "review-id": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "description": "Review ID if produced/approved as part of a review. Null when no review performed."
         }
       }
     },
@@ -137,53 +145,36 @@
         "release",
         "audit",
         "workflow"
-      ]
+      ],
+      "description": "Change category. 'feature'=new functionality, 'code-fix'=bug fix, 'refactor'=restructure without behavior change, 'docs'=documentation, 'tests'=test changes, 'config'=config changes, 'release'=release process, 'audit'=audit/tracking, 'workflow'=CI/CD."
     },
     "files": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "minItems": 1
-    },
-    "diff-stats": {
-      "type": "object",
-      "required": [
-        "files-changed",
-        "insertions",
-        "deletions"
-      ],
-      "properties": {
-        "files-changed": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "insertions": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "deletions": {
-          "type": "integer",
-          "minimum": 0
-        }
-      }
+      "minItems": 1,
+      "description": "Relative file paths changed from project root."
     },
     "technical-summary": {
-      "type": "string"
+      "type": "string",
+      "description": "Detailed 'what and why' — the audit trail."
     },
     "user-summary-candidate": {
-      "type": "string"
+      "type": "string",
+      "description": "Concise changelog-style summary for user-facing output."
     },
     "status": {
       "type": "string",
       "enum": [
         "unreleased",
         "released"
-      ]
+      ],
+      "description": "'unreleased' when recording. The archive step stamps 'released'."
     },
     "release-id": {
       "type": "string",
-      "description": "Release identifier stamped by archive_current_ledger when status transitions to released."
+      "description": "Stamped by archive_current_ledger when status transitions to released."
     },
     "git-commits": {
       "type": "array",
@@ -192,7 +183,7 @@
         "minLength": 7
       },
       "uniqueItems": true,
-      "description": "Git commit SHAs that contain files from this fragment. Populated by post-commit hook; append-only."
+      "description": "Git commit SHAs from post-commit hook. Append-only. Do not set manually."
     }
   }
 }

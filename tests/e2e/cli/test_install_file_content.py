@@ -52,7 +52,7 @@ def test_install_release_creates_release_workflow(tmp_path):
     content = wf.read_text(encoding="utf-8")
     assert "on:" in content or "jobs:" in content
     assert "PYTHONPATH: src" in content
-    assert "from audiagentic.components.optional.release import api" in content
+    assert "from audiagentic.components.optional.release import release_api" in content
     assert "scripts/components/optional/ledger/finalize_ledger.py" not in content
 
 
@@ -83,9 +83,9 @@ def test_reinstall_project_preserves_create_if_missing(tmp_path):
 
 
 
-def test_install_agent_actions_creates_skill_files(tmp_path):
+def test_install_agent_jobs_creates_skill_files(tmp_path):
     _cli("component", "install", "project", project=tmp_path)
-    _cli("component", "install", "agent-actions", project=tmp_path)
+    _cli("component", "install", "agent-jobs", project=tmp_path)
     skill = tmp_path / ".audiagentic" / "skills" / "ag-review" / "skill.md"
     assert skill.is_file(), f"expected skill file at {skill}"
     assert skill.stat().st_size > 0
@@ -106,22 +106,22 @@ def test_uninstall_removes_release_required_managed_files(tmp_path):
 
 def test_uninstall_preserves_create_if_missing_without_flag(tmp_path):
     _cli("component", "install", "project", project=tmp_path)
-    _cli("component", "install", "agent-actions", project=tmp_path)
+    _cli("component", "install", "agent-jobs", project=tmp_path)
     skill = tmp_path / ".audiagentic" / "skills" / "ag-review" / "skill.md"
-    marker = tmp_path / ".audiagentic" / "components" / "agent-actions.yaml"
+    marker = tmp_path / ".audiagentic" / "components" / "agent-jobs.yaml"
     assert skill.exists()
     assert marker.exists()
 
-    _cli("component", "uninstall", "agent-actions", project=tmp_path)
+    _cli("component", "uninstall", "agent-jobs", project=tmp_path)
     assert not skill.exists()
     assert not marker.exists()
 
 
 def test_uninstall_removes_configs_with_flag(tmp_path):
     _cli("component", "install", "project", project=tmp_path)
-    _cli("component", "install", "agent-actions", project=tmp_path)
-    marker = tmp_path / ".audiagentic" / "components" / "agent-actions.yaml"
+    _cli("component", "install", "agent-jobs", project=tmp_path)
+    marker = tmp_path / ".audiagentic" / "components" / "agent-jobs.yaml"
     assert marker.exists()
 
-    _cli("component", "uninstall", "agent-actions", "--remove-configs", project=tmp_path)
+    _cli("component", "uninstall", "agent-jobs", "--remove-configs", project=tmp_path)
     assert not marker.exists()

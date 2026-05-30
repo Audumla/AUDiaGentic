@@ -13,7 +13,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import atomic_write_ndjson, load_ndjson
+from audiagentic.foundation.io import atomic_write_ndjson, atomic_write_text
 
 STALE_AFTER_SECONDS = 300
 
@@ -98,27 +98,19 @@ def _load_fragments(project_root: Path) -> list[dict[str, Any]]:
     ]
 
 
-def _merge_by_event_id(current: list[dict[str, Any]], incoming: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    by_id: dict[str, dict[str, Any]] = {e["event-id"]: e for e in current}
-    for event in incoming:
-        by_id.setdefault(event["event-id"], event)
-    return [by_id[k] for k in sorted(by_id.keys())]
-
-
 def sync_current_release_ledger(project_root: Path) -> SyncResult:
     ledger_path = project_root / "docs" / "releases" / "CURRENT_RELEASE_LEDGER.ndjson"
     lock_path, warning = _acquire_lock(project_root)
     try:
         fragments = _load_fragments(project_root)
-        merged = _merge_by_event_id(load_ndjson(ledger_path), fragments)
-        atomic_write_ndjson(ledger_path, merged)
+        atomic_write_ndjson(ledger_path, fragments)
 
         manifest_path = _manifest_path(project_root)
-        manifest_path.write_text(json.dumps({
+        atomic_write_text(manifest_path, json.dumps({
             "synced-at": _now(),
             "fragment-count": len(fragments),
             "ledger-path": str(ledger_path),
-        }, indent=2), encoding="utf-8")
+        }, indent=2))
     finally:
         _release_lock(lock_path)
 

@@ -7,6 +7,7 @@
     "kind": "interactive-prompt",
     "provider-id": "claude",
     "surface": "vscode",
+    "prompt-tag": "implement",
     "session-id": "sess_001",
     "job-id": null,
     "packet-id": "pkt-job-implement-001"

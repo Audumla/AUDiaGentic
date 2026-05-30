@@ -10,33 +10,44 @@
       "."
     ]
   },
-  "commands": {
-    "location": ".gemini/commands/",
-    "files": [
-      "ag-plan.md",
-      "ag-implement.md",
-      "ag-review.md",
-      "ag-ledger.md",
-      "ag-check-in-prep.md"
-    ]
-  },
-  "canonical_tags": {
-    "ag-plan": "Planning and execution strategy",
-    "ag-implement": "Implementation work",
-    "ag-review": "Read-focused validation and review",
-    "ag-ledger": "Ledger state, release artifacts, and consistency checks",
-    "ag-check-in-prep": "Check-in preparation"
-  },
   "fallback_path": {
     "enabled": true,
     "description": "Use the bridge for all prompt-trigger launches since native hook is unavailable"
   },
   "mcpServers": {
-    "lsp-mcp": {
+    "git": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-git",
+        "--repository",
+        "."
+      ]
+    },
+    "github": {
+      "command": "gh",
+      "args": [
+        "mcp",
+        "serve"
+      ],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "ag-ledger": {
       "command": "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
       "args": [
         "-m",
-        "audiagentic.components.optional.coding_lsp.mcp_server"
+        "audiagentic.components.optional.ledger.ledger_mcp"
+      ],
+      "env": {
+        "PYTHONPATH": "H:/development/projects/AUDia/AUDiaGentic/src"
+      }
+    },
+    "ag-lsp": {
+      "command": "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe",
+      "args": [
+        "-m",
+        "audiagentic.components.optional.coding_lsp.lsp_mcp"
       ],
       "env": {
         "PYTHONPATH": "H:/development/projects/AUDia/AUDiaGentic/src"

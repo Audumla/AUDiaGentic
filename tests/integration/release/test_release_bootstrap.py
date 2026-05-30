@@ -46,6 +46,7 @@ def test_release_bootstrap_creates_install_and_release_artifacts(tmp_path: Path)
                     "kind": "interactive-prompt",
                     "provider-id": "codex",
                     "surface": "terminal",
+                    "prompt-tag": "implement",
                     "session-id": "local",
                     "job-id": None,
                     "packet-id": "PKT-RLS-011",

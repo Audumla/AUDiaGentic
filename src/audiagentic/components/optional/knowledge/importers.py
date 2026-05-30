@@ -9,7 +9,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-from .config import KnowledgeConfig
+from .knowledge_config import KnowledgeConfig
 from .markdown_io import load_page_by_id, save_page, sidecar_for_page
 from .models import ImportResult, KnowledgePage, Section
 from .registry import load_importer_registry, resolve_registry_handler
@@ -229,3 +229,5 @@ def _dedupe_list(values: list[Any]) -> list[Any]:
         seen.add(key)
         result.append(value)
     return result
+
+
