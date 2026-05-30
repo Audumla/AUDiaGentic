@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 
-from audiagentic.foundation.invoke.toolchains import uv
+from audiagentic.foundation.toolchains import uv
 
 from ...descriptors.base import AgentFile, CliInstallRecipe, ProviderDescriptor, ProviderPermissions
 from ...descriptors.registry import register

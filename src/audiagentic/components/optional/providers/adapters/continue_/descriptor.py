@@ -1,6 +1,6 @@
 import shutil
 
-from audiagentic.foundation.invoke.toolchains import npm
+from audiagentic.foundation.toolchains import npm
 
 from ...descriptors.base import (
     AgentFile,
