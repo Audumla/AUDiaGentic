@@ -12,6 +12,7 @@ from audiagentic.foundation.dependencies import (
     load_component_probes,
     load_component_workflow,
 )
+from audiagentic.foundation.workflow.invocation.steps import SequenceStep
 
 _PROBES = load_component_probes("source-control")
 
@@ -26,7 +27,6 @@ async def install_dependencies(names: list[str], *, ctx, run_with_output) -> dic
     filtered = workflow.steps if not names else tuple(
         s for s in workflow.steps if s.id in names
     )
-    from audiagentic.foundation.workflow.invocation.steps import SequenceStep
     seq = SequenceStep(id="install", steps=filtered, fail_fast=False)
     return await run_with_output(
         ctx=ctx,
@@ -41,7 +41,6 @@ async def uninstall_dependencies(names: list[str], *, ctx, run_with_output) -> d
     filtered = workflow.steps if not names else tuple(
         s for s in workflow.steps if s.id in names
     )
-    from audiagentic.foundation.workflow.invocation.steps import SequenceStep
     seq = SequenceStep(id="uninstall", steps=filtered, fail_fast=False)
     return await run_with_output(
         ctx=ctx,
