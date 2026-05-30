@@ -111,7 +111,7 @@ def test_get_diagnostics_for_project() -> None:
     with patch("audiagentic.components.optional.coding_lsp.lsp_session_manager.LspSession") as MockSession:
         mock = MagicMock()
         mock.is_ready.return_value = True
-        mock.get_diagnostics.return_value = {"file:///tmp/test.py": [{"message": "bad"}]}
+        mock.diagnostics.return_value = {"file:///tmp/test.py": [{"message": "bad"}]}
         MockSession.return_value = mock
         mgr.get_or_create("/tmp", "python", _python_config())
-        assert mgr.get_diagnostics("/tmp") == {"file:///tmp/test.py": [{"message": "bad"}]}
+        assert mgr.diagnostics("/tmp") == {"file:///tmp/test.py": [{"message": "bad"}]}
