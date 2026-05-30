@@ -130,7 +130,7 @@ def _uninstall_select(via: dict[str, str]) -> SelectStep:
     )
 
 
-def _guarded(dep_id: str, probe_fn: Callable[[], bool], inner: SelectStep, *, skip_when_true: bool) -> SelectStep:
+def _guarded(dep_id: str, probe_fn: Callable[[], bool], inner: Any, *, skip_when_true: bool) -> SelectStep:
     """Wrap a step with a probe guard: skip when probe matches skip_when_true."""
     return SelectStep(
         id=dep_id,

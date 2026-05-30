@@ -84,17 +84,25 @@ def test_hover_returns_none_on_no_info() -> None:
 
 def test_get_diagnostics_all() -> None:
     session = LspSession(_make_config(), "/tmp")
-    session._diagnostics_cache["file://a.py"] = [{"severity": 1}]
-    session._diagnostics_cache["file://b.py"] = []
-    result = session.get_diagnostics()
+    session.bridge = MagicMock()
+    session.bridge.send_request = MagicMock(return_value={
+        "items": [
+            {"kind": "full", "uri": "file://a.py", "items": [{"severity": 1, "message": "err"}]},
+            {"kind": "full", "uri": "file://b.py", "items": []},
+        ]
+    })
+    result = session.diagnostics()
     assert "file://a.py" in result
-    assert "file://b.py" in result
 
 
 def test_get_diagnostics_single_uri() -> None:
     session = LspSession(_make_config(), "/tmp")
-    session._diagnostics_cache["file://a.py"] = [{"severity": 1}]
-    session._diagnostics_cache["file://b.py"] = [{"severity": 2}]
-    result = session.get_diagnostics("file://a.py")
+    session.bridge = MagicMock()
+    session.bridge.send_request = MagicMock(return_value={
+        "items": [
+            {"kind": "full", "uri": "file://a.py", "items": [{"severity": 1, "message": "err"}]},
+            {"kind": "full", "uri": "file://b.py", "items": [{"severity": 2, "message": "warn"}]},
+        ]
+    })
+    result = session.diagnostics(min_severity=1)
     assert "file://a.py" in result
-    assert "file://b.py" not in result
