@@ -1,11 +1,11 @@
 """Generic system dependency infrastructure.
 
-Defines the canonical set of system tool dependencies (SYSTEM_DEPENDENCIES)
-and provides install/uninstall/detect functions that operate on any
-DependencySpec registry.
+DependencySpec, _PlatformStep, orchestration (install/uninstall/detect),
+and a YAML loader that builds specs from component config declarations.
 """
 from __future__ import annotations
 
+import importlib
 import os
 import subprocess
 from collections.abc import Callable, Mapping
@@ -14,34 +14,35 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from audiagentic.foundation.output import ComponentOutputEvent, ComponentOutputSink
-from audiagentic.foundation.toolchains import (
-    apt,
-    brew,
-    choco,
-    dnf,
-    gh_extension,
-    pacman,
-    scoop,
-    winget,
-)
 from audiagentic.foundation.toolchains.detect import (
     detect_pkg_manager,
     platform_key,
     tool_available,
 )
+from audiagentic.foundation.toolchains.loader import build_step, has_action
 from audiagentic.foundation.workflow.invocation.models import StepResult
 from audiagentic.foundation.workflow.invocation.steps import SequenceStep, ShellStep
 
+_PACKAGE_DIR = Path(__file__).resolve().parents[1]  # audiagentic/
+_COMPONENTS_CONFIG_DIR = _PACKAGE_DIR / "config" / "components"
+
+
+# ---------------------------------------------------------------------------
+# Step types
+# ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
 class _PlatformStep:
     """Select a step variant based on detected package manager at runtime."""
     variants: dict[str, ShellStep | SequenceStep]
     platform_fallback: dict[str, ShellStep] = field(default_factory=dict)
+    detect_fn: Callable[[], str | None] | None = None
 
     def run(self, context: dict[str, Any]) -> StepResult:
-        pm = detect_pkg_manager()
+        pm = (self.detect_fn or detect_pkg_manager)()
         if pm and pm in self.variants:
             return self.variants[pm].run(context)
         pk = platform_key()
@@ -57,6 +58,10 @@ class _PlatformStep:
 _StepType = ShellStep | SequenceStep | _PlatformStep
 
 
+# ---------------------------------------------------------------------------
+# DependencySpec
+# ---------------------------------------------------------------------------
+
 @dataclass(frozen=True)
 class DependencySpec:
     id: str
@@ -71,16 +76,14 @@ class DependencySpec:
         return self.display_name or self.id
 
 
+# ---------------------------------------------------------------------------
+# Complex probes (too involved for binary: / path: declarations)
+# ---------------------------------------------------------------------------
+
 @cache
 def gh_mcp_available() -> bool:
-    """Check whether gh mcp serve is available (extension or built-in).
-
-    Cached per process — gh capability does not change while the process is running.
-    Never uses `gh mcp serve` as a probe because it blocks on stdin.
-    """
     if not tool_available("gh"):
         return False
-
     ext_name = "gh-mcp"
     ext_dirs: list[Path] = [
         Path.home() / ".local" / "share" / "gh" / "extensions" / ext_name,
@@ -93,14 +96,12 @@ def gh_mcp_available() -> bool:
                 ext_dirs.append(Path(base) / "GitHub CLI" / "extensions" / ext_name)
     if any(d.exists() for d in ext_dirs):
         return True
-
     try:
         r = subprocess.run(["gh", "extension", "list"], capture_output=True, timeout=5, text=True)
         if r.returncode == 0 and ext_name in r.stdout:
             return True
     except (subprocess.TimeoutExpired, OSError):
         return False
-
     try:
         r = subprocess.run(["gh", "mcp", "--help"], capture_output=True, timeout=5, text=True)
         return r.returncode == 0 and "serve" in r.stdout
@@ -115,81 +116,93 @@ def uv_available() -> bool:
     return (local_bin / "uv").exists() or (local_bin / "uvx").exists()
 
 
-_WINGET_FLAGS = ("--accept-source-agreements", "--accept-package-agreements")
-_ASTRAL_UV_INSTALL = ShellStep(id="install", command=("sh", "-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"))
+# ---------------------------------------------------------------------------
+# YAML loader
+# ---------------------------------------------------------------------------
 
-SYSTEM_DEPENDENCIES: dict[str, DependencySpec] = {
-    "git": DependencySpec(
-        id="git",
-        check=lambda: tool_available("git"),
-        install=_PlatformStep(variants={
-            "winget": winget.install("Git.Git", *_WINGET_FLAGS),
-            "scoop":  scoop.install("git"),
-            "choco":  choco.install("git"),
-            "brew":   brew.install("git"),
-            "apt":    apt.install("git"),
-            "dnf":    dnf.install("git"),
-            "pacman": pacman.install("git"),
-        }),
-        uninstall=_PlatformStep(variants={
-            "winget": winget.uninstall("Git.Git"),
-            "scoop":  scoop.uninstall("git"),
-            "choco":  choco.uninstall("git"),
-            "brew":   brew.uninstall("git"),
-            "apt":    apt.remove("git"),
-            "dnf":    dnf.remove("git"),
-            "pacman": pacman.remove("git"),
-        }),
-    ),
-    "gh": DependencySpec(
-        id="gh",
-        display_name="GitHub CLI",
-        check=lambda: tool_available("gh"),
-        install=_PlatformStep(variants={
-            "winget": winget.install("GitHub.cli", *_WINGET_FLAGS),
-            "scoop":  scoop.install("gh"),
-            "choco":  choco.install("gh"),
-            "brew":   brew.install("gh"),
-            "apt":    apt.install("gh"),
-            "dnf":    dnf.install("gh"),
-            "pacman": pacman.install("github-cli"),
-        }),
-        uninstall=_PlatformStep(variants={
-            "winget": winget.uninstall("GitHub.cli"),
-            "scoop":  scoop.uninstall("gh"),
-            "choco":  choco.uninstall("gh"),
-            "brew":   brew.uninstall("gh"),
-            "apt":    apt.remove("gh"),
-            "dnf":    dnf.remove("gh"),
-            "pacman": pacman.remove("github-cli"),
-        }),
-    ),
-    "uv": DependencySpec(
-        id="uv",
-        check=uv_available,
-        install=_PlatformStep(
-            variants={
-                "winget": winget.install("astral-sh.uv", *_WINGET_FLAGS),
-                "scoop":  scoop.install("uv"),
-                "brew":   brew.install("uv"),
-            },
-            platform_fallback={"linux": _ASTRAL_UV_INSTALL},
-        ),
-        uninstall=_PlatformStep(variants={
-            "winget": winget.uninstall("astral-sh.uv"),
-            "scoop":  scoop.uninstall("uv"),
-            "brew":   brew.uninstall("uv"),
-        }),
-    ),
-    "gh-mcp": DependencySpec(
-        id="gh-mcp",
-        check=gh_mcp_available,
-        install=gh_extension.install("shuymn/gh-mcp"),
-        uninstall=gh_extension.remove("gh-mcp"),
-        requires=("gh",),
-    ),
-}
+def _find_component_yaml(component_id: str) -> Path:
+    for subdir in ("core", "optional"):
+        candidate = _COMPONENTS_CONFIG_DIR / subdir / f"{component_id}.yaml"
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(f"no component config found for '{component_id}'")
 
+
+def _resolve_check(check_str: str) -> Callable[[], bool]:
+    if check_str.startswith("binary:"):
+        binary = check_str[7:]
+        return lambda: tool_available(binary)
+    if check_str.startswith("path:"):
+        p = Path(check_str[5:].replace("~", str(Path.home())))
+        return lambda: p.exists()
+    if check_str.startswith("custom:"):
+        dotpath = check_str[7:]
+        module_name, fn_name = dotpath.rsplit(".", 1)
+        fn = getattr(importlib.import_module(module_name), fn_name)
+        return fn
+    raise ValueError(f"unknown check syntax: {check_str!r}")
+
+
+def _uninstall_action(toolchain: str) -> str:
+    return "uninstall" if has_action(toolchain, "uninstall") else "remove"
+
+
+def _build_dep_spec(dep_id: str, cfg: dict[str, Any]) -> DependencySpec:
+    check = _resolve_check(cfg["check"])
+    requires = tuple(cfg.get("requires", []))
+    display_name = cfg.get("display-name")
+
+    if "toolchain" in cfg:
+        tc = cfg["toolchain"]
+        pkg = cfg["package"]
+        uninstall_pkg = cfg.get("uninstall-package", pkg)
+        extra = cfg.get("extra-flags", {}).get(tc, [])
+        install = build_step(tc, "install", pkg, *extra)
+        uninstall = build_step(tc, _uninstall_action(tc), uninstall_pkg)
+        return DependencySpec(id=dep_id, check=check, install=install, uninstall=uninstall,
+                              requires=requires, display_name=display_name)
+
+    packages: dict[str, str] = cfg.get("packages", {})
+    uninstall_packages: dict[str, str] = cfg.get("uninstall-packages", packages)
+    extra_flags: dict[str, list[str]] = cfg.get("extra-flags", {})
+    platform_fallback_cfg: dict[str, list[str]] = cfg.get("platform-fallback", {})
+
+    install_variants = {
+        tc: build_step(tc, "install", pkg, *extra_flags.get(tc, []))
+        for tc, pkg in packages.items()
+    }
+    uninstall_variants = {
+        tc: build_step(tc, _uninstall_action(tc), pkg)
+        for tc, pkg in uninstall_packages.items()
+    }
+    platform_fallback = {
+        plat: ShellStep(id="install", command=tuple(cmd))
+        for plat, cmd in platform_fallback_cfg.items()
+    }
+
+    install = _PlatformStep(variants=install_variants, platform_fallback=platform_fallback)
+    uninstall = _PlatformStep(variants=uninstall_variants) if uninstall_variants else None
+    return DependencySpec(id=dep_id, check=check, install=install, uninstall=uninstall,
+                          requires=requires, display_name=display_name)
+
+
+def load_dependencies(yaml_path: Path) -> dict[str, DependencySpec]:
+    """Load DependencySpecs from a component config YAML's dependencies: section."""
+    cfg = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    return {
+        dep_id: _build_dep_spec(dep_id, dep_cfg)
+        for dep_id, dep_cfg in (cfg.get("dependencies") or {}).items()
+    }
+
+
+def load_component_dependencies(component_id: str) -> dict[str, DependencySpec]:
+    """Load DependencySpecs for a named component."""
+    return load_dependencies(_find_component_yaml(component_id))
+
+
+# ---------------------------------------------------------------------------
+# Orchestration
+# ---------------------------------------------------------------------------
 
 def detect_missing(
     deps: Mapping[str, DependencySpec],
@@ -314,11 +327,3 @@ def uninstall_dependencies(
         _emit(on_progress, f"Verified dependency {spec.label} removed: {verified is True}", progress=float(index), total=total)
         results.append(_result_payload(spec, result, verified=verified, verb="uninstall"))
     return {"results": results}
-
-
-def install_system_dependencies(
-    names: list[str],
-    *,
-    on_progress: ComponentOutputSink | None = None,
-) -> dict[str, Any]:
-    return install_dependencies(SYSTEM_DEPENDENCIES, names, on_progress=on_progress)

@@ -8,15 +8,21 @@ from audiagentic.components.optional.source_control.source_control_bootstrap imp
     detect_availability,
 )
 from audiagentic.foundation.dependencies import (
-    SYSTEM_DEPENDENCIES,
     detect_missing,
-    install_system_dependencies,
-    uninstall_system_dependencies,
+    load_component_dependencies,
 )
+from audiagentic.foundation.dependencies import (
+    install_dependencies as _install,
+)
+from audiagentic.foundation.dependencies import (
+    uninstall_dependencies as _uninstall,
+)
+
+_DEPS = load_component_dependencies("source-control")
 
 
 def get_source_control_status() -> dict[str, Any]:
-    missing = detect_missing(SYSTEM_DEPENDENCIES, SOURCE_CONTROL_DEPENDENCY_IDS)
+    missing = detect_missing(_DEPS, SOURCE_CONTROL_DEPENDENCY_IDS)
     return {**detect_availability(), "missing-dependencies": missing}
 
 
@@ -25,7 +31,7 @@ async def install_dependencies(names: list[str], *, ctx, run_with_output) -> dic
         ctx=ctx,
         logger="source-control.dependencies.install",
         heartbeat_message="Dependency install still running...",
-        work=lambda output: install_system_dependencies(names, on_progress=output),
+        work=lambda output: _install(_DEPS, names, on_progress=output),
     )
 
 
@@ -34,5 +40,5 @@ async def uninstall_dependencies(names: list[str], *, ctx, run_with_output) -> d
         ctx=ctx,
         logger="source-control.dependencies.uninstall",
         heartbeat_message="Dependency uninstall still running...",
-        work=lambda output: uninstall_system_dependencies(names, on_progress=output),
+        work=lambda output: _uninstall(_DEPS, names, on_progress=output),
     )
