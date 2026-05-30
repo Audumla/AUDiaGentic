@@ -10,8 +10,8 @@ depends-on:
 dependencies:
   git:
     display-name: Git
-    check: binary:git
-    packages:
+    probe: binary:git
+    via:
       winget: Git.Git
       scoop: git
       brew: git
@@ -19,13 +19,11 @@ dependencies:
       dnf: git
       pacman: git
       choco: git
-    extra-flags:
-      winget: [--accept-source-agreements, --accept-package-agreements]
 
   gh:
     display-name: GitHub CLI
-    check: binary:gh
-    packages:
+    probe: binary:gh
+    via:
       winget: GitHub.cli
       scoop: gh
       brew: gh
@@ -33,24 +31,20 @@ dependencies:
       dnf: gh
       pacman: github-cli
       choco: gh
-    extra-flags:
-      winget: [--accept-source-agreements, --accept-package-agreements]
 
   uv:
     display-name: uv
-    check: custom:audiagentic.foundation.dependencies.uv_available
-    packages:
+    probe: custom:audiagentic.foundation.dependencies.uv_available
+    via:
       winget: astral-sh.uv
       scoop: uv
       brew: uv
-    extra-flags:
-      winget: [--accept-source-agreements, --accept-package-agreements]
     platform-fallback:
       linux: [sh, -c, "curl -LsSf https://astral.sh/uv/install.sh | sh"]
 
   gh-mcp:
     display-name: GitHub MCP Extension
-    check: custom:audiagentic.foundation.dependencies.gh_mcp_available
+    probe: custom:audiagentic.foundation.dependencies.gh_mcp_available
     requires: [gh]
     toolchain: gh_extension
     package: shuymn/gh-mcp
