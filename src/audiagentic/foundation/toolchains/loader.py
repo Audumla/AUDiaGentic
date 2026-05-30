@@ -23,6 +23,11 @@ def _expand(template: list[str], package: str, priv: bool) -> tuple[str, ...]:
     return (*prefix, *(s.replace("{package}", package) for s in template))
 
 
+def raw_step(step_id: str, command: list[str]) -> ShellStep:
+    """Wrap a raw command list as a ShellStep without a toolchain lookup."""
+    return ShellStep(id=step_id, command=tuple(command))
+
+
 def has_action(toolchain: str, action: str) -> bool:
     tc = _toolchains()[toolchain]
     if action == "install":
