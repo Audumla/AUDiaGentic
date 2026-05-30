@@ -21,12 +21,8 @@ from audiagentic.foundation.toolchains.detect import (
     platform_key,
     tool_available,
 )
-from audiagentic.foundation.toolchains.loader import build_step, has_action
-from audiagentic.foundation.workflow.invocation.steps import (
-    SelectStep,
-    SequenceStep,
-    ShellStep,
-)
+from audiagentic.foundation.toolchains.loader import build_step, has_action, raw_step
+from audiagentic.foundation.workflow.invocation.steps import SelectStep, SequenceStep
 
 _PACKAGE_DIR = Path(__file__).resolve().parents[1]
 _COMPONENTS_CONFIG_DIR = _PACKAGE_DIR / "config" / "components"
@@ -110,7 +106,7 @@ def _install_select(via: dict[str, str], fallback_cfg: dict[str, list]) -> Selec
             id="platform-fallback",
             select=lambda _: platform_key(),
             variants={
-                plat: ShellStep(id="fallback", command=tuple(cmd))
+                plat: raw_step("fallback", cmd)
                 for plat, cmd in fallback_cfg.items()
             },
         )
@@ -134,41 +130,32 @@ def _uninstall_select(via: dict[str, str]) -> SelectStep:
     )
 
 
+def _guarded(dep_id: str, probe_fn: Callable[[], bool], inner: SelectStep, *, skip_when_true: bool) -> SelectStep:
+    """Wrap a step with a probe guard: skip when probe matches skip_when_true."""
+    return SelectStep(
+        id=dep_id,
+        select=lambda _: None if probe_fn() == skip_when_true else "run",
+        variants={"run": inner},
+    )
+
+
 def _dep_workflow(dep_id: str, cfg: dict[str, Any], action: str) -> SelectStep:
-    """Wrap install/uninstall step with a probe guard (skip if already satisfied)."""
     probe_fn = _resolve_probe(cfg["probe"])
     fallback_cfg = cfg.get("platform-fallback", {})
 
     if "toolchain" in cfg:
         tc = cfg["toolchain"]
         pkg = cfg["package"]
-        if action == "install":
-            inner = build_step(tc, "install", pkg)
-        else:
-            uninstall_pkg = cfg.get("uninstall-package", pkg)
-            inner = build_step(tc, _uninstall_action(tc), uninstall_pkg)
+        inner = build_step(tc, "install" if action == "install" else _uninstall_action(tc),
+                           pkg if action == "install" else cfg.get("uninstall-package", pkg))
     else:
         via: dict[str, str] = cfg.get("via", {})
-        uninstall_via: dict[str, str] = cfg.get("uninstall-via", via)
-        if action == "install":
-            inner = _install_select(via, fallback_cfg)
-        else:
-            inner = _uninstall_select(uninstall_via)
+        inner = _install_select(via, fallback_cfg) if action == "install" else _uninstall_select(
+            cfg.get("uninstall-via", via)
+        )
 
-    if action == "install":
-        # skip if probe already satisfied
-        return SelectStep(
-            id=dep_id,
-            select=lambda _: None if probe_fn() else "run",
-            variants={"run": inner},
-        )
-    else:
-        # skip if probe already failing (not present)
-        return SelectStep(
-            id=dep_id,
-            select=lambda _: None if not probe_fn() else "run",
-            variants={"run": inner},
-        )
+    # install: skip if already present; uninstall: skip if already absent
+    return _guarded(dep_id, probe_fn, inner, skip_when_true=(action == "install"))
 
 
 # ---------------------------------------------------------------------------
