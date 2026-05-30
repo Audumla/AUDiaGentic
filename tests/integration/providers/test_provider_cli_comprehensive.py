@@ -5,7 +5,7 @@ Tests every registered provider descriptor to ensure:
 2. CliInstallRecipe has valid install/uninstall pairs
 3. npm-based providers can install and uninstall
 4. Probe correctly detects availability after install/uninstall
-5. All toolchain factories produce valid ShellRecipe instances
+5. All toolchain factories produce valid ShellStep instances
 """
 from __future__ import annotations
 
@@ -32,14 +32,14 @@ from audiagentic.components.optional.providers.descriptors.registry import (
     all_descriptors,
     get_descriptor,
 )
-from audiagentic.foundation.invoke.recipes.shell import ShellRecipe
-from audiagentic.foundation.invoke.toolchains import (
+from audiagentic.foundation.toolchains import (
     brew,
     gh_extension,
     npm,
     uv,
     vscode,
 )
+from audiagentic.foundation.workflow.invocation.steps import CallableStep, ShellStep
 
 pytestmark = [
     pytest.mark.mutates_host,
@@ -122,61 +122,61 @@ class TestDescriptorRegistry:
 # ---------------------------------------------------------------------------
 
 class TestToolchainFactories:
-    """Verify toolchain factories produce valid ShellRecipe instances."""
+    """Verify toolchain factories produce valid ShellStep instances."""
 
     def test_npm_install_recipe(self) -> None:
         recipe = npm.install("test-package")
-        assert isinstance(recipe, ShellRecipe)
+        assert isinstance(recipe, ShellStep)
         assert recipe.command == ("npm", "install", "-g", "test-package")
 
     def test_npm_uninstall_recipe(self) -> None:
         recipe = npm.uninstall("test-package")
-        assert isinstance(recipe, ShellRecipe)
+        assert isinstance(recipe, ShellStep)
         assert recipe.command == ("npm", "uninstall", "-g", "test-package")
 
     def test_brew_install_recipe(self) -> None:
         recipe = brew.install("test-package")
-        assert isinstance(recipe, ShellRecipe)
+        assert isinstance(recipe, ShellStep)
         assert recipe.command == ("brew", "install", "test-package")
 
     def test_brew_uninstall_recipe(self) -> None:
         recipe = brew.uninstall("test-package")
-        assert isinstance(recipe, ShellRecipe)
+        assert isinstance(recipe, ShellStep)
         assert recipe.command == ("brew", "uninstall", "test-package")
 
     def test_uv_install_recipe(self) -> None:
         recipe = uv.install("test-package")
-        assert isinstance(recipe, ShellRecipe)
+        assert isinstance(recipe, ShellStep)
         assert recipe.command == ("uv", "tool", "install", "test-package")
 
     def test_uv_install_recipe_with_pre_flags(self) -> None:
         recipe = uv.install("test-package", "--python", "3.12")
-        assert isinstance(recipe, ShellRecipe)
+        assert isinstance(recipe, ShellStep)
         assert recipe.command == ("uv", "tool", "install", "--python", "3.12", "test-package")
 
     def test_uv_uninstall_recipe(self) -> None:
         recipe = uv.uninstall("test-package")
-        assert isinstance(recipe, ShellRecipe)
+        assert isinstance(recipe, ShellStep)
         assert recipe.command == ("uv", "tool", "uninstall", "test-package")
 
     def test_gh_extension_install(self) -> None:
         recipe = gh_extension.install("owner/repo")
-        assert isinstance(recipe, ShellRecipe)
+        assert isinstance(recipe, ShellStep)
         assert recipe.command == ("gh", "extension", "install", "owner/repo")
 
     def test_gh_extension_remove(self) -> None:
         recipe = gh_extension.remove("owner/repo")
-        assert isinstance(recipe, ShellRecipe)
+        assert isinstance(recipe, ShellStep)
         assert recipe.command == ("gh", "extension", "remove", "owner/repo")
 
     def test_vscode_install(self) -> None:
         recipe = vscode.install("publisher.extension")
-        assert isinstance(recipe, ShellRecipe)
+        assert isinstance(recipe, ShellStep)
         assert recipe.command == ("code", "--install-extension", "publisher.extension", "--force")
 
     def test_vscode_uninstall(self) -> None:
         recipe = vscode.uninstall("publisher.extension")
-        assert isinstance(recipe, ShellRecipe)
+        assert isinstance(recipe, ShellStep)
         assert recipe.command == ("code", "--uninstall-extension", "publisher.extension")
 
 
@@ -309,8 +309,8 @@ class TestProviderInstallRecipes:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
         assert desc.cli_install.package_manager == "npm"
-        assert isinstance(desc.cli_install.install, ShellRecipe)
-        assert isinstance(desc.cli_install.uninstall, ShellRecipe)
+        assert isinstance(desc.cli_install.install, ShellStep)
+        assert isinstance(desc.cli_install.uninstall, ShellStep)
         assert desc.cli_install.install.command[0] == "npm"
         assert desc.cli_install.uninstall.command[0] == "npm"
 
@@ -319,8 +319,8 @@ class TestProviderInstallRecipes:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
         assert desc.cli_install.package_manager == "brew"
-        assert isinstance(desc.cli_install.install, ShellRecipe)
-        assert isinstance(desc.cli_install.uninstall, ShellRecipe)
+        assert isinstance(desc.cli_install.install, ShellStep)
+        assert isinstance(desc.cli_install.uninstall, ShellStep)
         assert desc.cli_install.install.command[0] == "brew"
         assert desc.cli_install.uninstall.command[0] == "brew"
 
@@ -329,8 +329,8 @@ class TestProviderInstallRecipes:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
         assert desc.cli_install.package_manager == "script"
-        assert isinstance(desc.cli_install.install, ShellRecipe)
-        assert isinstance(desc.cli_install.uninstall, ShellRecipe)
+        assert isinstance(desc.cli_install.install, ShellStep)
+        assert isinstance(desc.cli_install.uninstall, ShellStep)
         assert desc.cli_install.install.command[0] == "bash"
         assert desc.cli_install.uninstall.command[0] == "bash"
 
@@ -339,8 +339,8 @@ class TestProviderInstallRecipes:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
         assert desc.cli_install.package_manager == "uv-tool"
-        assert isinstance(desc.cli_install.install, ShellRecipe)
-        assert isinstance(desc.cli_install.uninstall, ShellRecipe)
+        assert isinstance(desc.cli_install.install, ShellStep)
+        assert isinstance(desc.cli_install.uninstall, ShellStep)
         assert desc.cli_install.install.command[0] == "uv"
         assert desc.cli_install.uninstall.command[0] == "uv"
 
@@ -349,8 +349,8 @@ class TestProviderInstallRecipes:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
         assert desc.cli_install.package_manager == "gh-extension"
-        assert isinstance(desc.cli_install.install, ShellRecipe)
-        assert isinstance(desc.cli_install.uninstall, ShellRecipe)
+        assert isinstance(desc.cli_install.install, ShellStep)
+        assert isinstance(desc.cli_install.uninstall, ShellStep)
         assert desc.cli_install.install.command[0] == "gh"
         assert desc.cli_install.uninstall.command[0] == "gh"
 
@@ -359,19 +359,18 @@ class TestProviderInstallRecipes:
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
         assert desc.cli_install.package_manager == "vscode"
-        assert isinstance(desc.cli_install.install, ShellRecipe)
-        assert isinstance(desc.cli_install.uninstall, ShellRecipe)
+        assert isinstance(desc.cli_install.install, ShellStep)
+        assert isinstance(desc.cli_install.uninstall, ShellStep)
         assert desc.cli_install.install.command[0] == "code"
         assert desc.cli_install.uninstall.command[0] == "code"
 
     @pytest.mark.parametrize("provider_id", _param_ids(filtered_provider_ids(package_manager="pi-harness"), "no pi-harness providers selected"))
     def test_pi_provider_recipe(self, provider_id: str) -> None:
-        from audiagentic.foundation.invoke.recipes.callable_ import CallableRecipe
         desc = get_descriptor(provider_id)
         assert desc.cli_install is not None
         assert desc.cli_install.package_manager == "pi-harness"
-        assert isinstance(desc.cli_install.install, CallableRecipe)
-        assert isinstance(desc.cli_install.uninstall, CallableRecipe)
+        assert isinstance(desc.cli_install.install, CallableStep)
+        assert isinstance(desc.cli_install.uninstall, CallableStep)
 
     @pytest.mark.parametrize("provider_id", non_installable_provider_ids())
     def test_no_install_provider(self, provider_id: str) -> None:
