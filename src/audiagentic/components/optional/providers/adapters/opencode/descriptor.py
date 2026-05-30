@@ -11,7 +11,7 @@ from audiagentic.components.optional.providers.adapters.mcp_opencode import (
     remove_opencode_mcp,
     write_opencode_mcp,
 )
-from audiagentic.foundation.invoke.toolchains import npm
+from audiagentic.foundation.toolchains import npm
 
 from ...descriptors.base import (
     AgentFile,

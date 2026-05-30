@@ -1,4 +1,4 @@
-from audiagentic.foundation.invoke.toolchains import brew
+from audiagentic.foundation.toolchains import brew
 
 from ...descriptors.base import AgentFile, CliInstallRecipe, ProviderDescriptor, ProviderPermissions
 from ...descriptors.registry import register

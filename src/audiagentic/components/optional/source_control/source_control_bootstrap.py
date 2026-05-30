@@ -14,7 +14,7 @@ from audiagentic.foundation.components.ids import COMPONENT_AGENT_LEDGER, COMPON
 from audiagentic.foundation.dependencies import (
     gh_mcp_available,
 )
-from audiagentic.foundation.invoke.toolchains.detect import tool_available
+from audiagentic.foundation.toolchains.detect import tool_available
 
 SOURCE_CONTROL_DEPENDENCY_IDS = ["git", "gh", "gh-mcp", "uv"]
 
