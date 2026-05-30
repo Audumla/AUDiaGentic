@@ -8,7 +8,7 @@ from audiagentic.components.optional.providers.adapters.mcp_json import (
     remove_mcp_json,
     write_mcp_json,
 )
-from audiagentic.foundation.invoke.recipes.callable_ import CallableRecipe
+from audiagentic.foundation.workflow.invocation.steps import CallableStep
 
 from ...descriptors.base import (
     AgentFile,
@@ -86,8 +86,8 @@ register(ProviderDescriptor(
         package_manager="pi-harness",
         package_name="audiagentic-pi-harness",
         executable="pi",
-        install=CallableRecipe(_pi_install, label="pi-harness install"),
-        uninstall=CallableRecipe(_pi_uninstall, label="pi-harness uninstall"),
+        install=CallableStep(id="install", fn=_pi_install),
+        uninstall=CallableStep(id="uninstall", fn=_pi_uninstall),
         probe_fn=_pi_probe,
     ),
     vscode_extensions=(),

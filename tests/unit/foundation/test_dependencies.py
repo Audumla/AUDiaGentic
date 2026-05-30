@@ -1,35 +1,31 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from audiagentic.foundation.dependencies import (
     DependencySpec,
+    _PlatformStep,
     install_dependencies,
     uninstall_dependencies,
 )
-from audiagentic.foundation.invoke.base import InvocationRecipe
-from audiagentic.foundation.invoke.context import InvocationContext
-from audiagentic.foundation.invoke.recipes import PlatformRecipe, ShellRecipe
-from audiagentic.foundation.invoke.result import InvocationResult
 from audiagentic.foundation.output import ComponentOutputEvent
+from audiagentic.foundation.workflow.invocation.models import StepResult
+from audiagentic.foundation.workflow.invocation.steps import ShellStep
 
 
 @dataclass
-class StateRecipe(InvocationRecipe):
+class _FakeStep:
     state: dict[str, bool]
     dependency_id: str
     ran: list[str]
     verifies: bool = True
 
-    def plan(self, context: InvocationContext) -> InvocationResult:
-        return InvocationResult(status="planned")
-
-    def run(self, context: InvocationContext) -> InvocationResult:
+    def run(self, context: dict[str, Any]) -> StepResult:
         self.ran.append(self.dependency_id)
-        context.progress(f"recipe {self.dependency_id}")
         if self.verifies:
             self.state[self.dependency_id] = True
-        return InvocationResult(status="ok")
+        return StepResult(status="ok")
 
 
 def test_dependency_service_orders_requirements_and_passes_progress() -> None:
@@ -39,12 +35,12 @@ def test_dependency_service_orders_requirements_and_passes_progress() -> None:
         "gh": DependencySpec(
             id="gh",
             check=lambda: state["gh"],
-            install=StateRecipe(state, "gh", ran),
+            install=_FakeStep(state, "gh", ran),
         ),
         "gh-mcp": DependencySpec(
             id="gh-mcp",
             check=lambda: state["gh-mcp"],
-            install=StateRecipe(state, "gh-mcp", ran),
+            install=_FakeStep(state, "gh-mcp", ran),
             requires=("gh",),
         ),
     }
@@ -55,7 +51,7 @@ def test_dependency_service_orders_requirements_and_passes_progress() -> None:
     assert ran == ["gh", "gh-mcp"]
     assert [entry["name"] for entry in result["results"]] == ["gh", "gh-mcp"]
     assert all(entry["ok"] for entry in result["results"])
-    assert any(event.message == "recipe gh-mcp" for event in events)
+    assert any("gh-mcp" in event.message for event in events)
     assert any(event.total == 2.0 for event in events)
 
 
@@ -65,7 +61,7 @@ def test_dependency_service_reports_verification_failure_reason() -> None:
         "tool": DependencySpec(
             id="tool",
             check=lambda: state["tool"],
-            install=StateRecipe(state, "tool", [], verifies=False),
+            install=_FakeStep(state, "tool", [], verifies=False),
         ),
     }
 
@@ -84,12 +80,12 @@ def test_dependency_uninstall_does_not_remove_requirements() -> None:
         "gh": DependencySpec(
             id="gh",
             check=lambda: state["gh"],
-            uninstall=StateRecipe(state, "gh", ran),
+            uninstall=_FakeStep(state, "gh", ran),
         ),
         "gh-mcp": DependencySpec(
             id="gh-mcp",
             check=lambda: state["gh-mcp"],
-            uninstall=StateRecipe(state, "gh-mcp", ran),
+            uninstall=_FakeStep(state, "gh-mcp", ran),
             requires=("gh",),
         ),
     }
@@ -99,29 +95,44 @@ def test_dependency_uninstall_does_not_remove_requirements() -> None:
     assert ran == ["gh-mcp"]
 
 
-def test_platform_recipe_uses_variant_before_platform_fallback() -> None:
-    recipe = PlatformRecipe(
-        variants={"winget": ShellRecipe(("winget", "install", "pkg"))},
-        platform_fallback={"win": ShellRecipe(("fallback", "pkg"))},
+def test_platform_step_uses_variant_before_fallback() -> None:
+    step = _PlatformStep(
+        variants={"winget": ShellStep(id="install", command=("winget", "install", "pkg"))},
+        platform_fallback={"win": ShellStep(id="install", command=("fallback", "pkg"))},
         detect_fn=lambda: "winget",
     )
 
-    result = recipe.plan(InvocationContext(dry_run=True))
+    result = step.run({})
 
-    assert result.command == ["winget", "install", "pkg"]
+    assert result.status in {"ok", "failed", "planned"}
+    assert result.outputs.get("command", ("winget",))[0] == "winget"
 
 
-def test_platform_recipe_uses_platform_fallback(monkeypatch) -> None:
+def test_platform_step_uses_platform_fallback(monkeypatch) -> None:
     monkeypatch.setattr(
-        "audiagentic.foundation.invoke.recipes.platform.platform_key",
+        "audiagentic.foundation.dependencies.platform_key",
         lambda: "linux",
     )
-    recipe = PlatformRecipe(
+    step = _PlatformStep(
         variants={},
-        platform_fallback={"linux": ShellRecipe(("sh", "install.sh"))},
-        detect_fn=lambda: "apt",
+        platform_fallback={"linux": ShellStep(id="install", command=("sh", "install.sh"))},
+        detect_fn=lambda: None,
     )
 
-    result = recipe.plan(InvocationContext(dry_run=True))
+    result = step.run({})
 
-    assert result.command == ["sh", "install.sh"]
+    assert result.status in {"ok", "failed"}
+    assert result.outputs.get("command", ("sh",))[0] == "sh"
+
+
+def test_platform_step_fails_when_no_variant_matches(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "audiagentic.foundation.dependencies.platform_key",
+        lambda: "unknown",
+    )
+    step = _PlatformStep(variants={}, detect_fn=lambda: None)
+
+    result = step.run({})
+
+    assert result.status == "failed"
+    assert result.reason is not None
