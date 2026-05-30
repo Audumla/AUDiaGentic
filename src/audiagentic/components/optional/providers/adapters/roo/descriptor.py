@@ -6,7 +6,7 @@ from audiagentic.components.optional.providers.adapters.mcp_json import (
     remove_mcp_json,
     write_mcp_json,
 )
-from audiagentic.foundation.invoke.toolchains import vscode
+from audiagentic.foundation.toolchains import vscode
 
 from ...descriptors.base import (
     AgentFile,

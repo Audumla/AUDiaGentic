@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.invoke.base import InvocationRecipe
 from audiagentic.foundation.mcp import McpServerEntry
+from audiagentic.foundation.workflow.invocation.steps import CallableStep, SequenceStep, ShellStep
 
 
 @dataclass(frozen=True)
@@ -53,14 +53,10 @@ class ProviderPermissions:
 class CliInstallRecipe:
     """How AUDiaGentic can provision a provider CLI.
 
-    install and uninstall are InvocationRecipe instances owned by the provider
-    descriptor. lifecycle.py dispatches through them without knowing internals.
-
     Standard package managers use toolchain factories from
-    foundation.invoke.toolchains (npm, uv, brew, gh_extension).
+    foundation.toolchains (npm, uv, brew, gh_extension).
 
-    Custom provisioners (e.g. pi-harness) use CallableRecipe to wrap their
-    own install/uninstall logic.
+    Custom provisioners (e.g. pi-harness) use CallableStep.
 
     probe_fn is kept as a callable returning a structured availability dict
     because its semantics differ from install/uninstall (read-only, typed result).
@@ -68,8 +64,8 @@ class CliInstallRecipe:
     package_manager: str        # metadata/display only
     package_name: str           # metadata/display only
     executable: str
-    install: InvocationRecipe
-    uninstall: InvocationRecipe
+    install: ShellStep | SequenceStep | CallableStep
+    uninstall: ShellStep | SequenceStep | CallableStep
     uninstall_name: str | None = None
     probe_fn: Callable[[Any], dict[str, Any] | None] | None = None
 

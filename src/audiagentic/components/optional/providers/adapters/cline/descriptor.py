@@ -3,7 +3,7 @@ from audiagentic.components.optional.providers.adapters.mcp_json import (
     remove_mcp_json,
     write_mcp_json,
 )
-from audiagentic.foundation.invoke.toolchains import npm
+from audiagentic.foundation.toolchains import npm
 
 from ...descriptors.base import (
     AgentFile,
