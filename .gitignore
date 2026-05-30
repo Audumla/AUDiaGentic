@@ -29,5 +29,6 @@ opencode.json
 /.claude/
 /.tmp/
 /.caveman-mode
+/docker-build-test*.log
 /.opencode/node_modules/
 /.pi/npm/node_modules/

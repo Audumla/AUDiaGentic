@@ -21,6 +21,8 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+from audiagentic.foundation.logging.config import _SafeTimedRotatingFileHandler
+
 _logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -109,7 +111,7 @@ class AiAuditLogger:
         logger.setLevel(logging.DEBUG)
         logger.propagate = False  # never mix with diagnostic log
 
-        handler = logging.handlers.TimedRotatingFileHandler(
+        handler = _SafeTimedRotatingFileHandler(
             filename=audit_dir / "ai_audit.jsonl",
             when="midnight",
             backupCount=backup_count,

@@ -28,27 +28,26 @@ An MCP-only agent. You have no access to the local filesystem, shell, or any bui
 
 ## What you can do
 
-### audiagentic-session
+### ag-session-mgmt
 - `audiagentic_provisioning_audiagentic_smoke_status` — check provisioning smoke/connectivity status
 
-### audiagentic-project
+### ag-project-mgmt
 - `audiagentic_project_project_status` — current project installation state and installed components
 - `audiagentic_project_list_components` — all available AUDiaGentic components with install status
 - `audiagentic_project_read_project_file` — read a file inside the project `.audiagentic/` directory (read-only)
 
-### audiagentic-planning
+### ag-planning-mgmt
 - `audiagentic_planning_planning_status` — planning component installation status
 - `audiagentic_planning_planning_summary` — item counts per kind and current ID counters
 - `audiagentic_planning_planning_index` — read a specific planning index (requests, specifications, plans, tasks, work-packages, standards, lookup, readiness, dispatch, trace, claims)
 - `audiagentic_planning_planning_events` — recent planning events
 
-### audiagentic-providers
+### ag-providers-mgmt
 - `audiagentic_providers_list_providers` — all known providers and their configuration/catalog status
-- `audiagentic_providers_provider_status` — detailed status for a specific provider including catalog contents
+- `audiagentic_providers_get_provider_status` — detailed status for a specific provider including catalog contents
 - `audiagentic_providers_list_provider_models` — model IDs from a provider's runtime catalog
 
-### audiagentic-release-please
-- `audiagentic_release_please_release_please_status` — release-please installation status, current version, release type
+### ag-release-please
 - `audiagentic_release_please_install_release_please` — install release-please into the target project (python/node/java/go/rust/simple)
 - `audiagentic_release_please_update_release_please_workflow` — re-render the release workflow from the current template
 

@@ -18,7 +18,6 @@ COMPONENT_SESSION = "session"           # harness-scoped; lives in audiagentic_h
 
 # ── optional ─────────────────────────────────────────────────────────────────
 
-COMPONENT_AGENT_ACTIONS  = "agent-actions"
 COMPONENT_AGENT_JOBS     = "agent-jobs"
 COMPONENT_AGENT_LEDGER   = "agent-ledger"
 COMPONENT_PLANNING       = "planning"
@@ -35,7 +34,6 @@ CORE_COMPONENT_IDS: frozenset[str] = frozenset({
 })
 
 OPTIONAL_COMPONENT_IDS: frozenset[str] = frozenset({
-    COMPONENT_AGENT_ACTIONS,
     COMPONENT_AGENT_JOBS,
     COMPONENT_AGENT_LEDGER,
     COMPONENT_PLANNING,

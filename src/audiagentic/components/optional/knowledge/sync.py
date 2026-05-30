@@ -9,8 +9,8 @@ from typing import Any
 
 import yaml
 
-from .config import KnowledgeConfig
 from .diffing import normalize_text, summarize_structured_change, unified_diff_excerpt
+from .knowledge_config import KnowledgeConfig
 from .markdown_io import load_pages
 from .models import DriftItem
 
@@ -640,3 +640,5 @@ def _dedupe_archive_path(path: Path) -> Path:
         if not candidate.exists():
             return candidate
         counter += 1
+
+

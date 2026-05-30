@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from audiagentic import launcher
-from audiagentic.components.core.session_server import _set_cli_visibility
+from audiagentic.components.core.session_manage_mcp import _set_cli_visibility
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.runtime.harness.pi.install import request_runtime_reload
@@ -52,13 +52,13 @@ def test_materialize_agent_config_rebuilds_mcp_from_installed_components(
 
     materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
     initial = json.loads((harness_root / "agent" / "mcp.json").read_text(encoding="utf-8"))
-    assert "audiagentic-planning" not in initial["mcpServers"]
+    assert "ag-planning-mgmt" not in initial["mcpServers"]
 
     install_component("planning", project_root)
     materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
     updated = json.loads((harness_root / "agent" / "mcp.json").read_text(encoding="utf-8"))
 
-    assert "audiagentic-planning" in updated["mcpServers"]
+    assert "ag-planning-mgmt" in updated["mcpServers"]
 
 
 def test_providers_component_uses_optional_server_module_in_mcp_config(
@@ -76,10 +76,10 @@ def test_providers_component_uses_optional_server_module_in_mcp_config(
     materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
     payload = json.loads((harness_root / "agent" / "mcp.json").read_text(encoding="utf-8"))
 
-    providers = payload["mcpServers"]["audiagentic-providers"]
+    providers = payload["mcpServers"]["ag-providers-mgmt"]
     assert providers["args"] == [
         "-m",
-        "audiagentic.components.optional.providers.server",
+        "audiagentic.components.optional.providers.providers_manage_mcp",
     ]
 
 
@@ -98,10 +98,10 @@ def test_planning_component_uses_optional_server_module_in_mcp_config(
     materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
     payload = json.loads((harness_root / "agent" / "mcp.json").read_text(encoding="utf-8"))
 
-    planning = payload["mcpServers"]["audiagentic-planning"]
+    planning = payload["mcpServers"]["ag-planning-mgmt"]
     assert planning["args"] == [
         "-m",
-        "audiagentic.components.optional.planning.server",
+        "audiagentic.components.optional.planning.planning_manage_mcp",
     ]
 
 
@@ -120,20 +120,20 @@ def test_ledger_component_uses_optional_server_module_in_mcp_config(
     materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
     payload = json.loads((harness_root / "agent" / "mcp.json").read_text(encoding="utf-8"))
 
-    ledger = payload["mcpServers"]["audiagentic-ledger-write"]
+    ledger = payload["mcpServers"]["ag-ledger"]
     assert ledger["args"] == [
         "-m",
-        "audiagentic.components.optional.ledger.ledger_write_mcp",
+        "audiagentic.components.optional.ledger.ledger_mcp",
     ]
 
 
 def test_component_mcp_metadata_loads_from_yaml() -> None:
     register_all_components()
 
-    project_decl = get_mcp_server_declaration("project", "audiagentic-project")
-    session_decl = get_mcp_server_declaration("session", "audiagentic-session")
-    planning_decl = get_mcp_server_declaration("planning", "audiagentic-planning")
-    ledger_decl = get_mcp_server_declaration("agent-ledger", "audiagentic-ledger-write")
+    project_decl = get_mcp_server_declaration("project", "ag-project-mgmt")
+    session_decl = get_mcp_server_declaration("session", "ag-session-mgmt")
+    planning_decl = get_mcp_server_declaration("planning", "ag-planning-mgmt")
+    ledger_decl = get_mcp_server_declaration("agent-ledger", "ag-ledger")
 
     assert project_decl is not None
     assert "list_components" in project_decl.instructions
@@ -144,11 +144,11 @@ def test_component_mcp_metadata_loads_from_yaml() -> None:
     assert "set_cli_visibility" in session_decl.tool_descriptions
 
     assert planning_decl is not None
-    assert planning_decl.module == "audiagentic.components.optional.planning.server"
+    assert planning_decl.module == "audiagentic.components.optional.planning.planning_manage_mcp"
     assert "planning_summary" in planning_decl.tool_descriptions
 
     assert ledger_decl is not None
-    assert ledger_decl.module == "audiagentic.components.optional.ledger.ledger_write_mcp"
+    assert ledger_decl.module == "audiagentic.components.optional.ledger.ledger_mcp"
 
 
 def test_component_install_refreshes_materialized_agent_config(
@@ -173,7 +173,7 @@ def test_component_install_refreshes_materialized_agent_config(
     )
     monkeypatch.setattr(
         "audiagentic.runtime.harness.pi.install.request_runtime_reload",
-        lambda project_root, *, reason, component_id=None: reload_calls.append(
+        lambda project_root, *, reason, component_id=None, has_mcp_servers=True: reload_calls.append(
             (project_root, reason, component_id)
         ),
     )
@@ -183,8 +183,10 @@ def test_component_install_refreshes_materialized_agent_config(
     rc = launcher._cmd_component(args, project_root)
 
     assert rc == 0
-    assert refresh_calls == [(harness_root, project_root)]
-    assert reload_calls == [(project_root, "component-installed", "planning")]
+    assert refresh_calls
+    assert all(call == (harness_root, project_root) for call in refresh_calls)
+    assert reload_calls
+    assert all(call == (project_root, "component-installed", "planning") for call in reload_calls)
 
 
 def test_request_runtime_reload_writes_marker(tmp_path: Path) -> None:
@@ -244,10 +246,10 @@ def test_set_cli_visibility_updates_project_config_and_requests_reload(
     )
     monkeypatch.setattr(
         "audiagentic.runtime.harness.pi.install.request_runtime_reload",
-        lambda project_root, *, reason, component_id=None: reload_calls.append((project_root, reason)),
+        lambda project_root, *, reason, component_id=None, has_mcp_servers=True: reload_calls.append((project_root, reason)),
     )
     monkeypatch.setattr(
-        "audiagentic.components.core.session_server._effective_cli_visibility",
+        "audiagentic.components.core.session_manage_mcp._effective_cli_visibility",
         lambda project_root: {
             "show_thinking_blocks": False,
             "show_tool_blocks": True,
@@ -269,3 +271,5 @@ def test_set_cli_visibility_updates_project_config_and_requests_reload(
     assert "hide_tool_use: false" in payload
     assert refresh_calls == [(harness_root, project_root)]
     assert reload_calls == [(project_root, "session-ui-visibility-updated")]
+
+

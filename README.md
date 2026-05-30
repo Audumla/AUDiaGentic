@@ -57,13 +57,13 @@ docker run --rm \
 
 Rebuild only when one of these changed:
 
-- `Dockerfile.test-base`
-- `Dockerfile.test`
-- `Dockerfile.release-test`
+- `tests/docker/Dockerfile.test-base`
+- `tests/docker/Dockerfile.test`
+- `tests/docker/Dockerfile.release-test`
 - image-level package/tool bootstrap requirements
 - the local image is missing or known-bad
 
-Use `Dockerfile.release-test` only when validating the wheel-installed release
+Use `tests/docker/Dockerfile.release-test` only when validating the wheel-installed release
 path or package-data bundling. It is not the default recheck path.
 
 ### Planning Document Integrity

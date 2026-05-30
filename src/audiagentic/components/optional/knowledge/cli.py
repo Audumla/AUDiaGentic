@@ -7,12 +7,12 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .actions import execute_deterministic_action
-from .bootstrap import bootstrap_project
 from .capability import doctor, show_capability_contract, show_install_profiles
-from .config import load_config
 from .events import load_event_adapters, process_events, record_event_baseline, scan_events
 from .importers import scaffold_page, seed_from_manifest
 from .index_maintenance import maintain_index_pages, refresh_index, validate_index_links
+from .knowledge_bootstrap import bootstrap_project
+from .knowledge_config import load_config
 from .lifecycle import (
     accept_proposal,
     apply_proposal,
@@ -557,3 +557,5 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("refresh-index")
     p.add_argument("--json", action="store_true")
     return parser
+
+

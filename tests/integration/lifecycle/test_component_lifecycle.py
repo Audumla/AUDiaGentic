@@ -10,6 +10,7 @@ from tests.integration.lifecycle.harness import (
     create_if_missing_paths,
     disable_component,
     enable_component,
+    install_component,
     install_with_deps,
     is_enabled,
     is_installed,
@@ -170,3 +171,47 @@ def test_project_component_selector_matches_registry_contract() -> None:
         if descriptor.scope == "project" and not descriptor.core
     }
     assert selected == expected
+
+
+# --- sync payload ---
+
+@pytest.mark.parametrize("component_id", project_component_ids())
+def test_install_sync_target_is_project(component_id: str, tmp_path: Path) -> None:
+    with component_sandbox(tmp_path, f"sync-install-{component_id}") as sb:
+        install_with_deps(component_id, sb.repo)
+        result = install_component(component_id, sb.repo)
+        sync = result.get("sync", {})
+        assert sync.get("target") == "project", (
+            f"{component_id}: sync.target should be 'project', got {sync.get('target')!r}"
+        )
+
+
+@pytest.mark.parametrize("component_id", project_component_ids())
+def test_disable_sync_action_reflects_mcp_servers(component_id: str, tmp_path: Path) -> None:
+    with component_sandbox(tmp_path, f"sync-disable-{component_id}") as sb:
+        install_with_deps(component_id, sb.repo)
+        result = disable_component(component_id, sb.repo)
+        sync = result.get("sync", {})
+        descriptor = all_descriptors()[component_id]
+        has_mcp = bool(descriptor.mcp_servers or descriptor.external_mcp_servers)
+        expected_action = "reload_required" if has_mcp else "refresh_required"
+        assert sync.get("action") == expected_action, (
+            f"{component_id}: sync.action={sync.get('action')!r}, expected={expected_action!r} "
+            f"(has_mcp={has_mcp})"
+        )
+
+
+@pytest.mark.parametrize("component_id", project_component_ids())
+def test_enable_sync_action_reflects_mcp_servers(component_id: str, tmp_path: Path) -> None:
+    with component_sandbox(tmp_path, f"sync-enable-{component_id}") as sb:
+        install_with_deps(component_id, sb.repo)
+        disable_component(component_id, sb.repo)
+        result = enable_component(component_id, sb.repo)
+        sync = result.get("sync", {})
+        descriptor = all_descriptors()[component_id]
+        has_mcp = bool(descriptor.mcp_servers or descriptor.external_mcp_servers)
+        expected_action = "reload_required" if has_mcp else "refresh_required"
+        assert sync.get("action") == expected_action, (
+            f"{component_id}: sync.action={sync.get('action')!r}, expected={expected_action!r} "
+            f"(has_mcp={has_mcp})"
+        )

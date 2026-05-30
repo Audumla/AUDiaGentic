@@ -1,24 +1,12 @@
 """Source control manage MCP server — component management and configuration."""
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 try:
     from mcp.server.fastmcp.server import Context
 except ImportError:  # pragma: no cover
     Context = None  # type: ignore[assignment, misc]
 
-from audiagentic.components.optional.source_control.bootstrap import (
-    SOURCE_CONTROL_DEPENDENCY_IDS,
-    detect_availability,
-)
-from audiagentic.foundation.dependencies import (
-    SYSTEM_DEPENDENCIES,
-    detect_missing,
-    install_system_dependencies,
-    uninstall_system_dependencies,
-)
+from audiagentic.components.optional.source_control import source_control_api
 from audiagentic.foundation.mcp.component_server import (
     log_tool_call,
     mcp_server,
@@ -28,16 +16,11 @@ from audiagentic.foundation.mcp.component_server import (
 mcp = mcp_server(__name__)
 
 
-def _project_root() -> Path:
-    return Path(os.environ.get("AUDIAGENTIC_REPO_ROOT", ".")).resolve()
-
-
 @mcp.tool()
 @log_tool_call
 def get_source_control_status() -> dict:
     """Return availability of git, gh CLI, and official MCP servers."""
-    missing = detect_missing(SYSTEM_DEPENDENCIES, SOURCE_CONTROL_DEPENDENCY_IDS)
-    return {**detect_availability(), "missing-dependencies": missing}
+    return source_control_api.get_source_control_status()
 
 
 @mcp.tool()
@@ -48,11 +31,10 @@ async def install_dependencies(names: list[str], ctx: Context = None) -> dict:
     Call only after user confirms which dependencies to install. Use detect_missing in
     get_source_control_status to discover which are absent.
     """
-    return await run_blocking_with_output(
+    return await source_control_api.install_dependencies(
+        names,
         ctx=ctx,
-        logger="source-control.dependencies.install",
-        heartbeat_message="Dependency install still running...",
-        work=lambda output: install_system_dependencies(names, on_progress=output),
+        run_with_output=run_blocking_with_output,
     )
 
 
@@ -63,11 +45,10 @@ async def uninstall_dependencies(names: list[str], ctx: Context = None) -> dict:
 
     Explicit user-requested action only — does NOT run when the component is uninstalled.
     """
-    return await run_blocking_with_output(
+    return await source_control_api.uninstall_dependencies(
+        names,
         ctx=ctx,
-        logger="source-control.dependencies.uninstall",
-        heartbeat_message="Dependency uninstall still running...",
-        work=lambda output: uninstall_system_dependencies(names, on_progress=output),
+        run_with_output=run_blocking_with_output,
     )
 
 
@@ -79,3 +60,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

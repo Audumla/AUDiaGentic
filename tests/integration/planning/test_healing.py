@@ -9,7 +9,7 @@ from pathlib import Path
 
 from tests.helpers.planning_testkit import seed_planning_config
 
-from audiagentic.components.optional.planning.app.api import PlanningAPI
+from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
 
 
 def _seed_planning_project(root: Path) -> None:
@@ -307,3 +307,4 @@ healing:
 
     # apply_propagation() should also respect max_depth
     # (this is tested indirectly via the propagate check above)
+

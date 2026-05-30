@@ -5,8 +5,8 @@ from pathlib import Path
 
 import yaml
 
-from audiagentic.components.optional.knowledge.config import load_config
 from audiagentic.components.optional.knowledge.events import on_planning_state_change
+from audiagentic.components.optional.knowledge.knowledge_config import load_config
 from audiagentic.paths import REPO_ROOT
 
 
@@ -139,3 +139,4 @@ def test_missing_action_registry_entry_is_skipped(tmp_path: Path, monkeypatch) -
         (tmp_path / "docs" / "knowledge" / "data" / "proposals").glob("*-event-review.yml")
     )
     assert not proposals
+

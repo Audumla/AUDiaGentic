@@ -1,8 +1,30 @@
 extensions:
-- name: lsp-mcp
+- name: git
+  type: stdio
+  cmd: uvx
+  args:
+  - mcp-server-git
+  - --repository
+  - .
+  enabled: true
+- name: github
+  type: stdio
+  cmd: gh
+  args:
+  - mcp
+  - serve
+  enabled: true
+- name: ag-ledger
   type: stdio
   cmd: C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe
   args:
   - -m
-  - audiagentic.components.optional.coding_lsp.mcp_server
+  - audiagentic.components.optional.ledger.ledger_mcp
+  enabled: true
+- name: ag-lsp
+  type: stdio
+  cmd: C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe
+  args:
+  - -m
+  - audiagentic.components.optional.coding_lsp.lsp_mcp
   enabled: true

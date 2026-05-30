@@ -11,7 +11,7 @@ try:
 except ImportError:
     _FUZZY_AVAILABLE = False
 
-from .config import KnowledgeConfig
+from .knowledge_config import KnowledgeConfig
 from .markdown_io import load_pages
 from .models import SearchResult
 
@@ -164,3 +164,5 @@ def _build_snippet(text: str, tokens: list[str], width: int) -> str:
     end = min(len(text), start + width)
     snippet = text[start:end].strip()
     return snippet if len(snippet) < len(text) else snippet + "..."
+
+

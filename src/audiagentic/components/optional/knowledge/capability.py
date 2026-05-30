@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .config import KnowledgeConfig
+from .knowledge_config import KnowledgeConfig
 from .runtime_defaults import get_capability_contract, get_capability_profiles, get_host_profiles
 
 
@@ -48,3 +48,5 @@ def doctor(config: KnowledgeConfig) -> dict[str, Any]:
         'selected_profiles': selected,
         'runtime_contract': contract,
     }
+
+

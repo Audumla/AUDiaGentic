@@ -262,3 +262,5 @@ class Compactor:
             already_compact=already_compact,
             aborted=bool(rewrite_errors or rename_errors),
         )
+
+

@@ -19,7 +19,7 @@ from audiagentic.components.optional.ledger.current_summary import (
 )
 from audiagentic.components.optional.ledger.fragments import record_change_event  # noqa: E402
 from audiagentic.components.optional.ledger.sync import sync_current_release_ledger  # noqa: E402
-from audiagentic.components.optional.release import api as release_api  # noqa: E402
+from audiagentic.components.optional.release import release_api  # noqa: E402
 
 FIXTURES = ROOT / "docs" / "examples" / "fixtures"
 

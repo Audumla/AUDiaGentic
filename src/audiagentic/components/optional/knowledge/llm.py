@@ -5,7 +5,7 @@ from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from .config import KnowledgeConfig
+from .knowledge_config import KnowledgeConfig
 from .markdown_io import load_page_by_id
 from .navigation import suggest_navigation
 from .registry import (
@@ -518,3 +518,5 @@ def _parse_iso_datetime(value: Any) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+

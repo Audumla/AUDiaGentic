@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from tests.helpers.planning_testkit import seed_planning_config
 
-from audiagentic.components.optional.planning.app.api import PlanningAPI
+from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
 
 
 def _seed_planning_project(root: Path) -> None:
@@ -517,3 +517,4 @@ kinds: {}
             and entry.get("status") == "success"
         ]
         assert len(matching) == 1
+

@@ -6,7 +6,6 @@ high-level LSP requests (definition, hover, references, rename, symbols).
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -24,13 +23,6 @@ class ServerConfig:
     workspace_config_files: list[str] = field(default_factory=list)
     settings: dict[str, Any] = field(default_factory=dict)
     label: str = ""
-
-
-@dataclass
-class DiagnosticReport:
-    """Cached diagnostics for a single file."""
-    uri: str
-    diagnostics: list[dict[str, Any]]
 
 
 class LspSession:
@@ -54,8 +46,6 @@ class LspSession:
         self.bridge = LspJsonRpc()
         self._capabilities: dict[str, Any] = {}
         self._opened_docs: dict[str, int] = {}
-        self._diagnostics_callbacks: list[Callable[[dict[str, Any]], None]] = []
-        self._diagnostics_cache: dict[str, list[dict[str, Any]]] = {}
 
     def initialize(self, timeout: float = 30.0) -> dict[str, Any]:
         """Start the language server and complete the initialize handshake."""
@@ -190,26 +180,47 @@ class LspSession:
         )
         return result
 
-    def handle_publish_diagnostics(self, callback: Callable[[dict[str, Any]], None]) -> None:
-        """Register a callback for publishDiagnostics notifications.
+    def diagnostics(
+        self, min_severity: int = 4, limit: int = 0, timeout: float = 30.0,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Pull diagnostics via workspace/diagnostic request (LSP 3.17).
 
-        The callback receives the raw params dict from the notification.
-        Diagnostics are also cached internally.
+        min_severity: 1=Error, 2=Warning, 3=Information, 4=Hint (default: all)
+        limit: max total diagnostics returned, 0 = unlimited
         """
-        self._diagnostics_callbacks.append(callback)
-        self.bridge._diagnostics_callback = callback  # type: ignore[attr-defined]
-
-    def get_diagnostics(self, uri: str | None = None) -> dict[str, list[dict[str, Any]]]:
-        """Return cached diagnostics. If uri given, return only for that file."""
-        if uri:
-            return {uri: self._diagnostics_cache.get(uri, [])}
-        return dict(self._diagnostics_cache)
+        try:
+            result = self.bridge.send_request(
+                "workspace/diagnostic",
+                {"identifier": None, "previousResultIds": []},
+                timeout=timeout,
+            )
+        except Exception:
+            return {}
+        if not isinstance(result, dict):
+            return {}
+        out: dict[str, list[dict[str, Any]]] = {}
+        total = 0
+        for item in result.get("items") or []:
+            if not isinstance(item, dict) or item.get("kind") != "full":
+                continue
+            uri = item.get("uri", "")
+            diags = [
+                d for d in (item.get("items") or [])
+                if isinstance(d, dict) and d.get("severity", 1) <= min_severity
+            ]
+            if diags:
+                if limit > 0:
+                    remaining = limit - total
+                    diags = diags[:remaining]
+                out[uri] = diags
+                total += len(diags)
+                if limit > 0 and total >= limit:
+                    break
+        return out
 
     def shutdown(self) -> None:
         """Graceful shutdown of the language server session."""
         self._opened_docs.clear()
-        self._diagnostics_cache.clear()
-        self._diagnostics_callbacks.clear()
         self.bridge.shutdown()
 
     def is_ready(self) -> bool:

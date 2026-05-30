@@ -32,16 +32,15 @@ Integrated into AUDiaGentic on 2026-04-14 via [request-0032](../../docs/planning
 knowledge/
   __init__.py          - Module exports
   actions.py           - Deterministic action handlers
-  bootstrap.py         - Vault initialization
+  knowledge_bootstrap.py - Vault initialization
   capability.py        - Contract validation
   cli.py               - Command-line interface
-  config.py            - Configuration loading
+  knowledge_config.py  - Configuration loading
   diffing.py           - Change detection
   events.py            - Event processing (TODO: split)
   importers.py         - Page scaffolding
   llm.py               - Optional LLM integration
   markdown_io.py       - Markdown parsing
-  mcp_server.py        - MCP tool server (moved to tools/mcp/audiagentic-knowledge/)
   models.py            - Data models
   navigation.py        - Navigation routing
   patches.py           - Patch application
@@ -67,28 +66,25 @@ knowledge/
 **CLI:**
 ```bash
 # Validate vault
-python -m src.audiagentic.knowledge.cli --root . validate
+python -m audiagentic.components.optional.knowledge.cli --root . validate
 
 # Scan for drift
-python -m src.audiagentic.knowledge.cli --root . scan-drift
+python -m audiagentic.components.optional.knowledge.cli --root . scan-drift
 
 # Process events
-python -m src.audiagentic.knowledge.cli --root . process-events
+python -m audiagentic.components.optional.knowledge.cli --root . process-events
 
 # Search pages
-python -m src.audiagentic.knowledge.cli --root . search --query "planning"
+python -m audiagentic.components.optional.knowledge.cli --root . search --query "planning"
 
 # View status
-python -m src.audiagentic.knowledge.cli --root . status
+python -m audiagentic.components.optional.knowledge.cli --root . status
 ```
 
 **MCP:**
 ```bash
-# Via launcher (recommended)
-python tools/mcp/audiagentic-knowledge/launch_audiagentic_knowledge_mcp.py
-
-# Or directly
-python tools/mcp/audiagentic-knowledge/mcp_server.py --root .
+# Start via AUDiaGentic launcher/component registry.
+# This package does not expose a standalone in-tree MCP entrypoint.
 ```
 
 ## Known Issues
@@ -109,13 +105,13 @@ See [Critical Review](#critical-review-findings) below for known gaps and planne
 | LLM job state unstructured (llm-jobs.yml) | ⚠️ Known | Lifecycle management planned |
 | 27 MCP tools is too many | ⚠️ Known | Consolidation planned: 4-5 top-level tools |
 | Sync proposals have no lifecycle | ⚠️ Known | Accept/reject/merge states planned |
-| config.py path resolution | ✅ Verified | Uses relative paths from config, not hardcoded |
+| knowledge_config.py path resolution | ✅ Verified | Uses relative paths from config, not hardcoded |
 | Bootstrap idempotency | ✅ Verified | Skips existing files unless `--force` |
 
 **Applied Fixes:**
 - ✅ Updated README to reflect "fully implemented" status
 - ✅ Verified bootstrap idempotency (skips existing files)
-- ✅ Verified config.py uses relative paths from configuration
+- ✅ Verified knowledge_config.py uses relative paths from configuration
 
 **Planned Improvements:**
 1. Add unit tests for events.py, sync.py, validation.py

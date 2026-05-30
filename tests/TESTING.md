@@ -1,19 +1,21 @@
 # Testing Standards
 
-Covers: folder structure, test categories, markers, naming, assertions, fixtures,
-timeouts, coverage, and Docker test conventions.
+Covers: folder structure, test tiers, markers, naming, assertions, fixtures,
+timeouts, coverage, Docker conventions, and CI execution matrix.
+
+---
 
 ## Folder structure
 
 ```text
 tests/
-├── unit/           Pure Python — no subprocess, no filesystem side effects, no network
-├── integration/    Real I/O: filesystem, subprocess, local ports; no Docker
-├── e2e/            Full stack: real CLI, may spawn Docker; always runs in CI Docker
-├── deferred/       Tests for planned / not-yet-built modules; never collected in CI
-├── dev/            Developer-only: local checkout state; never collected in CI
-├── helpers/        Shared test utilities (no test_ prefix, not collected)
-└── fixtures/       Static data files
+├── unit/           Fast, isolated — no subprocess, no real I/O, no network
+├── integration/    Real I/O — filesystem (tmp_path), subprocess, local services
+├── e2e/            Full user-facing path — real CLI, Docker, external systems
+├── deferred/       Tests for planned/unbuilt modules — never collected in CI
+├── dev/            Local developer checks against checkout state — never in CI
+├── helpers/        Shared utilities — no test_ prefix, never collected
+└── fixtures/       Static data files (JSON, YAML, etc.)
 ```
 
 Component tests live under each tier:
@@ -24,30 +26,62 @@ tests/integration/coding_lsp/
 tests/e2e/coding_lsp/
 ```
 
-## Test categories
+---
 
-| Tier          | Rules                                                    | Examples                               |
-| ------------- | -------------------------------------------------------- | -------------------------------------- |
-| `unit`        | No subprocess, no real filesystem writes, no network     | Parser, config reader, recipe builder  |
-| `integration` | May use real filesystem (`tmp_path`), real subprocess    | LSP bridge with real server binary     |
-| `e2e`         | Full user-facing path; real CLI or Docker                | `audiagentic install`, Docker recipe   |
-| `deferred`    | Module or feature doesn't exist yet                      | Tests for `audiagentic.execution.jobs` |
+## Test tiers
+
+Tiers describe **what is under test**, not how it runs or how fast it is.
+
+| Tier          | What it tests                                      | Key constraint                                     |
+| ------------- | -------------------------------------------------- | -------------------------------------------------- |
+| `unit`        | A single function or class in isolation            | No real I/O — mock or monkeypatch all boundaries   |
+| `integration` | A module or subsystem against real dependencies    | Uses `tmp_path`; may call subprocesses; no network |
+| `e2e`         | A complete user-visible workflow end-to-end        | Real CLI, real network, may need Docker            |
+| `deferred`    | Code not yet written (placeholder/spec tests)      | Never collected; tracked separately                |
+| `dev`         | State of the local checkout (migrations, fixtures) | Never collected in CI                              |
+
+**Tier is orthogonal to execution environment.** An integration test that uses
+`tmp_path` runs safely on a developer's laptop. An e2e test that calls `apt-get`
+needs Docker. Use markers (below) to express those constraints separately.
+
+---
 
 ## Markers
 
-All markers must be registered in `pyproject.toml`. `--strict-markers` is enforced —
-unregistered markers are an error, not a warning.
+All markers must be declared in `pyproject.toml` under `[tool.pytest.ini_options]`.
+`--strict-markers` is enforced — unregistered markers fail collection.
 
-| Marker            | Apply when                    | Effect                                   |
-| ----------------- | ----------------------------- | ---------------------------------------- |
-| `slow`            | Test runs >10s                | Excludable: `pytest -m 'not slow'`       |
-| `docker`          | Test needs Docker daemon      | Excludable: `pytest -m 'not docker'`     |
-| `requires_network`| Needs outbound internet       | Note for CI/offline environments         |
-| `requires_uv`     | Needs `uv` on PATH            | Pair with `pytest.mark.skipif`           |
-| `requires_npm`    | Needs `npm` on PATH           | Pair with `pytest.mark.skipif`           |
-| `requires_cargo`  | Needs `cargo` on PATH         | Pair with `pytest.mark.skipif`           |
+### Marker taxonomy
 
-Use `pytest.mark.skipif` to guard tests that need binaries:
+Markers express **cross-cutting concerns** independently of tier:
+
+#### Execution speed
+
+| Marker | When to apply         | Default CI behaviour             |
+| ------ | --------------------- | -------------------------------- |
+| `slow` | Single test runs >10s | Included but reported separately |
+
+#### Resource and environment dependencies
+
+| Marker              | When to apply                                    | Gating                                       |
+| ------------------- | ------------------------------------------------ | -------------------------------------------- |
+| `requires_docker`   | Test needs a Docker daemon (not just isolation)  | Skip unless `DOCKER_AVAILABLE=1`             |
+| `mutates_host`      | Test installs/removes packages on the real host  | Always skip locally; runs in CI Docker only  |
+| `requires_network`  | Needs outbound internet access                   | Skip unless `NETWORK_TESTS=1`                |
+| `requires_uv`       | Needs `uv` on PATH                               | Use `skipif(shutil.which("uv") is None)`     |
+| `requires_npm`      | Needs `npm` on PATH                              | Use `skipif(shutil.which("npm") is None)`    |
+| `requires_cargo`    | Needs `cargo` on PATH                            | Use `skipif(shutil.which("cargo") is None)`  |
+| `requires_gh`       | Needs `gh` CLI on PATH                           | Use `skipif(shutil.which("gh") is None)`     |
+
+#### Behaviour modifiers
+
+| Marker   | When to apply                                            |
+| -------- | -------------------------------------------------------- |
+| `smoke`  | Minimal sanity check — should pass in every environment  |
+| `opt_in` | Destructive or expensive; never run by default           |
+| `xfail`  | Known failure; use `strict=True` unless genuinely flaky  |
+
+### Applying markers
 
 ```python
 import shutil
@@ -56,70 +90,126 @@ import pytest
 @pytest.mark.slow
 @pytest.mark.requires_uv
 @pytest.mark.skipif(shutil.which("pyright-langserver") is None, reason="pyright not on PATH")
-@pytest.mark.timeout(60)
-def test_pyright_initializes() -> None:
+@pytest.mark.timeout(120)
+def test_pyright_completes_full_workspace_check() -> None:
     ...
 ```
 
-Use `@pytest.mark.timeout(N)` on individual tests that legitimately exceed the 30s default.
-Do not raise the global timeout — fix the test instead.
+### Auto-applying tier markers via conftest
+
+Apply tier markers automatically from test path so individual tests stay clean:
+
+```python
+# tests/conftest.py
+def pytest_collection_modifyitems(items):
+    for item in items:
+        path = item.nodeid.replace("\\", "/")
+        if "/unit/" in path:
+            item.add_marker(pytest.mark.unit)
+        elif "/integration/" in path:
+            item.add_marker(pytest.mark.integration)
+        elif "/e2e/" in path:
+            item.add_marker(pytest.mark.e2e)
+```
+
+This enables `pytest -m integration` without decorating every test function.
+
+### Environment-gated markers — conftest pattern
+
+For tests that must not run outside a controlled environment, gate in the
+directory's `conftest.py`, not in each test:
+
+```python
+# tests/integration/providers/conftest.py
+import os
+import pytest
+
+def pytest_collection_modifyitems(config, items):
+    if os.environ.get("AUDIAGENTIC_DOCKER_TESTS") == "1":
+        return
+    skip = pytest.mark.skip(reason="set AUDIAGENTIC_DOCKER_TESTS=1 to run")
+    for item in items:
+        if "tests/integration/providers" in item.nodeid.replace("\\", "/"):
+            item.add_marker(skip)
+```
+
+Use environment variables consistently. Established variables:
+
+| Variable                                | Controls                                         |
+| --------------------------------------- | ------------------------------------------------ |
+| `AUDIAGENTIC_DOCKER_TESTS=1`            | Lifecycle and provider integration tests         |
+| `AUDIAGENTIC_REAL_PROVIDER_CLI_TESTS=1` | Real provider CLI install/uninstall (opt-in)     |
+| `NETWORK_TESTS=1`                       | Tests requiring outbound network access          |
+
+---
 
 ## Timeouts
 
-Global default: **30 seconds** (set in `pyproject.toml` via `pytest-timeout`).
+Global default: **30 seconds** (`timeout = 30` in `pyproject.toml`).
 
-| Tier              | Typical timeout                                    |
-| ----------------- | -------------------------------------------------- |
-| Unit              | <1s (30s global is generous safety net)            |
-| Integration       | 5–30s                                              |
-| E2E (fast)        | 30s                                                |
-| E2E (docker run)  | 300–900s — use `@pytest.mark.timeout(N)`           |
+| Tier / type                    | Typical budget | Action                                    |
+| ------------------------------ | -------------- | ----------------------------------------- |
+| Unit                           | <1s            | 30s global is a safety net, not a target  |
+| Integration (filesystem)       | 5–30s          | Use `@pytest.mark.timeout(N)` if >30s     |
+| E2E (fast path)                | 30s            | Override with `@pytest.mark.timeout(N)`   |
+| E2E (Docker build + run)       | 300–900s       | Always explicit `@pytest.mark.timeout(N)` |
+| Slow compiles (rust-analyzer)  | up to 900s     | Note in test why timeout is high          |
 
-Never call `time.sleep()` in a unit test. Use mocks or real async coordination instead.
+Do not raise the global timeout — override per-test with `@pytest.mark.timeout(N)`.
+Never use `time.sleep()` in a unit test.
 
-## Coverage
-
-Target: **80% branch coverage** for `src/`. Current gate: **60%** (ratchet upward).
-
-Run with:
-
-```bash
-pytest --cov=src --cov-branch --cov-report=term-missing --cov-report=html
-```
-
-Coverage is a diagnostic, not a goal. 100% coverage on a trivially-tested module is worse
-than 70% on a well-designed one.
+---
 
 ## Naming conventions
 
-- Files: `test_<subject>.py` where subject is the module or behaviour
-- Functions: `test_<what>_<condition>_<expected>` or `test_<what>` when condition is obvious
-- Classes: `Test<Subject>` for grouping related tests under shared state
+### Files
+
+`test_<subject>.py` where subject is the module or behaviour being tested.
+
+### Functions
+
+`test_<what>_<condition>_<expected_outcome>` — or shorter when condition is obvious.
 
 ```python
-# Good
+# Good — explicit about what, when, and outcome
 def test_detect_missing_returns_only_absent_tools() -> None: ...
 def test_apt_install_prepends_update_step() -> None: ...
 def test_lsp_config_status_empty_project() -> None: ...
+def test_install_propagates_mcp_servers_to_providers() -> None: ...
 
-# Bad
+# Bad — vague or tautological
 def test_it_works() -> None: ...
 def test_detect_missing_test() -> None: ...
+def test_function() -> None: ...
 ```
+
+### Classes
+
+`Test<Subject>` for grouping related tests under shared setup state. Use only
+when multiple tests share expensive `@pytest.fixture(scope="class")` setup —
+otherwise prefer plain functions.
+
+---
 
 ## Assertions
 
 - One logical assertion per test where possible
-- Always use plain `assert` — no custom wrappers
-- Include a failure message when the default diff is insufficient:
+- Always use plain `assert` — no custom assertion wrappers
+- Include a failure message when the default diff is insufficient
 
-  ```python
-  assert result["ok"], f"expected ok=True, got {result}"
-  ```
+```python
+assert result["ok"], f"expected ok=True, got {result}"
+
+assert expected_servers.issubset(present), (
+    f"servers {expected_servers - present} missing from {config_path}. "
+    f"Present: {present}"
+)
+```
 
 - Never assert on log output or stdout unless that IS the contract under test
+- Never assert on implementation details — assert on public contracts
 
-Use **Arrange-Act-Assert** structure:
+**Arrange-Act-Assert (AAA) structure** — keep each section visually distinct:
 
 ```python
 def test_confirm_step_declines_on_no() -> None:
@@ -134,144 +224,168 @@ def test_confirm_step_declines_on_no() -> None:
     assert result.status == "skipped"
 ```
 
+---
+
 ## Fixtures
 
-- Place fixtures in `conftest.py` at the **lowest scope that uses them**
-- Root `conftest.py` (`tests/conftest.py`): path/env setup only — no component logic
-- Use `tmp_path` (pytest built-in) for temp filesystem — never `os.getcwd()` or hardcoded paths
-- Scope: default `function`; use `session` only for expensive read-only shared setup
-- Split `conftest.py` when it exceeds ~150 lines
+- Declare fixtures in `conftest.py` at the **lowest scope that shares them**
+- Root `conftest.py` (`tests/conftest.py`): path setup and global hooks only — no domain logic
+- Use `tmp_path` (pytest built-in) for all temp filesystem work — never `os.getcwd()` or hardcoded paths
+- Fixture scope default: `function` (strongest isolation); use `session` only for
+  expensive read-only shared setup (e.g. a compiled binary or model download)
+- Split `conftest.py` into multiple files when it exceeds ~150 lines
+
+---
+
+## Coverage
+
+Target: **80% branch coverage** for `src/`. Current gate: **60%** (ratchet upward as coverage grows).
+
+```bash
+pytest --cov=src --cov-branch --cov-report=term-missing --cov-report=html
+```
+
+Coverage is a diagnostic, not a goal. 100% coverage on a trivially-mocked module
+is worse than 70% on a module with meaningful behaviour tests.
+
+---
 
 ## Docker tests
 
+### When Docker is required
+
+| Scenario                                     | Why Docker                                         |
+| -------------------------------------------- | -------------------------------------------------- |
+| `mutates_host` — installs/removes packages   | Prevent corrupting the developer's local system    |
+| Requires specific OS toolchain (apt, brew)   | Reproducible environment across developer machines |
+| Full CLI integration (real npm/cargo/uv run) | Match CI environment exactly                       |
+
+**Docker is not required for filesystem isolation.** `tmp_path` provides full
+isolation for component lifecycle tests, provider surface tests, and similar
+file-based integration tests. Use `tmp_path`; reserve Docker for tests that
+genuinely need it.
+
 ### Base image
 
-**`audia-test-base`** is the single canonical toolchain image. All Docker test images
-must extend it — never install toolchains from scratch in a component Dockerfile.
+**`audia-test-base`** is the single canonical toolchain image. All test images
+`FROM audia-test-base:latest` — never install toolchains from scratch.
 
-| Tool             | Purpose                            |
-| ---------------- | ---------------------------------- |
-| `python3`, `pip` | Package install and test execution |
-| `node`, `npm`    | JavaScript tooling                 |
-| `uv`             | Python tool installs (pyright)     |
-| `cargo`          | Rust tooling (rust-analyzer)       |
-| `brew`           | Homebrew packages                  |
-| `gh`             | GitHub CLI                         |
+| Tool               | Purpose                            |
+| ------------------ | ---------------------------------- |
+| `python3`, `pip`   | Package install and test execution |
+| `node`, `npm`      | JavaScript tooling                 |
+| `uv`               | Python tool installs (pyright etc) |
+| `cargo`            | Rust tooling (rust-analyzer)       |
+| `gh`               | GitHub CLI                         |
 
-### Image requirements
+### Dockerfile requirements
 
 - `ENV PYTHONDONTWRITEBYTECODE=1` — prevents stale `.pyc` across bind mounts
 - `ENV PYTHONUNBUFFERED=1` — immediate stdout flush
-- `ENV PYTHONPYCACHEPREFIX=/tmp/pycache` must be set **after** all `RUN` steps in the base
-  image, not before. Setting it before causes build-time `.pyc` files to be baked into
-  `/tmp/pycache` inside the image layer; these are then read at runtime and fail with
-  `ValueError: bad marshal data` if the compile context differed.
-- Do NOT use `pip3 install` or system pip in container CMDs. Debian Bookworm's Python 3.11
-  pip has a CPython ABI bug (`SystemError: attempting to create PyCFunction with class but
-  no METH_METHOD flag`) that fires during wheel resolution. Use `uv` instead:
+- `ENV PYTHONPYCACHEPREFIX=/tmp/pycache` must be set **after** all `RUN` steps.
+  Setting it before bakes `.pyc` files into the layer; these fail at runtime with
+  `ValueError: bad marshal data` if compile context differed.
+- Use `uv` not `pip3` in CMD steps. Debian Bookworm pip has a CPython ABI bug
+  (`SystemError: attempting to create PyCFunction with class but no METH_METHOD flag`)
+  during wheel resolution on Python 3.11:
 
   ```bash
-  uv venv /venv && uv pip install --python /venv/bin/python -q -e '.[mcp]' && /venv/bin/python script.py
+  uv venv /venv && uv pip install --python /venv/bin/python -q -e '.[mcp]'
   ```
 
 - Do NOT clean apt lists in component Dockerfiles — the base handles this
 
-### System-impacting functions — Docker gate
+### Adding a Docker test
 
-Any test that performs a real install, uninstall, or package-manager operation on the
-host **must** run inside Docker. This prevents corrupting the developer's local environment.
+For tests that genuinely require Docker (system packages, real CLI lifecycle):
 
-Functions that require Docker gate:
+1. Create `tests/docker/Dockerfile.<component>-<purpose>` extending `audia-test-base:latest`
+2. Create in-container test script as a standalone pytest file at
+   `tests/integration/<component>/test_<purpose>.py` — this is what the container CMD runs
+3. Create host-side pytest test at `tests/e2e/<component>/test_<purpose>_docker.py`
+   with `@pytest.mark.docker`, `@pytest.mark.slow`, `@pytest.mark.timeout(N)`,
+   `@pytest.mark.mutates_host`
+4. Add `build-<component>` and `test-<component>-docker` Make targets
 
-| Function                       | Package manager  | Docker test location          |
-| ------------------------------ | ---------------- | ----------------------------- |
-| `install_dependencies` (LSP)   | uv/npm/cargo/apt | `test_install_deps.py`        |
-| `uninstall_dependencies` (LSP) | uv/npm/cargo/apt | same                          |
-| `install_system_dependencies`  | varies           | same (system dep section)     |
-| `PlatformRecipe.run()`         | apt on Linux     | same (PlatformRecipe section) |
+**Container-side scripts** use pytest — not the `section`/`check` pattern.
+Pytest output is already structured; duplicating it with a custom format
+adds noise and loses assertion detail. Reserve `section`/`check` only for
+shell scripts (`*.sh`) that cannot use pytest.
 
-The container-side test script must cover the full lifecycle:
+### Full lifecycle coverage for mutates_host tests
 
-1. **Install** — invoke `install_dependencies`, verify binary on PATH, check `detect_missing` returns `[]`
-2. **Uninstall** — invoke `uninstall_dependencies`, verify binary absent, check `detect_missing` reports the dep
+Any test that installs a package must also test uninstall. Do not skip uninstall
+coverage — broken uninstall leaves orphaned packages on real systems.
+
+1. **Install** — invoke install function, verify binary present, verify `detect_missing` returns `[]`
+2. **Uninstall** — invoke uninstall function, verify binary absent, verify `detect_missing` reports dep
 3. **Cycle** — reinstall at least one dep, re-verify, uninstall again
 
-Do NOT skip uninstall coverage just because a dep was installed. Broken uninstall leaves
-orphaned packages on real systems.
-
-For slow compile steps (e.g. `cargo install rust-analyzer` ≈ 10–15 min), install once and
-do not cycle — note this explicitly in a comment in the script.
+For slow compile steps (e.g. `cargo install rust-analyzer` ≈ 10–15 min): install
+once and do not cycle — mark with `@pytest.mark.timeout(900)` and add a comment
+explaining why cycling is skipped.
 
 ### Build once, run many
 
 ```bash
-make build-base           # Build audia-test-base (run once or on Dockerfile.test-base change)
-make build-lsp-install    # Build LSP install test image
-make test-lsp-docker      # Run LSP install test (no rebuild, bind-mount source)
-make test-docker          # Run full suite in Docker
+make build-base             # Build audia-test-base (once, or on Dockerfile.test-base change)
+make build-lsp-install      # Build LSP install test image
+make test-lsp-docker        # Run LSP install tests (no rebuild; bind-mounts source)
+make test-docker            # Run full Docker suite
 ```
 
-### Adding a Docker test
+---
 
-1. Create `Dockerfile.<component>-<purpose>` at repo root
-2. `FROM audia-test-base:latest`
-3. Add `build-<component>` and `test-<component>-docker` to `Makefile`
-4. Add host-side pytest test in `tests/e2e/<component>/test_<purpose>_docker.py`
-   with `@pytest.mark.docker`, `@pytest.mark.slow`, `@pytest.mark.timeout(N)`
-5. Create a standalone script in `tests/integration/<component>/test_<purpose>.py`
-   that runs inside the container (what the CMD calls)
+## CI execution matrix
 
-### Docker test script output format
+| Command / target                       | Markers included      | Markers excluded         | Environment vars required    |
+| -------------------------------------- | --------------------- | ------------------------ | ---------------------------- |
+| `make test-unit`                       | `unit`                | —                        | —                            |
+| `make test`                            | `unit`, `integration` | `mutates_host`, `opt_in` | —                            |
+| `make test AUDIAGENTIC_DOCKER_TESTS=1` | `unit`, `integration` | `mutates_host`, `opt_in` | `AUDIAGENTIC_DOCKER_TESTS=1` |
+| `make test-docker`                     | all                   | `opt_in`                 | runs inside Docker           |
+| `pytest -m smoke`                      | `smoke`               | —                        | —                            |
+| `pytest -m 'not slow'`                 | all except `slow`     | —                        | —                            |
 
-Use the section/check pattern for container-side scripts:
+In CI, `make test-docker` is the authoritative run. Local `make test` is the fast
+feedback loop. Both must pass before merge.
 
-```python
-FAILURES: list[str] = []
-
-def check(label: str, condition: bool) -> None:
-    print(f"  [{'PASS' if condition else 'FAIL'}] {label}")
-    if not condition:
-        FAILURES.append(label)
-
-def section(title: str) -> None:
-    print(f"\n=== {title} ===")
-
-# ... test body ...
-
-if FAILURES:
-    print(f"\nFAILED: {FAILURES}")
-    sys.exit(1)
-print("\nAll checks passed.")
-```
+---
 
 ## What NOT to test
 
-- Framework internals (FastMCP dispatch, asyncio scheduling, pytest itself)
-- Third-party library correctness (yaml.safe_load, shutil.which)
-- Trivial getters on dataclasses with no logic
+- Framework internals (FastMCP dispatch, asyncio event loop, pytest itself)
+- Third-party library correctness (`yaml.safe_load`, `shutil.which`, `json.loads`)
+- Trivial attribute access on dataclasses with no logic
 - Implementation details that can change without breaking the public contract
+- Logging output or stdout unless that is the observable contract
+
+---
 
 ## Running tests
 
 ```bash
-# Standard: unit + integration + e2e
+# Fast feedback — unit only
+make test-unit
+
+# Standard local run — unit + integration (no mutates_host)
 make test
 
-# Unit only (fast, no network, no Docker)
-make test-unit
+# Include gated integration tests (safe, filesystem-isolated)
+AUDIAGENTIC_DOCKER_TESTS=1 make test
 
 # Skip slow tests
 pytest -m 'not slow'
 
-# Only slow tests
-pytest -m slow
+# Smoke pass — minimal sanity in any environment
+pytest -m smoke
 
-# With coverage report
+# With branch coverage report
 pytest --cov=src --cov-branch --cov-report=term-missing
 
-# Docker LSP install (all 4 servers, takes ~10 min for rust-analyzer)
+# Docker LSP install (~10 min; includes rust-analyzer)
 make test-lsp-docker
 
-# Full Docker suite
+# Full Docker suite (authoritative)
 make test-docker
 ```

@@ -18,18 +18,18 @@ files:
     recursive: true
     description: Runtime provider catalogs and session state
 mcp-servers:
-  - name: audiagentic-providers
-    module: audiagentic.components.optional.providers.server
+  - name: ag-providers-mgmt
+    module: audiagentic.components.optional.providers.providers_manage_mcp
     direct-tools: true
     description: Providers MCP server for provider management and introspection
+    propagate: audiagentic
     instructions: >
       AUDiaGentic providers component server.
       Use list_providers to see all providers and their status.
-      Use provider_status to inspect a specific provider runtime catalog.
+      Use get_provider_status to inspect a specific provider runtime catalog.
     tool-descriptions:
       list_providers: List all known providers and their configuration or catalog status.
-      provider_status: Return detailed status for a specific provider including catalog contents.
-      interrogate_provider: Interrogate a provider for CLI availability, VS Code extension status, permissions, and agent files.
+      get_provider_status: Return detailed status for a specific provider including catalog contents.
       list_provider_descriptors: List all registered provider descriptors and static metadata.
       list_provider_models: List model IDs from a provider runtime catalog.
       refresh_provider_catalog: Fetch and persist live model catalog for a provider.
@@ -37,7 +37,6 @@ mcp-servers:
       install_provider: Install a provider CLI. For explicit install requests, call with dry_run=false unless the user specifically asks for a dry run.
       uninstall_provider: Uninstall a provider CLI. For explicit uninstall requests, call with dry_run=false after confirmation.
       repair_provider: Repair a provider CLI by installing it if missing. For explicit repair requests, call with dry_run=false unless the user specifically asks for a dry run.
-      set_provider_enabled: Enable or disable a provider in providers.yaml.
       apply_provider_surfaces: Apply managed provider surface blocks to agent files.
       prune_provider_surfaces: Remove stale managed provider surface blocks from agent files.
       reconcile_provider: Reconcile a single provider against host state and sync config or surfaces.
@@ -45,10 +44,11 @@ mcp-servers:
 harness-instructions:
   - section: "What you can do"
     content: |
-      ### audiagentic-providers
+      ### ag-providers-mgmt
       - `mcp_list_providers` — List all known providers
-      - `mcp_provider_status` — Check a specific provider status
+      - `mcp_get_provider_status` — Check a specific provider status
       - `mcp_list_provider_models` — List models from a provider's catalog
       - `mcp_install_provider` — Install a provider CLI when explicitly requested; do not dry-run unless requested
       - `mcp_uninstall_provider` — Uninstall a provider CLI after user confirmation; do not dry-run unless requested
       - `mcp_repair_provider` — Repair a provider CLI when explicitly requested; do not dry-run unless requested
+

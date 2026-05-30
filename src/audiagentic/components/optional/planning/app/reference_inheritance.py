@@ -91,3 +91,5 @@ def effective_references(
     return list(
         dict.fromkeys(_collect_inherited_reference_values(item, target_field, items_by_id, config))
     )
+
+

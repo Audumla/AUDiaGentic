@@ -75,9 +75,10 @@ def build_runtime_sync(
     reason: str,
     component_id: str | None = None,
     target: str | None = None,
+    has_mcp_servers: bool = True,
 ) -> dict[str, object]:
     mod = _mod("install")
-    kw: dict = {"reason": reason, "component_id": component_id}
+    kw: dict = {"reason": reason, "component_id": component_id, "has_mcp_servers": has_mcp_servers}
     if target is not None:
         kw["target"] = target
     return mod.build_runtime_sync(**kw)
@@ -107,9 +108,10 @@ def request_runtime_reload(
     *,
     reason: str,
     component_id: str | None = None,
+    has_mcp_servers: bool = True,
 ) -> Path:
     return _mod("install", project_root).request_runtime_reload(
-        project_root, reason=reason, component_id=component_id
+        project_root, reason=reason, component_id=component_id, has_mcp_servers=has_mcp_servers
     )
 
 

@@ -28,6 +28,17 @@ _ALL_COMPONENT_CONFIG_DIRS = [
 ]
 
 
+def _require_propagate(ms: dict, path: Path) -> str:
+    if "propagate" not in ms:
+        logger.warning(
+            "MCP server %r in %s missing required 'propagate' field — defaulting to 'audiagentic'",
+            ms.get("name", "<unknown>"),
+            path.name,
+        )
+        return "audiagentic"
+    return ms["propagate"]
+
+
 def register_from_yaml(path: Path) -> ComponentDescriptor:
     """Parse a single component config YAML and register the descriptor."""
     data = load_yaml_file(path)
@@ -49,12 +60,13 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
         McpServerDeclaration(
             name=ms["name"],
             module=ms["module"],
+            managed_id=ms.get("managed-id"),
             args=tuple(ms.get("args") or []),
             direct_tools=ms.get("direct-tools") or [],
             description=ms.get("description", ""),
             instructions=ms.get("instructions", ""),
             tool_descriptions=ms.get("tool-descriptions") or {},
-            propagate=ms.get("propagate", "audiagentic"),
+            propagate=_require_propagate(ms, path),
         )
         for ms in (data.get("mcp-servers") or [])
     )
@@ -63,13 +75,14 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
         ExternalMcpServerDeclaration(
             name=ms["name"],
             command=ms["command"],
+            managed_id=ms.get("managed-id"),
             args=tuple(ms.get("args") or []),
             env=dict(ms.get("env") or {}),
             description=ms.get("description", ""),
             instructions=ms.get("instructions", ""),
             requires=tuple(ms.get("requires") or []),
             probe=tuple(ms.get("probe") or []),
-            propagate=ms.get("propagate", "audiagentic"),
+            propagate=_require_propagate(ms, path),
         )
         for ms in (data.get("external-mcp-servers") or [])
     )

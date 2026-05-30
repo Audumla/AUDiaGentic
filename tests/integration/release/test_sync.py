@@ -42,6 +42,25 @@ def test_sync_merges_fragments_idempotent(tmp_path: Path) -> None:
         sandbox.cleanup()
 
 
+def test_sync_rebuilds_from_fragments_only(tmp_path: Path) -> None:
+    sandbox = sandbox_helper.create(tmp_path, "sync-rebuild")
+    try:
+        record_change_event(sandbox.repo, _load_event("chg_010"))
+        ledger = sandbox.repo / "docs" / "releases" / "CURRENT_RELEASE_LEDGER.ndjson"
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        ledger.write_text(
+            json.dumps({"event-id": "evt_manual_001", "change-class": "docs"}) + "\n",
+            encoding="utf-8",
+        )
+
+        result = sync_current_release_ledger(sandbox.repo)
+        assert result.fragment_count == 1
+        lines = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines() if line.strip()]
+        assert [entry["event-id"] for entry in lines] == ["chg_010"]
+    finally:
+        sandbox.cleanup()
+
+
 def test_sync_replaces_stale_lock(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "sync-stale")
     try:

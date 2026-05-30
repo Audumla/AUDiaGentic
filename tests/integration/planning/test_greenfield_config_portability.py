@@ -13,8 +13,8 @@ for _p in (str(ROOT), str(ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from audiagentic.components.optional.planning.app.api import PlanningAPI
 from audiagentic.components.optional.planning.app.config import Config
+from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
 from audiagentic.components.optional.planning.fs.read import parse_markdown
 from audiagentic.components.optional.planning.fs.write import dump_markdown
 
@@ -604,3 +604,4 @@ def test_greenfield_cascade_skipped_when_no_cascade_config(tmp_path: Path) -> No
     assert api._find(signal.data["id"]).data["state"] == "frozen"
     # No cascade config -> sketch state unchanged (NOT auto-retired)
     assert api._find(sketch.data["id"]).data["state"] == "shaping"
+

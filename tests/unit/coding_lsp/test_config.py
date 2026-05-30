@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.optional.coding_lsp.config import (
+from audiagentic.components.optional.coding_lsp.coding_lsp_bootstrap import _active_dependency_ids
+from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
     detect_project_languages,
     discover_language_servers,
     merge_server_configs,
@@ -108,3 +109,53 @@ def test_discover_language_servers_returns_dict(tmp_path: Path) -> None:
     result = discover_language_servers(tmp_path)
     assert isinstance(result, dict)
     assert "python" in result
+
+
+def test_makefile_does_not_trigger_cpp_detection(tmp_path: Path) -> None:
+    (tmp_path / "Makefile").touch()
+    detected = detect_project_languages(tmp_path)
+    assert "cpp" not in detected, "Makefile alone should not trigger C++ detection"
+
+
+def test_cmake_triggers_cpp_detection(tmp_path: Path) -> None:
+    (tmp_path / "CMakeLists.txt").touch()
+    detected = detect_project_languages(tmp_path)
+    assert "cpp" in detected
+
+
+def test_active_dependency_ids_reads_from_lsp_json(tmp_path: Path) -> None:
+    from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
+        CODING_LSP_DIR,
+        write_lsp_config,
+    )
+    lsp_json = tmp_path / CODING_LSP_DIR / "lsp.json"
+    write_lsp_config(lsp_json, {"python": {"command": ["pyright-langserver", "--stdio"]}})
+    dep_ids = _active_dependency_ids(tmp_path)
+    assert "pyright" in dep_ids
+    assert "typescript-language-server" not in dep_ids
+    assert "clangd" not in dep_ids
+
+
+def test_active_dependency_ids_no_lsp_json_returns_empty(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").touch()
+    dep_ids = _active_dependency_ids(tmp_path)
+    assert dep_ids == [], "No lsp.json means no active deps — lsp.json is the source of truth"
+
+
+def test_active_dependency_ids_no_project_root_returns_empty() -> None:
+    dep_ids = _active_dependency_ids(None)
+    assert dep_ids == []
+
+
+def test_active_dependency_ids_excludes_unconfigured_languages(tmp_path: Path) -> None:
+    from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
+        CODING_LSP_DIR,
+        write_lsp_config,
+    )
+    (tmp_path / "pyproject.toml").touch()
+    (tmp_path / "Makefile").touch()
+    lsp_json = tmp_path / CODING_LSP_DIR / "lsp.json"
+    write_lsp_config(lsp_json, {"python": {"command": ["pyright-langserver", "--stdio"]}})
+    dep_ids = _active_dependency_ids(tmp_path)
+    assert "clangd" not in dep_ids, "Only configured languages in lsp.json should appear"
+

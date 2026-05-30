@@ -14,8 +14,8 @@ for _p in (str(ROOT), str(ROOT / "src")):
 
 from tests.helpers.planning_testkit import seed_planning_config
 
-from audiagentic.components.optional.planning.app.api import PlanningAPI
 from audiagentic.components.optional.planning.app.paths import Paths
+from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
 from audiagentic.components.optional.planning.app.rec_mgr import Reconcile
 from audiagentic.components.optional.planning.fs.scan import scan_items
 
@@ -195,3 +195,4 @@ def test_naming_config_defines_numeric_format(tmp_path: Path) -> None:
     cfg = yaml.safe_load((root / ".audiagentic/planning/config/planning.yaml").read_text())
     naming = cfg["planning"]["naming"]
     assert "numeric_format" in naming
+
