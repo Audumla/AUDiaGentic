@@ -15,18 +15,15 @@ import pytest
 
 from audiagentic.foundation.dependencies import (
     detect_missing,
-    install_dependencies,
-    load_component_dependencies,
-    uninstall_dependencies,
+    load_component_probes,
+    load_component_workflow,
 )
-
-_SYSTEM_DEPS = load_component_dependencies("source-control")
-_get_lsp_deps = lambda: load_component_dependencies("coding-lsp")
 from audiagentic.foundation.toolchains.detect import (
     detect_pkg_manager,
     platform_key,
     privilege_prefix,
 )
+from audiagentic.foundation.workflow.invocation.steps import SelectStep, SequenceStep
 
 pytestmark = [pytest.mark.mutates_host, pytest.mark.slow]
 
@@ -40,9 +37,27 @@ BINARY: dict[str, str] = {
     "clangd": "clangd",
 }
 
+_SYSTEM_PROBES = load_component_probes("source-control")
+_LSP_PROBES = load_component_probes("coding-lsp")
 
-def _ok_count(results: dict) -> int:
-    return sum(1 for r in results["results"] if r.get("ok"))
+
+def _run_subset(workflow: SequenceStep, names: list[str]) -> dict:
+    steps = tuple(s for s in workflow.steps if s.id in names)
+    seq = SequenceStep(id="subset", steps=steps, fail_fast=False)
+    result = seq.run({})
+    ok_count = sum(
+        1 for v in result.outputs.values()
+        if isinstance(v, dict) and v.get("status") in ("ok", "skipped")
+        or not isinstance(v, dict)
+    )
+    return {"result": result, "ok_count": len(steps)}
+
+
+def _ok_count(result) -> int:
+    return sum(
+        1 for v in result.outputs.values()
+        if not isinstance(v, dict) or v.get("status") in ("ok", "skipped")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -77,23 +92,23 @@ def test_platform_key_is_linux() -> None:
 
 @pytest.mark.parametrize("tool", ["git", "gh", "uv"])
 def test_system_dependency_present_in_base_image(tool: str) -> None:
-    missing = detect_missing(_SYSTEM_DEPS, [tool])
+    missing = detect_missing(_SYSTEM_PROBES, [tool])
     assert tool not in missing, f"{tool} should be pre-installed in base image"
 
 
 # ---------------------------------------------------------------------------
-# PlatformRecipe resolution
+# SelectStep resolution for platform-dispatched deps
 # ---------------------------------------------------------------------------
 
-def test_clangd_platform_step_resolves() -> None:
-    deps = _get_lsp_deps()
-    clangd = deps["clangd"].install
-    assert clangd is not None, "clangd has no install step"
-    # Verify the platform dispatch resolves to a known step (not a 'no PM detected' failure).
-    # We can't run the actual install, but we can check the step resolves without error.
-    from audiagentic.foundation.dependencies import _PlatformStep
-    assert isinstance(clangd, _PlatformStep), f"expected _PlatformStep, got {type(clangd)}"
-    assert len(clangd.variants) > 0, "clangd install has no variants"
+def test_clangd_step_is_select_with_variants() -> None:
+    workflow = load_component_workflow("coding-lsp")
+    clangd_step = next(s for s in workflow.steps if s.id == "clangd")
+    assert isinstance(clangd_step, SelectStep)
+    # inner install SelectStep should have apt variant
+    inner = clangd_step.variants.get("run")
+    assert inner is not None
+    assert isinstance(inner, SelectStep)
+    assert "apt" in inner.variants
 
 
 # ---------------------------------------------------------------------------
@@ -102,14 +117,14 @@ def test_clangd_platform_step_resolves() -> None:
 
 @pytest.mark.timeout(900)
 def test_install_all_lsp_servers() -> None:
-    deps = _get_lsp_deps()
-    missing_before = detect_missing(deps, ALL_SERVERS)
+    missing_before = detect_missing(_LSP_PROBES, ALL_SERVERS)
     if not missing_before:
         pytest.skip("all LSP servers already present — skipping install")
 
-    result = install_dependencies(deps, missing_before)
-    assert _ok_count(result) == len(missing_before), (
-        f"not all servers installed: {[r for r in result['results'] if not r.get('ok')]}"
+    workflow = load_component_workflow("coding-lsp", action="install")
+    result = _run_subset(workflow, missing_before)
+    assert result["ok_count"] == len(missing_before), (
+        f"not all servers installed: {result['result'].outputs}"
     )
 
 
@@ -122,8 +137,7 @@ def test_lsp_binary_present_after_install(server: str) -> None:
 
 @pytest.mark.timeout(900)
 def test_detect_missing_empty_after_install() -> None:
-    deps = _get_lsp_deps()
-    missing = detect_missing(deps, ALL_SERVERS)
+    missing = detect_missing(_LSP_PROBES, ALL_SERVERS)
     assert missing == [], f"servers still missing after install: {missing}"
 
 
@@ -133,10 +147,10 @@ def test_detect_missing_empty_after_install() -> None:
 
 @pytest.mark.timeout(300)
 def test_uninstall_fast_lsp_servers() -> None:
-    deps = _get_lsp_deps()
-    result = uninstall_dependencies(deps, FAST_SERVERS)
-    assert _ok_count(result) == len(FAST_SERVERS), (
-        f"not all fast servers uninstalled: {[r for r in result['results'] if not r.get('ok')]}"
+    workflow = load_component_workflow("coding-lsp", action="uninstall")
+    result = _run_subset(workflow, FAST_SERVERS)
+    assert result["ok_count"] == len(FAST_SERVERS), (
+        f"not all fast servers uninstalled: {result['result'].outputs}"
     )
 
 
@@ -157,15 +171,13 @@ def test_rust_analyzer_unaffected_by_fast_uninstall() -> None:
 @pytest.mark.timeout(300)
 @pytest.mark.parametrize("server", FAST_SERVERS)
 def test_detect_missing_reports_uninstalled_fast_servers(server: str) -> None:
-    deps = _get_lsp_deps()
-    missing = detect_missing(deps, ALL_SERVERS)
+    missing = detect_missing(_LSP_PROBES, ALL_SERVERS)
     assert server in missing, f"{server} should be reported missing after uninstall"
 
 
 @pytest.mark.timeout(300)
 def test_detect_missing_does_not_report_rust_analyzer() -> None:
-    deps = _get_lsp_deps()
-    missing = detect_missing(deps, ALL_SERVERS)
+    missing = detect_missing(_LSP_PROBES, ALL_SERVERS)
     assert "rust-analyzer" not in missing, "rust-analyzer should not be reported missing"
 
 
@@ -175,15 +187,15 @@ def test_detect_missing_does_not_report_rust_analyzer() -> None:
 
 @pytest.mark.timeout(120)
 def test_pyright_reinstall_cycle() -> None:
-    deps = _get_lsp_deps()
+    install_wf = load_component_workflow("coding-lsp", action="install")
+    uninstall_wf = load_component_workflow("coding-lsp", action="uninstall")
 
-    reinstall = install_dependencies(deps, ["pyright"])
-    assert _ok_count(reinstall) == 1, f"pyright reinstall failed: {reinstall}"
+    reinstall = _run_subset(install_wf, ["pyright"])
+    assert reinstall["ok_count"] == 1, f"pyright reinstall failed: {reinstall['result'].outputs}"
     assert shutil.which(BINARY["pyright"]) is not None, "pyright binary absent after reinstall"
 
-    re_uninstall = uninstall_dependencies(deps, ["pyright"])
-    assert _ok_count(re_uninstall) == 1, f"pyright second uninstall failed: {re_uninstall}"
+    re_uninstall = _run_subset(uninstall_wf, ["pyright"])
+    assert re_uninstall["ok_count"] == 1, f"pyright uninstall failed: {re_uninstall['result'].outputs}"
     assert shutil.which(BINARY["pyright"]) is None, "pyright binary present after second uninstall"
 
-    missing_end = detect_missing(deps, ["pyright"])
-    assert "pyright" in missing_end, "pyright should be reported missing after cycle end"
+    assert "pyright" in detect_missing(_LSP_PROBES, ["pyright"])

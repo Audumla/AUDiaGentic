@@ -9,36 +9,43 @@ from audiagentic.components.optional.source_control.source_control_bootstrap imp
 )
 from audiagentic.foundation.dependencies import (
     detect_missing,
-    load_component_dependencies,
-)
-from audiagentic.foundation.dependencies import (
-    install_dependencies as _install,
-)
-from audiagentic.foundation.dependencies import (
-    uninstall_dependencies as _uninstall,
+    load_component_probes,
+    load_component_workflow,
 )
 
-_DEPS = load_component_dependencies("source-control")
+_PROBES = load_component_probes("source-control")
 
 
 def get_source_control_status() -> dict[str, Any]:
-    missing = detect_missing(_DEPS, SOURCE_CONTROL_DEPENDENCY_IDS)
+    missing = detect_missing(_PROBES, SOURCE_CONTROL_DEPENDENCY_IDS)
     return {**detect_availability(), "missing-dependencies": missing}
 
 
 async def install_dependencies(names: list[str], *, ctx, run_with_output) -> dict[str, Any]:
+    workflow = load_component_workflow("source-control", action="install")
+    filtered = workflow.steps if not names else tuple(
+        s for s in workflow.steps if s.id in names
+    )
+    from audiagentic.foundation.workflow.invocation.steps import SequenceStep
+    seq = SequenceStep(id="install", steps=filtered, fail_fast=False)
     return await run_with_output(
         ctx=ctx,
         logger="source-control.dependencies.install",
         heartbeat_message="Dependency install still running...",
-        work=lambda output: _install(_DEPS, names, on_progress=output),
+        work=lambda _: seq.run({}),
     )
 
 
 async def uninstall_dependencies(names: list[str], *, ctx, run_with_output) -> dict[str, Any]:
+    workflow = load_component_workflow("source-control", action="uninstall")
+    filtered = workflow.steps if not names else tuple(
+        s for s in workflow.steps if s.id in names
+    )
+    from audiagentic.foundation.workflow.invocation.steps import SequenceStep
+    seq = SequenceStep(id="uninstall", steps=filtered, fail_fast=False)
     return await run_with_output(
         ctx=ctx,
         logger="source-control.dependencies.uninstall",
         heartbeat_message="Dependency uninstall still running...",
-        work=lambda output: _uninstall(_DEPS, names, on_progress=output),
+        work=lambda _: seq.run({}),
     )
