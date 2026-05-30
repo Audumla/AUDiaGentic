@@ -23,6 +23,13 @@ def _expand(template: list[str], package: str, priv: bool) -> tuple[str, ...]:
     return (*prefix, *(s.replace("{package}", package) for s in template))
 
 
+def has_action(toolchain: str, action: str) -> bool:
+    tc = _toolchains()[toolchain]
+    if action == "install":
+        return "install" in tc or "install_steps" in tc
+    return action in tc
+
+
 def build_step(toolchain: str, action: str, package: str, *extra: str) -> ShellStep | SequenceStep:
     tc = _toolchains()[toolchain]
     priv = tc.get("privilege", False)

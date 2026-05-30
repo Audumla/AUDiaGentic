@@ -18,9 +18,8 @@ from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
     discover_language_servers,
     write_lsp_config,
 )
-from audiagentic.components.optional.coding_lsp.lsp_dependencies import get_lsp_dependencies
 from audiagentic.foundation.components.ids import COMPONENT_CODING_LSP
-from audiagentic.foundation.dependencies import detect_missing
+from audiagentic.foundation.dependencies import detect_missing, load_component_dependencies
 from audiagentic.foundation.event import get_bus
 from audiagentic.runtime.lifecycle.observers import (
     COMPONENT_DISABLED,
@@ -33,8 +32,8 @@ _REGISTERED = False
 
 _TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 
-# Dependency IDs used by this component's status hook
-LSP_DEPENDENCY_IDS = list(get_lsp_dependencies().keys())
+_LSP_DEPS = load_component_dependencies("coding-lsp")
+LSP_DEPENDENCY_IDS = list(_LSP_DEPS.keys())
 
 
 def _on_lifecycle_event(event_type: str, payload: dict[str, Any], metadata: dict[str, Any]) -> None:
@@ -117,7 +116,7 @@ def status_payload(project_root: Path | None = None) -> dict[str, Any]:
     so the component installer can prompt the user to install them.
     Only reports dependencies for languages configured or detected in the project.
     """
-    deps = get_lsp_dependencies()
+    deps = _LSP_DEPS
     active_dep_ids = _active_dependency_ids(project_root)
     if not active_dep_ids:
         return {}
