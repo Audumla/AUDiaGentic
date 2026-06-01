@@ -8,15 +8,14 @@ from audiagentic.components.optional.providers.adapters.mcp_json import (
     remove_mcp_json,
     write_mcp_json,
 )
-from audiagentic.foundation.toolchains import npm
 
 from ...descriptors.base import (
     AgentFile,
-    CliInstallRecipe,
     McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
     VsCodeExtension,
+    cli_recipe,
 )
 from ...descriptors.registry import register
 
@@ -68,14 +67,7 @@ register(ProviderDescriptor(
     description="GitHub's AI coding assistant. Inline completions, chat, and multi-file edits across VS Code and JetBrains.",
     url="https://github.com/features/copilot",
     cli_probe=["copilot", "--version"],
-    cli_install=CliInstallRecipe(
-        package_manager="npm",
-        package_name="@github/copilot",
-        executable="copilot",
-        install=npm.install("@github/copilot"),
-        uninstall=npm.uninstall("@github/copilot"),
-        probe_fn=_copilot_probe,
-    ),
+    cli_install=cli_recipe("npm", "@github/copilot", executable="copilot", probe_fn=_copilot_probe),
     vscode_extensions=(
         VsCodeExtension("GitHub.copilot", "GitHub Copilot"),
         VsCodeExtension("GitHub.copilot-chat", "GitHub Copilot Chat"),

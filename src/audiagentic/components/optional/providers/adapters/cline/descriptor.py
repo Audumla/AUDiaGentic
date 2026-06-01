@@ -3,15 +3,14 @@ from audiagentic.components.optional.providers.adapters.mcp_json import (
     remove_mcp_json,
     write_mcp_json,
 )
-from audiagentic.foundation.toolchains import npm
 
 from ...descriptors.base import (
     AgentFile,
-    CliInstallRecipe,
     McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
     VsCodeExtension,
+    cli_recipe,
 )
 from ...descriptors.registry import register
 
@@ -21,13 +20,7 @@ register(ProviderDescriptor(
     description="Autonomous coding agent VS Code extension. Supports any model via OpenRouter, Anthropic, OpenAI and others.",
     url="https://cline.bot",
     cli_probe=["cline", "--version"],
-    cli_install=CliInstallRecipe(
-        package_manager="npm",
-        package_name="cline",
-        executable="cline",
-        install=npm.install("cline"),
-        uninstall=npm.uninstall("cline"),
-    ),
+    cli_install=cli_recipe("npm", "cline", executable="cline"),
     vscode_extensions=(
         VsCodeExtension("saoudrizwan.claude-dev", "Cline"),
     ),

@@ -9,15 +9,14 @@ from audiagentic.components.optional.providers.adapters.mcp_json import (
     remove_mcp_json,
     write_mcp_json,
 )
-from audiagentic.foundation.toolchains import npm
 
 from ...descriptors.base import (
     AgentFile,
-    CliInstallRecipe,
     McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
     VsCodeExtension,
+    cli_recipe,
 )
 from ...descriptors.registry import register
 
@@ -91,13 +90,7 @@ register(ProviderDescriptor(
     description="Anthropic's Claude Code CLI. Agentic coding assistant with deep codebase understanding and MCP tool use.",
     url="https://claude.ai/code",
     cli_probe=["claude", "--version"],
-    cli_install=CliInstallRecipe(
-        package_manager="npm",
-        package_name="@anthropic-ai/claude-code",
-        executable="claude",
-        install=npm.install("@anthropic-ai/claude-code"),
-        uninstall=npm.uninstall("@anthropic-ai/claude-code"),
-    ),
+    cli_install=cli_recipe("npm", "@anthropic-ai/claude-code", executable="claude"),
     vscode_extensions=(
         VsCodeExtension("anthropic.claude-code", "Claude Code"),
     ),
