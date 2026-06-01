@@ -32,13 +32,7 @@ from audiagentic.components.optional.providers.descriptors.registry import (
     all_descriptors,
     get_descriptor,
 )
-from audiagentic.foundation.toolchains import (
-    brew,
-    gh_extension,
-    npm,
-    uv,
-    vscode,
-)
+from audiagentic.foundation.toolchains.loader import build_step
 from audiagentic.foundation.workflow.invocation.steps import CallableStep, ShellStep
 
 pytestmark = [
@@ -122,62 +116,62 @@ class TestDescriptorRegistry:
 # ---------------------------------------------------------------------------
 
 class TestToolchainFactories:
-    """Verify toolchain factories produce valid ShellStep instances."""
+    """Verify build_step produces correct ShellStep commands for each toolchain."""
 
-    def test_npm_install_recipe(self) -> None:
-        recipe = npm.install("test-package")
-        assert isinstance(recipe, ShellStep)
-        assert recipe.command == ("npm", "install", "-g", "test-package")
+    def test_npm_install(self) -> None:
+        step = build_step("npm", "install", "test-package")
+        assert isinstance(step, ShellStep)
+        assert step.command == ("npm", "install", "-g", "test-package")
 
-    def test_npm_uninstall_recipe(self) -> None:
-        recipe = npm.uninstall("test-package")
-        assert isinstance(recipe, ShellStep)
-        assert recipe.command == ("npm", "uninstall", "-g", "test-package")
+    def test_npm_uninstall(self) -> None:
+        step = build_step("npm", "uninstall", "test-package")
+        assert isinstance(step, ShellStep)
+        assert step.command == ("npm", "uninstall", "-g", "test-package")
 
-    def test_brew_install_recipe(self) -> None:
-        recipe = brew.install("test-package")
-        assert isinstance(recipe, ShellStep)
-        assert recipe.command == ("brew", "install", "test-package")
+    def test_brew_install(self) -> None:
+        step = build_step("brew", "install", "test-package")
+        assert isinstance(step, ShellStep)
+        assert step.command == ("brew", "install", "test-package")
 
-    def test_brew_uninstall_recipe(self) -> None:
-        recipe = brew.uninstall("test-package")
-        assert isinstance(recipe, ShellStep)
-        assert recipe.command == ("brew", "uninstall", "test-package")
+    def test_brew_uninstall(self) -> None:
+        step = build_step("brew", "uninstall", "test-package")
+        assert isinstance(step, ShellStep)
+        assert step.command == ("brew", "uninstall", "test-package")
 
-    def test_uv_install_recipe(self) -> None:
-        recipe = uv.install("test-package")
-        assert isinstance(recipe, ShellStep)
-        assert recipe.command == ("uv", "tool", "install", "test-package")
+    def test_uv_install(self) -> None:
+        step = build_step("uv", "install", "test-package")
+        assert isinstance(step, ShellStep)
+        assert step.command == ("uv", "tool", "install", "test-package")
 
-    def test_uv_install_recipe_with_pre_flags(self) -> None:
-        recipe = uv.install("test-package", "--python", "3.12")
-        assert isinstance(recipe, ShellStep)
-        assert recipe.command == ("uv", "tool", "install", "--python", "3.12", "test-package")
+    def test_uv_install_with_extra_flags(self) -> None:
+        step = build_step("uv", "install", "test-package", "--python", "3.12")
+        assert isinstance(step, ShellStep)
+        assert step.command == ("uv", "tool", "install", "test-package", "--python", "3.12")
 
-    def test_uv_uninstall_recipe(self) -> None:
-        recipe = uv.uninstall("test-package")
-        assert isinstance(recipe, ShellStep)
-        assert recipe.command == ("uv", "tool", "uninstall", "test-package")
+    def test_uv_uninstall(self) -> None:
+        step = build_step("uv", "uninstall", "test-package")
+        assert isinstance(step, ShellStep)
+        assert step.command == ("uv", "tool", "uninstall", "test-package")
 
     def test_gh_extension_install(self) -> None:
-        recipe = gh_extension.install("owner/repo")
-        assert isinstance(recipe, ShellStep)
-        assert recipe.command == ("gh", "extension", "install", "owner/repo")
+        step = build_step("gh_extension", "install", "owner/repo")
+        assert isinstance(step, ShellStep)
+        assert step.command == ("gh", "extension", "install", "owner/repo")
 
     def test_gh_extension_remove(self) -> None:
-        recipe = gh_extension.remove("owner/repo")
-        assert isinstance(recipe, ShellStep)
-        assert recipe.command == ("gh", "extension", "remove", "owner/repo")
+        step = build_step("gh_extension", "remove", "owner/repo")
+        assert isinstance(step, ShellStep)
+        assert step.command == ("gh", "extension", "remove", "owner/repo")
 
     def test_vscode_install(self) -> None:
-        recipe = vscode.install("publisher.extension")
-        assert isinstance(recipe, ShellStep)
-        assert recipe.command == ("code", "--install-extension", "publisher.extension", "--force")
+        step = build_step("vscode", "install", "publisher.extension")
+        assert isinstance(step, ShellStep)
+        assert step.command == ("code", "--install-extension", "publisher.extension", "--force")
 
     def test_vscode_uninstall(self) -> None:
-        recipe = vscode.uninstall("publisher.extension")
-        assert isinstance(recipe, ShellStep)
-        assert recipe.command == ("code", "--uninstall-extension", "publisher.extension")
+        step = build_step("vscode", "uninstall", "publisher.extension")
+        assert isinstance(step, ShellStep)
+        assert step.command == ("code", "--uninstall-extension", "publisher.extension")
 
 
 # ---------------------------------------------------------------------------
