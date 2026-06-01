@@ -8,14 +8,13 @@ from audiagentic.components.optional.providers.adapters.mcp_json import (
     remove_mcp_json,
     write_mcp_json,
 )
-from audiagentic.foundation.toolchains import npm
 
 from ...descriptors.base import (
-    CliInstallRecipe,
     McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
     VsCodeExtension,
+    cli_recipe,
 )
 from ...descriptors.registry import register
 
@@ -67,14 +66,7 @@ register(ProviderDescriptor(
     description="Alibaba Cloud's Qwen Code CLI. Open-source coding agent built on the Qwen model family.",
     url="https://github.com/QwenLM/qwen-code",
     cli_probe=["qwen", "--version"],
-    cli_install=CliInstallRecipe(
-        package_manager="npm",
-        package_name="@qwen-code/qwen-code",
-        executable="qwen",
-        install=npm.install("@qwen-code/qwen-code"),
-        uninstall=npm.uninstall("@qwen-code/qwen-code"),
-        probe_fn=_qwen_probe,
-    ),
+    cli_install=cli_recipe("npm", "@qwen-code/qwen-code", executable="qwen", probe_fn=_qwen_probe),
     vscode_extensions=(
         VsCodeExtension("qwenlm.qwen-code-vscode-ide-companion", "Qwen Code Companion"),
     ),
