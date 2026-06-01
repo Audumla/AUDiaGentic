@@ -19,6 +19,34 @@ from ..descriptors.registry import get_descriptor
 _RESOURCE_KIND = "provider-cli"
 
 
+class _ProviderCliConfig:
+    """Minimal workflow config adapter — makes StateMachine work with the hardcoded state tables."""
+
+    def workflow_for(self, kind: str, wf_name: str | None) -> dict[str, Any]:
+        return _PROVIDER_CLI_STATES
+
+    def initial_state(self, kind: str, wf_name: str | None) -> str:
+        return _PROVIDER_CLI_STATES["initial"]
+
+    def lifecycle_action_for_transition(self, kind: str, old: str, new: str, wf_name: str | None):
+        return None, None
+
+    def state_in_set(self, kind: str, state: str | None, set_name: str, wf_name: str | None) -> bool:
+        return state in _PROVIDER_CLI_SETS.get(set_name, set())
+
+    def reference_fields(self, kind: str) -> list[str]:
+        return []
+
+    def reference_field_targets(self, field: str) -> list[str]:
+        return []
+
+    def lifecycle_action(self, name: str) -> dict[str, Any]:
+        return {}
+
+
+_PROVIDER_CLI_CONFIG = _ProviderCliConfig()
+
+
 def supports_provider_cli_workflow(provider_id: str) -> bool:
     descriptor = get_descriptor(provider_id)
     return descriptor is not None and descriptor.cli_install is not None
@@ -27,6 +55,7 @@ def supports_provider_cli_workflow(provider_id: str) -> bool:
 class ProviderCliWorkflowContext:
     def __init__(self, provider_id: str, state: str) -> None:
         self.root = Path.cwd()
+        self.config = _PROVIDER_CLI_CONFIG
         self.events: list[dict[str, Any]] = []
         self.saved: list[dict[str, Any]] = []
         self._item = ItemView(
