@@ -118,7 +118,7 @@ def provider_cli_plan(provider_id: str, action: str) -> dict[str, Any]:
         )
     workflow_result = workflow_provider_cli_plan(provider_id, action=action, descriptor=descriptor)
     inv = _invocation_result_from_workflow(workflow_result, step_id=action)
-    return _result(provider_id=provider_id, action=action, status=inv.status, recipe=recipe, invocation=inv)
+    return _result(provider_id=provider_id, action=action, status=inv["status"], recipe=recipe, invocation=inv)
 
 
 def install_provider_cli(

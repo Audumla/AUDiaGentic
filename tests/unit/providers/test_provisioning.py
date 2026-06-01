@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 from audiagentic.components.optional.providers.descriptors.registry import all_descriptors
@@ -75,7 +74,7 @@ def test_codex_provider_cli_install_uses_workflow(monkeypatch) -> None:
                 },
             )
 
-    monkeypatch.setattr(provider_workflow, "_step_for_action", lambda *a, **kw: FakeStep())
+    monkeypatch.setattr(provider_workflow, "_build_step", lambda *a, **kw: FakeStep())
     monkeypatch.setattr(
         lifecycle,
         "_probe_provider_cli_after_install",
@@ -120,7 +119,7 @@ def test_codex_provider_cli_uninstall_uses_workflow(monkeypatch) -> None:
                 },
             )
 
-    monkeypatch.setattr(provider_workflow, "_step_for_action", lambda *a, **kw: FakeStep())
+    monkeypatch.setattr(provider_workflow, "_build_step", lambda *a, **kw: FakeStep())
     monkeypatch.setattr(
         lifecycle,
         "_probe_provider_cli",
@@ -150,15 +149,21 @@ def test_provider_cli_uninstall_dry_run_does_not_touch_host() -> None:
 
 
 def test_pi_provider_cli_install_uses_harness_installer(monkeypatch) -> None:
-    import audiagentic.components.optional.providers.adapters.pi.descriptor as pi_descriptor
     import audiagentic.components.optional.providers.services.lifecycle as lifecycle
+    import audiagentic.components.optional.providers.workflow.provider_cli as provider_workflow
+    from audiagentic.foundation.workflow.invocation import StepResult
 
-    monkeypatch.setattr(
-        pi_descriptor,
-        "_pi_install",
-        lambda project_root=None: subprocess.CompletedProcess(["audiagentic", "install"], 0, "", ""),
-    )
-    monkeypatch.setattr(lifecycle, "_probe_provider_cli",
+    class FakeCallableStep:
+        id = "install"
+
+        def plan(self, context):
+            return None
+
+        def run(self, context, answers=None):
+            return StepResult(status="ok", outputs={})
+
+    monkeypatch.setattr(provider_workflow, "_build_step", lambda *a, **kw: FakeCallableStep())
+    monkeypatch.setattr(lifecycle, "_probe_provider_cli_after_install",
         lambda descriptor: {"available": True, "command": ["pi", "--version"],
                             "executable": "/tmp/pi", "returncode": 0, "stdout": "0.74.0", "stderr": ""})
     result = install_provider_cli("pi")
@@ -167,14 +172,20 @@ def test_pi_provider_cli_install_uses_harness_installer(monkeypatch) -> None:
 
 
 def test_pi_provider_cli_uninstall_uses_harness_uninstaller(monkeypatch) -> None:
-    import audiagentic.components.optional.providers.adapters.pi.descriptor as pi_descriptor
     import audiagentic.components.optional.providers.services.lifecycle as lifecycle
+    import audiagentic.components.optional.providers.workflow.provider_cli as provider_workflow
+    from audiagentic.foundation.workflow.invocation import StepResult
 
-    monkeypatch.setattr(
-        pi_descriptor,
-        "_pi_uninstall",
-        lambda project_root=None: subprocess.CompletedProcess(["audiagentic", "uninstall"], 0, "", ""),
-    )
+    class FakeCallableStep:
+        id = "uninstall"
+
+        def plan(self, context):
+            return None
+
+        def run(self, context, answers=None):
+            return StepResult(status="ok", outputs={})
+
+    monkeypatch.setattr(provider_workflow, "_build_step", lambda *a, **kw: FakeCallableStep())
     monkeypatch.setattr(lifecycle, "_probe_provider_cli",
         lambda descriptor: {"available": False, "command": ["pi", "--version"],
                             "executable": None, "returncode": None, "stdout": "", "stderr": "command not found"})
@@ -188,7 +199,7 @@ def test_all_provider_cli_dry_run_covers_installable_providers() -> None:
     providers = {entry["provider-id"]: entry for entry in result["providers"]}
 
     assert result["ok"] is True
-    assert providers["aider"]["package-manager"] == "uv-tool"
+    assert providers["aider"]["package-manager"] == "uv"
     assert providers["codex"]["package-name"] == "@openai/codex"
     assert providers["claude"]["package-name"] == "@anthropic-ai/claude-code"
     assert providers["cline"]["package-name"] == "cline"
@@ -197,7 +208,7 @@ def test_all_provider_cli_dry_run_covers_installable_providers() -> None:
     assert providers["copilot"]["package-manager"] == "npm"
     assert providers["gemini"]["package-name"] == "@google/gemini-cli"
     assert providers["goose"]["package-manager"] == "script"
-    assert providers["openhands"]["package-manager"] == "uv-tool"
+    assert providers["openhands"]["package-manager"] == "uv"
     assert providers["opencode"]["package-name"] == "opencode-ai"
     assert providers["pi"]["package-manager"] == "pi-harness"
     assert providers["qwen"]["package-name"] == "@qwen-code/qwen-code"

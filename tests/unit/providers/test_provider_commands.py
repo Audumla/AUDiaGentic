@@ -27,9 +27,9 @@ PROVIDER_COMMANDS = [
     ("qwen",      "install",   ["npm", "install",   "-g", "@qwen-code/qwen-code"]),
     ("qwen",      "uninstall", ["npm", "uninstall",  "-g", "@qwen-code/qwen-code"]),
     # uv-tool providers
-    ("aider",     "install",   ["uv", "tool", "install", "--force", "--python", "python3.12", "--with", "pip", "aider-chat@latest"]),
+    ("aider",     "install",   ["uv", "tool", "install", "aider-chat@latest", "--force", "--python", "python3.12", "--with", "pip"]),
     ("aider",     "uninstall", ["uv", "tool", "uninstall", "aider-chat"]),
-    ("openhands", "install",   ["uv", "tool", "install", "--python", "3.12", "openhands"]),
+    ("openhands", "install",   ["uv", "tool", "install", "openhands", "--python", "3.12"]),
     ("openhands", "uninstall", ["uv", "tool", "uninstall", "openhands"]),
     # brew providers
     ("goose",     "install",   ["bash", "-lc", "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash"]),

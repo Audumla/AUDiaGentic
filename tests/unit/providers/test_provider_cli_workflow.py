@@ -10,43 +10,27 @@ from audiagentic.components.optional.providers.workflow import provider_cli as w
 from audiagentic.foundation.workflow.invocation import StepResult
 
 
-def test_workflow_config_has_valid_provider_cli_resource_contract() -> None:
-    cfg = workflow._load_provider_cli_config()
-    resources = cfg.get("resources", {})
-    assert resources, "provider CLI workflow must define at least one resource"
+def test_workflow_state_tables_are_consistent() -> None:
+    states = workflow._PROVIDER_CLI_STATES
+    sets = workflow._PROVIDER_CLI_SETS
+    all_states = set(states["values"])
 
-    for resource_id, resource in resources.items():
-        assert resource_id.startswith("provider-cli.")
-        assert isinstance(resource.get("extends"), str)
-        assert isinstance(resource.get("recipes"), dict) and resource["recipes"]
-        assert isinstance(resource.get("actions"), dict) and resource["actions"]
-        for action_name, action in resource["actions"].items():
-            recipe_name = action.get("recipe")
-            assert recipe_name in resource["recipes"], (
-                f"{resource_id}.{action_name} points to missing recipe '{recipe_name}'"
+    assert states["initial"] in all_states, "initial state must be in values"
+    for from_state, to_states in states["transitions"].items():
+        assert from_state in all_states, f"transition source {from_state!r} not in values"
+        for to in to_states:
+            assert to in all_states, f"transition target {to!r} not in values"
+    for set_name, members in sets.items():
+        for s in members:
+            assert s in all_states, f"set {set_name!r} contains unknown state {s!r}"
+
+
+def test_all_installable_providers_support_workflow() -> None:
+    for provider_id, descriptor in all_descriptors().items():
+        if descriptor.cli_install is not None:
+            assert workflow.supports_provider_cli_workflow(provider_id), (
+                f"{provider_id} has cli_install but supports_provider_cli_workflow returned False"
             )
-            for field in (
-                "start_state",
-                "success_state",
-                "failure_state",
-                "legacy_success_status",
-                "initial_state",
-            ):
-                assert isinstance(action.get(field), str) and action[field]
-            assert isinstance(action.get("probe_available"), bool)
-
-
-def test_all_installable_providers_use_workflow() -> None:
-    installable = {
-        provider_id
-        for provider_id, descriptor in all_descriptors().items()
-        if descriptor.cli_install is not None
-    }
-    workflow_backed = {
-        resource_id.removeprefix("provider-cli.")
-        for resource_id in workflow._load_provider_cli_config().get("resources", {})
-    }
-    assert workflow_backed == installable
 
 
 def test_workflow_plan_renders_install_command_from_yaml() -> None:
@@ -95,7 +79,7 @@ def test_workflow_run_install_emits_state_transitions(monkeypatch, tmp_path: Pat
                 outputs={"command": ["npm", "install", "-g", "@openai/codex"], "returncode": 0},
             )
 
-    monkeypatch.setattr(workflow, "_step_for_action", lambda *a, **kw: FakeStep())
+    monkeypatch.setattr(workflow, "_build_step", lambda *a, **kw: FakeStep())
 
     result, probe, status, events = workflow.workflow_provider_cli_run(
         "codex",
@@ -131,7 +115,7 @@ def test_workflow_run_install_failure_transitions_to_failed(monkeypatch, tmp_pat
                 outputs={"command": ["npm", "install", "-g", "@openai/codex"], "returncode": 1},
             )
 
-    monkeypatch.setattr(workflow, "_step_for_action", lambda *a, **kw: FakeStep())
+    monkeypatch.setattr(workflow, "_build_step", lambda *a, **kw: FakeStep())
 
     result, probe, status, events = workflow.workflow_provider_cli_run(
         "codex",
