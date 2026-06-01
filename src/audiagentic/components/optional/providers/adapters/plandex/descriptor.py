@@ -1,6 +1,4 @@
-from audiagentic.foundation.toolchains import brew
-
-from ...descriptors.base import AgentFile, CliInstallRecipe, ProviderDescriptor, ProviderPermissions
+from ...descriptors.base import AgentFile, ProviderDescriptor, ProviderPermissions, cli_recipe
 from ...descriptors.registry import register
 
 register(ProviderDescriptor(
@@ -9,13 +7,7 @@ register(ProviderDescriptor(
     description="Open-source AI coding agent for large, complex tasks. Manages long-running plans across many files with version control and sandboxed changes.",
     url="https://plandex.ai",
     cli_probe=["plandex", "--version"],
-    cli_install=CliInstallRecipe(
-        package_manager="brew",
-        package_name="plandex-ai/tap/plandex",
-        executable="plandex",
-        install=brew.install("plandex-ai/tap/plandex"),
-        uninstall=brew.uninstall("plandex"),
-    ),
+    cli_install=cli_recipe("brew", "plandex-ai/tap/plandex", executable="plandex", uninstall_package="plandex"),
     vscode_extensions=(),
     permissions=ProviderPermissions(
         can_write_files=True,

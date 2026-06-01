@@ -53,10 +53,8 @@ class ProviderPermissions:
 class CliInstallRecipe:
     """How AUDiaGentic can provision a provider CLI.
 
-    Standard package managers use toolchain factories from
-    foundation.toolchains (npm, uv, brew, gh_extension).
-
-    Custom provisioners (e.g. pi-harness) use CallableStep.
+    Use cli_recipe() for standard toolchain installs (npm, uv, brew, vscode).
+    Custom provisioners (e.g. pi-harness, raw shell scripts) pass steps directly.
 
     probe_fn is kept as a callable returning a structured availability dict
     because its semantics differ from install/uninstall (read-only, typed result).
@@ -68,6 +66,28 @@ class CliInstallRecipe:
     uninstall: ShellStep | SequenceStep | CallableStep
     uninstall_name: str | None = None
     probe_fn: Callable[[Any], dict[str, Any] | None] | None = None
+
+
+def cli_recipe(
+    toolchain: str,
+    package: str,
+    *extra: str,
+    executable: str,
+    uninstall_package: str | None = None,
+    **kwargs: Any,
+) -> CliInstallRecipe:
+    """Build a CliInstallRecipe from a toolchain name and package, without importing toolchains."""
+    from audiagentic.foundation.toolchains.loader import build_step, has_action
+    un_pkg = uninstall_package or package
+    un_action = "uninstall" if has_action(toolchain, "uninstall") else "remove"
+    return CliInstallRecipe(
+        package_manager=toolchain,
+        package_name=package,
+        executable=executable,
+        install=build_step(toolchain, "install", package, *extra),
+        uninstall=build_step(toolchain, un_action, un_pkg),
+        **kwargs,
+    )
 
 
 @dataclass(frozen=True)

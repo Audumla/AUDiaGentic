@@ -3,9 +3,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 
-from audiagentic.foundation.toolchains import uv
-
-from ...descriptors.base import AgentFile, CliInstallRecipe, ProviderDescriptor, ProviderPermissions
+from ...descriptors.base import AgentFile, ProviderDescriptor, ProviderPermissions, cli_recipe
 from ...descriptors.registry import register
 
 
@@ -47,14 +45,7 @@ register(ProviderDescriptor(
     description="Open-source autonomous AI agent (formerly OpenDevin). Runs tasks in sandboxed Docker containers with full shell, browser, and file access.",
     url="https://www.all-hands.dev",
     cli_probe=["openhands", "--version"],
-    cli_install=CliInstallRecipe(
-        package_manager="uv-tool",
-        package_name="openhands",
-        executable="openhands",
-        install=uv.install("openhands", "--python", "3.12"),
-        uninstall=uv.uninstall("openhands"),
-        probe_fn=_openhands_probe,
-    ),
+    cli_install=cli_recipe("uv", "openhands", "--python", "3.12", executable="openhands", probe_fn=_openhands_probe),
     vscode_extensions=(),
     permissions=ProviderPermissions(
         can_write_files=True,

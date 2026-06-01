@@ -1,14 +1,12 @@
 import shutil
 
-from audiagentic.foundation.toolchains import npm
-
 from ...descriptors.base import (
     AgentFile,
-    CliInstallRecipe,
     McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
     VsCodeExtension,
+    cli_recipe,
 )
 from ...descriptors.registry import register
 from .mcp_format import read_continue_json, remove_continue_json, write_continue_json
@@ -41,14 +39,7 @@ register(ProviderDescriptor(
     description="Open-source AI code assistant for VS Code and JetBrains. Chat, autocomplete, and edit with any model.",
     url="https://continue.dev",
     cli_probe=["cn", "--version"],
-    cli_install=CliInstallRecipe(
-        package_manager="npm",
-        package_name="@continuedev/cli",
-        executable="cn",
-        install=npm.install("@continuedev/cli"),
-        uninstall=npm.uninstall("@continuedev/cli"),
-        probe_fn=_continue_probe,
-    ),
+    cli_install=cli_recipe("npm", "@continuedev/cli", executable="cn", probe_fn=_continue_probe),
     vscode_extensions=(
         VsCodeExtension("Continue.continue", "Continue"),
     ),
