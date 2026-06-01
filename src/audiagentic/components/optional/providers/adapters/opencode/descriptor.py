@@ -11,15 +11,14 @@ from audiagentic.components.optional.providers.adapters.mcp_opencode import (
     remove_opencode_mcp,
     write_opencode_mcp,
 )
-from audiagentic.foundation.toolchains import npm
 
 from ...descriptors.base import (
     AgentFile,
-    CliInstallRecipe,
     McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
     VsCodeExtension,
+    cli_recipe,
 )
 from ...descriptors.registry import register
 
@@ -115,14 +114,7 @@ register(ProviderDescriptor(
     description="Terminal-based AI coding assistant. Supports multiple LLM providers via a unified CLI.",
     url="https://opencode.ai",
     cli_probe=["opencode", "--version"],
-    cli_install=CliInstallRecipe(
-        package_manager="npm",
-        package_name="opencode-ai",
-        executable="opencode",
-        install=npm.install("opencode-ai"),
-        uninstall=npm.uninstall("opencode-ai"),
-        probe_fn=_opencode_probe,
-    ),
+    cli_install=cli_recipe("npm", "opencode-ai", executable="opencode", probe_fn=_opencode_probe),
     vscode_extensions=(
         VsCodeExtension("sst-dev.opencode", "OpenCode"),
     ),

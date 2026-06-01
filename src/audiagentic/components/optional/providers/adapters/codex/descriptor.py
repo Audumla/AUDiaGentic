@@ -3,15 +3,14 @@ from audiagentic.components.optional.providers.adapters.mcp_json import (
     remove_mcp_json,
     write_mcp_json,
 )
-from audiagentic.foundation.toolchains import npm
 
 from ...descriptors.base import (
     AgentFile,
-    CliInstallRecipe,
     McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
     VsCodeExtension,
+    cli_recipe,
 )
 from ...descriptors.registry import register
 
@@ -21,13 +20,7 @@ register(ProviderDescriptor(
     description="OpenAI's CLI coding agent. Runs tasks autonomously in a sandboxed environment.",
     url="https://github.com/openai/codex",
     cli_probe=["codex", "--version"],
-    cli_install=CliInstallRecipe(
-        package_manager="npm",
-        package_name="@openai/codex",
-        executable="codex",
-        install=npm.install("@openai/codex"),
-        uninstall=npm.uninstall("@openai/codex"),
-    ),
+    cli_install=cli_recipe("npm", "@openai/codex", executable="codex"),
     vscode_extensions=(
         VsCodeExtension("openai.chatgpt", "ChatGPT / OpenAI"),
     ),

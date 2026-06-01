@@ -6,15 +6,14 @@ from audiagentic.components.optional.providers.adapters.mcp_json import (
     remove_mcp_json,
     write_mcp_json,
 )
-from audiagentic.foundation.toolchains import vscode
 
 from ...descriptors.base import (
     AgentFile,
-    CliInstallRecipe,
     McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
     VsCodeExtension,
+    cli_recipe,
 )
 from ...descriptors.registry import register
 
@@ -56,14 +55,7 @@ register(ProviderDescriptor(
     url="https://roocode.com",
     access_mode="env",
     cli_probe=["code", "--list-extensions"],
-    cli_install=CliInstallRecipe(
-        package_manager="vscode",
-        package_name=_EXTENSION_ID,
-        executable="code",
-        install=vscode.install(_EXTENSION_ID),
-        uninstall=vscode.uninstall(_EXTENSION_ID),
-        probe_fn=_roo_probe,
-    ),
+    cli_install=cli_recipe("vscode", _EXTENSION_ID, executable="code", probe_fn=_roo_probe),
     vscode_extensions=(
         VsCodeExtension(_EXTENSION_ID, "Roo Code"),
     ),
