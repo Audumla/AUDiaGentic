@@ -19,9 +19,7 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from collections.abc import Callable
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -30,14 +28,14 @@ from audiagentic.components.optional.agent_jobs.state_machine import (
     transition_and_persist,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.io import atomic_write_json
+from audiagentic.foundation.time import now_iso_z
 from audiagentic.runtime.state import jobs_store as _default_store
 
 # Type alias for store interface
 JobStoreInterface = Callable[[Path, str], dict[str, Any]]
 
 
-def _now_timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _control_path(project_root: Path, job_id: str) -> Path:
@@ -46,21 +44,6 @@ def _control_path(project_root: Path, job_id: str) -> Path:
 
 def _control_events_path(project_root: Path, job_id: str) -> Path:
     return project_root / ".audiagentic" / "runtime" / "jobs" / job_id / "control-events.ndjson"
-
-
-def _write_atomic(path: Path, payload: dict[str, Any]) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(prefix=path.stem + ".", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2, sort_keys=True)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp_path, path)
-    finally:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-    return path
 
 
 def _append_event(path: Path, payload: dict[str, Any]) -> None:
@@ -82,8 +65,8 @@ def build_job_control_request(
 ) -> dict[str, Any]:
     if requested_action not in {"cancel", "stop", "kill"}:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-040",
-            kind="validation",
+            code="VAL-CONTROL-001",
+            kind="agent-jobs",
             message="unsupported job control action",
             details={"requested-action": requested_action},
         )
@@ -93,7 +76,7 @@ def build_job_control_request(
         "project-id": project_id,
         "requested-action": requested_action,
         "requested-by": requested_by,
-        "requested-at": requested_at or _now_timestamp(),
+        "requested-at": requested_at or now_iso_z(),
         "reason": reason,
         "result": "pending",
         "applied-at": None,
@@ -109,15 +92,17 @@ def read_job_control(project_root: Path, job_id: str) -> dict[str, Any] | None:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
         raise AudiaGenticError(
-            code="JOB-IO-004",
-            kind="io",
+            code="IO-CONTROL-001",
+            kind="agent-jobs",
             message="failed to read job control record",
             details={"job-id": job_id, "error": str(exc)},
         ) from exc
 
 
 def write_job_control(project_root: Path, payload: dict[str, Any]) -> Path:
-    return _write_atomic(_control_path(project_root, payload["job-id"]), payload)
+    path = _control_path(project_root, payload["job-id"])
+    atomic_write_json(path, payload)
+    return path
 
 
 def request_job_control(
@@ -149,7 +134,7 @@ def request_job_control(
     if job["state"] in TERMINAL_STATES:
         payload = dict(payload)
         payload["result"] = "ignored"
-        payload["applied-at"] = _now_timestamp()
+        payload["applied-at"] = now_iso_z()
         write_job_control(project_root, payload)
         _append_event(
             _control_events_path(project_root, payload["job-id"]),
@@ -170,7 +155,7 @@ def request_job_control(
     if job["state"] in {"ready", "awaiting-approval"}:
         transition_and_persist(project_root, payload["job-id"], "cancelled")
         payload["result"] = "applied"
-        payload["applied-at"] = _now_timestamp()
+        payload["applied-at"] = now_iso_z()
     else:
         payload["result"] = "pending"
         payload["applied-at"] = None
@@ -228,7 +213,7 @@ def apply_pending_job_control(
     job = store.read_job_record(project_root, job_id)
     if job["state"] in TERMINAL_STATES:
         control["result"] = "ignored"
-        control["applied-at"] = _now_timestamp()
+        control["applied-at"] = now_iso_z()
         write_job_control(project_root, control)
         _append_event(
             _control_events_path(project_root, job_id),
@@ -246,7 +231,7 @@ def apply_pending_job_control(
         return control
     transition_and_persist(project_root, job_id, "cancelled")
     control["result"] = "applied"
-    control["applied-at"] = _now_timestamp()
+    control["applied-at"] = now_iso_z()
     write_job_control(project_root, control)
     _append_event(
         _control_events_path(project_root, job_id),

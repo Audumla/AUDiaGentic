@@ -1,4 +1,4 @@
-# execution/jobs/
+# components/optional/agent_jobs/
 
 ## Purpose
 The active core of job orchestration. Contains all modules that drive a prompt request through the full agent job lifecycle.
@@ -35,3 +35,6 @@ The active core of job orchestration. Contains all modules that drive a prompt r
 | `reviews.py` | Build and validate review reports and bundles |
 | `records.py` | Job record construction (not persistence) |
 | `profiles.py` | Workflow profile loading and application |
+| `prompt_syntax.py` | Prompt syntax parsing and validation |
+| `prompt_templates.py` | Prompt template management |
+| `stages.py` | Job stage definitions and orchestration |

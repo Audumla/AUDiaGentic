@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+from audiagentic.foundation.io import atomic_write_json
+from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +23,6 @@ from audiagentic.runtime.state import jobs_store as store
 DEFAULT_TTL = timedelta(hours=8)
 
 
-def _now_timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _approvals_root(project_root: Path) -> Path:
@@ -40,19 +39,6 @@ def _validate_approval(payload: dict[str, Any]) -> list[str]:
     return sorted(error.message for error in validator.iter_errors(payload))
 
 
-def _write_atomic(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(prefix=path.stem + ".", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2, sort_keys=True)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp_path, path)
-    finally:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-
 
 def build_approval_request(
     *,
@@ -65,7 +51,7 @@ def build_approval_request(
     requested_at: str | None = None,
     expires_at: str | None = None,
 ) -> dict[str, Any]:
-    requested_at = requested_at or _now_timestamp()
+    requested_at = requested_at or now_iso_z()
     if expires_at is None:
         expires = datetime.fromisoformat(requested_at.replace("Z", "+00:00")) + DEFAULT_TTL
         expires_at = expires.isoformat().replace("+00:00", "Z")
@@ -84,8 +70,8 @@ def build_approval_request(
     issues = _validate_approval(payload)
     if issues:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-018",
-            kind="validation",
+            code="VAL-APPROVE-001",
+            kind="agent-jobs",
             message="approval request failed validation",
             details={"issues": issues},
         )
@@ -117,8 +103,8 @@ def request_approval(project_root: Path, payload: dict[str, Any]) -> dict[str, A
     issues = _validate_approval(payload)
     if issues:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-019",
-            kind="validation",
+            code="VAL-APPROVE-002",
+            kind="agent-jobs",
             message="approval request failed validation",
             details={"issues": issues},
         )
@@ -131,7 +117,7 @@ def request_approval(project_root: Path, payload: dict[str, Any]) -> dict[str, A
     if existing:
         return existing
     path = _approval_path(project_root, payload["approval-id"])
-    _write_atomic(path, payload)
+    atomic_write_json(path, payload)
     return payload
 
 
@@ -141,16 +127,16 @@ def read_approval(project_root: Path, approval_id: str) -> dict[str, Any]:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
         raise AudiaGenticError(
-            code="JOB-IO-002",
-            kind="io",
+            code="IO-APPROVE-001",
+            kind="agent-jobs",
             message="failed to read approval",
             details={"approval-id": approval_id, "error": str(exc)},
         ) from exc
     issues = _validate_approval(payload)
     if issues:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-020",
-            kind="validation",
+            code="VAL-APPROVE-003",
+            kind="agent-jobs",
             message="approval failed validation",
             details={"approval-id": approval_id, "issues": issues},
         )
@@ -163,12 +149,12 @@ def update_approval_state(project_root: Path, approval_id: str, new_state: str) 
     issues = _validate_approval(payload)
     if issues:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-021",
-            kind="validation",
+            code="VAL-APPROVE-004",
+            kind="agent-jobs",
             message="approval update failed validation",
             details={"approval-id": approval_id, "issues": issues},
         )
-    _write_atomic(_approval_path(project_root, approval_id), payload)
+    atomic_write_json(_approval_path(project_root, approval_id), payload)
     return payload
 
 
@@ -194,8 +180,8 @@ def request_job_approval(
     job = store.read_job_record(project_root, job_id)
     if job["state"] != "running":
         raise AudiaGenticError(
-            code="JOB-BUSINESS-003",
-            kind="business-rule",
+            code="CON-APPROVE-001",
+            kind="agent-jobs",
             message="job must be running to request approval",
             details={"job-id": job_id, "state": job["state"]},
         )
@@ -204,8 +190,8 @@ def request_job_approval(
         bundle = read_review_bundle(project_root, job_id)
         if bundle["decision"] != "approved":
             raise AudiaGenticError(
-                code="JOB-BUSINESS-005",
-                kind="business-rule",
+                code="CON-APPROVE-002",
+                kind="agent-jobs",
                 message="review bundle is not approved",
                 details={"job-id": job_id, "decision": bundle["decision"]},
             )
@@ -216,7 +202,7 @@ def request_job_approval(
         source_kind="job-service",
         source_id=job_id,
         summary=summary,
-        requested_at=now_ts or _now_timestamp(),
+        requested_at=now_ts or now_iso_z(),
         expires_at=None,
     )
     approval = request_approval(project_root, approval)
@@ -231,7 +217,7 @@ def check_job_approval(
     approval_id: str,
     now_ts: str | None = None,
 ) -> dict[str, Any]:
-    now_ts = now_ts or _now_timestamp()
+    now_ts = now_ts or now_iso_z()
     approval = read_approval(project_root, approval_id)
     if approval["state"] == "pending" and _is_expired(approval, now_ts):
         approval = update_approval_state(project_root, approval_id, "expired")

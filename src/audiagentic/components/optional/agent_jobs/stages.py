@@ -1,14 +1,12 @@
 """Stage execution contract and persistence."""
 from __future__ import annotations
 
-import json
-import os
-import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.io import atomic_write_json
 
 StageHandler = Callable[
     [dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any] | None],
@@ -40,19 +38,6 @@ def _validate_stage_output(payload: dict[str, Any]) -> list[str]:
     return issues
 
 
-def _write_atomic(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(prefix=path.stem + ".", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2, sort_keys=True)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp_path, path)
-    finally:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-
 
 def execute_stage(
     project_root: Path,
@@ -67,8 +52,8 @@ def execute_stage(
     issues = _validate_stage_output(output)
     if issues:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-017",
-            kind="validation",
+            code="VAL-STAGE-001",
+            kind="agent-jobs",
             message="stage output failed validation",
             details={"issues": issues, "stage-id": stage.get("id")},
         )
@@ -82,5 +67,5 @@ def execute_stage(
         },
         "output": output,
     }
-    _write_atomic(stage_output_path(project_root, job_record["job-id"], stage.get("id")), envelope)
+    atomic_write_json(stage_output_path(project_root, job_record["job-id"], stage.get("id")), envelope)
     return envelope
