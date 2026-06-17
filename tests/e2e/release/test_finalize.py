@@ -59,7 +59,7 @@ def test_finalize_fails_with_empty_ledger(tmp_path: Path) -> None:
         try:
             release_api.finalize(sandbox.repo, release_id="rel_002")
         except AudiaGenticError as exc:
-            assert exc.kind == "business-rule"
+            assert exc.kind == "release"
         else:
             raise AssertionError("expected business-rule error")
     finally:

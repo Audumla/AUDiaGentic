@@ -1,4 +1,4 @@
-# release/
+# components/optional/ledger/
 
 Release management, audit, and change tracking for the system.
 
@@ -22,11 +22,14 @@ Governs the release lifecycle:
 ## Key modules
 
 - **fragments.py**: Change event recording
-- **finalize.py**: Release finalization
 - **sync.py**: Ledger merge and sync
 - **audit.py**: Audit and checkin report generation
 - **current_summary.py**: Release summary generation
 - **ledger_bootstrap.py**: Release workflow initialization
+- **ledger_mcp.py**: MCP tool interface for ledger operations
+- **ledger_manage_mcp.py**: MCP management tools for ledger
+- **ledger_api.py**: Ledger API surface
+- **archive.py**: Ledger history archiving
 
 ## Must not own
 

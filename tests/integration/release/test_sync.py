@@ -90,7 +90,7 @@ def test_sync_fails_when_lock_active(tmp_path: Path) -> None:
         try:
             sync_current_release_ledger(sandbox.repo)
         except AudiaGenticError as exc:
-            assert exc.kind == "business-rule"
+            assert exc.kind == "release"
         else:
             raise AssertionError("expected lock error")
     finally:
