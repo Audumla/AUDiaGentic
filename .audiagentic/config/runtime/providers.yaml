@@ -1,7 +1,7 @@
 contract-version: v1
 providers:
   aider:
-    enabled: true
+    enabled: false
     install-mode: external-configured
     access-mode: cli
   copilot:
@@ -9,7 +9,7 @@ providers:
     install-mode: external-configured
     access-mode: cli
   openhands:
-    enabled: true
+    enabled: false
     install-mode: external-configured
     access-mode: cli
   pi:
