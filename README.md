@@ -1,47 +1,28 @@
-# AUDiaGentic E2E Build Pack v14
+# AUDiaGentic
 
-This pack extends the v13 end-to-end staged build plan with a **core build-status system** and a clearer **Phase 0–2 execution reference**.
+Multi-agent workflow orchestration system for AI coding agents. Provides the infrastructure to plan, execute, and track software engineering work across coordinated agent sessions.
 
-The purpose of this revision is to make implementation activity easier to coordinate across multiple agents and developers without duplicated work or uncertainty about current build state.
+## Quick links
 
-## What changed in v14
+- **[docs/layout.md](docs/layout.md)** — directory layout and config hierarchy
+- **[docs/planning/](docs/planning/)** — planning system (requests, specs, tasks, plans, work packages)
+- **[docs/releases/](docs/releases/)** — current release and audit docs
+- **[docs/testing/](docs/testing/)** — test environment and architecture
+- **[docs/knowledge/](docs/knowledge/)** — knowledge vault
+- **[docs/examples/](docs/examples/)** — example project scaffold
+- **[docs/archive/](docs/archive/)** — superseded references
 
-- adds a **single build status and work registry** that must be updated for all implementation activity
-- adds a **start-here guide** for any new developer or agent joining the project
-- adds a **Phase 0–2 readiness and execution reference** consolidating packet inventories, strict execution order, and phase gates
-- updates the implementation index, kickoff checklist, and packet execution rules so build-status tracking is mandatory rather than optional
+## Source code
 
-## Start here
+| Layer | Path | Contents |
+|-------|------|----------|
+| Foundation | `src/audiagentic/foundation/` | Contracts, config, events, workflow primitives |
+| Runtime | `src/audiagentic/runtime/` | Lifecycle management, state |
+| Components | `src/audiagentic/components/optional/` | Providers, planning, knowledge, ledger, agent jobs |
 
-1. `docs/implementation/31_Build_Status_and_Work_Registry.md`
-2. `docs/implementation/32_New_Agent_or_Developer_Start_Here.md`
-3. `docs/implementation/00_Implementation_Index.md`
-4. `docs/implementation/01_Master_Implementation_Roadmap.md`
-5. `docs/implementation/02_Phase_Gates_and_Exit_Criteria.md`
-6. `docs/implementation/20_Packet_Dependency_Graph.md`
-7. `docs/implementation/33_Phase_0_1_2_Readiness_and_Execution_Reference.md`
+## Docker test path
 
-## Working rule for all implementation activity
-
-No agent or developer should begin packet or module work until:
-
-- the packet or module is located in the build-status registry
-- dependencies are shown as satisfied
-- the work item is explicitly claimed in the registry
-- the owner has read the packet build sheet and relevant contracts
-
-The build-status registry is the live operational starting point for all work.
-
-## Validation and Maintenance
-
-Primary test environment guide:
-
-- `docs/testing/TEST_ENVIRONMENT.md`
-
-### Docker Test Path
-
-Use the existing Docker base image as the normal test path. Do not rebuild test
-images for routine validation unless the image inputs changed.
+Use the existing Docker base image as the normal test path. Do not rebuild test images for routine validation unless the image inputs changed.
 
 Normal path:
 
@@ -63,31 +44,9 @@ Rebuild only when one of these changed:
 - image-level package/tool bootstrap requirements
 - the local image is missing or known-bad
 
-Use `tests/docker/Dockerfile.release-test` only when validating the wheel-installed release
-path or package-data bundling. It is not the default recheck path.
+Use `tests/docker/Dockerfile.release-test` only when validating the wheel-installed release path or package-data bundling. It is not the default recheck path.
 
-### Planning Document Integrity
+## Testing
 
-Before merging planning changes or after bulk operations, run:
-
-```bash
-# Check for broken references in planning documents
-python tools/checks/repair_broken_refs.py
-```
-
-This tool checks metadata fields (YAML frontmatter) for broken references. Body text references are intentionally excluded as they are often historical/documentation. See `docs/planning/docs/BROKEN_REFERENCE_POLICY.md` for details.
-
-### Other Validation Tools
-
-```bash
-# Validate all planning objects
-python tools/planning/tm.py validate
-
-# Check ID format and uniqueness
-python tools/validation/validate_ids.py
-
-# Verify schema validity
-python tools/validation/validate_schemas.py
-```
-
-See `tools/README.md` for a complete list of available tools.
+- **[docs/testing/TEST_ENVIRONMENT.md](docs/testing/TEST_ENVIRONMENT.md)** — primary test environment guide
+- **[docs/testing/TEST_ARCHITECTURE.md](docs/testing/TEST_ARCHITECTURE.md)** — test architecture overview

@@ -1,6 +1,6 @@
 # Check-In Summary
 
-Total changes: 9
+Total changes: 14
 
 - Fixed startup logging errors when another AUDiaGentic process still has diagnostic log open on Windows.
 - Refactored coding LSP so MCP tools are thin wrappers over internal LSP services.
@@ -11,3 +11,8 @@ Total changes: 9
 - Made ledger reads cheaper and manifest handling safer.
 - Added batched ledger recording to avoid repeated sync work.
 - Made fragments the sole source of truth for current release ledger sync.
+- Toolchain declarations consolidated from 12 Python files into a single YAML-driven loader. Foundation layout cleaned up.
+- Dependency declarations moved out of hardcoded Python into component YAML files. Install/uninstall logic now expressed as workflow steps, eliminating a separate dependency management lane.
+- Added SelectStep workflow primitive for N-variant runtime dispatch. Layer boundaries enforced: toolchains/ never imported from dependency layer. Probe-guard pattern extracted to shared helper.
+- Provider descriptors no longer import foundation toolchains directly. Install specs are now declared via cli_recipe() which builds steps through the toolchain loader.
+- Fixed provider CLI plan crash and state machine protocol mismatch. All pre-existing provider and provisioning test failures resolved.
