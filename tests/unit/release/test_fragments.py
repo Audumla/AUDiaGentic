@@ -36,7 +36,7 @@ def test_record_fragment_invalid_event(tmp_path: Path) -> None:
     try:
         record_change_event(tmp_path, event)
     except AudiaGenticError as exc:
-        assert exc.kind == "validation"
+        assert exc.kind == "release"
         fragment_dir = tmp_path / ".audiagentic" / "runtime" / "ledger" / "fragments"
         assert not fragment_dir.exists()
     else:

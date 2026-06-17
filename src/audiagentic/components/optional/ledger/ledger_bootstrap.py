@@ -1,7 +1,6 @@
 """Ledger component bootstrap — initialise layout and regenerate ledger artifacts."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -9,15 +8,12 @@ from audiagentic.components.optional.ledger.audit import generate_audit_and_chec
 from audiagentic.components.optional.ledger.current_summary import regenerate_current_release
 from audiagentic.components.optional.ledger.sync import sync_current_release_ledger
 from audiagentic.foundation.components.ids import COMPONENT_PROJECT
+from audiagentic.foundation.time import now_iso_z
 from audiagentic.paths import REPO_ROOT
 from audiagentic.runtime.config import load_yaml_file, save_yaml_file
 from audiagentic.runtime.lifecycle.baseline_sync import ensure_project_layout, sync_managed_baseline
 from audiagentic.runtime.lifecycle.components import DEFAULT_VERSION
 from audiagentic.runtime.lifecycle.detector import detect_installed_state
-
-
-def _now_timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def bootstrap_ledger(project_root: Path) -> dict[str, Any]:
@@ -35,7 +31,7 @@ def bootstrap_ledger(project_root: Path) -> dict[str, Any]:
     if marker_path.exists():
         current_marker = load_yaml_file(marker_path)
 
-    now = _now_timestamp()
+    now = now_iso_z()
     updated_marker: dict[str, Any] = {
         "component-id": COMPONENT_PROJECT,
         "enabled": True,

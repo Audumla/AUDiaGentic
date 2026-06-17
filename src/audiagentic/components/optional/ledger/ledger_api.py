@@ -16,7 +16,7 @@ from audiagentic.components.optional.ledger.fragments import record_change_event
 from audiagentic.components.optional.ledger.sync import sync_current_release_ledger
 
 
-def record_change(project_root: Path, event: dict[str, Any], *, sync: bool = True) -> dict[str, Any]:
+def record_change(project_root: Path, event: dict[str, Any], *, sync: bool = False) -> dict[str, Any]:
     """Validate and record a change event fragment, optionally syncing the current ledger."""
     result = _record(project_root, event)
     if not sync:
@@ -25,7 +25,7 @@ def record_change(project_root: Path, event: dict[str, Any], *, sync: bool = Tru
     return {**result, "ledger-count": sync_result.fragment_count}
 
 
-def record_changes(project_root: Path, events: list[dict[str, Any]], *, sync: bool = True) -> dict[str, Any]:
+def record_changes(project_root: Path, events: list[dict[str, Any]], *, sync: bool = False) -> dict[str, Any]:
     """Record multiple change event fragments, optionally syncing once at the end."""
     results = [_record(project_root, event) for event in events]
     payload: dict[str, Any] = {
