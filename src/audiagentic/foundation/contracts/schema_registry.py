@@ -10,7 +10,6 @@ from audiagentic.paths import SRC_ROOT
 
 AUDIAGENTIC_ROOT = SRC_ROOT / "audiagentic"
 SCHEMA_DIR = AUDIAGENTIC_ROOT / "foundation" / "contracts" / "schemas"
-PLANNING_SCHEMA_DIR = SCHEMA_DIR / "planning"
 
 
 def schema_filename(stem: str) -> str:
@@ -24,24 +23,9 @@ def schema_path(stem: str) -> Path:
     return path
 
 
-def planning_schema_path(stem: str) -> Path:
-    path = PLANNING_SCHEMA_DIR / schema_filename(stem)
-    if not path.exists():
-        raise FileNotFoundError(f"planning schema not found: {path}")
-    return path
-
-
 def read_schema(stem: str) -> dict[str, Any]:
     return json.loads(schema_path(stem).read_text(encoding="utf-8"))
 
 
-def read_planning_schema(stem: str) -> dict[str, Any]:
-    return json.loads(planning_schema_path(stem).read_text(encoding="utf-8"))
-
-
 def iter_schema_paths() -> list[Path]:
     return sorted(SCHEMA_DIR.glob("*.json"))
-
-
-def iter_planning_schema_paths() -> list[Path]:
-    return sorted(PLANNING_SCHEMA_DIR.glob("*.json"))

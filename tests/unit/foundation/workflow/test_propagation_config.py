@@ -1,4 +1,4 @@
-"""Unit tests for foundation/workflow/propagation/config.py."""
+"""Unit tests for foundation/workflow/propagation/propagation_config.py."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.foundation.workflow.propagation.config import (
+from audiagentic.foundation.workflow.propagation.propagation_config import (
     _import_callable,
     bind_callables,
     load_config,
