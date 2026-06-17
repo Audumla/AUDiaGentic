@@ -1,4 +1,4 @@
-# interoperability/protocols/acp/
+# components/optional/providers/protocols/acp/
 
 ## Status
 **Scaffold only.** Reserved for the Agent Communication Protocol (ACP).

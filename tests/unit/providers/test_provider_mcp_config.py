@@ -4,6 +4,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from audiagentic.components.optional.providers.adapters.codex.mcp_format import (
+    read_codex_toml,
+    remove_codex_toml,
+    write_codex_toml,
+)
 from audiagentic.components.optional.providers.adapters.continue_.mcp_format import (
     read_continue_json,
     remove_continue_json,
@@ -164,6 +169,45 @@ class TestContinueJsonFormat:
         assert "srv" not in result
 
 
+class TestCodexTomlFormat:
+    def test_read_missing_file_returns_empty(self, tmp_path: Path) -> None:
+        result = read_codex_toml(tmp_path / ".codex" / "config.toml")
+        assert result == {}
+
+    def test_write_creates_codex_server_entry(self, tmp_path: Path) -> None:
+        path = tmp_path / ".codex" / "config.toml"
+        entry = McpServerEntry(name="srv", command="python", args=("-m", "mod"))
+        write_codex_toml(path, {"srv": entry})
+        data = path.read_text(encoding="utf-8")
+        assert "[mcp_servers.srv]" in data
+        assert 'command = "python"' in data
+        assert 'args = ["-m", "mod"]' in data
+        assert "enabled = true" in data
+
+    def test_write_preserves_existing_codex_settings(self, tmp_path: Path) -> None:
+        path = tmp_path / ".codex" / "config.toml"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            'model = "gpt-5.4"\n\n[features]\nexperimental_windows_sandbox = true\n',
+            encoding="utf-8",
+        )
+        entry = McpServerEntry(name="srv", command="python", args=("-m", "mod"))
+        write_codex_toml(path, {"srv": entry})
+        data = path.read_text(encoding="utf-8")
+        assert 'model = "gpt-5.4"' in data
+        assert "[features]" in data
+        assert "[mcp_servers.srv]" in data
+
+    def test_remove_existing_codex_entry(self, tmp_path: Path) -> None:
+        path = tmp_path / ".codex" / "config.toml"
+        entry = McpServerEntry(name="srv", command="python", args=("-m", "mod"))
+        write_codex_toml(path, {"srv": entry})
+        removed = remove_codex_toml(path, "srv")
+        assert removed is True
+        result = read_codex_toml(path)
+        assert "srv" not in result
+
+
 
 class TestAddProviderMcpServer:
     def test_adds_entry_to_mcp_json(self, tmp_path: Path) -> None:
@@ -195,6 +239,15 @@ class TestAddProviderMcpServer:
         add_provider_mcp_server("claude", "srv", "new-cmd", tmp_path)
         data = json.loads((tmp_path / ".mcp.json").read_text())
         assert data["mcpServers"]["srv"]["command"] == "new-cmd"
+
+    def test_adds_entry_to_codex_toml(self, tmp_path: Path) -> None:
+        result = add_provider_mcp_server("codex", "my-srv", "python", tmp_path, args=("-m", "mod"))
+        assert result["ok"] is True
+        path = tmp_path / ".codex" / "config.toml"
+        assert path.exists()
+        data = path.read_text(encoding="utf-8")
+        assert "[mcp_servers.my-srv]" in data
+        assert 'command = "python"' in data
 
 
 class TestRemoveProviderMcpServer:
@@ -357,6 +410,9 @@ class TestMcpConfigSpecOnDescriptors:
         assert cont.mcp_config.config_path == ".continue/config.json"
         gem = get_descriptor("gemini")
         assert gem.mcp_config.config_path == ".gemini/settings.json"
+        codex = get_descriptor("codex")
+        assert codex.mcp_config.format == "codex-toml"
+        assert codex.mcp_config.config_path == ".codex/config.toml"
 
     def test_providers_without_mcp_config(self) -> None:
         from audiagentic.components.optional.providers.descriptors.registry import get_descriptor

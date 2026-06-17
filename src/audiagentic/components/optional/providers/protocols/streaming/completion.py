@@ -128,8 +128,8 @@ class ProviderCompletion:
         issues = validate_provider_completion(data)
         if issues:
             raise AudiaGenticError(
-                code="COMPLETION-VALIDATION-003",
-                kind="validation",
+                code="VAL-COMPLETE-001",
+                kind="providers",
                 message="failed to load provider completion due to schema validation errors",
                 details={"issues": issues, "provider-id": data.get("provider-id")},
             )
@@ -237,8 +237,8 @@ def normalize_provider_result(
     issues = validate_provider_completion(completion.to_dict())
     if issues:
         raise AudiaGenticError(
-            code="COMPLETION-VALIDATION-001",
-            kind="validation",
+            code="VAL-COMPLETE-002",
+            kind="providers",
             message="provider completion failed schema validation",
             details={"issues": issues, "provider-id": provider_id},
         )
@@ -294,8 +294,8 @@ def persist_completion(
     issues = validate_provider_completion(completion.to_dict())
     if issues:
         raise AudiaGenticError(
-            code="COMPLETION-VALIDATION-002",
-            kind="validation",
+            code="VAL-COMPLETE-003",
+            kind="providers",
             message="provider completion cannot be persisted because validation failed",
             details={"issues": issues, "provider-id": completion.provider_id},
         )

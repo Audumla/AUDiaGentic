@@ -21,16 +21,16 @@ def load_provider_registry(descriptors: list[dict[str, Any]]) -> dict[str, dict[
         issues = validate_descriptor(payload)
         if issues:
             raise AudiaGenticError(
-                code="PRV-VALIDATION-001",
-                kind="validation",
+                code="VAL-REGISTRY-001",
+                kind="providers",
                 message="provider descriptor failed validation",
                 details={"issues": issues, "provider-id": payload.get("provider-id")},
             )
         provider_id = payload["provider-id"]
         if provider_id in registry:
             raise AudiaGenticError(
-                code="PRV-BUSINESS-001",
-                kind="business-rule",
+                code="CON-REGISTRY-001",
+                kind="providers",
                 message="duplicate provider-id in registry",
                 details={"provider-id": provider_id},
             )

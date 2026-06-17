@@ -83,6 +83,6 @@ def test_codex_adapter_requires_command(monkeypatch) -> None:
         codex.run({"provider-id": "codex"}, {"default-model": "codex-stub"})
     except AudiaGenticError as exc:
         assert exc.code == "PRV-EXTERNAL-001"
-        assert exc.kind == "external"
+        assert exc.kind == "providers"
     else:
         raise AssertionError("expected missing command error")

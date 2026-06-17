@@ -117,8 +117,8 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
 
     if completed.returncode != 0:
         raise AudiaGenticError(
-            code="PRV-EXTERNAL-008",
-            kind="external",
+            code="EXT-QWEN-001",
+            kind="providers",
             message="qwen execution failed",
             details={
                 "provider-id": "qwen",
