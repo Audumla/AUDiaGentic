@@ -68,8 +68,8 @@ def _parse_bool(value: str) -> bool:
     if lowered in {"false", "0", "no"}:
         return False
     raise AudiaGenticError(
-        code="JOB-VALIDATION-023",
-        kind="validation",
+        code="VAL-PPARSE-001",
+        kind="agent-jobs",
         message="boolean directive must be true or false",
         details={"value": value},
     )
@@ -83,8 +83,8 @@ def _parse_target(value: str, *, adhoc_requested: bool) -> dict[str, Any]:
         return payload
     if ":" not in value:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-024",
-            kind="validation",
+            code="VAL-PPARSE-002",
+            kind="agent-jobs",
             message="target directive must use kind:value",
             details={"value": value},
         )
@@ -100,8 +100,8 @@ def _parse_target(value: str, *, adhoc_requested: bool) -> dict[str, Any]:
     if kind == "adhoc":
         return {"kind": "adhoc", "adhoc-id": ref or None}
     raise AudiaGenticError(
-        code="JOB-VALIDATION-025",
-        kind="validation",
+        code="VAL-PPARSE-003",
+        kind="agent-jobs",
         message="unknown target kind",
         details={"kind": kind},
     )
@@ -133,8 +133,8 @@ def _split_prompt_text(prompt_text: str) -> tuple[str, str]:
             break
     if first_index is None:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-026",
-            kind="validation",
+            code="VAL-PPARSE-004",
+            kind="agent-jobs",
             message="prompt body is empty",
             details={},
         )
@@ -169,8 +169,8 @@ def _normalize_directives(raw_directives: dict[str, str], alias_map: dict[str, s
         key = alias_map.get(raw_key, raw_key)
         if key in normalized:
             raise AudiaGenticError(
-                code="JOB-VALIDATION-031",
-                kind="validation",
+                code="VAL-PPARSE-005",
+                kind="agent-jobs",
                 message="duplicate prompt directive",
                 details={"directive": key},
             )
@@ -217,8 +217,8 @@ def parse_prompt_launch_request(
     raw_tag = tokens[0]
     if not raw_tag.startswith("@"):
         raise AudiaGenticError(
-            code="JOB-VALIDATION-027",
-            kind="validation",
+            code="VAL-PPARSE-006",
+            kind="agent-jobs",
             message="prompt must begin with a tag token",
             details={"header": header},
         )
@@ -251,8 +251,8 @@ def parse_prompt_launch_request(
         normalized_tag = implement_tag
     else:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-028",
-            kind="validation",
+            code="VAL-PPARSE-007",
+            kind="agent-jobs",
             message="unknown prompt tag",
             details={"tag": tag_token},
         )
@@ -261,16 +261,16 @@ def parse_prompt_launch_request(
     for token in tokens[1:]:
         if "=" not in token:
             raise AudiaGenticError(
-                code="JOB-VALIDATION-029",
-                kind="validation",
+                code="VAL-PPARSE-008",
+                kind="agent-jobs",
                 message="prompt directive must use key=value",
                 details={"token": token},
             )
         key, value = token.split("=", 1)
         if key in raw_directives:
             raise AudiaGenticError(
-                code="JOB-VALIDATION-031",
-                kind="validation",
+                code="VAL-PPARSE-009",
+                kind="agent-jobs",
                 message="duplicate prompt directive",
                 details={"directive": key},
             )
@@ -282,22 +282,22 @@ def parse_prompt_launch_request(
     resolved_provider = directive_provider or provider_token or provider_suffix_value or provider_id_value
     if provider_token is not None and directive_provider is not None and directive_provider != provider_token:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-035",
-            kind="validation",
+            code="VAL-PPARSE-010",
+            kind="agent-jobs",
             message="provider shorthand conflicts with provider directive",
             details={"provider-tag": provider_token, "provider": raw_directives.get("provider")},
         )
     if provider_suffix_value is not None and directive_provider is not None and provider_suffix_value != directive_provider:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-039",
-            kind="validation",
+            code="VAL-PPARSE-011",
+            kind="agent-jobs",
             message="provider shorthand conflicts with provider directive",
             details={"provider-tag": provider_suffix, "provider": raw_directives.get("provider")},
         )
     if resolved_provider is None:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-036",
-            kind="validation",
+            code="VAL-PPARSE-012",
+            kind="agent-jobs",
             message="provider is required",
             details={},
         )
@@ -322,8 +322,8 @@ def parse_prompt_launch_request(
     for key in directives:
         if key not in ALLOWED_DIRECTIVES:
             raise AudiaGenticError(
-                code="JOB-VALIDATION-030",
-                kind="validation",
+                code="VAL-PPARSE-013",
+                kind="agent-jobs",
                 message="unknown prompt directive",
                 details={"directive": key},
             )
@@ -360,8 +360,8 @@ def parse_prompt_launch_request(
     )
     if normalized_tag not in no_body_required_tags and not body.strip() and not (explicit_adhoc or has_template_fallback):
         raise AudiaGenticError(
-            code="JOB-VALIDATION-032",
-            kind="validation",
+            code="VAL-PPARSE-014",
+            kind="agent-jobs",
             message="prompt body is required for this tag unless a template is selected",
             details={"tag": normalized_tag},
         )
@@ -377,8 +377,8 @@ def parse_prompt_launch_request(
         }
     if review_policy is not None and review_policy.get("aggregation-rule") == "majority-pass":
         raise AudiaGenticError(
-            code="JOB-VALIDATION-033",
-            kind="validation",
+            code="CON-PPARSE-001",
+            kind="agent-jobs",
             message="majority-pass is not enabled in the first executable pass",
             details={},
         )
@@ -414,8 +414,8 @@ def parse_prompt_launch_request(
     issues = validate_prompt_launch_request(payload)
     if issues:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-034",
-            kind="validation",
+            code="VAL-PPARSE-015",
+            kind="agent-jobs",
             message="prompt launch request failed validation",
             details={"issues": issues},
         )

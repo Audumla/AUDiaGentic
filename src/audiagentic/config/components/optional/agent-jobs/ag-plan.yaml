@@ -31,16 +31,17 @@ is-review-tag: false
 skill-content-file: ag-plan-skill.md
 
 instructions:
-  - id: ag-plan/planning-item-policy
-    title: Planning item creation policy
+  - id: ag-plan/scope-policy
+    title: Scope and approval policy
     content:
       body: |
-        Planning items (requests, specs, plans, tasks) can only be created with explicit user approval.
+        Produce a plan only — do not create or modify tracked work artifacts, or commit to
+        changes, without explicit user approval.
 
-        - Do not autonomously create planning items during analysis, review, or exploration work.
-        - If analysis suggests a new request or spec is needed, report findings and ask for approval.
-        - Use the plan action to signal planning work that requires user direction.
-        - Only create planning items in response to explicit user instruction or approved workflow prompts.
+        - Do not autonomously create or modify persistent artifacts during analysis, review, or exploration work.
+        - If analysis suggests new work is needed, report findings and ask for approval before proceeding.
+        - Use the plan action to surface work that requires user direction.
+        - Act only in response to explicit user instruction or approved workflow prompts.
 
 prompts:
   - name: default

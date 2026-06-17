@@ -30,7 +30,7 @@ def test_profile_override_rejects_disabling_required_stage() -> None:
     try:
         load_profile("lite", overrides={"plan": {"enabled": False}})
     except AudiaGenticError as exc:
-        assert exc.kind == "business-rule"
+        assert exc.kind == "agent-jobs"
     else:
         raise AssertionError("expected required stage disable error")
 
@@ -39,7 +39,7 @@ def test_profile_override_rejects_unknown_stage() -> None:
     try:
         load_profile("lite", overrides={"unknown": {"enabled": False}})
     except AudiaGenticError as exc:
-        assert exc.kind == "validation"
+        assert exc.kind == "agent-jobs"
     else:
         raise AssertionError("expected unknown stage override error")
 
@@ -65,6 +65,6 @@ def test_load_workflow_overrides_invalid_yaml() -> None:
             REPO_ROOT / "docs" / "examples" / "fixtures" / "workflow-overrides.invalid.yaml"
         )
     except AudiaGenticError as exc:
-        assert exc.kind == "validation"
+        assert exc.kind == "agent-jobs"
     else:
         raise AssertionError("expected invalid override error")

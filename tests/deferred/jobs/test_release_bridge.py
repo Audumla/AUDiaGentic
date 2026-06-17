@@ -64,6 +64,6 @@ def test_release_bridge_requires_payload_fields() -> None:
             {"event-id": "chg_1"},
         )
     except AudiaGenticError as exc:
-        assert exc.kind == "validation"
+        assert exc.kind == "agent-jobs"
     else:
         raise AssertionError("expected missing field error")

@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -32,27 +30,10 @@ from audiagentic.components.optional.providers.services.execution import execute
 from audiagentic.components.optional.providers.services.models import resolve_model_selection
 from audiagentic.components.optional.providers.services.provider_config import load_provider_config
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.io import atomic_write_json
+from audiagentic.foundation.time import now_iso_z
 from audiagentic.runtime.config import load_yaml_file
 from audiagentic.runtime.state import jobs_store as store
-
-
-def _now_timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def _write_atomic(path: Path, payload: dict[str, Any]) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(prefix=path.stem + ".", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2, sort_keys=True)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp_path, path)
-    finally:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-    return path
 
 
 def load_project_config(project_root: Path) -> dict[str, Any]:
@@ -84,7 +65,7 @@ def subject_manifest_path(project_root: Path, job_id: str) -> Path:
 
 
 def generate_subject_id(*, now_fn=None) -> str:
-    timestamp = (now_fn or _now_timestamp)()
+    timestamp = (now_fn or now_iso_z)()
     compact = timestamp.replace("-", "").replace(":", "").replace("Z", "").replace("T", "_")
     return f"adh_{compact[:15]}"
 
@@ -133,7 +114,7 @@ def _build_job_from_request(
     now_fn=None,
 ) -> dict[str, Any]:
     job_id = _resolve_job_id(project_root, request, now_fn=now_fn)
-    timestamp = (now_fn or _now_timestamp)()
+    timestamp = (now_fn or now_iso_z)()
     target = request["target"]
     provider_config = load_provider_config(project_root).get("providers", {})
     provider_id = request["source"].get("provider-id") or "local-openai"
@@ -177,9 +158,9 @@ def _build_job_from_request(
         review_bundle_id=None,
     )
     store.write_job_record(project_root, payload)
-    _write_atomic(prompt_launch_path(project_root, job_id), request)
+    atomic_write_json(prompt_launch_path(project_root, job_id), request)
     if request["target"]["kind"] == "adhoc":
-        _write_atomic(subject_manifest_path(project_root, job_id), _build_launch_subject(request, job_id=job_id, now_fn=now_fn))
+        atomic_write_json(subject_manifest_path(project_root, job_id), _build_launch_subject(request, job_id=job_id, now_fn=now_fn))
     return payload
 
 
@@ -187,16 +168,16 @@ def _resume_job_from_request(project_root: Path, request: dict[str, Any], *, now
     job_id = request.get("existing-job-id") or request["target"].get("job-id")
     if not job_id:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-035",
-            kind="validation",
+            code="VAL-LAUNCH-001",
+            kind="agent-jobs",
             message="resume requires an existing job id",
             details={},
         )
     job = store.read_job_record(project_root, job_id)
     if job["state"] in TERMINAL_STATES:
         raise AudiaGenticError(
-            code="JOB-BUSINESS-004",
-            kind="business-rule",
+            code="CON-LAUNCH-001",
+            kind="agent-jobs",
             message="cannot resume a terminal job",
             details={"job-id": job_id, "state": job["state"]},
         )
@@ -211,7 +192,7 @@ def _resume_job_from_request(project_root: Path, request: dict[str, Any], *, now
         },
         catalog=None,
     )
-    job["updated-at"] = (now_fn or _now_timestamp)()
+    job["updated-at"] = (now_fn or now_iso_z)()
     launch_source = {
         "prompt-id": request["prompt-id"],
         "surface": request["source"]["surface"],
@@ -229,7 +210,7 @@ def _resume_job_from_request(project_root: Path, request: dict[str, Any], *, now
     if selection.get("default-model") is not None:
         job["default-model"] = selection.get("default-model")
     store.write_job_record(project_root, job)
-    _write_atomic(prompt_launch_path(project_root, job_id), request)
+    atomic_write_json(prompt_launch_path(project_root, job_id), request)
     return job
 
 
@@ -322,7 +303,7 @@ def _launch_review_request(project_root: Path, request: dict[str, Any], *, now_f
                             findings=findings,
                             recommendation=recommendation,
                             follow_up_actions=follow_up_actions,
-                            created_at=(now_fn or _now_timestamp)(),
+                            created_at=(now_fn or now_iso_z)(),
                         )
         except AudiaGenticError:
             report_payload = None
@@ -334,7 +315,7 @@ def _launch_review_request(project_root: Path, request: dict[str, Any], *, now_f
         findings=[],
         recommendation="pass-with-notes",
         follow_up_actions=[],
-        created_at=(now_fn or _now_timestamp)(),
+        created_at=(now_fn or now_iso_z)(),
     )
     bundle = build_review_bundle(
         review_bundle_id=f"rvb_{review_id.split('_', 1)[-1]}",
@@ -349,9 +330,9 @@ def _launch_review_request(project_root: Path, request: dict[str, Any], *, now_f
                 "recommendation": report["recommendation"],
             }
         ],
-        updated_at=(now_fn or _now_timestamp)(),
+        updated_at=(now_fn or now_iso_z)(),
     )
-    _write_atomic(prompt_launch_path(project_root, job_id), request)
+    atomic_write_json(prompt_launch_path(project_root, job_id), request)
     persist_review_report(project_root, job_id, report)
     persist_review_bundle(project_root, job_id, bundle)
     if request.get("existing-job-id") or request["target"]["kind"] == "job":
