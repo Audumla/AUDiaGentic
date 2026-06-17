@@ -13,10 +13,12 @@ import shutil
 
 import pytest
 
-from audiagentic.foundation.dependencies import (
+from audiagentic.components.optional.coding_lsp import language_registry
+from audiagentic.foundation.components.dependencies import (
+    build_dependency_probes,
+    build_dependency_workflow,
     detect_missing,
-    load_component_probes,
-    load_component_workflow,
+    load_dependency_probes,
 )
 from audiagentic.foundation.toolchains.detect import (
     detect_pkg_manager,
@@ -26,6 +28,13 @@ from audiagentic.foundation.toolchains.detect import (
 from audiagentic.foundation.workflow.invocation.steps import SelectStep, SequenceStep
 
 pytestmark = [pytest.mark.mutates_host, pytest.mark.slow]
+
+
+def load_dependency_workflow_lsp(action: str = "install"):
+    """Build the coding-lsp dependency workflow from the per-language registry."""
+    return build_dependency_workflow(
+        language_registry.dependency_cfgs(), workflow_id="coding-lsp", action=action
+    )
 
 ALL_SERVERS = ["pyright", "typescript-language-server", "rust-analyzer", "clangd"]
 FAST_SERVERS = ["pyright", "typescript-language-server", "clangd"]
@@ -37,8 +46,8 @@ BINARY: dict[str, str] = {
     "clangd": "clangd",
 }
 
-_SYSTEM_PROBES = load_component_probes("source-control")
-_LSP_PROBES = load_component_probes("coding-lsp")
+_SYSTEM_PROBES = load_dependency_probes("source-control")
+_LSP_PROBES = build_dependency_probes(language_registry.dependency_cfgs())
 
 
 def _run_subset(workflow: SequenceStep, names: list[str]) -> dict:
@@ -101,7 +110,7 @@ def test_system_dependency_present_in_base_image(tool: str) -> None:
 # ---------------------------------------------------------------------------
 
 def test_clangd_step_is_select_with_variants() -> None:
-    workflow = load_component_workflow("coding-lsp")
+    workflow = load_dependency_workflow_lsp()
     clangd_step = next(s for s in workflow.steps if s.id == "clangd")
     assert isinstance(clangd_step, SelectStep)
     # inner install SelectStep should have apt variant
@@ -121,7 +130,7 @@ def test_install_all_lsp_servers() -> None:
     if not missing_before:
         pytest.skip("all LSP servers already present — skipping install")
 
-    workflow = load_component_workflow("coding-lsp", action="install")
+    workflow = load_dependency_workflow_lsp(action="install")
     result = _run_subset(workflow, missing_before)
     assert result["ok_count"] == len(missing_before), (
         f"not all servers installed: {result['result'].outputs}"
@@ -147,7 +156,7 @@ def test_detect_missing_empty_after_install() -> None:
 
 @pytest.mark.timeout(300)
 def test_uninstall_fast_lsp_servers() -> None:
-    workflow = load_component_workflow("coding-lsp", action="uninstall")
+    workflow = load_dependency_workflow_lsp(action="uninstall")
     result = _run_subset(workflow, FAST_SERVERS)
     assert result["ok_count"] == len(FAST_SERVERS), (
         f"not all fast servers uninstalled: {result['result'].outputs}"
@@ -187,8 +196,8 @@ def test_detect_missing_does_not_report_rust_analyzer() -> None:
 
 @pytest.mark.timeout(120)
 def test_pyright_reinstall_cycle() -> None:
-    install_wf = load_component_workflow("coding-lsp", action="install")
-    uninstall_wf = load_component_workflow("coding-lsp", action="uninstall")
+    install_wf = load_dependency_workflow_lsp(action="install")
+    uninstall_wf = load_dependency_workflow_lsp(action="uninstall")
 
     reinstall = _run_subset(install_wf, ["pyright"])
     assert reinstall["ok_count"] == 1, f"pyright reinstall failed: {reinstall['result'].outputs}"

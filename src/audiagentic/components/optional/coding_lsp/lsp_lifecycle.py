@@ -46,6 +46,7 @@ class LspSession:
         self.bridge = LspJsonRpc()
         self._capabilities: dict[str, Any] = {}
         self._opened_docs: dict[str, int] = {}
+        self._document_text: dict[str, str] = {}
 
     def initialize(self, timeout: float = 30.0) -> dict[str, Any]:
         """Start the language server and complete the initialize handshake."""
@@ -74,6 +75,7 @@ class LspSession:
     def did_open(self, uri: str, text: str, language_id: str, version: int = 1) -> None:
         """Open a document in the language server."""
         self._opened_docs[uri] = version
+        self._document_text[uri] = text
         self.bridge.send_notification(
             "textDocument/didOpen",
             {
@@ -89,6 +91,10 @@ class LspSession:
     def did_change(self, uri: str, changes: list[dict[str, Any]], version: int) -> None:
         """Notify the language server of document changes."""
         self._opened_docs[uri] = version
+        if changes:
+            text = changes[-1].get("text")
+            if isinstance(text, str):
+                self._document_text[uri] = text
         self.bridge.send_notification(
             "textDocument/didChange",
             {
@@ -96,6 +102,16 @@ class LspSession:
                 "contentChanges": changes,
             },
         )
+
+    def sync_document(self, uri: str, text: str, language_id: str) -> None:
+        """Open once, then update only when contents change."""
+        if uri not in self._opened_docs:
+            self.did_open(uri, text, language_id, version=1)
+            return
+        if self._document_text.get(uri) == text:
+            return
+        version = self._opened_docs[uri] + 1
+        self.did_change(uri, [{"text": text}], version)
 
     def did_save(self, uri: str, text: str | None = None) -> None:
         """Notify the language server that a document was saved."""
@@ -221,6 +237,7 @@ class LspSession:
     def shutdown(self) -> None:
         """Graceful shutdown of the language server session."""
         self._opened_docs.clear()
+        self._document_text.clear()
         self.bridge.shutdown()
 
     def is_ready(self) -> bool:

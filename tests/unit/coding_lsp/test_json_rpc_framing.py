@@ -93,6 +93,42 @@ def test_parse_content_length() -> None:
     assert bridge._parse_content_length(b"Garbage\r\n\r\n") is None
 
 
+def test_send_request_registers_pending_before_write(monkeypatch) -> None:
+    bridge = LspJsonRpc()
+
+    def _fake_write(_msg):
+        rid = 1
+        with bridge._lock:
+            assert rid in bridge._pending
+            bridge._responses[rid] = {"jsonrpc": "2.0", "id": rid, "result": {"ok": True}}
+            bridge._pending[rid].set()
+
+    monkeypatch.setattr(bridge, "_write_message", _fake_write)
+    result = bridge.send_request("initialize", {}, id=1, timeout=0.1)
+    assert result == {"ok": True}
+
+
+def test_shutdown_sends_request_then_exit(monkeypatch) -> None:
+    bridge = LspJsonRpc()
+    calls: list[tuple[str, str]] = []
+
+    class FakeProcess:
+        def poll(self):
+            return None
+        def wait(self, timeout=None):
+            return 0
+
+    bridge._process = FakeProcess()  # type: ignore[assignment]
+    bridge._running = True
+
+    monkeypatch.setattr(bridge, "send_request", lambda method, params, id=None, timeout=30.0: calls.append(("request", method)) or {})
+    monkeypatch.setattr(bridge, "send_notification", lambda method, params: calls.append(("notification", method)))
+
+    bridge.shutdown()
+
+    assert calls == [("request", "shutdown"), ("notification", "exit")]
+
+
 @pytest.mark.skip(reason="requires real pyright-langserver binary")
 def test_real_pyright_lifecycle():
     bridge = LspJsonRpc()
