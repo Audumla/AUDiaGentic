@@ -21,8 +21,8 @@ def test_event_config_imports_and_loads(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    from audiagentic.foundation.event.config import load_config
+    from audiagentic.foundation.event.event_config import load_event_config
 
-    config = load_config(tmp_path)
+    config = load_event_config(tmp_path)
     assert config.event_store.enabled is False
     assert config.replay.dispatch_on_replay is True

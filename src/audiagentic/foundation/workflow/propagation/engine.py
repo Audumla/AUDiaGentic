@@ -11,11 +11,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from . import config as _config
 from . import healing as _healing
-from .api import WorkflowItemAPI
 from .log import PropagationLog
 from .parents import find_parents
+from .propagation_config import load_config, validate
+from .workflow_item_api import WorkflowItemAPI
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +54,8 @@ class StatePropagationEngine:
         return self._workflow_config or {}
 
     def load_workflow_config(self) -> dict[str, Any]:
-        config = _config.load_config(self._config_path if self._enabled else None)
-        warnings = _config.validate(config, self._states_for_kind)
+        config = load_config(self._config_path if self._enabled else None)
+        warnings = validate(config, self._states_for_kind)
         if warnings:
             logger.warning("Config validation warnings: %s", ", ".join(warnings))
         self._workflow_config = config
