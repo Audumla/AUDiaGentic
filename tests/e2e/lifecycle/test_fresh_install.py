@@ -66,7 +66,7 @@ def test_fresh_install_rejects_existing_state(tmp_path: Path) -> None:
         try:
             apply_fresh_install(sandbox.repo)
         except AudiaGenticError as exc:
-            assert exc.kind == "business-rule"
+            assert exc.kind == "lifecycle"
             assert (
                 sandbox.repo / ".audiagentic" / "config" / "project.yaml"
             ).read_text(encoding="utf-8") == "contract-version: v1"

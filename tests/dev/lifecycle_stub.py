@@ -47,8 +47,8 @@ def run_stub(mode: str, project_root: Path) -> dict:
     if mode == "validate":
         return _validate_payload()
     raise AudiaGenticError(
-        code="LFC-VALIDATION-001",
-        kind="validation",
+        code="VAL-STUB-001",
+        kind="lifecycle",
         message=f"unsupported mode: {mode}",
         details={"mode": mode},
     )

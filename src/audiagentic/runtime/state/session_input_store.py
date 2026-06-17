@@ -19,19 +19,17 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.time import now_iso_z
 from audiagentic.runtime.state import jobs_store as _default_store
 
 # Type alias for job store interface
 JobStoreInterface = Callable[[Path, str], dict[str, Any]]
 
 
-def _now_timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _job_runtime_root(project_root: Path, job_id: str) -> Path:
@@ -71,7 +69,7 @@ def build_session_input_record(
         "stage": stage,
         "event-kind": event_kind,
         "message": message,
-        "timestamp": timestamp or _now_timestamp(),
+        "timestamp": timestamp or now_iso_z(),
     }
     if details is not None:
         payload["details"] = details
@@ -99,8 +97,8 @@ def _append_text(path: Path, text: str) -> None:
 def persist_session_input(project_root: Path, record: dict[str, Any]) -> dict[str, Any]:
     if not record.get("job-id"):
         raise AudiaGenticError(
-            code="JOB-VALIDATION-041",
-            kind="validation",
+            code="VAL-SESSION-001",
+            kind="state-store",
             message="session input record requires a job id",
             details={},
         )

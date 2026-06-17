@@ -29,6 +29,8 @@ Greenfield project lifecycle management: install, baseline sync, uninstall, and 
 | `detector.py` | Detect and report current installed state |
 | `fresh_install.py` | Bootstrap a fresh project installation |
 | `uninstall.py` | Remove runtime and component-owned files |
+| `external_mcp_probe.py` | External MCP server probing |
+| `observers.py` | Lifecycle event observers |
 
 ## Related Domains
 - `release` — calls lifecycle after install to bootstrap release workflow

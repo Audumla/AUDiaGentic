@@ -70,7 +70,6 @@ def test_status_unknown_component(tmp_path):
 
 LIFECYCLE_COMPONENTS = [
     "providers",
-    "planning",
     "release",
     "agent-jobs",
 ]
