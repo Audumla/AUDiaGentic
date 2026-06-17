@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from audiagentic.foundation.event import EventBus, EventService, StructuredLog
-from audiagentic.foundation.event import service as service_module
+from audiagentic.foundation.event import event_service as event_service_module
 
 
 class MemoryLog(StructuredLog):
@@ -25,7 +25,7 @@ def test_event_service_logs_and_dispatches_same_envelope(monkeypatch) -> None:
         envelope.metadata["event_id"] = envelope.id
         return EventBus.publish_envelope(bus, envelope, mode=mode)
 
-    monkeypatch.setattr(service_module, "get_bus", lambda: bus)
+    monkeypatch.setattr(event_service_module, "get_bus", lambda: bus)
     monkeypatch.setattr(bus, "publish_envelope", publish_envelope)
     bus.subscribe("planning.item.created", capture)
 
