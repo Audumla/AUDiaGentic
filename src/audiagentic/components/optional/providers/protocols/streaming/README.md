@@ -1,4 +1,4 @@
-# interoperability/protocols/streaming/
+# components/optional/providers/protocols/streaming/
 
 Live streaming protocol for capturing and normalizing real-time provider output.
 
@@ -22,6 +22,8 @@ Implements direct streaming of provider responses:
 - **sinks.py**: `StreamSink`, `NormalizedEventSink`, sink implementations
 - **completion.py**: `ProviderCompletion`, normalization, validation
 - **provider_streaming.py**: `StreamedCommandResult`, streaming command execution
+- **_utils.py**: Internal streaming utilities
+- **base_extractor.py**: Base stream extraction logic
 
 ## Must not own
 

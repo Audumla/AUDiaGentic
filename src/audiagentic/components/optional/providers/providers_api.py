@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.output import ComponentOutputEvent
+from audiagentic.foundation.contracts.output import ComponentOutputEvent
 
 
 def list_providers(project_root: Path) -> dict[str, Any]:

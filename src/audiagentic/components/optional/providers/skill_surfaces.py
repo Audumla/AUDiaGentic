@@ -12,9 +12,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
-import os
 import sys
-import tempfile
 from pathlib import Path
 
 from audiagentic.components.optional.agent_jobs.prompt_syntax import load_prompt_syntax
@@ -24,6 +22,7 @@ from audiagentic.components.optional.providers.surfaces.base import (
 )
 from audiagentic.components.optional.providers.surfaces.manager import build_provider_surface_blocks
 from audiagentic.components.optional.providers.surfaces.registry import load_renderer_registry
+from audiagentic.foundation.io import atomic_write_text
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -128,19 +127,6 @@ def _build_base_surfaces(project_root: Path, syntax: dict[str, object]) -> dict[
     return surfaces
 
 
-def _write_atomic(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(prefix=path.stem + ".", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(text)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp_path, path)
-    finally:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-
 
 def _apply_contributions(project_root: Path, surfaces: dict[Path, str]) -> dict[Path, str]:
     """Overlay contribution blocks onto the base render output for each path."""
@@ -219,7 +205,7 @@ def regenerate_skill_surfaces(
             continue
         diffs.append((path.relative_to(project_root), _diff_text(path.relative_to(project_root), current, desired)))
         if not check and not dry_run:
-            _write_atomic(path, desired)
+            atomic_write_text(path, desired)
 
     if check:
         if diffs:

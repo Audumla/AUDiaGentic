@@ -1,11 +1,17 @@
-from audiagentic.components.optional.providers.adapters.mcp_json import (
-    read_mcp_json,
-    remove_mcp_json,
-    write_mcp_json,
+from audiagentic.components.optional.providers.adapters.codex.language_servers import (
+    read_language_servers_codex,
+    remove_language_servers_codex,
+    write_language_servers_codex,
+)
+from audiagentic.components.optional.providers.adapters.codex.mcp_format import (
+    read_codex_toml,
+    remove_codex_toml,
+    write_codex_toml,
 )
 
 from ...descriptors.base import (
     AgentFile,
+    LanguageServersConfigSpec,
     McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
@@ -36,12 +42,19 @@ register(ProviderDescriptor(
     agent_files=(
         AgentFile("AGENTS.md", managed=False, description="Codex project instructions"),
     ),
-    mcp_config=McpConfigSpec(
-        config_path=".mcp.json",
-        reader=read_mcp_json,
-        writer=write_mcp_json,
-        remover=remove_mcp_json,
-        format="mcp-json",
+   mcp_config=McpConfigSpec(
+        config_path=".codex/config.toml",
+        reader=read_codex_toml,
+        writer=write_codex_toml,
+        remover=remove_codex_toml,
+        format="codex-toml",
         refresh_mode="restart-required",
+    ),
+    language_servers_config=LanguageServersConfigSpec(
+        config_path=".codex/config.toml",
+        reader=read_language_servers_codex,
+        writer=write_language_servers_codex,
+        remover=remove_language_servers_codex,
+        format="codex-toml",
     ),
 ))

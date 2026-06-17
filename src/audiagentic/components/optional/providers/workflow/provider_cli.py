@@ -4,7 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.output import ComponentOutputEvent, ComponentOutputSink
+from audiagentic.foundation.contracts.output import ComponentOutputEvent, ComponentOutputSink
 from audiagentic.foundation.workflow import ItemView, StateMachine
 from audiagentic.foundation.workflow.invocation import (
     CallableStep,

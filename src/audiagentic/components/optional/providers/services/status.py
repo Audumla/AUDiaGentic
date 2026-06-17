@@ -165,8 +165,8 @@ def build_provider_status(
     if provider_id is not None:
         if provider_id not in providers and provider_id not in descriptors:
             raise AudiaGenticError(
-                code="PRV-VALIDATION-010",
-                kind="validation",
+                code="VAL-STATUS-001",
+                kind="providers",
                 message="unknown provider-id in provider config",
                 details={"provider-id": provider_id},
             )

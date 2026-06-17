@@ -10,19 +10,44 @@ from audiagentic.foundation.workflow.invocation.steps import CallableStep, Seque
 
 
 @dataclass(frozen=True)
+class LanguageServerEntry:
+    """A single language server entry for provider config sync."""
+    language: str
+    command: list[str]
+    file_extensions: list[str] = field(default_factory=list)
+    settings: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class McpConfigSpec:
     """Declares how a provider reads/writes its MCP server config.
 
     reader/writer/remover are supplied by each adapter — they own their format.
     format is informational only (display, tests, logging).
     """
-    config_path: str | Callable[[], Path]
+    config_path: str | Callable[[Path | None], Path]
     reader: Callable[[Path], dict[str, McpServerEntry]]
     writer: Callable[[Path, dict[str, McpServerEntry]], None]
     remover: Callable[[Path, str], bool]
     refresh_mode: str  # "file-watch" | "restart-required"
     format: str = ""   # informational label
     reload_fn: Callable[[Path], dict[str, Any]] | None = None
+
+
+@dataclass(frozen=True)
+class LanguageServersConfigSpec:
+    """Declares how a provider reads/writes its language server config.
+
+    reader/writer/remover are supplied by each adapter — they own their format.
+    writer upserts managed languages (preserving unmanaged entries); remover
+    deletes one managed language (also preserving unmanaged). format is
+    informational only (display, tests, logging).
+    """
+    config_path: str | Callable[[Path | None], Path]
+    reader: Callable[[Path], dict[str, LanguageServerEntry]]
+    writer: Callable[[Path, dict[str, LanguageServerEntry]], None]
+    remover: Callable[[Path, str], bool]
+    format: str = ""   # informational label
 
 
 @dataclass(frozen=True)
@@ -118,6 +143,8 @@ class ProviderDescriptor:
     fetch_catalog_fn: Callable[[dict[str, Any]], list[dict[str, Any]]] | None = None
     # MCP server config spec — None means this provider has no manageable MCP config.
     mcp_config: McpConfigSpec | None = None
+    # Language server config spec — None means this provider doesn't accept LSP config sync.
+    language_servers_config: LanguageServersConfigSpec | None = None
 
     @property
     def install_mode(self) -> str:

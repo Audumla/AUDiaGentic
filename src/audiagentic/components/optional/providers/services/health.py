@@ -1,12 +1,9 @@
 """Provider health check helpers."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
-
-def _now_timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+from audiagentic.foundation.time import now_iso_z
 
 
 def _config_status(config: dict[str, Any]) -> tuple[bool, str | None]:
@@ -32,5 +29,5 @@ def health_check(provider_id: str, descriptor: dict[str, Any], config: dict[str,
         "configured": configured,
         "latency-ms": 0,
         "error": None if configured else error,
-        "checked-at": (now_fn or _now_timestamp)(),
+        "checked-at": (now_fn or now_iso_z)(),
     }

@@ -24,7 +24,7 @@ def test_registry_rejects_invalid_descriptor() -> None:
     try:
         load_provider_registry([descriptor])
     except AudiaGenticError as exc:
-        assert exc.kind == "validation"
+        assert exc.kind == "providers"
     else:
         raise AssertionError("expected validation error")
 
@@ -34,6 +34,6 @@ def test_registry_rejects_duplicate_provider_id() -> None:
     try:
         load_provider_registry([descriptor, descriptor])
     except AudiaGenticError as exc:
-        assert exc.kind == "business-rule"
+        assert exc.kind == "providers"
     else:
         raise AssertionError("expected duplicate provider error")

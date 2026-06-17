@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.output import ComponentOutputEvent, ComponentOutputSink
+from audiagentic.foundation.contracts.output import ComponentOutputEvent, ComponentOutputSink
 from audiagentic.foundation.workflow.invocation import WorkflowInvocationResult
 
 from ..descriptors.base import CliInstallRecipe, ProviderDescriptor
@@ -28,8 +28,8 @@ def _descriptor(provider_id: str) -> ProviderDescriptor:
     descriptor = get_descriptor(provider_id)
     if descriptor is None:
         raise AudiaGenticError(
-            code="PRV-VALIDATION-002",
-            kind="validation",
+            code="VAL-PLFC-001",
+            kind="providers",
             message="unknown provider",
             details={"provider-id": provider_id},
         )
@@ -439,8 +439,8 @@ def provision_all_provider_clis(
     }
     if action not in actions:
         raise AudiaGenticError(
-            code="PRV-VALIDATION-003",
-            kind="validation",
+            code="VAL-PLFC-002",
+            kind="providers",
             message="unsupported provider CLI provisioning action",
             details={"action": action},
         )

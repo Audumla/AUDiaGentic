@@ -1,4 +1,4 @@
-# interoperability/protocols/
+# components/optional/providers/protocols/
 
 ## Purpose
 Communication protocols used to interact with external systems. Each protocol subdomain owns a distinct transport or exchange mechanism.
@@ -6,7 +6,7 @@ Communication protocols used to interact with external systems. Each protocol su
 ## Ownership
 - Protocol-level abstractions for external system communication
 - Streaming protocol implementation (`streaming/`)
-- Future protocol scaffolding (`acp/`, `mcp/`)
+- Future protocol scaffolding (`acp/`)
 
 ## Must NOT Own
 - Provider-specific business logic (→ `interoperability/providers/`)

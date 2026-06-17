@@ -16,8 +16,8 @@ def _descriptor(provider_id: str) -> ProviderDescriptor:
     descriptor = get_descriptor(provider_id)
     if descriptor is None:
         raise AudiaGenticError(
-            code="PRV-VALIDATION-002",
-            kind="validation",
+            code="VAL-MCP-001",
+            kind="providers",
             message="unknown provider",
             details={"provider-id": provider_id},
         )
@@ -26,7 +26,7 @@ def _descriptor(provider_id: str) -> ProviderDescriptor:
 
 def _resolve_mcp_path(spec: McpConfigSpec, project_root: Path) -> Path:
     if callable(spec.config_path):
-        return spec.config_path()
+        return spec.config_path(project_root)
     return project_root / spec.config_path
 
 

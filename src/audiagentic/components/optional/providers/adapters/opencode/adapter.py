@@ -183,8 +183,8 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
 
     if completed.returncode != 0:
         raise AudiaGenticError(
-            code="PRV-EXTERNAL-012",
-            kind="external",
+            code="EXT-OPENC-001",
+            kind="providers",
             message="opencode execution failed",
             details={
                 "provider-id": "opencode",

@@ -34,8 +34,8 @@ def _load_runner(provider_id: str) -> ProviderRunner | None:
     runner = getattr(module, "run", None)
     if runner is None:
         raise AudiaGenticError(
-            code="PRV-VALIDATION-012",
-            kind="validation",
+            code="INT-EXEC-001",
+            kind="providers",
             message="provider adapter is missing a run entrypoint",
             details={"provider-id": provider_id, "module": module_path},
         )
@@ -68,8 +68,8 @@ def execute_provider(
     result = runner(packet_ctx, provider_cfg)
     if not isinstance(result, dict):
         raise AudiaGenticError(
-            code="PRV-VALIDATION-013",
-            kind="validation",
+            code="INT-EXEC-002",
+            kind="providers",
             message="provider adapter must return a mapping",
             details={"provider-id": provider_id, "type": type(result).__name__},
         )

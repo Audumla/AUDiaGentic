@@ -11,9 +11,15 @@ from audiagentic.components.optional.providers.adapters.mcp_opencode import (
     remove_opencode_mcp,
     write_opencode_mcp,
 )
+from audiagentic.components.optional.providers.adapters.opencode.language_servers import (
+    read_language_servers_opencode,
+    remove_language_servers_opencode,
+    write_language_servers_opencode,
+)
 
 from ...descriptors.base import (
     AgentFile,
+    LanguageServersConfigSpec,
     McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
@@ -137,5 +143,12 @@ register(ProviderDescriptor(
         remover=remove_opencode_mcp,
         format="opencode-mcp",
         refresh_mode="file-watch",
+    ),
+    language_servers_config=LanguageServersConfigSpec(
+        config_path=".opencode/opencode.json",
+        reader=read_language_servers_opencode,
+        writer=write_language_servers_opencode,
+        remover=remove_language_servers_opencode,
+        format="opencode-json",
     ),
 ))
