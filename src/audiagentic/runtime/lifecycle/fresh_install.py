@@ -15,8 +15,8 @@ def apply_fresh_install(project_root: Path) -> dict:
     state = detect_installed_state(project_root)
     if state.state != "none":
         raise AudiaGenticError(
-            code="LFC-BUSINESS-001",
-            kind="business-rule",
+            code="CON-INSTALL-001",
+            kind="lifecycle",
             message="fresh install requires empty state",
             details={"state": state.state},
         )

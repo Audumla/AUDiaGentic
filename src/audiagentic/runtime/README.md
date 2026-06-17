@@ -1,42 +1,33 @@
 # runtime/
 
+Runtime infrastructure and mutable project state.
+
 ## Purpose
-Runtime infrastructure domain. Owns two distinct responsibilities:
-1. **Lifecycle** — project installation, baseline sync, manifest management
-2. **State** — durable persistence of live job records, session input, and review bundles
 
-## Ownership
-- Project lifecycle operations (install, update, detect state)
-- Baseline asset synchronization from template to project
-- Component manifest read/write
-- Durable job record persistence
-- Durable session input persistence
-- Durable review bundle persistence
+This layer owns code that turns packaged defaults plus installed components into a live working AUDiaGentic environment.
 
-## Must NOT Own
-- Job orchestration logic (→ `execution`)
-- Provider dispatch (→ `interoperability`)
-- Release audit generation (→ `release`)
-- Channel formatting (→ `channels`)
+## Owns
 
-## Allowed Dependencies
-- `foundation/contracts` — canonical errors, schema validation, canonical IDs
-- `foundation/config` — project configuration
+- lifecycle install, detect, baseline sync, and uninstall flows
+- layered config loading from package, user, and project tiers
+- harness materialization, reload markers, system prompt assembly, and MCP config writes
+- rig launch/reuse/probing for embedded and external backends
+- durable job/session state stores
+- package update detection and update prompts
 
 ## Subdomains
 
-### lifecycle/
-Manages the installed state of AUDiaGentic in a project:
-- `baseline_sync.py` — synchronize managed baseline from template
-- `fresh_install.py` — first-time installation
-- `detector.py` — detect current installed state
-- `manifest.py` — read/write component manifest
+- `config/` layered YAML loading helpers
+- `harness/` agent-facing runtime files, prompt assembly, and harness-specific adapters
+- `lifecycle/` install/detect/sync/uninstall logic
+- `rig/` model backend launch, registry, and HTTP probes
+- `state/` persistent job/session input storage
+- `update/` version checks and update workflow helpers
 
-### state/
-Durable persistence layer extracted from `execution/jobs/`:
-- `jobs_store.py` — job record read/write
-- `session_input_store.py` — session input event persistence
-- review bundle and report persistence remains in `execution/jobs/reviews.py`
+## Must Not Own
 
-## Dependency Note
-`runtime` must NOT import from `channels` or `execution`. It is a lower-level layer that both of those domains depend on.
+- provider-specific CLI integration logic
+- release ledger business rules
+- generic contracts, schemas, or workflow primitives
+
+Those belong in `components/` or `foundation/`.

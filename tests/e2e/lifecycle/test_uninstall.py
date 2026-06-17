@@ -68,7 +68,7 @@ def test_uninstall_rejects_non_audiagentic(tmp_path: Path) -> None:
         try:
             apply_uninstall(sandbox.repo)
         except AudiaGenticError as exc:
-            assert exc.kind == "business-rule"
+            assert exc.kind == "lifecycle"
         else:
             raise AssertionError("expected business-rule error")
     finally:

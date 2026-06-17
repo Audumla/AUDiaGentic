@@ -6,8 +6,9 @@ session monitors can detect config changes without harness-specific logic.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
+
+from audiagentic.foundation.time import now_iso_z
 
 
 def _runtime_action_for_reason(reason: str, *, has_mcp_servers: bool = True) -> str:
@@ -55,7 +56,7 @@ def write_reload_marker(
     path = runtime_reload_request_path(project_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "requested_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "requested_at": now_iso_z(),
         **build_runtime_sync(reason=reason, component_id=component_id, target=target, has_mcp_servers=has_mcp_servers),
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")

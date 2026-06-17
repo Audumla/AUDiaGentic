@@ -33,9 +33,14 @@ _REGISTRY: dict[str, str] = {
     "opencode": "audiagentic.runtime.harness.opencode",
 }
 
-def _harness_cfg_path() -> Path:
+def default_config_path() -> Path:
+    """Package-default harness config path (config/provisioning/harness/ag.yaml)."""
     from .paths import _HARNESS_CONFIG
     return _HARNESS_CONFIG
+
+
+def _harness_cfg_path() -> Path:
+    return default_config_path()
 
 
 def get_harness_type(project_root: Path | None = None) -> str:
@@ -64,6 +69,11 @@ def _mod(subpath: str, project_root: Path | None = None):
 
 def install_to(target: Path, project_root: Path | None = None) -> int:
     return _mod("install", project_root).install_to(target, project_root)
+
+
+def version_info(project_root: Path | None = None) -> dict[str, str]:
+    """Configured agent + MCP adapter versions for the active harness."""
+    return _mod("install", project_root).version_info(project_root)
 
 
 def uninstall_from(target: Path) -> int:
