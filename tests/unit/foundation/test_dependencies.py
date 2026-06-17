@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from audiagentic.foundation.dependencies import detect_missing
+from audiagentic.foundation.components.dependencies import detect_missing
 from audiagentic.foundation.workflow.invocation.models import StepResult
 from audiagentic.foundation.workflow.invocation.steps import SelectStep, SequenceStep, ShellStep
 

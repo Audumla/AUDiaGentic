@@ -27,6 +27,7 @@ ComponentOutputSink = Callable[[ComponentOutputEvent], None]
 
 
 def coerce_output_event(message: str | ComponentOutputEvent) -> ComponentOutputEvent:
+    """Return the event unchanged, or wrap a plain string as a progress event."""
     if isinstance(message, ComponentOutputEvent):
         return message
     return ComponentOutputEvent(message=str(message))

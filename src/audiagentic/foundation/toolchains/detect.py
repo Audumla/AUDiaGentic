@@ -3,11 +3,24 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+from pathlib import Path
 
 
 def tool_available(name: str) -> bool:
     """Return True if the named executable is on PATH."""
     return shutil.which(name) is not None
+
+
+def uv_available() -> bool:
+    """Return True if the uv toolchain (uv or uvx) is installed.
+
+    Adds a ``~/.local/bin`` fallback because uv's installer drops binaries
+    there, which is not always on PATH for the running process.
+    """
+    if tool_available("uvx") or tool_available("uv"):
+        return True
+    local_bin = Path.home() / ".local" / "bin"
+    return (local_bin / "uv").exists() or (local_bin / "uvx").exists()
 
 
 def privilege_prefix() -> tuple[str, ...]:

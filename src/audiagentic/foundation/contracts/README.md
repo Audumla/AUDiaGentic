@@ -11,7 +11,6 @@ Defines the canonical data formats, error envelopes, and ID generation rules for
 - Schemas (JSON Schema files in `schemas/` subdirectory)
 - Error types and error envelope construction (`errors.py`)
 - ID validation and canonical ID sets (`canonical_ids.py`)
-- Glossary of canonical terms (`glossary.py`)
 - Schema registry and discovery (`schema_registry.py`)
 
 ## Key modules
@@ -19,9 +18,10 @@ Defines the canonical data formats, error envelopes, and ID generation rules for
 - **errors.py**: `AudiaGenticError`, `to_error_envelope`
 - **schema_registry.py**: `read_schema()`, `iter_schema_paths()`, schema file discovery
 - **canonical_ids.py**: `validate_ids()`, provider and packet ID validation
-- **glossary.py**: Canonical term definitions
 - **schemas/**: Flat JSON Schema files (job-record, review-report, etc.)
-- **schemas/planning/**: Planning-specific schemas (request, task, plan, etc.)
+- **validate_ids.py**: ID validation utilities
+- **validate_packet_dependencies.py**: Packet dependency validation
+- **validate_schemas.py**: Schema validation utilities
 
 ## Must not own
 
