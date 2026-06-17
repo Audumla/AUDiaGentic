@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from audiagentic.foundation.event.envelope import EventEnvelope
-from audiagentic.foundation.event.log import StructuredLog
+from audiagentic.foundation.event.event_log import StructuredLog
 
 
 def _records(path: Path) -> list[dict]:

@@ -7,16 +7,14 @@ portable without requiring the OpenTelemetry SDK at runtime.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.time import now_iso
+
 from .envelope import EventEnvelope
 
-
-def now_iso() -> str:
-    """Return current UTC timestamp in ISO 8601 format."""
-    return datetime.now(timezone.utc).isoformat()
+__all__ = ["StructuredLog", "now_iso"]
 
 
 class StructuredLog:
