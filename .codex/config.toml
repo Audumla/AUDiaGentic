@@ -1,8 +1,19 @@
 model = "general"
 model_provider = "brutus"
+[model_providers]
 
 [model_providers.brutus]
 name = "Brutus"
 base_url = "http://10.10.100.10:41080/v1"
 env_key = "LOCAL_API_KEY"
 wire_api = "responses"
+
+[mcp_servers]
+
+[mcp_servers.ag-lsp]
+command = "C:/Users/mgs/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe"
+args = ["-m", "audiagentic.components.optional.coding_lsp.lsp_mcp"]
+enabled = true
+
+[mcp_servers.ag-lsp.env]
+PYTHONPATH = "H:/development/projects/AUDia/AUDiaGentic/src"
