@@ -40,7 +40,7 @@ def test_service_boundary_rejects_invalid_request(tmp_path: Path) -> None:
         try:
             boundary.run_job({"packet-id": "pkt", "project-id": "proj"})
         except AudiaGenticError as exc:
-            assert exc.kind == "validation"
+            assert exc.kind == "agent-jobs"
         else:
             raise AssertionError("expected validation error")
         assert not job_record_path(sandbox.repo, "job_missing").exists()

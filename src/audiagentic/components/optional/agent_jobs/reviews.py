@@ -2,9 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -12,10 +9,8 @@ from jsonschema import Draft202012Validator
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import read_schema
-
-
-def _now_timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+from audiagentic.foundation.io import atomic_write_json
+from audiagentic.foundation.time import now_iso_z
 
 
 def _validate(schema_name: str, payload: dict[str, Any]) -> list[str]:
@@ -63,8 +58,8 @@ def subject_from_target(target: dict[str, Any], *, existing_job_id: str | None =
             subject["adhoc-id"] = target["adhoc-id"]
         return subject
     raise AudiaGenticError(
-        code="JOB-VALIDATION-030",
-        kind="validation",
+        code="VAL-REVIEW-001",
+        kind="agent-jobs",
         message="unsupported review target kind",
         details={"kind": kind},
     )
@@ -90,13 +85,13 @@ def build_review_report(
         "findings": findings,
         "recommendation": recommendation,
         "follow-up-actions": follow_up_actions,
-        "created-at": created_at or _now_timestamp(),
+        "created-at": created_at or now_iso_z(),
     }
     issues = validate_review_report(payload)
     if issues:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-031",
-            kind="validation",
+            code="VAL-REVIEW-002",
+            kind="agent-jobs",
             message="review report failed schema validation",
             details={"issues": issues, "review-id": review_id},
         )
@@ -121,8 +116,8 @@ def build_review_bundle(
         status = "open"
     elif aggregation_rule != "all-pass":
         raise AudiaGenticError(
-            code="JOB-VALIDATION-032",
-            kind="validation",
+            code="VAL-REVIEW-003",
+            kind="agent-jobs",
             message="unsupported review aggregation rule",
             details={"aggregation-rule": aggregation_rule},
         )
@@ -152,32 +147,17 @@ def build_review_bundle(
         "reports": reports,
         "decision": decision,
         "status": status,
-        "updated-at": updated_at or _now_timestamp(),
+        "updated-at": updated_at or now_iso_z(),
     }
     issues = validate_review_bundle(payload)
     if issues:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-033",
-            kind="validation",
+            code="VAL-REVIEW-004",
+            kind="agent-jobs",
             message="review bundle failed schema validation",
             details={"issues": issues, "review-bundle-id": review_bundle_id},
         )
     return payload
-
-
-def _write_atomic(path: Path, payload: dict[str, Any]) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(prefix=path.stem + ".", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2, sort_keys=True)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp_path, path)
-    finally:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-    return path
 
 
 def review_artifact_dir(project_root: Path, job_id: str) -> Path:
@@ -193,11 +173,15 @@ def review_bundle_path(project_root: Path, job_id: str) -> Path:
 
 
 def persist_review_report(project_root: Path, job_id: str, payload: dict[str, Any]) -> Path:
-    return _write_atomic(review_report_path(project_root, job_id, payload["review-id"]), payload)
+    path = review_report_path(project_root, job_id, payload["review-id"])
+    atomic_write_json(path, payload)
+    return path
 
 
 def persist_review_bundle(project_root: Path, job_id: str, payload: dict[str, Any]) -> Path:
-    return _write_atomic(review_bundle_path(project_root, job_id), payload)
+    path = review_bundle_path(project_root, job_id)
+    atomic_write_json(path, payload)
+    return path
 
 
 def read_review_bundle(project_root: Path, job_id: str) -> dict[str, Any]:
@@ -206,16 +190,16 @@ def read_review_bundle(project_root: Path, job_id: str) -> dict[str, Any]:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
         raise AudiaGenticError(
-            code="JOB-IO-003",
-            kind="io",
+            code="IO-REVIEW-001",
+            kind="agent-jobs",
             message="failed to read review bundle",
             details={"job-id": job_id, "error": str(exc)},
         ) from exc
     issues = validate_review_bundle(payload)
     if issues:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-036",
-            kind="validation",
+            code="VAL-REVIEW-005",
+            kind="agent-jobs",
             message="review bundle failed validation",
             details={"job-id": job_id, "issues": issues},
         )

@@ -11,12 +11,12 @@ Trigger:
 Do:
 - map the requested change into a concrete execution plan with discrete steps
 - identify dependencies, blockers, risks, and review checkpoints
-- verify the target subject exists and is consistent with planning records if an id is supplied
+- verify the target subject exists and is consistent with existing records if an id is supplied
 - keep the plan deterministic, scoped, and concise — no implementation work
 - surface any ambiguity before committing to a plan shape
 
 Do not:
 - do not implement the requested change
-- do not create planning items (requests, specs, plans, tasks) without explicit user approval
+- do not create or modify tracked work artifacts without explicit user approval
 - do not mutate tracked docs or code without approval
 - do not broaden scope beyond what the prompt specifies

@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.time import now_iso_z
 from audiagentic.runtime.state.jobs_store import validate_job_record
 
 
@@ -32,8 +32,6 @@ class JobRecord:
     review_bundle_id: str | None = None
 
 
-def _now_timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def build_job_record(
@@ -57,7 +55,7 @@ def build_job_record(
     review_policy: dict[str, Any] | None = None,
     review_bundle_id: str | None = None,
 ) -> dict[str, Any]:
-    timestamp = _now_timestamp()
+    timestamp = now_iso_z()
     payload = {
         "contract-version": "v1",
         "job-id": job_id,
@@ -90,8 +88,8 @@ def build_job_record(
     issues = validate_job_record(payload)
     if issues:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-001",
-            kind="validation",
+            code="VAL-RECORD-001",
+            kind="agent-jobs",
             message="job record failed schema validation",
             details={"issues": issues},
         )
@@ -102,8 +100,8 @@ def coerce_job_record(payload: dict[str, Any]) -> JobRecord:
     issues = validate_job_record(payload)
     if issues:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-002",
-            kind="validation",
+            code="VAL-RECORD-002",
+            kind="agent-jobs",
             message="job record failed schema validation",
             details={"issues": issues},
         )

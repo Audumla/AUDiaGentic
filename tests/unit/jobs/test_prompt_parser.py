@@ -142,7 +142,7 @@ def test_parse_prompt_launch_request_rejects_majority_pass_in_mvp() -> None:
             prompt_id="prm_20260330_0003",
         )
     except AudiaGenticError as exc:
-        assert exc.kind == "validation"
+        assert exc.kind == "agent-jobs"
     else:
         raise AssertionError("expected validation error")
 

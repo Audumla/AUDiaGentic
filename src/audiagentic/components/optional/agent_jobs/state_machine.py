@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.time import now_iso_z
 from audiagentic.runtime.state import jobs_store as store
 
 LEGAL_TRANSITIONS = {
@@ -22,23 +22,21 @@ LEGAL_TRANSITIONS = {
 TERMINAL_STATES = {"completed", "failed", "cancelled"}
 
 
-def _now_timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def ensure_transition(current_state: str, new_state: str) -> None:
     allowed = LEGAL_TRANSITIONS.get(current_state)
     if allowed is None:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-006",
-            kind="validation",
+            code="VAL-STATE-001",
+            kind="agent-jobs",
             message="unknown job state",
             details={"state": current_state},
         )
     if new_state not in allowed:
         raise AudiaGenticError(
-            code="JOB-BUSINESS-001",
-            kind="business-rule",
+            code="CON-STATE-001",
+            kind="agent-jobs",
             message="illegal job state transition",
             details={"from": current_state, "to": new_state},
         )
@@ -53,7 +51,7 @@ def transition_job(
     ensure_transition(job_record["state"], new_state)
     updated = dict(job_record)
     updated["state"] = new_state
-    updated["updated-at"] = (now_fn or _now_timestamp)()
+    updated["updated-at"] = (now_fn or now_iso_z)()
     return updated
 
 
