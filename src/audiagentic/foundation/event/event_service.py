@@ -9,8 +9,8 @@ from __future__ import annotations
 import warnings
 from typing import Any
 
-from .bus import DeliveryMode, get_bus
 from .envelope import EventEnvelope
+from .event_bus import DeliveryMode, get_bus
 
 
 class EventService:

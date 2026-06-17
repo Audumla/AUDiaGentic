@@ -4,7 +4,7 @@ Generic event infrastructure for AUDiaGentic. Provides in-process pub/sub dispat
 
 ## Purpose
 
-The event layer is the communication backbone between components. It allows planning, knowledge, and future components to exchange events without direct coupling. The layer is **transport-agnostic** — the in-process `EventBus` can be replaced with an external MQ implementation without changing component code.
+The event layer is the communication backbone between components. It allows components to exchange events without direct coupling. The layer is **transport-agnostic** — the in-process `EventBus` can be replaced with an external MQ implementation without changing component code.
 
 **Key design principle:** The event bus is passive infrastructure. Components register their own subscribers; the bus does not know about event semantics.
 
@@ -20,7 +20,7 @@ Publisher → EventService → StructuredLog (JSONL) + EventBus → Subscribers
 
 ## Components
 
-### EventBus / EventBusProtocol (`bus.py`)
+### EventBus / EventBusProtocol (`event_bus.py`)
 
 Core in-process pub/sub with SYNC/ASYNC delivery modes.
 
@@ -57,19 +57,19 @@ Canonical dataclass wrapper for all events. Auto-generates metadata:
 
 Serializable via `to_dict()` / `from_dict()`.
 
-### EventService (`service.py`)
+### EventService (`event_service.py`)
 
 Thin publisher that writes canonical event records to `StructuredLog` (local JSONL) and dispatches through `EventBus` (shared runtime delivery). Workflow-specific behavior (propagation, automation) lives in event subscribers, not here.
 
 - `publish(event_type, payload, metadata, mode)` — emits to log + bus
-- `sync_delivery_mode()` — returns SYNC mode for planning lifecycle
+- `sync_delivery_mode()` — returns SYNC mode for synchronous lifecycle delivery
 - `supports_sync` — always `True` for in-process bus
 
-### StructuredLog (`log.py`)
+### StructuredLog (`event_log.py`)
 
 Append-only JSONL structured logger aligned with the OpenTelemetry Logs data model. Each record includes `timestamp`, `observed_timestamp`, `severity_text`, `body`, and `attributes`, with optional `trace_id` and `span_id`. Event publishers use `emit_event()` to project `EventEnvelope` into this schema. Domain modules should delegate operational/audit records here instead of deriving component-specific log formats inside reusable foundation code.
 
-### FileEventStore (`store.py`)
+### FileEventStore (`event_store.py`)
 
 Optional file-based event persistence with atomic writes (temp file + rename). Best-effort — failures are logged, never block publishing.
 
@@ -78,33 +78,24 @@ Optional file-based event persistence with atomic writes (temp file + rename). B
 - `cleanup(older_than_days)` — retention management
 - Filename format: `{timestamp}_{sanitized_type}_{event_id}.json`
 
-### ReplayService (`replay.py`)
+### ReplayService (`event_replay.py`)
 
 Replays persisted events from `FileEventStore`. Optionally re-dispatches to subscribers.
 
 - `replay(from_timestamp, to_timestamp, event_type_pattern)` — returns count of replayed events
 - `dispatch_on_replay` — when `True`, replayed events trigger subscribers
 
-### CodeFormatter (`formatters.py`)
-
-Opt-in subscriber that runs `ruff format` + `ruff check --fix` on task source files when a task transitions to `done`. Registered via `bootstrap.setup_code_formatter()`.
-
-### Configuration (`config.py`)
+### Configuration (`event_config.py`)
 
 Dataclass-based configuration loaded from `.audiagentic/event/config.yaml`.
 
-- `EventStoreConfig` — enabled, path, retention_days
-- `CycleDetectionConfig` — max_depth, correlation_tracking
-- `ReplayConfig` — dispatch_on_replay
-- `load_config(root)` — loads from file or returns defaults
+- `EventStoreSettings` — enabled, path, retention_days
+- `EventCycleDetectionSettings` — max_depth, correlation_tracking
+- `EventReplaySettings` — dispatch_on_replay
+- `EventLayerConfig` — top-level event-layer settings object
+- `load_event_config(root)` — loads from file or returns defaults
 
-### Bootstrap (`bootstrap.py`)
-
-Opt-in registration functions. Nothing subscribes at import time.
-
-- `setup_code_formatter(project_root)` — registers CodeFormatter as event subscriber
-
-### Exceptions (`exceptions.py`)
+### Exceptions (`event_exceptions.py`)
 
 - **EventBusError** — base exception
 - **CycleDetectedError** — propagation depth exceeded or correlation_id cycle
@@ -187,13 +178,11 @@ class MQTTBus(EventBusProtocol):
 
 | File | Responsibility |
 |------|----------------|
-| `bus.py` | EventBus, EventBusProtocol, singleton, pattern matching, cycle detection |
+| `event_bus.py` | EventBus, EventBusProtocol, singleton, pattern matching, cycle detection |
 | `envelope.py` | EventEnvelope dataclass with auto-metadata |
-| `service.py` | EventService — publishes to log + bus |
-| `log.py` | StructuredLog — OpenTelemetry-style JSONL writer |
-| `store.py` | FileEventStore — optional file persistence with atomic writes |
-| `replay.py` | ReplayService — replay persisted events |
-| `config.py` | EventConfig dataclasses and YAML loader |
-| `bootstrap.py` | Opt-in subscription registration |
-| `formatters.py` | CodeFormatter — ruff on task completion |
-| `exceptions.py` | EventBusError, CycleDetectedError, SubscriberError, PersistenceError |
+| `event_service.py` | EventService — publishes to log + bus |
+| `event_log.py` | StructuredLog — OpenTelemetry-style JSONL writer |
+| `event_store.py` | FileEventStore — optional file persistence with atomic writes |
+| `event_replay.py` | ReplayService — replay persisted events |
+| `event_config.py` | EventLayerConfig dataclasses and YAML loader |
+| `event_exceptions.py` | EventBusError, CycleDetectedError, SubscriberError, PersistenceError |
