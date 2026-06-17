@@ -9,11 +9,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.optional.source_control.probes import gh_mcp_available
 from audiagentic.foundation.components import is_installed
 from audiagentic.foundation.components.ids import COMPONENT_AGENT_LEDGER, COMPONENT_SOURCE_CONTROL
-from audiagentic.foundation.dependencies import (
-    gh_mcp_available,
-)
 from audiagentic.foundation.toolchains.detect import tool_available
 
 SOURCE_CONTROL_DEPENDENCY_IDS = ["git", "gh", "gh-mcp", "uv"]

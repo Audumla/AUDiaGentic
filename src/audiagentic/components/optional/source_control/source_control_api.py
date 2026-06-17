@@ -7,14 +7,14 @@ from audiagentic.components.optional.source_control.source_control_bootstrap imp
     SOURCE_CONTROL_DEPENDENCY_IDS,
     detect_availability,
 )
-from audiagentic.foundation.dependencies import (
+from audiagentic.foundation.components.dependencies import (
     detect_missing,
-    load_component_probes,
-    load_component_workflow,
+    load_dependency_probes,
+    load_dependency_workflow,
 )
 from audiagentic.foundation.workflow.invocation.steps import SequenceStep
 
-_PROBES = load_component_probes("source-control")
+_PROBES = load_dependency_probes("source-control")
 
 
 def get_source_control_status() -> dict[str, Any]:
@@ -23,7 +23,7 @@ def get_source_control_status() -> dict[str, Any]:
 
 
 async def install_dependencies(names: list[str], *, ctx, run_with_output) -> dict[str, Any]:
-    workflow = load_component_workflow("source-control", action="install")
+    workflow = load_dependency_workflow("source-control", action="install")
     filtered = workflow.steps if not names else tuple(
         s for s in workflow.steps if s.id in names
     )
@@ -37,7 +37,7 @@ async def install_dependencies(names: list[str], *, ctx, run_with_output) -> dic
 
 
 async def uninstall_dependencies(names: list[str], *, ctx, run_with_output) -> dict[str, Any]:
-    workflow = load_component_workflow("source-control", action="uninstall")
+    workflow = load_dependency_workflow("source-control", action="uninstall")
     filtered = workflow.steps if not names else tuple(
         s for s in workflow.steps if s.id in names
     )

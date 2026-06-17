@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.event.log import StructuredLog
+from audiagentic.foundation.event.event_log import StructuredLog
 
 logger = logging.getLogger(__name__)
 
