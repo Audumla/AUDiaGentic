@@ -46,7 +46,7 @@ def test_history_import_missing_file(tmp_path: Path) -> None:
         try:
             import_legacy_history(sandbox.repo, missing)
         except AudiaGenticError as exc:
-            assert exc.kind == "validation"
+            assert exc.kind == "release"
             report = sandbox.repo / ".audiagentic" / "runtime" / "ledger" / "import" / "report.json"
             assert not report.exists()
         else:

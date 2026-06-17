@@ -25,7 +25,7 @@ def record_change_event(event: dict) -> dict:
     source.session-id, job-id, packet-id, review-id: null for ad-hoc work; populated by job/packet/review system for structured workflows.
     change-class: feature, code-fix, refactor, docs, tests, config, release, audit, workflow.
     """
-    return ledger_api.record_change(_project_root(), event)
+    return ledger_api.record_change(_project_root(), event, sync=True)
 
 
 @mcp.tool()

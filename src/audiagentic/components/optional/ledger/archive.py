@@ -43,8 +43,8 @@ def archive_current_ledger(project_root: Path, release_id: str) -> dict[str, Any
     events = load_ndjson(current_path)
     if not events:
         raise AudiaGenticError(
-            code="RLS-BUSINESS-020",
-            kind="business-rule",
+            code="CON-ARCHIVE-001",
+            kind="release",
             message="no events in current ledger to archive",
             details={"release-id": release_id},
         )
