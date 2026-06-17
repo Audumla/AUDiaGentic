@@ -28,6 +28,10 @@ For release-affecting work, follow AUDiaGentic agent ledger process.
 After completing substantive implementation work, record a change event to the ledger
 using the ag-ledger MCP tool (record_change_event).
 Do not skip this step — the ledger is the authoritative record for release tracking.
+Required fields: event-id (chg_YYYYMMDD_HHMMSS_<desc>), timestamp-utc, project-id,
+source (kind=interactive-prompt, provider-id, surface, prompt-tag), change-class,
+files, technical-summary, user-summary-candidate, status ('unreleased').
+session-id, job-id, packet-id, review-id: null for ad-hoc work.
 <!-- AUDIAGENTIC:END agent-ledger/write-instruction -->
 
 <!-- AUDIAGENTIC:BEGIN source-control/doctrine -->
