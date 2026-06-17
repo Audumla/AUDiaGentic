@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from audiagentic.components.optional.coding_lsp import lsp_api
+from audiagentic.components.optional.coding_lsp.coding_lsp_config import write_lsp_config
 from audiagentic.components.optional.coding_lsp.lsp_lifecycle import ServerConfig
 
 
@@ -42,7 +43,7 @@ def test_definition_uses_repo_root_and_correct_language_for_explicit_config(tmp_
     assert captured["project_root"] == tmp_path
     assert captured["language"] == "rust"
     assert captured["server"] is rust_server
-    mock_session.did_open.assert_called_once()
+    mock_session.sync_document.assert_called_once()
 
 
 def test_diagnostics_uses_session_manager_public_api(monkeypatch) -> None:
@@ -61,3 +62,42 @@ def test_diagnostics_uses_session_manager_public_api(monkeypatch) -> None:
     assert result == {"file:///tmp/test.py": []}
     assert called["min_severity"] == 2
     assert called["limit"] == 10
+
+
+def test_config_status_reports_missing_config(tmp_path: Path) -> None:
+    (tmp_path / ".audiagentic").mkdir()
+    status = lsp_api.config_status(str(tmp_path))
+    assert status["config_exists"] is False
+    assert status["config_valid"] is False
+    assert status["languages"] == {}
+
+
+def test_config_status_reports_invalid_config(tmp_path: Path) -> None:
+    (tmp_path / ".audiagentic").mkdir()
+    lsp_json = tmp_path / ".coding-lsp" / "lsp.json"
+    lsp_json.parent.mkdir(parents=True)
+    lsp_json.write_text("{bad json", encoding="utf-8")
+    status = lsp_api.config_status(str(tmp_path))
+    assert status["config_exists"] is True
+    assert status["config_valid"] is False
+    assert status["config_errors"]
+
+
+def test_open_file_session_uses_sync_document(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / ".audiagentic").mkdir()
+    nested = tmp_path / "src" / "pkg" / "mod.py"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("x = 1\n", encoding="utf-8")
+    write_lsp_config(tmp_path / ".coding-lsp" / "lsp.json", {
+        "python": {
+            "command": ["pyright-langserver", "--stdio"],
+            "fileExtensions": [".py"],
+        }
+    })
+
+    mock_session = MagicMock()
+    monkeypatch.setattr(lsp_api._session_manager, "get_or_create", lambda project_root, language, server: mock_session)
+
+    lsp_api.document_symbols(str(nested))
+
+    mock_session.sync_document.assert_called_once()

@@ -7,36 +7,10 @@ lifecycle-observer: audiagentic.components.optional.coding_lsp.coding_lsp_bootst
 status-hook: audiagentic.components.optional.coding_lsp.coding_lsp_bootstrap.status_payload
 detection-marker: .audiagentic/components/coding-lsp.yaml
 
-dependencies:
-  pyright:
-    display-name: Pyright (Python LSP)
-    probe: binary:pyright-langserver
-    toolchain: uv
-    package: pyright
-
-  typescript-language-server:
-    display-name: TypeScript Language Server
-    probe: binary:typescript-language-server
-    toolchain: npm
-    package: typescript-language-server
-
-  rust-analyzer:
-    display-name: Rust Analyzer
-    probe: binary:rust-analyzer
-    toolchain: cargo
-    package: rust-analyzer
-
-  clangd:
-    display-name: Clangd (C/C++ LSP)
-    probe: binary:clangd
-    via:
-      winget: LLVM.LLVM
-      scoop: clangd
-      choco: llvm
-      brew: clangd
-      apt: clangd
-      dnf: clangd
-      pacman: clangd
+# Language facts (server command, file extensions, detection markers, and the
+# language's LSP server dependency) live in per-language files under
+# config/components/optional/coding-lsp/<language>.yaml. This component owns
+# orchestration only — enabling, installing, and propagating LSP capability.
 
 files:
   - path: .audiagentic/components/coding-lsp.yaml
@@ -64,6 +38,9 @@ mcp-servers:
     module: audiagentic.components.optional.coding_lsp.lsp_mcp
     description: LSP code intelligence — symbols, definitions, diagnostics
     propagate: providers
+    # Providers with native LSP config (codex, opencode, qwen) use their own
+    # language servers; do not also push the generic MCP LSP server to them.
+    skip-if-native-lsp: true
     instructions: >
       Use these tools for precise code navigation and intelligence.
       lsp_symbols: search workspace symbols by name — use before grep for symbol lookups.
@@ -88,9 +65,12 @@ harness-instructions:
       - `lsp_list_missing` — List configured languages whose server binaries are not installed
       - `lsp_install_dependencies` — Install a missing language server binary (confirm with user first)
 
-      Languages are installed on request or auto-detected at component install time.
-      Do not suggest installing a language server unless the project uses that language
-      or the user explicitly requests it.
+      Active languages come only from .coding-lsp/lsp.json; nothing is auto-detected
+      or installed at component install time. lsp_add_language records a config entry
+      (server defaults from the language spec); installing its server binary is a
+      separate, explicit step via lsp_install_dependencies — scoped to configured
+      languages only. Do not suggest installing a language server unless the project
+      uses that language or the user explicitly requests it.
 
 contributions:
   - id: coding-lsp/usage

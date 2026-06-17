@@ -78,12 +78,12 @@ class LspJsonRpc:
             with self._lock:
                 self._next_id += 1
                 id = self._next_id
-        msg = {"jsonrpc": "2.0", "method": method, "params": params, "id": id}
-        self._write_message(msg)
         event = threading.Event()
         with self._lock:
             self._pending[id] = event
+        msg = {"jsonrpc": "2.0", "method": method, "params": params, "id": id}
         try:
+            self._write_message(msg)
             if not event.wait(timeout):
                 raise TimeoutError(f"LSP request '{method}' timed out after {timeout}s")
             with self._lock:
@@ -111,15 +111,16 @@ class LspJsonRpc:
 
     def shutdown(self) -> None:
         """Graceful LSP shutdown: send shutdown + exit, then kill if needed."""
-        self._running = False
         if self._process is None or self._process.poll() is not None:
             return
         try:
-            self.send_notification("shutdown", None)
+            self.send_request("shutdown", None, timeout=5)
             self.send_notification("exit", None)
+            self._running = False
             self._process.wait(timeout=5)
         except (TimeoutError, OSError, LspError):
             try:
+                self._running = False
                 self._process.kill()
                 self._process.wait(timeout=3)
             except (OSError, TimeoutError):
