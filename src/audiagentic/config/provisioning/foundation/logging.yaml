@@ -39,7 +39,7 @@ logging:
 
   # Per-logger level overrides. Dict-merge across layers: later layer wins per key.
   # Example:
-  #   audiagentic.components.optional.planning: DEBUG
+  #   audiagentic.components.optional.providers: DEBUG
   loggers: {}
 
   # Loggers forced to WARNING regardless of root level. Lists union across layers.
