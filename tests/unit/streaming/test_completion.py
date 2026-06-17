@@ -100,7 +100,7 @@ class TestProviderCompletion:
         with pytest.raises(AudiaGenticError) as exc_info:
             ProviderCompletion.from_dict(data)
             
-        assert exc_info.value.code == "COMPLETION-VALIDATION-003"
+        assert exc_info.value.code == "VAL-COMPLETE-001"
 
 
 class TestNormalizeProviderResult:
@@ -283,7 +283,7 @@ class TestPersistCompletion:
         with pytest.raises(AudiaGenticError) as exc_info:
             persist_completion(tmp_path, "job-123", completion)
             
-        assert exc_info.value.code == "COMPLETION-VALIDATION-002"
+        assert exc_info.value.code == "VAL-COMPLETE-003"
         assert "cannot be persisted" in exc_info.value.message
 
 
