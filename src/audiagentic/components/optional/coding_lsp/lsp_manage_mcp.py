@@ -45,8 +45,11 @@ def lsp_list_languages() -> dict[str, Any]:
 
 @mcp.tool()
 @log_tool_call
-async def lsp_install_dependencies(names: list[str]) -> dict[str, Any]:
-    return await lsp_api.install_lsp_dependencies(names, run_with_output=run_blocking_with_output)
+async def lsp_install_dependencies(names: list[str], root: str = ".") -> dict[str, Any]:
+    resolved = root if root != "." else str(_project_root())
+    return await lsp_api.install_lsp_dependencies(
+        names, run_with_output=run_blocking_with_output, root=resolved
+    )
 
 
 @mcp.tool()

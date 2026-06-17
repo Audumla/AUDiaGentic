@@ -1,0 +1,16 @@
+type: language
+contract-version: v1
+id: typescript
+display-name: TypeScript (tsserver)
+language-id: typescript
+server:
+  command: [typescript-language-server, --stdio]
+  file-extensions: [.ts, .tsx, .js, .jsx, .mjs, .cjs]
+  workspace-config-files: [tsconfig.json]
+detection-markers: [tsconfig.json, package.json]
+dependency:
+  id: typescript-language-server
+  display-name: TypeScript Language Server
+  probe: binary:typescript-language-server
+  toolchain: npm
+  package: typescript-language-server

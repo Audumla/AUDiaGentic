@@ -1,0 +1,16 @@
+type: language
+contract-version: v1
+id: python
+display-name: Python (pyright)
+language-id: python
+server:
+  command: [pyright-langserver, --stdio]
+  file-extensions: [.py, .pyi]
+  workspace-config-files: [pyrightconfig.json]
+detection-markers: [pyproject.toml, setup.py, requirements.txt, setup.cfg, Pipfile]
+dependency:
+  id: pyright
+  display-name: Pyright (Python LSP)
+  probe: binary:pyright-langserver
+  toolchain: uv
+  package: pyright

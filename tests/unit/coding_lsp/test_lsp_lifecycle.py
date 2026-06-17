@@ -74,6 +74,24 @@ def test_did_open_tracks_document_version() -> None:
     assert session._opened_docs["file://test.py"] == 1
 
 
+def test_sync_document_opens_once_and_skips_unchanged() -> None:
+    session = LspSession(_make_config(), "/tmp")
+    session.bridge = MagicMock()
+    session.sync_document("file://test.py", "print('hi')", "python")
+    session.sync_document("file://test.py", "print('hi')", "python")
+    session.bridge.send_notification.assert_called_once()
+
+
+def test_sync_document_sends_change_for_new_text() -> None:
+    session = LspSession(_make_config(), "/tmp")
+    session.bridge = MagicMock()
+    session.sync_document("file://test.py", "print('hi')", "python")
+    session.sync_document("file://test.py", "print('bye')", "python")
+    assert session._opened_docs["file://test.py"] == 2
+    assert session._document_text["file://test.py"] == "print('bye')"
+    assert session.bridge.send_notification.call_count == 2
+
+
 def test_hover_returns_none_on_no_info() -> None:
     session = LspSession(_make_config(), "/tmp")
     session.bridge = MagicMock()

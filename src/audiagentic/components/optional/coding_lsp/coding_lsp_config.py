@@ -1,76 +1,38 @@
 """LSP configuration: lsp.json parsing, language detection, server discovery.
 
-Config is explicit (lsp.json) merged with auto-detected project languages.
+Active runtime config is explicit (`lsp.json`) only. Project-language detection
+is advisory for status/UI flows, not an implicit source of server config.
 Server availability is probed via foundation.system.probe.
 """
 from __future__ import annotations
 
 import json
 import shutil
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.system.probe import ProbeSpec, probe_binary
+from audiagentic.foundation.components.dependencies import build_dependency_probes
 
+from . import language_registry
 from .lsp_lifecycle import ServerConfig
 
 CODING_LSP_DIR = Path(".coding-lsp")
 
-# ── default server specs ────────────────────────────────────────────────────
-
-_DEFAULT_SERVERS: dict[str, ServerConfig] = {
-    "python": ServerConfig(
-        command=["pyright-langserver", "--stdio"],
-        file_extensions=[".py", ".pyi"],
-        workspace_config_files=["pyrightconfig.json"],
-        label="Python (pyright)",
-    ),
-    "typescript": ServerConfig(
-        command=["typescript-language-server", "--stdio"],
-        file_extensions=[".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"],
-        workspace_config_files=["tsconfig.json"],
-        label="TypeScript (tsserver)",
-    ),
-    "rust": ServerConfig(
-        command=["rust-analyzer"],
-        file_extensions=[".rs"],
-        workspace_config_files=["Cargo.toml", "Cargo.lock"],
-        label="Rust (rust-analyzer)",
-    ),
-    "cpp": ServerConfig(
-        command=["clangd"],
-        file_extensions=[".c", ".cpp", ".cc", ".cxx", ".h", ".hpp", ".hxx"],
-        workspace_config_files=[".clangd", "compile_commands.json", "CMakeLists.txt"],
-        label="C/C++ (clangd)",
-    ),
-}
-
-# ── project detection markers ───────────────────────────────────────────────
-
-_DETECTION_MARKERS: dict[str, list[str]] = {
-    "python": ["pyproject.toml", "setup.py", "requirements.txt", "setup.cfg", "Pipfile"],
-    "typescript": ["tsconfig.json", "package.json"],
-    "rust": ["Cargo.toml", "Cargo.lock"],
-    "cpp": [".clangd", "compile_commands.json", "CMakeLists.txt"],
-}
-
-# ── probe specs ─────────────────────────────────────────────────────────────
-
-_PROBE_SPECS: dict[str, ProbeSpec] = {
-    "python": ProbeSpec("python", ("pyright",)),
-    "typescript": ProbeSpec("typescript", ("typescript-language-server",)),
-    "rust": ProbeSpec("rust", ("rust-analyzer",)),
-    "cpp": ProbeSpec("cpp", ("clangd",)),
-}
+# Language facts (server command, extensions, detection markers, dependency)
+# live in per-language YAML files loaded via `language_registry`. This module
+# owns parsing/validation of the active config (`lsp.json`) and runtime
+# discovery — not the catalog of supported languages.
 
 
 # ── public API ──────────────────────────────────────────────────────────────
 
 
 def available_language_specs() -> dict[str, dict[str, Any]]:
-    """Return all available language server specifications."""
-    return {name: asdict(cfg) for name, cfg in _DEFAULT_SERVERS.items()}
+    """Return all supported language server specifications, keyed by language."""
+    return {
+        lang_id: language_registry.server_spec_dict(spec)
+        for lang_id, spec in language_registry.all_languages().items()
+    }
 
 
 def read_lsp_config(path: Path | str) -> dict[str, dict[str, Any]]:
@@ -93,50 +55,88 @@ def write_lsp_config(path: Path | str, servers: dict[str, dict[str, Any]]) -> No
 
 
 def detect_project_languages(project_root: Path | str) -> dict[str, str]:
-    """Scan project root for config files, return {language: marker_file}."""
+    """Scan project root for config files, return {language: marker_file}.
+
+    Advisory only — detection never activates a language. Active languages
+    come solely from `lsp.json`.
+    """
     if isinstance(project_root, str):
         project_root = Path(project_root)
     detected: dict[str, str] = {}
-    for language, markers in _DETECTION_MARKERS.items():
-        for marker in markers:
-            marker_path = project_root / marker
-            if marker_path.exists():
+    for language, spec in language_registry.all_languages().items():
+        for marker in spec.detection_markers:
+            if (project_root / marker).exists():
                 detected[language] = marker
                 break
     return detected
 
 
-def merge_server_configs(
-    explicit: dict[str, dict[str, Any]],
-    detected: dict[str, str],
-    defaults: dict[str, ServerConfig] | None = None,
-) -> dict[str, ServerConfig]:
-    """Merge explicit config with detected languages.
+def load_runtime_servers(path: Path | str) -> tuple[dict[str, ServerConfig], list[str], bool]:
+    """Load validated runtime servers from lsp.json.
 
-    Explicit config wins. Detected languages fill gaps with defaults.
+    Returns (servers, errors, exists). Runtime is config-first:
+    missing or invalid config yields no synthesized server entries.
     """
-    if defaults is None:
-        defaults = _DEFAULT_SERVERS
-    merged: dict[str, ServerConfig] = {}
+    if isinstance(path, str):
+        path = Path(path)
+    if not path.exists():
+        return {}, [], False
 
-    # Explicit config overrides everything
-    for name, cfg_dict in explicit.items():
-        cmd = cfg_dict.get("command")
-        if cmd:
-            merged[name] = ServerConfig(
-                command=cmd if isinstance(cmd, list) else [cmd],
-                file_extensions=cfg_dict.get("fileExtensions", cfg_dict.get("file_extensions", [])),
-                workspace_config_files=cfg_dict.get("workspaceConfigFiles", cfg_dict.get("workspace_config_files", [])),
-                settings=cfg_dict.get("settings", {}),
-                label=cfg_dict.get("label", name),
-            )
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        return {}, [f"Invalid lsp.json: {exc}"], True
 
-    # Detected languages fill gaps
-    for lang in detected:
-        if lang not in merged and lang in defaults:
-            merged[lang] = defaults[lang]
+    if not isinstance(raw, dict):
+        return {}, ["Invalid lsp.json: top-level object required"], True
 
-    return merged
+    servers_raw = raw.get("servers", {})
+    if not isinstance(servers_raw, dict):
+        return {}, ["Invalid lsp.json: 'servers' must be an object"], True
+
+    servers: dict[str, ServerConfig] = {}
+    errors: list[str] = []
+    for name, cfg_dict in servers_raw.items():
+        if not isinstance(cfg_dict, dict):
+            errors.append(f"{name}: config must be an object")
+            continue
+
+        command = cfg_dict.get("command")
+        if isinstance(command, str):
+            command = [command]
+        if not isinstance(command, list) or not command or not all(isinstance(item, str) and item for item in command):
+            errors.append(f"{name}: command must be non-empty list[str]")
+            continue
+
+        file_extensions = cfg_dict.get("fileExtensions", cfg_dict.get("file_extensions", []))
+        if not isinstance(file_extensions, list) or not file_extensions or not all(isinstance(item, str) and item for item in file_extensions):
+            errors.append(f"{name}: file_extensions must be non-empty list[str]")
+            continue
+
+        workspace_files = cfg_dict.get("workspaceConfigFiles", cfg_dict.get("workspace_config_files", []))
+        if not isinstance(workspace_files, list) or not all(isinstance(item, str) for item in workspace_files):
+            errors.append(f"{name}: workspace_config_files must be list[str]")
+            continue
+
+        settings = cfg_dict.get("settings", {})
+        if not isinstance(settings, dict):
+            errors.append(f"{name}: settings must be an object")
+            continue
+
+        label = cfg_dict.get("label", name)
+        if not isinstance(label, str):
+            errors.append(f"{name}: label must be string")
+            continue
+
+        servers[name] = ServerConfig(
+            command=command,
+            file_extensions=file_extensions,
+            workspace_config_files=workspace_files,
+            settings=settings,
+            label=label,
+        )
+
+    return servers, errors, True
 
 
 def discover_language_servers(project_root: Path | str) -> dict[str, bool]:
@@ -148,17 +148,17 @@ def discover_language_servers(project_root: Path | str) -> dict[str, bool]:
         project_root = Path(project_root)
 
     lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
-    explicit = read_lsp_config(lsp_path)
-    detected = detect_project_languages(project_root)
-    servers = merge_server_configs(explicit, detected)
+    servers, _, _ = load_runtime_servers(lsp_path)
 
     results: dict[str, bool] = {}
     for name in servers:
-        spec = _PROBE_SPECS.get(name)
-        if spec:
-            results[name] = probe_binary(spec.name, spec.requires, spec.probe_cmd)
+        lang = language_registry.get_language(name)
+        if lang is not None and lang.dependency is not None:
+            probe = build_dependency_probes({lang.dependency.id: lang.dependency.cfg})
+            results[name] = probe[lang.dependency.id]()
         else:
-            results[name] = shutil.which(servers[name].command[0]) is not None
+            command = servers[name].command
+            results[name] = bool(command) and shutil.which(command[0]) is not None
 
     return results
 
