@@ -20,7 +20,7 @@ from enum import Enum
 from typing import Any
 
 from .envelope import EventEnvelope
-from .exceptions import CycleDetectedError
+from .event_exceptions import CycleDetectedError
 
 logger = logging.getLogger(__name__)
 

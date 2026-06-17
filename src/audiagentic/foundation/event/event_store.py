@@ -49,7 +49,6 @@ class FileEventStore:
         self._path = root / path
         self._retention_days = retention_days
 
-        # Create directory if not exists
         if self._enabled:
             self._path.mkdir(parents=True, exist_ok=True)
 
@@ -66,15 +65,11 @@ class FileEventStore:
             return
 
         try:
-            # Sanitize event type for filename
             sanitized_type = re.sub(r"[^a-zA-Z0-9_]", "_", envelope.type)
-
-            # Filename: timestamp_type_eventid.json
             timestamp = envelope.occurred_at.replace(":", "-").split(".")[0]
             filename = f"{timestamp}_{sanitized_type}_{envelope.id}.json"
             filepath = self._path / filename
 
-            # Atomic write: temp file + rename
             with tempfile.NamedTemporaryFile(
                 mode="w",
                 dir=self._path,
@@ -84,7 +79,6 @@ class FileEventStore:
                 json.dump(envelope.to_dict(), tmp, indent=2)
                 tmp_path = Path(tmp.name)
 
-            # Rename to final name (atomic on most filesystems)
             tmp_path.rename(filepath)
 
         except Exception as e:
@@ -122,13 +116,11 @@ class FileEventStore:
 
                 envelope = EventEnvelope.from_dict(data)
 
-                # Filter by timestamp range
                 if from_timestamp and envelope.occurred_at < from_timestamp:
                     continue
                 if to_timestamp and envelope.occurred_at > to_timestamp:
                     continue
 
-                # Filter by event type pattern
                 if event_type_pattern:
                     if not self._pattern_matches(event_type_pattern, envelope.type):
                         continue
@@ -138,7 +130,6 @@ class FileEventStore:
             except Exception:
                 logger.warning("Failed to parse event file %s", filepath, exc_info=True)
 
-        # Sort by timestamp
         events.sort(key=lambda e: e.occurred_at)
 
         return events
