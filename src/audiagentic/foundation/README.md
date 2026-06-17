@@ -1,76 +1,27 @@
 # foundation/
 
-Shared primitives, contracts, and configuration infrastructure for the AUDiaGentic system.
+Shared low-level primitives used by every higher layer.
 
 ## Purpose
 
-The foundation layer provides:
-- Machine-readable schemas and contracts (`contracts/`)
-- Configuration loading and validation (`config/`)
-- Canonical error types and envelopes
-- ID generation and validation rules
-
-All other layers in AUDiaGentic depend on foundation; foundation depends on nothing except stdlib and third-party libraries.
+Foundation is where AUDiaGentic keeps reusable building blocks that should stay stable across components and runtime implementations.
 
 ## Owns
 
-- `contracts/`: Schemas, error types, canonical IDs, glossary
-- `config/`: Provider registry, catalog, and configuration loaders
-- `event/`: Generic pub/sub event bus, envelope, persistence, replay (swappable transport)
-- `workflow/`: State machine, config-driven propagation engine, lifecycle actions, frontmatter builder
+- `components/` component descriptor models, registries, and dependency workflows
+- `contracts/` schemas, canonical IDs, errors, and validation helpers
+- `event/` generic envelopes, event bus, persistence, and replay
+- `logging/` layered logging config, context propagation, and audit-log helpers
+- `mcp/` shared MCP server scaffolding and output bridging
+- `system/` process and host-level helpers
+- `toolchains/` external dependency detection and recipe loading
+- `workflow/` state-machine and propagation primitives
 
-## Must not own
+## Must Not Own
 
-- Job orchestration
-- Provider-specific behavior
-- Runtime state management
-- Release logic
-- Channel behavior
-- Protocol implementations
+- provider-specific adapters
+- project install state
+- release lifecycle business logic
+- user-facing component orchestration
 
-## Allowed dependencies
-
-**Exports to**: All other layers (execution, runtime, interoperability, channels, planning, knowledge, release)
-
-**Imports from**: None (except stdlib/third-party)
-
-## Examples
-
-```python
-# Correct: Load a schema from foundation
-from audiagentic.foundation.contracts.schema_registry import read_schema
-
-# Correct: Get the canonical error type
-from audiagentic.foundation.contracts.errors import AudiaGenticError
-
-# Correct: Load provider configuration
-from audiagentic.foundation.config.provider_registry import load_provider_registry
-
-# Correct: Use event bus
-from audiagentic.foundation.event import EventBus, EventEnvelope, EventService
-
-# Correct: Use state propagation engine
-from audiagentic.foundation.workflow import StatePropagationEngine, StateMachine
-```
-
-## Anti-examples
-
-```python
-# WRONG: foundation should not import from execution
-from audiagentic.foundation.execution.jobs import ...  # BAD
-
-# WRONG: foundation should not manage provider adapters
-# That belongs in interoperability/providers/
-
-# WRONG: event bus should not subscribe on behalf of components
-from audiagentic.foundation.event import get_bus
-get_bus().subscribe("planning.*", some_handler)  # Owner component registers its own handlers
-```
-
-## Migration notes
-
-- Moved from `contracts/` and `config/` roots (2026-04-12)
-- All imports updated to `audiagentic.foundation.contracts.*` and `audiagentic.foundation.config.*`
-- Relative path updates in `planning/app/config.py` to locate schemas at foundation/contracts/schemas/
-- `event/` moved from `planning/events/` to `foundation/event/` — generic, swappable event layer
-- `workflow/` moved from `planning/workflow/` to `foundation/workflow/` — generic state machine and propagation engine
+If code needs project-specific state or external service behavior, it usually belongs above this layer.

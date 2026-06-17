@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
 from typing import Any
+
+from audiagentic.foundation.time import now_iso
+
+__all__ = ["body_has_section", "extract_ref_ids", "now_iso", "slugify"]
 
 
 def slugify(s: str) -> str:
     s = s.lower().strip()
     s = re.sub(r"[^a-z0-9]+", "-", s)
     return re.sub(r"-+", "-", s).strip("-") or "item"
-
-
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def body_has_section(body: str, section: str) -> bool:

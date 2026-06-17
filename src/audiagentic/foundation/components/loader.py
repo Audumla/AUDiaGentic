@@ -28,6 +28,15 @@ _ALL_COMPONENT_CONFIG_DIRS = [
 ]
 
 
+def component_yaml_path(component_id: str) -> Path:
+    """Return the config YAML path for a component, searching core then optional."""
+    for base in _ALL_COMPONENT_CONFIG_DIRS:
+        candidate = base / f"{component_id}.yaml"
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(f"no component config found for '{component_id}'")
+
+
 def _require_propagate(ms: dict, path: Path) -> str:
     if "propagate" not in ms:
         logger.warning(
@@ -67,6 +76,7 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
             instructions=ms.get("instructions", ""),
             tool_descriptions=ms.get("tool-descriptions") or {},
             propagate=_require_propagate(ms, path),
+            skip_if_native_lsp=bool(ms.get("skip-if-native-lsp", False)),
         )
         for ms in (data.get("mcp-servers") or [])
     )
