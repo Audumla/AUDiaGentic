@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from audiagentic.foundation.io import atomic_write_text
 
 
 def load_yaml_value(path: Path, default: Any = None) -> Any:
@@ -43,24 +43,14 @@ def save_yaml_file(
     allow_unicode: bool = True,
     atomic: bool = False,
 ) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     text = yaml.safe_dump(
         payload,
         sort_keys=sort_keys,
         allow_unicode=allow_unicode,
         default_flow_style=False,
     )
-    if not atomic:
+    if atomic:
+        atomic_write_text(path, text)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
-        return
-
-    fd, tmp = tempfile.mkstemp(prefix=path.stem + ".", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(text)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp, path)
-    finally:
-        if os.path.exists(tmp):
-            os.unlink(tmp)

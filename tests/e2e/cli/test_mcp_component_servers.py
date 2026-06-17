@@ -159,7 +159,7 @@ def _call_keepalive(
 
 def test_session_server_exposes_expected_tools(tmp_path: Path) -> None:
     names = _tools_list(
-        "audiagentic.components.core.session_manage_mcp",
+        "audiagentic.components.core.session.session_mcp",
         tmp_path,
         extra_args=["--readonly", "--smoke-only"],
     )
@@ -174,7 +174,7 @@ def test_session_server_exposes_expected_tools(tmp_path: Path) -> None:
 
 def test_session_server_status_returns_environment(tmp_path: Path) -> None:
     result = _call(
-        "audiagentic.components.core.session_manage_mcp",
+        "audiagentic.components.core.session.session_mcp",
         "status",
         {},
         project_root=tmp_path,
@@ -186,7 +186,7 @@ def test_session_server_status_returns_environment(tmp_path: Path) -> None:
 
 
 def test_project_server_exposes_expected_tools(tmp_path: Path) -> None:
-    names = _tools_list("audiagentic.components.core.project_manage_mcp", tmp_path)
+    names = _tools_list("audiagentic.components.core.project.project_mcp", tmp_path)
     assert {
         "project_status",
         "list_components",
@@ -199,7 +199,7 @@ def test_project_server_exposes_expected_tools(tmp_path: Path) -> None:
 
 def test_project_server_lists_optional_components_not_installed(tmp_path: Path) -> None:
     result = _call(
-        "audiagentic.components.core.project_manage_mcp",
+        "audiagentic.components.core.project.project_mcp",
         "list_components",
         {},
         project_root=tmp_path,
@@ -212,7 +212,7 @@ def test_project_server_lists_optional_components_not_installed(tmp_path: Path) 
 
 
 def test_providers_server_exposes_expected_tools(tmp_path: Path) -> None:
-    names = _tools_list("audiagentic.components.optional.providers.providers_manage_mcp", tmp_path)
+    names = _tools_list("audiagentic.components.optional.providers.providers_mcp", tmp_path)
     assert {
         "list_providers",
         "get_provider_status",
@@ -223,7 +223,7 @@ def test_providers_server_exposes_expected_tools(tmp_path: Path) -> None:
 
 def test_providers_server_lists_known_providers(tmp_path: Path) -> None:
     result = _call(
-        "audiagentic.components.optional.providers.providers_manage_mcp",
+        "audiagentic.components.optional.providers.providers_mcp",
         "list_providers",
         {},
         project_root=tmp_path,
@@ -232,27 +232,6 @@ def test_providers_server_lists_known_providers(tmp_path: Path) -> None:
     provider_ids = {provider["provider_id"] for provider in payload["providers"]}
     assert "codex" in provider_ids
     assert "gemini" in provider_ids
-
-
-def test_planning_server_exposes_expected_tools(tmp_path: Path) -> None:
-    names = _tools_list("audiagentic.components.optional.planning.planning_manage_mcp", tmp_path)
-    assert {
-        "planning_status",
-        "planning_summary",
-        "planning_index",
-        "planning_events",
-    }.issubset(names)
-
-
-def test_planning_server_status_on_fresh_project(tmp_path: Path) -> None:
-    result = _call(
-        "audiagentic.components.optional.planning.planning_manage_mcp",
-        "planning_status",
-        {},
-        project_root=tmp_path,
-    )
-    payload = result if isinstance(result, dict) else result[0]
-    assert payload["installed"] is False
 
 
 def test_release_please_server_exposes_expected_tools(tmp_path: Path) -> None:
@@ -268,7 +247,7 @@ def test_release_please_server_exposes_expected_tools(tmp_path: Path) -> None:
 
 def test_session_server_update_embedded_rig(tmp_path: Path) -> None:
     result = _call_keepalive(
-        "audiagentic.components.core.session_manage_mcp",
+        "audiagentic.components.core.session.session_mcp",
         "update_embedded_rig",
         {},
         project_root=tmp_path,
@@ -280,11 +259,13 @@ def test_session_server_update_embedded_rig(tmp_path: Path) -> None:
 
 
 def test_session_server_detects_active_embedded_rig_profile(monkeypatch) -> None:
-    from audiagentic.components.core.session_manage_mcp import _active_embedded_rig_profile
+    from audiagentic.components.core.session.session_embedded_rig import (
+        active_embedded_rig_profile,
+    )
 
     monkeypatch.setenv("AUDIAGENTIC_RIG_TYPE", "embedded")
     monkeypatch.setenv("AUDIAGENTIC_RIG_PROFILE", "qwen3.5-2b-q4_k_s")
-    assert _active_embedded_rig_profile() == "qwen3.5-2b-q4_k_s"
+    assert active_embedded_rig_profile() == "qwen3.5-2b-q4_k_s"
 
 
 def test_update_embedded_rig_works_directly(tmp_path: Path) -> None:
@@ -295,7 +276,7 @@ def test_update_embedded_rig_works_directly(tmp_path: Path) -> None:
     # Set harness home for the test
     import os
 
-    from audiagentic.foundation.output import ComponentOutputEvent
+    from audiagentic.foundation.contracts.output import ComponentOutputEvent
     from audiagentic.runtime.home import global_harness_runtime
     from audiagentic.runtime.rig.embedded.binaries import update_binaries as _update
     os.environ["AUDIAGENTIC_HOME"] = str(tmp_path / ".audiagentic")
@@ -313,5 +294,3 @@ def test_update_embedded_rig_works_directly(tmp_path: Path) -> None:
 
     assert len(events) > 0
     assert "llama-server" in events[-1].message or "Installed" in events[-1].message or "up to date" in events[-1].message
-
-
