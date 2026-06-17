@@ -12,11 +12,11 @@
   "properties": {
     "contract-version": {"const": "v1"},
     "ok": {"const": false},
-    "error-code": {"type": "string"},
-    "error-kind": {
+    "error-code": {
       "type": "string",
-      "enum": ["validation", "business-rule", "io", "external", "internal"]
+      "pattern": "^[A-Z]{2,}-[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\\d{3}$"
     },
+    "error-kind": {"type": "string"},
     "message": {"type": "string"},
     "details": {"type": "object"}
   }

@@ -48,6 +48,9 @@ class McpServerDeclaration:
     instructions: str = ""
     tool_descriptions: dict[str, str] = field(default_factory=dict)
     propagate: str = "audiagentic"  # "audiagentic" | "providers" | "audiagentic,providers"
+    # When true, this server is NOT propagated to providers that have a native
+    # language_servers_config (native LSP supersedes the generic MCP LSP server).
+    skip_if_native_lsp: bool = False
 
 
 @dataclass(frozen=True)

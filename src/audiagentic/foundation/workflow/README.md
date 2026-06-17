@@ -108,6 +108,14 @@ propagation engines.
 `rel.py` provides `Relationships.ensure_rel_list()` for list values shaped as
 `{"ref": "...", "seq": ..., "display": "..."}`.
 
+## Invocation
+
+The `invocation/` subdirectory provides workflow invocation and execution utilities.
+
+- `invocation/models.py` — data models for invocation steps and run context
+- `invocation/steps.py` — step definition and sequencing primitives
+- `invocation/runner.py` — orchestrates step execution with error handling
+
 ## ID Generation
 
 `id_gen.py` provides `next_id(counter_path, id_prefix)` for file-backed,
@@ -144,3 +152,6 @@ ignore this helper.
 | `item.py` | `ItemView` DTO |
 | `interfaces.py` | Workflow host protocols |
 | `util.py` | Small generic helpers |
+| `invocation/models.py` | Invocation data models |
+| `invocation/steps.py` | Step definition and sequencing |
+| `invocation/runner.py` | Step execution orchestrator |
