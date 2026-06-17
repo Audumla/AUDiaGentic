@@ -1,8 +1,0 @@
-# Objective
-
-
-# Instructions
-
-
-# Required Outputs
-
