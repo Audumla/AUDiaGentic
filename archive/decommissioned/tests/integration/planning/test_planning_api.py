@@ -1,0 +1,478 @@
+"""Integration tests for PlanningAPI against a real temp-dir project."""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[3]
+for _p in (str(ROOT), str(ROOT / "src")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+import pytest
+from tests.helpers.planning_testkit import seed_planning_config
+
+
+def _seed_planning_project(root: Path) -> None:
+    """Seed the minimum planning config needed for PlanningAPI."""
+    seed_planning_config(root)
+    # Seed doc directories
+    for d in (
+        "requests",
+        "specifications",
+        "plans",
+        "tasks/core",
+        "work-packages/core",
+        "standards",
+    ):
+        (root / "docs" / "planning" / d).mkdir(parents=True, exist_ok=True)
+    # Seed support directories so lookups don't fall back to slow scan_items()
+    for sub in ("ids", "indexes", "events", "claims", "meta", "extracts"):
+        (root / ".audiagentic" / "planning" / sub).mkdir(parents=True, exist_ok=True)
+
+
+@pytest.fixture()
+def planning_root(tmp_path: Path):
+    _seed_planning_project(tmp_path)
+    from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
+
+    return tmp_path, PlanningAPI(tmp_path)
+
+
+def test_validate_empty_project(planning_root):
+    _, api = planning_root
+    errors = api.validate()
+    assert errors == []
+
+
+def test_new_request(planning_root):
+    root, api = planning_root
+    item = api.new("request", label="Test request", summary="A test", source="test")
+    assert item.data["id"].startswith("request-")
+    assert item.data["state"] == "captured"
+    assert (root / "docs" / "planning" / "requests" / f"{item.data['id']}-test-request.md").exists()
+
+
+def test_new_request_persists_source_and_context(planning_root):
+    _, api = planning_root
+    item = api.new(
+        "request",
+        label="Traceable request",
+        summary="A test",
+        source="mcp",
+        context="codex review session",
+    )
+    assert item.data["source"] == "mcp"
+    assert item.data["context"] == "codex review session"
+
+
+def test_new_spec_and_task(planning_root):
+    _, api = planning_root
+    request = api.new("request", label="Spec request", summary="Spec summary", source="test")
+    spec = api.new("spec", label="My spec", summary="Spec summary", refs={"request_refs": [request.data["id"]]})
+    task = api.new(
+        "task", label="Do the thing", summary="Task summary", refs={"spec": spec.data["id"]}
+    )
+    assert spec.data["id"].startswith("spec-")
+    assert task.data["id"].startswith("task-")
+    assert task.data["spec_ref"] == spec.data["id"]
+
+
+def test_state_transition(planning_root):
+    _, api = planning_root
+    request = api.new("request", label="State request", summary="S", source="test")
+    spec = api.new("spec", label="S", summary="S", refs={"request_refs": [request.data["id"]]})
+    item = api.state(spec.data["id"], "ready")
+    assert item.data["state"] == "ready"
+
+
+def test_invalid_state_transition_rejected(planning_root):
+    _, api = planning_root
+    request = api.new("request", label="Transition request", summary="S", source="test")
+    spec = api.new("spec", label="S", summary="S", refs={"request_refs": [request.data["id"]]})
+    with pytest.raises(ValueError, match="invalid transition"):
+        api.state(spec.data["id"], "done")  # draft → done not allowed
+
+
+def test_archive_and_restore_task_state_roundtrip(planning_root):
+    _, api = planning_root
+    request = api.new("request", label="Archive roundtrip request", summary="S", source="test")
+    spec = api.new("spec", label="S", summary="S", refs={"request_refs": [request.data["id"]]})
+    task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
+
+    archived = api.state(task.data["id"], "archived", reason="obsolete", actor="tester")
+    assert archived.data["state"] == "archived"
+    assert archived.data["archived_by"] == "tester"
+    assert archived.data["archive_reason"] == "obsolete"
+    assert archived.data["archived_at"]
+
+    restored = api.state(task.data["id"], "ready", actor="tester")
+    assert restored.data["state"] == "ready"
+    assert restored.data["restored_by"] == "tester"
+    assert restored.data["restored_at"]
+
+
+def test_archive_and_restore_request_uses_request_workflow(planning_root):
+    _, api = planning_root
+    request = api.new("request", label="R", summary="S", source="test")
+    api.new("spec", label="S", summary="S", refs={"request_refs": [request.data["id"]]})
+    api.state(request.data["id"], "distilled")
+
+    archived = api.state(request.data["id"], "archived", reason="historical")
+    assert archived.data["state"] == "archived"
+
+    restored = api.state(request.data["id"], "distilled")
+    assert restored.data["state"] == "distilled"
+
+
+def test_archive_request_cascades_to_sole_spec_and_task(planning_root):
+    _, api = planning_root
+    request = api.new("request", label="Cascade request", summary="S", source="test")
+    spec = api.new("spec", label="S", summary="S", refs={"request_refs": [request.data["id"]]})
+    task = api.new(
+        "task",
+        label="T",
+        summary="S",
+        refs={"spec": spec.data["id"], "request_refs": [request.data["id"]]},
+    )
+    api.state(request.data["id"], "distilled")
+
+    api.state(request.data["id"], "archived", reason="historical")
+
+    assert api._find(spec.data["id"]).data["state"] == "archived"
+    assert api._find(task.data["id"]).data["state"] == "archived"
+
+
+def test_archive_request_cascade_ignores_unrelated_specs_and_tasks(planning_root):
+    _, api = planning_root
+    request_a = api.new("request", label="Cascade request A", summary="S", source="test")
+    request_b = api.new("request", label="Cascade request B", summary="S", source="test")
+    spec_a = api.new("spec", label="Spec A", summary="S", refs={"request_refs": [request_a.data["id"]]})
+    spec_b = api.new("spec", label="Spec B", summary="S", refs={"request_refs": [request_b.data["id"]]})
+    task_a = api.new(
+        "task",
+        label="Task A",
+        summary="S",
+        refs={"spec": spec_a.data["id"], "request_refs": [request_a.data["id"]]},
+    )
+    task_b = api.new(
+        "task",
+        label="Task B",
+        summary="S",
+        refs={"spec": spec_b.data["id"], "request_refs": [request_b.data["id"]]},
+    )
+    api.state(request_a.data["id"], "distilled")
+
+    api.state(request_a.data["id"], "archived", reason="historical")
+
+    assert api._find(spec_a.data["id"]).data["state"] == "archived"
+    assert api._find(task_a.data["id"]).data["state"] == "archived"
+    assert api._find(spec_b.data["id"]).data["state"] == "draft"
+    assert api._find(task_b.data["id"]).data["state"] == "draft"
+
+
+def test_archive_spec_cascades_to_sole_plan_and_task(planning_root):
+    _, api = planning_root
+    request = api.new("request", label="Cascade request", summary="S", source="test")
+    spec = api.new("spec", label="S", summary="S", refs={"request_refs": [request.data["id"]]})
+    plan = api.new("plan", label="P", summary="P", refs={"spec": spec.data["id"]})
+    task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
+
+    api.state(spec.data["id"], "archived", reason="obsolete")
+
+    assert api._find(plan.data["id"]).data["state"] == "archived"
+    assert api._find(task.data["id"]).data["state"] == "archived"
+
+
+def test_archive_spec_cascade_ignores_unrelated_plans_and_tasks(planning_root):
+    _, api = planning_root
+    request = api.new("request", label="Cascade request", summary="S", source="test")
+    spec_a = api.new("spec", label="Spec A", summary="S", refs={"request_refs": [request.data["id"]]})
+    spec_b = api.new("spec", label="Spec B", summary="S", refs={"request_refs": [request.data["id"]]})
+    plan_a = api.new("plan", label="Plan A", summary="P", refs={"spec": spec_a.data["id"]})
+    plan_b = api.new("plan", label="Plan B", summary="P", refs={"spec": spec_b.data["id"]})
+    task_a = api.new("task", label="Task A", summary="S", refs={"spec": spec_a.data["id"]})
+    task_b = api.new("task", label="Task B", summary="S", refs={"spec": spec_b.data["id"]})
+
+    api.state(spec_a.data["id"], "archived", reason="obsolete")
+
+    assert api._find(plan_a.data["id"]).data["state"] == "archived"
+    assert api._find(task_a.data["id"]).data["state"] == "archived"
+    assert api._find(plan_b.data["id"]).data["state"] == "draft"
+    assert api._find(task_b.data["id"]).data["state"] == "draft"
+
+
+def test_archived_item_rejects_update_operations(planning_root):
+    _, api = planning_root
+    request = api.new("request", label="Archive request", summary="S", source="test")
+    spec = api.new("spec", label="S", summary="S", refs={"request_refs": [request.data["id"]]})
+    task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
+    api.state(task.data["id"], "archived")
+
+    with pytest.raises(ValueError, match="cannot update terminal item"):
+        api.update(task.data["id"], label="Updated")
+
+    with pytest.raises(ValueError, match="cannot update content for terminal item"):
+        api.update_content(task.data["id"], "x", mode="replace")
+
+    with pytest.raises(ValueError, match="cannot relink terminal item"):
+        api.relink(task.data["id"], "spec_ref", spec.data["id"])
+
+
+def test_id_counter_persisted_across_api_instances(planning_root):
+    root, api = planning_root
+    api.new("request", label="R1", summary="S", source="test")
+    api.new("request", label="R2", summary="S", source="test")
+    # New API instance should continue from counter
+    from audiagentic.components.optional.planning.app.planning_app_api import PlanningAPI
+
+    api2 = PlanningAPI(root)
+    item = api2.new("request", label="R3", summary="S", source="test")
+    assert item.data["id"].startswith("request-")
+    # Counter should be higher than 2 (two already created)
+    num = int(item.data["id"].split("-")[-1])
+    assert num >= 3
+
+
+def test_index_creates_files(planning_root):
+    root, api = planning_root
+    api.new("request", label="R", summary="S", source="test")
+    api.index()
+    idx = root / ".audiagentic" / "planning" / "indexes"
+    assert (idx / "requests.json").exists()
+    assert (idx / "trace.json").exists()
+    assert (idx / "dispatch.json").exists()
+
+
+def test_dispatch_json_initialised_by_index(planning_root):
+    root, api = planning_root
+    api.index()
+    dispatch = json.loads(
+        (root / ".audiagentic" / "planning" / "indexes" / "dispatch.json").read_text()
+    )
+    assert "entries" in dispatch
+
+
+def test_validate_catches_duplicate_ids(planning_root):
+    root, api = planning_root
+    req = api.new("request", label="R", summary="S", source="test")
+    actual_id = req.data["id"]
+    # Manually write a duplicate with the same id
+    dup = root / "docs" / "planning" / "requests" / f"{actual_id}-dup.md"
+    dup.write_text(
+        "---\n"
+        f"id: {actual_id}\n"
+        "label: Dup\n"
+        "state: captured\n"
+        "summary: dup\n"
+        "current_understanding: dup\n"
+        "open_questions: []\n"
+        "---\n"
+        "# Understanding\n\nDup\n\n"
+        "# Open Questions\n\n- None\n\n"
+        "# Notes\n\n",
+        encoding="utf-8",
+    )
+    errors = api.validate()
+    assert any("duplicate id" in e for e in errors)
+
+
+def test_claims_roundtrip(planning_root):
+    _, api = planning_root
+    request = api.new("request", label="Claim request", summary="S", source="test")
+    task = api.new(
+        "task",
+        label="T",
+        summary="S",
+        refs={"spec": api.new("spec", label="S", summary="S", refs={"request_refs": [request.data["id"]]}).data["id"]},
+    )
+    rec = api.claim("task", task.data["id"], holder="agent-1", ttl=60)
+    assert rec["holder"] == "agent-1"
+    active = api.claims("task")
+    assert any(c["id"] == task.data["id"] for c in active)
+    assert api.unclaim(task.data["id"])
+    assert api.claims("task") == []
+
+
+def test_next_items_excludes_claimed(planning_root):
+    _, api = planning_root
+    request = api.new("request", label="Next request", summary="S", source="test")
+    spec = api.new("spec", label="S", summary="S", refs={"request_refs": [request.data["id"]]})
+    task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
+    api.state(task.data["id"], "ready")
+    api.claim("task", task.data["id"], holder="agent-1")
+    assert api.next_items("task", "ready") == []
+
+
+def test_package_creates_wp_with_task_refs(planning_root):
+    _, api = planning_root
+    request = api.new("request", label="Package request", summary="S", source="test")
+    spec = api.new("spec", label="S", summary="S", refs={"request_refs": [request.data["id"]]})
+    plan = api.new("plan", label="P", summary="P", refs={"spec": spec.data["id"]})
+    task = api.new("task", label="T", summary="S", refs={"spec": spec.data["id"]})
+    wp = api.run_workflow_action(
+        "group",
+        {
+            "parent_id": plan.data["id"],
+            "item_ids": [task.data["id"]],
+            "label": "WP",
+            "summary": "S",
+        },
+    )["group"]
+    assert any(r["ref"] == task.data["id"] for r in wp.data["task_refs"])
+
+
+def test_api_new_plan_and_task_preserve_request_trace_in_index(planning_root):
+    root, api = planning_root
+    request = api.new("request", label="R", summary="Request summary", source="test")
+    spec = api.new(
+        "spec",
+        label="S",
+        summary="Spec summary",
+        refs={"request_refs": [request.data["id"]]},
+    )
+    plan = api.new(
+        "plan",
+        label="P",
+        summary="Plan summary",
+        refs={"spec": spec.data["id"], "request_refs": [request.data["id"]]},
+    )
+    task = api.new(
+        "task",
+        label="T",
+        summary="Task summary",
+        refs={"spec": spec.data["id"], "request_refs": [request.data["id"]]},
+    )
+    trace = json.loads(
+        (root / ".audiagentic" / "planning" / "indexes" / "trace.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    request_edges = [
+        ref
+        for ref in trace["refs"]
+        if ref["field"] == "request_refs" and ref["dst"] == request.data["id"]
+    ]
+    assert any(ref["src"] == spec.data["id"] for ref in request_edges)
+    assert any(ref["src"] == plan.data["id"] for ref in request_edges)
+    assert any(ref["src"] == task.data["id"] for ref in request_edges)
+
+
+def test_api_duplicate_detection_rejects_duplicate_requests_and_specs(planning_root):
+    _, api = planning_root
+    api.new("request", label="Repeated request", summary="Same summary", source="test")
+    with pytest.raises(ValueError, match="request already exists"):
+        api.new("request", label="Repeated request", summary="Same summary", source="test")
+
+    req = api.new("request", label="Repeated spec request", summary="Spec summary", source="test")
+    api.new("spec", label="Repeated spec", summary="Spec summary", refs={"request_refs": [req.data["id"]]})
+    with pytest.raises(ValueError, match="spec already exists"):
+        api.new("spec", label="Repeated spec", summary="Spec summary", refs={"request_refs": [req.data["id"]]})
+
+
+def test_new_spec_requires_request_ref(planning_root):
+    _, api = planning_root
+    with pytest.raises(ValueError, match="requires 'request_refs' reference"):
+        api.new("spec", label="Orphan spec", summary="Missing request")
+
+
+def test_api_delete_soft_and_hard(planning_root):
+    _, api = planning_root
+    request = api.new("request", label="Delete request", summary="S", source="test")
+    spec = api.new("spec", label="S", summary="S", refs={"request_refs": [request.data["id"]]})
+    task = api.new("task", label="Delete me", summary="S", refs={"spec": spec.data["id"]})
+
+    soft = api.delete(task.data["id"], reason="cleanup")
+    shown = api.extracts.show(task.data["id"])
+    assert soft["hard_delete"] is False
+    assert shown["deleted"] is True
+    assert shown["deletion_reason"] == "cleanup"
+
+    hard = api.delete(task.data["id"], hard=True, reason="cleanup")
+    assert hard["hard_delete"] is True
+    with pytest.raises(KeyError):
+        api._find(task.data["id"])
+
+    next_task = api.new("task", label="Next task", summary="S", refs={"spec": spec.data["id"]})
+    assert next_task.data["id"].startswith("task-")
+
+
+def test_validation_error_messages_are_actionable(planning_root):
+    root, api = planning_root
+    request = api.new("request", label="Validation request", summary="S", source="test")
+    spec = api.new("spec", label="S", summary="S", refs={"request_refs": [request.data["id"]]})
+    plan = api.new("plan", label="P", summary="P", refs={"spec": spec.data["id"]})
+    wp_path = root / "docs" / "planning" / "work-packages" / "core" / "wp-9999-bad.md"
+    wp_path.write_text(
+        "---\n"
+        "id: wp-9999\n"
+        "label: Bad\n"
+        "state: draft\n"
+        "summary: bad\n"
+        f"plan_ref: {plan.data['id']}\n"
+        "task_refs:\n"
+        "- task-0001\n"
+        "---\n\n"
+        "# Objective\n\nX\n\n"
+        "# Scope of This Package\n\nX\n\n"
+        "# Inputs\n\nX\n\n"
+        "# Instructions\n\nX\n\n"
+        "# Required Outputs\n\nX\n\n"
+        "# Acceptance Checks\n\nX\n\n"
+        "# Non-Goals\n\nX\n",
+        encoding="utf-8",
+    )
+
+    errors = api.validate()
+    assert any(
+        "task_refs must be a list of objects with 'ref'" in error for error in errors
+    )
+
+
+def test_package_tasks_to_existing_wp_not_duplicate(planning_root):
+    """Regression: tm_package should add tasks to existing WP, not create duplicate."""
+    root, api = planning_root
+    request = api.new("request", label="Package request duplicate", summary="S", source="test")
+    spec = api.new("spec", label="S", summary="S", refs={"request_refs": [request.data["id"]]})
+    plan = api.new("plan", label="P", summary="P", refs={"spec": spec.data["id"]})
+
+    # Create a work package manually (domain="core" required for glob to work)
+    wp = api.new("wp", label="Test WP", summary="Test", refs={"plan": plan.data["id"]}, domain="core")
+    wp_id = wp.data["id"]
+
+    # Create some tasks
+    task1 = api.new("task", label="T1", summary="S", refs={"spec": spec.data["id"]})
+    task2 = api.new("task", label="T2", summary="S", refs={"spec": spec.data["id"]})
+
+    # Package tasks to the existing WP
+    result = api.run_workflow_action(
+        "group",
+        {
+            "parent_id": plan.data["id"],
+            "item_ids": [task1.data["id"], task2.data["id"]],
+            "label": "Test WP",
+            "summary": "Test",
+        },
+    )["group"]
+
+    # Should return the existing WP, not create a new one
+    assert result.data["id"] == wp_id
+
+    # Verify tasks are in the WP
+    wp_item = api._find(wp_id)
+    from audiagentic.components.optional.planning.fs.read import parse_markdown
+
+    data, _body = parse_markdown(wp_item.path)
+    task_refs = data.get("task_refs", [])
+    assert len(task_refs) == 2
+    assert any(t.get("ref") == task1.data["id"] for t in task_refs)
+    assert any(t.get("ref") == task2.data["id"] for t in task_refs)
+
+    # Verify no duplicate WP was created
+    all_wps = list(
+        (root / "docs" / "planning" / "work-packages" / "core").glob("wp-*.md")
+    )
+    assert len(all_wps) == 1
+

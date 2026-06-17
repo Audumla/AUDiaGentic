@@ -57,6 +57,20 @@ where = ["src"]
     # Package-default configs
     "config/provisioning/harness/*.yaml",
     "config/provisioning/rig/*.yaml",
+    "config/provisioning/foundation/*.yaml",
+    # Toolchain action table (read at import time by descriptors)
+    "foundation/toolchains/*.yaml",
+    # JSON Schemas used for runtime payload validation (ledger, providers, planning)
+    "foundation/contracts/schemas/**/*.json",
+    # Knowledge component runtime data
+    "components/optional/knowledge/runtime_data/*.yml",
+    # Provider instruction / prompt-tag templates materialized onto surfaces
+    "components/optional/providers/adapters/**/*.md",
+    "components/optional/providers/surfaces/templates/*.md",
+    # Misc runtime data
+    "runtime/build/*.yaml",
+    "runtime/rig/external/*.yaml",
+    "runtime/harness/opencode/templates/**/*.md",
     # Pi harness home templates
     "runtime/harness/pi/templates/home/agent/**/*.ts",
     "runtime/harness/pi/templates/home/agent/**/*.json",
@@ -114,6 +128,7 @@ fail_under = 60
 src = ["src"]
 target-version = "py310"
 line-length = 100
+extend-exclude = ["archive"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
