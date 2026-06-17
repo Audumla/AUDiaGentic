@@ -34,7 +34,7 @@ dependencies:
 
   uv:
     display-name: uv
-    probe: custom:audiagentic.foundation.dependencies.uv_available
+    probe: custom:audiagentic.foundation.toolchains.detect.uv_available
     via:
       winget: astral-sh.uv
       scoop: uv
@@ -44,7 +44,7 @@ dependencies:
 
   gh-mcp:
     display-name: GitHub MCP Extension
-    probe: custom:audiagentic.foundation.dependencies.gh_mcp_available
+    probe: custom:audiagentic.components.optional.source_control.probes.gh_mcp_available
     requires: [gh]
     toolchain: gh_extension
     package: shuymn/gh-mcp
@@ -56,7 +56,7 @@ files:
     description: Installation marker
 mcp-servers:
   - name: ag-sc-mgmt
-    module: audiagentic.components.optional.source_control.source_control_manage_mcp
+    module: audiagentic.components.optional.source_control.source_control_mcp
     direct-tools: [get_source_control_status, install_dependencies, uninstall_dependencies]
     description: Source control component management
     propagate: audiagentic

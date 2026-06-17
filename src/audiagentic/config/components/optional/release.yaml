@@ -16,7 +16,7 @@ files:
     description: Release workflow
 mcp-servers:
   - name: ag-release-mgmt
-    module: audiagentic.components.optional.release.release_manage_mcp
+    module: audiagentic.components.optional.release.release_mcp
     direct-tools: [get_release_status, ensure_release_baseline]
     description: Release component management
     propagate: audiagentic
