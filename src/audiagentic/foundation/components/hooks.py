@@ -47,7 +47,7 @@ def invoke_hook(
     try:
         return fn(*args, **kwargs)
     except Exception as exc:  # noqa: BLE001
-        _log.error("%s '%s' raised: %s", failure_label, hook_path, exc, exc_info=True)
+        logger.error("%s '%s' raised: %s", failure_label, hook_path, exc, exc_info=True)
         return {"error": str(exc), "hook": hook_path}
 
 

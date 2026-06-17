@@ -127,5 +127,5 @@ def test_all_other_builtins_are_project_scope():
         cid for cid, d in all_descriptors().items()
         if d.scope == SCOPE_PROJECT
     }
-    for expected in ("project", "agent-jobs", "planning", "providers"):
+    for expected in ("project", "agent-jobs", "coding-lsp", "providers"):
         assert expected in project_scoped

@@ -253,3 +253,28 @@ class ConditionalStep:
         if self.when_false is not None:
             return self.when_false.run(context, answers)
         return StepResult(status="skipped", reason="condition not met")
+
+
+def planned_commands(step: Any, context: dict[str, Any] | None = None) -> list[list[str]]:
+    """Walk a step tree and return the shell commands it would run.
+
+    Resolves SelectStep branches against ``context`` (falling back where no
+    variant matches). Non-command steps contribute nothing.
+    """
+    context = context or {}
+    if isinstance(step, ShellStep):
+        return [step.plan(context).outputs["command"]]
+    if isinstance(step, SequenceStep):
+        commands: list[list[str]] = []
+        for child in step.steps:
+            commands.extend(planned_commands(child, context))
+        return commands
+    if isinstance(step, SelectStep):
+        if set(step.variants) == {"run"}:
+            return planned_commands(step.variants["run"], context)
+        key = step.select(context)
+        if key in step.variants:
+            return planned_commands(step.variants[key], context)
+        if step.fallback is not None:
+            return planned_commands(step.fallback, context)
+    return []

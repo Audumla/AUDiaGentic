@@ -19,7 +19,7 @@ from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
-from audiagentic.foundation.output import (
+from audiagentic.foundation.contracts.output import (
     ComponentOutputEvent,
     ComponentOutputSink,
     coerce_output_event,

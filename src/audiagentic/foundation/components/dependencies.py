@@ -7,14 +7,9 @@ No separate orchestration lane — deps are workflow steps.
 from __future__ import annotations
 
 import importlib
-import os
-import subprocess
 from collections.abc import Callable
-from functools import cache
 from pathlib import Path
 from typing import Any
-
-import yaml
 
 from audiagentic.foundation.toolchains.detect import (
     detect_pkg_manager,
@@ -22,51 +17,14 @@ from audiagentic.foundation.toolchains.detect import (
     tool_available,
 )
 from audiagentic.foundation.toolchains.loader import build_step, has_action, raw_step
-from audiagentic.foundation.workflow.invocation.steps import SelectStep, SequenceStep
+from audiagentic.foundation.workflow.invocation.steps import (
+    SelectStep,
+    SequenceStep,
+    planned_commands,
+)
+from audiagentic.runtime.config import load_yaml_file
 
-_PACKAGE_DIR = Path(__file__).resolve().parents[1]
-_COMPONENTS_CONFIG_DIR = _PACKAGE_DIR / "config" / "components"
-
-
-# ---------------------------------------------------------------------------
-# Complex probes — too involved for binary:/path: declarations
-# ---------------------------------------------------------------------------
-
-@cache
-def gh_mcp_available() -> bool:
-    if not tool_available("gh"):
-        return False
-    ext_name = "gh-mcp"
-    ext_dirs: list[Path] = [
-        Path.home() / ".local" / "share" / "gh" / "extensions" / ext_name,
-        Path.home() / ".config" / "gh" / "extensions" / ext_name,
-    ]
-    if os.name == "nt":
-        for env_var in ("LOCALAPPDATA", "APPDATA"):
-            base = os.environ.get(env_var)
-            if base:
-                ext_dirs.append(Path(base) / "GitHub CLI" / "extensions" / ext_name)
-    if any(d.exists() for d in ext_dirs):
-        return True
-    try:
-        r = subprocess.run(["gh", "extension", "list"], capture_output=True, timeout=5, text=True)
-        if r.returncode == 0 and ext_name in r.stdout:
-            return True
-    except (subprocess.TimeoutExpired, OSError):
-        return False
-    try:
-        r = subprocess.run(["gh", "mcp", "--help"], capture_output=True, timeout=5, text=True)
-        return r.returncode == 0 and "serve" in r.stdout
-    except (subprocess.TimeoutExpired, OSError):
-        return False
-
-
-def uv_available() -> bool:
-    if tool_available("uvx") or tool_available("uv"):
-        return True
-    local_bin = Path.home() / ".local" / "bin"
-    return (local_bin / "uv").exists() or (local_bin / "uvx").exists()
-
+from .loader import component_yaml_path
 
 # ---------------------------------------------------------------------------
 # Probe resolution
@@ -190,39 +148,91 @@ def _topo_sort(dep_cfgs: dict[str, Any]) -> list[str]:
 # YAML loader
 # ---------------------------------------------------------------------------
 
-def _find_component_yaml(component_id: str) -> Path:
-    for subdir in ("core", "optional"):
-        candidate = _COMPONENTS_CONFIG_DIR / subdir / f"{component_id}.yaml"
-        if candidate.exists():
-            return candidate
-    raise FileNotFoundError(f"no component config found for '{component_id}'")
-
-
 def _load_dep_cfgs(component_id: str) -> dict[str, Any]:
-    path = _find_component_yaml(component_id)
-    cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
+    cfg = load_yaml_file(component_yaml_path(component_id))
     return cfg.get("dependencies") or {}
 
 
-def load_component_workflow(component_id: str, *, action: str = "install") -> SequenceStep:
-    """Build a SequenceStep that installs (or uninstalls) all component deps.
+# ---------------------------------------------------------------------------
+# Builders over explicit dep-cfg dicts
+#
+# These accept dependency configs directly so callers that source deps from
+# somewhere other than a component YAML `dependencies:` block (e.g. the
+# coding-lsp per-language registry) reuse the same workflow machinery.
+# ---------------------------------------------------------------------------
+
+def build_dependency_workflow(
+    dep_cfgs: dict[str, Any], *, workflow_id: str, action: str = "install"
+) -> SequenceStep:
+    """Build a SequenceStep that installs (or uninstalls) the given deps.
 
     Each dep becomes a SelectStep that skips if the probe is already satisfied.
     Ordering respects requires: declarations. Run with .run({}).
     """
-    dep_cfgs = _load_dep_cfgs(component_id)
     ordered = _topo_sort(dep_cfgs)
     steps = tuple(
         _dep_workflow(dep_id, dep_cfgs[dep_id], action)
         for dep_id in ordered
     )
-    return SequenceStep(id=f"{component_id}.{action}", steps=steps, fail_fast=False)
+    return SequenceStep(id=f"{workflow_id}.{action}", steps=steps, fail_fast=False)
 
 
-def load_component_probes(component_id: str) -> dict[str, Callable[[], bool]]:
-    """Return probe callables keyed by dep id — for status checks."""
-    dep_cfgs = _load_dep_cfgs(component_id)
+def build_dependency_probes(dep_cfgs: dict[str, Any]) -> dict[str, Callable[[], bool]]:
     return {dep_id: _resolve_probe(cfg["probe"]) for dep_id, cfg in dep_cfgs.items()}
+
+
+def build_dependency_labels(dep_cfgs: dict[str, Any]) -> dict[str, str]:
+    return {dep_id: cfg.get("display-name", dep_id) for dep_id, cfg in dep_cfgs.items()}
+
+
+def build_dependency_install_commands(
+    dep_cfgs: dict[str, Any],
+    names: list[str] | None = None,
+    *,
+    workflow_id: str = "deps",
+) -> dict[str, list[list[str]]]:
+    workflow = build_dependency_workflow(dep_cfgs, workflow_id=workflow_id, action="install")
+    targets = set(names) if names is not None else None
+    return {
+        step.id: planned_commands(step)
+        for step in workflow.steps
+        if targets is None or step.id in targets
+    }
+
+
+# ---------------------------------------------------------------------------
+# Component-id convenience wrappers (source deps from component YAML)
+# ---------------------------------------------------------------------------
+
+def load_dependency_workflow(component_id: str, *, action: str = "install") -> SequenceStep:
+    """Build a dependency workflow from a component's YAML `dependencies:` block."""
+    return build_dependency_workflow(
+        _load_dep_cfgs(component_id), workflow_id=component_id, action=action
+    )
+
+
+def load_dependency_probes(component_id: str) -> dict[str, Callable[[], bool]]:
+    """Return probe callables keyed by dep id — for status checks."""
+    return build_dependency_probes(_load_dep_cfgs(component_id))
+
+
+def load_dependency_labels(component_id: str) -> dict[str, str]:
+    """Return human-readable display labels keyed by dep id (falls back to id)."""
+    return build_dependency_labels(_load_dep_cfgs(component_id))
+
+
+def load_dependency_install_commands(
+    component_id: str,
+    names: list[str] | None = None,
+) -> dict[str, list[list[str]]]:
+    """Return planned install commands for component dependencies.
+
+    Commands are derived from the same dependency workflow used by installers,
+    so status messages stay in sync with component YAML declarations.
+    """
+    return build_dependency_install_commands(
+        _load_dep_cfgs(component_id), names, workflow_id=component_id
+    )
 
 
 def detect_missing(
