@@ -175,8 +175,8 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
     )
     if completed.returncode != 0:
         raise AudiaGenticError(
-            code="PRV-EXTERNAL-006",
-            kind="external",
+            code="EXT-GEMINI-001",
+            kind="providers",
             message="gemini execution failed",
             details={
                 "provider-id": "gemini",

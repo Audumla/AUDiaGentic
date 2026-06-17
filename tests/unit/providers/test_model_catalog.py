@@ -62,6 +62,6 @@ def test_resolve_model_selection_rejects_missing_alias() -> None:
             catalog=None,
         )
     except AudiaGenticError as exc:
-        assert exc.kind == "validation"
+        assert exc.kind == "providers"
     else:
         raise AssertionError("expected validation error")

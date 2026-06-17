@@ -430,7 +430,7 @@ def test_reconcile_all_providers_emits_progress_with_total(
     monkeypatch, tmp_path: Path
 ) -> None:
     import audiagentic.components.optional.providers.services.lifecycle as lifecycle
-    from audiagentic.foundation.output import ComponentOutputEvent
+    from audiagentic.foundation.contracts.output import ComponentOutputEvent
 
     monkeypatch.setattr(
         lifecycle,

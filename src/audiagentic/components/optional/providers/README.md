@@ -1,24 +1,22 @@
-# interoperability/providers/
+# components/optional/providers/
 
-Provider adapters, health checks, and surfaces for external AI services.
+Provider adapters, surfaces, and API helpers for external AI services.
 
 ## Purpose
 
 Implements the provider integration pattern:
 - Provider-specific adapters (Claude, Gemini, Cline, etc.)
-- Model selection and catalog
-- Provider health and status
-- Provider-specific prompt surfaces and helpers
+- Provider surfaces and skill definitions
+- Provider API helpers and MCP management
 
 ## Owns
 
 - `adapters/`: Provider-specific runner implementations
 - `surfaces/`: Provider prompt surface renderers and skill definitions
-- `execution.py`: Generic provider execution wrapper
-- `health.py`: Health check logic
-- `models.py`: Model selection and resolution
-- `status.py`: Provider status reporting
-- `provisioning.py`: Provider CLI install, uninstall, and repair
+- `protocols/`: Communication protocols (streaming, ACP)
+- `providers_mcp.py`: MCP server management for providers
+- `providers_api.py`: Provider API helpers
+- `skill_surfaces.py`: Skill surface definitions
 
 ## Special cross-layer seam
 

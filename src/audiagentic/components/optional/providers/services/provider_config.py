@@ -86,16 +86,16 @@ def load_provider_config(project_root: Path) -> dict[str, Any]:
         payload = load_yaml_file(path)
     except Exception as exc:  # noqa: BLE001
         raise AudiaGenticError(
-            code="PRV-IO-002",
-            kind="io",
+            code="IO-PCFG-001",
+            kind="providers",
             message="failed to read provider config",
             details={"path": str(path), "error": str(exc)},
         ) from exc
     issues = validate_provider_config(payload)
     if issues:
         raise AudiaGenticError(
-            code="PRV-VALIDATION-009",
-            kind="validation",
+            code="VAL-PCFG-001",
+            kind="providers",
             message="provider config failed validation",
             details={"issues": issues, "path": str(path)},
         )

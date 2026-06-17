@@ -11,7 +11,7 @@ from audiagentic.components.optional.providers.services.catalog import (
     fetch_provider_catalog,
     refresh_all_catalogs,
 )
-from audiagentic.foundation.output import ComponentOutputEvent
+from audiagentic.foundation.contracts.output import ComponentOutputEvent
 
 # ---------------------------------------------------------------------------
 # Helpers

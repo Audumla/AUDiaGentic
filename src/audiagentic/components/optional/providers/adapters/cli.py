@@ -18,8 +18,8 @@ def require_executable(provider_id: str, *aliases: str) -> str:
             return path
     tried = ", ".join(aliases)
     raise AudiaGenticError(
-        code="PRV-EXTERNAL-NOT-FOUND",
-        kind="external",
+        code="EXT-PROVCLI-001",
+        kind="providers",
         message=f"Provider '{provider_id}' executable not found. Tried: {tried}. Ensure it is installed and on PATH.",
         details={"provider-id": provider_id, "aliases": list(aliases)},
     )

@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from audiagentic import launcher
-from audiagentic.components.core.session_manage_mcp import _set_cli_visibility
+from audiagentic.components.core.session.session_visibility import set_cli_visibility
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.runtime.harness.pi.install import request_runtime_reload
@@ -27,14 +27,14 @@ def test_build_system_md_injections_uses_explicit_project_root(
     other_root.mkdir()
 
     register_all_components()
-    install_component("planning", project_root)
+    install_component("coding-lsp", project_root)
     monkeypatch.chdir(other_root)
 
     injections = build_system_md_injections(project_root)
 
     assert "What you can do" in injections
     assert "Available components" in injections
-    assert "mcp_planning_status" in injections["What you can do"]
+    assert "installed/enabled" in injections["Available components"]
     assert "`providers`" in injections["Available components"]
     assert "not installed" in injections["Available components"]
 
@@ -52,13 +52,13 @@ def test_materialize_agent_config_rebuilds_mcp_from_installed_components(
 
     materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
     initial = json.loads((harness_root / "agent" / "mcp.json").read_text(encoding="utf-8"))
-    assert "ag-planning-mgmt" not in initial["mcpServers"]
+    assert "ag-lsp-mgmt" not in initial["mcpServers"]
 
-    install_component("planning", project_root)
+    install_component("coding-lsp", project_root)
     materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
     updated = json.loads((harness_root / "agent" / "mcp.json").read_text(encoding="utf-8"))
 
-    assert "ag-planning-mgmt" in updated["mcpServers"]
+    assert "ag-lsp-mgmt" in updated["mcpServers"]
 
 
 def test_providers_component_uses_optional_server_module_in_mcp_config(
@@ -79,29 +79,7 @@ def test_providers_component_uses_optional_server_module_in_mcp_config(
     providers = payload["mcpServers"]["ag-providers-mgmt"]
     assert providers["args"] == [
         "-m",
-        "audiagentic.components.optional.providers.providers_manage_mcp",
-    ]
-
-
-def test_planning_component_uses_optional_server_module_in_mcp_config(
-    tmp_path: Path,
-) -> None:
-    project_root = tmp_path / "project"
-    harness_root = tmp_path / "harness"
-    project_root.mkdir()
-    harness_root.mkdir()
-
-    register_all_components()
-    harness_cfg = {"rig": {"model": "qwen3.5-0.8b", "port": 42001, "provider": "audiagentic"}}
-
-    install_component("planning", project_root)
-    materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
-    payload = json.loads((harness_root / "agent" / "mcp.json").read_text(encoding="utf-8"))
-
-    planning = payload["mcpServers"]["ag-planning-mgmt"]
-    assert planning["args"] == [
-        "-m",
-        "audiagentic.components.optional.planning.planning_manage_mcp",
+        "audiagentic.components.optional.providers.providers_mcp",
     ]
 
 
@@ -132,7 +110,6 @@ def test_component_mcp_metadata_loads_from_yaml() -> None:
 
     project_decl = get_mcp_server_declaration("project", "ag-project-mgmt")
     session_decl = get_mcp_server_declaration("session", "ag-session-mgmt")
-    planning_decl = get_mcp_server_declaration("planning", "ag-planning-mgmt")
     ledger_decl = get_mcp_server_declaration("agent-ledger", "ag-ledger")
 
     assert project_decl is not None
@@ -142,10 +119,6 @@ def test_component_mcp_metadata_loads_from_yaml() -> None:
     assert session_decl is not None
     assert "CLI visibility controls" in session_decl.instructions
     assert "set_cli_visibility" in session_decl.tool_descriptions
-
-    assert planning_decl is not None
-    assert planning_decl.module == "audiagentic.components.optional.planning.planning_manage_mcp"
-    assert "planning_summary" in planning_decl.tool_descriptions
 
     assert ledger_decl is not None
     assert ledger_decl.module == "audiagentic.components.optional.ledger.ledger_mcp"
@@ -178,7 +151,7 @@ def test_component_install_refreshes_materialized_agent_config(
         ),
     )
 
-    args = argparse.Namespace(component_cmd="install", component_id="planning")
+    args = argparse.Namespace(component_cmd="install", component_id="coding-lsp")
 
     rc = launcher._cmd_component(args, project_root)
 
@@ -186,7 +159,7 @@ def test_component_install_refreshes_materialized_agent_config(
     assert refresh_calls
     assert all(call == (harness_root, project_root) for call in refresh_calls)
     assert reload_calls
-    assert all(call == (project_root, "component-installed", "planning") for call in reload_calls)
+    assert all(call == (project_root, "component-installed", "coding-lsp") for call in reload_calls)
 
 
 def test_request_runtime_reload_writes_marker(tmp_path: Path) -> None:
@@ -196,13 +169,13 @@ def test_request_runtime_reload_writes_marker(tmp_path: Path) -> None:
     marker = request_runtime_reload(
         project_root,
         reason="component-enabled",
-        component_id="planning",
+        component_id="coding-lsp",
     )
 
     assert marker == project_root / ".audiagentic" / "runtime" / "harness" / "reload-request.json"
     payload = json.loads(marker.read_text(encoding="utf-8"))
     assert payload["reason"] == "component-enabled"
-    assert payload["component_id"] == "planning"
+    assert payload["component_id"] == "coding-lsp"
     assert payload["requested_at"].endswith("Z")
 
 
@@ -230,6 +203,9 @@ def test_set_cli_visibility_updates_project_config_and_requests_reload(
 ) -> None:
     project_root = tmp_path / "project"
     project_root.mkdir()
+    cfg_path = project_root / ".audiagentic" / "config" / "harness" / "ag.yaml"
+    cfg_path.parent.mkdir(parents=True)
+    cfg_path.write_text("ui:\n  hide_thinking_block: false\n  hide_tool_use: false\n", encoding="utf-8")
     harness_root = tmp_path / "harness"
     harness_root.mkdir()
 
@@ -249,21 +225,20 @@ def test_set_cli_visibility_updates_project_config_and_requests_reload(
         lambda project_root, *, reason, component_id=None, has_mcp_servers=True: reload_calls.append((project_root, reason)),
     )
     monkeypatch.setattr(
-        "audiagentic.components.core.session_manage_mcp._effective_cli_visibility",
+        "audiagentic.components.core.session.session_visibility.effective_cli_visibility",
         lambda project_root: {
             "show_thinking_blocks": False,
             "show_tool_blocks": True,
         },
     )
 
-    result = _set_cli_visibility(
+    result = set_cli_visibility(
         project_root=project_root,
         show_thinking_blocks=False,
         show_tool_blocks=True,
         scope="project",
     )
 
-    cfg_path = project_root / ".audiagentic" / "config" / "harness" / "ag.yaml"
     payload = cfg_path.read_text(encoding="utf-8")
 
     assert result["ok"] is True
@@ -271,5 +246,3 @@ def test_set_cli_visibility_updates_project_config_and_requests_reload(
     assert "hide_tool_use: false" in payload
     assert refresh_calls == [(harness_root, project_root)]
     assert reload_calls == [(project_root, "session-ui-visibility-updated")]
-
-
