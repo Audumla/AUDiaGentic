@@ -1,0 +1,249 @@
+# State propagation configuration
+# Location: .audiagentic/planning/config/state_propagation.yaml
+#
+# This configures automatic state propagation across planning hierarchies.
+# Rules can be overridden per-item in the item frontmatter with:
+#   propagation:
+#     enabled: false  # Disable propagation for this item
+#     rules:
+#       done: custom_rule_name  # Override default rule for 'done' state
+
+# Global propagation settings
+global:
+  enabled: true  # Enable propagation by default (can be overridden per-item)
+  max_depth: 10  # Maximum propagation chain depth (cycle detection)
+  default_mode: async  # async or sync delivery mode
+
+# Per-kind configuration: defines parent relationships and state transition rules
+kinds:
+  # Task propagation rules
+  task:
+    enabled: true
+    parent_kind: wp  # Tasks belong to WPs
+    parent_field: task_refs  # WP field that references tasks (e.g., task_refs contains task IDs)
+    state_rules:
+      in_progress:
+        rule: parent_in_set
+        when:
+          state_set: initial
+        new_state: in_progress
+      done:
+        rule: all_children_in_set
+        when:
+          state_set: complete
+        new_state: done
+      blocked:
+        rule: parent_not_in_set
+        when:
+          state_set: terminal
+        new_state: blocked
+      archived:
+        rule: none
+        new_state: null
+
+  # WP propagation rules
+  wp:
+    enabled: true
+    parent_kind: plan  # WPs belong to Plans
+    parent_field: plan_ref  # WP field that references parent plan
+    # Note: WPs don't have a direct child field - tasks are referenced via task_refs
+    # For check_all_children_done, we need to find tasks that reference this WP
+    state_rules:
+      in_progress:
+        rule: parent_in_set
+        when:
+          state_set: initial
+        new_state: in_progress
+      done:
+        rule: all_children_in_set
+        when:
+          state_set: complete
+        new_state: done
+      blocked:
+        rule: parent_not_in_set
+        when:
+          state_set: terminal
+        new_state: blocked
+      archived:
+        rule: none
+        new_state: null
+
+  # Plan propagation rules
+  plan:
+    enabled: true
+    parent_kind: spec  # Plans belong to Specs
+    parent_field: spec_refs  # Plan field that references specs
+    state_rules:
+      in_progress:
+        rule: parent_in_set
+        when:
+          state_set: initial
+        new_state: in_progress
+      done:
+        rule: all_children_in_set
+        when:
+          state_set: complete
+        new_state: done
+      blocked:
+        rule: parent_not_in_set
+        when:
+          state_set: terminal
+        new_state: blocked
+      archived:
+        rule: none
+        new_state: null
+
+  # Spec propagation rules
+  spec:
+    enabled: true
+    parent_kind: request  # Specs belong to Requests
+    parent_field: request_refs  # Spec field that references requests
+    state_rules:
+      in_progress:
+        rule: parent_in_set
+        when:
+          state_set: initial
+        new_state: in_progress
+      done:
+        rule: all_children_in_set
+        when:
+          state_set: complete
+        new_state: done
+        actions:
+          - action: complete_parent
+            parent_field: request_refs
+            required_state_set: complete
+            parent_blocking_set: terminal
+            target_state: closed
+      blocked:
+        rule: parent_not_in_set
+        when:
+          state_set: terminal
+        new_state: blocked
+      archived:
+        rule: none
+        new_state: null
+
+  # Request propagation rules (special: requests are top-level)
+  request:
+    enabled: false  # Disabled by default - requests are top-level
+    parent_kind: null  # No parent
+    state_rules:
+      done:
+        rule: none
+        new_state: null
+
+# Rule definitions: logic for each rule type
+# These are registered in propagation/rules.py and referenced by dotted path here
+rules:
+  # No propagation
+  none:
+    enabled: true
+    description: "No state propagation"
+    logic: "audiagentic.foundation.workflow.propagation.rules.rule_none"
+
+  parent_in_set:
+    enabled: true
+    description: "Set parent to new_state when parent is in configured state set"
+    logic: "audiagentic.foundation.workflow.propagation.rules.rule_parent_in_set"
+
+  all_children_in_set:
+    enabled: true
+    description: "Set parent to new_state when all sibling children are in configured state set"
+    logic: "audiagentic.foundation.workflow.propagation.rules.rule_all_children_in_set"
+
+  parent_not_in_set:
+    enabled: true
+    description: "Set parent to new_state when parent is not in configured state set"
+    logic: "audiagentic.foundation.workflow.propagation.rules.rule_parent_not_in_set"
+
+# Action definitions: additional logic to run after propagation
+actions:
+  complete_parent:
+    enabled: true
+    description: "Complete parent when all related children are in configured state set"
+    logic: "audiagentic.foundation.workflow.propagation.rules.action_complete_parent"
+
+# Workflow-specific configurations
+# Each workflow can override global/kind settings for specific use cases
+workflows:
+  # Default workflow (used when no workflow specified)
+  default:
+    description: "Default propagation rules for standard workflows"
+    # Inherits from global config, no overrides needed
+
+  # Fast-track workflow: aggressive propagation
+  fast-track:
+    description: "Aggressive state propagation for fast-track items"
+    global:
+      enabled: true
+      default_mode: sync  # Synchronous for fast feedback
+    kinds:
+      task:
+        state_rules:
+          in_progress:
+            rule: parent_not_in_set  # More aggressive
+            when:
+              state_set: terminal
+            new_state: in_progress
+      wp:
+        state_rules:
+          done:
+            rule: parent_in_set  # Don't wait for all children
+            when:
+              state_set: initial
+            new_state: done
+
+  # Conservative workflow: minimal propagation
+  conservative:
+    description: "Minimal propagation, manual control preferred"
+    global:
+      enabled: false  # Disabled by default, opt-in per-item
+    kinds:
+      task:
+        enabled: false
+      wp:
+        enabled: false
+      plan:
+        enabled: false
+      spec:
+        enabled: false
+
+  # Documentation workflow: no auto-propagation
+  documentation:
+    description: "Documentation items don't propagate state"
+    global:
+      enabled: false
+    kinds:
+      task:
+        enabled: false
+      wp:
+        enabled: false
+      plan:
+        enabled: false
+      spec:
+        enabled: false
+      request:
+        enabled: false
+
+# Validation rules (checked when config is loaded)
+validation:
+  required_fields:
+    - global.enabled
+    - kinds.task.parent_kind
+    - kinds.wp.parent_kind
+    - kinds.plan.parent_kind
+    - kinds.spec.parent_kind
+  required_rules:
+    - none
+    - parent_in_set
+    - all_children_in_set
+    - parent_not_in_set
+
+# Healing configuration: error detection and auto-fix
+healing:
+  enabled: true  # Enable validation and healing
+  auto_fix: false  # If true, automatically apply safe fixes
+  log_only: true  # If true, only log issues without applying fixes
+  on_state_change: false  # If true, validate hierarchy on every state change
+  max_fixes_per_run: 10  # Maximum number of fixes to apply in one run
