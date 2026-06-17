@@ -8,8 +8,14 @@ from audiagentic.components.optional.providers.adapters.mcp_json import (
     remove_mcp_json,
     write_mcp_json,
 )
+from audiagentic.components.optional.providers.adapters.qwen.language_servers import (
+    read_language_servers_qwen,
+    remove_language_servers_qwen,
+    write_language_servers_qwen,
+)
 
 from ...descriptors.base import (
+    LanguageServersConfigSpec,
     McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
@@ -86,5 +92,12 @@ register(ProviderDescriptor(
         remover=remove_mcp_json,
         format="mcp-json",
         refresh_mode="file-watch",
+    ),
+    language_servers_config=LanguageServersConfigSpec(
+        config_path=".lsp.json",
+        reader=read_language_servers_qwen,
+        writer=write_language_servers_qwen,
+        remover=remove_language_servers_qwen,
+        format="qwen-lsp-json",
     ),
 ))

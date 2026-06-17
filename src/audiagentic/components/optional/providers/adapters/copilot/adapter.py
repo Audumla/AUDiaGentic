@@ -107,8 +107,8 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
 
     if completed.returncode != 0:
         raise AudiaGenticError(
-            code="PRV-EXTERNAL-014",
-            kind="external",
+            code="EXT-COPIL-001",
+            kind="providers",
             message="copilot execution failed",
             details={
                 "provider-id": "copilot",

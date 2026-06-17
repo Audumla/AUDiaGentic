@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import os
-import tempfile
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.output import ComponentOutputEvent, ComponentOutputSink
+from audiagentic.foundation.contracts.output import ComponentOutputEvent, ComponentOutputSink
+from audiagentic.foundation.io import atomic_write_text
 
 from .base import SurfaceBlock, apply_managed_blocks, prune_managed_blocks
 from .contributions import load_surface_contributions
@@ -59,19 +58,6 @@ def plan_provider_surfaces(
     return {"ok": True, "files": files}
 
 
-def _write_atomic(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(prefix=path.stem + ".", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(text)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp_path, path)
-    finally:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-
 
 def prune_provider_surfaces(
     project_root: Path,
@@ -112,7 +98,7 @@ def prune_provider_surfaces(
         if current == desired:
             _emit(on_progress, f"No stale blocks in {path.name}", level="debug")
             continue
-        _write_atomic(path, desired)
+        atomic_write_text(path, desired)
         pruned.append(str(path))
         _emit(on_progress, f"Pruned stale blocks from {path.name}")
 
@@ -139,7 +125,7 @@ def apply_provider_surfaces(
         if current == desired:
             _emit(on_progress, f"No changes — {path.name}", level="debug")
             continue
-        _write_atomic(path, desired)
+        atomic_write_text(path, desired)
         written.append(str(path))
         _emit(on_progress, f"Updated {path.name} ({len(file_blocks)} block(s))")
     _emit(on_progress, f"Apply complete — {len(written)} file(s) updated")

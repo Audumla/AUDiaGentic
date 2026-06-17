@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import tomllib
 import yaml
 from tests.integration.lifecycle.harness import (
     component_sandbox,
@@ -43,6 +44,7 @@ _SURFACE_FILES: list[str] = [
 # Provider MCP config paths relative to project root, keyed by format label.
 _MCP_CONFIG_PATHS: dict[str, str] = {
     "mcp-json-claude":    ".mcp.json",
+    "codex-toml":         ".codex/config.toml",
     "opencode-mcp":       ".opencode/opencode.json",
     "mcp-json-gemini":    ".gemini/settings.json",
     "goose-yaml":         ".goose/config.yaml",
@@ -70,6 +72,7 @@ def setup_provider_surfaces(project_root: Path) -> None:
     (project_root / ".mcp.json").write_text(
         json.dumps({"mcpServers": {}}), encoding="utf-8"
     )
+    _ensure_dir_and_stub(project_root / ".codex" / "config.toml", "")
     _ensure_dir_and_stub(project_root / ".opencode" / "opencode.json", '{"mcp": {}}')
     _ensure_dir_and_stub(project_root / ".gemini" / "settings.json", '{"mcpServers": {}}')
     _ensure_dir_and_stub(
@@ -114,6 +117,13 @@ def mcp_servers_in(project_root: Path, config_path: str) -> set[str]:
 
     suffix = path.suffix.lower()
     name = path.name.lower()
+
+    if suffix == ".toml":
+        try:
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+        except (tomllib.TOMLDecodeError, OSError):
+            return set()
+        return set((data.get("mcp_servers") or {}).keys())
 
     # YAML-based config (goose)
     if suffix in (".yaml", ".yml"):

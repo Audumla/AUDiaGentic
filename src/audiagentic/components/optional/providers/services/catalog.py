@@ -10,7 +10,7 @@ from audiagentic.components.optional.providers.services.provider_catalog import 
     write_model_catalog,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.output import ComponentOutputEvent, ComponentOutputSink
+from audiagentic.foundation.contracts.output import ComponentOutputEvent, ComponentOutputSink
 
 from ..descriptors.registry import all_descriptors
 
@@ -55,15 +55,15 @@ def fetch_provider_catalog(
     desc = descriptors.get(provider_id)
     if desc is None:
         raise AudiaGenticError(
-            code="PRV-CATALOG-001",
-            kind="not-found",
+            code="RES-CAT-001",
+            kind="providers",
             message=f"no descriptor for provider {provider_id!r}",
             details={"provider-id": provider_id},
         )
     if desc.fetch_catalog_fn is None:
         raise AudiaGenticError(
-            code="PRV-CATALOG-002",
-            kind="not-supported",
+            code="CON-CAT-001",
+            kind="providers",
             message=f"provider {provider_id!r} does not support catalog fetch",
             details={"provider-id": provider_id},
         )
@@ -74,16 +74,16 @@ def fetch_provider_catalog(
     )
     if not success:
         raise AudiaGenticError(
-            code="PRV-CATALOG-004",
-            kind="timeout",
+            code="TO-CAT-001",
+            kind="providers",
             message=f"catalog fetch timed out after {timeout}s for {provider_id!r}",
             details={"provider-id": provider_id},
         ) from result_or_exc
     models = result_or_exc
     if not models:
         raise AudiaGenticError(
-            code="PRV-CATALOG-003",
-            kind="empty",
+            code="RES-CAT-002",
+            kind="providers",
             message=f"catalog fetch returned no models for {provider_id!r}",
             details={"provider-id": provider_id},
         )

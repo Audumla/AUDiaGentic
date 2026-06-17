@@ -31,8 +31,8 @@ def resolve_model_selection(
         resolved_from = "alias"
         if resolved is None:
             raise AudiaGenticError(
-                code="PRV-VALIDATION-005",
-                kind="validation",
+                code="VAL-MODEL-001",
+                kind="providers",
                 message="unknown model alias",
                 details={"provider-id": provider_id, "model-alias": model_alias},
             )
@@ -41,8 +41,8 @@ def resolve_model_selection(
         resolved_from = "default"
     else:
         raise AudiaGenticError(
-            code="PRV-VALIDATION-006",
-            kind="validation",
+            code="VAL-MODEL-002",
+            kind="providers",
             message="model-id or model-alias is required",
             details={"provider-id": provider_id},
         )
@@ -51,8 +51,8 @@ def resolve_model_selection(
         allowed = catalog_model_ids(catalog)
         if resolved not in allowed:
             raise AudiaGenticError(
-                code="PRV-BUSINESS-003",
-                kind="business-rule",
+                code="CON-MODEL-001",
+                kind="providers",
                 message="resolved model is not in provider catalog",
                 details={"provider-id": provider_id, "model-id": resolved},
             )

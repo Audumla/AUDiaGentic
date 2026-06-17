@@ -188,8 +188,8 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
 
     if completed.returncode != 0:
         raise AudiaGenticError(
-            code="PRV-EXTERNAL-004",
-            kind="external",
+            code="EXT-CLAUDE-001",
+            kind="providers",
             message="claude execution failed",
             details={
                 "provider-id": "claude",
