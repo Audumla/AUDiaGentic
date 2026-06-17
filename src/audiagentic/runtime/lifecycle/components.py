@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import logging
 import shutil
-from datetime import datetime, timezone
 from pathlib import Path
+
+from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +36,6 @@ _REMOVE_WITH_CONFIGS = {MODE_CREATE_IF_MISSING}
 DEFAULT_VERSION = "0.1.0"
 
 
-def _now_timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _get_component_root(component_id: str, project_root: Path) -> Path:
@@ -149,7 +148,7 @@ def install_component(
     marker: dict = {
         "component-id": resolved_id,
         "enabled": True,
-        "installed-at": _now_timestamp(),
+        "installed-at": now_iso_z(),
         "version": version,
     }
     if resolved_id == COMPONENT_PROJECT:
@@ -310,6 +309,10 @@ def _propagate_mcp_to_providers(descriptor, project_root: Path) -> None:
         desired_entries: dict[str, tuple[str, object]] = {}
         for mcp_def in (descriptor.mcp_servers or []):
             if "providers" in mcp_def.propagate:
+                # Native LSP supersedes the generic MCP LSP server: skip this
+                # server for providers that manage their own language servers.
+                if getattr(mcp_def, "skip_if_native_lsp", False) and pdesc.language_servers_config is not None:
+                    continue
                 from audiagentic.foundation.mcp import McpServerEntry
 
                 managed_id = mcp_def.managed_id or mcp_def.name

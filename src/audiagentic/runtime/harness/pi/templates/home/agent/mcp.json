@@ -9,7 +9,7 @@
       "command": "__AUDIAGENTIC_PYTHON__",
       "args": [
         "-m",
-        "audiagentic.components.core.session_manage_mcp",
+        "audiagentic.components.core.session.session_mcp",
         "--readonly",
         "--smoke-only"
       ],
@@ -28,7 +28,7 @@
       "command": "__AUDIAGENTIC_PYTHON__",
       "args": [
         "-m",
-        "audiagentic.components.core.project_manage_mcp"
+        "audiagentic.components.core.project.project_mcp"
       ],
       "env": {
         "PYTHONPATH": "__AUDIAGENTIC_SRC__",

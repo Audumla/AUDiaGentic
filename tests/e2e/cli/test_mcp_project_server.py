@@ -30,7 +30,7 @@ def _mcp(*messages: dict, project_root: Path) -> list[dict]:
     # Keep AUDIAGENTIC_REPO_ROOT from container env (template root for baseline_sync).
     # The target project is passed via --project-root, not this env var.
     proc = subprocess.run(
-           [sys.executable, "-m", "audiagentic.components.core.project_manage_mcp",
+           [sys.executable, "-m", "audiagentic.components.core.project.project_mcp",
          "--project-root", str(project_root)],
         input=payload, text=True, encoding="utf-8", capture_output=True, timeout=30, env=env,
     )

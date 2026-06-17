@@ -23,6 +23,16 @@ from .patches import apply_lockdown_patches
 _TARGET = "pi-runtime"
 
 
+def version_info(project_root: Path | None = None) -> dict[str, str]:
+    """Resolve configured agent + MCP adapter versions (env override, else pi.yaml)."""
+    pi_cfg = _c.load_pi_config(project_root=project_root)
+    agent_cfg = pi_cfg.get("agent", {})
+    return {
+        "agent": _c.AGENT_VERSION or agent_cfg.get("version", "latest"),
+        "mcp_adapter": _c.AGENT_MCP_ADAPTER_VERSION or agent_cfg.get("mcp_adapter_version", "latest"),
+    }
+
+
 def _npm_env() -> dict[str, str]:
     env = os.environ.copy()
     # Node 22 in Docker can intermittently crash compiling large npm installs.

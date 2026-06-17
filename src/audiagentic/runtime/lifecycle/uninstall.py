@@ -25,8 +25,8 @@ def apply_uninstall(
     state = detect_installed_state(project_root)
     if state.state != "installed":
         raise AudiaGenticError(
-            code="LFC-BUSINESS-004",
-            kind="business-rule",
+            code="CON-UNINSTALL-001",
+            kind="lifecycle",
             message="uninstall requires installed state",
             details={"state": state.state},
         )
