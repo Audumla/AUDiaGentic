@@ -1,0 +1,16 @@
+type: language
+contract-version: v1
+id: rust
+display-name: Rust (rust-analyzer)
+language-id: rust
+server:
+  command: [rust-analyzer]
+  file-extensions: [.rs]
+  workspace-config-files: [Cargo.toml, Cargo.lock]
+detection-markers: [Cargo.toml, Cargo.lock]
+dependency:
+  id: rust-analyzer
+  display-name: Rust Analyzer
+  probe: binary:rust-analyzer
+  toolchain: cargo
+  package: rust-analyzer

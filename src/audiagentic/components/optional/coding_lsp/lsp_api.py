@@ -4,25 +4,26 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.optional.coding_lsp import language_registry
 from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
-    _PROBE_SPECS,
     CODING_LSP_DIR,
     available_language_specs,
     detect_project_languages,
-    merge_server_configs,
+    load_runtime_servers,
     read_lsp_config,
     resolve_server_for_file,
     write_lsp_config,
 )
 from audiagentic.components.optional.coding_lsp.lsp_session_manager import SessionManager
-from audiagentic.foundation.dependencies import (
+from audiagentic.foundation.components.dependencies import (
+    build_dependency_probes,
+    build_dependency_workflow,
     detect_missing,
-    load_component_probes,
-    load_component_workflow,
 )
 from audiagentic.foundation.workflow.invocation.steps import SequenceStep
 
-_LSP_PROBES = load_component_probes("coding-lsp")
+# Probes for every supported language (status checks scope by configured ids).
+_LSP_PROBES = build_dependency_probes(language_registry.dependency_cfgs())
 
 _session_manager = SessionManager()
 
@@ -59,9 +60,8 @@ def resolve_project_root(path: str | Path) -> Path:
 def discover_servers(project_root: str | Path) -> dict[str, Any]:
     resolved_root = resolve_project_root(project_root)
     lsp_path = resolved_root / CODING_LSP_DIR / "lsp.json"
-    explicit = read_lsp_config(lsp_path)
-    detected = detect_project_languages(resolved_root)
-    return merge_server_configs(explicit, detected)
+    servers, _, _ = load_runtime_servers(lsp_path)
+    return servers
 
 
 def workspace_symbols(query: str, root: str = ".") -> list[dict[str, Any]]:
@@ -123,39 +123,52 @@ def rename_preview(file: str, position: str, new_name: str) -> dict[str, Any] | 
     return session.rename(uri, line, character, new_name)
 
 
-def configured_dependency_ids(project_root: Path | None) -> list[str]:
-    """Return dependency IDs for languages explicitly configured in lsp.json."""
+def _configured_language_ids(project_root: Path | None) -> list[str]:
+    """Languages explicitly enabled in lsp.json — the sole source of activation."""
     if project_root is None:
         return []
     lsp_json = resolve_project_root(project_root) / CODING_LSP_DIR / "lsp.json"
-    configured = read_lsp_config(lsp_json)
-    dep_ids: list[str] = []
-    for lang in configured:
-        spec = _PROBE_SPECS.get(lang)
-        if spec:
-            dep_ids.extend(spec.requires)
-    return dep_ids
+    configured, _, _ = load_runtime_servers(lsp_json)
+    return list(configured.keys())
+
+
+def configured_dependency_ids(project_root: Path | None) -> list[str]:
+    """Return dependency IDs for languages explicitly configured in lsp.json."""
+    return language_registry.dependency_ids(_configured_language_ids(project_root))
+
+
+def missing_configured_dependencies(project_root: Path | None) -> list[str]:
+    """Dep ids for configured languages whose server binary is not installed."""
+    configured = configured_dependency_ids(project_root)
+    probes = build_dependency_probes(
+        language_registry.dependency_cfgs(_configured_language_ids(project_root))
+    )
+    return detect_missing(probes, configured)
 
 
 def config_status(root: str = ".") -> dict[str, Any]:
     project_root = resolve_project_root(root)
     lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
-    configured = read_lsp_config(lsp_path)
+    configured, config_errors, config_exists = load_runtime_servers(lsp_path)
     deps = _LSP_PROBES
     missing_deps = detect_missing(deps, configured_dependency_ids(project_root))
 
     language_status: dict[str, dict[str, Any]] = {}
     for lang, cfg in configured.items():
-        spec = _PROBE_SPECS.get(lang)
-        binary_ok = all(dep_id not in missing_deps for dep_id in (spec.requires if spec else ()))
+        lang_spec = language_registry.get_language(lang)
+        dep_ids = (lang_spec.dependency.id,) if (lang_spec and lang_spec.dependency) else ()
+        binary_ok = all(dep_id not in missing_deps for dep_id in dep_ids)
         language_status[lang] = {
             "configured": True,
             "binary_available": binary_ok,
-            "command": cfg.get("command", []),
+            "command": cfg.command,
         }
 
     return {
         "project_root": str(project_root),
+        "config_exists": config_exists,
+        "config_valid": config_exists and not config_errors,
+        "config_errors": config_errors,
         "languages": language_status,
         "missing_binaries": [lang for lang, status in language_status.items() if not status["binary_available"]],
         "detectable": list(detect_project_languages(project_root).keys()),
@@ -198,9 +211,36 @@ def list_languages() -> dict[str, Any]:
     }
 
 
-async def install_lsp_dependencies(names: list[str], *, run_with_output) -> dict[str, Any]:
-    workflow = load_component_workflow("coding-lsp", action="install")
-    filtered = tuple(s for s in workflow.steps if s.id in names) if names else workflow.steps
+async def install_lsp_dependencies(
+    names: list[str], *, run_with_output, root: str = "."
+) -> dict[str, Any]:
+    """Install language-server binaries — scoped to configured languages.
+
+    The workflow is built only from dependencies of languages enabled in
+    lsp.json, so a server for a non-enabled language can never be installed.
+    Empty `names` installs the configured-but-missing set; explicit `names`
+    must belong to configured languages or are rejected.
+    """
+    project_root = resolve_project_root(root)
+    configured = configured_dependency_ids(project_root)
+    dep_cfgs = language_registry.dependency_cfgs(_configured_language_ids(project_root))
+
+    if names:
+        stray = [n for n in names if n not in configured]
+        if stray:
+            return {
+                "ok": False,
+                "error": f"not enabled for this project: {stray}. Configured: {configured}",
+            }
+        targets = list(names)
+    else:
+        targets = missing_configured_dependencies(project_root)
+
+    if not targets:
+        return {"ok": True, "installed": [], "skipped": "no missing dependencies for configured languages"}
+
+    workflow = build_dependency_workflow(dep_cfgs, workflow_id="coding-lsp", action="install")
+    filtered = tuple(s for s in workflow.steps if s.id in set(targets))
     seq = SequenceStep(id="install", steps=filtered, fail_fast=False)
     return await run_with_output(
         ctx=None,
@@ -231,11 +271,10 @@ def _open_file_session(file: str) -> tuple[Any, str]:
     language, server = language_server
     uri = file_to_uri(file_path)
     session = _session_manager.get_or_create(project_root, language, server)
-    session.did_open(
+    session.sync_document(
         uri,
         file_path.read_text(encoding="utf-8", errors="replace"),
         _lang_to_id(language),
-        1,
     )
     return session, uri
 
@@ -252,12 +291,5 @@ def _resolve_language_server(file_path: Path, project_root: Path) -> tuple[str, 
 
 
 def _lang_to_id(language: str) -> str:
-    mapping = {
-        "python": "python",
-        "typescript": "typescript",
-        "rust": "rust",
-        "cpp": "cpp",
-        "javascript": "javascript",
-    }
-    return mapping.get(language, language)
-
+    spec = language_registry.get_language(language)
+    return spec.language_id if spec else language
