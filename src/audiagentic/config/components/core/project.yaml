@@ -26,7 +26,7 @@ files:
     description: Managed prompt templates
 mcp-servers:
   - name: ag-project-mgmt
-    module: audiagentic.components.core.project_manage_mcp
+    module: audiagentic.components.core.project.project_mcp
     direct-tools: [project_status, list_components, install_component, uninstall_component, enable_component, disable_component, read_project_file]
     description: Project MCP server for project-level component management
     propagate: audiagentic

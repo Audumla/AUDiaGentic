@@ -11,7 +11,7 @@ files:
     description: Component installation marker
 mcp-servers:
   - name: ag-session-mgmt
-    module: audiagentic.components.core.session_manage_mcp
+    module: audiagentic.components.core.session.session_mcp
     args: ["--readonly", "--smoke-only"]
     direct-tools: [status, config, set_auto_update, cli_visibility, set_cli_visibility, refresh_harness_config, update_embedded_rig]
     description: Harness status and configuration

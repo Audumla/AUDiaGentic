@@ -19,7 +19,7 @@ files:
     description: Runtime provider catalogs and session state
 mcp-servers:
   - name: ag-providers-mgmt
-    module: audiagentic.components.optional.providers.providers_manage_mcp
+    module: audiagentic.components.optional.providers.providers_mcp
     direct-tools: true
     description: Providers MCP server for provider management and introspection
     propagate: audiagentic
