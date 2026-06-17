@@ -41,7 +41,7 @@ def test_state_machine_rejects_illegal_transition() -> None:
     try:
         transition_job(record, "running", now_fn=lambda: "later")
     except AudiaGenticError as exc:
-        assert exc.kind == "business-rule"
+        assert exc.kind == "agent-jobs"
     else:
         raise AssertionError("expected illegal transition error")
     assert record["state"] == "created"
@@ -76,7 +76,7 @@ def test_transition_and_persist_does_not_corrupt_on_error(tmp_path: Path) -> Non
         try:
             transition_and_persist(sandbox.repo, payload["job-id"], "running")
         except AudiaGenticError as exc:
-            assert exc.kind == "business-rule"
+            assert exc.kind == "agent-jobs"
         else:
             raise AssertionError("expected illegal transition error")
         after = read_job_record(sandbox.repo, payload["job-id"])

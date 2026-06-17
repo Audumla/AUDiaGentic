@@ -72,7 +72,7 @@ def test_stage_execution_rejects_invalid_output(tmp_path: Path) -> None:
                 previous_output=None,
             )
         except AudiaGenticError as exc:
-            assert exc.kind == "validation"
+            assert exc.kind == "agent-jobs"
         else:
             raise AssertionError("expected validation error")
         path = stage_output_path(sandbox.repo, job["job-id"], stage["id"])

@@ -82,8 +82,8 @@ def apply_overrides(profile: dict[str, Any], overrides: dict[str, Any]) -> dict[
     issues = validate_profile(profile)
     if issues:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-007",
-            kind="validation",
+            code="VAL-PROF-001",
+            kind="agent-jobs",
             message="profile failed validation",
             details={"issues": issues},
         )
@@ -95,29 +95,29 @@ def apply_overrides(profile: dict[str, Any], overrides: dict[str, Any]) -> dict[
     for stage_id, override in overrides.items():
         if stage_id not in stage_map:
             raise AudiaGenticError(
-                code="JOB-VALIDATION-008",
-                kind="validation",
+                code="VAL-PROF-002",
+                kind="agent-jobs",
                 message="override references unknown stage id",
                 details={"stage-id": stage_id},
             )
         if not isinstance(override, dict):
             raise AudiaGenticError(
-                code="JOB-VALIDATION-009",
-                kind="validation",
+                code="VAL-PROF-003",
+                kind="agent-jobs",
                 message="override entry must be an object",
                 details={"stage-id": stage_id},
             )
         if "enabled" not in override or not isinstance(override["enabled"], bool):
             raise AudiaGenticError(
-                code="JOB-VALIDATION-010",
-                kind="validation",
+                code="VAL-PROF-004",
+                kind="agent-jobs",
                 message="override must include boolean enabled",
                 details={"stage-id": stage_id},
             )
         if any(stage["required"] for stage in stage_map[stage_id]) and not override["enabled"]:
             raise AudiaGenticError(
-                code="JOB-BUSINESS-002",
-                kind="business-rule",
+                code="CON-PROF-001",
+                kind="agent-jobs",
                 message="required stages may not be disabled",
                 details={"stage-id": stage_id},
             )
@@ -140,8 +140,8 @@ def _parse_overrides_yaml(text: str) -> dict[str, dict[str, bool]]:
         if indent == 0:
             if key != "workflow-overrides":
                 raise AudiaGenticError(
-                    code="JOB-VALIDATION-011",
-                    kind="validation",
+                    code="VAL-PROF-005",
+                    kind="agent-jobs",
                     message="unexpected root key in workflow overrides",
                     details={"key": key},
                 )
@@ -157,16 +157,16 @@ def _parse_overrides_yaml(text: str) -> dict[str, dict[str, bool]]:
         if indent == 4 and current_stage:
             if key != "enabled":
                 raise AudiaGenticError(
-                    code="JOB-VALIDATION-012",
-                    kind="validation",
+                    code="VAL-PROF-006",
+                    kind="agent-jobs",
                     message="unexpected override field",
                     details={"stage-id": current_stage, "field": key},
                 )
             value_norm = value.strip().lower()
             if value_norm not in {"true", "false"}:
                 raise AudiaGenticError(
-                    code="JOB-VALIDATION-013",
-                    kind="validation",
+                    code="VAL-PROF-007",
+                    kind="agent-jobs",
                     message="override enabled must be true or false",
                     details={"stage-id": current_stage},
                 )
@@ -194,8 +194,8 @@ def load_profile(
     builtins = load_builtin_profiles()
     if profile_id not in builtins:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-014",
-            kind="validation",
+            code="RES-PROF-001",
+            kind="agent-jobs",
             message="unknown workflow profile",
             details={"profile-id": profile_id},
         )

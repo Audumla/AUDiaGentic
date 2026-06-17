@@ -14,6 +14,7 @@ from audiagentic.components.optional.agent_jobs.stages import execute_stage
 from audiagentic.components.optional.agent_jobs.state_machine import transition_and_persist
 from audiagentic.foundation.contracts.canonical_ids import canonical_provider_ids, validate_ids
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.time import now_iso_z
 from audiagentic.runtime.state import jobs_store as store
 
 StageExecutor = Callable[
@@ -23,8 +24,6 @@ StageExecutor = Callable[
 ProviderAdapter = Callable[[dict[str, Any]], dict[str, Any]]
 
 
-def _now_timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _jobs_root(project_root: Path) -> Path:
@@ -81,8 +80,8 @@ def _validate_provider_id(provider_id: str) -> None:
     issues = validate_ids([provider_id], canonical_provider_ids())
     if issues:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-015",
-            kind="validation",
+            code="VAL-RUN-001",
+            kind="agent-jobs",
             message="provider-id is not canonical",
             details={"issues": issues},
         )
@@ -104,15 +103,15 @@ def run_packet(
 ) -> dict[str, Any]:
     if not provider_id:
         raise AudiaGenticError(
-            code="JOB-VALIDATION-016",
-            kind="validation",
+            code="VAL-RUN-002",
+            kind="agent-jobs",
             message="provider-id is required",
             details={},
         )
     _validate_provider_id(provider_id)
 
     job_id = job_id or generate_job_id(project_root)
-    timestamp = (now_fn or _now_timestamp)()
+    timestamp = (now_fn or now_iso_z)()
     record = build_job_record(
         job_id=job_id,
         packet_id=packet_id,
@@ -193,8 +192,8 @@ def run_packet(
         except AudiaGenticError:
             pass
         raise AudiaGenticError(
-            code="JOB-INTERNAL-001",
-            kind="internal",
+            code="INT-RUN-001",
+            kind="agent-jobs",
             message="packet runner failed during stage execution",
             details={"job-id": job_id, "error": str(exc)},
         ) from exc
