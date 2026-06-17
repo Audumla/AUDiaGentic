@@ -18,8 +18,8 @@ def _validate_change_event(payload: dict[str, Any]) -> None:
     errors = list(validator.iter_errors(payload))
     if errors:
         raise AudiaGenticError(
-            code="RLS-VALIDATION-001",
-            kind="validation",
+            code="VAL-FRAGMENT-001",
+            kind="release",
             message="change event failed schema validation",
             details={"errors": [error.message for error in errors]},
         )
@@ -41,8 +41,8 @@ def record_change_event(project_root: Path, event: dict[str, Any]) -> dict[str, 
         event_core = {k: v for k, v in event.items() if k != "git-commits"}
         if existing_core != event_core:
             raise AudiaGenticError(
-                code="RLS-BUSINESS-001",
-                kind="business-rule",
+                code="CON-FRAGMENT-001",
+                kind="release",
                 message="fragment already exists with different content",
                 details={"event-id": event_id},
             )
