@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock
 
 from audiagentic.components.optional.coding_lsp.lsp_lifecycle import (
@@ -124,3 +125,21 @@ def test_get_diagnostics_single_uri() -> None:
     })
     result = session.diagnostics(min_severity=1)
     assert "file://a.py" in result
+
+
+def test_diagnostics_logs_warning_on_request_failure(caplog) -> None:
+    """Regression: a failed diagnostics request logs before returning {}.
+
+    Also guards the module-level logger: a bare logger.* call would NameError
+    if the import were dropped.
+    """
+    session = LspSession(_make_config(), "/tmp")
+    session.bridge = MagicMock()
+    session.bridge.send_request = MagicMock(side_effect=RuntimeError("boom"))
+
+    logger_name = "audiagentic.components.optional.coding_lsp.lsp_lifecycle"
+    with caplog.at_level(logging.WARNING, logger=logger_name):
+        result = session.diagnostics()
+
+    assert result == {}
+    assert any("diagnostics request failed" in r.getMessage() for r in caplog.records)

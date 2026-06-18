@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -213,6 +214,34 @@ def test_validate_unknown_rule_in_state_rules_reports_error() -> None:
     }
     errors = validate(config, lambda kind: ["draft", "active", "done"])
     assert any("ghost_rule" in e for e in errors)
+
+
+def test_validate_logs_warning_when_states_getter_raises(caplog) -> None:
+    """Regression: a raising states_for_kind is logged, not silently swallowed.
+
+    On failure valid_states falls back to empty, which flags every configured
+    state invalid — a warning makes that fallback visible instead of confusing.
+    """
+    def boom(kind: str) -> list[str]:
+        raise KeyError(kind)
+
+    config = {
+        "rules": {"none": {"enabled": True}},
+        "kinds": {
+            "task": {
+                "state_rules": {"done": {"rule": "none", "new_state": "done"}},
+            }
+        },
+    }
+
+    logger_name = "audiagentic.foundation.workflow.propagation.propagation_config"
+    with caplog.at_level(logging.WARNING, logger=logger_name):
+        validate(config, boom)
+
+    assert any(
+        "task" in r.getMessage() and r.levelno == logging.WARNING
+        for r in caplog.records
+    ), "raising states getter must log a warning"
 
 
 def test_validate_no_states_getter_skips_state_check() -> None:
