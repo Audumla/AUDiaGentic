@@ -101,7 +101,7 @@ def apply_surfaces(project_root: Path) -> None:
         apply_provider_surfaces,
         prune_provider_surfaces,
     )
-    from audiagentic.runtime.lifecycle.components import sync_all_provider_mcp_servers
+    from audiagentic.runtime.lifecycle.component_mcp import sync_all_provider_mcp_servers
 
     sync_all_provider_mcp_servers(project_root)
     prune_provider_surfaces(project_root)

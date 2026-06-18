@@ -15,7 +15,7 @@ def _sync_provider_mcp(project_root: Path, on_progress: ComponentOutputSink | No
     """Sync all component MCP servers to provider configs — adds missing, removes stale."""
     from audiagentic.components.optional.providers.services.lifecycle import _emit
     try:
-        from audiagentic.runtime.lifecycle.components import sync_all_provider_mcp_servers
+        from audiagentic.runtime.lifecycle.component_mcp import sync_all_provider_mcp_servers
         sync_all_provider_mcp_servers(project_root)
         _emit(on_progress, "MCP server configs synced")
     except Exception:  # noqa: BLE001
