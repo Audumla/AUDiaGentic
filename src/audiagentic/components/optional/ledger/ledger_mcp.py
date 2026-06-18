@@ -1,17 +1,14 @@
 """Ledger MCP server — tools for recording change events and managing ledger content."""
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 from audiagentic.components.optional.ledger import ledger_api
-from audiagentic.foundation.mcp.component_server import log_tool_call, mcp_server
+from audiagentic.foundation.mcp.component_server import (
+    log_tool_call,
+    mcp_server,
+    project_root_from_env,
+)
 
 mcp = mcp_server(__name__)
-
-
-def _project_root() -> Path:
-    return Path(os.environ.get("AUDIAGENTIC_REPO_ROOT", ".")).resolve()
 
 
 @mcp.tool()
@@ -24,28 +21,28 @@ def record_change_event(event: dict) -> dict:
 
     change-class: feature, code-fix, refactor, docs, tests, config, release, audit, workflow.
     """
-    return ledger_api.record_change(_project_root(), event, sync=True)
+    return ledger_api.record_change(project_root_from_env(), event, sync=True)
 
 
 @mcp.tool()
 @log_tool_call
 def get_current_summary() -> str:
     """Return the current release summary markdown."""
-    return ledger_api.get_current_summary(_project_root())
+    return ledger_api.get_current_summary(project_root_from_env())
 
 
 @mcp.tool()
 @log_tool_call
 def sync_ledger() -> dict:
     """Merge all pending fragments into the current release ledger."""
-    return ledger_api.sync(_project_root())
+    return ledger_api.sync(project_root_from_env())
 
 
 @mcp.tool()
 @log_tool_call
 def get_audit_report() -> dict:
     """Regenerate and return paths to the audit summary and check-in docs."""
-    return ledger_api.generate_audit(_project_root())
+    return ledger_api.generate_audit(project_root_from_env())
 
 
 def main() -> None:
