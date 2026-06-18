@@ -1,5 +1,6 @@
 """Interfaces for the generic workflow engine.
 
+ItemView: neutral DTO for workflow items.
 WorkflowConfig: config methods the engine needs from its host component.
 WorkflowContext: runtime operations (lookup, scan, save, publish, etc.).
 
@@ -9,10 +10,19 @@ The workflow package itself has no dependency on the host implementation.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-from .item import ItemView
+
+@dataclass
+class ItemView:
+    """Neutral DTO for workflow items."""
+
+    kind: str
+    path: Path
+    data: dict[str, Any]
+    body: str
 
 
 class WorkflowConfig(Protocol):
