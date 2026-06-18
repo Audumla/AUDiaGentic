@@ -5,7 +5,22 @@ from typing import Any
 
 from audiagentic.foundation.time import now_iso
 
-__all__ = ["body_has_section", "extract_ref_ids", "now_iso", "slugify"]
+
+class Relationships:
+    @staticmethod
+    def ensure_rel_list(current, ref: str, seq: int | None = None, display: str | None = None):
+        current = list(current or [])
+        current = [r for r in current if r.get("ref") != ref]
+        rel = {"ref": ref}
+        if seq is not None:
+            rel["seq"] = int(seq)
+        if display is not None:
+            rel["display"] = display
+        current.append(rel)
+        current.sort(key=lambda r: (r.get("seq", 999999999), r["ref"]))
+        return current
+
+__all__ = ["Relationships", "body_has_section", "extract_ref_ids", "now_iso", "slugify"]
 
 
 def slugify(s: str) -> str:
