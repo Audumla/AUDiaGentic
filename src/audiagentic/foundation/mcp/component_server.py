@@ -35,6 +35,31 @@ except ImportError:  # pragma: no cover
 T = TypeVar("T")
 
 
+def server_instructions(decl: Any) -> str:
+    """Return MCP server instructions from a server declaration, or empty string."""
+    if decl is None:
+        return ""
+    return getattr(decl, "instructions", "") or ""
+
+
+def tool_description(decl: Any, name: str) -> str:
+    """Return tool description from a server declaration, or empty string."""
+    if decl is None:
+        return ""
+    descriptions = getattr(decl, "tool_descriptions", None)
+    if not descriptions:
+        return ""
+    return descriptions.get(name, "")
+
+
+def report_error(
+    label: str, tool_name: str, exc: Exception, logger: logging.Logger
+) -> dict[str, Any]:
+    """Return a standardized MCP error envelope, logging the failure."""
+    logger.exception("%s tool failed: %s", label, tool_name)
+    return {"ok": False, "error": str(exc), "tool": tool_name}
+
+
 def log_tool_call(func: Callable) -> Callable:
     """Decorator that adds entry/exit/error logging to an MCP tool function.
 
