@@ -1,6 +1,0 @@
-profile_pack:
-  id: audiagentic_full
-  documentation:
-    required_updates:
-      task: [changelog]
-      wp: [changelog, readme, references_index]
