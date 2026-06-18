@@ -5,6 +5,8 @@ All tests use FakeContext — no host component, filesystem, or event bus.
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from audiagentic.foundation.workflow import StateMachine
@@ -424,3 +426,28 @@ def test_cascade_logs_not_swallows_on_invalid_transition() -> None:
     sm = StateMachine(ctx)
     sm.state("plan-1", "cancelled")
     assert ctx.items["t-1"].data["state"] == "draft"
+
+
+def test_cascade_failure_logs_at_warning_with_exc_info(caplog) -> None:
+    """Regression: cascade failures log at WARNING (not DEBUG) with exc_info.
+
+    DEBUG is invisible at production log levels, hiding state inconsistency.
+    """
+    cfg = CascadeConfig()
+    cfg._lifecycle_transitions[("plan", "active", "cancelled")] = (
+        "cancel",
+        # "done" is not reachable from "draft", so the cascade transition raises
+        {"metadata": {}, "cascade": {"by_kind": {"plan": {"task": "done"}}}},
+    )
+    ctx = FakeContext(config=cfg)
+    ctx.add_item("plan-1", "plan", state="active")
+    ctx.add_item("t-1", "task", state="draft", plan_ref="plan-1")
+
+    logger_name = "audiagentic.foundation.workflow.state_machine"
+    with caplog.at_level(logging.WARNING, logger=logger_name):
+        StateMachine(ctx).state("plan-1", "cancelled")
+
+    recs = [r for r in caplog.records if "cascade failed" in r.getMessage()]
+    assert recs, "cascade failure must log at WARNING"
+    assert recs[0].levelno == logging.WARNING
+    assert recs[0].exc_info is not None
