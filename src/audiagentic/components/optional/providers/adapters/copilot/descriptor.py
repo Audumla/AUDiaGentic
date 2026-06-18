@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
 
 from audiagentic.components.optional.providers.adapters.mcp_json import (
     read_mcp_json,
     remove_mcp_json,
     write_mcp_json,
 )
+from audiagentic.components.optional.providers.adapters.probe import run_cli
 
 from ...descriptors.base import (
     AgentFile,
@@ -33,7 +33,7 @@ def _copilot_probe(_descriptor) -> dict:
             "stderr": "command not found",
         }
     try:
-        completed = subprocess.run(command, check=False, capture_output=True, text=True, timeout=15)
+        completed = run_cli(command)
         if completed.returncode == 0:
             return {
                 "available": True,
