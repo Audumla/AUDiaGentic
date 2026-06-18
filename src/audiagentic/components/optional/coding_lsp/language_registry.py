@@ -11,9 +11,9 @@ The coding-lsp component itself owns no language facts — it orchestrates
 """
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-import subprocess
 from typing import Any
 
 from audiagentic.foundation.toolchains.detect import tool_available
