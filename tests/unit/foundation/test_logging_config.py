@@ -239,6 +239,21 @@ def test_dev_formatter_active_when_format_is_dev(monkeypatch):
     assert isinstance(stream_handlers[0].formatter, _DevFormatter)
 
 
+def test_console_formatter_active_when_format_is_console(monkeypatch):
+    monkeypatch.setenv("AUDIAGENTIC_LOG_FORMAT", "console")
+    monkeypatch.delenv("AUDIAGENTIC_LOG_DIR", raising=False)
+    monkeypatch.setenv("AUDIAGENTIC_LOG_CONSOLE", "true")
+    configure_logging()
+
+    from audiagentic.foundation.logging.config import _ConsoleFormatter
+    stream_handlers = [
+        h for h in logging.getLogger().handlers
+        if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+    ]
+    assert stream_handlers
+    assert isinstance(stream_handlers[0].formatter, _ConsoleFormatter)
+
+
 # ---------------------------------------------------------------------------
 # Config merge — env var overrides
 # ---------------------------------------------------------------------------
