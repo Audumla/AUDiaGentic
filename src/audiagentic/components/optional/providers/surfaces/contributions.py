@@ -78,9 +78,20 @@ def load_tag_surface_contributions(project_root: Path | None = None) -> list[Sur
     return contributions
 
 
+_OVERVIEW_BODY = (
+    "This repository uses AUDiaGentic workflow jobs. The instruction blocks below "
+    "are generated from component sources — do not edit them directly; edit the "
+    "owning component config and re-run surface apply.\n"
+)
+
+
 def _build_canonical_tags_body(tags: dict) -> str:
-    """Build the canonical-tags summary block body from all loaded tags."""
-    lines = ["Canonical tags:\n"]
+    """Build the canonical-tags summary block body from all loaded tags.
+
+    Tag-routing doctrine lives in the agent-jobs/prompt-tags block; this block is
+    just the canonical tag list plus where definitions are managed.
+    """
+    lines = ["Canonical tags (route the raw tagged prompt through the repo-owned bridge):\n"]
     for tag_id in sorted(tags):
         descriptor = tags[tag_id]
         alias_sample = ", ".join(f"`{a}`" for a in list(descriptor.aliases)[:2])
@@ -88,38 +99,9 @@ def _build_canonical_tags_body(tags: dict) -> str:
         lines.append(f"- `{tag_id}`{alias_note}")
     lines += [
         "",
-        "Rules:",
-        "",
-        "- Do not reinterpret these tags — route the raw tagged prompt through the repo-owned bridge.",
-        "- Keep tag semantics identical to the shared AUDiaGentic launch contract.",
-        "- Keep provenance visible: provider id, surface, and session id should survive normalization.",
-        "- Tag definitions are managed in `config/components/optional/agent-jobs/tags/`;",
-        "  run `python -m audiagentic.components.optional.providers.skill_surfaces --project-root .`"
+        "Definitions are managed in `config/components/optional/agent-jobs/tags/`; run"
+        " `python -m audiagentic.components.optional.providers.skill_surfaces --project-root .`"
         " after adding, removing, or renaming tags.",
-    ]
-    return "\n".join(lines) + "\n"
-
-
-def _build_tag_shortcuts_body(tags: dict) -> str:
-    """Build the aliases cheatsheet body from all loaded tags."""
-    lines = [
-        "Tag and provider aliases are centralized in the tag registry and",
-        "`config/components/optional/agent-jobs/tags/` and work in all surfaces.\n",
-        "Tag aliases:\n",
-    ]
-    for tag_id in sorted(tags):
-        descriptor = tags[tag_id]
-        for alias in descriptor.aliases:
-            lines.append(f"- `{alias}` -> `{tag_id}`")
-    lines += [
-        "",
-        "Provider aliases:\n",
-        "- `cx` -> `codex`",
-        "- `cld` -> `claude`",
-        "- `cln` -> `cline`",
-        "- `gm` -> `gemini`",
-        "- `opc` -> `opencode`",
-        "- `cp` -> `copilot`",
     ]
     return "\n".join(lines) + "\n"
 
@@ -127,12 +109,11 @@ def _build_tag_shortcuts_body(tags: dict) -> str:
 def build_summary_contributions(project_root: Path | None = None) -> list[SurfaceContribution]:
     """Build synthetic cross-tag summary contributions.
 
-    These replace the old hardcoded agent-jobs/canonical-rule and
-    agent-jobs/tag-shortcuts blocks. Generated dynamically from all
-    loaded tag descriptors so they stay accurate without manual edits.
-
-    Always uses all registered tags — the canonical-rule is a routing contract
-    that documents every valid tag regardless of per-tag installation state.
+    Generates the managed preamble and the canonical-tags list dynamically from
+    all loaded tag descriptors so they stay accurate without manual edits. The
+    canonical-rule documents every valid tag regardless of per-tag install state.
+    Tag-routing doctrine is owned by the agent-jobs/prompt-tags block and is not
+    duplicated here; alias tables live in the tag registry, not the surfaces.
     """
     from audiagentic.components.optional.providers.tags.registry import (  # noqa: PLC0415
         all_tags_loaded,
@@ -143,16 +124,16 @@ def build_summary_contributions(project_root: Path | None = None) -> list[Surfac
         return []
     return [
         SurfaceContribution(
+            contribution_id="agent-jobs/overview",
+            owner_component=COMPONENT_AGENT_JOBS,
+            title="AUDiaGentic agent instructions",
+            body=_OVERVIEW_BODY,
+        ),
+        SurfaceContribution(
             contribution_id="agent-jobs/canonical-rule",
             owner_component=COMPONENT_AGENT_JOBS,
             title="Canonical workflow tags",
             body=_build_canonical_tags_body(tags),
-        ),
-        SurfaceContribution(
-            contribution_id="agent-jobs/tag-shortcuts",
-            owner_component=COMPONENT_AGENT_JOBS,
-            title="Tag shortcuts and aliases",
-            body=_build_tag_shortcuts_body(tags),
         ),
     ]
 
