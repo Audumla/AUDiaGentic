@@ -14,7 +14,13 @@ except ImportError:
 from audiagentic.foundation.components.ids import COMPONENT_PROJECT
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
-from audiagentic.foundation.mcp.component_server import log_tool_call, project_root_from_env
+from audiagentic.foundation.mcp.component_server import (
+    log_tool_call,
+    project_root_from_env,
+    report_error,
+    server_instructions,
+    tool_description,
+)
 
 from . import project_api
 
@@ -27,52 +33,38 @@ def _server_decl():
     return get_mcp_server_declaration(COMPONENT_PROJECT, "ag-project-mgmt")
 
 
-def _server_instructions() -> str:
-    decl = _server_decl()
-    return decl.instructions if decl else ""
-
-
-def _tool_description(name: str) -> str:
-    decl = _server_decl()
-    return decl.tool_descriptions.get(name, "") if decl else ""
-
-
-def _report_error(tool_name: str, exc: Exception) -> dict[str, Any]:
-    logger.exception("project tool failed: %s", tool_name)
-    return {"ok": False, "error": str(exc), "tool": tool_name}
-
-
 def build_server() -> FastMCP:
+    decl = _server_decl()
     mcp = FastMCP(
         "ag-project-mgmt",
-        instructions=_server_instructions(),
+        instructions=server_instructions(decl),
     )
 
-    @mcp.tool(description=_tool_description("project_status"))
+    @mcp.tool(description=tool_description(decl, "project_status"))
     @log_tool_call
     def project_status() -> dict[str, Any]:
         try:
             return project_api.project_status(project_root_from_env())
         except Exception as exc:
-            return _report_error("project_status", exc)
+            return report_error("project", "project_status", exc, logger)
 
-    @mcp.tool(description=_tool_description("list_components"))
+    @mcp.tool(description=tool_description(decl, "list_components"))
     @log_tool_call
     def list_components() -> list[dict[str, Any]] | dict[str, Any]:
         try:
             return project_api.list_components(project_root_from_env())
         except Exception as exc:
-            return _report_error("list_components", exc)
+            return report_error("project", "list_components", exc, logger)
 
-    @mcp.tool(description=_tool_description("install_component"))
+    @mcp.tool(description=tool_description(decl, "install_component"))
     @log_tool_call
     def install_component(component_id: str) -> dict[str, Any]:
         try:
             return project_api.install_component(project_root_from_env(), component_id)
         except Exception as exc:
-            return _report_error("install_component", exc)
+            return report_error("project", "install_component", exc, logger)
 
-    @mcp.tool(description=_tool_description("uninstall_component"))
+    @mcp.tool(description=tool_description(decl, "uninstall_component"))
     @log_tool_call
     def uninstall_component(component_id: str, remove_configs: bool = False) -> dict[str, Any]:
         try:
@@ -82,39 +74,39 @@ def build_server() -> FastMCP:
                 remove_configs=remove_configs,
             )
         except Exception as exc:
-            return _report_error("uninstall_component", exc)
+            return report_error("project", "uninstall_component", exc, logger)
 
-    @mcp.tool(description=_tool_description("enable_component"))
+    @mcp.tool(description=tool_description(decl, "enable_component"))
     @log_tool_call
     def enable_component(component_id: str) -> dict[str, Any]:
         try:
             return project_api.enable_component(project_root_from_env(), component_id)
         except Exception as exc:
-            return _report_error("enable_component", exc)
+            return report_error("project", "enable_component", exc, logger)
 
-    @mcp.tool(description=_tool_description("disable_component"))
+    @mcp.tool(description=tool_description(decl, "disable_component"))
     @log_tool_call
     def disable_component(component_id: str) -> dict[str, Any]:
         try:
             return project_api.disable_component(project_root_from_env(), component_id)
         except Exception as exc:
-            return _report_error("disable_component", exc)
+            return report_error("project", "disable_component", exc, logger)
 
-    @mcp.tool(description=_tool_description("read_project_file"))
+    @mcp.tool(description=tool_description(decl, "read_project_file"))
     @log_tool_call
     def read_project_file(relative_path: str) -> dict[str, Any]:
         try:
             return project_api.read_project_file(project_root_from_env(), relative_path)
         except Exception as exc:
-            return _report_error("read_project_file", exc)
+            return report_error("project", "read_project_file", exc, logger)
 
-    @mcp.tool(description=_tool_description("runtime_sync_contract"))
+    @mcp.tool(description=tool_description(decl, "runtime_sync_contract"))
     @log_tool_call
     def runtime_sync_contract() -> dict[str, Any]:
         try:
             return project_api.runtime_sync_contract()
         except Exception as exc:
-            return _report_error("runtime_sync_contract", exc)
+            return report_error("project", "runtime_sync_contract", exc, logger)
 
     return mcp
 
