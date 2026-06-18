@@ -14,6 +14,7 @@
 /.pi/
 /.roo/
 /agent/
+/.mcp.json
 /.audiagentic/components/
 /.audiagentic/runtime/
 /.audiagentic/sessions/
