@@ -1,18 +1,11 @@
 """Plandex provider adapter."""
-
 from __future__ import annotations
 
-from typing import Any
+from audiagentic.components.optional.providers.adapters._stubs import make_probe_stub
 
-from audiagentic.components.optional.providers.adapters.cli import require_executable
-
-
-def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "provider-id": "plandex",
-        "status": "stubbed",
-        "execution-mode": provider_cfg.get("access-mode", "cli"),
-        "model": provider_cfg.get("default-model"),
-        "executable": require_executable("plandex", "plandex", "pdx"),
-        "output": "Plandex adapter is registered; execution bridge not wired yet.",
-    }
+run = make_probe_stub(
+    "plandex",
+    "plandex",
+    "pdx",
+    message="Plandex adapter is registered; execution bridge not wired yet.",
+)
