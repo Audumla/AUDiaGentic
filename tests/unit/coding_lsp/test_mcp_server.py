@@ -30,6 +30,6 @@ def test_lsp_definition_delegates_to_api() -> None:
 
 
 def test_lsp_config_status_delegates_to_api() -> None:
-    with patch("audiagentic.components.optional.coding_lsp.lsp_api.config_status", return_value={"ok": True}) as mock:
+    with patch("audiagentic.components.optional.coding_lsp.lsp_config_api.config_status", return_value={"ok": True}) as mock:
         assert lsp_manage_mcp.lsp_config_status(".") == {"ok": True}
         mock.assert_called_once_with(".")

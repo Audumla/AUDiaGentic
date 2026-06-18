@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from audiagentic.components.optional.coding_lsp import lsp_api
+from audiagentic.components.optional.coding_lsp import lsp_config_api
 from audiagentic.foundation.mcp.component_server import (
     log_tool_call,
     mcp_server,
@@ -17,7 +17,7 @@ mcp = mcp_server(__name__)
 @mcp.tool()
 @log_tool_call
 def lsp_config_status(root: str = ".") -> dict[str, Any]:
-    return lsp_api.config_status(root)
+    return lsp_config_api.config_status(root)
 
 
 @mcp.tool()
@@ -30,7 +30,7 @@ async def lsp_add_language(root: str = ".", language: str = "") -> dict[str, Any
     language is not left enabled.
     """
     resolved = root if root != "." else str(project_root_from_env())
-    return await lsp_api.enable_language(
+    return await lsp_config_api.enable_language(
         resolved, language, run_with_output=run_blocking_with_output
     )
 
@@ -38,20 +38,20 @@ async def lsp_add_language(root: str = ".", language: str = "") -> dict[str, Any
 @mcp.tool()
 @log_tool_call
 def lsp_remove_language(root: str, language: str) -> dict[str, Any]:
-    return lsp_api.remove_language(root, language)
+    return lsp_config_api.remove_language(root, language)
 
 
 @mcp.tool()
 @log_tool_call
 def lsp_list_languages() -> dict[str, Any]:
-    return lsp_api.list_languages()
+    return lsp_config_api.list_languages()
 
 
 @mcp.tool()
 @log_tool_call
 async def lsp_install_dependencies(names: list[str], root: str = ".") -> dict[str, Any]:
     resolved = root if root != "." else str(project_root_from_env())
-    return await lsp_api.install_lsp_dependencies(
+    return await lsp_config_api.install_lsp_dependencies(
         names, run_with_output=run_blocking_with_output, root=resolved
     )
 
@@ -59,7 +59,7 @@ async def lsp_install_dependencies(names: list[str], root: str = ".") -> dict[st
 @mcp.tool()
 @log_tool_call
 def lsp_list_missing() -> dict[str, Any]:
-    return lsp_api.list_missing(str(project_root_from_env()))
+    return lsp_config_api.list_missing(str(project_root_from_env()))
 
 
 def main() -> None:
