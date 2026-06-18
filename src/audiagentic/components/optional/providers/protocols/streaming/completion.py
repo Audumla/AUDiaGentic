@@ -10,9 +10,9 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from audiagentic.components.optional.providers.protocols.streaming._utils import _utc_now
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import read_schema
+from audiagentic.foundation.time import now_iso_z
 
 
 class ResultSource(str, Enum):
@@ -91,7 +91,7 @@ class ProviderCompletion:
 
     def __post_init__(self) -> None:
         if self.created_at is None:
-            self.created_at = _utc_now()
+            self.created_at = now_iso_z("microseconds")
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
