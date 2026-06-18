@@ -17,6 +17,24 @@ from typing import Any
 
 from ...descriptors.base import LanguageServerEntry
 
+# opencode keys its `lsp` object by opencode's own built-in server name, which is
+# not always our language id. coding-lsp stays language-keyed and generic; the
+# adapter maps to/from opencode's keys here. Languages absent from this map use
+# their id unchanged (e.g. typescript, rust already match opencode's keys).
+_LANGUAGE_TO_OPENCODE_KEY = {
+    "python": "pyright",
+    "cpp": "clangd",
+}
+_OPENCODE_KEY_TO_LANGUAGE = {v: k for k, v in _LANGUAGE_TO_OPENCODE_KEY.items()}
+
+
+def _to_opencode_key(language: str) -> str:
+    return _LANGUAGE_TO_OPENCODE_KEY.get(language, language)
+
+
+def _to_language(opencode_key: str) -> str:
+    return _OPENCODE_KEY_TO_LANGUAGE.get(opencode_key, opencode_key)
+
 
 def _load_json(path: Path) -> dict[str, Any]:
     if not path.exists():
@@ -42,8 +60,9 @@ def read_language_servers_opencode(path: Path) -> dict[str, LanguageServerEntry]
     for name, cfg in lsp.items():
         if not isinstance(cfg, dict):
             continue
-        result[name] = LanguageServerEntry(
-            language=name,
+        language = _to_language(name)
+        result[language] = LanguageServerEntry(
+            language=language,
             command=list(cfg.get("command", [])),
             file_extensions=list(cfg.get("extensions", [])),
             settings=dict(cfg.get("initialization", {})),
@@ -64,15 +83,16 @@ def write_language_servers_opencode(path: Path, entries: dict[str, LanguageServe
         }
         if entry.settings:
             node["initialization"] = dict(entry.settings)
-        lsp[name] = node
+        lsp[_to_opencode_key(name)] = node
     _save_json(path, data)
 
 
 def remove_language_servers_opencode(path: Path, language: str) -> bool:
     data = _load_json(path)
     lsp = data.get("lsp", {})
-    if not isinstance(lsp, dict) or language not in lsp:
+    key = _to_opencode_key(language)
+    if not isinstance(lsp, dict) or key not in lsp:
         return False
-    del lsp[language]
+    del lsp[key]
     _save_json(path, data)
     return True

@@ -42,6 +42,36 @@ def _pi_uninstall(project_root=None):
     return subprocess.CompletedProcess(["audiagentic", "uninstall"], rc, "", "")
 
 
+def _pi_ensure_lens(project_root=None):
+    """Install the pi-lens LSP extension into the pi harness (best-effort).
+
+    Fired when the coding-lsp component is enabled. pi-lens auto-discovers
+    language servers from PATH, so the language server binaries installed by
+    coding-lsp plus this extension are all pi needs — no per-language config.
+    Idempotent: re-running `pi install` for an already-present extension is safe.
+    """
+    from audiagentic.runtime.harness.pi.runner.context import resolve_agent_bin
+    from audiagentic.runtime.home import global_harness_runtime
+    pi_bin = resolve_agent_bin(global_harness_runtime())
+    if not pi_bin.exists():
+        return {"ok": False, "skipped": "pi harness not installed"}
+    try:
+        proc = subprocess.run(
+            [str(pi_bin), "install", "npm:pi-lens"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
+    return {
+        "ok": proc.returncode == 0,
+        "returncode": proc.returncode,
+        "stdout": (proc.stdout or "").strip(),
+        "stderr": (proc.stderr or "").strip(),
+    }
+
+
 def _pi_probe(descriptor):
     from audiagentic.runtime.harness.pi.runner import resolve_agent_bin
     from audiagentic.runtime.home import global_harness_runtime
@@ -109,4 +139,5 @@ register(ProviderDescriptor(
         format="mcp-json",
         refresh_mode="restart-required",
     ),
+    on_lsp_enabled=_pi_ensure_lens,
 ))

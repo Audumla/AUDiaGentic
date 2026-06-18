@@ -49,6 +49,10 @@ class ActionDescriptor:
     requires_body: bool = True
     is_generic_tag: bool = False
     is_review_tag: bool = False
+    # Component that declared this action in its config YAML. Drives surface/skill
+    # lifecycle: the action's contributions and generated skill files are only active
+    # while this component is installed and enabled. Empty = unknown owner (treated active).
+    owner_component_id: str = ""
 
     @property
     def skill_path(self) -> Path:

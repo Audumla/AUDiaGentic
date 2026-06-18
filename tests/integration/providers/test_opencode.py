@@ -140,7 +140,7 @@ def test_opencode_adapter_raises_on_non_zero_return(monkeypatch, tmp_path: Path)
             {"default-model": "openai/gpt-5", "access-mode": "cli"},
         )
     except AudiaGenticError as exc:
-        assert exc.code == "PRV-EXTERNAL-012"
+        assert exc.code == "EXT-OPENC-001"
         assert exc.details["returncode"] == 2
         assert exc.details["provider-id"] == "opencode"
     else:

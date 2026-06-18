@@ -4,9 +4,10 @@ from pathlib import Path
 
 import audiagentic.components.optional.providers  # noqa: F401
 from audiagentic.components.optional.providers.surfaces.base import (
+    MANAGED_REGION_BEGIN,
+    MANAGED_REGION_END,
     SurfaceBlock,
     apply_managed_blocks,
-    prune_managed_blocks,
 )
 from audiagentic.components.optional.providers.surfaces.contributions import (
     load_surface_contributions,
@@ -34,7 +35,7 @@ def test_loads_release_ledger_surface_contribution() -> None:
     assert "agent ledger process" in contribution.title.lower()
 
 
-def test_managed_block_replaces_existing_block_without_duplicate() -> None:
+def test_managed_region_replaces_without_duplicate() -> None:
     block = SurfaceBlock(
         path=Path("AGENTS.md"),
         block_id="agent-ledger/process",
@@ -43,8 +44,37 @@ def test_managed_block_replaces_existing_block_without_duplicate() -> None:
     first = apply_managed_blocks("User text\n", [block])
     second = apply_managed_blocks(first, [block])
 
-    assert second.count("AUDIAGENTIC:BEGIN agent-ledger/process") == 1
+    # exactly one managed region, user content preserved, no legacy fences
+    assert second.count(MANAGED_REGION_BEGIN) == 1
+    assert second.count(MANAGED_REGION_END) == 1
+    assert "User text" in second
     assert "New body" in second
+    assert "AUDIAGENTIC:BEGIN" not in second
+
+
+def test_apply_empty_blocks_removes_region_keeps_user_text() -> None:
+    block = SurfaceBlock(path=Path("AGENTS.md"), block_id="x/y", content="## X\n\nbody")
+    applied = apply_managed_blocks("User text\n", [block])
+    cleared = apply_managed_blocks(applied, [])
+
+    assert MANAGED_REGION_BEGIN not in cleared
+    assert "body" not in cleared
+    assert "User text" in cleared
+
+
+def test_apply_migrates_legacy_per_block_fences() -> None:
+    legacy = (
+        "User text\n\n"
+        "<!-- AUDIAGENTIC:BEGIN old/a -->\n## Old A\n\nstale\n<!-- AUDIAGENTIC:END old/a -->\n"
+    )
+    block = SurfaceBlock(path=Path("AGENTS.md"), block_id="new/b", content="## New B\n\nfresh")
+    result = apply_managed_blocks(legacy, [block])
+
+    assert "AUDIAGENTIC:BEGIN" not in result   # legacy fence migrated away
+    assert "stale" not in result
+    assert "fresh" in result
+    assert result.count(MANAGED_REGION_BEGIN) == 1
+    assert "User text" in result
 
 
 def test_provider_surface_blocks_dedupe_shared_agents_file(tmp_path: Path) -> None:
@@ -65,7 +95,8 @@ def test_apply_provider_surfaces_writes_provider_owned_paths(tmp_path: Path) -> 
 
     assert result["ok"] is True
     assert str(target) in result["written"]
-    assert "agent-ledger/process" in target.read_text(encoding="utf-8")
+    # block_id is no longer emitted into the file; the friendly title is
+    assert "Agent ledger process" in target.read_text(encoding="utf-8")
 
 
 def test_roo_provider_surface_owns_roo_rules_path(tmp_path: Path) -> None:
@@ -75,7 +106,7 @@ def test_roo_provider_surface_owns_roo_rules_path(tmp_path: Path) -> None:
 
     assert result["ok"] is True
     assert str(target) in result["written"]
-    assert "agent-ledger/process" in target.read_text(encoding="utf-8")
+    assert "Agent ledger process" in target.read_text(encoding="utf-8")
 
 
 def test_plan_provider_surfaces_reports_changes(tmp_path: Path) -> None:
@@ -88,60 +119,15 @@ def test_plan_provider_surfaces_reports_changes(tmp_path: Path) -> None:
     assert "agent-ledger/process" in block_ids
 
 
-def test_prune_managed_blocks_removes_inactive_blocks() -> None:
-    doc = (
-        "# Rules\n\n"
-        "User text.\n\n"
-        "<!-- AUDIAGENTIC:BEGIN block-a -->\nContent A\n<!-- AUDIAGENTIC:END block-a -->\n\n"
-        "More text.\n\n"
-        "<!-- AUDIAGENTIC:BEGIN block-b -->\nContent B\n<!-- AUDIAGENTIC:END block-b -->\n"
-    )
-    result = prune_managed_blocks(doc, active_ids={"block-a"})
-
-    assert "block-a" in result
-    assert "Content A" in result
-    assert "block-b" not in result
-    assert "Content B" not in result
-    assert "User text." in result
-    assert "More text." in result
-
-
-def test_prune_managed_blocks_keeps_all_when_all_active() -> None:
-    doc = (
-        "<!-- AUDIAGENTIC:BEGIN x -->\nX\n<!-- AUDIAGENTIC:END x -->\n\n"
-        "<!-- AUDIAGENTIC:BEGIN y -->\nY\n<!-- AUDIAGENTIC:END y -->\n"
-    )
-    result = prune_managed_blocks(doc, active_ids={"x", "y"})
-
-    assert "x" in result
-    assert "y" in result
-
-
-def test_prune_managed_blocks_removes_all_when_none_active() -> None:
-    doc = (
-        "Preamble.\n\n"
-        "<!-- AUDIAGENTIC:BEGIN block-a -->\nContent A\n<!-- AUDIAGENTIC:END block-a -->\n"
-    )
-    result = prune_managed_blocks(doc, active_ids=set())
-
-    assert "block-a" not in result
-    assert "Content A" not in result
-    assert "Preamble." in result
-
-
-def test_prune_managed_blocks_empty_doc_returns_empty() -> None:
-    assert prune_managed_blocks("", active_ids=set()) == ""
-
-
-def test_prune_provider_surfaces_removes_stale_blocks(tmp_path: Path) -> None:
+def test_prune_provider_surfaces_removes_legacy_blocks(tmp_path: Path) -> None:
     _install_agent_ledger(tmp_path)
     apply_provider_surfaces(tmp_path, provider_id="cline")
     target = tmp_path / ".clinerules" / "audiagentic.md"
     assert target.exists()
     content_before = target.read_text(encoding="utf-8")
-    assert "AUDIAGENTIC:BEGIN" in content_before
+    assert MANAGED_REGION_BEGIN in content_before
 
-    # Inject a fake stale block directly
+    # Inject a stale legacy-format block (pre-region layout)
     stale = (
         "\n\n<!-- AUDIAGENTIC:BEGIN stale-block -->\n"
         "Stale content\n"
@@ -149,14 +135,15 @@ def test_prune_provider_surfaces_removes_stale_blocks(tmp_path: Path) -> None:
     )
     target.write_text(content_before + stale, encoding="utf-8")
 
-    # Prune — stale-block has no active contribution, should be removed
+    # Prune regenerates the region and migrates away legacy fences
     result = prune_provider_surfaces(tmp_path, provider_id="cline")
 
     assert result["ok"] is True
     assert str(target) in result["pruned"]
     pruned_text = target.read_text(encoding="utf-8")
-    assert "stale-block" not in pruned_text
+    assert "AUDIAGENTIC:BEGIN" not in pruned_text
     assert "Stale content" not in pruned_text
+    assert pruned_text.count(MANAGED_REGION_BEGIN) == 1
 
 
 def test_prune_provider_surfaces_leaves_active_blocks(tmp_path: Path) -> None:

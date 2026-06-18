@@ -32,8 +32,8 @@ _AGENT_FILES = [
 ]
 
 _HEADER = "<!-- MANAGED_BY_AUDIAGENTIC: do not edit directly. -->"
-_BLOCK = re.compile(
-    r"<!-- AUDIAGENTIC:BEGIN (?P<id>[^>]+?) -->.*?<!-- AUDIAGENTIC:END (?P=id) -->",
+_REGION = re.compile(
+    r"<!-- ag:managed:begin -->.*?<!-- ag:managed:end -->",
     re.DOTALL,
 )
 _REMOVED_IDS = (
@@ -74,18 +74,20 @@ def _existing_agent_files() -> list[Path]:
 
 @pytest.mark.parametrize("path", _existing_agent_files(), ids=lambda p: p.name)
 def test_agent_file_has_no_unmanaged_content(path: Path) -> None:
-    """Every non-blank line is the managed header or inside a managed block."""
+    """Every non-blank line is the managed header or inside the managed region."""
     text = path.read_text(encoding="utf-8")
     leftover = [
         line
-        for line in _BLOCK.sub("", text).splitlines()
+        for line in _REGION.sub("", text).splitlines()
         if line.strip() and line.strip() != _HEADER
     ]
     assert not leftover, f"{path.name} has unmanaged content: {leftover[:3]}"
 
 
 @pytest.mark.parametrize("path", _existing_agent_files(), ids=lambda p: p.name)
-def test_agent_file_has_no_removed_blocks(path: Path) -> None:
+def test_agent_file_has_single_wellformed_region(path: Path) -> None:
+    """Exactly one managed region; no leftover legacy per-block fences."""
     text = path.read_text(encoding="utf-8")
-    for gone in _REMOVED_IDS:
-        assert f"BEGIN {gone}" not in text, f"{path.name} still has stale block {gone}"
+    assert text.count("<!-- ag:managed:begin -->") == text.count("<!-- ag:managed:end -->")
+    assert text.count("<!-- ag:managed:begin -->") <= 1
+    assert "AUDIAGENTIC:BEGIN" not in text, f"{path.name} still has legacy per-block fences"

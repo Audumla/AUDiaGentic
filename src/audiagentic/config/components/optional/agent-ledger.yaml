@@ -12,6 +12,9 @@ files:
     lifecycle: runtime-only
     recursive: true
     description: Ledger fragments and sync state
+  - path: .audiagentic/skills/ag-ledger/skill.md
+    lifecycle: required-managed
+    description: ag-ledger skill source
 mcp-servers:
   - name: ag-ledger
     module: audiagentic.components.optional.ledger.ledger_mcp

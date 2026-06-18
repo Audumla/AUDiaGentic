@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from typing import Any
 
@@ -119,8 +120,10 @@ def build_server() -> FastMCP:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--readonly", action="store_true", help="Read-only mode (no-op, server is always read-only)")
-    parser.add_argument("--smoke-only", action="store_true", help="Smoking mode (no-op)")
-    parser.parse_args()
+    parser.add_argument("--smoke-only", action="store_true", help="Smoke mode for fast MCP health checks")
+    args = parser.parse_args()
+    if args.smoke_only:
+        os.environ["AUDIAGENTIC_MCP_SMOKE_ONLY"] = "1"
 
     from audiagentic.foundation.logging import bootstrap
     bootstrap("session")

@@ -1,6 +1,7 @@
 FROM audia-test-base:latest
 
 ENV AUDIAGENTIC_DOCKER_TESTS=1
+ENV AUDIAGENTIC_REAL_PROVIDER_CLI_TESTS=1
 ENV AUDIAGENTIC_REPO_ROOT=/app
 
 WORKDIR /app
@@ -15,4 +16,4 @@ WORKDIR /app
 # wheel resolution. uv's own installer does not invoke pip's C-extension path.
 #
 # The venv is created fresh each run inside the container (ephemeral).
-CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-timeout && /venv/bin/pytest tests/integration/coding_lsp/test_install_deps.py -v --tb=short"]
+CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-asyncio pytest-timeout && /venv/bin/pytest tests/integration/coding_lsp/test_install_deps.py -v --tb=short"]

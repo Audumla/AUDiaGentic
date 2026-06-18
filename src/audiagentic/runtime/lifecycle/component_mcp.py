@@ -27,12 +27,16 @@ def _refresh_mcp_config_if_needed(descriptor, project_root: Path, *, reason: str
     except Exception:
         logger.warning("Failed to refresh harness config for %s", descriptor.component_id, exc_info=True)
     try:
-        _propagate_mcp_to_providers(descriptor, project_root)
+        _propagate_mcp_to_providers(
+            descriptor,
+            project_root,
+            enabled=reason != "component-uninstalled",
+        )
     except Exception:
         logger.warning("Failed to propagate MCP config for %s", descriptor.component_id, exc_info=True)
 
 
-def _propagate_mcp_to_providers(descriptor, project_root: Path) -> None:
+def _propagate_mcp_to_providers(descriptor, project_root: Path, *, enabled: bool = True) -> None:
     """Add/remove component MCP servers on every provider that has mcp_config defined.
 
     Servers with propagate containing "providers" are added.
@@ -40,7 +44,9 @@ def _propagate_mcp_to_providers(descriptor, project_root: Path) -> None:
     """
     importlib.import_module("audiagentic.components.optional.providers")
     from audiagentic.components.optional.providers.descriptors.registry import all_descriptors
-    from audiagentic.components.optional.providers.services.mcp import sync_managed_provider_mcp
+    from audiagentic.components.optional.providers.services.mcp import (
+        sync_managed_provider_mcp_subset,
+    )
     from audiagentic.runtime.harness.paths import find_package_root
 
     python = sys.executable.replace("\\", "/")
@@ -51,35 +57,45 @@ def _propagate_mcp_to_providers(descriptor, project_root: Path) -> None:
         if pdesc.mcp_config is None:
             continue
         desired_entries: dict[str, tuple[str, object]] = {}
+        managed_ids: set[str] = set()
         for mcp_def in (descriptor.mcp_servers or []):
+            managed_id = mcp_def.managed_id or mcp_def.name
+            managed_ids.add(managed_id)
             if "providers" in mcp_def.propagate:
                 from audiagentic.foundation.mcp import McpServerEntry
 
-                managed_id = mcp_def.managed_id or mcp_def.name
-                desired_entries[managed_id] = (
-                    mcp_def.name,
-                    McpServerEntry(
-                        name=mcp_def.name,
-                        command=python,
-                        args=("-m", mcp_def.module) + tuple(mcp_def.args),
-                        env={"PYTHONPATH": src_dir},
-                    ),
-                )
+                if enabled:
+                    desired_entries[managed_id] = (
+                        mcp_def.name,
+                        McpServerEntry(
+                            name=mcp_def.name,
+                            command=python,
+                            args=("-m", mcp_def.module) + tuple(mcp_def.args),
+                            env={"PYTHONPATH": src_dir},
+                        ),
+                    )
         for mcp_def in (descriptor.external_mcp_servers or []):
+            managed_id = mcp_def.managed_id or mcp_def.name
+            managed_ids.add(managed_id)
             if "providers" in mcp_def.propagate:
                 from audiagentic.foundation.mcp import McpServerEntry
 
-                managed_id = mcp_def.managed_id or mcp_def.name
-                desired_entries[managed_id] = (
-                    mcp_def.name,
-                    McpServerEntry(
-                        name=mcp_def.name,
-                        command=mcp_def.command,
-                        args=tuple(mcp_def.args),
-                        env=dict(mcp_def.env) if mcp_def.env else {},
-                    ),
-                )
-        sync_managed_provider_mcp(provider_id=provider_id, project_root=project_root, desired_entries=desired_entries)
+                if enabled:
+                    desired_entries[managed_id] = (
+                        mcp_def.name,
+                        McpServerEntry(
+                            name=mcp_def.name,
+                            command=mcp_def.command,
+                            args=tuple(mcp_def.args),
+                            env=dict(mcp_def.env) if mcp_def.env else {},
+                        ),
+                    )
+        sync_managed_provider_mcp_subset(
+            provider_id=provider_id,
+            project_root=project_root,
+            desired_entries=desired_entries,
+            managed_ids=managed_ids,
+        )
 
 
 def sync_all_provider_mcp_servers(project_root: Path) -> None:
