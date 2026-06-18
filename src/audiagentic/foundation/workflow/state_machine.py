@@ -167,9 +167,12 @@ class StateMachine:
                         actor=actor,
                         metadata=cascade_metadata,
                     )
-                except Exception as exc:
-                    logger.debug(
-                        "cascade skipped %s -> %s: %s", item.data.get("id"), target, exc
+                except Exception:
+                    logger.warning(
+                        "cascade failed %s -> %s",
+                        item.data.get("id"),
+                        target,
+                        exc_info=True,
                     )
 
     def _cascade_targets(
