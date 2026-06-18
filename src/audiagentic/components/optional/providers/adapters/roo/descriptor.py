@@ -1,11 +1,11 @@
 import shutil
-import subprocess
 
 from audiagentic.components.optional.providers.adapters.mcp_json import (
     read_mcp_json,
     remove_mcp_json,
     write_mcp_json,
 )
+from audiagentic.components.optional.providers.adapters.probe import run_cli
 
 from ...descriptors.base import (
     AgentFile,
@@ -33,7 +33,7 @@ def _roo_probe(descriptor) -> dict:
                 "executable": "code", "returncode": 0, "stdout": "", "stderr": ""}
     # No cache — only probe explicitly (MCP interrogate path).
     try:
-        completed = subprocess.run(command, check=False, capture_output=True, text=True, timeout=15)
+        completed = run_cli(command)
     except Exception as exc:  # noqa: BLE001
         return {"available": False, "command": command, "executable": "code",
                 "returncode": None, "stdout": "", "stderr": str(exc)}
