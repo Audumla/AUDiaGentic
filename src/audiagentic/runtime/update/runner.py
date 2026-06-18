@@ -86,7 +86,7 @@ def _schedule_post_exit_install(wheel: Path, version: str) -> dict:
             creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS,
             close_fds=True,
         )
-    except Exception:
+    except Exception as exc:
         logger.error("Failed to spawn updater script", exc_info=True)
         script_path.unlink(missing_ok=True)
         return {
