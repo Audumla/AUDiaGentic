@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from audiagentic.components.optional.providers import providers_api
 from audiagentic.components.optional.providers.descriptors import registry as descriptor_registry
 from audiagentic.components.optional.providers.services.status import build_provider_status
 
@@ -109,3 +110,28 @@ def test_provider_status_reports_vscode_extension_installation(monkeypatch, tmp_
     assert provider["installation"]["vscode-extension"]["applicable"] is True
     assert provider["installation"]["vscode-extension"]["installed"] is True
     assert provider["vscode-extension-installed"] is True
+
+
+def test_get_provider_status_returns_single_provider_entry(tmp_path: Path) -> None:
+    project_root = tmp_path
+    runtime_config = project_root / ".audiagentic" / "config" / "runtime"
+    runtime_config.mkdir(parents=True)
+    (runtime_config / "providers.yaml").write_text(
+        "\n".join(
+            [
+                "contract-version: v1",
+                "providers:",
+                "  codex:",
+                "    enabled: true",
+                "    install-mode: external-configured",
+                "    access-mode: cli",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    payload = providers_api.get_provider_status(project_root, "codex")
+
+    assert payload["provider-id"] == "codex"
+    assert "providers" not in payload
+    assert "installation" in payload

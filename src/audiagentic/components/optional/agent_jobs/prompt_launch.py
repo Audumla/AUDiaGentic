@@ -1,7 +1,6 @@
 """Prompt-to-job launch helpers."""
 from __future__ import annotations
 
-import json
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,22 +10,8 @@ from audiagentic.components.optional.agent_jobs.prompt_syntax import (
     load_prompt_syntax,
     load_review_tag,
 )
-from audiagentic.components.optional.agent_jobs.prompt_templates import (
-    load_prompt_context,
-    load_prompt_template,
-    render_prompt_template,
-)
 from audiagentic.components.optional.agent_jobs.records import build_job_record
-from audiagentic.components.optional.agent_jobs.reviews import (
-    build_review_bundle,
-    build_review_report,
-    persist_review_bundle,
-    persist_review_report,
-    reviewer_key_from_source,
-    subject_from_target,
-)
 from audiagentic.components.optional.agent_jobs.state_machine import TERMINAL_STATES
-from audiagentic.components.optional.providers.services.execution import execute_provider
 from audiagentic.components.optional.providers.services.models import resolve_model_selection
 from audiagentic.components.optional.providers.services.provider_config import load_provider_config
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -214,144 +199,6 @@ def _resume_job_from_request(project_root: Path, request: dict[str, Any], *, now
     return job
 
 
-def _launch_review_request(project_root: Path, request: dict[str, Any], *, now_fn=None) -> dict[str, Any]:
-    job_id = _resolve_job_id(project_root, request, now_fn=now_fn)
-    review_tag = load_review_tag(load_prompt_syntax(project_root))
-    subject = subject_from_target(request["target"], existing_job_id=request.get("existing-job-id"))
-    review_id = f"rvr_{request['prompt-id'].split('_', 1)[-1]}"
-    reviewer = {
-        "provider-id": request["source"].get("provider-id"),
-        "surface": request["source"]["surface"],
-        "session-id": request["source"].get("session-id"),
-        "prompt-id": request["prompt-id"],
-        "reviewer-key": reviewer_key_from_source(request["source"]),
-    }
-    provider_id = request["source"].get("provider-id")
-    provider_config = load_provider_config(project_root).get("providers", {})
-    provider_cfg = provider_config.get(provider_id or "", {})
-    prompt_controls = request.get("prompt-controls", {})
-    rendered_prompt = request["prompt-body"]
-    template_name = prompt_controls.get("template") if isinstance(prompt_controls, dict) else None
-    context_value = prompt_controls.get("context") if isinstance(prompt_controls, dict) else None
-    resolved_context, context_path = load_prompt_context(project_root, context_value if isinstance(context_value, str) else None)
-    if provider_id:
-        template_text, template_path = load_prompt_template(
-            project_root,
-            tag=request["tag"],
-            provider_id=provider_id,
-            template_name=template_name if isinstance(template_name, str) and template_name else None,
-        )
-        if template_text:
-            rendered_prompt = render_prompt_template(
-                template_text,
-                {
-                    "id": prompt_controls.get("id") if isinstance(prompt_controls, dict) else None,
-                    "context": resolved_context,
-                    "output": prompt_controls.get("output") if isinstance(prompt_controls, dict) else None,
-                    "template": template_name,
-                    "provider": provider_id,
-                    "tag": request["tag"],
-                    "body": request["prompt-body"],
-                    "subject": subject,
-                    "project-root": str(project_root),
-                    "template-path": str(template_path) if template_path else None,
-                    "context-path": str(context_path) if context_path else None,
-                },
-            )
-    prompt_for_criteria = request["prompt-body"].strip() or rendered_prompt.strip()
-    criteria = [line.strip() for line in prompt_for_criteria.splitlines() if line.strip()]
-    if not criteria:
-        criteria = ["review the subject against the requested prompt"]
-    report_payload: dict[str, Any] | None = None
-    if provider_id and provider_cfg.get("access-mode") in {"cli", "external-configured", "none"}:
-        try:
-            provider_result = execute_provider(
-                provider_id=provider_id,
-                packet_ctx={
-                    "provider-id": provider_id,
-                    "job-id": job_id,
-                    "packet-id": subject.get("job-id")
-                    or subject.get("packet-id")
-                    or subject.get("artifact-id")
-                    or subject.get("adhoc-id")
-                    or job_id,
-                    "workflow-profile": request["workflow-profile"],
-                    "working-root": str(project_root),
-                    "prompt-body": rendered_prompt,
-                    "prompt-controls": prompt_controls,
-                    "stream-controls": request.get("stream-controls", {}),
-                    "input-controls": request.get("input-controls", {}),
-                },
-                provider_cfg=provider_cfg,
-            )
-            output_text = str(provider_result.get("output") or "").strip()
-            if output_text:
-                try:
-                    parsed = json.loads(output_text)
-                except json.JSONDecodeError:
-                    parsed = None
-                if isinstance(parsed, dict):
-                    findings = parsed.get("findings", [])
-                    recommendation = parsed.get("recommendation", "pass-with-notes")
-                    follow_up_actions = parsed.get("follow-up-actions", [])
-                    if isinstance(findings, list) and isinstance(follow_up_actions, list) and isinstance(recommendation, str):
-                        report_payload = build_review_report(
-                            review_id=review_id,
-                            subject=subject,
-                            reviewer=reviewer,
-                            criteria=criteria,
-                            findings=findings,
-                            recommendation=recommendation,
-                            follow_up_actions=follow_up_actions,
-                            created_at=(now_fn or now_iso_z)(),
-                        )
-        except AudiaGenticError:
-            report_payload = None
-    report = report_payload or build_review_report(
-        review_id=review_id,
-        subject=subject,
-        reviewer=reviewer,
-        criteria=criteria,
-        findings=[],
-        recommendation="pass-with-notes",
-        follow_up_actions=[],
-        created_at=(now_fn or now_iso_z)(),
-    )
-    bundle = build_review_bundle(
-        review_bundle_id=f"rvb_{review_id.split('_', 1)[-1]}",
-        subject=subject,
-        required_reviews=request.get("review-policy", {}).get("required-reviews", 1),
-        aggregation_rule=request.get("review-policy", {}).get("aggregation-rule", "all-pass"),
-        require_distinct_reviewers=request.get("review-policy", {}).get("require-distinct-reviewers", True),
-        reports=[
-            {
-                "review-id": report["review-id"],
-                "reviewer-key": report["reviewer"]["reviewer-key"],
-                "recommendation": report["recommendation"],
-            }
-        ],
-        updated_at=(now_fn or now_iso_z)(),
-    )
-    atomic_write_json(prompt_launch_path(project_root, job_id), request)
-    persist_review_report(project_root, job_id, report)
-    persist_review_bundle(project_root, job_id, bundle)
-    if request.get("existing-job-id") or request["target"]["kind"] == "job":
-        try:
-            job = store.read_job_record(project_root, job_id)
-        except AudiaGenticError:
-            job = None
-        if job is not None:
-            job["review-bundle-id"] = bundle["review-bundle-id"]
-            store.write_job_record(project_root, job)
-    return {
-        "job-id": job_id,
-        "review-id": report["review-id"],
-        "review-bundle-id": bundle["review-bundle-id"],
-        "decision": bundle["decision"],
-        "status": bundle["status"],
-    }
-
-
 def launch_prompt_request(
     project_root: Path,
     request: dict[str, Any],
@@ -372,7 +219,9 @@ def launch_prompt_request(
             "prompt-id": request["prompt-id"],
         }
     if request["tag"] == review_tag:
-        return {"status": "ok", **_launch_review_request(project_root, request, now_fn=now_fn)}
+        from audiagentic.components.optional.agent_jobs.review_launch import launch_review_request
+
+        return {"status": "ok", **launch_review_request(project_root, request, now_fn=now_fn)}
     if request.get("existing-job-id") or request["target"]["kind"] == "job":
         job = _resume_job_from_request(project_root, request, now_fn=now_fn)
         return {"status": "resumed", "job-id": job["job-id"], "job": job}

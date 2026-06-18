@@ -169,7 +169,7 @@ def test_session_server_exposes_expected_tools(tmp_path: Path) -> None:
         "set_auto_update",
         "cli_visibility",
         "set_cli_visibility",
-        "update_global_embedded_rig",
+        "update_rig",
     }.issubset(names)
 
 
@@ -246,11 +246,11 @@ def test_release_please_server_exposes_expected_tools(tmp_path: Path) -> None:
     }.issubset(names)
 
 
-def test_session_server_update_embedded_rig(tmp_path: Path) -> None:
+def test_session_server_update_rig(tmp_path: Path) -> None:
     result = _call_keepalive(
         "audiagentic.components.core.session.session_mcp",
-        "update_embedded_rig",
-        {},
+        "update_rig",
+        {"scope": "local"},
         project_root=tmp_path,
         timeout=120,
     )
@@ -269,7 +269,7 @@ def test_session_server_detects_active_embedded_rig_profile(monkeypatch) -> None
     assert active_embedded_rig_profile() == "qwen3.5-2b-q4_k_s"
 
 
-def test_update_embedded_rig_works_directly(tmp_path: Path) -> None:
+def test_update_rig_works_directly(tmp_path: Path) -> None:
     """Test the update_binaries work function directly (avoids MCP subprocess timeout)."""
     import contextlib
     import io

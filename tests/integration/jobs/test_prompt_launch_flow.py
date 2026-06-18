@@ -12,7 +12,7 @@ for path in (str(ROOT), str(SRC)):
 
 from tests.helpers import sandbox as sandbox_helper
 
-from audiagentic.components.optional.agent_jobs import prompt_launch
+from audiagentic.components.optional.agent_jobs import review_launch
 from audiagentic.components.optional.agent_jobs.prompt_launch import launch_prompt_request
 from audiagentic.components.optional.agent_jobs.prompt_parser import parse_prompt_launch_request
 from audiagentic.runtime.state.jobs_store import job_record_path
@@ -20,7 +20,8 @@ from audiagentic.runtime.state.jobs_store import job_record_path
 
 def _write_project_and_provider_config(sandbox) -> None:
     (sandbox.repo / ".audiagentic").mkdir(parents=True, exist_ok=True)
-    (sandbox.repo / ".audiagentic" / "project.yaml").write_text(
+    (sandbox.repo / ".audiagentic" / "config").mkdir(parents=True, exist_ok=True)
+    (sandbox.repo / ".audiagentic" / "config" / "project.yaml").write_text(
         "\n".join(
             [
                 "contract-version: v1",
@@ -55,7 +56,8 @@ def _write_project_and_provider_config(sandbox) -> None:
         ),
         encoding="utf-8",
     )
-    (sandbox.repo / ".audiagentic" / "providers.yaml").write_text(
+    (sandbox.repo / ".audiagentic" / "config" / "runtime").mkdir(parents=True, exist_ok=True)
+    (sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml").write_text(
         "\n".join(
             [
                 "contract-version: v1",
@@ -151,7 +153,7 @@ def test_prompt_launch_defaults_model_and_job_subject_from_provider_shorthand(tm
 
 def test_prompt_review_creates_review_artifacts(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "prompt-review")
-    original_execute_provider = prompt_launch.execute_provider
+    original_execute_provider = review_launch.execute_provider
     try:
         _write_project_and_provider_config(sandbox)
         captured: dict[str, object] = {}
@@ -178,8 +180,7 @@ def test_prompt_review_creates_review_artifacts(tmp_path: Path) -> None:
                 ),
             }
 
-        original_execute_provider = prompt_launch.execute_provider
-        prompt_launch.execute_provider = fake_execute_provider  # type: ignore[assignment]
+        review_launch.execute_provider = fake_execute_provider  # type: ignore[assignment]
         request = parse_prompt_launch_request(
             "@r-cline id=job_001 ctx=documentation t=review-default\n",
             surface="cli",
@@ -204,5 +205,5 @@ def test_prompt_review_creates_review_artifacts(tmp_path: Path) -> None:
         assert packet_ctx["stream-controls"]["enabled"] is True
         assert packet_ctx["input-controls"]["capture-stdin"] is True
     finally:
-        prompt_launch.execute_provider = original_execute_provider  # type: ignore[assignment]
+        review_launch.execute_provider = original_execute_provider  # type: ignore[assignment]
         sandbox.cleanup()

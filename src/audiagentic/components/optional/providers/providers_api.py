@@ -9,7 +9,7 @@ from audiagentic.foundation.contracts.output import ComponentOutputEvent
 
 def list_providers(project_root: Path) -> dict[str, Any]:
     from audiagentic.components.optional.providers.services.status import build_provider_status
-    return build_provider_status(project_root)
+    return build_provider_status(project_root, include_probes=False)
 
 
 def get_provider_status(project_root: Path, provider_id: str) -> dict[str, Any]:
@@ -17,9 +17,15 @@ def get_provider_status(project_root: Path, provider_id: str) -> dict[str, Any]:
     from audiagentic.foundation.contracts.errors import AudiaGenticError
 
     try:
-        return build_provider_status(project_root, provider_id)
+        payload = build_provider_status(project_root, provider_id, include_probes=True)
     except AudiaGenticError as exc:
         return {"provider_id": provider_id, "ok": False, "error": exc.message}
+    providers = payload.get("providers", [])
+    if providers:
+        provider = providers[0]
+        if isinstance(provider, dict):
+            return provider
+    return {"provider_id": provider_id, "ok": False, "error": "provider status unavailable"}
 
 
 def list_provider_descriptors() -> list[dict[str, Any]]:
