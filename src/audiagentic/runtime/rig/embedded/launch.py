@@ -6,16 +6,9 @@ import logging
 import os
 import subprocess
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
-from audiagentic.foundation.paths.resolution import (
-    build_layered_path_map,
-    iter_layered_candidates,
-    resolve_required_dir,
-)
 from audiagentic.foundation.system.process import candidate_ports
 from audiagentic.runtime.rig.embedded.config import (
     ModelProfile,
@@ -23,14 +16,18 @@ from audiagentic.runtime.rig.embedded.config import (
 )
 from audiagentic.runtime.rig.embedded.process import (
     build_command,
-    resolve_platform_dirs,
     wait_for_health,
 )
+from audiagentic.runtime.rig.embedded.resolution import (
+    find_server_bin,
+    resolve_model,
+    runtime_bin_dir,
+)
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 42001
-_PROJECT_RIG_BIN_REL = Path("provisioning/rig/embedded/bin")
-_GLOBAL_RIG_BIN_REL = Path("rig/bin")
 
 
 @dataclass
@@ -56,161 +53,6 @@ class LaunchPlan:
     server_cfg: dict[str, object]
 
 
-def runtime_bin_dir() -> Path:
-    from audiagentic.runtime.home import global_harness_runtime
-
-    path_map = build_layered_path_map(
-        user_global_root=global_harness_runtime(),
-        user_global=_GLOBAL_RIG_BIN_REL,
-        project_root=_project_audiagentic_root(),
-        project_local=_PROJECT_RIG_BIN_REL,
-    )
-    return resolve_required_dir(path_map, label="Rig binary directory")
-
-
-def resolve_under(root: Path, value: str | None, *, base: Path | None = None) -> Path | None:
-    if not value:
-        return None
-    raw = Path(value)
-    resolved = raw if raw.is_absolute() else (base or root) / raw
-    return resolved.resolve()
-
-
-def ensure_under(path: Path, root: Path, label: str) -> Path:
-    try:
-        path.relative_to(root)
-    except ValueError as exc:
-        raise SystemExit(f"{label} must stay under {root}") from exc
-    return path
-
-
-def find_server_bin(bin_dir: Path, override: str | None) -> Path:
-    server_dir, llamafile_dir = resolve_platform_dirs(bin_dir)
-    if override:
-        candidate = ensure_under(
-            resolve_under(bin_dir, override) or Path(),
-            bin_dir,
-            "AUDIAGENTIC_RIG_SERVER_BIN",
-        )
-        if not candidate.exists():
-            raise SystemExit(f"Rig binary not found: {candidate}")
-        return candidate
-
-    if os.name == "nt":
-        server_name = "llama-server.exe"
-        fallback_name = "llamafile.exe"
-    else:
-        server_name = "llama-server"
-        fallback_name = "llamafile"
-
-    server_bin = server_dir / server_name
-    if server_bin.exists():
-        return server_bin
-
-    fallback_bin = llamafile_dir / fallback_name
-    if fallback_bin.exists():
-        return fallback_bin
-
-    raise SystemExit(f"Local rig binary not found under {bin_dir}")
-
-
-def resolve_model(bin_dir: Path, server_dir: Path, override: str | None) -> tuple[Path, str]:
-    if not override:
-        raise SystemExit(
-            "No model file specified. Set --model-file or AUDIAGENTIC_RIG_MODEL_FILE, or add model_file to the profile."
-        )
-    candidate = resolve_under(bin_dir, override, base=server_dir)
-    assert candidate is not None
-    if Path(override).is_absolute():
-        if not candidate.exists():
-            raise SystemExit(f"Model not found: {candidate}")
-        return candidate, str(candidate)
-    ensure_under(candidate, bin_dir, "AUDIAGENTIC_RIG_MODEL_FILE")
-    if not candidate.exists():
-        layered_candidates = _layered_model_candidates(
-            override,
-            project_root=_project_audiagentic_root(),
-        )
-        candidate = _first_existing_model(layered_candidates)
-        if candidate is None:
-            checked = ", ".join(str(path) for path in layered_candidates)
-            raise SystemExit(f"Model not found. Checked: {checked}")
-    if Path(override).is_absolute():
-        return candidate, str(candidate)
-    try:
-        return candidate, candidate.relative_to(server_dir).as_posix()
-    except ValueError:
-        return candidate, str(candidate)
-
-
-def _layered_model_candidates(override: str, *, project_root: Path | None) -> list[Path]:
-    from audiagentic.runtime.home import global_harness_runtime
-
-    candidates: list[Path] = []
-    path_map = build_layered_path_map(
-        user_global_root=global_harness_runtime(),
-        user_global=_GLOBAL_RIG_BIN_REL,
-        project_root=project_root,
-        project_local=_PROJECT_RIG_BIN_REL,
-    )
-    for bin_candidate in iter_layered_candidates(path_map):
-        server_dir, _ = resolve_platform_dirs(bin_candidate)
-        candidate = resolve_under(bin_candidate, override, base=server_dir)
-        assert candidate is not None
-        ensure_under(candidate, bin_candidate, "AUDIAGENTIC_RIG_MODEL_FILE")
-        candidates.append(candidate)
-    return candidates
-
-
-def _first_existing_model(candidates: list[Path]) -> Path | None:
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    return None
-
-
-def _project_audiagentic_root() -> Path | None:
-    from audiagentic.paths import find_repo_root
-
-    env_root = os.environ.get("AUDIAGENTIC_REPO_ROOT")
-    if env_root:
-        return Path(env_root).resolve() / ".audiagentic"
-    try:
-        return find_repo_root(Path.cwd()) / ".audiagentic"
-    except Exception:
-        logger.warning("Failed to find repo root", exc_info=True)
-        return None
-
-
-def print_result(result: LaunchResult, as_json: bool) -> None:
-    payload = asdict(result)
-    if as_json:
-        print(json.dumps(payload))
-        return
-    print("Embedded rig ready")
-    print(f"  PID:      {result.pid}")
-    print(f"  Endpoint: {result.base_url}")
-    print(f"  Model:    {result.model}")
-    print(f"  Binary:   {result.binary}")
-    if result.log_path:
-        print(f"  Log:      {result.log_path}")
-
-
-def _apply_cli_overrides(server_cfg: dict[str, object], args: argparse.Namespace) -> dict[str, object]:
-    cfg = dict(server_cfg)
-    if args.gpu_layers:
-        cfg["gpu_layers"] = args.gpu_layers
-    if args.context is not None:
-        cfg["context_size"] = args.context
-    if args.parallel is not None:
-        cfg["parallel"] = args.parallel
-    if args.fit:
-        cfg["fit"] = args.fit
-    if args.reasoning:
-        cfg["reasoning"] = args.reasoning
-    return cfg
-
-
 def prepare_launch(
     *,
     model_profile: str | None,
@@ -223,6 +65,8 @@ def prepare_launch(
     fit: str | None,
     reasoning: str | None,
 ) -> LaunchPlan:
+    from audiagentic.runtime.rig.embedded.cli import _apply_cli_overrides
+
     bin_dir = runtime_bin_dir()
     profile = resolve_model_profile(
         model_profile,
@@ -385,88 +229,13 @@ def start_embedded_rig(
     raise SystemExit(last_error or f"Unable to launch rig on {host}")
 
 
-def launch_background(args: argparse.Namespace) -> int:
-    result = start_embedded_rig(
-        model_profile=args.model_profile,
-        port=args.port,
-        host=args.host,
-        server_bin=args.server_bin,
-        model_file=args.model_file,
-        device=args.device,
-        gpu_layers=args.gpu_layers,
-        context=args.context,
-        parallel=args.parallel,
-        fit=args.fit,
-        reasoning=args.reasoning,
-        health_timeout=args.health_timeout,
-    )
-    print_result(result, args.json)
-    return 0
+# -- backward-compatible re-exports --
 
-
-def launch_foreground(args: argparse.Namespace) -> int:
-    plan = prepare_launch(
-        model_profile=args.model_profile,
-        server_bin=args.server_bin,
-        model_file=args.model_file,
-        device=args.device,
-        gpu_layers=args.gpu_layers,
-        context=args.context,
-        parallel=args.parallel,
-        fit=args.fit,
-        reasoning=args.reasoning,
-    )
-
-    command = build_command(
-        binary=plan.binary,
-        model_arg=plan.model_arg,
-        host=args.host,
-        port=args.port,
-        device=plan.device,
-        server_cfg=plan.server_cfg,
-        chat_template_kwargs=plan.profile.chat_template_kwargs,
-        alias=plan.profile.name,
-    )
-
-    if not args.json:
-        print("Starting embedded rig...")
-        print(f"  Endpoint: http://{args.host}:{args.port}/v1")
-        print(f"  Model:    {plan.model_path.name}")
-        print(f"  Binary:   {plan.binary}")
-        print(f"  ModelArg: {plan.model_arg}")
-        print(f"  Profile:  {plan.profile.name}")
-
-    completed = subprocess.run(command, cwd=plan.server_dir, check=False)
-    return int(completed.returncode)
-
-
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Launch AUDiaGentic embedded llama rig.")
-    parser.add_argument("--host", default=DEFAULT_HOST)
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="Use 0 to auto-pick a free local port.")
-    parser.add_argument("--background", action="store_true", help="Start detached, wait for health, then return.")
-    parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON result.")
-    parser.add_argument("--server-bin")
-    parser.add_argument("--model-file")
-    parser.add_argument("--model-profile")
-    parser.add_argument("--device", default=None, help="Pass through to llama-server. Falls back to AUDIAGENTIC_RIG_DEVICE env var.")
-    parser.add_argument("--gpu-layers", default=os.environ.get("AUDIAGENTIC_RIG_GPU_LAYERS"))
-    parser.add_argument("--context", type=int, default=int(os.environ["AUDIAGENTIC_RIG_CONTEXT"]) if os.environ.get("AUDIAGENTIC_RIG_CONTEXT") else None)
-    parser.add_argument("--parallel", type=int, default=int(os.environ["AUDIAGENTIC_RIG_PARALLEL"]) if os.environ.get("AUDIAGENTIC_RIG_PARALLEL") else None)
-    parser.add_argument("--fit", default=os.environ.get("AUDIAGENTIC_RIG_FIT"))
-    parser.add_argument("--reasoning", default=os.environ.get("AUDIAGENTIC_RIG_REASONING"))
-    parser.add_argument("--health-timeout", type=float, default=60.0)
-    return parser.parse_args(argv)
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
-    if args.background:
-        return launch_background(args)
-    if args.port == 0:
-        raise SystemExit("--port 0 requires --background")
-    return launch_foreground(args)
-
+from audiagentic.runtime.rig.embedded.cli import main  # noqa: E402, F401
+from audiagentic.runtime.rig.embedded.resolution import (  # noqa: E402, F401
+    ensure_under,
+    resolve_under,
+)
 
 if __name__ == "__main__":
     raise SystemExit(main())
