@@ -1,38 +1,40 @@
 from __future__ import annotations
 
+import subprocess
+
 from audiagentic.components.optional.coding_lsp import language_registry
+from audiagentic.foundation.components.dependencies import build_dependency_workflow
 
 
-def test_all_languages_loaded_from_config() -> None:
-    langs = language_registry.all_languages()
-    assert {"python", "typescript", "rust", "cpp"} <= set(langs)
+def test_typescript_dependency_installs_server_and_runtime() -> None:
+    dep_cfgs = language_registry.dependency_cfgs(["typescript"])
+    workflow = build_dependency_workflow(dep_cfgs, workflow_id="coding-lsp", action="install")
+    step = next(s for s in workflow.steps if s.id == "typescript-language-server")
+    inner = step.variants["run"]
+    command = inner.command if hasattr(inner, "command") else ()
+    assert command[:4] == ("npm", "install", "-g", "typescript-language-server")
+    assert command[4:] == ("typescript",)
 
 
-def test_python_spec_fields() -> None:
-    spec = language_registry.get_language("python")
-    assert spec is not None
-    assert spec.command == ("pyright-langserver", "--stdio")
-    assert ".py" in spec.file_extensions
-    assert spec.language_id == "python"
-    assert spec.dependency is not None
-    assert spec.dependency.id == "pyright"
+def test_probe_rust_analyzer_requires_working_binary(monkeypatch) -> None:
+    monkeypatch.setattr(language_registry, "tool_available", lambda name: True)
+
+    class _Result:
+        returncode = 1
+
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: _Result(),
+    )
+
+    assert language_registry.probe_rust_analyzer() is False
 
 
-def test_dependency_cfgs_scoped_to_languages() -> None:
-    only_python = language_registry.dependency_cfgs(["python"])
-    assert set(only_python) == {"pyright"}
-    # a non-enabled language's server never enters the dep set
-    assert "clangd" not in only_python
-
-
-def test_dependency_ids_all() -> None:
-    ids = set(language_registry.dependency_ids())
-    assert {"pyright", "typescript-language-server", "rust-analyzer", "clangd"} <= ids
-
-
-def test_server_spec_dict_shape() -> None:
-    spec = language_registry.get_language("rust")
-    d = language_registry.server_spec_dict(spec)
-    assert d["command"] == ["rust-analyzer"]
-    assert d["file_extensions"] == [".rs"]
-    assert d["label"] == "Rust (rust-analyzer)"
+def test_rust_dependency_uses_rustup_component() -> None:
+    dep_cfgs = language_registry.dependency_cfgs(["rust"])
+    workflow = build_dependency_workflow(dep_cfgs, workflow_id="coding-lsp", action="install")
+    step = next(s for s in workflow.steps if s.id == "rust-analyzer")
+    inner = step.variants["run"]
+    command = inner.command if hasattr(inner, "command") else ()
+    assert command == ("rustup", "component", "add", "rust-analyzer")

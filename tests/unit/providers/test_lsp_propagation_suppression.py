@@ -2,59 +2,76 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.foundation.components.base import McpServerDeclaration
-from audiagentic.runtime.lifecycle import components as comp
+from audiagentic.components.optional.coding_lsp.language_servers_sync import (
+    prune_generic_lsp_mcp_from_providers,
+    sync_generic_lsp_mcp_to_providers,
+)
+from audiagentic.foundation.mcp import McpServerEntry
 
 
 class _Provider:
-    def __init__(self, provider_id: str, *, native: bool) -> None:
+    def __init__(self, provider_id: str, *, native: bool, has_mcp: bool = True) -> None:
         self.provider_id = provider_id
-        self.mcp_config = object()  # has an mcp config target
+        self.mcp_config = object() if has_mcp else None
         self.language_servers_config = object() if native else None
 
 
-class _Component:
-    def __init__(self, servers) -> None:
-        self.mcp_servers = servers
-        self.external_mcp_servers = ()
+def test_sync_generic_lsp_routes_by_provider_capability(tmp_path: Path, monkeypatch) -> None:
+    providers = {
+        "codex": _Provider("codex", native=True),
+        "claude": _Provider("claude", native=False),
+        "aider": _Provider("aider", native=False, has_mcp=False),
+    }
+    captured: dict[str, dict[str, tuple[str, McpServerEntry]]] = {}
 
+    def _fake_sync(*, provider_id, project_root, desired_entries, managed_ids):
+        captured[provider_id] = desired_entries
+        assert managed_ids == {"coding-lsp/ag-lsp"}
+        return {"ok": True}
 
-def test_native_provider_skips_ag_lsp_generic_provider_keeps_it(tmp_path: Path, monkeypatch) -> None:
-    ag_lsp = McpServerDeclaration(
-        name="ag-lsp",
-        module="audiagentic.components.optional.coding_lsp.lsp_mcp",
-        propagate="providers",
-        skip_if_native_lsp=True,
+    monkeypatch.setattr(
+        "audiagentic.components.optional.coding_lsp.language_servers_sync.all_descriptors",
+        lambda: providers,
     )
-    ag_ledger = McpServerDeclaration(
-        name="ag-ledger",
-        module="audiagentic.components.optional.ledger.ledger_mcp",
-        propagate="providers",
-        skip_if_native_lsp=False,
+    monkeypatch.setattr(
+        "audiagentic.components.optional.coding_lsp.language_servers_sync.sync_managed_provider_mcp_subset",
+        _fake_sync,
     )
 
+    result = sync_generic_lsp_mcp_to_providers(tmp_path)
+
+    assert result["ok"] is True
+    assert "aider" in result["skipped"]
+    assert captured["codex"] == {}
+    assert list(captured["claude"]) == ["coding-lsp/ag-lsp"]
+    assert captured["claude"]["coding-lsp/ag-lsp"][0] == "ag-lsp"
+
+
+def test_prune_generic_lsp_only_targets_component_owned_entry(tmp_path: Path, monkeypatch) -> None:
     providers = {
         "codex": _Provider("codex", native=True),
         "claude": _Provider("claude", native=False),
     }
-    captured: dict[str, list[str]] = {}
+    captured: dict[str, set[str]] = {}
 
-    def _fake_sync(*, provider_id, project_root, desired_entries):
-        captured[provider_id] = sorted(name for name, _ in desired_entries.values())
+    def _fake_sync(*, provider_id, project_root, desired_entries, managed_ids):
+        captured[provider_id] = managed_ids
+        assert desired_entries == {}
         return {"ok": True}
 
     monkeypatch.setattr(
-        "audiagentic.components.optional.providers.descriptors.registry.all_descriptors",
+        "audiagentic.components.optional.coding_lsp.language_servers_sync.all_descriptors",
         lambda: providers,
     )
     monkeypatch.setattr(
-        "audiagentic.components.optional.providers.services.mcp.sync_managed_provider_mcp",
+        "audiagentic.components.optional.coding_lsp.language_servers_sync.sync_managed_provider_mcp_subset",
         _fake_sync,
     )
 
-    comp._propagate_mcp_to_providers(_Component([ag_lsp, ag_ledger]), tmp_path)
+    result = prune_generic_lsp_mcp_from_providers(tmp_path)
 
-    # native provider: ag-lsp suppressed, ledger kept
-    assert captured["codex"] == ["ag-ledger"]
-    # generic provider: both kept (gets generic LSP via MCP)
-    assert captured["claude"] == ["ag-ledger", "ag-lsp"]
+    assert result["ok"] is True
+    assert captured == {
+        "codex": {"coding-lsp/ag-lsp"},
+        "claude": {"coding-lsp/ag-lsp"},
+    }

@@ -2,10 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "required": [
-    "event-id",
-    "timestamp-utc",
-    "project-id",
-    "source",
     "change-class",
     "files",
     "technical-summary",
@@ -13,126 +9,6 @@
     "status"
   ],
   "properties": {
-    "event-id": {
-      "type": "string",
-      "description": "Unique ID, format chg_YYYYMMDD_HHMMSS_<short-desc>."
-    },
-    "timestamp-utc": {
-      "type": "string",
-      "description": "ISO 8601 UTC timestamp of completion."
-    },
-    "project-id": {
-      "type": "string",
-      "description": "Project identifier from config or environment."
-    },
-    "source": {
-      "type": "object",
-      "required": [
-        "kind",
-        "provider-id",
-        "surface",
-        "prompt-tag"
-      ],
-      "description": "How and where this change was triggered.",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "enum": [
-            "interactive-prompt",
-            "job-run",
-            "workflow-stage",
-            "manual-script",
-            "release-finalization"
-          ],
-          "description": "Initiation method. 'interactive-prompt' for agent terminal/chat (most common). 'job-run' for automated jobs. 'workflow-stage' for job stages. 'manual-script' for CLI scripts. 'release-finalization' for archive steps."
-        },
-        "provider-id": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "AI provider used (e.g. 'codex', 'claude'), or null."
-        },
-        "surface": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Interaction surface ('terminal', 'cli', 'web'), or null."
-        },
-        "session-id": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Conversation session ID if part of a named session. Null for ad-hoc."
-        },
-        "job-id": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Job ID if part of a structured job workflow. Null for ad-hoc."
-        },
-        "packet-id": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Packet/stage ID if produced by a specific packet within a job. A packet is a discrete task sent to an LLM provider. Null when not in a job."
-        },
-        "prompt-id": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Prompt ID if triggered by a specific prompt. Null for general work."
-        },
-        "prompt-tag": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "enum": [
-            "plan",
-            "implement",
-            "review",
-            "audit",
-            "check-in-prep",
-            null
-          ],
-          "description": "Workflow tag that initiated work ('implement', 'plan', 'review', 'audit', 'check-in-prep')."
-        },
-        "target-kind": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "enum": [
-            "packet",
-            "job",
-            "artifact",
-            "adhoc",
-            null
-          ],
-          "description": "What this targets ('packet', 'job', 'artifact', 'adhoc')."
-        },
-        "target-ref": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Short kebab-case slug describing the work (e.g. 'windows-log-rollover-fix')."
-        },
-        "review-id": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Review ID if produced/approved as part of a review. Null when no review performed."
-        }
-      }
-    },
     "change-class": {
       "type": "string",
       "enum": [
@@ -146,7 +22,7 @@
         "audit",
         "workflow"
       ],
-      "description": "Change category. 'feature'=new functionality, 'code-fix'=bug fix, 'refactor'=restructure without behavior change, 'docs'=documentation, 'tests'=test changes, 'config'=config changes, 'release'=release process, 'audit'=audit/tracking, 'workflow'=CI/CD."
+      "description": "Change category."
     },
     "files": {
       "type": "array",
@@ -158,11 +34,11 @@
     },
     "technical-summary": {
       "type": "string",
-      "description": "Detailed 'what and why' — the audit trail."
+      "description": "Detailed what-andwhy — the audit trail."
     },
     "user-summary-candidate": {
       "type": "string",
-      "description": "Concise changelog-style summary for user-facing output."
+      "description": "Concise changelog-style summary."
     },
     "status": {
       "type": "string",
@@ -170,11 +46,11 @@
         "unreleased",
         "released"
       ],
-      "description": "'unreleased' when recording. The archive step stamps 'released'."
+      "description": "Always 'unreleased' when recording. Archive stamps 'released'."
     },
     "release-id": {
       "type": "string",
-      "description": "Stamped by archive_current_ledger when status transitions to released."
+      "description": "Stamped by archive when status transitions to released."
     },
     "git-commits": {
       "type": "array",

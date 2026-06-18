@@ -13,8 +13,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import subprocess
 from typing import Any
 
+from audiagentic.foundation.toolchains.detect import tool_available
 from audiagentic.paths import SRC_ROOT
 from audiagentic.runtime.config import load_yaml_file
 
@@ -142,3 +144,25 @@ def dependency_ids(language_ids: list[str] | None = None) -> list[str]:
         _REGISTRY[lid] for lid in language_ids if lid in _REGISTRY
     )
     return [spec.dependency.id for spec in langs if spec.dependency is not None]
+
+
+def probe_typescript_language_server() -> bool:
+    """typescript-language-server also needs TypeScript's tsserver runtime."""
+    return tool_available("typescript-language-server") and tool_available("tsserver")
+
+
+def probe_rust_analyzer() -> bool:
+    """Rustup may provide a shim on PATH even when rust-analyzer is unavailable."""
+    if not tool_available("rust-analyzer"):
+        return False
+    try:
+        result = subprocess.run(
+            ["rust-analyzer", "--version"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except OSError:
+        return False
+    return result.returncode == 0

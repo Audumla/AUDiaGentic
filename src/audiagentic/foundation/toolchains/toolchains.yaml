@@ -15,6 +15,10 @@ toolchains:
     install: [cargo, install, "{package}"]
     uninstall: [cargo, uninstall, "{package}"]
 
+  rustup:
+    install: [rustup, component, add, "{package}"]
+    remove: [rustup, component, remove, "{package}"]
+
   choco:
     install: [choco, install, -y, "{package}"]
     uninstall: [choco, uninstall, -y, "{package}"]

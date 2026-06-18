@@ -37,10 +37,7 @@ mcp-servers:
   - name: ag-lsp
     module: audiagentic.components.optional.coding_lsp.lsp_mcp
     description: LSP code intelligence — symbols, definitions, diagnostics
-    propagate: providers
-    # Providers with native LSP config (codex, opencode, qwen) use their own
-    # language servers; do not also push the generic MCP LSP server to them.
-    skip-if-native-lsp: true
+    propagate: audiagentic
     instructions: >
       Use these tools for precise code navigation and intelligence.
       lsp_symbols: search workspace symbols by name — use before grep for symbol lookups.
