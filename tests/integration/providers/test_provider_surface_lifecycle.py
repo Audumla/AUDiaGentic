@@ -160,11 +160,24 @@ def mcp_servers_in(project_root: Path, config_path: str) -> set[str]:
 
 
 def managed_blocks_in(file_path: Path) -> set[str]:
-    """Return the set of block IDs from AUDIAGENTIC:BEGIN markers in a file."""
+    """Return contribution IDs present in a file's managed region.
+
+    Blocks are no longer fenced per-id; the managed region holds friendly
+    `## Title` headings. Map those titles back to contribution IDs via the
+    registry so existing id-based assertions keep working.
+    """
     if not file_path.exists():
         return set()
     text = file_path.read_text(encoding="utf-8")
-    return set(re.findall(r"<!-- AUDIAGENTIC:BEGIN ([^>]+) -->", text))
+    match = re.search(r"<!-- ag:managed:begin -->(.*?)<!-- ag:managed:end -->", text, re.DOTALL)
+    if not match:
+        return set()
+    titles = re.findall(r"^#{1,6}\s+(.+?)\s*$", match.group(1), re.MULTILINE)
+    from audiagentic.components.optional.providers.surfaces.contributions import (
+        load_surface_contributions,
+    )
+    id_by_title = {c.title.strip(): c.contribution_id for c in load_surface_contributions()}
+    return {id_by_title[t.strip()] for t in titles if t.strip() in id_by_title}
 
 
 def _provider_mcp_server_names(component_id: str) -> set[str]:

@@ -112,16 +112,9 @@ def get_owned_files(
 
 
 def _resolve_and_run_post_install(hook_path: str, project_root: Path) -> None:
-    from threading import Thread
-
     from audiagentic.foundation.components.hooks import invoke_hook
 
-    Thread(
-        target=invoke_hook,
-        args=(hook_path,),
-        kwargs={"project_root": project_root, "failure_label": "post_install"},
-        daemon=True,
-    ).start()
+    invoke_hook(hook_path, project_root=project_root, failure_label="post_install")
 
 
 def install_component(

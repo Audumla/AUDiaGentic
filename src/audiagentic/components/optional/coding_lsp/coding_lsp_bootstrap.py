@@ -69,11 +69,18 @@ def _on_enabled(project_root: Path) -> None:
     """Sync configured language servers and generic MCP projection to providers."""
     try:
         from .language_servers_sync import (
+            provision_provider_lsp_support,
             sync_generic_lsp_mcp_to_providers,
             sync_language_servers_to_providers,
         )
+        provision_result = provision_provider_lsp_support(project_root)
         native_result = sync_language_servers_to_providers(project_root)
         generic_result = sync_generic_lsp_mcp_to_providers(project_root)
+        if provision_result.get("provisioned"):
+            logger.info(
+                "Provisioned provider LSP support: %s",
+                ", ".join(provision_result["provisioned"]),
+            )
         if native_result.get("synced"):
             logger.info(
                 "Synced language servers to providers: %s",

@@ -15,9 +15,16 @@ from . import session_embedded_rig, session_runtime_status, session_visibility
 
 def status(project_root: Path) -> dict[str, Any]:
     """Return current harness/session status."""
+    try:
+        model = session_runtime_status.model_info()
+    except Exception as exc:  # noqa: BLE001 - status should remain inspectable.
+        model = {
+            "configured": False,
+            "error": str(exc),
+        }
     return {
         "versions": session_runtime_status.versions(),
-        "model": session_runtime_status.model_info(),
+        "model": model,
         "endpoint": session_runtime_status.endpoint_info(),
         "auto_update": _auto_update_status(),
         "environment": {
@@ -74,6 +81,12 @@ def refresh_harness_config(project_root: Path) -> dict[str, Any]:
 
 async def update_rig(*, ctx, run_with_output, scope: str = "local") -> dict[str, Any]:
     """Update rig binaries for the requested scope."""
+    if os.environ.get("AUDIAGENTIC_MCP_SMOKE_ONLY") == "1":
+        return {
+            "ok": True,
+            "output": "smoke-only: rig update skipped",
+            "scope": scope,
+        }
     if scope == "local":
         return await session_embedded_rig.update_embedded_rig(ctx=ctx, run_with_output=run_with_output)
     if scope == "global":

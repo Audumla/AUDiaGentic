@@ -82,6 +82,8 @@ def set_provider_enabled(project_root: Path, provider_id: str, *, enabled: bool)
 
 def load_provider_config(project_root: Path) -> dict[str, Any]:
     path = project_root / ".audiagentic" / "config" / "runtime" / "providers.yaml"
+    if not path.exists():
+        return {"contract-version": "v1", "providers": {}}
     try:
         payload = load_yaml_file(path)
     except Exception as exc:  # noqa: BLE001

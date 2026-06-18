@@ -85,12 +85,20 @@ def _load_skills_from_registry(project_root: Path | None = None) -> list[SkillDe
     If a project-local override exists at .audiagentic/skills/<tag>/skill.md it
     takes precedence over the tag package's bundled skill.md.
     """
+    from audiagentic.components.optional.providers.surfaces.contributions import (  # noqa: PLC0415
+        active_tag_ids,
+    )
     from audiagentic.components.optional.providers.tags.registry import (  # noqa: PLC0415
         all_tags_loaded,
     )
     tags = all_tags_loaded()
+    active = active_tag_ids(project_root)
     skills: list[SkillDefinition] = []
     for tag_id, descriptor in sorted(tags.items()):
+        # Skip tags whose owning component is disabled/uninstalled so regeneration
+        # cannot resurrect skill files that prune removed.
+        if tag_id not in active:
+            continue
         # Project-level override wins if present
         if project_root is not None:
             override = project_root / ".audiagentic" / "skills" / tag_id / "skill.md"

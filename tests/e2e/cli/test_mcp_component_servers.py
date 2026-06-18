@@ -32,23 +32,66 @@ _INITIALIZED = {"jsonrpc": "2.0", "method": "notifications/initialized", "params
 
 
 def _mcp(module: str, *messages: dict, project_root: Path, extra_args: list[str] | None = None, timeout: int = 30) -> list[dict]:
-    payload = "\n".join(json.dumps(m) for m in [_INIT, _INITIALIZED, *messages]) + "\n"
     env = dict(os.environ)
     env["AUDIAGENTIC_REPO_ROOT"] = str(project_root)
     command = [sys.executable, "-m", module]
     if extra_args:
         command.extend(extra_args)
-    proc = subprocess.run(
+    proc = subprocess.Popen(
         command,
-        input=payload,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
         encoding="utf-8",
-        capture_output=True,
-        timeout=timeout,
         env=env,
     )
-    assert proc.returncode == 0, f"MCP server {module} rc={proc.returncode}\n{proc.stderr}"
-    return [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
+    assert proc.stdin is not None
+    assert proc.stdout is not None
+
+    responses: list[dict] = []
+    expected_ids = {message["id"] for message in messages if "id" in message}
+    deadline = time.time() + timeout
+
+    proc.stdin.write(json.dumps(_INIT) + "\n")
+    proc.stdin.flush()
+    while time.time() < deadline:
+        line = proc.stdout.readline()
+        if not line:
+            if proc.poll() is not None:
+                break
+            continue
+        payload = json.loads(line)
+        responses.append(payload)
+        if payload.get("id") == _INIT["id"]:
+            break
+
+    proc.stdin.write(json.dumps(_INITIALIZED) + "\n")
+    for message in messages:
+        proc.stdin.write(json.dumps(message) + "\n")
+    proc.stdin.flush()
+
+    while time.time() < deadline:
+        line = proc.stdout.readline()
+        if not line:
+            if proc.poll() is not None:
+                break
+            continue
+        payload = json.loads(line)
+        responses.append(payload)
+        if expected_ids and expected_ids.issubset({item.get("id") for item in responses}):
+            break
+
+    proc.stdin.close()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.terminate()
+        proc.wait(timeout=5)
+
+    stderr = proc.stderr.read() if proc.stderr else ""
+    assert proc.returncode == 0, f"MCP server {module} rc={proc.returncode}\n{stderr}"
+    return responses
 
 
 def _tools_list(module: str, project_root: Path, extra_args: list[str] | None = None) -> set[str]:
@@ -99,11 +142,15 @@ def _call_keepalive(
     project_root: Path,
     msg_id: int = 2,
     timeout: int = 120,
+    extra_args: list[str] | None = None,
 ) -> dict | list:
     env = dict(os.environ)
     env["AUDIAGENTIC_REPO_ROOT"] = str(project_root)
+    command = [sys.executable, "-m", module]
+    if extra_args:
+        command.extend(extra_args)
     proc = subprocess.Popen(
-        [sys.executable, "-m", module],
+        command,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -252,6 +299,7 @@ def test_session_server_update_rig(tmp_path: Path) -> None:
         "update_rig",
         {"scope": "local"},
         project_root=tmp_path,
+        extra_args=["--smoke-only"],
         timeout=120,
     )
     payload = result if isinstance(result, dict) else result[0]

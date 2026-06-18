@@ -3,8 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from audiagentic.components.optional.coding_lsp import lsp_api
-from audiagentic.components.optional.coding_lsp import lsp_config_api
+from audiagentic.components.optional.coding_lsp import lsp_api, lsp_config_api
 from audiagentic.components.optional.coding_lsp.coding_lsp_config import write_lsp_config
 from audiagentic.components.optional.coding_lsp.lsp_lifecycle import ServerConfig
 
