@@ -140,15 +140,44 @@ def test_runtime_bin_dir_prefers_project_provisioning_root(tmp_path: Path, monke
     project_root = tmp_path / "project"
     project_bin = project_root / ".audiagentic" / "provisioning" / "rig" / "embedded" / "bin"
     project_bin.mkdir(parents=True)
+    global_bin = tmp_path / "home" / "harness" / "rig" / "bin"
+    global_bin.mkdir(parents=True)
     monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(project_root))
+    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path / "home"))
     assert runtime_bin_dir() == project_bin
 
 
-def test_runtime_bin_dir_falls_back_when_project_bin_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_runtime_bin_dir_falls_back_when_project_bin_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    global_bin = tmp_path / "home" / "harness" / "rig" / "bin"
+    global_bin.mkdir(parents=True)
     monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(Path(os.sep) / "missing-project-root"))
+    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path / "home"))
     path = runtime_bin_dir()
-    assert path.name == "bin"
-    assert path.exists()
+    assert path == global_bin
+
+
+def test_resolve_model_falls_back_to_global_model_when_local_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = tmp_path / "project"
+    project_server_dir = project_root / ".audiagentic" / "provisioning" / "rig" / "embedded" / "bin" / "llama-server" / "windows"
+    project_server_dir.mkdir(parents=True)
+    global_model = tmp_path / "home" / "harness" / "rig" / "bin" / "models" / "fast.gguf"
+    global_model.parent.mkdir(parents=True)
+    global_model.write_bytes(b"gguf")
+
+    monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(project_root))
+    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path / "home"))
+
+    resolved_path, model_arg = resolve_model(
+        project_root / ".audiagentic" / "provisioning" / "rig" / "embedded" / "bin",
+        project_server_dir,
+        "../../models/fast.gguf",
+    )
+
+    assert resolved_path == global_model
+    assert model_arg == str(global_model)
 
 
 # ---------------------------------------------------------------------------
@@ -159,4 +188,3 @@ def _write_models(root: Path, data: dict) -> Path:
     path = root / "rig.yaml"
     path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     return path
-

@@ -11,6 +11,11 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+from audiagentic.foundation.paths.resolution import (
+    build_layered_path_map,
+    iter_layered_candidates,
+    resolve_required_dir,
+)
 from audiagentic.foundation.system.process import candidate_ports
 from audiagentic.runtime.rig.embedded.config import (
     ModelProfile,
@@ -24,6 +29,8 @@ from audiagentic.runtime.rig.embedded.process import (
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 42001
+_PROJECT_RIG_BIN_REL = Path("provisioning/rig/embedded/bin")
+_GLOBAL_RIG_BIN_REL = Path("rig/bin")
 
 
 @dataclass
@@ -50,22 +57,15 @@ class LaunchPlan:
 
 
 def runtime_bin_dir() -> Path:
-    from audiagentic.paths import find_repo_root
     from audiagentic.runtime.home import global_harness_runtime
 
-    project_root = os.environ.get("AUDIAGENTIC_REPO_ROOT")
-    if project_root:
-        project_bin = Path(project_root) / ".audiagentic" / "provisioning" / "rig" / "embedded" / "bin"
-        if project_bin.exists():
-            return project_bin
-    try:
-        repo_root = find_repo_root(Path.cwd())
-        project_bin = repo_root / ".audiagentic" / "provisioning" / "rig" / "embedded" / "bin"
-        if project_bin.exists():
-            return project_bin
-    except Exception:
-        logger.warning("Failed to find repo root", exc_info=True)
-    return global_harness_runtime() / "rig" / "bin"
+    path_map = build_layered_path_map(
+        user_global_root=global_harness_runtime(),
+        user_global=_GLOBAL_RIG_BIN_REL,
+        project_root=_project_audiagentic_root(),
+        project_local=_PROJECT_RIG_BIN_REL,
+    )
+    return resolve_required_dir(path_map, label="Rig binary directory")
 
 
 def resolve_under(root: Path, value: str | None, *, base: Path | None = None) -> Path | None:
@@ -121,12 +121,65 @@ def resolve_model(bin_dir: Path, server_dir: Path, override: str | None) -> tupl
         )
     candidate = resolve_under(bin_dir, override, base=server_dir)
     assert candidate is not None
+    if Path(override).is_absolute():
+        if not candidate.exists():
+            raise SystemExit(f"Model not found: {candidate}")
+        return candidate, str(candidate)
     ensure_under(candidate, bin_dir, "AUDIAGENTIC_RIG_MODEL_FILE")
     if not candidate.exists():
-        raise SystemExit(f"Model not found: {candidate}")
+        layered_candidates = _layered_model_candidates(
+            override,
+            project_root=_project_audiagentic_root(),
+        )
+        candidate = _first_existing_model(layered_candidates)
+        if candidate is None:
+            checked = ", ".join(str(path) for path in layered_candidates)
+            raise SystemExit(f"Model not found. Checked: {checked}")
     if Path(override).is_absolute():
         return candidate, str(candidate)
-    return candidate, override
+    try:
+        return candidate, candidate.relative_to(server_dir).as_posix()
+    except ValueError:
+        return candidate, str(candidate)
+
+
+def _layered_model_candidates(override: str, *, project_root: Path | None) -> list[Path]:
+    from audiagentic.runtime.home import global_harness_runtime
+
+    candidates: list[Path] = []
+    path_map = build_layered_path_map(
+        user_global_root=global_harness_runtime(),
+        user_global=_GLOBAL_RIG_BIN_REL,
+        project_root=project_root,
+        project_local=_PROJECT_RIG_BIN_REL,
+    )
+    for bin_candidate in iter_layered_candidates(path_map):
+        server_dir, _ = resolve_platform_dirs(bin_candidate)
+        candidate = resolve_under(bin_candidate, override, base=server_dir)
+        assert candidate is not None
+        ensure_under(candidate, bin_candidate, "AUDIAGENTIC_RIG_MODEL_FILE")
+        candidates.append(candidate)
+    return candidates
+
+
+def _first_existing_model(candidates: list[Path]) -> Path | None:
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _project_audiagentic_root() -> Path | None:
+    from audiagentic.paths import find_repo_root
+
+    env_root = os.environ.get("AUDIAGENTIC_REPO_ROOT")
+    if env_root:
+        return Path(env_root).resolve() / ".audiagentic"
+    try:
+        return find_repo_root(Path.cwd()) / ".audiagentic"
+    except Exception:
+        logger.warning("Failed to find repo root", exc_info=True)
+        return None
 
 
 def print_result(result: LaunchResult, as_json: bool) -> None:
