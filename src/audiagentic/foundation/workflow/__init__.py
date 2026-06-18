@@ -7,8 +7,7 @@ engine, lifecycle actions, frontmatter assembly, relationships, ID generation.
 from .actions import WorkflowActionExecutor, render
 from .frontmatter import FrontmatterBuilder
 from .id_gen import next_id
-from .interfaces import WorkflowConfig, WorkflowContext
-from .item import ItemView
+from .interfaces import ItemView, WorkflowConfig, WorkflowContext
 from .propagation import StatePropagationEngine, WorkflowItemAPI
 from .rel import Relationships
 from .state_machine import StateMachine
