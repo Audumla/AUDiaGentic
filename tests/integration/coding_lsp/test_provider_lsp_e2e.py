@@ -22,6 +22,11 @@ from pathlib import Path
 
 import pytest
 import tomllib
+from tests.integration.providers.harness import (
+    assert_health_ok,
+    assert_install_result_ok,
+    install_provider,
+)
 
 from audiagentic.components.optional.coding_lsp import language_registry, lsp_api
 from audiagentic.components.optional.coding_lsp.language_servers_sync import (
@@ -34,11 +39,6 @@ from audiagentic.components.optional.providers.descriptors.registry import all_d
 from audiagentic.foundation.components.dependencies import build_dependency_workflow
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.runtime.lifecycle.components import enable_component, install_component
-from tests.integration.providers.harness import (
-    assert_health_ok,
-    assert_install_result_ok,
-    install_provider,
-)
 
 pytestmark = [
     pytest.mark.mutates_host,

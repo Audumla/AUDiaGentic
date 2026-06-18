@@ -20,8 +20,8 @@ from audiagentic.components.optional.providers.descriptors.registry import all_d
 from audiagentic.components.optional.providers.services.mcp import (
     sync_managed_provider_mcp_subset,
 )
-from audiagentic.runtime.harness.paths import find_package_root
 from audiagentic.foundation.mcp import McpServerEntry
+from audiagentic.runtime.harness.paths import find_package_root
 
 logger = logging.getLogger(__name__)
 
