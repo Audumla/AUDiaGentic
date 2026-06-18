@@ -204,3 +204,25 @@ def render_flat_skill(skill: SkillDefinition, *, provider_name: str, launch_exam
 
 def resolve_tag_path(project_root: Path, template: str, tag: str) -> Path:
     return project_root / template.format(tag=tag)
+
+
+def make_single_file_contribution_renderer(
+    filename: str, *, heading: str = "##"
+) -> ProviderContributionRenderer:
+    """Factory for providers that write contributions to a single markdown file.
+
+    Collapses ~9 near-identical render_contributions implementations into one
+    factory call per provider, differing only by target filename.
+    """
+    def render_contributions(
+        *, project_root: Path, contributions: list[SurfaceContribution]
+    ) -> list[SurfaceBlock]:
+        return [
+            SurfaceBlock(
+                path=project_root / filename,
+                block_id=c.contribution_id,
+                content=f"{heading} {c.title}\n\n{c.body.strip()}",
+            )
+            for c in contributions
+        ]
+    return render_contributions

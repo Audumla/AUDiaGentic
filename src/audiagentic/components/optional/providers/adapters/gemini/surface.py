@@ -5,9 +5,8 @@ from typing import Any
 
 from ...surfaces.base import (
     SkillDefinition,
-    SurfaceBlock,
-    SurfaceContribution,
     apply_managed_header,
+    make_single_file_contribution_renderer,
     render_flat_skill,
     render_instruction_file,
     resolve_tag_path,
@@ -16,22 +15,7 @@ from ...surfaces.registry import register_contribution_renderer, register_render
 
 _ADAPTER_DIR = Path(__file__).parent
 
-
-def render_contributions(
-    *,
-    project_root: Path,
-    contributions: list[SurfaceContribution],
-) -> list[SurfaceBlock]:
-    blocks: list[SurfaceBlock] = []
-    for contribution in contributions:
-        blocks.append(
-            SurfaceBlock(
-                path=project_root / "GEMINI.md",
-                block_id=contribution.contribution_id,
-                content=f"## {contribution.title}\n\n{contribution.body.strip()}",
-            )
-        )
-    return blocks
+render_contributions = make_single_file_contribution_renderer("GEMINI.md")
 
 
 def render(
