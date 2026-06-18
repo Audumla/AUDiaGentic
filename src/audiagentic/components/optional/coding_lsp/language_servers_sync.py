@@ -7,6 +7,7 @@ declares a language_servers_config spec.
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -16,8 +17,29 @@ from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
 )
 from audiagentic.components.optional.providers.descriptors.base import LanguageServerEntry
 from audiagentic.components.optional.providers.descriptors.registry import all_descriptors
+from audiagentic.components.optional.providers.services.mcp import (
+    sync_managed_provider_mcp_subset,
+)
+from audiagentic.runtime.harness.paths import find_package_root
+from audiagentic.foundation.mcp import McpServerEntry
 
 logger = logging.getLogger(__name__)
+
+_AG_LSP_MANAGED_ID = "coding-lsp/ag-lsp"
+
+
+def _ag_lsp_entry() -> tuple[str, McpServerEntry]:
+    python = sys.executable.replace("\\", "/")
+    src_dir = str(find_package_root(Path(__file__)).parent).replace("\\", "/")
+    return (
+        "ag-lsp",
+        McpServerEntry(
+            name="ag-lsp",
+            command=python,
+            args=("-m", "audiagentic.components.optional.coding_lsp.lsp_mcp"),
+            env={"PYTHONPATH": src_dir},
+        ),
+    )
 
 
 def sync_language_servers_to_providers(project_root: Path) -> dict[str, Any]:
@@ -91,6 +113,35 @@ def sync_language_servers_to_providers(project_root: Path) -> dict[str, Any]:
     }
 
 
+def sync_generic_lsp_mcp_to_providers(project_root: Path) -> dict[str, Any]:
+    """Propagate ag-lsp only to providers without native language server config."""
+    results: dict[str, dict[str, Any]] = {}
+    synced: list[str] = []
+    skipped: list[str] = []
+    desired_entry = {_AG_LSP_MANAGED_ID: _ag_lsp_entry()}
+
+    for descriptor in all_descriptors().values():
+        if descriptor.mcp_config is None:
+            skipped.append(descriptor.provider_id)
+            continue
+        desired = {} if descriptor.language_servers_config is not None else desired_entry
+        result = sync_managed_provider_mcp_subset(
+            provider_id=descriptor.provider_id,
+            project_root=project_root,
+            desired_entries=desired,
+            managed_ids={_AG_LSP_MANAGED_ID},
+        )
+        results[descriptor.provider_id] = result
+        synced.append(descriptor.provider_id)
+
+    return {
+        "ok": True,
+        "synced": synced,
+        "skipped": skipped,
+        "details": results,
+    }
+
+
 def prune_language_servers_from_providers(project_root: Path) -> dict[str, Any]:
     """Remove synced language server entries from provider configs on disable.
 
@@ -146,5 +197,32 @@ def prune_language_servers_from_providers(project_root: Path) -> dict[str, Any]:
         "pruned": pruned,
         "skipped": skipped,
         "languages": languages,
+        "details": results,
+    }
+
+
+def prune_generic_lsp_mcp_from_providers(project_root: Path) -> dict[str, Any]:
+    """Remove coding-lsp managed ag-lsp entries from every provider MCP config."""
+    results: dict[str, dict[str, Any]] = {}
+    pruned: list[str] = []
+    skipped: list[str] = []
+
+    for descriptor in all_descriptors().values():
+        if descriptor.mcp_config is None:
+            skipped.append(descriptor.provider_id)
+            continue
+        result = sync_managed_provider_mcp_subset(
+            provider_id=descriptor.provider_id,
+            project_root=project_root,
+            desired_entries={},
+            managed_ids={_AG_LSP_MANAGED_ID},
+        )
+        results[descriptor.provider_id] = result
+        pruned.append(descriptor.provider_id)
+
+    return {
+        "ok": True,
+        "pruned": pruned,
+        "skipped": skipped,
         "details": results,
     }

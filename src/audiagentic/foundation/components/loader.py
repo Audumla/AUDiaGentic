@@ -76,7 +76,6 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
             instructions=ms.get("instructions", ""),
             tool_descriptions=ms.get("tool-descriptions") or {},
             propagate=_require_propagate(ms, path),
-            skip_if_native_lsp=bool(ms.get("skip-if-native-lsp", False)),
         )
         for ms in (data.get("mcp-servers") or [])
     )

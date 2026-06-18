@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +30,21 @@ def _fragment_dir(project_root: Path) -> Path:
     return project_root / ".audiagentic" / "runtime" / "ledger" / "fragments"
 
 
+def _generate_event_id(desc: str | None = None) -> str:
+    """Generate a unique event ID: chg_YYYYMMDD_HHMMSS_<desc>."""
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    suffix = f"_{desc}" if desc else ""
+    import random
+    rand = random.randint(1000, 9999)
+    return f"chg_{ts}{suffix}_{rand}"
+
+
 def record_change_event(project_root: Path, event: dict[str, Any]) -> dict[str, Any]:
+    if "timestamp-utc" not in event:
+        event["timestamp-utc"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    if "event-id" not in event:
+        desc = event.get("user-summary-candidate", "")
+        event["event-id"] = _generate_event_id(desc[:30].replace(" ", "-").lower() if desc else None)
     _validate_change_event(event)
     event_id = event["event-id"]
     fragment_path = _fragment_dir(project_root) / f"{event_id}.json"

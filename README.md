@@ -18,7 +18,7 @@ Multi-agent workflow orchestration system for AI coding agents. Provides the inf
 |-------|------|----------|
 | Foundation | `src/audiagentic/foundation/` | Contracts, config, events, workflow primitives |
 | Runtime | `src/audiagentic/runtime/` | Lifecycle management, state |
-| Components | `src/audiagentic/components/optional/` | Providers, planning, knowledge, ledger, agent jobs |
+| Components | `src/audiagentic/components/optional/` | Providers, coding LSP, ledger, agent jobs, release, source control |
 
 ## Docker test path
 

@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 from audiagentic.components.optional.coding_lsp import language_registry
 from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
     CODING_LSP_DIR,
-    discover_language_servers,
 )
 from audiagentic.foundation.components.dependencies import (
     build_dependency_install_commands,
@@ -67,23 +66,26 @@ def _on_installed(project_root: Path) -> None:
 
 
 def _on_enabled(project_root: Path) -> None:
-    """Discover available language servers and sync to provider configs."""
+    """Sync configured language servers and generic MCP projection to providers."""
     try:
-        available = discover_language_servers(project_root)
-    except Exception:
-        logger.warning("Failed to discover language servers", exc_info=True)
-        available = {}
-
-    try:
-        from .language_servers_sync import sync_language_servers_to_providers
-        result = sync_language_servers_to_providers(project_root)
-        if result.get("synced"):
+        from .language_servers_sync import (
+            sync_generic_lsp_mcp_to_providers,
+            sync_language_servers_to_providers,
+        )
+        native_result = sync_language_servers_to_providers(project_root)
+        generic_result = sync_generic_lsp_mcp_to_providers(project_root)
+        if native_result.get("synced"):
             logger.info(
                 "Synced language servers to providers: %s",
-                ", ".join(result["synced"]),
+                ", ".join(native_result["synced"]),
+            )
+        if generic_result.get("synced"):
+            logger.info(
+                "Synced generic ag-lsp MCP to providers: %s",
+                ", ".join(generic_result["synced"]),
             )
     except Exception:
-        logger.warning("Failed to sync language servers to providers", exc_info=True)
+        logger.warning("Failed to sync coding-lsp provider config", exc_info=True)
 
 
 def _on_disabled(project_root: Path | None = None) -> None:
@@ -93,15 +95,24 @@ def _on_disabled(project_root: Path | None = None) -> None:
 
     if project_root is not None:
         try:
-            from .language_servers_sync import prune_language_servers_from_providers
-            result = prune_language_servers_from_providers(project_root)
-            if result.get("pruned"):
+            from .language_servers_sync import (
+                prune_generic_lsp_mcp_from_providers,
+                prune_language_servers_from_providers,
+            )
+            native_result = prune_language_servers_from_providers(project_root)
+            generic_result = prune_generic_lsp_mcp_from_providers(project_root)
+            if native_result.get("pruned"):
                 logger.info(
                     "Pruned language servers from providers: %s",
-                    ", ".join(result["pruned"]),
+                    ", ".join(native_result["pruned"]),
+                )
+            if generic_result.get("pruned"):
+                logger.info(
+                    "Pruned generic ag-lsp MCP from providers: %s",
+                    ", ".join(generic_result["pruned"]),
                 )
         except Exception:
-            logger.warning("Failed to prune language servers from providers", exc_info=True)
+            logger.warning("Failed to prune coding-lsp provider config", exc_info=True)
 
 
 def register() -> None:

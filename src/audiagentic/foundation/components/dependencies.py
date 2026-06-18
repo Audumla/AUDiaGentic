@@ -103,9 +103,16 @@ def _dep_workflow(dep_id: str, cfg: dict[str, Any], action: str) -> SelectStep:
 
     if "toolchain" in cfg:
         tc = cfg["toolchain"]
-        pkg = cfg["package"]
-        inner = build_step(tc, "install" if action == "install" else _uninstall_action(tc),
-                           pkg if action == "install" else cfg.get("uninstall-package", pkg))
+        pkg_spec = cfg["package"] if action == "install" else cfg.get("uninstall-package", cfg["package"])
+        if isinstance(pkg_spec, list):
+            if not pkg_spec:
+                raise ValueError(f"{dep_id}: package list must not be empty")
+            pkg = pkg_spec[0]
+            extra = tuple(pkg_spec[1:])
+        else:
+            pkg = pkg_spec
+            extra = ()
+        inner = build_step(tc, "install" if action == "install" else _uninstall_action(tc), pkg, *extra)
     else:
         via: dict[str, str] = cfg.get("via", {})
         inner = _install_select(via, fallback_cfg) if action == "install" else _uninstall_select(
