@@ -1,13 +1,6 @@
 """Continue provider adapter."""
 from __future__ import annotations
 
-from typing import Any
+from audiagentic.components.optional.providers.adapters._stubs import make_ok_stub
 
-
-def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "provider-id": "continue",
-        "status": "ok",
-        "model": provider_cfg.get("default-model"),
-        "output": "stubbed-response",
-    }
+run = make_ok_stub("continue")
