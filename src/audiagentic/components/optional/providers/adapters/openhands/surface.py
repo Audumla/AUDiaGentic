@@ -3,7 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ...surfaces.base import SkillDefinition, SurfaceBlock, SurfaceContribution
+from ...surfaces.base import (
+    SkillDefinition,
+    make_single_file_contribution_renderer,
+)
 from ...surfaces.registry import register_contribution_renderer, register_renderer
 
 
@@ -18,19 +21,7 @@ def render(
     return {}
 
 
-def render_contributions(
-    *,
-    project_root: Path,
-    contributions: list[SurfaceContribution],
-) -> list[SurfaceBlock]:
-    return [
-        SurfaceBlock(
-            path=project_root / "AGENTS.md",
-            block_id=contribution.contribution_id,
-            content=f"## {contribution.title}\n\n{contribution.body.strip()}",
-        )
-        for contribution in contributions
-    ]
+render_contributions = make_single_file_contribution_renderer("AGENTS.md")
 
 
 register_renderer("openhands", render)

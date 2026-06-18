@@ -5,30 +5,13 @@ from typing import Any
 
 from ...surfaces.base import (
     SkillDefinition,
-    SurfaceBlock,
-    SurfaceContribution,
-    apply_managed_header,
+    make_single_file_contribution_renderer,
     render_frontmatter_skill,
     resolve_tag_path,
 )
 from ...surfaces.registry import register_contribution_renderer, register_renderer
 
-
-def render_contributions(
-    *,
-    project_root: Path,
-    contributions: list[SurfaceContribution],
-) -> list[SurfaceBlock]:
-    blocks: list[SurfaceBlock] = []
-    for contribution in contributions:
-        blocks.append(
-            SurfaceBlock(
-                path=project_root / "AGENTS.md",
-                block_id=contribution.contribution_id,
-                content=f"## {contribution.title}\n\n{contribution.body.strip()}",
-            )
-        )
-    return blocks
+render_contributions = make_single_file_contribution_renderer("AGENTS.md")
 
 
 def render(
@@ -43,9 +26,7 @@ def render(
     path_template = str(config["path"])
     for skill in skills:
         path = resolve_tag_path(project_root, path_template, skill.tag)
-        surfaces[path] = apply_managed_header(
-            render_frontmatter_skill(skill, root_label=path_template.format(tag=skill.tag))
-        )
+        surfaces[path] = render_frontmatter_skill(skill, root_label=path_template.format(tag=skill.tag))
     return surfaces
 
 
