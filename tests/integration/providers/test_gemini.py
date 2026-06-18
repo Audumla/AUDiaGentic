@@ -80,6 +80,6 @@ def test_gemini_adapter_requires_command(monkeypatch) -> None:
         gemini.run({"provider-id": "gemini"}, {"default-model": "gemini-stub"})
     except AudiaGenticError as exc:
         assert exc.code == "PRV-EXTERNAL-005"
-        assert exc.kind == "providers"
+        assert exc.kind == "external"
     else:
         raise AssertionError("expected missing command error")

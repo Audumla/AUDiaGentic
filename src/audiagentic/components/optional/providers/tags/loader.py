@@ -102,7 +102,7 @@ def _load_primary_instruction(data: dict, path: Path) -> ActionInstruction | Non
     )
 
 
-def load_tag_from_yaml(path: Path) -> ActionDescriptor:
+def load_tag_from_yaml(path: Path, owner_component_id: str = "") -> ActionDescriptor:
     """Parse a single action descriptor YAML and return a registered ActionDescriptor."""
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
@@ -132,12 +132,15 @@ def load_tag_from_yaml(path: Path) -> ActionDescriptor:
         requires_body=bool(data.get("requires-body", True)),
         is_generic_tag=bool(data.get("is-generic-tag", False)),
         is_review_tag=bool(data.get("is-review-tag", False)),
+        owner_component_id=owner_component_id,
     )
     register(descriptor)
     return descriptor
 
 
-def _load_tags_from_component_config(config_file: Path, config_root: Path) -> list[ActionDescriptor]:
+def _load_tags_from_component_config(
+    config_file: Path, config_root: Path, owner_component_id: str = ""
+) -> list[ActionDescriptor]:
     """Read a component's config YAML and load any action file references.
 
     Scans the ``contributions:`` list (or legacy ``actions:`` list) for entries
@@ -162,7 +165,7 @@ def _load_tags_from_component_config(config_file: Path, config_root: Path) -> li
             raise FileNotFoundError(
                 f"action config declared in {config_file} not found: {tag_path}"
             )
-        descriptors.append(load_tag_from_yaml(tag_path))
+        descriptors.append(load_tag_from_yaml(tag_path, owner_component_id))
     return descriptors
 
 
@@ -183,5 +186,7 @@ def load_all_tags(config_root: Path | None = None) -> list[ActionDescriptor]:
     for component in sorted(all_descriptors().values(), key=lambda d: d.component_id):
         if not component.yaml_path or not component.yaml_path.exists():
             continue
-        descriptors.extend(_load_tags_from_component_config(component.yaml_path, root))
+        descriptors.extend(
+            _load_tags_from_component_config(component.yaml_path, root, component.component_id)
+        )
     return descriptors

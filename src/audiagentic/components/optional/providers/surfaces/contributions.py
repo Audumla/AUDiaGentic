@@ -46,25 +46,45 @@ def _contributions_from_data(data: dict[str, Any], component_id: str) -> list[Su
     return contributions
 
 
-def load_tag_surface_contributions(project_root: Path | None = None) -> list[SurfaceContribution]:
-    """Load surface contributions declared in each tag's descriptor.yaml.
+def active_tag_ids(project_root: Path | None = None) -> set[str]:
+    """Return the set of tag ids whose owning component is installed and enabled.
 
-    Tags are optional parts of the agent-jobs component, not separate components.
-    If project_root is given, contributions are only included when agent-jobs is installed and enabled.
+    A tag is owned by the component that declared it (ActionDescriptor.owner_component_id).
+    With no project_root the install/enable state is unknown, so every loaded tag is
+    treated as active. Tags with an empty/unknown owner are also treated as active so
+    that ownership-unaware callers keep working.
     """
     from audiagentic.components.optional.providers.tags.registry import (  # noqa: PLC0415
         all_tags_loaded,
     )
     from audiagentic.foundation.components.registry import is_enabled, is_installed  # noqa: PLC0415
 
-    if project_root is not None and not (
-        is_installed(COMPONENT_AGENT_JOBS, project_root)
-        and is_enabled(COMPONENT_AGENT_JOBS, project_root)
-    ):
-        return []
+    tags = all_tags_loaded()
+    if project_root is None:
+        return set(tags)
+    active: set[str] = set()
+    for tag_id, descriptor in tags.items():
+        owner = descriptor.owner_component_id
+        if not owner or (is_installed(owner, project_root) and is_enabled(owner, project_root)):
+            active.add(tag_id)
+    return active
 
+
+def load_tag_surface_contributions(project_root: Path | None = None) -> list[SurfaceContribution]:
+    """Load surface contributions declared in each tag's descriptor.yaml.
+
+    A tag's contributions are included only while its owning component is installed and
+    enabled (see active_tag_ids). With no project_root, all loaded tags contribute.
+    """
+    from audiagentic.components.optional.providers.tags.registry import (  # noqa: PLC0415
+        all_tags_loaded,
+    )
+
+    active = active_tag_ids(project_root)
     contributions: list[SurfaceContribution] = []
     for tag_id, descriptor in sorted(all_tags_loaded().items()):
+        if tag_id not in active:
+            continue
         for contrib in descriptor.instructions:
             contributions.append(
                 SurfaceContribution(

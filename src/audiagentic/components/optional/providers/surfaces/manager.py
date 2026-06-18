@@ -7,7 +7,7 @@ from typing import Any
 from audiagentic.foundation.contracts.output import ComponentOutputEvent, ComponentOutputSink
 from audiagentic.foundation.io import atomic_write_text
 
-from .base import SurfaceBlock, apply_managed_blocks, prune_managed_blocks
+from .base import SurfaceBlock, apply_managed_blocks
 from .contributions import load_surface_contributions
 from .registry import load_contribution_renderer_registry
 
@@ -65,36 +65,83 @@ def prune_provider_surfaces(
     provider_id: str | None = None,
     on_progress: ComponentOutputSink | None = None,
 ) -> dict[str, Any]:
-    """Remove managed blocks that no longer have an active contribution.
+    """Regenerate each file's managed region from active contributions.
 
-    Scans all files that any registered renderer can write to. Blocks whose
-    ID appears in the current contribution set are kept; all others are pruned.
+    The region is rebuilt from the live contribution set, so blocks whose
+    contribution was removed simply disappear, and files that lose all
+    contributions have their region (and any legacy fences) stripped entirely.
+
+    Generated per-tag skill files (provider skill_surface_path) are whole managed
+    files with no region to strip, so a tag whose owning component is disabled or
+    uninstalled would otherwise be orphaned. Those files are deleted outright when
+    the tag is no longer active.
+
     If provider_id is given, only files owned by that provider are touched.
     """
+    from .contributions import active_tag_ids
+
     contributions = load_surface_contributions(project_root=project_root)
-    active_ids = {c.contribution_id for c in contributions}
     renderers = load_contribution_renderer_registry()
     provider_ids = [provider_id] if provider_id else sorted(renderers)
 
-    _emit(on_progress, f"Pruning stale surface blocks ({len(active_ids)} active contributions)")
+    _emit(on_progress, f"Pruning stale surface blocks ({len(contributions)} active contributions)")
 
-    # Discover candidate paths by running renderers with the real contribution list.
-    # Paths are determined by what contributions are present; an empty list returns
-    # no blocks and therefore no paths.
-    candidate_paths: set[Path] = set()
+    # Group active blocks by path (deduped, same as build_provider_surface_blocks).
+    active_by_path: dict[Path, dict[str, SurfaceBlock]] = defaultdict(dict)
     for pid in provider_ids:
         renderer = renderers.get(pid)
         if renderer is None:
             continue
         for block in renderer(project_root=project_root, contributions=contributions):
-            candidate_paths.add(block.path)
+            active_by_path[block.path].setdefault(block.block_id, block)
+
+    candidate_paths: set[Path] = set(active_by_path)
+
+    from audiagentic.components.optional.providers.descriptors.registry import all_descriptors
+
+    descriptors = all_descriptors()
+    from audiagentic.components.optional.providers.tags.registry import all_tags_loaded
+
+    tag_ids = sorted(all_tags_loaded())
+    active_tags = active_tag_ids(project_root)
+    inactive_tags = [tag_id for tag_id in tag_ids if tag_id not in active_tags]
+    descriptor_ids = provider_ids if provider_id else sorted(descriptors)
+
+    # Delete generated skill files for tags whose owning component is no longer
+    # active. These are whole managed files (no region to strip), so the region
+    # rewrite below cannot remove them.
+    deleted: list[str] = []
+    for pid in descriptor_ids:
+        descriptor = descriptors.get(pid)
+        if descriptor is None:
+            continue
+        if descriptor.instruction_file:
+            candidate_paths.add(project_root / descriptor.instruction_file)
+        if not descriptor.skill_surface_path:
+            continue
+        candidate_paths.update(
+            project_root / descriptor.skill_surface_path.format(tag=tag_id)
+            for tag_id in active_tags
+        )
+        for tag_id in inactive_tags:
+            skill_path = project_root / descriptor.skill_surface_path.format(tag=tag_id)
+            if not skill_path.exists():
+                continue
+            skill_path.unlink()
+            deleted.append(str(skill_path))
+            _emit(on_progress, f"Removed orphaned skill {skill_path.name} (tag {tag_id} inactive)")
+            parent = skill_path.parent
+            # Clean up an emptied per-tag directory (e.g. .claude/skills/<tag>/).
+            if parent.name == tag_id and parent != project_root and not any(parent.iterdir()):
+                parent.rmdir()
 
     pruned: list[str] = []
     for path in sorted(candidate_paths):
         if not path.exists():
             continue
         current = path.read_text(encoding="utf-8")
-        desired = prune_managed_blocks(current, active_ids)
+        file_blocks = list(active_by_path.get(path, {}).values())
+        desired = apply_managed_blocks(current, file_blocks)
         if current == desired:
             _emit(on_progress, f"No stale blocks in {path.name}", level="debug")
             continue
@@ -102,8 +149,11 @@ def prune_provider_surfaces(
         pruned.append(str(path))
         _emit(on_progress, f"Pruned stale blocks from {path.name}")
 
-    _emit(on_progress, f"Prune complete — {len(pruned)} file(s) updated")
-    return {"ok": True, "pruned": pruned}
+    _emit(
+        on_progress,
+        f"Prune complete — {len(pruned)} file(s) updated, {len(deleted)} skill file(s) removed",
+    )
+    return {"ok": True, "pruned": pruned, "deleted": deleted}
 
 
 def apply_provider_surfaces(

@@ -4,17 +4,13 @@ WORKDIR /app
 ENV AUDIAGENTIC_DOCKER_TESTS=1
 ENV AUDIAGENTIC_REPO_ROOT=/app
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md release-please-config.json ./
 COPY src ./src
 COPY tests ./tests
 COPY docs/examples ./docs/examples
 COPY .audiagentic/config ./.audiagentic/config
-COPY .audiagentic/prompts ./.audiagentic/prompts
 COPY .audiagentic/skills ./.audiagentic/skills
-COPY .audiagentic/planning/config ./.audiagentic/planning/config
-COPY .claude/rules ./.claude/rules
 COPY .claude/skills ./.claude/skills
-COPY .claude/settings.json ./.claude/settings.json
 COPY .gemini ./.gemini
 COPY .clinerules ./.clinerules
 COPY .github/workflows ./.github/workflows

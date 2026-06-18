@@ -124,7 +124,11 @@ def sync_generic_lsp_mcp_to_providers(project_root: Path) -> dict[str, Any]:
         if descriptor.mcp_config is None:
             skipped.append(descriptor.provider_id)
             continue
-        desired = {} if descriptor.language_servers_config is not None else desired_entry
+        self_provides_lsp = (
+            descriptor.language_servers_config is not None
+            or descriptor.on_lsp_enabled is not None
+        )
+        desired = {} if self_provides_lsp else desired_entry
         result = sync_managed_provider_mcp_subset(
             provider_id=descriptor.provider_id,
             project_root=project_root,
@@ -137,6 +141,41 @@ def sync_generic_lsp_mcp_to_providers(project_root: Path) -> dict[str, Any]:
     return {
         "ok": True,
         "synced": synced,
+        "skipped": skipped,
+        "details": results,
+    }
+
+
+def provision_provider_lsp_support(project_root: Path) -> dict[str, Any]:
+    """Let providers that self-provide LSP install/configure their support.
+
+    Fires each descriptor's `on_lsp_enabled` hook (e.g. pi installs the pi-lens
+    extension). Best-effort: a failing provider is logged and skipped, never
+    blocking other providers or the enable flow.
+    """
+    results: dict[str, dict[str, Any]] = {}
+    provisioned: list[str] = []
+    skipped: list[str] = []
+
+    for descriptor in all_descriptors().values():
+        hook = descriptor.on_lsp_enabled
+        if hook is None:
+            skipped.append(descriptor.provider_id)
+            continue
+        try:
+            results[descriptor.provider_id] = hook(project_root)
+            provisioned.append(descriptor.provider_id)
+        except Exception:
+            logger.warning(
+                "Failed to provision LSP support for %s",
+                descriptor.provider_id,
+                exc_info=True,
+            )
+            results[descriptor.provider_id] = {"ok": False, "error": "provision failed"}
+
+    return {
+        "ok": True,
+        "provisioned": provisioned,
         "skipped": skipped,
         "details": results,
     }

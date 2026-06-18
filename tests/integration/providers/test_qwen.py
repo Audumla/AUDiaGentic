@@ -81,6 +81,6 @@ def test_qwen_adapter_requires_command(monkeypatch) -> None:
         qwen.run({"provider-id": "qwen"}, {"default-model": "qwen-coder"})
     except AudiaGenticError as exc:
         assert exc.code == "PRV-EXTERNAL-007"
-        assert exc.kind == "providers"
+        assert exc.kind == "external"
     else:
         raise AssertionError("expected missing command error")

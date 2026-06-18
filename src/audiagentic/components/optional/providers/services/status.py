@@ -36,6 +36,7 @@ def _provider_entry(
     )
     entry: dict[str, Any] = {
         "provider-id": provider_id,
+        "provider_id": provider_id,
         "enabled": provider_cfg.get("enabled", False),
         "install-mode": provider_cfg.get("install-mode"),
         "access-mode": provider_cfg.get("access-mode"),

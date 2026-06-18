@@ -69,29 +69,10 @@ harness-instructions:
       languages only. Do not suggest installing a language server unless the project
       uses that language or the user explicitly requests it.
 
-contributions:
-  - id: coding-lsp/usage
-    owner: coding-lsp
-    title: Code intelligence via LSP
-    preferred-targets:
-      - instruction
-    content:
-      body: |
-        The coding-lsp component provides language server protocol tools for code intelligence.
-        Use LSP tools instead of text search when doing symbol lookup, go-to-definition,
-        hover documentation, or finding all references — they are more precise.
-
-        Available tools (ag-lsp server):
-        - `lsp_symbols` — search workspace symbols by name
-        - `lsp_definition` — go to definition at file:line:column
-        - `lsp_hover` — type and documentation at a position
-        - `lsp_references` — all references to a symbol
-        - `lsp_doc_symbols` — file symbol outline
-        - `lsp_diagnostics` — type errors and warnings
-        - `lsp_rename_preview` — preview rename refactor
-
-        Position format for all tools: "line:column" (1-based).
-        These tools only operate on languages configured in .coding-lsp/lsp.json.
-        Use `lsp_config_status` (ag-lsp-mgmt server) to check which languages are active.
-
+# No instruction-file contribution for LSP tools: the ag-lsp / ag-lsp-mgmt MCP
+# servers expose their tools and descriptions to the agent directly over the MCP
+# protocol, and only to providers that actually receive those servers. A markdown
+# tool list duplicated into every provider's instruction file drifts out of sync
+# (e.g. advertised to opencode/pi, which self-provide LSP and never get ag-lsp).
+# Usage doctrine lives in each MCP server's `instructions` field above.
 

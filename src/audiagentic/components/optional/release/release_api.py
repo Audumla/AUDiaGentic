@@ -48,7 +48,7 @@ def finalize(project_root: Path, release_id: str) -> dict[str, Any]:
         archive_result = archive_current(project_root, release_id)
         released_ids = archive_result.get("released-event-ids")
     except AudiaGenticError as exc:
-        if exc.code != "RLS-BUSINESS-020":
+        if exc.code not in {"RLS-BUSINESS-020", "CON-ARCHIVE-001"}:
             raise
         historical_path = project_root / "docs" / "releases" / "LEDGER.ndjson"
         historical = load_ndjson(historical_path)

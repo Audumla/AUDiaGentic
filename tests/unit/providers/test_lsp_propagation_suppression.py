@@ -14,6 +14,7 @@ class _Provider:
         self.provider_id = provider_id
         self.mcp_config = object() if has_mcp else None
         self.language_servers_config = object() if native else None
+        self.on_lsp_enabled = None
 
 
 def test_sync_generic_lsp_routes_by_provider_capability(tmp_path: Path, monkeypatch) -> None:

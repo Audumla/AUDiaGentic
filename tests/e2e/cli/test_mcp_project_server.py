@@ -16,6 +16,7 @@ for _p in (str(_ROOT), str(_ROOT / "src")):
 import json
 import os
 import subprocess
+import time
 
 _INIT = {
     "jsonrpc": "2.0", "id": 1, "method": "initialize",
@@ -25,17 +26,70 @@ _INITIALIZED = {"jsonrpc": "2.0", "method": "notifications/initialized", "params
 
 
 def _mcp(*messages: dict, project_root: Path) -> list[dict]:
-    payload = "\n".join(json.dumps(m) for m in [_INIT, _INITIALIZED, *messages]) + "\n"
     env = dict(os.environ)
     # Keep AUDIAGENTIC_REPO_ROOT from container env (template root for baseline_sync).
     # The target project is passed via --project-root, not this env var.
-    proc = subprocess.run(
-           [sys.executable, "-m", "audiagentic.components.core.project.project_mcp",
-         "--project-root", str(project_root)],
-        input=payload, text=True, encoding="utf-8", capture_output=True, timeout=30, env=env,
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "audiagentic.components.core.project.project_mcp",
+            "--project-root",
+            str(project_root),
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        env=env,
     )
-    assert proc.returncode == 0, f"MCP server rc={proc.returncode}\n{proc.stderr}"
-    return [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
+    assert proc.stdin is not None
+    assert proc.stdout is not None
+
+    responses: list[dict] = []
+    expected_ids = {message["id"] for message in messages if "id" in message}
+    proc.stdin.write(json.dumps(_INIT) + "\n")
+    proc.stdin.flush()
+
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        line = proc.stdout.readline()
+        if not line:
+            if proc.poll() is not None:
+                break
+            continue
+        payload = json.loads(line)
+        responses.append(payload)
+        if payload.get("id") == _INIT["id"]:
+            break
+
+    proc.stdin.write(json.dumps(_INITIALIZED) + "\n")
+    for message in messages:
+        proc.stdin.write(json.dumps(message) + "\n")
+    proc.stdin.flush()
+
+    while time.time() < deadline:
+        line = proc.stdout.readline()
+        if not line:
+            if proc.poll() is not None:
+                break
+            continue
+        payload = json.loads(line)
+        responses.append(payload)
+        if expected_ids and expected_ids.issubset({item.get("id") for item in responses}):
+            break
+
+    proc.stdin.close()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.terminate()
+        proc.wait(timeout=5)
+
+    stderr = proc.stderr.read() if proc.stderr else ""
+    assert proc.returncode == 0, f"MCP server rc={proc.returncode}\n{stderr}"
+    return responses
 
 
 def _call(tool: str, args: dict, project_root: Path, msg_id: int = 2) -> dict | list:
