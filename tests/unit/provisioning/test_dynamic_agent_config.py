@@ -13,7 +13,9 @@ from audiagentic.runtime.harness.pi.install.config import (
     _build_settings_config,
     materialize_agent_config,
 )
-from audiagentic.runtime.harness.pi.system_md import build_system_md_injections
+from audiagentic.runtime.harness.system_prompt import (
+    build_system_prompt_injections as build_system_md_injections,
+)
 from audiagentic.runtime.lifecycle.components import install_component
 
 
