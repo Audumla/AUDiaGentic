@@ -123,6 +123,17 @@ def build_server() -> FastMCP:
         except Exception as exc:
             return _report_error("update_embedded_rig", exc)
 
+    @mcp.tool(description=_tool_description("update_global_embedded_rig"))
+    @log_tool_call
+    async def update_global_embedded_rig(ctx: Context) -> dict[str, Any]:
+        try:
+            return await session_api.update_global_embedded_rig(
+                ctx=ctx,
+                run_with_output=run_blocking_with_output,
+            )
+        except Exception as exc:
+            return _report_error("update_global_embedded_rig", exc)
+
     return mcp
 
 
