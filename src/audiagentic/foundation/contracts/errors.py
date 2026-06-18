@@ -53,7 +53,11 @@ class AudiaGenticError(Exception):
     details: Mapping[str, Any] | None = None
 
     def __str__(self) -> str:  # pragma: no cover - readable stderr
-        return f"{self.code}: {self.message}"
+        base = f"{self.code}: {self.message}"
+        if self.details:
+            import json
+            return f"{base} details={json.dumps(dict(self.details))}"
+        return base
 
 
 def make_error_code(prefix: str, kind: str, number: int) -> str:

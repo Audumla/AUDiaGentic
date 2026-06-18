@@ -30,6 +30,7 @@ from audiagentic.components.optional.providers.services.mcp import (
     reload_provider_mcp,
     remove_provider_mcp_server,
     sync_managed_provider_mcp,
+    sync_managed_provider_mcp_subset,
 )
 from audiagentic.foundation.mcp import McpServerEntry
 
@@ -377,6 +378,62 @@ class TestSyncManagedProviderMcp:
         assert result["collisions"]
         data = json.loads(path.read_text())
         assert data["mcpServers"]["ag-project-mgmt"]["command"] == "node"
+
+
+class TestSyncManagedProviderMcpSubset:
+    def test_prunes_only_targeted_managed_entries(self, tmp_path: Path) -> None:
+        sync_managed_provider_mcp(
+            "claude",
+            tmp_path,
+            {
+                "ledger/ag-ledger": (
+                    "ag-ledger",
+                    McpServerEntry(name="ag-ledger", command="python", args=("-m", "ledger")),
+                ),
+                "coding-lsp/ag-lsp": (
+                    "ag-lsp",
+                    McpServerEntry(name="ag-lsp", command="python", args=("-m", "lsp")),
+                ),
+            },
+        )
+
+        result = sync_managed_provider_mcp_subset(
+            "claude",
+            tmp_path,
+            desired_entries={},
+            managed_ids={"coding-lsp/ag-lsp"},
+        )
+
+        assert result["ok"] is True
+        data = json.loads((tmp_path / ".mcp.json").read_text())
+        assert "ag-ledger" in data["mcpServers"]
+        assert "ag-lsp" not in data["mcpServers"]
+
+    def test_updates_only_targeted_subset(self, tmp_path: Path) -> None:
+        ledger = McpServerEntry(name="ag-ledger", command="python", args=("-m", "ledger"))
+        lsp = McpServerEntry(name="ag-lsp", command="python", args=("-m", "old.lsp"))
+        sync_managed_provider_mcp(
+            "claude",
+            tmp_path,
+            {
+                "ledger/ag-ledger": ("ag-ledger", ledger),
+                "coding-lsp/ag-lsp": ("ag-lsp", lsp),
+            },
+        )
+
+        renamed = McpServerEntry(name="ag-lsp2", command="python", args=("-m", "new.lsp"))
+        result = sync_managed_provider_mcp_subset(
+            "claude",
+            tmp_path,
+            desired_entries={"coding-lsp/ag-lsp": ("ag-lsp2", renamed)},
+            managed_ids={"coding-lsp/ag-lsp"},
+        )
+
+        assert result["ok"] is True
+        data = json.loads((tmp_path / ".mcp.json").read_text())
+        assert "ag-ledger" in data["mcpServers"]
+        assert "ag-lsp" not in data["mcpServers"]
+        assert "ag-lsp2" in data["mcpServers"]
 
 
 class TestMcpConfigSpecOnDescriptors:

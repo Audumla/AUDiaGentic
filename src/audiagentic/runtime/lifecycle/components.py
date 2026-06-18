@@ -309,10 +309,6 @@ def _propagate_mcp_to_providers(descriptor, project_root: Path) -> None:
         desired_entries: dict[str, tuple[str, object]] = {}
         for mcp_def in (descriptor.mcp_servers or []):
             if "providers" in mcp_def.propagate:
-                # Native LSP supersedes the generic MCP LSP server: skip this
-                # server for providers that manage their own language servers.
-                if getattr(mcp_def, "skip_if_native_lsp", False) and pdesc.language_servers_config is not None:
-                    continue
                 from audiagentic.foundation.mcp import McpServerEntry
 
                 managed_id = mcp_def.managed_id or mcp_def.name

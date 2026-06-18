@@ -4,8 +4,6 @@ ENV AUDIAGENTIC_DOCKER_TESTS=1
 ENV AUDIAGENTIC_REPO_ROOT=/app
 # Opt in to also exercise rust + cpp servers (slow: cargo build / apt clangd):
 #   docker run -e AUDIAGENTIC_LSP_E2E_ALL=1 ...
-# Opt in to install + run the provider CLIs (codex/opencode/qwen via npm):
-#   docker run -e AUDIAGENTIC_REAL_PROVIDER_CLI_TESTS=1 ...
 
 WORKDIR /app
 
@@ -25,7 +23,7 @@ RUN apt-get update \
 #
 # The project is installed into an isolated uv venv (see Dockerfile.lsp-install-test
 # for why system pip is avoided on this base image). The language-server binaries
-# themselves are installed by the test's provisioning fixture via the scoped
-# dependency workflow — exactly the path the runtime uses — so the test exercises
-# real installation, not a pre-baked environment.
+# themselves and the native-LSP provider CLIs are installed by the test's
+# provisioning fixture via the real scoped workflows, so the test exercises
+# actual installation, not a pre-baked environment.
 CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-timeout pytest-asyncio && /venv/bin/pytest tests/integration/coding_lsp/test_provider_lsp_e2e.py -v --tb=short"]

@@ -17,3 +17,16 @@ enabled = true
 
 [mcp_servers.ag-lsp.env]
 PYTHONPATH = "H:/development/projects/AUDia/AUDiaGentic/src"
+
+[mcp_servers.git]
+command = "uvx"
+args = ["mcp-server-git", "--repository", "."]
+enabled = true
+
+[mcp_servers.github]
+command = "gh"
+args = ["mcp", "serve"]
+enabled = true
+
+[mcp_servers.github.env]
+GITHUB_TOKEN = "${GITHUB_TOKEN}"
