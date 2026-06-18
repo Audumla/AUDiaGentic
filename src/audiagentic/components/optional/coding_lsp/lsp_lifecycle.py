@@ -5,12 +5,15 @@ high-level LSP requests (definition, hover, references, rename, symbols).
 """
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from .lsp_bridge import LspJsonRpc
+
+logger = logging.getLogger(__name__)
 
 _LSP_VERSION = "3.17"
 
@@ -211,6 +214,7 @@ class LspSession:
                 timeout=timeout,
             )
         except Exception:
+            logger.warning("diagnostics request failed", exc_info=True)
             return {}
         if not isinstance(result, dict):
             return {}
