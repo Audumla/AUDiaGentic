@@ -7,7 +7,8 @@ content:
     When the review action is triggered: perform read-focused validation and
     completeness review. Identify blockers, missing tests, contract mismatches,
     and drift from tracked docs. Do not add implementation work unless explicitly
-    requested. Do not broaden review into feature-scope changes.
+    requested, and do not broaden review into feature-scope changes. Keep tracked
+    docs and release artifacts synchronized with the job record.
 
 tag-id: ag-review
 display-name: Review
@@ -34,15 +35,6 @@ requires-body: true
 is-generic-tag: false
 is-review-tag: true
 skill-content-file: ag-review-skill.md
-
-instructions:
-  - id: ag-review/review-doctrine
-    title: Review doctrine
-    content:
-      body: |
-        - Review prompts should stay read-focused unless the normalized request explicitly allows more.
-        - Do not broaden review into implementation work.
-        - Keep tracked docs and release artifacts synchronized with the job record.
 
 prompts:
   - name: default
