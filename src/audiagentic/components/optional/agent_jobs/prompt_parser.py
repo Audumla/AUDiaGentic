@@ -7,19 +7,28 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from audiagentic.components.optional.agent_jobs.prompt_aliases import (
+    _normalize_alias_map,
+    _normalize_directives,
+    _normalize_provider,
+    _split_tag_and_provider,
+)
 from audiagentic.components.optional.agent_jobs.prompt_syntax import (
     load_canonical_tags,
     load_no_body_required_tags,
     load_prompt_syntax,
     load_review_tag,
 )
+from audiagentic.components.optional.agent_jobs.prompt_targets import (
+    DEFAULT_TARGET_KIND,
+    _infer_target_from_id,
+    _parse_target,
+)
 from audiagentic.components.optional.agent_jobs.prompt_templates import load_prompt_template
 from audiagentic.components.optional.providers.services.provider_config import load_provider_config
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import read_schema
 
-SHORT_TAG_PROVIDER_SEPARATOR = "-"
-DEFAULT_TARGET_KIND = "adhoc"
 # Fallback used before a project root is available; overridden per-call from config.
 ALLOWED_TAGS = load_canonical_tags({})
 ALLOWED_DIRECTIVES = {
@@ -75,55 +84,6 @@ def _parse_bool(value: str) -> bool:
     )
 
 
-def _parse_target(value: str, *, adhoc_requested: bool) -> dict[str, Any]:
-    if adhoc_requested:
-        payload: dict[str, Any] = {"kind": "adhoc"}
-        if value:
-            payload["adhoc-id"] = value
-        return payload
-    if ":" not in value:
-        raise AudiaGenticError(
-            code="VAL-PPARSE-002",
-            kind="agent-jobs",
-            message="target directive must use kind:value",
-            details={"value": value},
-        )
-    kind, ref = value.split(":", 1)
-    if kind == "packet":
-        return {"kind": "packet", "packet-id": ref}
-    if kind == "job":
-        return {"kind": "job", "job-id": ref}
-    if kind == "artifact":
-        if "/" in ref or ref.startswith("."):
-            return {"kind": "artifact", "artifact-path": ref}
-        return {"kind": "artifact", "artifact-id": ref}
-    if kind == "adhoc":
-        return {"kind": "adhoc", "adhoc-id": ref or None}
-    raise AudiaGenticError(
-        code="VAL-PPARSE-003",
-        kind="agent-jobs",
-        message="unknown target kind",
-        details={"kind": kind},
-    )
-
-
-def _infer_target_from_id(value: str, *, tag: str, review_tag: str) -> dict[str, Any]:
-    normalized = value.strip()
-    if not normalized:
-        return {"kind": DEFAULT_TARGET_KIND, "adhoc-id": normalized}
-    if ":" in normalized:
-        return _parse_target(normalized, adhoc_requested=False)
-    if normalized.startswith("PKT-"):
-        return {"kind": "packet", "packet-id": normalized}
-    if normalized.startswith("job_") or normalized.startswith("job-") or normalized.startswith("job"):
-        return {"kind": "job", "job-id": normalized}
-    if "/" in normalized or "\\" in normalized or normalized.endswith(".md") or normalized.endswith(".json"):
-        return {"kind": "artifact", "artifact-path": normalized}
-    if tag == review_tag:
-        return {"kind": "job", "job-id": normalized}
-    return {"kind": DEFAULT_TARGET_KIND, "adhoc-id": normalized}
-
-
 def _split_prompt_text(prompt_text: str) -> tuple[str, str]:
     lines = prompt_text.splitlines()
     first_index = None
@@ -141,47 +101,6 @@ def _split_prompt_text(prompt_text: str) -> tuple[str, str]:
     header = lines[first_index].strip()
     body = "\n".join(lines[first_index + 1 :]).lstrip("\n")
     return header, body
-
-
-def _split_tag_and_provider(raw_tag: str, *, tag_aliases: dict[str, str], generic_tag: str, allowed_tags: set[str]) -> tuple[str, str | None]:
-    tag_token = raw_tag[1:]
-    if SHORT_TAG_PROVIDER_SEPARATOR not in tag_token:
-        return tag_token, None
-    tag_part, provider_part = tag_token.split(SHORT_TAG_PROVIDER_SEPARATOR, 1)
-    if tag_part in tag_aliases or tag_part in allowed_tags or tag_part == generic_tag:
-        return tag_part, provider_part or None
-    return tag_token, None
-
-
-def _normalize_alias_map(alias_map: dict[str, str] | None) -> dict[str, str]:
-    normalized: dict[str, str] = {}
-    if not isinstance(alias_map, dict):
-        return normalized
-    for raw_key, raw_value in alias_map.items():
-        if isinstance(raw_key, str) and isinstance(raw_value, str) and raw_key:
-            normalized[raw_key] = raw_value
-    return normalized
-
-
-def _normalize_directives(raw_directives: dict[str, str], alias_map: dict[str, str]) -> dict[str, str]:
-    normalized: dict[str, str] = {}
-    for raw_key, value in raw_directives.items():
-        key = alias_map.get(raw_key, raw_key)
-        if key in normalized:
-            raise AudiaGenticError(
-                code="VAL-PPARSE-005",
-                kind="agent-jobs",
-                message="duplicate prompt directive",
-                details={"directive": key},
-            )
-        normalized[key] = value
-    return normalized
-
-
-def _normalize_provider(value: str | None, alias_map: dict[str, str]) -> str | None:
-    if value is None:
-        return None
-    return alias_map.get(value, value)
 
 
 def _default_adhoc_id(prompt_id: str) -> str:
