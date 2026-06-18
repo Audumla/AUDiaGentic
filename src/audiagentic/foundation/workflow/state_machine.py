@@ -12,8 +12,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from .interfaces import WorkflowContext
-from .item import ItemView
+from .interfaces import ItemView, WorkflowContext
 from .util import extract_ref_ids
 
 logger = logging.getLogger(__name__)
