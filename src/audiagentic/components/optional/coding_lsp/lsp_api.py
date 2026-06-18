@@ -28,6 +28,23 @@ _LSP_PROBES = build_dependency_probes(language_registry.dependency_cfgs())
 _session_manager = SessionManager()
 
 
+def _sync_to_providers(project_root: Path) -> None:
+    """Sync updated lsp.json to provider configs."""
+    try:
+        from audiagentic.components.optional.coding_lsp.language_servers_sync import (
+            sync_generic_lsp_mcp_to_providers,
+            sync_language_servers_to_providers,
+        )
+        sync_language_servers_to_providers(project_root)
+        sync_generic_lsp_mcp_to_providers(project_root)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Failed to sync language servers to providers after config change",
+            exc_info=True,
+        )
+
+
 def shutdown_all_sessions() -> None:
     _session_manager.shutdown_all()
 
@@ -184,6 +201,7 @@ def add_language(root: str, language: str) -> dict[str, Any]:
     configured = read_lsp_config(lsp_path)
     configured[language] = specs[language]
     write_lsp_config(lsp_path, configured)
+    _sync_to_providers(project_root)
     return {"ok": True, "language": language, "path": str(lsp_path)}
 
 
@@ -195,6 +213,8 @@ def remove_language(root: str, language: str) -> dict[str, Any]:
         return {"ok": False, "error": f"Language not configured: {language}"}
     del configured[language]
     write_lsp_config(lsp_path, configured)
+    _sync_to_providers(project_root)
+    _session_manager.shutdown_session(project_root, language)
     return {"ok": True, "language": language, "path": str(lsp_path)}
 
 

@@ -188,19 +188,12 @@ class LspJsonRpc:
             if line is None:
                 return None
             header_parts.append(line)
-            if line == b"\r\n" or line == b"":
+            if line in (b"\r\n", b"\n", b""):
                 return b"".join(header_parts)
 
     def _read_line(self, stream: subprocess.PIPE) -> bytes | None:
         try:
-            byte = stream.read(1)
-            if not byte:
-                return None
-            line = bytearray()
-            while byte != b"\n" and byte:
-                line.extend(byte)
-                byte = stream.read(1)
-            return bytes(line)
+            return stream.readline()
         except OSError:
             return None
 

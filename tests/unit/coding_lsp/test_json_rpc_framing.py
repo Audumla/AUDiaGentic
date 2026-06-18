@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import subprocess
 
@@ -91,6 +92,13 @@ def test_parse_content_length() -> None:
     assert bridge._parse_content_length(b"content-length: 100\r\n\r\n") == 100
     assert bridge._parse_content_length(b"Content-Length: 0\r\n\r\n") == 0
     assert bridge._parse_content_length(b"Garbage\r\n\r\n") is None
+
+
+def test_read_header_stops_on_blank_crlf_line() -> None:
+    bridge = LspJsonRpc()
+    stream = io.BytesIO(b"Content-Length: 2\r\n\r\n{}")
+    header = bridge._read_header(stream)
+    assert header == b"Content-Length: 2\r\n\r\n"
 
 
 def test_send_request_registers_pending_before_write(monkeypatch) -> None:

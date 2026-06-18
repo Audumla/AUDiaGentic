@@ -11,6 +11,6 @@ detection-markers: [Cargo.toml, Cargo.lock]
 dependency:
   id: rust-analyzer
   display-name: Rust Analyzer
-  probe: binary:rust-analyzer
-  toolchain: cargo
+  probe: custom:audiagentic.components.optional.coding_lsp.language_registry.probe_rust_analyzer
+  toolchain: rustup
   package: rust-analyzer

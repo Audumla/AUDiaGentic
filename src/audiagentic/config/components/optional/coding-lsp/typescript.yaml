@@ -11,6 +11,7 @@ detection-markers: [tsconfig.json, package.json]
 dependency:
   id: typescript-language-server
   display-name: TypeScript Language Server
-  probe: binary:typescript-language-server
+  probe: custom:audiagentic.components.optional.coding_lsp.language_registry.probe_typescript_language_server
   toolchain: npm
-  package: typescript-language-server
+  package: [typescript-language-server, typescript]
+  uninstall-package: [typescript-language-server, typescript]

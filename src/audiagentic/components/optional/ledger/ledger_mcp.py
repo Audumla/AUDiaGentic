@@ -19,10 +19,9 @@ def _project_root() -> Path:
 def record_change_event(event: dict) -> dict:
     """Record a change event fragment to the ledger and sync.
 
-    Required fields: event-id, timestamp-utc, project-id, source (kind, provider-id, surface, prompt-tag), change-class, files, technical-summary, user-summary-candidate, status (always 'unreleased').
+    Required fields: change-class, files, technical-summary,
+    user-summary-candidate, status (always 'unreleased').
 
-    source.kind: 'interactive-prompt' (most common), 'job-run', 'workflow-stage', 'manual-script', 'release-finalization'.
-    source.session-id, job-id, packet-id, review-id: null for ad-hoc work; populated by job/packet/review system for structured workflows.
     change-class: feature, code-fix, refactor, docs, tests, config, release, audit, workflow.
     """
     return ledger_api.record_change(_project_root(), event, sync=True)
