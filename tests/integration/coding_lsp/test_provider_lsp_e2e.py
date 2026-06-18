@@ -28,7 +28,7 @@ from tests.integration.providers.harness import (
     install_provider,
 )
 
-from audiagentic.components.optional.coding_lsp import language_registry, lsp_api
+from audiagentic.components.optional.coding_lsp import language_registry, lsp_api, lsp_config_api
 from audiagentic.components.optional.coding_lsp.language_servers_sync import (
     prune_generic_lsp_mcp_from_providers,
     prune_language_servers_from_providers,
@@ -117,7 +117,7 @@ def provisioned_project(tmp_path_factory) -> Path:
 
     # 3. enable languages in lsp.json
     for lang in LANGUAGES:
-        result = lsp_api.add_language(str(root), lang)
+        result = lsp_config_api.add_language(str(root), lang)
         assert result["ok"], f"add_language({lang}) failed: {result}"
 
     configured_lang_ids = LANGUAGES
@@ -160,13 +160,13 @@ def test_native_lsp_provider_cli_installed(provider_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 def test_no_missing_dependencies_for_configured_languages(provisioned_project: Path) -> None:
-    missing = lsp_api.missing_configured_dependencies(provisioned_project)
+    missing = lsp_config_api.missing_configured_dependencies(provisioned_project)
     assert missing == [], f"language servers not installed: {missing}"
 
 
 def test_only_configured_language_dependencies_are_considered(provisioned_project: Path) -> None:
     expected = set(language_registry.dependency_ids(LANGUAGES))
-    configured = set(lsp_api.configured_dependency_ids(provisioned_project))
+    configured = set(lsp_config_api.configured_dependency_ids(provisioned_project))
     assert configured == expected
 
 

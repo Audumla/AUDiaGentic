@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from audiagentic.components.optional.coding_lsp import lsp_api
+from audiagentic.components.optional.coding_lsp import lsp_config_api
 from audiagentic.components.optional.coding_lsp.coding_lsp_config import write_lsp_config
 from audiagentic.components.optional.coding_lsp.lsp_lifecycle import ServerConfig
 
@@ -66,7 +67,7 @@ def test_diagnostics_uses_session_manager_public_api(monkeypatch) -> None:
 
 def test_config_status_reports_missing_config(tmp_path: Path) -> None:
     (tmp_path / ".audiagentic").mkdir()
-    status = lsp_api.config_status(str(tmp_path))
+    status = lsp_config_api.config_status(str(tmp_path))
     assert status["config_exists"] is False
     assert status["config_valid"] is False
     assert status["languages"] == {}
@@ -77,7 +78,7 @@ def test_config_status_reports_invalid_config(tmp_path: Path) -> None:
     lsp_json = tmp_path / ".coding-lsp" / "lsp.json"
     lsp_json.parent.mkdir(parents=True)
     lsp_json.write_text("{bad json", encoding="utf-8")
-    status = lsp_api.config_status(str(tmp_path))
+    status = lsp_config_api.config_status(str(tmp_path))
     assert status["config_exists"] is True
     assert status["config_valid"] is False
     assert status["config_errors"]
