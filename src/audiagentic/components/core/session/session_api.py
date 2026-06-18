@@ -77,6 +77,11 @@ async def update_embedded_rig(*, ctx, run_with_output) -> dict[str, Any]:
     return await session_embedded_rig.update_embedded_rig(ctx=ctx, run_with_output=run_with_output)
 
 
+async def update_global_embedded_rig(*, ctx, run_with_output) -> dict[str, Any]:
+    """Update the shared global embedded rig binaries in the harness runtime."""
+    return await session_embedded_rig.update_global_embedded_rig(ctx=ctx, run_with_output=run_with_output)
+
+
 def _auto_update_status() -> dict[str, Any]:
     from audiagentic.runtime.update.checker import check_update, current_version
 

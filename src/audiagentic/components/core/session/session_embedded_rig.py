@@ -129,3 +129,57 @@ async def update_embedded_rig(*, ctx, run_with_output) -> dict[str, Any]:
         heartbeat_message="[rig] update still running...",
         work=_work,
     )
+
+
+async def update_global_embedded_rig(*, ctx, run_with_output) -> dict[str, Any]:
+    from audiagentic.runtime.home import global_harness_runtime
+
+    def _work(sink):
+        return _update_global_embedded_rig_impl(global_harness_runtime(), sink=sink)
+
+    return await run_with_output(
+        ctx=ctx,
+        logger="session.update_global_rig",
+        heartbeat_message="[rig] global update still running...",
+        work=_work,
+    )
+
+
+def _update_global_embedded_rig_impl(harness_runtime, *, sink=None) -> dict[str, Any]:
+    from audiagentic.runtime.rig.embedded.binaries import update_binaries as _update
+    from audiagentic.runtime.rig.embedded.launch import runtime_bin_dir
+
+    out = io.StringIO()
+    try:
+        global_bin_dir = harness_runtime / "rig" / "bin"
+        if sink:
+            sink(ComponentOutputEvent(message="[rig] updating global embedded rig binaries"))
+        with contextlib.redirect_stdout(out):
+            _update(target_bin_dir=global_bin_dir)
+        active_bin_dir = runtime_bin_dir()
+        global_active = active_bin_dir.resolve() == global_bin_dir.resolve()
+        project_local_overrides_global = not global_active
+        if sink and project_local_overrides_global:
+            sink(
+                ComponentOutputEvent(
+                    message=(
+                        "[rig] global binaries updated, but a project-local embedded rig "
+                        "binary still takes precedence"
+                    ),
+                    kind="log",
+                    level="warning",
+                )
+            )
+        output = out.getvalue().strip()
+        if sink and output:
+            sink(ComponentOutputEvent(message=output))
+        return {
+            "ok": True,
+            "output": output,
+            "global_bin_dir": str(global_bin_dir),
+            "active_bin_dir": str(active_bin_dir),
+            "global_active": global_active,
+            "project_local_overrides_global": project_local_overrides_global,
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "output": out.getvalue().strip()}
