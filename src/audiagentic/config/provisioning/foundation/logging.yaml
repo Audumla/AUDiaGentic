@@ -15,7 +15,7 @@
 
 logging:
   level: INFO              # DEBUG | INFO | WARNING | ERROR | CRITICAL
-  format: json             # json | dev
+  format: json             # json | dev | console
   console: true            # false = suppress stderr handler (logs go to file only; requires dir to be set)
   dir: null                # null = stderr only; path = write rotating file (required when console: false)
 

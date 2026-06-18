@@ -345,6 +345,33 @@ class _DevFormatter(logging.Formatter):
         return out
 
 
+class _ConsoleFormatter(logging.Formatter):
+    """Render terminal output as user-facing console lines, not raw log records."""
+
+    def __init__(self, colour: bool = False) -> None:
+        super().__init__()
+        self._colour = colour
+
+    def format(self, record: logging.LogRecord) -> str:
+        record.message = record.getMessage()
+        prefix = self._prefix(record)
+        message = f"{prefix} {record.message}"
+        if record.exc_info:
+            message = f"{message}\n{self.formatException(record.exc_info)}"
+        return message
+
+    def _prefix(self, record: logging.LogRecord) -> str:
+        if record.name == "audiagentic.launcher":
+            label = "AUDiaGentic"
+        else:
+            label = record.name.rsplit(".", 1)[-1].replace("_", " ")
+        if not self._colour:
+            return f"[{label}]"
+        colour = _ANSI.get(record.levelname, "")
+        reset = _ANSI["RESET"]
+        return f"{colour}[{label}]{reset}"
+
+
 class _SafeTimedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
     """Skip rollover when another Windows process still holds log file open."""
 
@@ -393,6 +420,8 @@ def configure_logging(project_root: Path | None = None) -> None:
     formatter: logging.Formatter
     if cfg.format == "dev":
         formatter = _DevFormatter(colour=use_colour)
+    elif cfg.format == "console":
+        formatter = _ConsoleFormatter(colour=use_colour)
     else:
         formatter = _CorrelationJsonFormatter()
 
