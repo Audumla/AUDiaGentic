@@ -135,7 +135,7 @@ def _active_dependency_ids(project_root: Path | None) -> list[str]:
     auto-populates it; languages are added explicitly via lsp_add_language.
     No configured languages means no dependencies and no install prompt.
     """
-    from audiagentic.components.optional.coding_lsp.lsp_api import configured_dependency_ids
+    from audiagentic.components.optional.coding_lsp.lsp_config_api import configured_dependency_ids
     return configured_dependency_ids(project_root)
 
 
