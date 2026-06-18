@@ -169,6 +169,7 @@ def test_session_server_exposes_expected_tools(tmp_path: Path) -> None:
         "set_auto_update",
         "cli_visibility",
         "set_cli_visibility",
+        "update_global_embedded_rig",
     }.issubset(names)
 
 

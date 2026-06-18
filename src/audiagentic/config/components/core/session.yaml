@@ -13,7 +13,7 @@ mcp-servers:
   - name: ag-session-mgmt
     module: audiagentic.components.core.session.session_mcp
     args: ["--readonly", "--smoke-only"]
-    direct-tools: [status, config, set_auto_update, cli_visibility, set_cli_visibility, refresh_harness_config, update_embedded_rig]
+    direct-tools: [status, config, set_auto_update, cli_visibility, set_cli_visibility, refresh_harness_config, update_embedded_rig, update_global_embedded_rig]
     description: Harness status and configuration
     propagate: audiagentic
     instructions: >
@@ -27,6 +27,7 @@ mcp-servers:
       set_cli_visibility: Set CLI visibility for thinking blocks and tool or MCP blocks, then request an in-session reload.
       refresh_harness_config: Regenerate mcp.json and SYSTEM.md from current component state, then request in-session reload.
       update_embedded_rig: Update the embedded rig's llama-server binary to the latest ggml-org/llama.cpp release.
+      update_global_embedded_rig: Update the global harness embedded rig llama-server binary to the latest ggml-org/llama.cpp release.
 harness-instructions:
   - section: "What you can do"
     content: |
@@ -38,3 +39,4 @@ harness-instructions:
       - `mcp_set_cli_visibility` — Show or hide thinking/tool blocks in the CLI
       - `mcp_refresh_harness_config` — Regenerate mcp.json/SYSTEM.md from current component state after install/uninstall
       - `mcp_update_embedded_rig` — Update the embedded rig's llama-server binary to the latest llama.cpp release
+      - `mcp_update_global_embedded_rig` — Update the global harness embedded rig binary to the latest llama.cpp release
