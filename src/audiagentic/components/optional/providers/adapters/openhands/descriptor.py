@@ -1,43 +1,12 @@
 from __future__ import annotations
 
-import shutil
-import subprocess
-
 from ...descriptors.base import AgentFile, ProviderDescriptor, ProviderPermissions, cli_recipe
 from ...descriptors.registry import register
+from ..probe import probe_cli_version
 
 
 def _openhands_probe(_descriptor) -> dict:
-    command = ["openhands", "--version"]
-    executable = shutil.which("openhands")
-    if executable is None:
-        return {
-            "available": False,
-            "command": command,
-            "executable": None,
-            "returncode": None,
-            "stdout": "",
-            "stderr": "command not found",
-        }
-    try:
-        completed = subprocess.run(command, check=False, capture_output=True, text=True, timeout=15)
-        return {
-            "available": completed.returncode == 0,
-            "command": command,
-            "executable": executable,
-            "returncode": completed.returncode,
-            "stdout": completed.stdout.strip(),
-            "stderr": completed.stderr.strip(),
-        }
-    except Exception as exc:  # noqa: BLE001
-        return {
-            "available": True,
-            "command": command,
-            "executable": executable,
-            "returncode": None,
-            "stdout": "",
-            "stderr": str(exc),
-        }
+    return probe_cli_version("openhands", ["openhands", "--version"])
 
 register(ProviderDescriptor(
     provider_id="openhands",
