@@ -1,26 +1,26 @@
-"""Tests for dedup infrastructure: _utils, base_extractor, cli, build_extractor_stream_sinks."""
+"""Tests for dedup infrastructure: foundation.time, base_extractor, cli, build_extractor_stream_sinks."""
 from __future__ import annotations
 
 import pytest
 
 from audiagentic.components.optional.providers.adapters.cli import require_executable
-from audiagentic.components.optional.providers.protocols.streaming._utils import _utc_now
 from audiagentic.components.optional.providers.protocols.streaming.base_extractor import (
     BaseEventExtractor,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.time import now_iso_z
 
-# ── _utils ──────────────────────────────────────────────────────────────────
+# ── foundation.time ─────────────────────────────────────────────────────────
 
 def test_utc_now_format() -> None:
-    ts = _utc_now()
+    ts = now_iso_z("microseconds")
     assert ts.endswith("Z")
     assert "T" in ts
     assert "+00:00" not in ts
 
 
 def test_utc_now_has_microsecond_precision() -> None:
-    ts = _utc_now()
+    ts = now_iso_z("microseconds")
     assert ts.endswith("Z")
     assert "T" in ts
     assert "+00:00" not in ts
