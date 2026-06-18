@@ -1,13 +1,36 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
-from string import Template
 from typing import Any, Protocol
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 MANAGED_MARKDOWN_HEADER = "<!-- MANAGED_BY_AUDIAGENTIC: do not edit directly. -->"
+
+# A single managed region per file holds every AUDiaGentic-generated block. The
+# boundary is one invisible comment pair (robust to re-render); the blocks inside
+# use plain markdown headings for readability. The region is regenerated wholesale
+# on each apply, so removing a contribution simply drops its block, and removing
+# all contributions removes the region.
+MANAGED_REGION_BEGIN = "<!-- ag:managed:begin -->"
+MANAGED_REGION_END = "<!-- ag:managed:end -->"
+MANAGED_REGION_NOTICE = (
+    "_Managed by AUDiaGentic — generated from component configs. "
+    "Edit the owning component and re-run surface apply; edits here are overwritten._"
+)
+
+_REGION_RE = re.compile(
+    r"\n*" + re.escape(MANAGED_REGION_BEGIN) + r".*?" + re.escape(MANAGED_REGION_END) + r"\n*",
+    re.DOTALL,
+)
+# Legacy per-block fences (pre-region format) — stripped on next apply so old
+# files migrate to the single-region layout automatically.
+_LEGACY_BLOCK_RE = re.compile(
+    r"\n*<!-- AUDIAGENTIC:BEGIN (?P<id>[^>]+) -->.*?<!-- AUDIAGENTIC:END (?P=id) -->\n*",
+    re.DOTALL,
+)
 
 
 @dataclass(frozen=True)
@@ -80,12 +103,7 @@ def render_instruction_file(
     adapter_dir: Path,
 ) -> str:
     """Render a provider's managed instruction file from its template."""
-    template_text = _load_template(adapter_dir, "instruction.md", "default_instruction.md")
-    content = Template(template_text).safe_substitute(
-        display_name=instruction_file,
-        provider_id=provider_id,
-    )
-    return apply_managed_header(content)
+    return f"{MANAGED_MARKDOWN_HEADER}\n"
 
 
 def render_rules_file(*, adapter_dir: Path, filename: str = "prompt-tags.md") -> str:
@@ -94,50 +112,34 @@ def render_rules_file(*, adapter_dir: Path, filename: str = "prompt-tags.md") ->
     return apply_managed_header(template_text)
 
 
-def managed_block(block_id: str, content: str) -> str:
-    body = content.strip()
-    return (
-        f"<!-- AUDIAGENTIC:BEGIN {block_id} -->\n"
-        f"{body}\n"
-        f"<!-- AUDIAGENTIC:END {block_id} -->"
-    )
+def strip_managed_content(existing: str) -> str:
+    """Remove the managed region and any legacy per-block fences, leaving user text."""
+    text = _REGION_RE.sub("\n\n", existing)
+    text = _LEGACY_BLOCK_RE.sub("\n\n", text)
+    return text
 
 
-def prune_managed_blocks(existing: str, active_ids: set[str]) -> str:
-    """Remove fenced blocks whose block_id is not in active_ids.
-
-    Leaves all other content untouched. Returns the pruned text.
-    """
-    import re
-    pattern = re.compile(
-        r"\n*<!-- AUDIAGENTIC:BEGIN (?P<id>[^>]+) -->.*?<!-- AUDIAGENTIC:END (?P=id) -->\n*",
-        re.DOTALL,
-    )
-
-    def _replace(match: re.Match) -> str:
-        return "" if match.group("id") not in active_ids else match.group(0)
-
-    pruned = pattern.sub(_replace, existing)
-    return pruned.rstrip() + "\n" if pruned.strip() else ""
+def render_managed_region(blocks: list[SurfaceBlock]) -> str:
+    """Render all blocks for a file into one fenced, regenerated managed region."""
+    ordered = sorted(blocks, key=lambda b: b.block_id)
+    parts = [block.content.strip() for block in ordered if block.content.strip()]
+    body = "\n\n".join([MANAGED_REGION_NOTICE, *parts])
+    return f"{MANAGED_REGION_BEGIN}\n{body}\n{MANAGED_REGION_END}"
 
 
 def apply_managed_blocks(existing: str, blocks: list[SurfaceBlock]) -> str:
-    text = existing.rstrip()
-    for block in blocks:
-        rendered = managed_block(block.block_id, block.content)
-        begin = f"<!-- AUDIAGENTIC:BEGIN {block.block_id} -->"
-        end = f"<!-- AUDIAGENTIC:END {block.block_id} -->"
-        start = text.find(begin)
-        if start == -1:
-            text = f"{text}\n\n{rendered}" if text else rendered
-            continue
-        finish = text.find(end, start)
-        if finish == -1:
-            text = f"{text}\n\n{rendered}" if text else rendered
-            continue
-        finish += len(end)
-        text = f"{text[:start].rstrip()}\n\n{rendered}\n\n{text[finish:].lstrip()}".strip()
-    return text.rstrip() + "\n"
+    """Replace the file's managed region with one regenerated from `blocks`.
+
+    Strips any prior region and legacy per-block fences first (migration), then
+    appends the freshly rendered region. An empty `blocks` removes the region
+    entirely, leaving only user-authored content.
+    """
+    text = strip_managed_content(existing).rstrip()
+    if not blocks:
+        return f"{text}\n" if text else ""
+    region = render_managed_region(blocks)
+    combined = f"{text}\n\n{region}" if text else region
+    return combined.rstrip() + "\n"
 
 
 def canonical_tags(syntax: dict[str, Any]) -> list[str]:
@@ -172,6 +174,7 @@ def render_frontmatter_skill(skill: SkillDefinition, *, root_label: str) -> str:
         f"name: {skill.name}\n"
         f"description: {skill.description}\n"
         "---\n\n"
+        f"{MANAGED_MARKDOWN_HEADER}\n\n"
         f"# {skill.title}\n\n"
         f"Use this skill for canonical `@{skill.tag}` launches.\n\n"
         "Trigger:\n"
@@ -189,6 +192,7 @@ def render_flat_skill(skill: SkillDefinition, *, provider_name: str, launch_exam
     do_lines = "\n".join(f"- {item}" for item in skill.do)
     dont_lines = "\n".join(f"- {item}" for item in skill.dont)
     return (
+        f"{MANAGED_MARKDOWN_HEADER}\n\n"
         f"# {skill.title}\n\n"
         f"Provider surface: `{provider_name}`\n\n"
         f"Launch example: `{launch_example}`\n\n"

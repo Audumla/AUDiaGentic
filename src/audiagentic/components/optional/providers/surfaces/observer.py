@@ -1,8 +1,8 @@
 """Provider surface lifecycle observer.
 
 Subscribes to lifecycle.component.* events on the foundation event bus.
-On component install: applies surface contributions for all installed providers.
-On component uninstall: prunes stale blocks then re-applies remaining contributions.
+On component install or enable: applies surface contributions for all installed providers.
+On component uninstall or disable: prunes stale blocks then re-applies remaining contributions.
 
 This module self-registers when imported. Import is triggered by the providers component
 declaring lifecycle-observer in its YAML descriptor, which causes register_all_components()
@@ -24,9 +24,9 @@ def _on_component_lifecycle(event_type: str, payload: dict, metadata: dict) -> N
     project_root = payload.get("project_root")
     if not isinstance(project_root, Path):
         return
-    if event_type == "lifecycle.component.installed":
+    if event_type in ("lifecycle.component.installed", "lifecycle.component.enabled"):
         apply_provider_surfaces(project_root)
-    elif event_type == "lifecycle.component.uninstalled":
+    elif event_type in ("lifecycle.component.uninstalled", "lifecycle.component.disabled"):
         prune_provider_surfaces(project_root)
         apply_provider_surfaces(project_root)
 

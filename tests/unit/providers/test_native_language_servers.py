@@ -33,18 +33,52 @@ def test_opencode_roundtrip_and_preserves_mcp(tmp_path: Path) -> None:
     data = json.loads(path.read_text(encoding="utf-8"))
     # existing mcp block preserved
     assert data["mcp"] == {"ag-lsp": {"command": "x"}}
-    assert data["lsp"]["python"]["command"] == ["pyright-langserver", "--stdio"]
-    assert data["lsp"]["python"]["extensions"] == [".py", ".pyi"]
-    assert data["lsp"]["python"]["initialization"] == {"python": {"analysis": "basic"}}
+    # opencode keys its built-in Python server "pyright", not "python"
+    assert "python" not in data["lsp"]
+    assert data["lsp"]["pyright"]["command"] == ["pyright-langserver", "--stdio"]
+    assert data["lsp"]["pyright"]["extensions"] == [".py", ".pyi"]
+    assert data["lsp"]["pyright"]["initialization"] == {"python": {"analysis": "basic"}}
 
+    # read maps the opencode key back to our language id
     back = read_language_servers_opencode(path)
+    assert "pyright" not in back
     assert back["python"].command == ["pyright-langserver", "--stdio"]
     assert back["python"].file_extensions == [".py", ".pyi"]
 
+    # remove by our language id finds the mapped opencode key
     assert remove_language_servers_opencode(path, "python") is True
     data = json.loads(path.read_text(encoding="utf-8"))
     assert data["lsp"] == {}
     assert data["mcp"] == {"ag-lsp": {"command": "x"}}
+
+
+def test_opencode_maps_cpp_to_clangd(tmp_path: Path) -> None:
+    path = tmp_path / ".opencode" / "opencode.json"
+    path.parent.mkdir(parents=True)
+    cpp = LanguageServerEntry(language="cpp", command=["clangd"], file_extensions=[".cpp", ".h"])
+
+    write_language_servers_opencode(path, {"cpp": cpp})
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert "cpp" not in data["lsp"]
+    assert data["lsp"]["clangd"]["command"] == ["clangd"]
+    assert read_language_servers_opencode(path)["cpp"].command == ["clangd"]
+    assert remove_language_servers_opencode(path, "cpp") is True
+
+
+def test_opencode_passthrough_when_key_matches(tmp_path: Path) -> None:
+    # typescript and rust already match opencode's built-in keys — no mapping.
+    path = tmp_path / ".opencode" / "opencode.json"
+    path.parent.mkdir(parents=True)
+    ts = LanguageServerEntry(
+        language="typescript",
+        command=["typescript-language-server", "--stdio"],
+        file_extensions=[".ts", ".tsx"],
+    )
+    write_language_servers_opencode(path, {"typescript": ts})
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert "typescript" in data["lsp"]
+    assert read_language_servers_opencode(path)["typescript"].file_extensions == [".ts", ".tsx"]
 
 
 def test_qwen_roundtrip_string_command_split(tmp_path: Path) -> None:

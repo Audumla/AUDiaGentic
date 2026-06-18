@@ -14,6 +14,9 @@ files:
   - path: .github/workflows/release.yml
     lifecycle: required-managed
     description: Release workflow
+  - path: .audiagentic/skills/ag-check-in-prep/skill.md
+    lifecycle: required-managed
+    description: ag-check-in-prep skill source
 mcp-servers:
   - name: ag-release-mgmt
     module: audiagentic.components.optional.release.release_mcp

@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from audiagentic.components.optional.coding_lsp import lsp_api
 from audiagentic.components.optional.coding_lsp import lsp_config_api
-from audiagentic.components.optional.coding_lsp.coding_lsp_config import read_lsp_config, write_lsp_config
+from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
+    read_lsp_config,
+    write_lsp_config,
+)
 
 
 def _configure(tmp_path: Path, *languages: str) -> None:

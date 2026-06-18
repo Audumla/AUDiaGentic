@@ -145,6 +145,12 @@ class ProviderDescriptor:
     mcp_config: McpConfigSpec | None = None
     # Language server config spec — None means this provider doesn't accept LSP config sync.
     language_servers_config: LanguageServersConfigSpec | None = None
+    # Optional hook fired when the coding-lsp component is enabled. Lets a provider
+    # provision its own LSP support (e.g. pi installs the pi-lens extension, which
+    # auto-discovers language servers from PATH). When set, the provider is treated
+    # as self-providing LSP and is excluded from the generic ag-lsp MCP projection.
+    # Receives project_root; returns a result dict.
+    on_lsp_enabled: Callable[[Path | None], dict[str, Any]] | None = None
 
     @property
     def install_mode(self) -> str:

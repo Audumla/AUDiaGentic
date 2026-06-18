@@ -10,7 +10,10 @@ def find_repo_root(start: Path | None = None) -> Path:
     env_root = os.environ.get("AUDIAGENTIC_REPO_ROOT")
     if env_root:
         candidate = Path(env_root).resolve()
-        if candidate.is_dir():
+        if candidate.is_dir() and (
+            (candidate / "pyproject.toml").is_file()
+            or (candidate / "src" / "audiagentic").is_dir()
+        ):
             return candidate
 
     anchor = (start or Path(__file__)).resolve()
@@ -24,6 +27,10 @@ def find_repo_root(start: Path | None = None) -> Path:
         if (candidate / "src" / "audiagentic").is_dir():
             return candidate
 
+    package_parent = Path(__file__).resolve().parent.parent
+    if (package_parent / "audiagentic").is_dir():
+        return package_parent
+
     raise RuntimeError(
         f"Could not locate repository root from {anchor}. "
         "Set AUDIAGENTIC_REPO_ROOT or run inside an audiagentic checkout."
@@ -31,4 +38,4 @@ def find_repo_root(start: Path | None = None) -> Path:
 
 
 REPO_ROOT: Path = find_repo_root()
-SRC_ROOT: Path = REPO_ROOT / "src"
+SRC_ROOT: Path = REPO_ROOT / "src" if (REPO_ROOT / "src" / "audiagentic").is_dir() else REPO_ROOT

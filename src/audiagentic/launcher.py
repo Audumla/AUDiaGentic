@@ -115,6 +115,23 @@ def main(argv: list[str] | None = None) -> int:
 
     subparsers.add_parser("update", help="Check for a new audiagentic version and update")
 
+    job_control_parser = subparsers.add_parser("job-control", help="Request job control action")
+    job_control_parser.add_argument("--project-root", metavar="PATH")
+    job_control_parser.add_argument("--job-id", required=True)
+    job_control_parser.add_argument("--action", required=True, choices=["cancel", "stop", "kill"])
+    job_control_parser.add_argument("--requested-by", required=True)
+    job_control_parser.add_argument("--reason", required=True)
+
+    session_input_parser = subparsers.add_parser("session-input", help="Record live session input")
+    session_input_parser.add_argument("--project-root", metavar="PATH")
+    session_input_parser.add_argument("--job-id", required=True)
+    session_input_parser.add_argument("--prompt-id")
+    session_input_parser.add_argument("--provider-id")
+    session_input_parser.add_argument("--surface", required=True)
+    session_input_parser.add_argument("--stage", required=True)
+    session_input_parser.add_argument("--event-kind", default="user-input")
+    session_input_parser.add_argument("--message", required=True)
+
     rb_parser = subparsers.add_parser("release-bootstrap", help="Bootstrap release workflow for a project")
     rb_parser.add_argument("--project-root", metavar="PATH", help="Project root directory")
     rb_parser.add_argument("--release-id", default="rel_0001", metavar="ID")
@@ -134,6 +151,9 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("audiagentic started", extra={"project_root": str(project_root), "command": args.command})
 
     def _log_exit() -> None:
+        handlers = list(logging.getLogger().handlers) + list(logger.handlers)
+        if any(getattr(getattr(handler, "stream", None), "closed", False) for handler in handlers):
+            return
         logger.info("audiagentic exit", extra={"project_root": str(project_root), "command": args.command})
 
     atexit.register(_log_exit)
@@ -147,6 +167,43 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "update":
         return _cmd_update()
+
+    if args.command == "job-control":
+        from audiagentic.components.optional.agent_jobs.control import (
+            build_job_control_request,
+            request_job_control,
+        )
+        from audiagentic.runtime.state.jobs_store import read_job_record
+
+        control_root = Path(args.project_root).resolve() if args.project_root else project_root
+        job = read_job_record(control_root, args.job_id)
+        payload = build_job_control_request(
+            job_id=args.job_id,
+            project_id=job["project-id"],
+            requested_action=args.action,
+            requested_by=args.requested_by,
+            reason=args.reason,
+        )
+        result = request_job_control(control_root, payload)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "session-input":
+        from audiagentic.runtime.state.session_input_store import build_and_persist_session_input
+
+        input_root = Path(args.project_root).resolve() if args.project_root else project_root
+        record = build_and_persist_session_input(
+            input_root,
+            job_id=args.job_id,
+            prompt_id=args.prompt_id,
+            provider_id=args.provider_id,
+            surface=args.surface,
+            stage=args.stage,
+            event_kind=args.event_kind,
+            message=args.message,
+        )
+        print(json.dumps({"status": "recorded", "record": record}, indent=2, sort_keys=True))
+        return 0
 
     if args.command == "release-bootstrap":
         from audiagentic.components.optional.ledger import ledger_bootstrap as release_bootstrap
