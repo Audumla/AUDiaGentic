@@ -12,8 +12,8 @@ from typing import Any, Protocol, TextIO
 
 from jsonschema import Draft202012Validator
 
-from audiagentic.components.optional.providers.protocols.streaming._utils import _utc_now
 from audiagentic.foundation.contracts.schema_registry import read_schema
+from audiagentic.foundation.time import now_iso_z
 
 # Per-path locks for coordinated writes to the same file
 _event_write_locks: dict[Path, threading.Lock] = {}
@@ -203,7 +203,7 @@ class NormalizedEventSink:
                 "stage": self.stage,
                 "event-kind": "task-progress",
                 "message": text,
-                "timestamp": _utc_now(),
+                "timestamp": now_iso_z("microseconds"),
                 "details": {"stream": self.stream},
             }
         )
@@ -241,7 +241,7 @@ class NormalizedEventSink:
     def _quarantine_event(self, record: dict[str, Any], reason: str) -> None:
         quarantine_record = {
             **record,
-            "quarantined-at": _utc_now(),
+            "quarantined-at": now_iso_z("microseconds"),
             "quarantine-reason": reason,
         }
         with self.quarantine_path.open("a", encoding="utf-8") as handle:
