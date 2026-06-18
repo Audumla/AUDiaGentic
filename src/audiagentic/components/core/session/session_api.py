@@ -72,14 +72,17 @@ def refresh_harness_config(project_root: Path) -> dict[str, Any]:
     }
 
 
-async def update_embedded_rig(*, ctx, run_with_output) -> dict[str, Any]:
-    """Update embedded rig binaries and restart active rig when needed."""
-    return await session_embedded_rig.update_embedded_rig(ctx=ctx, run_with_output=run_with_output)
-
-
-async def update_global_embedded_rig(*, ctx, run_with_output) -> dict[str, Any]:
-    """Update the shared global embedded rig binaries in the harness runtime."""
-    return await session_embedded_rig.update_global_embedded_rig(ctx=ctx, run_with_output=run_with_output)
+async def update_rig(*, ctx, run_with_output, scope: str = "local") -> dict[str, Any]:
+    """Update rig binaries for the requested scope."""
+    if scope == "local":
+        return await session_embedded_rig.update_embedded_rig(ctx=ctx, run_with_output=run_with_output)
+    if scope == "global":
+        return await session_embedded_rig.update_global_embedded_rig(ctx=ctx, run_with_output=run_with_output)
+    return {
+        "ok": False,
+        "error": "scope must be 'local' or 'global'",
+        "scope": scope,
+    }
 
 
 def _auto_update_status() -> dict[str, Any]:

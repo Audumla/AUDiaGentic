@@ -28,6 +28,7 @@ def _provider_entry(
     provider_id: str,
     provider_cfg: dict[str, Any],
     project_root: Path,
+    include_probes: bool,
     now_fn=None,
 ) -> dict[str, Any]:
     health = health_check(
@@ -74,9 +75,24 @@ def _provider_entry(
 
     descriptor = get_descriptor(provider_id)
     cli_probe = descriptor.cli_probe if descriptor and descriptor.cli_probe else None
-    entry["cli-check"] = _probe_provider_cli(descriptor) if descriptor else None
+    entry["cli-check"] = _probe_provider_cli(descriptor) if descriptor and include_probes else None
 
-    interrogation = _interrogate(provider_id, project_root)
+    interrogation = _interrogate(provider_id, project_root) if include_probes else {
+        "provider_id": provider_id,
+        "display_name": descriptor.display_name if descriptor else provider_id,
+        "registered": descriptor is not None,
+        "cli": None,
+        "vscode_project": (project_root / ".vscode").exists(),
+        "vscode_extensions": [],
+        "permissions": {
+            "can_write_files": descriptor.permissions.can_write_files if descriptor else False,
+            "can_execute_shell": descriptor.permissions.can_execute_shell if descriptor else False,
+            "can_browse_web": descriptor.permissions.can_browse_web if descriptor else False,
+            "can_read_env": descriptor.permissions.can_read_env if descriptor else False,
+            "notes": descriptor.permissions.notes if descriptor else "",
+        },
+        "agent_files": [],
+    }
     entry["interrogation"] = interrogation
     vscode_extensions = interrogation.get("vscode_extensions", [])
     vscode_applicable = bool(interrogation.get("vscode_project") and vscode_extensions)
@@ -143,7 +159,7 @@ def _provider_entry(
                 if "catalog-warning" in resolved:
                     entry["catalog-warning"] = resolved["catalog-warning"]
 
-    if provider_cfg.get("access-mode") == "cli" and entry.get("cli-check", {}).get(
+    if include_probes and provider_cfg.get("access-mode") == "cli" and entry.get("cli-check", {}).get(
         "available"
     ):
         entry["status"] = "healthy" if entry["configured"] else "unhealthy"
@@ -157,7 +173,7 @@ def _provider_entry(
 
 
 def build_provider_status(
-    project_root: Path, provider_id: str | None = None, *, now_fn=None
+    project_root: Path, provider_id: str | None = None, *, include_probes: bool = True, now_fn=None
 ) -> dict[str, Any]:
     provider_config = load_provider_config(project_root)
     providers = provider_config.get("providers", {})
@@ -182,6 +198,7 @@ def build_provider_status(
                 provider_id=item,
                 provider_cfg=providers.get(item, {"enabled": False, "access-mode": "none"}),
                 project_root=project_root,
+                include_probes=include_probes,
                 now_fn=now_fn,
             )
             for item in provider_ids
