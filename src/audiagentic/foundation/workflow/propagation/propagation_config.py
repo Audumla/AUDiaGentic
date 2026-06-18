@@ -88,6 +88,12 @@ def validate(config: dict[str, Any], states_for_kind: Callable[[str], list[str]]
             try:
                 valid_states = set(states_for_kind(kind_name))
             except (KeyError, TypeError):
+                logger.warning(
+                    "Could not resolve valid states for kind '%s'; "
+                    "its state_rules cannot be validated",
+                    kind_name,
+                    exc_info=True,
+                )
                 valid_states = set()
             for state in kind_config.get("state_rules", {}):
                 if state not in valid_states:
