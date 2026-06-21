@@ -1,7 +1,7 @@
 {
   "contract-version": "v1",
   "ok": false,
-  "error-code": "FND-VALIDATION-001",
+  "error-code": "VAL-PCFG-001",
   "error-kind": "validation",
   "message": "project config failed validation",
   "details": {

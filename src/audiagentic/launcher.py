@@ -17,15 +17,15 @@ Usage
 from __future__ import annotations
 
 import argparse
-import json
 import logging
-import sys
 from pathlib import Path
 
+from audiagentic.cli_io import print_error, print_json, print_message
 from audiagentic.commands.component import _cmd_component
 from audiagentic.commands.launch import _cmd_launch
 from audiagentic.commands.provider_prompt import _try_provider_prompt
 from audiagentic.foundation.components.ids import COMPONENT_SESSION
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.harness import (
     install_to,
 )
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 def _cmd_install(target: Path, project_root: Path) -> int:
-    print(f"Installing AUDiaGentic harness into {target}", flush=True)
+    print_message(f"Installing AUDiaGentic harness into {target}")
     rc = install_to(target, project_root=project_root)
     if rc == 0:
         # Auto-install harness components
@@ -46,9 +46,9 @@ def _cmd_install(target: Path, project_root: Path) -> int:
             install_component(COMPONENT_SESSION, project_root)
         except Exception:
             logger.warning("Failed to auto-install session component", exc_info=True)
-        print("\nInstall complete. Run 'audiagentic' from any project directory.", flush=True)
+        print_message("\nInstall complete. Run 'audiagentic' from any project directory.")
         if target != global_harness_runtime():
-            print(f"Set AUDIAGENTIC_HOME={target.parent} to use this location.", flush=True)
+            print_message(f"Set AUDIAGENTIC_HOME={target.parent} to use this location.")
     return rc
 
 
@@ -57,7 +57,7 @@ def _cmd_update() -> int:
     return run_update_now()
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="audiagentic",
         description="AUDiaGentic",
@@ -136,7 +136,7 @@ def main(argv: list[str] | None = None) -> int:
     rb_parser.add_argument("--project-root", metavar="PATH", help="Project root directory")
     rb_parser.add_argument("--release-id", default="rel_0001", metavar="ID")
 
-    binaries_parser = subparsers.add_parser("update-binaries", help="Update llama-server binaries to latest release")
+    subparsers.add_parser("update-binaries", help="Update llama-server binaries to latest release")
 
     subparsers.add_parser("refresh", help="Regenerate agent config (mcp.json, SYSTEM.md) from current component state")
 
@@ -148,6 +148,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from audiagentic.foundation.logging import bootstrap as _log_bootstrap
     _log_bootstrap("harness", project_root=project_root)
+
     logger.info("audiagentic started", extra={"project_root": str(project_root), "command": args.command})
 
     def _log_exit() -> None:
@@ -169,10 +170,15 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_update()
 
     if args.command == "job-control":
-        from audiagentic.components.optional.agent_jobs.control import (
-            build_job_control_request,
-            request_job_control,
-        )
+        try:
+            from audiagentic.components.optional.agent_jobs.control import (
+                build_job_control_request,
+                request_job_control,
+            )
+        except ImportError:
+            print_error("agent_jobs component not available")
+            return 1
+
         from audiagentic.runtime.state.jobs_store import read_job_record
 
         control_root = Path(args.project_root).resolve() if args.project_root else project_root
@@ -185,7 +191,7 @@ def main(argv: list[str] | None = None) -> int:
             reason=args.reason,
         )
         result = request_job_control(control_root, payload)
-        print(json.dumps(result, indent=2, sort_keys=True))
+        print_json(result, sort_keys=True)
         return 0
 
     if args.command == "session-input":
@@ -202,14 +208,19 @@ def main(argv: list[str] | None = None) -> int:
             event_kind=args.event_kind,
             message=args.message,
         )
-        print(json.dumps({"status": "recorded", "record": record}, indent=2, sort_keys=True))
+        print_json({"status": "recorded", "record": record}, sort_keys=True)
         return 0
 
     if args.command == "release-bootstrap":
-        from audiagentic.components.optional.ledger import ledger_bootstrap as release_bootstrap
+        try:
+            from audiagentic.components.optional.ledger.ledger_bootstrap import bootstrap_ledger
+        except ImportError:
+            print_error("ledger component not available")
+            return 1
+
         bootstrap_root = Path(args.project_root).resolve() if args.project_root else project_root
-        result = release_bootstrap.bootstrap_ledger(bootstrap_root)
-        print(json.dumps(result, indent=2, sort_keys=True))
+        result = bootstrap_ledger(bootstrap_root)
+        print_json(result, sort_keys=True)
         return 0
 
     if args.command == "update-binaries":
@@ -225,13 +236,13 @@ def main(argv: list[str] | None = None) -> int:
         )
         refreshed = refresh_harness_config_if_installed(project_root, reason="manual-refresh")
         if not refreshed:
-            print("Harness not installed. Run: audiagentic install", file=sys.stderr)
+            print_error("Harness not installed. Run: audiagentic install")
             return 1
-        print(json.dumps({
+        print_json({
             "ok": True,
             "refreshed": True,
             "sync": build_runtime_sync(reason="manual-refresh"),
-        }, indent=2))
+        })
         return 0
 
     from audiagentic.runtime.harness import RunnerParams
@@ -246,6 +257,15 @@ def main(argv: list[str] | None = None) -> int:
         return direct_provider_rc
 
     return _cmd_launch(project_root, remaining, params)
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        return _main(argv)
+    except AudiaGenticError as exc:
+        print_error(str(exc))
+        return 1
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

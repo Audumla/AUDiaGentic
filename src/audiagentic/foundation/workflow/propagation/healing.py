@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+
 from ..util import extract_ref_ids
 from .parents import find_parents
 
@@ -103,7 +105,7 @@ def heal(engine: Any, item_id: str, auto_fix: bool = False) -> dict[str, Any]:
                 logger.info(
                     "Applied healing fix: %s -> %s", fix.get("target_id"), fix.get("target_state")
                 )
-            except Exception as exc:
+            except AudiaGenticError as exc:
                 logger.error("Failed to apply healing fix: %s", exc, exc_info=True)
                 fix["applied"] = False
                 fix["error"] = str(exc)
@@ -214,7 +216,13 @@ def apply_fix(engine: Any, fix: dict[str, Any]) -> None:
     target_id = fix.get("target_id")
     target_state = fix.get("target_state")
     if not target_id or not target_state:
-        raise ValueError("Fix must have target_id and target_state")
+        raise make_error(
+            prefix="VAL",
+            component="WFPROP",
+            number=4,
+            kind="workflow",
+            message="Fix must have target_id and target_state",
+        )
     engine.ctx.state(
         id_=target_id,
         new_state=target_state,

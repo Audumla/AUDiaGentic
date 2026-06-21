@@ -35,7 +35,7 @@ def test_error_envelope_invalid_fixture_fails() -> None:
 
 def test_to_error_envelope_matches_fixture() -> None:
     error = AudiaGenticError(
-        code="FND-VALIDATION-001",
+        code="VAL-PCFG-001",
         kind="validation",
         message="project config failed validation",
         details={"field": "workflow-profile"},
