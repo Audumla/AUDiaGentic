@@ -319,6 +319,86 @@ def symbol_context(file: str, position: str) -> dict[str, Any]:
     }
 
 
+def code_actions(
+    file: str, range_start: str | None = None, range_end: str | None = None,
+    only: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    session, uri = _open_file_session(file)
+    if isinstance(session, dict):
+        return [session]
+    project_root = resolve_project_root(file)
+    lsp_range: dict[str, Any] | None = None
+    if range_start and range_end:
+        sl, sc = parse_position(range_start)
+        el, ec = parse_position(range_end)
+        lsp_range = {"start": {"line": sl, "character": sc}, "end": {"line": el, "character": ec}}
+    raw = session.code_actions(uri, lsp_range, only=only)
+    normalized: list[dict[str, Any]] = []
+    for action in raw:
+        if not isinstance(action, dict):
+            continue
+        edit = action.get("edit")
+        normalized.append({
+            "title": action.get("title", ""),
+            "kind": action.get("kind", ""),
+            "edit": normalize_workspace_edit(edit, project_root) if edit else None,
+            "isPreferred": action.get("isPreferred", False),
+            "disabled": action.get("disabled"),
+        })
+    return normalized
+
+
+def format_preview(
+    file: str, range_start: str | None = None, range_end: str | None = None,
+) -> dict[str, Any] | None:
+    session, uri = _open_file_session(file)
+    if isinstance(session, dict):
+        return session
+    project_root = resolve_project_root(file)
+    if range_start and range_end:
+        sl, sc = parse_position(range_start)
+        el, ec = parse_position(range_end)
+        lsp_range = {"start": {"line": sl, "character": sc}, "end": {"line": el, "character": ec}}
+        raw = session.range_formatting(uri, lsp_range)
+    else:
+        raw = session.formatting(uri)
+    if not raw:
+        return None
+    edits: list[dict[str, Any]] = []
+    for ed in raw:
+        if isinstance(ed, dict):
+            text = ed.get("newText", "")
+            rng = ed.get("range", {})
+            edits.append({
+                "range": rng,
+                "startLine": rng.get("start", {}).get("line", 0) + 1,
+                "startCharacter": rng.get("start", {}).get("character", 0),
+                "endLine": rng.get("end", {}).get("line", 0) + 1,
+                "endCharacter": rng.get("end", {}).get("character", 0),
+                "newText": text,
+            })
+    return {
+        "file": file,
+        "edits": edits,
+        "editCount": len(edits),
+    }
+
+
+def organize_imports_preview(file: str) -> dict[str, Any] | None:
+    session, uri = _open_file_session(file)
+    if isinstance(session, dict):
+        return session
+    project_root = resolve_project_root(file)
+    raw = session.organize_imports(uri)
+    edit = normalize_workspace_edit(raw, project_root) if raw else None
+    if not edit:
+        return None
+    return {
+        "file": file,
+        "edit": edit,
+    }
+
+
 def diagnostics(
     root: str = ".", min_severity: int = 4, limit: int = 0,
 ) -> dict[str, list[dict[str, Any]]]:
