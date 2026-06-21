@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from audiagentic.cli_io import print_json
 from audiagentic.components.optional.providers.adapters.claude.restrictions import (
     enforce_stage_restrictions,
 )
@@ -206,7 +207,7 @@ def _handle_user_prompt_submit_cli(payload: dict[str, Any] | None = None) -> int
     )
     result = UserPromptSubmit_handler(raw_prompt, _session_metadata_from_payload(payload))
     if result:
-        print(json.dumps(result))
+        print_json(result)
     return 0
 
 
@@ -225,7 +226,7 @@ def _handle_pre_tool_use_cli(payload: dict[str, Any] | None = None) -> int:
         _session_metadata_from_payload(payload),
     )
     if result:
-        print(json.dumps(result))
+        print_json(result)
     return 0
 
 

@@ -1,4 +1,4 @@
-from audiagentic.components.optional.providers.adapters.mcp_json import (
+from audiagentic.foundation.mcp.json_format import (
     read_mcp_json,
     remove_mcp_json,
     write_mcp_json,
@@ -16,12 +16,13 @@ from ...descriptors.registry import register
 
 register(ProviderDescriptor(
     provider_id="cline",
+    prompt_aliases=("cln",),
     display_name="Cline",
     description="Autonomous coding agent VS Code extension. Supports any model via OpenRouter, Anthropic, OpenAI and others.",
     url="https://cline.bot",
     cli_probe=["cline", "--version"],
     cli_install=cli_recipe("npm", "cline", executable="cline"),
-    vscode_extensions=(
+    host_capabilities=(
         VsCodeExtension("saoudrizwan.claude-dev", "Cline"),
     ),
     permissions=ProviderPermissions(

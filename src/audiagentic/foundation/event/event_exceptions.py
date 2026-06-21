@@ -2,11 +2,27 @@
 
 from __future__ import annotations
 
+from typing import Any
 
-class EventBusError(Exception):
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+
+class EventBusError(AudiaGenticError):
     """Base exception for EventBus errors."""
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "INT-EVT-001",
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=code,
+            kind="event-bus",
+            message=message,
+            details=details or {},
+        )
 
 
 class CycleDetectedError(EventBusError):
@@ -24,10 +40,15 @@ class CycleDetectedError(EventBusError):
         propagation_depth: int | None = None,
         correlation_id: str | None = None,
     ) -> None:
-        super().__init__(message)
-        self.event_id = event_id
-        self.propagation_depth = propagation_depth
-        self.correlation_id = correlation_id
+        details = {
+            "event-id": event_id,
+            "propagation-depth": propagation_depth,
+            "correlation-id": correlation_id,
+        }
+        super().__init__(message, code="CON-EVT-001", details=details)
+        object.__setattr__(self, "event_id", event_id)
+        object.__setattr__(self, "propagation_depth", propagation_depth)
+        object.__setattr__(self, "correlation_id", correlation_id)
 
 
 class SubscriberError(EventBusError):
@@ -44,10 +65,15 @@ class SubscriberError(EventBusError):
         handler_name: str | None = None,
         event_type: str | None = None,
     ) -> None:
-        super().__init__(message)
-        self.pattern = pattern
-        self.handler_name = handler_name
-        self.event_type = event_type
+        details = {
+            "pattern": pattern,
+            "handler-name": handler_name,
+            "event-type": event_type,
+        }
+        super().__init__(message, code="INT-EVT-002", details=details)
+        object.__setattr__(self, "pattern", pattern)
+        object.__setattr__(self, "handler_name", handler_name)
+        object.__setattr__(self, "event_type", event_type)
 
 
 class PersistenceError(EventBusError):
@@ -63,6 +89,7 @@ class PersistenceError(EventBusError):
         event_id: str | None = None,
         path: str | None = None,
     ) -> None:
-        super().__init__(message)
-        self.event_id = event_id
-        self.path = path
+        details = {"event-id": event_id, "path": path}
+        super().__init__(message, code="IO-EVT-001", details=details)
+        object.__setattr__(self, "event_id", event_id)
+        object.__setattr__(self, "path", path)

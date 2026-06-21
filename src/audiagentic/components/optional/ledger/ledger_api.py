@@ -14,6 +14,8 @@ from audiagentic.components.optional.ledger.audit import generate_audit_and_chec
 from audiagentic.components.optional.ledger.current_summary import regenerate_current_release
 from audiagentic.components.optional.ledger.fragments import record_change_event as _record
 from audiagentic.components.optional.ledger.sync import sync_current_release_ledger
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.io import load_ndjson
 
 
 def record_change(project_root: Path, event: dict[str, Any], *, sync: bool = False) -> dict[str, Any]:
@@ -74,6 +76,27 @@ def generate_audit(project_root: Path) -> dict[str, Any]:
 def archive_current(project_root: Path, release_id: str) -> dict[str, Any]:
     """Merge current ledger into historical and reset current. Called before release finalization."""
     return archive_current_ledger(project_root, release_id)
+
+
+def archive_for_release(project_root: Path, release_id: str) -> dict[str, Any]:
+    """Sync and archive the current ledger for a release finalization request."""
+    sync(project_root)
+    try:
+        return archive_current(project_root, release_id)
+    except AudiaGenticError as exc:
+        if exc.code not in {"RLS-BUSINESS-020", "CON-ARCHIVE-001"}:
+            raise
+        historical_path = project_root / "docs" / "releases" / "LEDGER.ndjson"
+        historical = load_ndjson(historical_path)
+        if not any(event.get("release-id") == release_id for event in historical):
+            raise
+        return {
+            "release-id": release_id,
+            "archived-events": 0,
+            "purged-fragments": 0,
+            "historical-ledger": str(historical_path),
+            "released-event-ids": [],
+        }
 
 
 def get_status(project_root: Path) -> dict[str, Any]:

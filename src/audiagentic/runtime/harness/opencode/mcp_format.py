@@ -7,12 +7,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.optional.providers.adapters.mcp_json import (
+from audiagentic.foundation.mcp import McpServerEntry
+from audiagentic.foundation.mcp.json_format import (
     read_mcp_json,
     remove_mcp_json,
     write_mcp_json,
 )
-from audiagentic.foundation.mcp import McpServerEntry
 
 
 def opencode_mcp_path(project_root: Path | None = None) -> Path:

@@ -6,15 +6,19 @@ No separate orchestration lane — deps are workflow steps.
 """
 from __future__ import annotations
 
-import importlib
+import shlex
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.foundation.io import load_yaml_file
 from audiagentic.foundation.toolchains.detect import (
     detect_pkg_manager,
     platform_key,
     tool_available,
+    uv_available,
 )
 from audiagentic.foundation.toolchains.loader import build_step, has_action, raw_step
 from audiagentic.foundation.workflow.invocation.steps import (
@@ -22,9 +26,20 @@ from audiagentic.foundation.workflow.invocation.steps import (
     SequenceStep,
     planned_commands,
 )
-from audiagentic.runtime.config import load_yaml_file
 
 from .loader import component_yaml_path
+
+
+def _dependency_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
+    return make_error(
+        prefix="VAL",
+        component="DEP",
+        number=code_number,
+        kind="component-dependencies",
+        message=message,
+        details=details,
+    )
+
 
 # ---------------------------------------------------------------------------
 # Probe resolution
@@ -34,14 +49,39 @@ def _resolve_probe(spec: str) -> Callable[[], bool]:
     if spec.startswith("binary:"):
         binary = spec[7:]
         return lambda: tool_available(binary)
+    if spec.startswith("all-binaries:"):
+        binaries = tuple(part.strip() for part in spec[13:].split(",") if part.strip())
+        return lambda: all(tool_available(binary) for binary in binaries)
     if spec.startswith("path:"):
         p = Path(spec[5:].replace("~", str(Path.home())))
         return lambda: p.exists()
+    if spec == "toolchain:uv":
+        return uv_available
+    if spec.startswith("command:"):
+        command = tuple(shlex.split(spec[8:]))
+
+        def _probe_command() -> bool:
+            if not command:
+                return False
+            try:
+                result = subprocess.run(
+                    command,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                return False
+            return result.returncode == 0
+
+        return _probe_command
     if spec.startswith("custom:"):
         dotpath = spec[7:]
+        import importlib
         module_name, fn_name = dotpath.rsplit(".", 1)
         return getattr(importlib.import_module(module_name), fn_name)
-    raise ValueError(f"unknown probe syntax: {spec!r}")
+    raise _dependency_error(1, f"unknown probe syntax: {spec!r}", probe=spec)
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +146,7 @@ def _dep_workflow(dep_id: str, cfg: dict[str, Any], action: str) -> SelectStep:
         pkg_spec = cfg["package"] if action == "install" else cfg.get("uninstall-package", cfg["package"])
         if isinstance(pkg_spec, list):
             if not pkg_spec:
-                raise ValueError(f"{dep_id}: package list must not be empty")
+                raise _dependency_error(2, f"{dep_id}: package list must not be empty", dependency=dep_id)
             pkg = pkg_spec[0]
             extra = tuple(pkg_spec[1:])
         else:
@@ -138,7 +178,7 @@ def _topo_sort(dep_cfgs: dict[str, Any]) -> list[str]:
         if name not in dep_cfgs:
             return
         if name in visiting:
-            raise ValueError(f"circular dependency: {name!r}")
+            raise _dependency_error(3, f"circular dependency: {name!r}", dependency=name)
         visiting.add(name)
         for req in dep_cfgs[name].get("requires", []):
             visit(req)

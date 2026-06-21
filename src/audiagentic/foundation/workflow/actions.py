@@ -7,9 +7,22 @@ from __future__ import annotations
 
 import re
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+
 from .interfaces import WorkflowContext
 
 _PLACEHOLDER_RE = re.compile(r"^\{(\w+)\}$")
+
+
+def _action_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
+    return make_error(
+        prefix="VAL",
+        component="WFACT",
+        number=code_number,
+        kind="workflow",
+        message=message,
+        details=details,
+    )
 
 
 def render(value, context: dict):
@@ -29,12 +42,12 @@ def render(value, context: dict):
         if match:
             key = match.group(1)
             if key not in context:
-                raise ValueError(f"unknown placeholder '{{{key}}}'")
+                raise _action_error(1, f"unknown placeholder '{{{key}}}'", placeholder=key)
             return context[key]
         try:
             return value.format(**context)
         except KeyError as e:
-            raise ValueError(f"unknown placeholder {e} in '{value}'") from e
+            raise _action_error(2, f"unknown placeholder {e} in '{value}'", placeholder=str(e)) from e
     if isinstance(value, list):
         return [render(v, context) for v in value]
     if isinstance(value, dict):
@@ -62,7 +75,7 @@ class WorkflowActionExecutor:
 
         creates = action.get("creates", {})
         if not creates:
-            raise ValueError(f"workflow action '{action_name}' has no creates config")
+            raise _action_error(3, f"workflow action '{action_name}' has no creates config", action=action_name)
 
         created: dict[str, object] = {}
         for create_key, spec in creates.items():
@@ -111,10 +124,15 @@ class WorkflowActionExecutor:
         child_id_from = spec.get("child_id_from")
 
         if not target_id or not ref_field or not child_id_from:
-            raise ValueError("workflow update requires 'target', 'ref_field', and 'child_id_from'")
+            raise _action_error(
+                4,
+                "workflow update requires 'target', 'ref_field', and 'child_id_from'",
+            )
         if child_id_from not in created:
-            raise ValueError(
-                f"workflow update child_id_from '{child_id_from}' is not a created key"
+            raise _action_error(
+                5,
+                f"workflow update child_id_from '{child_id_from}' is not a created key",
+                child_id_from=child_id_from,
             )
 
         child_id = created[child_id_from].data["id"]

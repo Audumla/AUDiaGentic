@@ -11,19 +11,12 @@ files:
   - path: .audiagentic/config/project.yaml
     lifecycle: create-if-missing
     description: Project identity and workflow config
-  - path: .audiagentic/config/execution/prompt-syntax.yaml
-    lifecycle: create-if-missing
-    description: Canonical prompt tag aliases
   - path: .audiagentic/config/interoperability/config.yaml
     lifecycle: create-if-missing
     description: Event bus and interoperability runtime config
   - path: .audiagentic/config/interoperability/events.yaml
     lifecycle: create-if-missing
     description: Project event definitions
-  - path: .audiagentic/prompts
-    lifecycle: required-managed
-    recursive: true
-    description: Managed prompt templates
 mcp-servers:
   - name: ag-project-mgmt
     module: audiagentic.components.core.project.project_mcp

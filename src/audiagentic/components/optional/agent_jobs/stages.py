@@ -1,11 +1,14 @@
 """Stage execution contract and persistence."""
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+logger = logging.getLogger(__name__)
 from audiagentic.foundation.io import atomic_write_json
 
 StageHandler = Callable[

@@ -37,11 +37,20 @@ def list_provider_descriptors() -> list[dict[str, Any]]:
             "display_name": descriptor.display_name,
             "description": descriptor.description,
             "url": descriptor.url,
+            "prompt_aliases": list(descriptor.prompt_aliases),
             "has_cli": descriptor.cli_probe is not None,
             "cli_probe": descriptor.cli_probe,
             "supports_catalog_fetch": descriptor.fetch_catalog_fn is not None,
+            "host_capabilities": [
+                {
+                    "host": capability.host,
+                    "capability_id": capability.capability_id,
+                    "display_name": capability.display_name,
+                }
+                for capability in descriptor.host_capabilities
+            ],
             "vscode_extensions": [
-                {"extension_id": extension.extension_id, "display_name": extension.display_name}
+                {"extension_id": extension.capability_id, "display_name": extension.display_name}
                 for extension in descriptor.vscode_extensions
             ],
             "permissions": {

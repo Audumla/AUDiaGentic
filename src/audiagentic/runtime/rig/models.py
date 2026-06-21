@@ -9,7 +9,20 @@ import logging
 import os
 from pathlib import Path
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+
 logger = logging.getLogger(__name__)
+
+
+def _rig_model_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
+    return make_error(
+        prefix="CFG",
+        component="RIG",
+        number=code_number,
+        kind="runtime-rig",
+        message=message,
+        details=details,
+    )
 
 
 def load_model_profile(
@@ -19,7 +32,7 @@ def load_model_profile(
 ) -> tuple[str, dict[str, object]]:
     """Resolve a model profile from the rig config.
 
-    Returns (profile_name, profile_dict). Raises SystemExit if not found.
+    Returns (profile_name, profile_dict). Raises AudiaGenticError if not found.
     rig_config defaults to the package-bundled rig.yaml.
     """
     from audiagentic.runtime.rig.embedded.config import (
@@ -35,7 +48,7 @@ def load_model_profile(
     data = load_rig_profiles(rig_config)
     models = data.get("models", {})
     if not isinstance(models, dict):
-        raise SystemExit(f"Invalid rig config: {rig_config}")
+        raise _rig_model_error(1, f"Invalid rig config: {rig_config}", path=str(rig_config))
 
     rig_profile, rig_model_id = load_rig_model(rig_config)
     target = (
@@ -51,13 +64,16 @@ def load_model_profile(
         elif model == rig_model_id:
             target = rig_profile
     if not target:
-        raise SystemExit(
+        raise _rig_model_error(
+            2,
             f"Model profile not found: {model}. "
             f"Set AUDIAGENTIC_AG_MODEL, set model in harness config, or ensure "
-            f"the model name matches an entry in {rig_config}."
+            f"the model name matches an entry in {rig_config}.",
+            model=model,
+            path=str(rig_config),
         )
     if target not in models:
-        raise SystemExit(f"Model profile not found: {target}")
+        raise _rig_model_error(3, f"Model profile not found: {target}", profile=target, path=str(rig_config))
     return target, resolve_profile_definition(target, rig_config)
 
 

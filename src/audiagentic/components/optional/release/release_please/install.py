@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.lifecycle.components import DEFAULT_VERSION
 
 _TEMPLATES = Path(__file__).parent / "templates"
@@ -25,7 +26,15 @@ def install(
     initial_version: str = DEFAULT_VERSION,
 ) -> dict[str, list[str]]:
     if release_type not in SUPPORTED_RELEASE_TYPES:
-        raise ValueError(f"Unsupported release_type '{release_type}'. Choose from: {SUPPORTED_RELEASE_TYPES}")
+        raise AudiaGenticError(
+            code="VAL-RELINST-001",
+            kind="release",
+            message="unsupported release type",
+            details={
+                "release-type": release_type,
+                "supported-release-types": list(SUPPORTED_RELEASE_TYPES),
+            },
+        )
 
     subs = {
         "__RELEASE_TYPE__": release_type,

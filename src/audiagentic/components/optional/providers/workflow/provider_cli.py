@@ -4,6 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.foundation.contracts.output import ComponentOutputEvent, ComponentOutputSink
 from audiagentic.foundation.workflow import ItemView, StateMachine
 from audiagentic.foundation.workflow.invocation import (
@@ -245,4 +246,11 @@ def _action_config(action: str) -> dict[str, Any]:
             "legacy_success_status": "uninstalled",
             "probe_available": False,
         }
-    raise ValueError(f"unknown provider CLI action: {action}")
+    raise make_error(
+        prefix="VAL",
+        component="PROVCLI",
+        number=1,
+        kind="providers",
+        message=f"unknown provider CLI action: {action}",
+        details={"action": action},
+    )

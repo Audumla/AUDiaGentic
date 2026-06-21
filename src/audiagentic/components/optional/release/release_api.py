@@ -7,11 +7,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.optional.release.events import RELEASE_LEDGER_ARCHIVE_REQUESTED
 from audiagentic.components.optional.release.release_please import install as _rp_install
 from audiagentic.components.optional.release.release_please import manage as _rp_manage
 from audiagentic.components.optional.release.release_please.finalize import render_release_docs
+from audiagentic.foundation.components.ids import COMPONENT_RELEASE
+from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import load_ndjson
+from audiagentic.foundation.event import DeliveryMode, get_bus
 from audiagentic.runtime.lifecycle.components import DEFAULT_VERSION
 
 
@@ -37,31 +40,35 @@ def update_workflow(project_root: Path, branch: str = "main", python_version: st
 
 
 def finalize(project_root: Path, release_id: str) -> dict[str, Any]:
-    """Archive current ledger then render release documents.
+    """Request ledger archival then render release documents.
 
-    Calls ledger_api.archive_current then renders CHANGELOG.md etc.
+    Publishes a synchronous release event handled by the ledger component, then
+    renders CHANGELOG.md etc. from the archived ledger state.
     After this returns, the agent should call the GitHub MCP server create_release_tag tool.
     """
-    from audiagentic.components.optional.ledger.ledger_api import archive_current, sync
-    sync(project_root)
-    try:
-        archive_result = archive_current(project_root, release_id)
-        released_ids = archive_result.get("released-event-ids")
-    except AudiaGenticError as exc:
-        if exc.code not in {"RLS-BUSINESS-020", "CON-ARCHIVE-001"}:
-            raise
-        historical_path = project_root / "docs" / "releases" / "LEDGER.ndjson"
-        historical = load_ndjson(historical_path)
-        if not any(event.get("release-id") == release_id for event in historical):
-            raise
-        archive_result = {
-            "release-id": release_id,
-            "archived-events": 0,
-            "purged-fragments": 0,
-            "historical-ledger": str(historical_path),
-            "released-event-ids": [],
-        }
-        released_ids = None
+    register_all_components()
+    archive_result: dict[str, Any] = {}
+    get_bus().publish(
+        RELEASE_LEDGER_ARCHIVE_REQUESTED,
+        {
+            "project_root": project_root,
+            "release_id": release_id,
+            "result": archive_result,
+        },
+        metadata={
+            "source_component": COMPONENT_RELEASE,
+            "subject": {"kind": "release", "id": release_id},
+        },
+        mode=DeliveryMode.SYNC,
+    )
+    if not archive_result:
+        raise AudiaGenticError(
+            code="INT-RELEASE-001",
+            kind="release",
+            message="ledger archive event was not handled",
+            details={"release-id": release_id},
+        )
+    released_ids = archive_result.get("released-event-ids") or None
     docs_result = render_release_docs(project_root, release_id, released_event_ids=released_ids)
     return {**archive_result, **docs_result}
 

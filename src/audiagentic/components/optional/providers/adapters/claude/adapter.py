@@ -194,8 +194,8 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
             details={
                 "provider-id": "claude",
                 "returncode": completed.returncode,
-                "stdout": stdout_text,
-                "stderr": stderr_text,
+                "stdout-length": len(stdout_text),
+                "stderr-length": len(stderr_text),
                 "command": command,
             },
         )

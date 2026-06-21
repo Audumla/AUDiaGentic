@@ -1,34 +1,45 @@
-"""Per-language LSP configuration registry.
+"""LSP language adapter over the foundation feature catalog.
 
-Each supported language is declared in its own YAML file under
-`config/components/optional/coding-lsp/`, mirroring the per-provider surface
-descriptor pattern. A language file owns everything about that language:
-server command, file extensions, detection markers, LSP languageId, and its
-single dependency (probe + install recipe).
+Each supported language is registered by the generic foundation feature loader
+from `config/components/optional/coding-lsp/`. This module does not scan YAML or
+own a separate catalog; it adapts registered coding-lsp `FeatureDescriptor`s
+into the LSP runtime shape used by session startup, detection, and dependency
+installation.
 
-The coding-lsp component itself owns no language facts — it orchestrates
-(enable/install/propagate) over this registry.
+`LanguageSpec` remains coding-lsp local because server commands, file
+extensions, detection markers, LSP language IDs, and probe/install recipes are
+LSP-domain facts rather than foundation feature fields.
 """
 from __future__ import annotations
 
 import subprocess
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.components.ids import COMPONENT_CODING_LSP
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.foundation.features.base import FeatureDescriptor, OptionSchema
+from audiagentic.foundation.features.options import load_option_schema
 from audiagentic.foundation.toolchains.detect import tool_available
-from audiagentic.paths import SRC_ROOT
-from audiagentic.runtime.config import load_yaml_file
-
-_LANGUAGE_CONFIG_DIR = SRC_ROOT / "audiagentic" / "config" / "components" / "optional" / "coding-lsp"
 
 _REGISTRY: dict[str, LanguageSpec] = {}
 _LOADED = False
 
 
+def _lsp_error(code_number: int, message: str, **details: Any) -> AudiaGenticError:
+    return make_error(
+        prefix="VAL",
+        component="LSP",
+        number=code_number,
+        kind="coding-lsp",
+        message=message,
+        details=details,
+    )
+
+
 @dataclass(frozen=True)
 class LanguageDependency:
-    """A language's single LSP server dependency.
+    """A language's LSP server dependency.
 
     `cfg` is the raw dependency block (minus `id`) in the exact shape the
     foundation dependency workflow consumes: probe + toolchain/package or
@@ -49,21 +60,47 @@ class LanguageSpec:
     detection_markers: tuple[str, ...] = ()
     dependency: LanguageDependency | None = None
     settings: dict[str, Any] = field(default_factory=dict)
+    options_schema: dict[str, OptionSchema] = field(default_factory=dict)
 
 
-def load_language_from_yaml(path: Path) -> LanguageSpec:
-    data = load_yaml_file(path)
-    if data.get("type") != "language":
-        raise ValueError(f"{path.name}: expected type=language, got {data.get('type')}")
+def _is_language_feature(data: dict[str, Any]) -> bool:
+    return (
+        data.get("type") == "feature"
+        and data.get("kind") == "language"
+        and data.get("parent") == "coding-lsp"
+    )
+
+
+def language_spec_from_data(data: dict[str, Any], *, source: str = "<descriptor>") -> LanguageSpec:
+    """Build a LanguageSpec from a coding-lsp language feature mapping.
+
+    The mapping is the descriptor body — identical whether it came from the
+    registered FeatureDescriptor's ``raw`` or from a YAML file on disk.
+    """
+    if not _is_language_feature(data):
+        raise _lsp_error(
+            1,
+            f"{source}: expected coding-lsp language feature",
+            source=source,
+            descriptor_type=data.get("type"),
+            kind=data.get("kind"),
+            parent=data.get("parent"),
+        )
     server = data.get("server") or {}
     dep_raw = data.get("dependency") or {}
+    dependencies = data.get("dependencies") or {}
+    if not dep_raw and dependencies:
+        if not isinstance(dependencies, dict):
+            raise _lsp_error(2, f"{source}: dependencies must be a mapping", source=source)
+        dep_id, dep_cfg = next(iter(dependencies.items()))
+        dep_raw = {"id": dep_id, **dict(dep_cfg or {})}
     dependency = None
     if dep_raw:
         dep_id = dep_raw["id"]
         cfg = {k: v for k, v in dep_raw.items() if k != "id"}
         dependency = LanguageDependency(id=dep_id, cfg=cfg)
     lang_id = data["id"]
-    spec = LanguageSpec(
+    return LanguageSpec(
         id=lang_id,
         display_name=data.get("display-name", lang_id),
         language_id=data.get("language-id", lang_id),
@@ -73,29 +110,63 @@ def load_language_from_yaml(path: Path) -> LanguageSpec:
         detection_markers=tuple(data.get("detection-markers", [])),
         dependency=dependency,
         settings=dict(server.get("settings", {})),
+        options_schema=load_option_schema(data.get("options-schema")),
     )
-    _REGISTRY[spec.id] = spec
-    return spec
 
 
-def load_all_languages(config_dir: Path | None = None) -> dict[str, LanguageSpec]:
-    target = (config_dir or _LANGUAGE_CONFIG_DIR).resolve()
-    if target.exists():
-        for path in sorted(target.glob("*.yaml")):
-            try:
-                data = load_yaml_file(path)
-            except Exception:  # noqa: BLE001
-                continue
-            if data.get("type") == "language":
-                load_language_from_yaml(path)
-    return dict(_REGISTRY)
+def language_spec_from_feature(descriptor: FeatureDescriptor) -> LanguageSpec:
+    spec = language_spec_from_data(descriptor.raw, source=f"feature:{descriptor.feature_id}")
+    return LanguageSpec(
+        id=spec.id,
+        display_name=spec.display_name,
+        language_id=spec.language_id,
+        command=spec.command,
+        file_extensions=spec.file_extensions,
+        workspace_config_files=spec.workspace_config_files,
+        detection_markers=spec.detection_markers,
+        dependency=spec.dependency,
+        settings=spec.settings,
+        options_schema=descriptor.options_schema,
+    )
+
+
+def _load_from_feature_registry() -> bool:
+    """Populate the registry from registered coding-lsp language features.
+
+    The foundation feature loader already parses every language YAML into a
+    FeatureDescriptor whose ``raw`` is the descriptor body, so the registered
+    catalog is the source of truth. Returns True if any language was loaded.
+    """
+    # Imported lazily so module import does not depend on registration order.
+    from audiagentic.foundation.features.registry import get_features
+
+    loaded = False
+    for descriptor in get_features(COMPONENT_CODING_LSP, "language").values():
+        if not isinstance(descriptor.raw, dict) or not _is_language_feature(descriptor.raw):
+            continue
+        spec = language_spec_from_feature(descriptor)
+        _REGISTRY[spec.id] = spec
+        loaded = True
+    return loaded
+
+
+def _ensure_feature_catalog_loaded() -> None:
+    """Load component descriptors so coding-lsp language features are registered."""
+    from audiagentic.foundation.components.loader import register_all_components
+    from audiagentic.foundation.features.registry import get_features
+
+    if get_features(COMPONENT_CODING_LSP, "language"):
+        return
+    register_all_components()
 
 
 def _ensure_loaded() -> None:
     global _LOADED
-    if not _LOADED:
-        load_all_languages()
-        _LOADED = True
+    if _LOADED:
+        return
+    _ensure_feature_catalog_loaded()
+    _load_from_feature_registry()
+    _LOADED = True
 
 
 def all_languages() -> dict[str, LanguageSpec]:

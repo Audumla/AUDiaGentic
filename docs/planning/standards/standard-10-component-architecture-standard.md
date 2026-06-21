@@ -80,6 +80,8 @@ Sources:
 
 19. Business logic and rules must be config-driven, not hardcoded. Components should provide pluggable implementations that are referenced by name in configuration files. This allows workflows and behaviors to be changed without modifying code. Rule implementations should live in separate modules and be imported dynamically based on config references.
 
+31. Configuration files committed to the repository must not contain user-specific absolute paths (e.g., `C:/Users/...`, `/home/...`, `H:/...`). Commands must resolve via PATH (e.g., `python`, `node`) or use relative paths. Environment-specific overrides belong in local, untracked config files (`.opencode/opencode.local.json`, `.env`, etc.) that are `.gitignore`-d.
+
 ## Extensibility
 
 19. Extension points — places where behavior is expected to vary or be added by outside code — must be defined explicitly as interfaces, abstract base classes, or documented registration patterns. Implicit extension via monkey-patching or subclassing undocumented internals is prohibited.
@@ -125,6 +127,24 @@ Sources:
 - Extension points must have at least one test that exercises a non-default implementation.
 - Bootstrap wiring must be tested end-to-end at least once in the integration test suite.
 - Circular import checks should be part of the standard smoke test (e.g., `python -c "import audiagentic"`).
+
+# Compliance Breaches
+
+## 2026-06-21: Hardcoded local paths in `.opencode/opencode.json`
+
+**Violations:** Req 11 (config-driven design), Req 17 (no hardcoded paths)
+
+**Finding:** `.opencode/opencode.json` contained absolute local paths in three MCP server entries:
+- User-specific Python executable path (Windows AppData store)
+- User-specific project path in `PYTHONPATH` environment variable
+
+**Impact:** Config file was non-portable. Any clone on another machine or user would fail to launch MCP servers.
+
+**Root cause:** Agent copied paths from runtime environment without validation. No standard existed to catch this pattern.
+
+**Remediation:** Replaced all entries with `python -m` (resolves from PATH). Removed `PYTHONPATH` environment overrides — `audiagentic` is installed as a package, making explicit PYTHONPATH unnecessary.
+
+**Prevention:** New requirement added (Req 31) — config files committed to repository must not contain user-specific absolute paths.
 
 # Non-Goals
 

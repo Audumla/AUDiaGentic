@@ -7,6 +7,7 @@ from typing import Any
 
 from audiagentic.foundation.components import all_descriptors, is_enabled, is_installed
 from audiagentic.foundation.components.hooks import get_component_status
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.harness import refresh_harness_config_if_installed
 from audiagentic.runtime.lifecycle.components import (
     disable_component as _lifecycle_disable_component,
@@ -54,7 +55,12 @@ def install_component(project_root: Path, component_id: str) -> dict[str, Any]:
 def uninstall_component(project_root: Path, component_id: str, *, remove_configs: bool = False) -> dict[str, Any]:
     descriptor = all_descriptors().get(component_id)
     if descriptor and descriptor.core:
-        raise RuntimeError(f"cannot uninstall core component: {component_id}")
+        raise AudiaGenticError(
+            code="CON-PROJCOMP-001",
+            kind="project",
+            message="cannot uninstall core component",
+            details={"component-id": component_id},
+        )
     result = _lifecycle_uninstall_component(component_id, project_root, remove_configs=remove_configs)
     return attach_harness_refresh(result, project_root, reason="component-uninstalled", component_id=component_id)
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from audiagentic.foundation.components.dependencies import detect_missing
+from audiagentic.foundation.components.dependencies import build_dependency_probes, detect_missing
 from audiagentic.foundation.workflow.invocation.models import StepResult
 from audiagentic.foundation.workflow.invocation.steps import SelectStep, SequenceStep, ShellStep
 
@@ -33,12 +33,36 @@ def test_detect_missing_all_satisfied() -> None:
     assert detect_missing(probes) == []
 
 
+def test_all_binaries_probe_requires_every_binary(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "audiagentic.foundation.components.dependencies.tool_available",
+        lambda name: name == "present",
+    )
+    probes = build_dependency_probes(
+        {"thing": {"probe": "all-binaries:present,missing"}}
+    )
+
+    assert probes["thing"]() is False
+
+
+def test_command_probe_reports_success(monkeypatch) -> None:
+    class _Result:
+        returncode = 0
+
+    monkeypatch.setattr(
+        "audiagentic.foundation.components.dependencies.subprocess.run",
+        lambda *args, **kwargs: _Result(),
+    )
+    probes = build_dependency_probes({"thing": {"probe": "command:tool --version"}})
+
+    assert probes["thing"]() is True
+
+
 # ---------------------------------------------------------------------------
 # SelectStep — core dispatch primitive
 # ---------------------------------------------------------------------------
 
 def test_select_step_runs_matching_variant() -> None:
-    ran = []
     step = SelectStep(
         id="s",
         select=lambda _: "apt",
@@ -62,7 +86,6 @@ def test_select_step_skips_when_select_returns_none() -> None:
 
 
 def test_select_step_uses_fallback_on_missing_variant() -> None:
-    fallback_ran = []
     fallback = SelectStep(
         id="fallback",
         select=lambda _: "linux",

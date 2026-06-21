@@ -3,6 +3,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from audiagentic.cli_io import print_message
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+
 from . import constants as _c
 from .patches_mcp_progress import (
     _patch_mcp_direct_tools_progress,
@@ -11,10 +14,21 @@ from .patches_mcp_progress import (
 from .patches_mcp_register import _patch_mcp_direct_tools_live_register
 
 
+def _patch_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
+    return make_error(
+        prefix="RES",
+        component="PIINST",
+        number=code_number,
+        kind="pi-harness",
+        message=message,
+        details=details,
+    )
+
+
 def _patch_slash_commands(npm_dir: Path, blocked: list[str]) -> None:
     target = _c._audiagentic_pkg_dir(npm_dir) / "dist" / "core" / "slash-commands.js"
     if not target.exists():
-        raise SystemExit(f"AudiaGentic agent install incomplete — not found: {target}")
+        raise _patch_error(1, f"AudiaGentic agent install incomplete - not found: {target}", path=str(target))
     source = target.read_text(encoding="utf-8")
     for cmd in blocked:
         source = re.sub(
@@ -31,7 +45,7 @@ def _patch_interactive_mode(npm_dir: Path, blocked: list[str]) -> None:
         / "dist" / "modes" / "interactive" / "interactive-mode.js"
     )
     if not target.exists():
-        raise SystemExit(f"AudiaGentic agent install incomplete — not found: {target}")
+        raise _patch_error(2, f"AudiaGentic agent install incomplete - not found: {target}", path=str(target))
     source = target.read_text(encoding="utf-8")
     for cmd in blocked:
         source = re.sub(
@@ -48,7 +62,7 @@ def _patch_tool_execution(npm_dir: Path) -> None:
         / "dist" / "modes" / "interactive" / "components" / "tool-execution.js"
     )
     if not target.exists():
-        raise SystemExit(f"AudiaGentic agent install incomplete — not found: {target}")
+        raise _patch_error(3, f"AudiaGentic agent install incomplete - not found: {target}", path=str(target))
     source = target.read_text(encoding="utf-8")
 
     helper_import = 'import { existsSync, readFileSync } from "fs";'
@@ -124,7 +138,7 @@ def _patch_update_notification(npm_dir: Path) -> None:
         / "dist" / "modes" / "interactive" / "interactive-mode.js"
     )
     if not target.exists():
-        raise SystemExit(f"AudiaGentic agent install incomplete — not found: {target}")
+        raise _patch_error(4, f"AudiaGentic agent install incomplete - not found: {target}", path=str(target))
     source = target.read_text(encoding="utf-8")
 
     # Match the version-check block regardless of the callback variable name.
@@ -223,19 +237,19 @@ def apply_lockdown_patches(npm_dir: Path, project_root: Path | None = None) -> N
     if blocked:
         _patch_slash_commands(npm_dir, blocked)
         _patch_interactive_mode(npm_dir, blocked)
-        _c._print(f"Patched AudiaGentic agent: blocked commands {blocked}")
+        print_message(f"Patched AudiaGentic agent: blocked commands {blocked}")
     if pi_cfg.get("ui", {}).get("hide_tool_use"):
         _patch_tool_execution(npm_dir)
-        _c._print("Patched AudiaGentic agent: MCP tool call blocks hidden")
+        print_message("Patched AudiaGentic agent: MCP tool call blocks hidden")
     _patch_update_notification(npm_dir)
-    _c._print("Patched AudiaGentic agent: update notifications suppressed")
+    print_message("Patched AudiaGentic agent: update notifications suppressed")
     _patch_mcp_oauth_suppress(npm_dir)
-    _c._print("Patched MCP adapter: OAuth callback server suppressed (stdio servers only)")
+    print_message("Patched MCP adapter: OAuth callback server suppressed (stdio servers only)")
     _patch_mcp_explicit_config_only(npm_dir)
-    _c._print("Patched MCP adapter: explicit config disables auto-discovery")
+    print_message("Patched MCP adapter: explicit config disables auto-discovery")
     _patch_mcp_direct_tools_live_register(npm_dir)
-    _c._print("Patched MCP adapter: bootstrapped direct tools register in-session")
+    print_message("Patched MCP adapter: bootstrapped direct tools register in-session")
     _patch_mcp_direct_tools_progress(npm_dir)
-    _c._print("Patched MCP adapter: direct tool progress bridged to Pi")
+    print_message("Patched MCP adapter: direct tool progress bridged to Pi")
     _patch_mcp_proxy_progress(npm_dir)
-    _c._print("Patched MCP adapter: proxy tool progress bridged to Pi")
+    print_message("Patched MCP adapter: proxy tool progress bridged to Pi")

@@ -1,8 +1,9 @@
-"""LSP configuration: lsp.json parsing, language detection, server discovery.
+"""LSP cache parsing, language detection, and server discovery helpers.
 
-Active runtime config is explicit (`lsp.json`) only. Project-language detection
-is advisory for status/UI flows, not an implicit source of server config.
-Server availability is probed via foundation.system.probe.
+Active runtime config is resolved from feature state and bindings by
+runtime_resolver.py. `lsp.json` is kept as generated cache/projection data.
+Project-language detection is advisory for status/UI flows, not an implicit
+source of server config. Server availability is probed via foundation.system.probe.
 """
 from __future__ import annotations
 
@@ -20,8 +21,8 @@ CODING_LSP_DIR = Path(".coding-lsp")
 
 # Language facts (server command, extensions, detection markers, dependency)
 # live in per-language YAML files loaded via `language_registry`. This module
-# owns parsing/validation of the active config (`lsp.json`) and runtime
-# discovery — not the catalog of supported languages.
+# owns parsing/validation of generated cache (`lsp.json`) and runtime
+# discovery helpers — not the catalog of supported languages.
 
 
 # ── public API ──────────────────────────────────────────────────────────────
@@ -58,7 +59,7 @@ def detect_project_languages(project_root: Path | str) -> dict[str, str]:
     """Scan project root for config files, return {language: marker_file}.
 
     Advisory only — detection never activates a language. Active languages
-    come solely from `lsp.json`.
+    come from feature state and active implementation bindings.
     """
     if isinstance(project_root, str):
         project_root = Path(project_root)
@@ -72,10 +73,10 @@ def detect_project_languages(project_root: Path | str) -> dict[str, str]:
 
 
 def load_runtime_servers(path: Path | str) -> tuple[dict[str, ServerConfig], list[str], bool]:
-    """Load validated runtime servers from lsp.json.
+    """Load validated generated runtime cache from lsp.json.
 
-    Returns (servers, errors, exists). Runtime is config-first:
-    missing or invalid config yields no synthesized server entries.
+    Returns (servers, errors, exists). This validates cache/projection data; the
+    active runtime source is feature state plus bindings.
     """
     if isinstance(path, str):
         path = Path(path)
@@ -142,13 +143,19 @@ def load_runtime_servers(path: Path | str) -> tuple[dict[str, ServerConfig], lis
 def discover_language_servers(project_root: Path | str) -> dict[str, bool]:
     """Discover available language servers for a project.
 
-    Returns {language: available} for each configured/detected server.
+    Returns {language: available} for each active language. Active languages are
+    resolved from feature state + the active implementation's bindings (the source
+    of truth), not from the generated lsp.json cache.
     """
     if isinstance(project_root, str):
         project_root = Path(project_root)
 
-    lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
-    servers, _, _ = load_runtime_servers(lsp_path)
+    # Lazy import to avoid an import cycle with runtime_resolver.
+    from audiagentic.components.optional.coding_lsp.runtime_resolver import (
+        resolve_active_runtime_servers,
+    )
+
+    servers = resolve_active_runtime_servers(project_root)
 
     results: dict[str, bool] = {}
     for name in servers:

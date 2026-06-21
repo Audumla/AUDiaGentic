@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.runtime.harness.rig import launch_rig_if_needed
 from audiagentic.runtime.rig.embedded.config import load_rig_model
 from audiagentic.runtime.rig.models import (
@@ -27,6 +28,23 @@ from .context import (
     resolve_agent_bin,
 )
 
+__all__ = [
+    "AgentContext",
+    "_build_run_env",
+    "build_agent_command",
+    "build_global_context",
+    "check_endpoint",
+    "direct_mcp_smoke",
+    "env_flag",
+    "env_with_pythonpath",
+    "load_harness_config",
+    "require_harness_provider",
+    "require_harness_rig_port",
+    "resolve_agent_bin",
+    "run_agent",
+    "translate_agent_args",
+]
+
 
 def translate_agent_args(params) -> list[str]:
     """Translate harness-agnostic RunnerParams to PI agent CLI flags.
@@ -48,9 +66,16 @@ def build_global_context(*, project_root: Path, agent_runtime: Path, enable_mcp:
     harness_cfg = load_harness_config(project_root=project_root)
     requested_model = os.environ.get("AUDIAGENTIC_AG_MODEL") or harness_cfg.get("rig", {}).get("model")
     if not requested_model:
-        raise SystemExit(
-            "No model configured. Set AUDIAGENTIC_AG_MODEL environment variable "
-            "or set 'model' in harness config."
+        raise make_error(
+            prefix="CFG",
+            component="HCFG",
+            number=9,
+            kind="harness-config",
+            message=(
+                "No model configured. Set AUDIAGENTIC_AG_MODEL environment variable "
+                "or set 'model' in harness config."
+            ),
+            details={"field": "rig.model"},
         )
     profile_name, model_profile = load_model_profile(None, requested_model)
     rig_port = require_harness_rig_port(harness_cfg)

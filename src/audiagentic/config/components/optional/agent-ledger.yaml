@@ -4,6 +4,7 @@ id: agent-ledger
 display-name: Agent Ledger
 description: Change ledger — fragment recording, sync, audit summaries, and release archiving
 detection-marker: .audiagentic/components/agent-ledger.yaml
+lifecycle-observer: audiagentic.components.optional.ledger.ledger_events
 files:
   - path: .audiagentic/components/agent-ledger.yaml
     lifecycle: create-if-missing

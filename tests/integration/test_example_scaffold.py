@@ -6,6 +6,7 @@ import tests.dev.seed_example_project as seed_example_project
 import yaml
 from jsonschema import Draft202012Validator
 
+from audiagentic.components.optional.agent_jobs.prompt_syntax import load_prompt_syntax
 from audiagentic.foundation.contracts.schema_registry import read_schema
 
 
@@ -23,8 +24,8 @@ def test_scaffold_seed_creates_layout(tmp_path: Path) -> None:
     target = tmp_path / "project"
     seed_example_project.seed_example_project(target)
     assert (target / ".audiagentic" / "config" / "runtime" / "providers.yaml").is_file()
-    assert (target / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml").is_file()
-    assert (target / ".audiagentic" / "prompts" / "ag-review" / "default.md").is_file()
+    assert not (target / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml").exists()
+    assert not (target / ".audiagentic" / "prompts").exists()
     assert (target / ".github" / "workflows" / "release.yml").is_file()
 
 
@@ -32,7 +33,7 @@ def test_scaffold_configs_validate(tmp_path: Path) -> None:
     target = tmp_path / "project"
     seed_example_project.seed_example_project(target)
     _validate("provider-config", _load_yaml(target / ".audiagentic" / "config" / "runtime" / "providers.yaml"))
-    _validate("prompt-syntax", _load_yaml(target / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml"))
+    _validate("prompt-syntax", load_prompt_syntax(target))
 
 
 def test_seed_refuses_non_empty_target(tmp_path: Path) -> None:

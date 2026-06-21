@@ -11,6 +11,8 @@ from typing import Any
 
 import tomllib
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+
 from ...descriptors.base import LanguageServerEntry
 
 _BARE_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -36,7 +38,12 @@ def _format_scalar(value: Any) -> str:
         return f"[{items}]"
     if isinstance(value, dict):
         return _format_inline_table(value)
-    raise ValueError(f"unsupported value type: {type(value).__name__}")
+    raise AudiaGenticError(
+        code="VAL-PROV-CODEX-LSP-001",
+        kind="providers-codex",
+        message=f"unsupported value type: {type(value).__name__}",
+        details={"type": type(value).__name__},
+    )
 
 
 def _format_inline_table(d: dict[str, Any]) -> str:
@@ -123,5 +130,9 @@ def remove_language_servers_codex(path: Path, language: str) -> bool:
     if not isinstance(servers, dict) or language not in servers:
         return False
     del servers[language]
+    # Drop the table entirely when the last managed server is gone, rather than
+    # leaving an empty [language_servers].
+    if not servers:
+        existing.pop("language_servers", None)
     _save_toml(path, existing)
     return True

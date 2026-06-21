@@ -7,6 +7,7 @@ import logging
 import os
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.config import load_layered_config
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,12 @@ def model_info() -> dict[str, Any]:
         requested = cfg.get("model")
 
     if not isinstance(requested, str) or not requested.strip():
-        raise RuntimeError("missing configured model in harness config")
+        raise AudiaGenticError(
+            code="CFG-SESSSTAT-001",
+            kind="session",
+            message="missing configured model in harness config",
+            details={},
+        )
 
     profile_name, profile = load_active_profile(None, requested)
     info: dict[str, Any] = {
@@ -85,7 +91,12 @@ def harness_config() -> dict[str, Any]:
     if harness:
         models_path = harness / "agent" / "models.json"
         if not models_path.exists():
-            raise RuntimeError(f"missing materialized models config: {models_path}")
+            raise AudiaGenticError(
+                code="RES-SESSSTAT-001",
+                kind="session",
+                message="missing materialized models config",
+                details={"path": str(models_path)},
+            )
         payload["models_path"] = str(models_path)
         payload["models"] = json.loads(models_path.read_text(encoding="utf-8"))
 

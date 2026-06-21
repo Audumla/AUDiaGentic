@@ -8,6 +8,7 @@ from pathlib import Path
 
 import yaml
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.mcp import McpServerEntry
 
 
@@ -40,7 +41,12 @@ def write_goose_yaml(path: Path, entries: dict[str, McpServerEntry]) -> None:
         try:
             existing = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         except (yaml.YAMLError, OSError) as exc:
-            raise ValueError(f"invalid goose YAML config: {path}") from exc
+            raise AudiaGenticError(
+                code="VAL-PROV-GOOSE-MCP-001",
+                kind="providers-goose",
+                message=f"invalid goose YAML config: {path}",
+                details={"path": str(path)},
+            ) from exc
     extensions: list[dict] = list(existing.get("extensions", []))
     by_name = {e.get("name"): i for i, e in enumerate(extensions) if e.get("type") == "stdio"}
     for name, entry in entries.items():

@@ -4,9 +4,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
-from audiagentic.runtime.config import load_yaml_file
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.foundation.io import load_yaml_file
 
 from .base import (
     SCOPE_PROJECT,
@@ -19,6 +18,8 @@ from .base import (
 from .hooks import initialize_lifecycle_hook_dispatch
 from .registry import register
 
+logger = logging.getLogger(__name__)
+
 # Resolve relative to the installed package — works in both editable installs and wheels.
 _PACKAGE_DIR = Path(__file__).resolve().parents[2]  # audiagentic/
 _COMPONENTS_CONFIG_DIR = _PACKAGE_DIR / "config" / "components"
@@ -26,6 +27,17 @@ _ALL_COMPONENT_CONFIG_DIRS = [
     _COMPONENTS_CONFIG_DIR / "core",
     _COMPONENTS_CONFIG_DIR / "optional",
 ]
+
+
+def _component_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
+    return make_error(
+        prefix="VAL",
+        component="COMP",
+        number=code_number,
+        kind="components",
+        message=message,
+        details=details,
+    )
 
 
 def component_yaml_path(component_id: str) -> Path:
@@ -52,10 +64,16 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
     """Parse a single component config YAML and register the descriptor."""
     data = load_yaml_file(path)
     if data.get("type") != "component":
-        raise ValueError(f"{path.name}: expected type=component, got {data.get('type')}")
+        raise _component_error(
+            1,
+            f"{path.name}: expected type=component, got {data.get('type')}",
+            path=str(path),
+            expected="component",
+            actual=data.get("type"),
+        )
     component_id = data.get("id")
     if not isinstance(component_id, str) or not component_id:
-        raise ValueError(f"{path.name}: missing or empty id")
+        raise _component_error(2, f"{path.name}: missing or empty id", path=str(path), field="id")
     files = tuple(
         ComponentFile(
             rel_path=f["path"],
@@ -128,6 +146,7 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
         lifecycle_observer=data.get("lifecycle-observer") or None,
         lifecycle_hook=data.get("lifecycle-hook") or None,
         status_hook=data.get("status-hook") or None,
+        implementation_cardinality=data.get("implementation-cardinality") or None,
     )
     register(descriptor)
     return descriptor
@@ -144,9 +163,27 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
     """
     targets = config_dirs or _ALL_COMPONENT_CONFIG_DIRS
     descriptors = []
+    feature_descriptor_types = {"feature", "implementation", "binding"}
     for target in targets:
         for path in sorted(target.resolve().glob("*.yaml")):
+            data = load_yaml_file(path)
+            if data.get("type") in feature_descriptor_types:
+                from audiagentic.foundation.features.loader import (
+                    register_from_yaml as register_feature_from_yaml,
+                )
+
+                register_feature_from_yaml(path)
+                continue
             descriptors.append(register_from_yaml(path))
+
+        for path in sorted(target.resolve().glob("*/*.yaml")):
+            data = load_yaml_file(path)
+            if data.get("type") in feature_descriptor_types:
+                from audiagentic.foundation.features.loader import (
+                    register_from_yaml as register_feature_from_yaml,
+                )
+
+                register_feature_from_yaml(path)
 
     _validate_loaded_descriptors(descriptors)
 
@@ -173,13 +210,20 @@ def _validate_loaded_descriptors(descriptors: list[ComponentDescriptor]) -> None
             duplicates.add(descriptor.component_id)
         seen.add(descriptor.component_id)
     if duplicates:
-        raise ValueError(f"duplicate component ids loaded: {', '.join(sorted(duplicates))}")
+        raise _component_error(
+            3,
+            f"duplicate component ids loaded: {', '.join(sorted(duplicates))}",
+            duplicate_ids=sorted(duplicates),
+        )
 
     loaded_ids = {d.component_id for d in descriptors}
 
     for descriptor in descriptors:
         for dep in descriptor.depends_on:
             if dep not in loaded_ids:
-                raise ValueError(
-                    f"component '{descriptor.component_id}' depends on unknown component '{dep}'"
+                raise _component_error(
+                    4,
+                    f"component '{descriptor.component_id}' depends on unknown component '{dep}'",
+                    component=descriptor.component_id,
+                    dependency=dep,
                 )

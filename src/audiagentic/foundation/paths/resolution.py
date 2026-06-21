@@ -6,8 +6,21 @@ from typing import Any
 
 import yaml
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+
 _RESOLUTION_ORDER = ("project_local", "user_global", "package_default")
 _MERGE_ORDER = ("package_default", "user_global", "project_local")
+
+
+def _path_error(prefix: str, code_number: int, message: str, **details: Any) -> AudiaGenticError:
+    return make_error(
+        prefix=prefix,
+        component="PATH",
+        number=code_number,
+        kind="paths",
+        message=message,
+        details=details,
+    )
 
 
 def deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
@@ -64,14 +77,26 @@ def resolve_required_file(path_map: dict[str, Path], *, label: str = "File") -> 
     resolved = resolve_existing_file(path_map)
     if resolved is not None:
         return resolved
-    raise SystemExit(f"{label} not found. Checked: {_format_candidates(path_map)}")
+    raise _path_error(
+        "RES",
+        1,
+        f"{label} not found. Checked: {_format_candidates(path_map)}",
+        label=label,
+        checked=[str(path) for path in iter_layered_candidates(path_map)],
+    )
 
 
 def resolve_required_dir(path_map: dict[str, Path], *, label: str = "Directory") -> Path:
     resolved = resolve_existing_dir(path_map)
     if resolved is not None:
         return resolved
-    raise SystemExit(f"{label} not found. Checked: {_format_candidates(path_map)}")
+    raise _path_error(
+        "RES",
+        2,
+        f"{label} not found. Checked: {_format_candidates(path_map)}",
+        label=label,
+        checked=[str(path) for path in iter_layered_candidates(path_map)],
+    )
 
 
 def load_layered_mapping(
@@ -82,8 +107,11 @@ def load_layered_mapping(
 ) -> dict[str, Any]:
     """Load mapping from package default, user global, and project local layers."""
     if not package_default_path.exists():
-        raise SystemExit(
-            f"Package config missing (reinstall may be needed): {package_default_path}"
+        raise _path_error(
+            "CFG",
+            3,
+            f"Package config missing (reinstall may be needed): {package_default_path}",
+            path=str(package_default_path),
         )
 
     payloads: dict[str, dict[str, Any]] = {
@@ -118,11 +146,11 @@ def _load_yaml_mapping(path: Path | None) -> dict[str, Any]:
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
-        raise SystemExit(f"Invalid YAML config: {path}") from exc
+        raise _path_error("CFG", 4, f"Invalid YAML config: {path}", path=str(path)) from exc
     if data is None:
         return {}
     if not isinstance(data, dict):
-        raise SystemExit(f"Invalid YAML config: {path} must be a mapping")
+        raise _path_error("CFG", 5, f"Invalid YAML config: {path} must be a mapping", path=str(path))
     return data
 
 

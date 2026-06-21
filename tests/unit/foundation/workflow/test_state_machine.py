@@ -9,6 +9,7 @@ import logging
 
 import pytest
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.workflow import StateMachine
 from audiagentic.foundation.workflow.state_machine import DEFAULT_STATE_CHANGE_EVENT
 
@@ -88,7 +89,7 @@ def test_unknown_target_state_raises() -> None:
     ctx = _make_ctx()
     ctx.add_item("t-1", "task", state="draft")
     sm = StateMachine(ctx)
-    with pytest.raises(ValueError, match="unknown state"):
+    with pytest.raises(AudiaGenticError, match="unknown state"):
         sm.state("t-1", "nonexistent")
 
 
@@ -96,7 +97,7 @@ def test_disallowed_transition_raises() -> None:
     ctx = _make_ctx()
     ctx.add_item("t-1", "task", state="draft")
     sm = StateMachine(ctx)
-    with pytest.raises(ValueError, match="invalid transition"):
+    with pytest.raises(AudiaGenticError, match="invalid transition"):
         sm.state("t-1", "done")
 
 
@@ -106,7 +107,7 @@ def test_failed_transition_does_not_save() -> None:
     sm = StateMachine(ctx)
     try:
         sm.state("t-1", "done")
-    except ValueError:
+    except AudiaGenticError:
         pass
     assert ctx.saved == []
 
@@ -117,7 +118,7 @@ def test_failed_transition_does_not_publish_event() -> None:
     sm = StateMachine(ctx)
     try:
         sm.state("t-1", "done")
-    except ValueError:
+    except AudiaGenticError:
         pass
     assert ctx.events == []
 
@@ -253,7 +254,7 @@ def test_apply_action_missing_transition_to_raises() -> None:
     cfg._actions["noop"] = {}
     ctx = FakeContext(config=cfg)
     ctx.add_item("t-1", "task", state="draft")
-    with pytest.raises(ValueError, match="transition_to"):
+    with pytest.raises(AudiaGenticError, match="transition_to"):
         StateMachine(ctx).apply_action("noop", "t-1")
 
 

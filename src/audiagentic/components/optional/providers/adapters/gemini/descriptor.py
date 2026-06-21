@@ -1,4 +1,4 @@
-from audiagentic.components.optional.providers.adapters.mcp_json import (
+from audiagentic.foundation.mcp.json_format import (
     read_mcp_json,
     remove_mcp_json,
     write_mcp_json,
@@ -16,12 +16,13 @@ from ...descriptors.registry import register
 
 register(ProviderDescriptor(
     provider_id="gemini",
+    prompt_aliases=("gm",),
     display_name="Gemini (Google)",
     description="Google's Gemini CLI. Agentic coding assistant with large context window and Google tool integrations.",
     url="https://github.com/google-gemini/gemini-cli",
     cli_probe=["gemini", "--version"],
     cli_install=cli_recipe("npm", "@google/gemini-cli", executable="gemini"),
-    vscode_extensions=(
+    host_capabilities=(
         VsCodeExtension("google.gemini-cli-vscode-ide-companion", "Gemini CLI Companion"),
     ),
     permissions=ProviderPermissions(

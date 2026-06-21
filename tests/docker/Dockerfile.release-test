@@ -18,12 +18,9 @@ RUN pip install --no-cache-dir --no-compile setuptools wheel build \
 WORKDIR /app
 RUN pip install --no-cache-dir --no-compile /dist/*.whl "mcp>=1.0" pytest
 
-# Template root: managed files that baseline_sync reads from.
-# In production the user has these from an installed/extracted repo template.
+# Template root: managed/static files used by release e2e tests.
 COPY .audiagentic/config /template/.audiagentic/config
-COPY .audiagentic/prompts /template/.audiagentic/prompts
 COPY .audiagentic/skills /template/.audiagentic/skills
-COPY .audiagentic/planning/config /template/.audiagentic/planning/config
 COPY .claude /template/.claude
 COPY .gemini /template/.gemini
 COPY .github/workflows /template/.github/workflows

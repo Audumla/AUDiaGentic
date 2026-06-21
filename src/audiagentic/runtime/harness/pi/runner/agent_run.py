@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import sys
 from datetime import datetime
 
+from audiagentic.cli_io import print_message
+from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.runtime.rig.http import require_models_endpoint
 
 from .context import AgentContext, require_smoke_timeout
+
+logger = logging.getLogger(__name__)
 
 
 def check_endpoint(ctx: AgentContext) -> None:
@@ -23,15 +28,29 @@ def direct_mcp_smoke(ctx: AgentContext, env: dict[str, str]) -> None:
         check=False,
     )
     if completed.returncode != 0:
-        raise SystemExit(completed.returncode)
+        raise make_error(
+            prefix="EXT",
+            component="PIRUN",
+            number=1,
+            kind="pi-harness",
+            message=f"Direct MCP smoke failed with exit code {completed.returncode}",
+            details={"returncode": completed.returncode},
+        )
 
 
 def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
     if not ctx.agent_bin.exists():
-        raise SystemExit("AudiaGentic agent not found. Run: audiagentic install")
+        raise make_error(
+            prefix="RES",
+            component="PIRUN",
+            number=2,
+            kind="pi-harness",
+            message="AudiaGentic agent not found. Run: audiagentic install",
+            details={"path": str(ctx.agent_bin)},
+        )
 
     if not smoke:
-        print("\033[2J\033[H", end="", flush=True)
+        print_message("\033[2J\033[H", flush=False)
 
     ctx.agent_work.mkdir(parents=True, exist_ok=True)
     ctx.agent_log_dir.mkdir(parents=True, exist_ok=True)
@@ -46,14 +65,14 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
     log_path = ctx.agent_log_dir / f"{mode}-{stamp}.log"
 
     if smoke:
-        print(f"Checking local LLM endpoint: {ctx.endpoint}/models")
+        print_message(f"Checking local LLM endpoint: {ctx.endpoint}/models")
         check_endpoint(ctx)
         if ctx.enable_mcp:
-            print("Checking direct MCP smoke")
+            print_message("Checking direct MCP smoke")
             direct_mcp_smoke(ctx, env)
         else:
-            print("MCP disabled")
-        print(f"Writing AudiaGentic smoke log: {log_path}")
+            print_message("MCP disabled")
+        print_message(f"Writing AudiaGentic smoke log: {log_path}")
     else:
         check_endpoint(ctx)
         ui_cfg = ctx.harness_cfg.get("ui", {})
@@ -61,27 +80,27 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
 
         banner = ui_cfg.get("startup_banner")
         if banner:
-            print(banner, end="" if str(banner).endswith("\n") else "\n")
+            print_message(banner, flush=str(banner).endswith("\n"))
 
         if ui_cfg.get("show_startup_info", True):
-            print("AUDiaGentic")
-            print(f"  Project:  {ctx.project_root}")
-            print(f"  Provider: {ctx.provider}")
-            print(f"  Model:    {ctx.model}")
-            print(f"  Endpoint: {ctx.endpoint}")
+            print_message("AUDiaGentic")
+            print_message(f"  Project:  {ctx.project_root}")
+            print_message(f"  Provider: {ctx.provider}")
+            print_message(f"  Model:    {ctx.model}")
+            print_message(f"  Endpoint: {ctx.endpoint}")
             if ctx.server_version:
-                print(f"  Server:   {ctx.server_version}")
-            print(f"  MCP:      {'enabled' if ctx.enable_mcp else 'disabled'}")
+                print_message(f"  Server:   {ctx.server_version}")
+            print_message(f"  MCP:      {'enabled' if ctx.enable_mcp else 'disabled'}")
             if tools_cfg.get("no_all"):
-                print("  Tools:    none (all disabled)")
+                print_message("  Tools:    none (all disabled)")
             elif tools_cfg.get("no_builtin"):
-                print("  Tools:    MCP/extensions only (built-ins disabled)")
+                print_message("  Tools:    MCP/extensions only (built-ins disabled)")
             elif tools_cfg.get("allow") is not None:
-                print(f"  Tools:    {','.join(tools_cfg['allow'])}")
+                print_message(f"  Tools:    {','.join(tools_cfg['allow'])}")
             else:
-                print("  Tools:    AudiaGentic defaults")
-            print(f"  Log:      {log_path}")
-            print()
+                print_message("  Tools:    AudiaGentic defaults")
+            print_message(f"  Log:      {log_path}")
+            print_message("")
 
     command = build_agent_command(ctx, smoke=smoke)
 

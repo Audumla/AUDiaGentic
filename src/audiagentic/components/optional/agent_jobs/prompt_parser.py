@@ -5,8 +5,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from jsonschema import Draft202012Validator
-
 from audiagentic.components.optional.agent_jobs.prompt_aliases import (
     _normalize_alias_map,
     _normalize_directives,
@@ -27,7 +25,7 @@ from audiagentic.components.optional.agent_jobs.prompt_targets import (
 from audiagentic.components.optional.agent_jobs.prompt_templates import load_prompt_template
 from audiagentic.components.optional.providers.services.provider_config import load_provider_config
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.contracts.schema_registry import read_schema
+from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 
 # Fallback used before a project root is available; overridden per-call from config.
 ALLOWED_TAGS = load_canonical_tags({})
@@ -65,9 +63,7 @@ def generate_prompt_id(*, now_fn=None) -> str:
 
 
 def validate_prompt_launch_request(payload: dict[str, Any]) -> list[str]:
-    schema = read_schema("prompt-launch-request")
-    validator = Draft202012Validator(schema)
-    return sorted(error.message for error in validator.iter_errors(payload))
+    return validate_with_schema("prompt-launch-request", payload)
 
 
 def _parse_bool(value: str) -> bool:

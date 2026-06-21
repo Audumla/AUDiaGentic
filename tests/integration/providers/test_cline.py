@@ -80,8 +80,8 @@ def test_cline_adapter_requires_command(monkeypatch) -> None:
             "require_executable",
             lambda _provider_id, _command: (_ for _ in ()).throw(
                 AudiaGenticError(
-                    code="PRV-EXTERNAL-009",
-                    kind="external",
+                    code="EXT-CLINE-001",
+                    kind="providers",
                     message="missing",
                     details={"provider-id": "cline"},
                 )
@@ -89,7 +89,7 @@ def test_cline_adapter_requires_command(monkeypatch) -> None:
         )
         cline.run({"provider-id": "cline"}, {"default-model": "cline-model"})
     except AudiaGenticError as exc:
-        assert exc.code == "PRV-EXTERNAL-009"
+        assert exc.code == "EXT-CLINE-001"
         assert exc.details["provider-id"] == "cline"
     else:  # pragma: no cover - defensive
         raise AssertionError("expected AudiaGenticError")

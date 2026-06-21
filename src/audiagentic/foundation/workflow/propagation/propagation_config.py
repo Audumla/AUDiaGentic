@@ -10,7 +10,20 @@ from typing import Any
 
 import yaml
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+
 logger = logging.getLogger(__name__)
+
+
+def _config_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
+    return make_error(
+        prefix="CFG",
+        component="WFPROP",
+        number=code_number,
+        kind="workflow",
+        message=message,
+        details=details,
+    )
 
 
 def load_config(path: Path | None) -> dict[str, Any]:
@@ -47,13 +60,19 @@ def bind_callables(config: dict[str, Any]) -> None:
                 try:
                     entry["logic"] = _import_callable(logic)
                 except (ImportError, AttributeError, ValueError) as exc:
-                    raise ValueError(f"Failed to load {section} {name}: {exc}") from exc
+                    raise _config_error(
+                        1,
+                        f"Failed to load {section} {name}: {exc}",
+                        section=section,
+                        name=name,
+                        logic=logic,
+                    ) from exc
 
 
 def _import_callable(ref: str) -> Callable:
     module_name, _, func_name = ref.rpartition(".")
     if not module_name or not func_name:
-        raise ValueError(f"Invalid callable reference: {ref}")
+        raise _config_error(2, f"Invalid callable reference: {ref}", reference=ref)
     module = importlib.import_module(module_name)
     func = getattr(module, func_name)
     if not callable(func):

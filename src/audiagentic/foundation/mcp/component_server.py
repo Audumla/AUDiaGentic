@@ -10,15 +10,14 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
-import os
 import queue
+import re
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
-logger = logging.getLogger(__name__)
-
+from audiagentic.foundation.contracts.errors import AudiaGenticError, to_error_envelope
 from audiagentic.foundation.contracts.output import (
     ComponentOutputEvent,
     ComponentOutputSink,
@@ -33,6 +32,57 @@ except ImportError:  # pragma: no cover
     Context = Any  # type: ignore[misc, assignment]
 
 T = TypeVar("T")
+logger = logging.getLogger(__name__)
+
+_SENSITIVE_DETAIL_KEYS = {
+    "stdout",
+    "stderr",
+    "output",
+    "prompt",
+    "input",
+    "token",
+    "secret",
+    "password",
+    "authorization",
+    "api-key",
+    "api_key",
+}
+_SECRET_PATTERNS = (
+    re.compile(r"(?i)(api[_-]?key|token|secret|password|authorization)(=|:)\s*([^\s,;]+)"),
+)
+
+
+def _redact_string(value: str, *, limit: int = 500) -> str:
+    redacted = value
+    for pattern in _SECRET_PATTERNS:
+        redacted = pattern.sub(r"\1\2 [redacted]", redacted)
+    if len(redacted) > limit:
+        return f"{redacted[:limit]}...[truncated]"
+    return redacted
+
+
+def _redact_error_value(key: str, value: Any) -> Any:
+    key_l = key.lower()
+    if any(token in key_l for token in _SENSITIVE_DETAIL_KEYS):
+        return "[redacted]"
+    if isinstance(value, str):
+        return _redact_string(value)
+    if isinstance(value, dict):
+        return {str(k): _redact_error_value(str(k), v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_redact_error_value(key, item) for item in value]
+    return value
+
+
+def _redact_error_envelope(error: AudiaGenticError) -> dict[str, Any]:
+    envelope = to_error_envelope(error)
+    details = envelope.get("details")
+    if isinstance(details, dict):
+        envelope["details"] = {
+            str(key): _redact_error_value(str(key), value)
+            for key, value in details.items()
+        }
+    return envelope
 
 
 def server_instructions(decl: Any) -> str:
@@ -57,7 +107,11 @@ def report_error(
 ) -> dict[str, Any]:
     """Return a standardized MCP error envelope, logging the failure."""
     logger.exception("%s tool failed: %s", label, tool_name)
-    return {"ok": False, "error": str(exc), "tool": tool_name}
+    if isinstance(exc, AudiaGenticError):
+        envelope = _redact_error_envelope(exc)
+        envelope["tool"] = tool_name
+        return envelope
+    return {"ok": False, "error": _redact_string(str(exc)), "tool": tool_name}
 
 
 def log_tool_call(func: Callable) -> Callable:
@@ -128,10 +182,29 @@ def log_tool_call(func: Callable) -> Callable:
 
 
 def project_root_from_env() -> Path:
-    repo_root = os.environ.get("AUDIAGENTIC_REPO_ROOT")
-    if repo_root:
-        return Path(repo_root)
-    raise RuntimeError("AUDIAGENTIC_REPO_ROOT not set")
+    """Resolve the project root being operated on.
+
+    Honors an explicit AUDIAGENTIC_REPO_ROOT override (needed when the package
+    is installed somewhere other than the target project); otherwise derives it
+    generically by walking up from CWD — the MCP server runs with CWD set to the
+    project root, so no path needs to be hard-coded anywhere.
+    """
+    from audiagentic.paths import find_project_root
+
+    root = find_project_root()
+    if root is None:
+        raise AudiaGenticError(
+            code="CFG-MCP-001",
+            kind="mcp",
+            message="could not locate project root",
+            details={
+                "hint": (
+                    "AUDIAGENTIC_REPO_ROOT is not set and no .audiagentic/ "
+                    "marker was found walking up from CWD"
+                )
+            },
+        )
+    return root
 
 
 def _resolve_mcp_server_name(module_name: str) -> str:
@@ -153,6 +226,17 @@ def mcp_server(module_name: str, instructions: str = "") -> FastMCP:
     """Create a FastMCP instance whose name is resolved from component config."""
     name = _resolve_mcp_server_name(module_name)
     return FastMCP(name, instructions=instructions)
+
+
+def run_mcp_server(server: FastMCP, bootstrap_name: str) -> None:
+    """Bootstrap logging and run an MCP server over stdio.
+
+    Shared entry-point body so component MCP servers do not each re-implement
+    the bootstrap + run sequence.
+    """
+    from audiagentic.foundation.logging import bootstrap
+    bootstrap(bootstrap_name)
+    server.run()
 
 
 class McpOutputBridge:
