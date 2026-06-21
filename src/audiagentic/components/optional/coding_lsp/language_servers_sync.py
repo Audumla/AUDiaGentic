@@ -206,11 +206,15 @@ def sync_language_servers_to_providers(project_root: Path) -> dict[str, Any]:
 def sync_generic_lsp_mcp_to_providers(project_root: Path) -> dict[str, Any]:
     """Publish selected generic LSP MCP projection for provider observers."""
     desired_entry = _generic_lsp_projection_for_active_implementation(project_root)
+    from audiagentic.components.optional.coding_lsp.lsp_routing_policy import (
+        get_routing_summary,
+    )
     return _publish_provider_projection(
         project_root,
         action="sync-generic-mcp",
         desired_entries=desired_entry,
         managed_ids=_generic_mcp_managed_ids(),
+        routing_policy=get_routing_summary(),
         default={"ok": True, "synced": [], "skipped": "no provider projection handler"},
     )
 
