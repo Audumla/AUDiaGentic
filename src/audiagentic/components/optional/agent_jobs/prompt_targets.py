@@ -1,9 +1,12 @@
 """Target parsing helpers for tagged interactive prompts."""
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TARGET_KIND = "adhoc"
 

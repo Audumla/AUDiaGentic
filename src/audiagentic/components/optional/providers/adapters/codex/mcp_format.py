@@ -12,6 +12,7 @@ from typing import Any
 
 import tomllib
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.mcp import McpServerEntry
 
 _BARE_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -34,7 +35,12 @@ def _format_scalar(value: Any) -> str:
         return json.dumps(value)
     if isinstance(value, list):
         return "[" + ", ".join(_format_scalar(item) for item in value) + "]"
-    raise ValueError(f"unsupported TOML value type: {type(value).__name__}")
+    raise AudiaGenticError(
+        code="VAL-PROV-CODEX-MCP-001",
+        kind="providers-codex",
+        message=f"unsupported TOML value type: {type(value).__name__}",
+        details={"type": type(value).__name__},
+    )
 
 
 def _write_table(lines: list[str], path: tuple[str, ...], data: dict[str, Any]) -> None:
@@ -58,9 +64,19 @@ def _load_toml(path: Path) -> dict[str, Any]:
     try:
         return tomllib.loads(path.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as exc:
-        raise ValueError(f"invalid Codex TOML config: {path}") from exc
+        raise AudiaGenticError(
+            code="VAL-PROV-CODEX-MCP-002",
+            kind="providers-codex",
+            message=f"invalid Codex TOML config: {path}",
+            details={"path": str(path)},
+        ) from exc
     except OSError as exc:
-        raise ValueError(f"unable to read Codex TOML config: {path}") from exc
+        raise AudiaGenticError(
+            code="VAL-PROV-CODEX-MCP-003",
+            kind="providers-codex",
+            message=f"unable to read Codex TOML config: {path}",
+            details={"path": str(path)},
+        ) from exc
 
 
 def _save_toml(path: Path, data: dict[str, Any]) -> None:
@@ -74,7 +90,12 @@ def read_codex_toml(path: Path) -> dict[str, McpServerEntry]:
     data = _load_toml(path)
     servers = data.get("mcp_servers", {})
     if not isinstance(servers, dict):
-        raise ValueError(f"invalid Codex MCP config shape: {path}")
+        raise AudiaGenticError(
+            code="VAL-PROV-CODEX-MCP-004",
+            kind="providers-codex",
+            message=f"invalid Codex MCP config shape: {path}",
+            details={"path": str(path)},
+        )
     result: dict[str, McpServerEntry] = {}
     for name, server in servers.items():
         if not isinstance(server, dict):
@@ -92,11 +113,21 @@ def write_codex_toml(path: Path, entries: dict[str, McpServerEntry]) -> None:
     existing = _load_toml(path)
     servers = existing.setdefault("mcp_servers", {})
     if not isinstance(servers, dict):
-        raise ValueError(f"invalid Codex MCP config shape: {path}")
+        raise AudiaGenticError(
+            code="VAL-PROV-CODEX-MCP-004",
+            kind="providers-codex",
+            message=f"invalid Codex MCP config shape: {path}",
+            details={"path": str(path)},
+        )
     for name, entry in entries.items():
         current = servers.get(name, {})
         if current and not isinstance(current, dict):
-            raise ValueError(f"invalid Codex MCP entry shape for {name}: {path}")
+            raise AudiaGenticError(
+                code="VAL-PROV-CODEX-MCP-005",
+                kind="providers-codex",
+                message=f"invalid Codex MCP entry shape for {name}: {path}",
+                details={"name": name, "path": str(path)},
+            )
         updated = dict(current) if isinstance(current, dict) else {}
         updated["command"] = entry.command
         updated["args"] = list(entry.args)
@@ -115,7 +146,12 @@ def remove_codex_toml(path: Path, name: str) -> bool:
     existing = _load_toml(path)
     servers = existing.get("mcp_servers", {})
     if not isinstance(servers, dict):
-        raise ValueError(f"invalid Codex MCP config shape: {path}")
+        raise AudiaGenticError(
+            code="VAL-PROV-CODEX-MCP-004",
+            kind="providers-codex",
+            message=f"invalid Codex MCP config shape: {path}",
+            details={"path": str(path)},
+        )
     if name not in servers:
         return False
     del servers[name]

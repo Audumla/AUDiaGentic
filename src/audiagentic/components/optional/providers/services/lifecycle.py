@@ -171,6 +171,9 @@ def install_provider_cli(
         _seed_provider_config(project_root, provider_id, descriptor, enabled=True)
         _emit(on_progress, "Applying provider surfaces...", provider_id=provider_id, action="install")
         result["surfaces"] = apply_provider_surfaces(project_root, provider_id=provider_id)
+        # Populate managed MCP config now that the provider is enabled; under
+        # enabled-aware propagation it would otherwise wait for the next sync.
+        _sync_provider_mcp(project_root, on_progress)
     _emit(on_progress, f"{provider_id}: {status}", provider_id=provider_id, action="install", status=status)
     return result
 
@@ -263,15 +266,17 @@ def _seed_provider_config(
     """
     from audiagentic.components.optional.providers.services.provider_config import (
         patch_provider_config,
+        set_provider_enabled,
     )
 
     seed: dict[str, Any] = {
-        "enabled": enabled,
         "install-mode": descriptor.install_mode,
         "access-mode": descriptor.access_mode,
     }
     # Only patch — existing keys (default-model, prompt-surface, etc.) are preserved.
     patch_provider_config(project_root, provider_id, seed)
+    # Enablement is feature state, not a providers.yaml field.
+    set_provider_enabled(project_root, provider_id, enabled=enabled)
 
 
 def provision_all_provider_clis(

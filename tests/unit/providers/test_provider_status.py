@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from audiagentic.components.optional.providers import providers_api
-from audiagentic.components.optional.providers.descriptors import registry as descriptor_registry
+from audiagentic.components.optional.providers.services import host_capabilities
 from audiagentic.components.optional.providers.services.status import build_provider_status
 
 
@@ -98,8 +98,8 @@ def test_provider_status_reports_vscode_extension_installation(monkeypatch, tmp_
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        descriptor_registry,
-        "_list_vscode_extensions",
+        host_capabilities,
+        "list_vscode_extensions",
         lambda: ["saoudrizwan.claude-dev"],
     )
 
@@ -110,6 +110,38 @@ def test_provider_status_reports_vscode_extension_installation(monkeypatch, tmp_
     assert provider["installation"]["vscode-extension"]["applicable"] is True
     assert provider["installation"]["vscode-extension"]["installed"] is True
     assert provider["vscode-extension-installed"] is True
+
+
+def test_provider_status_uses_error_envelope_for_vscode_probe_failure(monkeypatch, tmp_path: Path) -> None:
+    project_root = tmp_path
+    (project_root / ".vscode").mkdir()
+    runtime_config = project_root / ".audiagentic" / "config" / "runtime"
+    runtime_config.mkdir(parents=True)
+    (runtime_config / "providers.yaml").write_text(
+        "\n".join(
+            [
+                "contract-version: v1",
+                "providers:",
+                "  cline:",
+                "    enabled: true",
+                "    install-mode: external-configured",
+                "    access-mode: cli",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(host_capabilities, "list_vscode_extensions", lambda: None)
+
+    payload = build_provider_status(project_root, provider_id="cline")
+    extension = payload["providers"][0]["installation"]["vscode-extension"]["extensions"][0]
+
+    assert "probe_error" not in extension
+    assert extension["installed"] is None
+    assert payload["providers"][0]["vscode-extension-installed"] is None
+    assert extension["error"]["contract-version"] == "v1"
+    assert extension["error"]["ok"] is False
+    assert extension["error"]["error-code"] == "CFG-PVEXT-001"
+    assert extension["error"]["error-kind"] == "providers"
 
 
 def test_get_provider_status_returns_single_provider_entry(tmp_path: Path) -> None:

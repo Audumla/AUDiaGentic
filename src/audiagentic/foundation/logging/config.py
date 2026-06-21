@@ -17,11 +17,12 @@ from __future__ import annotations
 import logging
 import os
 import sys
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from audiagentic.cli_io import print_error
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.logging.context import reset_correlation_id
 from audiagentic.foundation.logging.formatters import (
     _ConsoleFormatter,
@@ -39,7 +40,7 @@ _loaded_config: LoggingConfig | None = None
 # ---------------------------------------------------------------------------
 
 def _find_pkg_root() -> Path:
-    from audiagentic.runtime.harness.paths import find_package_root
+    from audiagentic.foundation.paths.package import find_package_root
     return find_package_root(Path(__file__))
 
 _PKG_DEFAULT: Path | None = None
@@ -98,23 +99,21 @@ def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]
 
 
 def _safe_load_layered(project_root: Path | None) -> dict[str, Any]:
-    """Call load_layered_config, catching SystemExit from malformed YAML."""
+    """Call load_layered_config, catching malformed YAML/config errors."""
     try:
-        from audiagentic.runtime.config.layered import load_layered_config
+        from audiagentic.foundation.config import load_layered_config
         return load_layered_config(
             pkg_default_path=_pkg_default(),
             project_root=project_root,
             namespace="foundation/logging",
         )
-    except SystemExit:
-        print(
+    except AudiaGenticError:
+        print_error(
             "[audiagentic] WARNING: logging config malformed in one of the config tiers,"
-            " falling back to package defaults",
-            file=sys.stderr,
-            flush=True,
+            " falling back to package defaults"
         )
         try:
-            from audiagentic.runtime.config.files import load_yaml_file
+            from audiagentic.foundation.io import load_yaml_file
             return load_yaml_file(_pkg_default())
         except Exception:
             return {}
@@ -182,20 +181,9 @@ def _dict_to_config(
 
 def _find_project_root_from_env_or_cwd() -> Path | None:
     """Walk up from CWD looking for .audiagentic/. Max 10 levels, 500ms cap."""
-    if repo_root := os.environ.get("AUDIAGENTIC_REPO_ROOT"):
-        return Path(repo_root)
-    deadline = time.monotonic() + 0.5
-    current = Path.cwd()
-    for _ in range(10):
-        if time.monotonic() > deadline:
-            break
-        if (current / ".audiagentic").exists():
-            return current
-        parent = current.parent
-        if parent == current:
-            break
-        current = parent
-    return None
+    from audiagentic.paths import find_project_root
+
+    return find_project_root()
 
 
 _discovered_root: Path | None | bool = False  # False = not yet searched
@@ -221,7 +209,7 @@ def load_logging_config(project_root: Path | None = None) -> LoggingConfig:
     # Load pkg default lists separately — load_layered_config replaces lists entirely,
     # so we capture the base values before they are overwritten by project config.
     try:
-        from audiagentic.runtime.config.files import load_yaml_file as _lyf
+        from audiagentic.foundation.io import load_yaml_file as _lyf
         _pkg_raw = _lyf(_pkg_default()).get("logging", {})
         _pkg_silenced: list[str] = list(_pkg_raw.get("silenced", []))
         _pkg_redact_patterns: list[str] = list(
@@ -249,18 +237,16 @@ def load_logging_config(project_root: Path | None = None) -> LoggingConfig:
         local_path = resolved_root / ".audiagentic" / "config" / "foundation" / "logging.local.yaml"
         if local_path.exists():
             try:
-                from audiagentic.runtime.config.files import load_yaml_file
+                from audiagentic.foundation.io import load_yaml_file
                 local = load_yaml_file(local_path)
                 silenced_sets.append(list(local.get("logging", {}).get("silenced", [])))
                 redact_patterns_sets.append(
                     list(local.get("logging", {}).get("ai_audit", {}).get("redact_patterns", []))
                 )
                 raw = _deep_merge(raw, local)
-            except SystemExit:
-                print(
-                    f"[audiagentic] WARNING: {local_path} is malformed, skipping",
-                    file=sys.stderr,
-                    flush=True,
+            except AudiaGenticError:
+                print_error(
+                    f"[audiagentic] WARNING: {local_path} is malformed, skipping"
                 )
 
     # Tier 5: env vars

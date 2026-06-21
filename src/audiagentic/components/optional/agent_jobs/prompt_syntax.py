@@ -1,11 +1,14 @@
 """Prompt syntax profile loading and alias normalization."""
 from __future__ import annotations
 
+import logging
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from audiagentic.runtime.config import load_yaml_file
+
+logger = logging.getLogger(__name__)
 
 # Base directive aliases that apply regardless of which tags are loaded.
 _DIRECTIVE_ALIASES: dict[str, str] = {
@@ -15,20 +18,6 @@ _DIRECTIVE_ALIASES: dict[str, str] = {
     "out": "output",
     "t": "template",
 }
-
-# Provider shorthand aliases — identity aliases for registered providers are added dynamically.
-_PROVIDER_ALIASES: dict[str, str] = {
-    "lo": "local-openai",
-    "cx": "codex",
-    "cld": "claude",
-    "gm": "gemini",
-    "qw": "qwen",
-    "cp": "copilot",
-    "ctr": "continue",
-    "cln": "cline",
-    "opc": "opencode",
-}
-
 
 def _build_default_syntax() -> dict[str, Any]:
     """Build the default prompt syntax dict from the tag registry."""
@@ -67,7 +56,7 @@ def _build_default_syntax() -> dict[str, Any]:
         "canonical-tags": canonical_tags,
         "tag-aliases": tag_aliases,
         "skill-surfaces": {},   # populated dynamically below
-        "provider-aliases": dict(_PROVIDER_ALIASES),
+        "provider-aliases": {},
         "directive-aliases": dict(_DIRECTIVE_ALIASES),
     }
 
@@ -83,11 +72,11 @@ def _derive_skill_surfaces() -> dict[str, Any]:
     return result
 
 
-def _derive_provider_identity_aliases() -> dict[str, str]:
+def _derive_provider_aliases() -> dict[str, str]:
     from audiagentic.components.optional.providers.descriptors.registry import (  # noqa: PLC0415
-        all_descriptors,
+        provider_alias_map,
     )
-    return {pid: pid for pid in all_descriptors()}
+    return provider_alias_map()
 
 
 def load_no_body_required_tags(syntax: dict[str, Any]) -> set[str]:
@@ -151,8 +140,7 @@ def _resolve_profile(profiles: dict[str, Any], profile_name: str) -> dict[str, A
 def load_prompt_syntax(project_root: Path | None, profile_name: str | None = None) -> dict[str, Any]:
     syntax = _build_default_syntax()
     syntax["skill-surfaces"] = _derive_skill_surfaces()
-    identity_aliases = _derive_provider_identity_aliases()
-    syntax["provider-aliases"] = {**identity_aliases, **syntax["provider-aliases"]}
+    syntax["provider-aliases"] = _derive_provider_aliases()
 
     if project_root is None:
         return syntax

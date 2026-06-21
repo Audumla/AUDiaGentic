@@ -5,24 +5,20 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-import sys
 from typing import Any
-
-try:
-    from mcp.server.fastmcp import FastMCP
-    from mcp.server.fastmcp.server import Context
-except ImportError:  # pragma: no cover - exercised by missing optional dep only
-    print("Error: mcp package not installed. Run: pip install mcp", file=sys.stderr)
-    sys.exit(1)
 
 from audiagentic.foundation.components.ids import COMPONENT_SESSION
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.foundation.mcp.component_server import (
+    Context,
+    FastMCP,
     log_tool_call,
+    mcp_server,
     project_root_from_env,
     report_error,
     run_blocking_with_output,
+    run_mcp_server,
     server_instructions,
     tool_description,
 )
@@ -40,10 +36,7 @@ def _server_decl():
 
 def build_server() -> FastMCP:
     decl = _server_decl()
-    mcp = FastMCP(
-        "ag-session-mgmt",
-        instructions=server_instructions(decl),
-    )
+    mcp = mcp_server(__name__, instructions=server_instructions(decl))
 
     @mcp.tool(description=tool_description(decl, "status"))
     @log_tool_call
@@ -125,9 +118,7 @@ def main() -> int:
     if args.smoke_only:
         os.environ["AUDIAGENTIC_MCP_SMOKE_ONLY"] = "1"
 
-    from audiagentic.foundation.logging import bootstrap
-    bootstrap("session")
-    build_server().run()
+    run_mcp_server(build_server(), "session")
     return 0
 
 

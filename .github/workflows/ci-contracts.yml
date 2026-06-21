@@ -20,7 +20,7 @@ jobs:
       - name: Validate schemas
         run: python -m audiagentic.foundation.contracts.validate_schemas
       - name: Validate canonical ids
-        run: python -m audiagentic.foundation.contracts.validate_ids
+        run: python -m audiagentic.components.optional.providers.validate_ids
       - name: Validate packet dependencies
         run: python -m audiagentic.foundation.contracts.validate_packet_dependencies
       - name: Run contract tests

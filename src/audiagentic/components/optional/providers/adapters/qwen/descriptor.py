@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import shutil
 
-from audiagentic.components.optional.providers.adapters.mcp_json import (
-    read_mcp_json,
-    remove_mcp_json,
-    write_mcp_json,
-)
 from audiagentic.components.optional.providers.adapters.probe import run_cli
 from audiagentic.components.optional.providers.adapters.qwen.language_servers import (
     read_language_servers_qwen,
     remove_language_servers_qwen,
     write_language_servers_qwen,
+)
+from audiagentic.foundation.mcp.json_format import (
+    read_mcp_json,
+    remove_mcp_json,
+    write_mcp_json,
 )
 
 from ...descriptors.base import (
@@ -68,12 +68,13 @@ def _qwen_probe(_descriptor) -> dict:
 
 register(ProviderDescriptor(
     provider_id="qwen",
+    prompt_aliases=("qw",),
     display_name="Qwen (Alibaba)",
     description="Alibaba Cloud's Qwen Code CLI. Open-source coding agent built on the Qwen model family.",
     url="https://github.com/QwenLM/qwen-code",
     cli_probe=["qwen", "--version"],
     cli_install=cli_recipe("npm", "@qwen-code/qwen-code", executable="qwen", probe_fn=_qwen_probe),
-    vscode_extensions=(
+    host_capabilities=(
         VsCodeExtension("qwenlm.qwen-code-vscode-ide-companion", "Qwen Code Companion"),
     ),
     permissions=ProviderPermissions(

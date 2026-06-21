@@ -25,6 +25,12 @@ from .event_exceptions import CycleDetectedError
 logger = logging.getLogger(__name__)
 
 
+def _handler_name(handler: Callable[..., Any]) -> str:
+    module = getattr(handler, "__module__", "")
+    qualname = getattr(handler, "__qualname__", repr(handler))
+    return f"{module}.{qualname}" if module else qualname
+
+
 class DeliveryMode(Enum):
     """Event delivery mode."""
 
@@ -159,7 +165,15 @@ class EventBus(EventBusProtocol):
                 self._subscriptions[pattern] = []
             self._subscriptions[pattern].append(handle)
 
-        logger.debug("Subscribed to pattern: %s", pattern)
+        logger.debug(
+            "Subscribed to pattern: %s",
+            pattern,
+            extra={
+                "operation": "event-subscribe",
+                "subscription_pattern": pattern,
+                "handler": _handler_name(handler),
+            },
+        )
         return handle
 
     def unsubscribe(self, handle: SubscriptionHandle) -> None:
@@ -169,7 +183,15 @@ class EventBus(EventBusProtocol):
                     h for h in self._subscriptions[handle.pattern] if h != handle
                 ]
 
-        logger.debug("Unsubscribed from pattern: %s", handle.pattern)
+        logger.debug(
+            "Unsubscribed from pattern: %s",
+            handle.pattern,
+            extra={
+                "operation": "event-unsubscribe",
+                "subscription_pattern": handle.pattern,
+                "handler": _handler_name(handle.handler),
+            },
+        )
 
     def _dispatch_sync(self, envelope: EventEnvelope) -> None:
         """Dispatch event synchronously to all matching subscribers."""
@@ -184,6 +206,13 @@ class EventBus(EventBusProtocol):
                     handle.pattern,
                     e,
                     exc_info=True,
+                    extra={
+                        "operation": "event-dispatch",
+                        "event_type": envelope.type,
+                        "event_id": envelope.id,
+                        "subscription_pattern": handle.pattern,
+                        "handler": _handler_name(handle.handler),
+                    },
                 )
 
     def _dispatch_async(self, envelope: EventEnvelope) -> None:

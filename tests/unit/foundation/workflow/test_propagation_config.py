@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.workflow.propagation.propagation_config import (
     _import_callable,
     bind_callables,
@@ -71,7 +72,9 @@ def test_bind_callables_resolves_dotted_path() -> None:
 
 
 def test_bind_callables_already_callable_unchanged() -> None:
-    sentinel = lambda *a: False
+    def sentinel(*_args) -> bool:
+        return False
+
     config = {"rules": {"x": {"logic": sentinel}}}
     bind_callables(config)
     assert config["rules"]["x"]["logic"] is sentinel
@@ -79,13 +82,13 @@ def test_bind_callables_already_callable_unchanged() -> None:
 
 def test_bind_callables_invalid_path_raises() -> None:
     config = {"rules": {"bad": {"logic": "audiagentic.does.not.exist.fn"}}}
-    with pytest.raises(ValueError, match="Failed to load rules bad"):
+    with pytest.raises(AudiaGenticError, match="Failed to load rules bad"):
         bind_callables(config)
 
 
 def test_bind_callables_invalid_action_raises() -> None:
     config = {"actions": {"bad": {"logic": "audiagentic.does.not.exist.fn"}}}
-    with pytest.raises(ValueError, match="Failed to load actions bad"):
+    with pytest.raises(AudiaGenticError, match="Failed to load actions bad"):
         bind_callables(config)
 
 
@@ -103,7 +106,7 @@ def test_import_callable_returns_function() -> None:
 
 
 def test_import_callable_invalid_ref_raises_value_error() -> None:
-    with pytest.raises(ValueError, match="Invalid callable reference"):
+    with pytest.raises(AudiaGenticError, match="Invalid callable reference"):
         _import_callable("no_dot")
 
 

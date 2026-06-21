@@ -1,24 +1,22 @@
 """AUDiaGentic providers component MCP server."""
 from __future__ import annotations
 
-import sys
 from typing import Any
-
-try:
-    from mcp.server.fastmcp import FastMCP
-    from mcp.server.fastmcp.server import Context
-except ImportError:
-    print("Error: mcp package not installed. Run: pip install mcp", file=sys.stderr)
-    sys.exit(1)
 
 from audiagentic.components.optional.providers import providers_api
 from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.foundation.mcp.component_server import (
+    Context,
+    FastMCP,
     log_tool_call,
+    mcp_server,
     project_root_from_env,
     run_blocking_with_output,
+    run_mcp_server,
+    server_instructions,
+    tool_description,
 )
 
 register_all_components()
@@ -28,43 +26,31 @@ def _server_decl():
     return get_mcp_server_declaration(COMPONENT_PROVIDERS, "ag-providers-mgmt")
 
 
-def _server_instructions() -> str:
-    decl = _server_decl()
-    return decl.instructions if decl else ""
-
-
-def _tool_description(name: str) -> str:
-    decl = _server_decl()
-    return decl.tool_descriptions.get(name, "") if decl else ""
-
-
 def build_server() -> FastMCP:
-    mcp = FastMCP(
-        "ag-providers-mgmt",
-        instructions=_server_instructions(),
-    )
+    decl = _server_decl()
+    mcp = mcp_server(__name__, instructions=server_instructions(decl))
 
-    @mcp.tool(description=_tool_description("list_providers"))
+    @mcp.tool(description=tool_description(decl, "list_providers"))
     @log_tool_call
     def list_providers() -> dict[str, Any]:
         return providers_api.list_providers(project_root_from_env())
 
-    @mcp.tool(description=_tool_description("get_provider_status"))
+    @mcp.tool(description=tool_description(decl,"get_provider_status"))
     @log_tool_call
     def get_provider_status(provider_id: str) -> dict[str, Any]:
         return providers_api.get_provider_status(project_root_from_env(), provider_id)
 
-    @mcp.tool(description=_tool_description("list_provider_descriptors"))
+    @mcp.tool(description=tool_description(decl,"list_provider_descriptors"))
     @log_tool_call
     def list_provider_descriptors() -> list[dict[str, Any]]:
         return providers_api.list_provider_descriptors()
 
-    @mcp.tool(description=_tool_description("list_provider_models"))
+    @mcp.tool(description=tool_description(decl,"list_provider_models"))
     @log_tool_call
     def list_provider_models(provider_id: str) -> dict[str, Any]:
         return providers_api.list_provider_models(project_root_from_env(), provider_id)
 
-    @mcp.tool(description=_tool_description("refresh_provider_catalog"))
+    @mcp.tool(description=tool_description(decl,"refresh_provider_catalog"))
     @log_tool_call
     async def refresh_provider_catalog(provider_id: str, ctx: Context = None) -> dict[str, Any]:
         return await providers_api.refresh_provider_catalog(
@@ -74,7 +60,7 @@ def build_server() -> FastMCP:
             run_with_output=run_blocking_with_output,
         )
 
-    @mcp.tool(description=_tool_description("refresh_all_catalogs"))
+    @mcp.tool(description=tool_description(decl,"refresh_all_catalogs"))
     @log_tool_call
     async def refresh_all_catalogs(ctx: Context = None) -> dict[str, Any]:
         return await providers_api.refresh_all_catalogs(
@@ -83,7 +69,7 @@ def build_server() -> FastMCP:
             run_with_output=run_blocking_with_output,
         )
 
-    @mcp.tool(description=_tool_description("install_provider"))
+    @mcp.tool(description=tool_description(decl,"install_provider"))
     @log_tool_call
     async def install_provider(provider_id: str, dry_run: bool = False, ctx: Context = None) -> dict[str, Any]:
         return await providers_api.install_provider(
@@ -94,7 +80,7 @@ def build_server() -> FastMCP:
             run_with_output=run_blocking_with_output,
         )
 
-    @mcp.tool(description=_tool_description("uninstall_provider"))
+    @mcp.tool(description=tool_description(decl,"uninstall_provider"))
     @log_tool_call
     async def uninstall_provider(provider_id: str, dry_run: bool = False, ctx: Context = None) -> dict[str, Any]:
         return await providers_api.uninstall_provider(
@@ -105,7 +91,7 @@ def build_server() -> FastMCP:
             run_with_output=run_blocking_with_output,
         )
 
-    @mcp.tool(description=_tool_description("repair_provider"))
+    @mcp.tool(description=tool_description(decl,"repair_provider"))
     @log_tool_call
     async def repair_provider(provider_id: str, dry_run: bool = False, ctx: Context = None) -> dict[str, Any]:
         return await providers_api.repair_provider(
@@ -116,7 +102,7 @@ def build_server() -> FastMCP:
             run_with_output=run_blocking_with_output,
         )
 
-    @mcp.tool(description=_tool_description("apply_provider_surfaces"))
+    @mcp.tool(description=tool_description(decl,"apply_provider_surfaces"))
     @log_tool_call
     async def apply_provider_surfaces(provider_id: str | None = None, ctx: Context = None) -> dict[str, Any]:
         return await providers_api.apply_provider_surfaces(
@@ -126,7 +112,7 @@ def build_server() -> FastMCP:
             run_with_output=run_blocking_with_output,
         )
 
-    @mcp.tool(description=_tool_description("prune_provider_surfaces"))
+    @mcp.tool(description=tool_description(decl,"prune_provider_surfaces"))
     @log_tool_call
     async def prune_provider_surfaces(provider_id: str | None = None, ctx: Context = None) -> dict[str, Any]:
         return await providers_api.prune_provider_surfaces(
@@ -136,7 +122,7 @@ def build_server() -> FastMCP:
             run_with_output=run_blocking_with_output,
         )
 
-    @mcp.tool(description=_tool_description("reconcile_provider"))
+    @mcp.tool(description=tool_description(decl,"reconcile_provider"))
     @log_tool_call
     async def reconcile_provider(provider_id: str, fetch_catalog: bool = False, ctx: Context = None) -> dict[str, Any]:
         return await providers_api.reconcile_provider(
@@ -147,7 +133,7 @@ def build_server() -> FastMCP:
             run_with_output=run_blocking_with_output,
         )
 
-    @mcp.tool(description=_tool_description("reconcile_all_providers"))
+    @mcp.tool(description=tool_description(decl,"reconcile_all_providers"))
     @log_tool_call
     async def reconcile_all_providers(fetch_catalogs: bool = False, ctx: Context = None) -> dict[str, Any]:
         return await providers_api.reconcile_all_providers(
@@ -161,9 +147,7 @@ def build_server() -> FastMCP:
 
 
 def main() -> int:
-    from audiagentic.foundation.logging import bootstrap
-    bootstrap("providers")
-    build_server().run()
+    run_mcp_server(build_server(), "providers")
     return 0
 
 

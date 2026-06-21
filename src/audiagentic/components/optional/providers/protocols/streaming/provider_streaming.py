@@ -14,6 +14,8 @@ from typing import Any, TextIO
 from audiagentic.components.optional.providers.protocols.streaming.base_extractor import (
     BaseEventExtractor,
 )
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+
 from audiagentic.components.optional.providers.protocols.streaming.sinks import (
     ConsoleSink,
     InMemorySink,
@@ -100,8 +102,11 @@ def validate_stream_controls(
     valid_policies = {"warn", "fail", "normalize"}
     if result.get("sink-error-policy") not in valid_policies:
         if policy == "fail":
-            raise ValueError(
-                f"invalid sink-error-policy: {result.get('sink-error-policy')}"
+            raise AudiaGenticError(
+                code="VAL-PROV-STREAM-001",
+                kind="providers-streaming",
+                message=f"invalid sink-error-policy: {result.get('sink-error-policy')}",
+                details={"policy": result.get("sink-error-policy")},
             )
         elif policy == "warn":
             logger.warning(
@@ -113,8 +118,11 @@ def validate_stream_controls(
     valid_termination = {"graceful-kill", "warn-only"}
     if result.get("termination-policy") not in valid_termination:
         if policy == "fail":
-            raise ValueError(
-                f"invalid termination-policy: {result.get('termination-policy')}"
+            raise AudiaGenticError(
+                code="VAL-PROV-STREAM-002",
+                kind="providers-streaming",
+                message=f"invalid termination-policy: {result.get('termination-policy')}",
+                details={"policy": result.get("termination-policy")},
             )
         elif policy == "warn":
             logger.warning(

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import make_error
+
 from ..util import extract_ref_ids
 from .parents import find_parents, linked_child_ids
 
@@ -112,7 +114,13 @@ def action_complete_parent(
     if not source_kind or not required_set or not parent_field or not target_state:
         return []
     if not parent_blocking_set:
-        raise ValueError("action_complete_parent requires parent_blocking_set")
+        raise make_error(
+            prefix="VAL",
+            component="WFPROP",
+            number=3,
+            kind="workflow",
+            message="action_complete_parent requires parent_blocking_set",
+        )
 
     if not engine.config.state_in_set(
         source_kind, source.data.get("state"), required_set, source.data.get("workflow")

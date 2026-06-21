@@ -34,7 +34,7 @@ dependencies:
 
   uv:
     display-name: uv
-    probe: custom:audiagentic.foundation.toolchains.detect.uv_available
+    probe: toolchain:uv
     via:
       winget: astral-sh.uv
       scoop: uv
@@ -44,7 +44,7 @@ dependencies:
 
   gh-mcp:
     display-name: GitHub MCP Extension
-    probe: custom:audiagentic.components.optional.source_control.probes.gh_mcp_available
+    probe: command:gh mcp --help
     requires: [gh]
     toolchain: gh_extension
     package: shuymn/gh-mcp

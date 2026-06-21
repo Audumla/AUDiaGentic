@@ -1,5 +1,7 @@
-type: language
+type: feature
 contract-version: v1
+parent: coding-lsp
+kind: language
 id: cpp
 display-name: C/C++ (clangd)
 language-id: cpp
@@ -8,15 +10,19 @@ server:
   file-extensions: [.c, .cpp, .cc, .cxx, .h, .hpp, .hxx]
   workspace-config-files: [.clangd, compile_commands.json, CMakeLists.txt]
 detection-markers: [.clangd, compile_commands.json, CMakeLists.txt]
-dependency:
-  id: clangd
-  display-name: Clangd (C/C++ LSP)
-  probe: binary:clangd
-  via:
-    winget: LLVM.LLVM
-    scoop: clangd
-    choco: llvm
-    brew: clangd
-    apt: clangd
-    dnf: clangd
-    pacman: clangd
+dependencies:
+  clangd:
+    display-name: Clangd (C/C++ LSP)
+    probe: binary:clangd
+    via:
+      winget: LLVM.LLVM
+      scoop: clangd
+      choco: llvm
+      brew: clangd
+      apt: clangd
+      dnf: clangd
+      pacman: clangd
+options-schema:
+  server-settings:
+    type: object
+    default: {}

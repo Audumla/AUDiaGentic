@@ -35,12 +35,13 @@ def _continue_probe(_descriptor) -> dict:
 
 register(ProviderDescriptor(
     provider_id="continue",
+    prompt_aliases=("ctr",),
     display_name="Continue",
     description="Open-source AI code assistant for VS Code and JetBrains. Chat, autocomplete, and edit with any model.",
     url="https://continue.dev",
     cli_probe=["cn", "--version"],
     cli_install=cli_recipe("npm", "@continuedev/cli", executable="cn", probe_fn=_continue_probe),
-    vscode_extensions=(
+    host_capabilities=(
         VsCodeExtension("Continue.continue", "Continue"),
     ),
     permissions=ProviderPermissions(

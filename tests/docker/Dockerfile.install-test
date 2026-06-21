@@ -38,8 +38,12 @@ ENV AUDIAGENTIC_REPO_ROOT=/app
 RUN audiagentic install --target /root/.audiagentic/harness \
     && echo "--- Validating install ---" \
     && test -f /root/.audiagentic/harness/cli/node_modules/.bin/pi \
-    && echo "PASS: pi binary exists" \
-    && python3 -c "
+    && echo "PASS: pi binary exists"
+
+# Heredoc RUN (BuildKit): a multi-line python3 -c string cannot live inside a
+# `\`-continued RUN — each physical line would need its own continuation and the
+# Dockerfile parser treats the unescaped `import` as a new instruction.
+RUN python3 <<'PYEOF'
 import sys
 from pathlib import Path
 pi_pkg = Path('/root/.audiagentic/harness/cli/node_modules/@earendil-works/pi-coding-agent')
@@ -52,7 +56,8 @@ if empty:
     print(f'FAIL: empty dist/ in: {empty}', file=sys.stderr)
     sys.exit(1)
 print('PASS: all nested @earendil-works dist/ directories populated')
-" \
-    && echo "PASS: agent install OK"
+PYEOF
+
+RUN echo "PASS: agent install OK"
 
 CMD ["echo", "Install test image — run with: docker build -f tests/docker/Dockerfile.install-test -t audia-install-test . && docker run --rm audia-install-test"]

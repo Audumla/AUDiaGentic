@@ -108,7 +108,9 @@ class _SafeTimedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
                 try:
                     self.stream.close()
                 except Exception:
-                    pass
+                    logging.getLogger(__name__).debug(
+                        "failed to close stream during rollover", exc_info=True
+                    )
                 self.stream = None
 
             current_time = int(time.time())

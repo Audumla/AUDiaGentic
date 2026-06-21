@@ -1,11 +1,12 @@
 """Component-driven action discovery — reads actions from installed component configs.
 
-Each component config YAML can declare an ``actions`` list of paths pointing to
-action descriptor files. Actions are owned by the component that declares them; the
+Each component config YAML can declare ``contributions`` entries pointing to
+action feature descriptor files. Actions are owned by the component that declares them; the
 providers component surfaces them on every installed provider.
 
-Action descriptor files live under a component's config subdirectory and are referenced
-by relative path from the config root. Each descriptor must have ``type: action``.
+Action feature descriptor files live under a component's config subdirectory and are
+referenced by relative path from the config root. Each descriptor must have
+``type: feature`` and ``kind: action``.
 """
 from __future__ import annotations
 
@@ -14,12 +15,23 @@ from typing import Any
 
 import yaml
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.features.loader import load_feature_from_yaml
 from audiagentic.paths import SRC_ROOT
 
 from .base import ActionDescriptor, ActionFile, ActionInstruction, ActionPrompt
 from .registry import register
 
 _CONFIG_ROOT = SRC_ROOT / "audiagentic" / "config"
+
+
+def _tag_loader_error(path: Path, code: str, message: str, **details: Any) -> AudiaGenticError:
+    return AudiaGenticError(
+        code=code,
+        kind="providers",
+        message=message,
+        details={"path": str(path), **details},
+    )
 
 
 def _as_str_tuple(raw: Any) -> tuple[str, ...]:
@@ -102,16 +114,18 @@ def _load_primary_instruction(data: dict, path: Path) -> ActionInstruction | Non
     )
 
 
-def load_tag_from_yaml(path: Path, owner_component_id: str = "") -> ActionDescriptor:
-    """Parse a single action descriptor YAML and return a registered ActionDescriptor."""
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError(f"{path}: expected a YAML mapping")
-    if data.get("type") != "action":
-        raise ValueError(f"{path}: expected type=action, got {data.get('type')!r}")
+def _descriptor_from_data(
+    data: dict[str, Any],
+    path: Path,
+    owner_component_id: str = "",
+) -> ActionDescriptor:
     tag_id = data.get("tag-id")
     if not isinstance(tag_id, str) or not tag_id:
-        raise ValueError(f"{path}: missing or empty tag-id")
+        raise _tag_loader_error(
+            path,
+            "VAL-PTAG-004",
+            "missing or empty tag-id",
+        )
 
     # Primary instruction declared at top level; additional via `instructions:` list.
     primary = _load_primary_instruction(data, path)
@@ -136,6 +150,50 @@ def load_tag_from_yaml(path: Path, owner_component_id: str = "") -> ActionDescri
     )
     register(descriptor)
     return descriptor
+
+
+def load_action_feature_from_yaml(path: Path, owner_component_id: str = "") -> ActionDescriptor:
+    """Parse an action feature YAML and register the ActionDescriptor projection."""
+    feature = load_feature_from_yaml(path)
+    data = feature.raw
+    if data.get("kind") != "action":
+        raise _tag_loader_error(
+            path,
+            "VAL-PTAG-002",
+            "expected action feature kind",
+            expected="action",
+            actual=data.get("kind"),
+        )
+    return _descriptor_from_data(data, path, owner_component_id)
+
+
+def load_tag_from_yaml(path: Path, owner_component_id: str = "") -> ActionDescriptor:
+    """Parse an action feature YAML and return a registered ActionDescriptor."""
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise _tag_loader_error(
+            path,
+            "VAL-PTAG-001",
+            "expected action descriptor YAML mapping",
+            actual=type(data).__name__,
+        )
+    if data.get("type") != "feature":
+        raise _tag_loader_error(
+            path,
+            "VAL-PTAG-003",
+            "expected action descriptor type",
+            expected="feature",
+            actual=data.get("type"),
+        )
+    if data.get("kind") != "action":
+        raise _tag_loader_error(
+            path,
+            "VAL-PTAG-002",
+            "expected action feature kind",
+            expected="action",
+            actual=data.get("kind"),
+        )
+    return load_action_feature_from_yaml(path, owner_component_id)
 
 
 def _load_tags_from_component_config(
@@ -165,7 +223,7 @@ def _load_tags_from_component_config(
             raise FileNotFoundError(
                 f"action config declared in {config_file} not found: {tag_path}"
             )
-        descriptors.append(load_tag_from_yaml(tag_path, owner_component_id))
+        descriptors.append(load_action_feature_from_yaml(tag_path, owner_component_id))
     return descriptors
 
 

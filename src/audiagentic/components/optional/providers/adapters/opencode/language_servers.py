@@ -94,5 +94,9 @@ def remove_language_servers_opencode(path: Path, language: str) -> bool:
     if not isinstance(lsp, dict) or key not in lsp:
         return False
     del lsp[key]
+    # Drop the container entirely when the last managed server is gone, rather
+    # than leaving an empty "lsp": {}.
+    if not lsp:
+        data.pop("lsp", None)
     _save_json(path, data)
     return True

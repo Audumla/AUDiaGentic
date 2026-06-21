@@ -15,7 +15,9 @@ import difflib
 import sys
 from pathlib import Path
 
+from audiagentic.cli_io import print_message
 from audiagentic.components.optional.agent_jobs.prompt_syntax import load_prompt_syntax
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.components.optional.providers.surfaces.base import (
     SkillDefinition,
     apply_managed_blocks,
@@ -63,7 +65,12 @@ def _parse_section(lines: list[str], section_name: str) -> list[str]:
 def _skill_definition_from_content(tag_id: str, content: str) -> SkillDefinition:
     """Parse a skill.md string (with YAML frontmatter) into a SkillDefinition."""
     if not content.startswith("---\n"):
-        raise ValueError(f"skill content for {tag_id!r} missing frontmatter")
+        raise AudiaGenticError(
+            code="VAL-PROV-SKILL-001",
+            kind="providers",
+            message=f"skill content for {tag_id!r} missing frontmatter",
+            details={"tag_id": tag_id},
+        )
     _, frontmatter, body = content.split("---", 2)
     meta = _parse_frontmatter(frontmatter)
     body_lines = [line.rstrip() for line in body.strip().splitlines()]
@@ -115,7 +122,11 @@ def _build_base_surfaces(project_root: Path, syntax: dict[str, object]) -> dict[
     skills = _load_skills_from_registry(project_root)
     surface_config = syntax.get("skill-surfaces")
     if not isinstance(surface_config, dict):
-        raise ValueError("prompt syntax missing skill-surfaces config")
+        raise AudiaGenticError(
+            code="VAL-PROV-SKILL-002",
+            kind="providers",
+            message="prompt syntax missing skill-surfaces config",
+        )
     renderers = load_renderer_registry()
     surfaces: dict[Path, str] = {}
     for provider, config in surface_config.items():
@@ -123,14 +134,29 @@ def _build_base_surfaces(project_root: Path, syntax: dict[str, object]) -> dict[
             continue
         renderer_name = config.get("renderer")
         if not isinstance(renderer_name, str):
-            raise ValueError(f"skill surface for {provider} missing renderer")
+            raise AudiaGenticError(
+                code="VAL-PROV-SKILL-003",
+                kind="providers",
+                message=f"skill surface for {provider} missing renderer",
+                details={"provider": provider},
+            )
         renderer = renderers.get(renderer_name)
         if renderer is None:
-            raise ValueError(f"no renderer registered for {renderer_name}")
+            raise AudiaGenticError(
+                code="VAL-PROV-SKILL-004",
+                kind="providers",
+                message=f"no renderer registered for {renderer_name}",
+                details={"renderer_name": renderer_name},
+            )
         rendered = renderer(project_root=project_root, syntax=syntax, skills=skills, config=config)
         overlaps = set(surfaces).intersection(rendered)
         if overlaps:
-            raise ValueError(f"duplicate generated surface(s): {sorted(str(path) for path in overlaps)}")
+            raise AudiaGenticError(
+                code="VAL-PROV-SKILL-005",
+                kind="providers",
+                message=f"duplicate generated surface(s): {sorted(str(path) for path in overlaps)}",
+                details={"overlaps": [str(p) for p in overlaps]},
+            )
         surfaces.update(rendered)
     return surfaces
 
@@ -217,32 +243,32 @@ def regenerate_skill_surfaces(
 
     if check:
         if diffs:
-            print("Tag surface regeneration check failed:")
+            print_message("Tag surface regeneration check failed:")
             for rel_path, diff_text in diffs:
-                print(f"- {rel_path}")
+                print_message(f"- {rel_path}")
                 if diff_text:
-                    print(diff_text)
+                    print_message(diff_text)
             return 1
-        print("Tag surface regeneration check passed.")
+        print_message("Tag surface regeneration check passed.")
         return 0
 
     if dry_run:
         if diffs:
-            print("Tag surface regeneration dry run:")
+            print_message("Tag surface regeneration dry run:")
             for rel_path, diff_text in diffs:
-                print(f"- {rel_path}")
+                print_message(f"- {rel_path}")
                 if diff_text:
-                    print(diff_text)
+                    print_message(diff_text)
         else:
-            print("Tag surface regeneration dry run: no changes.")
+            print_message("Tag surface regeneration dry run: no changes.")
         return 0
 
     if diffs:
-        print("Tag surface regeneration wrote:")
+        print_message("Tag surface regeneration wrote:")
         for rel_path, _ in diffs:
-            print(f"- {rel_path}")
+            print_message(f"- {rel_path}")
     else:
-        print("Tag surface regeneration: no changes.")
+        print_message("Tag surface regeneration: no changes.")
     return 0
 
 

@@ -1,22 +1,57 @@
 """Provider reconciliation — bring providers.yaml in sync with host state."""
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.output import ComponentOutputEvent, ComponentOutputSink
+from audiagentic.foundation.event import DeliveryMode, get_bus
 
 from ..descriptors.registry import all_descriptors
 from ..surfaces.manager import apply_provider_surfaces, prune_provider_surfaces
+
+logger = logging.getLogger(__name__)
+
+_COMPONENT_MCP_SYNC_EVENT = "lifecycle.component.mcp.sync"
 
 
 def _sync_provider_mcp(project_root: Path, on_progress: ComponentOutputSink | None = None) -> None:
     """Sync all component MCP servers to provider configs — adds missing, removes stale."""
     from audiagentic.components.optional.providers.services.lifecycle import _emit
     try:
-        from audiagentic.runtime.lifecycle.component_mcp import sync_all_provider_mcp_servers
-        sync_all_provider_mcp_servers(project_root)
+        from audiagentic.foundation.components.loader import register_all_components
+        from audiagentic.foundation.components.registry import (
+            all_descriptors as all_component_descriptors,
+        )
+        from audiagentic.foundation.components.registry import (
+            is_enabled,
+            is_installed,
+        )
+
+        register_all_components()
+        bus = get_bus()
+        for component_id, descriptor in all_component_descriptors().items():
+            if not descriptor.mcp_servers and not descriptor.external_mcp_servers:
+                continue
+            if not descriptor.core and not is_installed(component_id, project_root):
+                continue
+            if not descriptor.core and not is_enabled(component_id, project_root):
+                continue
+            bus.publish(
+                _COMPONENT_MCP_SYNC_EVENT,
+                {
+                    "component_id": component_id,
+                    "project_root": project_root,
+                    "enabled": True,
+                },
+                metadata={
+                    "source_component": "providers",
+                    "subject": {"kind": "component", "id": component_id},
+                },
+                mode=DeliveryMode.SYNC,
+            )
         _emit(on_progress, "MCP server configs synced")
     except Exception:  # noqa: BLE001
         _emit(on_progress, "MCP server config sync failed (non-fatal)", level="warning")
@@ -48,7 +83,7 @@ def reconcile_provider(
         _seed_provider_config,
     )
     from audiagentic.components.optional.providers.services.provider_config import (
-        load_provider_config,
+        resolve_provider_enabled,
         set_provider_enabled,
     )
 
@@ -58,19 +93,8 @@ def reconcile_provider(
     cli_available = bool(probe and probe["available"])
     _emit(on_progress, f"CLI {'available' if cli_available else 'not found'}")
 
-    try:
-        provider_config = load_provider_config(project_root)
-    except Exception:
-        # Fall back to raw read — reconcile only needs the enabled flag, not full validation.
-        import yaml as _yaml
-
-        from audiagentic.components.optional.providers.services.provider_config import (
-            _providers_yaml_path,
-        )
-        _path = _providers_yaml_path(project_root)
-        provider_config = (_yaml.safe_load(_path.read_text(encoding="utf-8")) or {}) if _path.exists() else {}
-    provider_cfg = provider_config.get("providers", {}).get(provider_id, {})
-    currently_enabled = bool(provider_cfg.get("enabled", False))
+    # Enablement is feature state, independent of providers.yaml.
+    currently_enabled = resolve_provider_enabled(project_root, provider_id)
 
     action_taken: str
     surfaces_result: dict[str, Any] | None = None
@@ -174,4 +198,4 @@ def reconcile_all(*, project_root: Path) -> None:
     try:
         reconcile_all_providers(project_root=project_root)
     except Exception:  # noqa: BLE001
-        pass
+        logger.warning("Background provider reconcile failed", exc_info=True)

@@ -71,12 +71,12 @@ def test_claude_adapter_requires_command(monkeypatch) -> None:
             claude,
             "require_executable",
             lambda _provider_id, _command: (_ for _ in ()).throw(
-                AudiaGenticError(code="PRV-EXTERNAL-003", kind="external", message="missing")
+                AudiaGenticError(code="EXT-CLAUDE-001", kind="providers", message="missing")
             ),
         )
         claude.run({"provider-id": "claude"}, {"default-model": "claude-stub"})
     except AudiaGenticError as exc:
-        assert exc.code == "PRV-EXTERNAL-003"
-        assert exc.kind == "external"
+        assert exc.code == "EXT-CLAUDE-001"
+        assert exc.kind == "providers"
     else:
         raise AssertionError("expected missing command error")

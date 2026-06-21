@@ -1,5 +1,7 @@
-type: language
+type: feature
 contract-version: v1
+parent: coding-lsp
+kind: language
 id: rust
 display-name: Rust (rust-analyzer)
 language-id: rust
@@ -8,9 +10,13 @@ server:
   file-extensions: [.rs]
   workspace-config-files: [Cargo.toml, Cargo.lock]
 detection-markers: [Cargo.toml, Cargo.lock]
-dependency:
-  id: rust-analyzer
-  display-name: Rust Analyzer
-  probe: custom:audiagentic.components.optional.coding_lsp.language_registry.probe_rust_analyzer
-  toolchain: rustup
-  package: rust-analyzer
+dependencies:
+  rust-analyzer:
+    display-name: Rust Analyzer
+    probe: command:rust-analyzer --version
+    toolchain: rustup
+    package: rust-analyzer
+options-schema:
+  server-settings:
+    type: object
+    default: {}

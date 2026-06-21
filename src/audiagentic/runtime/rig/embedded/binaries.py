@@ -14,9 +14,11 @@ import zipfile
 from pathlib import Path
 from typing import NamedTuple
 
-logger = logging.getLogger(__name__)
-
+from audiagentic.cli_io import print_error, print_message
+from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.foundation.system.process import executable_command
+
+logger = logging.getLogger(__name__)
 
 GITHUB_REPO = "ggml-org/llama.cpp"
 GITHUB_API = f"https://api.github.com/repos/{GITHUB_REPO}"
@@ -48,7 +50,7 @@ def _http_get(url: str) -> bytes:
 
 def _latest_release() -> dict:
     """Fetch the latest release from GitHub API."""
-    print(f"Fetching latest release from {GITHUB_REPO} ...")
+    print_message(f"Fetching latest release from {GITHUB_REPO} ...")
     data = _http_get(f"{GITHUB_API}/releases/latest")
     return json.loads(data)
 
@@ -84,29 +86,36 @@ def _find_asset_for_platform(release: dict, plat: str) -> ReleaseInfo | None:
                 download_url=asset["browser_download_url"],
             )
 
-    print(f"  No matching asset found for {display} in release {tag}", file=sys.stderr)
-    print(f"  Expected pattern: {pattern.pattern}", file=sys.stderr)
-    print("  Available assets:", file=sys.stderr)
+    print_error(f"  No matching asset found for {display} in release {tag}")
+    print_error(f"  Expected pattern: {pattern.pattern}")
+    print_error("  Available assets:")
     for a in release.get("assets", []):
-        print(f"    - {a['name']}", file=sys.stderr)
+        print_error(f"    - {a['name']}")
     return None
 
 
 def _download(url: str, dest: Path) -> None:
     """Download a file with progress."""
-    print(f"  Downloading {url} ...")
+    print_message(f"  Downloading {url} ...")
     urllib.request.urlretrieve(url, dest)
-    print(f"  Saved to {dest}")
+    print_message(f"  Saved to {dest}")
 
 
 def _verify_sha256(path: Path, expected: str | None) -> None:
     if not expected:
-        print("  SHA256 not available, skipping verification")
+        print_message("  SHA256 not available, skipping verification")
         return
     h = hashlib.sha256(path.read_bytes()).hexdigest()
     if h != expected:
-        raise RuntimeError(f"SHA256 mismatch: got {h}, expected {expected}")
-    print("  SHA256 verified")
+        raise make_error(
+            prefix="CON",
+            component="RIGBIN",
+            number=4,
+            kind="runtime-rig",
+            message=f"SHA256 mismatch: got {h}, expected {expected}",
+            details={"path": str(path), "actual": h, "expected": expected},
+        )
+    print_message("  SHA256 verified")
 
 
 def _extract_zip(zip_path: Path, dest_dir: Path, inner_exe: str) -> None:
@@ -138,7 +147,14 @@ def _flatten_extracted_archive(dest_dir: Path, inner_exe: str) -> None:
     if extracted_root is None and (dest_dir / inner_exe).exists():
         return
     if extracted_root is None:
-        raise RuntimeError(f"Could not find {inner_exe} in extracted archive")
+        raise make_error(
+            prefix="RES",
+            component="RIGBIN",
+            number=5,
+            kind="runtime-rig",
+            message=f"Could not find {inner_exe} in extracted archive",
+            details={"dest_dir": str(dest_dir), "inner_exe": inner_exe},
+        )
 
     for child in extracted_root.iterdir():
         target = dest_dir / child.name
@@ -171,17 +187,29 @@ def update_binaries(runtime_dir: Path | None = None, target_bin_dir: Path | None
 
     plat = sys.platform
     if plat not in _PLATFORM_PATTERNS:
-        print(f"Unsupported platform: {plat}", file=sys.stderr)
-        sys.exit(1)
+        raise make_error(
+            prefix="CFG",
+            component="RIGBIN",
+            number=1,
+            kind="runtime-rig",
+            message=f"Unsupported platform: {plat}",
+            details={"platform": plat},
+        )
 
     # Fetch latest release dynamically
     release_data = _latest_release()
     release = _find_asset_for_platform(release_data, plat)
     if not release:
-        print(f"ERROR: Could not find matching asset for {plat}", file=sys.stderr)
-        sys.exit(1)
+        raise make_error(
+            prefix="RES",
+            component="RIGBIN",
+            number=2,
+            kind="runtime-rig",
+            message=f"Could not find matching asset for {plat}",
+            details={"platform": plat},
+        )
 
-    print(f"Found release {release.tag}, downloading {release.filename}")
+    print_message(f"Found release {release.tag}, downloading {release.filename}")
 
     # Determine target directory
     if target_bin_dir:
@@ -213,8 +241,14 @@ def update_binaries(runtime_dir: Path | None = None, target_bin_dir: Path | None
 
     bin_path = target_dir / release.inner_exe
     if not bin_path.exists():
-        print(f"ERROR: {release.inner_exe} not found after extraction", file=sys.stderr)
-        sys.exit(1)
+        raise make_error(
+            prefix="RES",
+            component="RIGBIN",
+            number=3,
+            kind="runtime-rig",
+            message=f"{release.inner_exe} not found after extraction",
+            details={"path": str(bin_path)},
+        )
 
     # Set executable permission on Unix
     if plat != "win32":
@@ -223,13 +257,13 @@ def update_binaries(runtime_dir: Path | None = None, target_bin_dir: Path | None
     # Show version
     result = subprocess.run([*executable_command(bin_path), "--version"], capture_output=True, text=True)
     version_output = result.stdout.strip() or result.stderr.strip()
-    print(f"Installed: {bin_path}")
-    print(f"Version:   {version_output}")
+    print_message(f"Installed: {bin_path}")
+    print_message(f"Version:   {version_output}")
 
     # Cleanup
     archive_path.unlink()
     tmp_dir.rmdir()
-    print("Done.")
+    print_message("Done.")
 
 
 if __name__ == "__main__":

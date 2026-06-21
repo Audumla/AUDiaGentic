@@ -11,6 +11,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+
 from . import healing as _healing
 from .log import PropagationLog
 from .parents import find_parents
@@ -18,6 +20,17 @@ from .propagation_config import load_config, validate
 from .workflow_item_api import WorkflowItemAPI
 
 logger = logging.getLogger(__name__)
+
+
+def _propagation_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
+    return make_error(
+        prefix="VAL",
+        component="WFPROP",
+        number=code_number,
+        kind="workflow",
+        message=message,
+        details=details,
+    )
 
 
 class StatePropagationEngine:
@@ -29,9 +42,10 @@ class StatePropagationEngine:
         log_path: Path | None = None,
     ) -> None:
         if enabled and config_path is None:
-            raise ValueError(
+            raise _propagation_error(
+                1,
                 "StatePropagationEngine enabled=True requires config_path. "
-                "Either pass config_path or set enabled=False."
+                "Either pass config_path or set enabled=False.",
             )
         self.ctx: Any = ctx
         self._enabled = enabled
@@ -135,7 +149,7 @@ class StatePropagationEngine:
         target_kind = getattr(target_view, "kind", None) or target_view.data.get("kind")
         cfg = self.config
         if cfg is None:
-            raise ValueError("State propagation requires Config")
+            raise _propagation_error(2, "State propagation requires Config")
 
         current_state = target_view.data.get("state", cfg.initial_state(target_kind))
 
@@ -173,7 +187,7 @@ class StatePropagationEngine:
 
         try:
             self.ctx.state(id_=target_id, new_state=target_state, metadata=new_metadata)
-        except ValueError as exc:
+        except (AudiaGenticError, ValueError) as exc:
             self._record(
                 "skipped", target_id, target_state, source_id, source_state, new_metadata,
                 target_kind=target_kind, old_state=current_state, reason="invalid_transition",

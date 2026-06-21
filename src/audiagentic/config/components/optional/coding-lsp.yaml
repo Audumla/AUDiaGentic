@@ -6,9 +6,10 @@ description: Language server protocol bridge for AI-assisted code navigation and
 lifecycle-observer: audiagentic.components.optional.coding_lsp.coding_lsp_bootstrap
 status-hook: audiagentic.components.optional.coding_lsp.coding_lsp_bootstrap.status_payload
 detection-marker: .audiagentic/components/coding-lsp.yaml
+implementation-cardinality: exclusive
 
-# Language facts (server command, file extensions, detection markers, and the
-# language's LSP server dependency) live in per-language files under
+# Language facts (server command, file extensions, detection markers, and
+# language LSP server dependencies) live in feature files under
 # config/components/optional/coding-lsp/<language>.yaml. This component owns
 # orchestration only — enabling, installing, and propagating LSP capability.
 
@@ -26,9 +27,15 @@ mcp-servers:
     description: LSP server configuration — manage language server settings
     propagate: audiagentic
     instructions: >
+      Use lsp_list_languages to see all supported languages with their default server commands.
       Use lsp_config_status to see which languages are configured and whether
       their server binaries are installed.
+      Use lsp_list_missing to see configured languages whose server binaries are not installed.
+      Use lsp_list_implementations to see which LSP implementation is active.
+      Use lsp_select_implementation to switch between available LSP implementations.
       Use lsp_add_language to add support for a language detected in the project.
+      Use lsp_set_language_option to update supported language feature options.
+      Use lsp_reset_language_option to clear a language feature option.
       Use lsp_install_dependencies to install a missing language server binary.
       Use lsp_remove_language to remove a language from the project configuration.
       Do not suggest installing a language server unless the project uses that language
@@ -47,7 +54,7 @@ mcp-servers:
       lsp_doc_symbols: get the symbol outline for a file.
       lsp_diagnostics: get type errors and warnings for open files.
       lsp_rename_preview: preview a rename refactor without applying it.
-      These tools only work for languages configured in the project's lsp.json.
+      These tools only work for languages enabled for the active LSP implementation.
       Check lsp_config_status if a tool returns no results for a language.
 
 harness-instructions:
@@ -56,18 +63,24 @@ harness-instructions:
     content: |
       ### ag-lsp-mgmt
       - `lsp_config_status` — Show configured languages and whether their server binaries are installed
+      - `lsp_list_implementations` — Show available LSP implementations and the active selection
+      - `lsp_select_implementation` — Switch the active LSP implementation
       - `lsp_add_language` — Add a language to the project (auto-configures defaults from the language spec)
       - `lsp_remove_language` — Remove a language from the project configuration
+      - `lsp_set_language_option` — Update a supported language feature option
+      - `lsp_reset_language_option` — Clear a supported language feature option
       - `lsp_list_languages` — List all supported languages with their default server commands
       - `lsp_list_missing` — List configured languages whose server binaries are not installed
       - `lsp_install_dependencies` — Install a missing language server binary (confirm with user first)
 
-      Active languages come only from .coding-lsp/lsp.json; nothing is auto-detected
-      or installed at component install time. lsp_add_language records a config entry
-      (server defaults from the language spec); installing its server binary is a
-      separate, explicit step via lsp_install_dependencies — scoped to configured
-      languages only. Do not suggest installing a language server unless the project
-      uses that language or the user explicitly requests it.
+      Active languages come from feature state and the active implementation's
+      language bindings; .coding-lsp/lsp.json is a generated runtime cache/projection
+      only, not the source of truth. Nothing is auto-detected or installed at
+      component install time. lsp_add_language enables a language feature (server
+      defaults from the language spec); installing its server binary is a separate,
+      explicit step via lsp_install_dependencies — scoped to enabled languages only.
+      Do not suggest installing a language server unless the project uses that
+      language or the user explicitly requests it.
 
 # No instruction-file contribution for LSP tools: the ag-lsp / ag-lsp-mgmt MCP
 # servers expose their tools and descriptions to the agent directly over the MCP

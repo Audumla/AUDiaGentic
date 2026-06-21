@@ -14,14 +14,10 @@
       "additionalProperties": {
         "type": "object",
         "required": [
-          "enabled",
           "install-mode",
           "access-mode"
         ],
         "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
           "install-mode": {
             "type": "string"
           },

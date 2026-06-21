@@ -5,21 +5,25 @@ has been moved to lsp_config_api.py.
 """
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
-    CODING_LSP_DIR,
-    load_runtime_servers,
     resolve_server_for_file,
 )
 from audiagentic.components.optional.coding_lsp.lsp_session_manager import SessionManager
+from audiagentic.components.optional.coding_lsp.runtime_resolver import (
+    resolve_active_runtime_servers,
+)
+
+logger = logging.getLogger(__name__)
 
 _session_manager = SessionManager()
 
 
 def _sync_to_providers(project_root: Path) -> None:
-    """Sync updated lsp.json to provider configs."""
+    """Sync active feature/runtime LSP projection to provider configs."""
     try:
         from audiagentic.components.optional.coding_lsp.language_servers_sync import (
             sync_generic_lsp_mcp_to_providers,
@@ -28,8 +32,7 @@ def _sync_to_providers(project_root: Path) -> None:
         sync_language_servers_to_providers(project_root)
         sync_generic_lsp_mcp_to_providers(project_root)
     except Exception:
-        import logging
-        logging.getLogger(__name__).warning(
+        logger.warning(
             "Failed to sync language servers to providers after config change",
             exc_info=True,
         )
@@ -52,6 +55,90 @@ def file_to_uri(file_path: str | Path) -> str:
     return Path(file_path).resolve().as_uri()
 
 
+def uri_to_repo_relative(uri: str, project_root: Path) -> str:
+    """Convert a file:// URI to a repo-relative path string."""
+    try:
+        path = Path.from_uri(uri)  # type: ignore[attr-defined]
+    except (ValueError, AttributeError):
+        path = Path(uri.replace("file://", "", 1))
+    try:
+        return str(path.relative_to(project_root))
+    except ValueError:
+        return str(path)
+
+
+def normalize_location(loc: dict[str, Any], project_root: Path) -> dict[str, Any]:
+    """Normalize an LSP Location to consistent schema."""
+    return {
+        "file": uri_to_repo_relative(loc.get("uri", ""), project_root),
+        "uri": loc.get("uri", ""),
+        "range": loc.get("range", {}),
+        "line": loc.get("range", {}).get("start", {}).get("line", 0),
+        "character": loc.get("range", {}).get("start", {}).get("character", 0),
+    }
+
+
+def normalize_symbol(sym: dict[str, Any], project_root: Path) -> dict[str, Any]:
+    """Normalize an LSP SymbolInformation or DocumentSymbol to consistent schema."""
+    kind_map = {
+        1: "file", 2: "module", 3: "namespace", 4: "package",
+        5: "class", 6: "method", 7: "property", 8: "field",
+        9: "constructor", 10: "enum", 11: "interface", 12: "function",
+        13: "variable", 14: "constant", 15: "string", 16: "number",
+        17: "boolean", 18: "array", 19: "object", 20: "key",
+        21: "null", 22: "enum_member", 23: "struct", 24: "event",
+        25: "operator", 26: "type_parameter",
+    }
+    loc = sym.get("location", {})
+    return {
+        "name": sym.get("name", ""),
+        "kind": kind_map.get(sym.get("kind", 0), f"unknown({sym.get('kind', '?')})"),
+        "kind_raw": sym.get("kind", 0),
+        "file": uri_to_repo_relative(loc.get("uri", ""), project_root),
+        "uri": loc.get("uri", ""),
+        "range": loc.get("range", sym.get("range", {})),
+        "container_name": sym.get("containerName", ""),
+        "children": [normalize_symbol(c, project_root) for c in sym.get("children", [])] if "children" in sym else [],
+    }
+
+
+def normalize_hover(hover: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Normalize an LSP Hover response to consistent schema."""
+    if not hover:
+        return None
+    contents = hover.get("contents", {})
+    if isinstance(contents, dict):
+        value = contents.get("value", "")
+        kind = contents.get("kind", "plaintext")
+    elif isinstance(contents, list):
+        first = next((c for c in contents if isinstance(c, dict)), {})
+        value = first.get("value", str(contents))
+        kind = first.get("kind", "plaintext")
+    else:
+        value = str(contents)
+        kind = "plaintext"
+    return {
+        "contents": value,
+        "format": kind,
+        "range": hover.get("range", {}),
+    }
+
+
+def normalize_workspace_edit(edit: dict[str, Any] | None, project_root: Path) -> dict[str, Any] | None:
+    """Normalize an LSP WorkspaceEdit to consistent schema."""
+    if not edit:
+        return None
+    changes = edit.get("changes", {})
+    normalized_changes: dict[str, list[dict[str, Any]]] = {}
+    for uri, ops in changes.items():
+        normalized_changes[uri_to_repo_relative(uri, project_root)] = ops
+    return {
+        "document_changes": edit.get("documentChanges", []),
+        "changes": normalized_changes,
+        "change_annotations": edit.get("changeAnnotations", {}),
+    }
+
+
 def resolve_project_root(path: str | Path) -> Path:
     """Resolve project root for a file or directory within a project.
 
@@ -68,18 +155,57 @@ def resolve_project_root(path: str | Path) -> Path:
     for candidate in (current, *current.parents):
         if home is not None and (candidate == home or candidate in home.parents):
             break  # reached home or above — boundary, not a project root
-        if (candidate / CODING_LSP_DIR / "lsp.json").exists():
-            return candidate
+        # `.audiagentic` is the project marker; lsp.json is a generated cache and
+        # must not define project root.
         if (candidate / ".audiagentic").exists():
             return candidate
     return current
 
 
+# Language-specific project markers for LSP server root resolution
+_LANGUAGE_MARKERS: dict[str, list[str]] = {
+    "python": ["pyproject.toml", "setup.py", "setup.cfg", "Pipfile", "poetry.lock"],
+    "typescript": ["tsconfig.json", "package.json"],
+    "javascript": ["package.json"],
+    "rust": ["Cargo.toml", "Cargo.lock"],
+    "c": ["compile_commands.json", "Makefile", "CMakeLists.txt"],
+    "cpp": ["compile_commands.json", "Makefile", "CMakeLists.txt"],
+}
+
+
+def resolve_language_root(path: str | Path, language: str) -> Path:
+    """Resolve the language-specific project root for LSP server initialization.
+
+    Some servers (rust-analyzer, typescript-language-server, clangd) need the
+    project-marker directory, not the raw cwd. A wrong root yields empty or
+    misconfigured results that look like missing capability.
+    """
+    base_root = resolve_project_root(path)
+    markers = _LANGUAGE_MARKERS.get(language, [])
+    if not markers:
+        return base_root
+
+    resolved = Path(path).resolve()
+    current = resolved if resolved.is_dir() else resolved.parent
+    try:
+        home = Path.home().resolve()
+    except (RuntimeError, OSError):
+        home = None
+
+    for candidate in (current, *current.parents):
+        if home is not None and (candidate == home or candidate in home.parents):
+            break
+        if candidate == base_root:
+            break
+        for marker in markers:
+            if (candidate / marker).exists():
+                return candidate
+    return base_root
+
+
 def discover_servers(project_root: str | Path) -> dict[str, Any]:
     resolved_root = resolve_project_root(project_root)
-    lsp_path = resolved_root / CODING_LSP_DIR / "lsp.json"
-    servers, _, _ = load_runtime_servers(lsp_path)
-    return servers
+    return resolve_active_runtime_servers(resolved_root)
 
 
 def workspace_symbols(query: str, root: str = ".") -> list[dict[str, Any]]:
@@ -89,7 +215,8 @@ def workspace_symbols(query: str, root: str = ".") -> list[dict[str, Any]]:
     for language, server in servers.items():
         try:
             session = _session_manager.get_or_create(project_root, language, server)
-            results.extend(session.workspace_symbol(query))
+            raw = session.workspace_symbol(query)
+            results.extend(normalize_symbol(s, project_root) for s in raw)
         except Exception as exc:
             results.append({"error": f"{language}: {exc}"})
     return results
@@ -99,15 +226,19 @@ def document_symbols(file: str) -> list[dict[str, Any]]:
     session, uri = _open_file_session(file)
     if isinstance(session, dict):
         return [session]
-    return session.document_symbol(uri)
+    project_root = resolve_project_root(file)
+    raw = session.document_symbol(uri)
+    return [normalize_symbol(s, project_root) for s in raw]
 
 
 def definition(file: str, position: str) -> list[dict[str, Any]]:
     session, uri = _open_file_session(file)
     if isinstance(session, dict):
         return [session]
+    project_root = resolve_project_root(file)
     line, character = parse_position(position)
-    return session.definition(uri, line, character)
+    raw = session.definition(uri, line, character)
+    return [normalize_location(loc, project_root) for loc in raw]
 
 
 def hover(file: str, position: str) -> dict[str, Any] | None:
@@ -115,15 +246,77 @@ def hover(file: str, position: str) -> dict[str, Any] | None:
     if isinstance(session, dict):
         return session
     line, character = parse_position(position)
-    return session.hover(uri, line, character)
+    raw = session.hover(uri, line, character)
+    return normalize_hover(raw)
 
 
 def references(file: str, position: str, include_declaration: bool = True) -> list[dict[str, Any]]:
     session, uri = _open_file_session(file)
     if isinstance(session, dict):
         return [session]
+    project_root = resolve_project_root(file)
     line, character = parse_position(position)
-    return session.references(uri, line, character, include_declaration)
+    raw = session.references(uri, line, character, include_declaration)
+    return [normalize_location(loc, project_root) for loc in raw]
+
+
+def type_definition(file: str, position: str) -> list[dict[str, Any]]:
+    session, uri = _open_file_session(file)
+    if isinstance(session, dict):
+        return [session]
+    project_root = resolve_project_root(file)
+    line, character = parse_position(position)
+    raw = session.type_definition(uri, line, character)
+    return [normalize_location(loc, project_root) for loc in raw]
+
+
+def implementation(file: str, position: str) -> list[dict[str, Any]]:
+    session, uri = _open_file_session(file)
+    if isinstance(session, dict):
+        return [session]
+    project_root = resolve_project_root(file)
+    line, character = parse_position(position)
+    raw = session.implementation(uri, line, character)
+    return [normalize_location(loc, project_root) for loc in raw]
+
+
+def call_hierarchy(
+    file: str, position: str, direction: str = "incoming",
+) -> list[dict[str, Any]]:
+    session, uri = _open_file_session(file)
+    if isinstance(session, dict):
+        return [session]
+    project_root = resolve_project_root(file)
+    line, character = parse_position(position)
+    if direction == "outgoing":
+        raw = session.call_hierarchy_outgoing(uri, line, character)
+    else:
+        raw = session.call_hierarchy_incoming(uri, line, character)
+    normalized: list[dict[str, Any]] = []
+    for call in raw:
+        from_loc = call.get("from", {})
+        from_range = from_loc.get("range", from_loc.get("fromRange", {}))
+        normalized.append({
+            "from": uri_to_repo_relative(from_loc.get("uri", ""), project_root),
+            "fromRange": from_range,
+            "fromLine": from_range.get("start", {}).get("line", 0),
+        })
+    return normalized
+
+
+def symbol_context(file: str, position: str) -> dict[str, Any]:
+    session, uri = _open_file_session(file)
+    if isinstance(session, dict):
+        return session
+    project_root = resolve_project_root(file)
+    line, character = parse_position(position)
+    raw = session.symbol_context(uri, line, character)
+    return {
+        "hover": normalize_hover(raw.get("hover")),
+        "definitions": [normalize_location(loc, project_root) for loc in raw.get("definitions", [])],
+        "references": [normalize_location(loc, project_root) for loc in raw.get("references", [])],
+        "referenceCount": raw.get("referenceCount", 0),
+    }
 
 
 def diagnostics(
@@ -133,12 +326,96 @@ def diagnostics(
     return _session_manager.diagnostics(project_root, min_severity=min_severity, limit=limit)
 
 
+def file_diagnostics(
+    file: str, min_severity: int = 4, timeout: float = 5.0,
+) -> list[dict[str, Any]]:
+    """Get diagnostics for a single file using publishDiagnostics cache."""
+    file_path = Path(file).resolve()
+    project_root = resolve_project_root(file_path)
+    language_server = _resolve_language_server(file_path, project_root)
+    if language_server is None:
+        return [{"source": "coding-lsp", "severity": 1, "code": "EXT-LSP-007",
+                  "message": f"No configured language server for {file}",
+                  "file": str(file_path), "range": {"start": {"line": 0, "character": 0},
+                                                    "end": {"line": 0, "character": 0}}}]
+    language, server = language_server
+    uri = file_to_uri(file_path)
+    session = _session_manager.get_or_create(project_root, language, server)
+    return session.file_diagnostics(uri, min_severity=min_severity, timeout=timeout)
+
+
+def changed_diagnostics(
+    files: list[str], min_severity: int = 4, limit: int = 50,
+) -> dict[str, list[dict[str, Any]]]:
+    """Batch diagnostics for changed files.
+
+    Caller supplies the changed-file list (from git status or job context).
+    """
+    result: dict[str, list[dict[str, Any]]] = {}
+    total = 0
+    for file in files:
+        if limit > 0 and total >= limit:
+            break
+        diags = file_diagnostics(file, min_severity=min_severity)
+        if diags:
+            remaining = (limit - total) if limit > 0 else len(diags)
+            result[file] = diags[:remaining]
+            total += len(result[file])
+    return result
+
+
+def server_capabilities(file: str) -> dict[str, Any]:
+    """Return the language server's capabilities for a given file.
+
+    Shows which LSP methods the server supports, so the agent can decide
+    which tools are viable.
+    """
+    file_path = Path(file).resolve()
+    project_root = resolve_project_root(file_path)
+    language_server = _resolve_language_server(file_path, project_root)
+    if language_server is None:
+        return {"error": f"No language server for {file}", "supported": []}
+    language, server = language_server
+    session = _session_manager.get_or_create(project_root, language, server)
+    caps = session.capabilities()
+    supported = []
+    method_labels = {
+        "textDocument/definition": "definition",
+        "textDocument/hover": "hover",
+        "textDocument/references": "references",
+        "textDocument/rename": "rename",
+        "textDocument/documentSymbol": "documentSymbol",
+        "textDocument/typeDefinition": "typeDefinition",
+        "textDocument/implementation": "implementation",
+        "textDocument/codeAction": "codeAction",
+        "textDocument/formatting": "formatting",
+        "textDocument/rangeFormatting": "rangeFormatting",
+        "textDocument/completion": "completion",
+        "textDocument/signatureHelp": "signatureHelp",
+        "textDocument/inlayHint": "inlayHint",
+        "textDocument/callHierarchy": "callHierarchy",
+        "workspace/symbol": "workspaceSymbol",
+        "workspace/diagnostic": "workspaceDiagnostic",
+    }
+    for method, label in method_labels.items():
+        if session.has_capability(method):
+            supported.append(label)
+    return {
+        "language": language,
+        "server": server.label if hasattr(server, "label") else str(server),
+        "supported": supported,
+        "raw": caps,
+    }
+
+
 def rename_preview(file: str, position: str, new_name: str) -> dict[str, Any] | None:
     session, uri = _open_file_session(file)
     if isinstance(session, dict):
         return session
+    project_root = resolve_project_root(file)
     line, character = parse_position(position)
-    return session.rename(uri, line, character, new_name)
+    raw = session.rename(uri, line, character, new_name)
+    return normalize_workspace_edit(raw, project_root)
 
 
 def _open_file_session(file: str) -> tuple[Any, str]:

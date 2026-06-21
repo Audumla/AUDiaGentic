@@ -1,0 +1,24 @@
+type: implementation
+contract-version: v1
+parent: coding-lsp
+id: agent-lsp
+display-name: Blackwell agent-lsp
+description: External agent-lsp MCP runtime from blackwell-systems/agent-lsp
+projection:
+  generic-mcp:
+    managed-id: coding-lsp/agent-lsp
+    name: agent-lsp
+    command: agent-lsp
+    args-from-runtime-servers: true
+dependencies:
+  agent-lsp:
+    display-name: agent-lsp
+    probe: binary:agent-lsp
+    via:
+      winget: BlackwellSystems.agent-lsp
+      scoop: blackwell-systems/agent-lsp
+      brew: blackwell-systems/tap/agent-lsp
+    platform-fallback:
+      win: [powershell, -NoProfile, -ExecutionPolicy, Bypass, -Command, "iwr -useb https://raw.githubusercontent.com/blackwell-systems/agent-lsp/main/install.ps1 | iex"]
+      darwin: [sh, -c, "curl -fsSL https://raw.githubusercontent.com/blackwell-systems/agent-lsp/main/install.sh | sh"]
+      linux: [sh, -c, "curl -fsSL https://raw.githubusercontent.com/blackwell-systems/agent-lsp/main/install.sh | sh"]

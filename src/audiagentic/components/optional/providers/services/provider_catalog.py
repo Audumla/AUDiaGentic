@@ -6,10 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from jsonschema import Draft202012Validator
-
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.contracts.schema_registry import read_schema
+from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.time import now_iso_z
 
@@ -23,9 +21,7 @@ def runtime_catalog_path(project_root: Path, provider_id: str) -> Path:
 
 
 def validate_model_catalog(payload: dict[str, Any]) -> list[str]:
-    schema = read_schema("provider-model-catalog")
-    validator = Draft202012Validator(schema)
-    return sorted(error.message for error in validator.iter_errors(payload))
+    return validate_with_schema("provider-model-catalog", payload)
 
 
 def build_model_catalog(

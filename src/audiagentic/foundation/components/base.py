@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 MODE_REQUIRED_MANAGED = "required-managed"
@@ -32,9 +32,6 @@ class ComponentFile:
     lifecycle: str          # one of the MODE_* constants
     recursive: bool = False
     description: str = ""
-
-
-from dataclasses import field
 
 
 @dataclass(frozen=True)
@@ -97,3 +94,4 @@ class ComponentDescriptor:
     lifecycle_observer: str | None = None  # dotted module path imported by register_all_components to self-register bus subscribers
     lifecycle_hook: str | None = None  # dotted import path to a function(event_type, payload, metadata)
     status_hook: str | None = None  # dotted import path to a function(project_root) -> dict
+    implementation_cardinality: str | None = None  # None | "exclusive" | "multi"

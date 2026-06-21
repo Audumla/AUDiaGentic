@@ -4,6 +4,8 @@ import json
 import shutil
 from pathlib import Path
 
+from audiagentic.cli_io import print_message
+from audiagentic.runtime.harness.config import require_harness_provider, require_harness_rig_port
 from audiagentic.runtime.harness.paths import _RIG_CONFIG
 from audiagentic.runtime.rig.embedded.config import load_rig_model, resolve_profile_definition
 
@@ -11,32 +13,11 @@ from . import constants as _c
 
 
 def _require_harness_provider(harness_cfg: dict) -> str:
-    provider = harness_cfg.get("rig", {}).get("provider")
-    if not isinstance(provider, str) or not provider.strip():
-        raise SystemExit(
-            "Harness config missing required 'provider'. "
-            "Set it in config/provisioning/harness/ag.yaml or override config."
-        )
-    return provider.strip()
+    return require_harness_provider(harness_cfg)
 
 
 def _require_harness_rig_port(harness_cfg: dict) -> int:
-    rig_cfg = harness_cfg.get("rig")
-    if not isinstance(rig_cfg, dict):
-        raise SystemExit(
-            "Harness config missing required 'rig' section. "
-            "Expected config/provisioning/harness/ag.yaml to define rig.port."
-        )
-    raw = rig_cfg.get("port")
-    if raw is None:
-        raise SystemExit(
-            "Harness config missing required 'rig.port'. "
-            "Set it in config/provisioning/harness/ag.yaml or override config."
-        )
-    try:
-        return int(raw)
-    except (TypeError, ValueError) as exc:
-        raise SystemExit(f"Invalid harness config value for rig.port: {raw!r}") from exc
+    return require_harness_rig_port(harness_cfg)
 
 
 def _build_models_config(harness_cfg: dict, model_name: str, model_profile: dict) -> dict:
@@ -193,7 +174,15 @@ def materialize_agent_config(
 
     model_name: str = harness_cfg.get("rig", {}).get("model")
     if not model_name:
-        raise SystemExit("No model configured. Set 'model' in ag.yaml or via AUDIAGENTIC_PI_MODEL env var.")
+        from audiagentic.foundation.contracts.errors import make_error
+        raise make_error(
+            prefix="CFG",
+            component="HCFG",
+            number=8,
+            kind="harness-config",
+            message="No model configured. Set 'model' in ag.yaml or via AUDIAGENTIC_PI_MODEL env var.",
+            details={"field": "rig.model"},
+        )
     model_profile: dict = {}
     model_id = model_name
     if _RIG_CONFIG.exists():
@@ -217,4 +206,4 @@ def materialize_agent_config(
         encoding="utf-8",
     )
 
-    _c._print(f"Materialized agent config in {agent_dir}")
+    print_message(f"Materialized agent config in {agent_dir}")
