@@ -5,6 +5,7 @@ import os
 import subprocess
 from dataclasses import asdict
 
+from audiagentic.cli_io import print_json, print_message
 from audiagentic.runtime.rig.embedded.process import build_command
 
 DEFAULT_HOST = "127.0.0.1"
@@ -15,18 +16,16 @@ def print_result(result: object, as_json: bool) -> None:
     from audiagentic.runtime.rig.embedded.launch import LaunchResult
 
     payload = asdict(LaunchResult(**result.__dict__) if hasattr(result, "__dict__") else result)
-    import json
-
     if as_json:
-        print(json.dumps(payload))
+        print_json(payload)
         return
-    print("Embedded rig ready")
-    print(f"  PID:      {result.pid}")
-    print(f"  Endpoint: {result.base_url}")
-    print(f"  Model:    {result.model}")
-    print(f"  Binary:   {result.binary}")
+    print_message("Embedded rig ready")
+    print_message(f"  PID:      {result.pid}")
+    print_message(f"  Endpoint: {result.base_url}")
+    print_message(f"  Model:    {result.model}")
+    print_message(f"  Binary:   {result.binary}")
     if result.log_path:
-        print(f"  Log:      {result.log_path}")
+        print_message(f"  Log:      {result.log_path}")
 
 
 def _apply_cli_overrides(server_cfg: dict[str, object], args: argparse.Namespace) -> dict[str, object]:
@@ -92,12 +91,12 @@ def launch_foreground(args: argparse.Namespace) -> int:
     )
 
     if not args.json:
-        print("Starting embedded rig...")
-        print(f"  Endpoint: http://{args.host}:{args.port}/v1")
-        print(f"  Model:    {plan.model_path.name}")
-        print(f"  Binary:   {plan.binary}")
-        print(f"  ModelArg: {plan.model_arg}")
-        print(f"  Profile:  {plan.profile.name}")
+        print_message("Starting embedded rig...")
+        print_message(f"  Endpoint: http://{args.host}:{args.port}/v1")
+        print_message(f"  Model:    {plan.model_path.name}")
+        print_message(f"  Binary:   {plan.binary}")
+        print_message(f"  ModelArg: {plan.model_arg}")
+        print_message(f"  Profile:  {plan.profile.name}")
 
     completed = subprocess.run(command, cwd=plan.server_dir, check=False)
     return int(completed.returncode)

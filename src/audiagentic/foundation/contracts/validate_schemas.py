@@ -9,6 +9,8 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from audiagentic.cli_io import print_json
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import SCHEMA_DIR, schema_filename
 from audiagentic.paths import REPO_ROOT
 
@@ -26,7 +28,12 @@ def _schema_path_for_fixture(fixture_path: Path) -> Path:
     elif name.endswith(".invalid.json"):
         stem = name[: -len(".invalid.json")]
     else:
-        raise ValueError("fixture file must end in .valid.json or .invalid.json")
+        raise AudiaGenticError(
+            code="VAL-VSCHEMA-001",
+            kind="contracts",
+            message=f"fixture file must end in .valid.json or .invalid.json: {name}",
+            details={"file": name},
+        )
     if "." in stem:
         stem = stem.split(".", 1)[0]
     return SCHEMA_DIR / schema_filename(stem)
@@ -98,7 +105,7 @@ def run(argv: list[str]) -> int:
     parser.parse_args(argv)
     findings = validate_fixtures()
     status = "ok" if not findings else "error"
-    print(json.dumps({"status": status, "findings": findings}, indent=2, sort_keys=True))
+    print_json({"status": status, "findings": findings}, indent=2, sort_keys=True)
     return 0 if status == "ok" else 2
 
 

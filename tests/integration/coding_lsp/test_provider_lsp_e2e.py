@@ -35,6 +35,9 @@ from audiagentic.components.optional.coding_lsp.language_servers_sync import (
     sync_generic_lsp_mcp_to_providers,
     sync_language_servers_to_providers,
 )
+from audiagentic.components.optional.providers.adapters.opencode.language_servers import (
+    _to_opencode_key,
+)
 from audiagentic.components.optional.providers.descriptors.registry import all_descriptors
 from audiagentic.foundation.components.dependencies import build_dependency_workflow
 from audiagentic.foundation.components.loader import register_all_components
@@ -103,19 +106,30 @@ def provisioned_project(tmp_path_factory) -> Path:
     root = tmp_path_factory.mktemp("lsp-e2e-project")
     (root / ".audiagentic").mkdir(parents=True, exist_ok=True)
 
-    # 1. install coding-lsp through lifecycle APIs
+    # 1. install providers component (required for provider enablement + observer)
+    prov_result = install_component("providers", root)
+    assert prov_result["ok"], f"install providers failed: {prov_result}"
+
+    # 2. install coding-lsp through lifecycle APIs
     lsp_result = install_component("coding-lsp", root)
     assert lsp_result["ok"], f"install coding-lsp failed: {lsp_result}"
     enable_result = enable_component("coding-lsp", root)
     assert enable_result["ok"], f"enable coding-lsp failed: {enable_result}"
 
-    # 2. install the provider CLIs used for native LSP config
+    # 3. install the provider CLIs used for native LSP config
     for provider_id in NATIVE_LSP_PROVIDERS:
         result = install_provider(provider_id, project_root=root)
         assert_install_result_ok(provider_id, result)
         assert_health_ok(provider_id, result)
 
-    # 3. enable languages in lsp.json
+    # 4. enable generic MCP LSP providers (no CLI install needed — they receive ag-lsp)
+    from audiagentic.components.optional.providers.services.provider_config import (
+        set_provider_enabled,
+    )
+    for provider_id in GENERIC_MCP_LSP_PROVIDERS:
+        set_provider_enabled(root, provider_id, enabled=True)
+
+    # 5. enable languages in lsp.json
     for lang in LANGUAGES:
         result = lsp_config_api.add_language(str(root), lang)
         assert result["ok"], f"add_language({lang}) failed: {result}"
@@ -123,11 +137,11 @@ def provisioned_project(tmp_path_factory) -> Path:
     configured_lang_ids = LANGUAGES
     dep_cfgs = language_registry.dependency_cfgs(configured_lang_ids)
 
-    # 4. install the language server binaries — scoped to configured languages
+    # 6. install the language server binaries — scoped to configured languages
     workflow = build_dependency_workflow(dep_cfgs, workflow_id="coding-lsp", action="install")
     workflow.run({})
 
-    # 5. propagate to providers: native config + generic ag-lsp MCP
+    # 7. propagate to providers: native config + generic ag-lsp MCP
     sync_language_servers_to_providers(root)
     sync_generic_lsp_mcp_to_providers(root)
 
@@ -201,8 +215,9 @@ def test_opencode_native_config(provisioned_project: Path) -> None:
     data = json.loads(cfg_path.read_text(encoding="utf-8"))
     lsp = data.get("lsp", {})
     for lang in LANGUAGES:
-        assert lang in lsp, f"opencode missing native LSP entry for {lang}"
-        assert lsp[lang]["command"] == list(language_registry.get_language(lang).command)
+        key = _to_opencode_key(lang)
+        assert key in lsp, f"opencode missing native LSP entry for {lang} (key: {key})"
+        assert lsp[key]["command"] == list(language_registry.get_language(lang).command)
 
 
 def test_qwen_native_config(provisioned_project: Path) -> None:
@@ -220,7 +235,7 @@ def test_native_provider_configs_scope_to_enabled_languages(provisioned_project:
     codex = tomllib.loads((provisioned_project / ".codex" / "config.toml").read_text(encoding="utf-8"))
     assert set(codex.get("language_servers", {}).keys()) == set(LANGUAGES)
     opencode = json.loads((provisioned_project / ".opencode" / "opencode.json").read_text(encoding="utf-8"))
-    assert set(opencode.get("lsp", {}).keys()) == set(LANGUAGES)
+    assert set(opencode.get("lsp", {}).keys()) == {_to_opencode_key(l) for l in LANGUAGES}
     qwen = json.loads((provisioned_project / ".lsp.json").read_text(encoding="utf-8"))
     assert set(qwen.keys()) == set(LANGUAGES)
 

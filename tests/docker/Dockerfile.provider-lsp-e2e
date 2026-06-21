@@ -1,6 +1,7 @@
 FROM audia-test-base:latest
 
 ENV AUDIAGENTIC_DOCKER_TESTS=1
+ENV AUDIAGENTIC_REAL_PROVIDER_CLI_TESTS=1
 ENV AUDIAGENTIC_REPO_ROOT=/app
 # Opt in to also exercise rust + cpp servers (slow: cargo build / apt clangd):
 #   docker run -e AUDIAGENTIC_LSP_E2E_ALL=1 ...
@@ -17,13 +18,15 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Source mounted at runtime — no COPY here.
+# Source is baked in (COPY), not bind-mounted: a -v $PWD:/app mount of the host
+# filesystem deadlocks on Windows Docker Desktop. .dockerignore curates the context.
 # Build: docker build -f tests/docker/Dockerfile.provider-lsp-e2e -t audiagentic-provider-lsp-e2e .
-# Run:   docker run --rm -v $PWD:/app audiagentic-provider-lsp-e2e
+# Run:   docker run --rm audiagentic-provider-lsp-e2e
 #
 # The project is installed into an isolated uv venv (see Dockerfile.lsp-install-test
 # for why system pip is avoided on this base image). The language-server binaries
 # themselves and the native-LSP provider CLIs are installed by the test's
 # provisioning fixture via the real scoped workflows, so the test exercises
 # actual installation, not a pre-baked environment.
-CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-timeout pytest-asyncio && /venv/bin/pytest tests/integration/coding_lsp/test_provider_lsp_e2e.py -v --tb=short"]
+COPY . /app
+CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-timeout pytest-asyncio && /venv/bin/pytest tests/integration/coding_lsp/test_provider_lsp_e2e.py -v --tb=short --timeout=300"]

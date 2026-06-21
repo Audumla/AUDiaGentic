@@ -7,16 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
-def find_package_root(start: Path) -> Path:
-    """Walk up from start until a directory named 'audiagentic' is found."""
-    current = start.resolve()
-    while current != current.parent:
-        if current.name == "audiagentic":
-            return current
-        current = current.parent
-    raise RuntimeError(f"Could not find 'audiagentic' package root from {start}")
-
+from audiagentic.foundation.paths.package import find_package_root
 
 _PKG_ROOT = find_package_root(Path(__file__))
 _RIG_CONFIG = _PKG_ROOT / "config" / "provisioning" / "rig" / "rig.yaml"

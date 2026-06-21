@@ -23,6 +23,10 @@ def test_install_commands_for_clangd_uses_platform_variant() -> None:
 def test_status_payload_uses_workflow_derived_install_commands(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(coding_lsp_bootstrap, "_active_dependency_ids", lambda project_root: ["pyright"])
     monkeypatch.setattr(coding_lsp_bootstrap, "detect_missing", lambda probes, names: ["pyright"])
+    monkeypatch.setattr(
+        "audiagentic.components.optional.coding_lsp.lsp_config_api.active_dependency_cfgs",
+        lambda project_root: language_registry.dependency_cfgs(["python"]),
+    )
 
     payload = coding_lsp_bootstrap.status_payload(tmp_path)
 

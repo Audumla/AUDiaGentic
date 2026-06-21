@@ -10,12 +10,13 @@ from typing import Any
 
 import yaml
 
+from audiagentic.cli_io import print_json
 from audiagentic.foundation.components.ids import ALL_COMPONENT_IDS
 from audiagentic.foundation.contracts.canonical_ids import (
-    canonical_provider_ids,
     validate_ids,
     validate_schema_files,
 )
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import SCHEMA_DIR
 from audiagentic.paths import REPO_ROOT
 
@@ -50,7 +51,12 @@ def _load_payload(path: Path) -> Any:
         return json.loads(path.read_text(encoding="utf-8"))
     if path.suffix.lower() in {".yaml", ".yml"}:
         return yaml.safe_load(path.read_text(encoding="utf-8"))
-    raise ValueError("unsupported file type")
+    raise AudiaGenticError(
+        code="VAL-VIDS-001",
+        kind="contracts",
+        message=f"unsupported file type: {path.suffix}",
+        details={"file": str(path), "suffix": path.suffix},
+    )
 
 
 def _should_validate_content(path: Path) -> bool:
@@ -68,7 +74,12 @@ def _should_validate_content(path: Path) -> bool:
         return True
 
 
-def scan_paths(paths: Iterable[Path]) -> list[dict[str, str]]:
+def scan_paths(
+    paths: Iterable[Path],
+    *,
+    provider_ids: Iterable[str] | None = None,
+) -> list[dict[str, str]]:
+    allowed_provider_ids = tuple(provider_ids) if provider_ids is not None else None
     findings: list[dict[str, str]] = []
     for path in paths:
         if path.is_dir():
@@ -86,8 +97,9 @@ def scan_paths(paths: Iterable[Path]) -> list[dict[str, str]]:
                 findings.append({"path": str(file_path), "issue": f"parse-error: {exc}"})
                 continue
             providers, components = _extract_ids(payload)
-            for issue in validate_ids(providers, canonical_provider_ids()):
-                findings.append({"path": str(file_path), "issue": issue})
+            if allowed_provider_ids is not None:
+                for issue in validate_ids(providers, allowed_provider_ids):
+                    findings.append({"path": str(file_path), "issue": issue})
             for issue in validate_ids(components, ALL_COMPONENT_IDS):
                 findings.append({"path": str(file_path), "issue": issue})
     schema_findings = validate_schema_files(SCHEMA_DIR)
@@ -99,15 +111,21 @@ def scan_paths(paths: Iterable[Path]) -> list[dict[str, str]]:
 def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Validate canonical ids.")
     parser.add_argument("paths", nargs="*", help="Paths to scan")
+    parser.add_argument(
+        "--provider-id",
+        action="append",
+        dest="provider_ids",
+        help="Allowed provider id. Repeat to validate provider ids from foundation-only CLI.",
+    )
     args = parser.parse_args(argv)
     if args.paths:
         paths = [Path(p) for p in args.paths]
     else:
         paths = [REPO_ROOT / "docs", REPO_ROOT / "docs" / "examples"]
-    findings = scan_paths(paths)
+    findings = scan_paths(paths, provider_ids=args.provider_ids)
     status = "ok" if not findings else "error"
     payload = {"status": status, "findings": findings}
-    print(json.dumps(payload, indent=2, sort_keys=True))
+    print_json(payload, indent=2, sort_keys=True)
     return 0 if status == "ok" else 2
 
 

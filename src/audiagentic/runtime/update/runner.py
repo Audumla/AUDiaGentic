@@ -8,6 +8,8 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
+from audiagentic.cli_io import print_message
+
 logger = logging.getLogger(__name__)
 
 GITHUB_REPO = "Audumla/AUDiaGentic"
@@ -32,7 +34,7 @@ def _download_wheel(url: str, version: str) -> Path:
     safe_ver = version.replace("-", "_")
     filename = f"audiagentic-{safe_ver}-py3-none-any.whl"
     tmp = Path(tempfile.gettempdir()) / filename
-    print(f"  Downloading audiagentic {version}...", flush=True)
+    print_message(f"  Downloading audiagentic {version}...")
     urllib.request.urlretrieve(url, tmp)
     return tmp
 
@@ -133,15 +135,15 @@ def install_version(version: str) -> dict:
         try:
             wheel.unlink()
         except Exception:  # noqa: BLE001
-            pass
+            logger.debug("Failed to clean up wheel file after install failure", exc_info=True)
         return {"ok": False, "error": f"pip install failed (rc={result.returncode})\n{result.stderr}"}
 
     try:
         wheel.unlink()
     except Exception:  # noqa: BLE001
-        pass
+        logger.debug("Failed to clean up wheel file after successful install", exc_info=True)
 
-    print("  Refreshing harness config...", flush=True)
+    print_message("  Refreshing harness config...")
     try:
         from audiagentic.runtime.harness import install_to
         from audiagentic.runtime.home import global_harness_runtime

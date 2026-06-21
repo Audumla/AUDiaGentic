@@ -59,3 +59,55 @@ def test_observer_ignores_non_path_project_root(recorded: dict[str, list]) -> No
     )
     assert recorded["prune"] == []
     assert recorded["apply"] == []
+
+
+@pytest.fixture()
+def recorded_mcp(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Path, bool]]:
+    calls: list[tuple[str, Path, bool]] = []
+    monkeypatch.setattr(
+        observer,
+        "sync_component_mcp_to_providers",
+        lambda component_id, project_root, *, enabled=True: calls.append(
+            (component_id, project_root, enabled)
+        ),
+    )
+    return calls
+
+
+@pytest.mark.parametrize(
+    ("event_type", "expected_enabled"),
+    [
+        ("lifecycle.component.installed", True),
+        ("lifecycle.component.enabled", True),
+        ("lifecycle.component.disabled", True),
+        ("lifecycle.component.uninstalled", False),
+    ],
+)
+def test_observer_maps_lifecycle_events_to_mcp_projection(
+    recorded_mcp: list[tuple[str, Path, bool]],
+    event_type: str,
+    expected_enabled: bool,
+) -> None:
+    root = Path("/tmp/project")
+
+    observer._on_component_mcp_lifecycle(
+        event_type,
+        {"component_id": "coding-lsp", "project_root": root},
+        {},
+    )
+
+    assert recorded_mcp == [("coding-lsp", root, expected_enabled)]
+
+
+def test_observer_maps_explicit_mcp_sync_event(
+    recorded_mcp: list[tuple[str, Path, bool]],
+) -> None:
+    root = Path("/tmp/project")
+
+    observer._on_component_mcp_sync(
+        "lifecycle.component.mcp.sync",
+        {"component_id": "coding-lsp", "project_root": root, "enabled": False},
+        {},
+    )
+
+    assert recorded_mcp == [("coding-lsp", root, False)]

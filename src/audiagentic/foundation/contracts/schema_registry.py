@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from jsonschema import Draft202012Validator
+
 from audiagentic.paths import SRC_ROOT
 
 AUDIAGENTIC_ROOT = SRC_ROOT / "audiagentic"
@@ -25,6 +27,12 @@ def schema_path(stem: str) -> Path:
 
 def read_schema(stem: str) -> dict[str, Any]:
     return json.loads(schema_path(stem).read_text(encoding="utf-8"))
+
+
+def validate_with_schema(stem: str, payload: Any) -> list[str]:
+    """Return sorted validation error messages for a canonical schema."""
+    validator = Draft202012Validator(read_schema(stem))
+    return sorted(error.message for error in validator.iter_errors(payload))
 
 
 def iter_schema_paths() -> list[Path]:

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
+import threading
 
-from audiagentic.components.optional.providers.adapters.mcp_json import (
+from audiagentic.foundation.mcp.json_format import (
     read_mcp_json,
     remove_mcp_json,
     write_mcp_json,
@@ -18,6 +20,8 @@ from ...descriptors.base import (
     ProviderPermissions,
 )
 from ...descriptors.registry import register
+
+logger = logging.getLogger(__name__)
 
 
 def _pi_install(project_root=None):
@@ -42,6 +46,27 @@ def _pi_uninstall(project_root=None):
     return subprocess.CompletedProcess(["audiagentic", "uninstall"], rc, "", "")
 
 
+def _install_pi_lens(pi_bin) -> None:
+    """Run the (network) `pi install npm:pi-lens`, bounded and best-effort."""
+    try:
+        proc = subprocess.run(
+            [str(pi_bin), "install", "npm:pi-lens"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=300,
+        )
+    except Exception:
+        logger.warning("pi-lens install errored", exc_info=True)
+        return
+    if proc.returncode != 0:
+        logger.warning(
+            "pi-lens install failed (rc=%s): %s",
+            proc.returncode,
+            (proc.stderr or "").strip()[:500],
+        )
+
+
 def _pi_ensure_lens(project_root=None):
     """Install the pi-lens LSP extension into the pi harness (best-effort).
 
@@ -49,27 +74,23 @@ def _pi_ensure_lens(project_root=None):
     language servers from PATH, so the language server binaries installed by
     coding-lsp plus this extension are all pi needs — no per-language config.
     Idempotent: re-running `pi install` for an already-present extension is safe.
+
+    The install is a network npm fetch, so it runs on a background daemon thread
+    rather than inline: enabling a component must not block its (MCP) response on
+    a slow/hanging install. A missed or retried install is harmless.
     """
     from audiagentic.runtime.harness.pi.runner.context import resolve_agent_bin
     from audiagentic.runtime.home import global_harness_runtime
     pi_bin = resolve_agent_bin(global_harness_runtime())
     if not pi_bin.exists():
         return {"ok": False, "skipped": "pi harness not installed"}
-    try:
-        proc = subprocess.run(
-            [str(pi_bin), "install", "npm:pi-lens"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": str(exc)}
-    return {
-        "ok": proc.returncode == 0,
-        "returncode": proc.returncode,
-        "stdout": (proc.stdout or "").strip(),
-        "stderr": (proc.stderr or "").strip(),
-    }
+    threading.Thread(
+        target=_install_pi_lens,
+        args=(pi_bin,),
+        name="pi-lens-install",
+        daemon=True,
+    ).start()
+    return {"ok": True, "started": True, "detail": "pi-lens install running in background"}
 
 
 def _pi_probe(descriptor):
@@ -120,7 +141,7 @@ register(ProviderDescriptor(
         uninstall=CallableStep(id="uninstall", fn=_pi_uninstall),
         probe_fn=_pi_probe,
     ),
-    vscode_extensions=(),
+    host_capabilities=(),
     permissions=ProviderPermissions(
         can_write_files=True,
         can_execute_shell=True,

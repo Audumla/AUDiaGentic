@@ -1,4 +1,6 @@
-type: action
+type: feature
+parent: agent-jobs
+kind: action
 contract-version: v1
 id: ag-review/doctrine
 title: Review action doctrine

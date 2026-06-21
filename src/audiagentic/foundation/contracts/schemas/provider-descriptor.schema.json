@@ -18,17 +18,7 @@
     },
     "provider-id": {
       "type": "string",
-      "enum": [
-        "local-openai",
-        "claude",
-        "codex",
-        "gemini",
-        "qwen",
-        "copilot",
-        "continue",
-        "cline",
-        "opencode"
-      ]
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
     },
     "install-mode": {
       "type": "string"

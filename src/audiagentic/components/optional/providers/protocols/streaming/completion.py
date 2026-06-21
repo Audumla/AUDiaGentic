@@ -8,10 +8,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from jsonschema import Draft202012Validator
-
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.contracts.schema_registry import read_schema
+from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 from audiagentic.foundation.time import now_iso_z
 
 
@@ -185,9 +183,7 @@ def try_extract_json_from_stdout(stdout: str) -> dict[str, Any] | None:
 
 def _validate(payload: dict[str, Any]) -> list[str]:
     """Validate against the completion schema."""
-    schema = read_schema("provider-completion")
-    validator = Draft202012Validator(schema)
-    return sorted(error.message for error in validator.iter_errors(payload))
+    return validate_with_schema("provider-completion", payload)
 
 
 def validate_provider_completion(payload: dict[str, Any]) -> list[str]:

@@ -1,11 +1,14 @@
 """Job state machine."""
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+logger = logging.getLogger(__name__)
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.runtime.state import jobs_store as store
 

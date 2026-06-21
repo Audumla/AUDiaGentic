@@ -84,6 +84,18 @@ def setup_provider_surfaces(project_root: Path) -> None:
         json.dumps({"mcpServers": []}),
     )
 
+    # Enabled-aware projection: a provider only receives managed MCP entries and
+    # surface files when it is enabled. Enable every provider so propagation and
+    # surface apply target the stub configs / surface files created above.
+    from audiagentic.components.optional.providers.descriptors.registry import (
+        all_descriptors as all_provider_descriptors,
+    )
+    from audiagentic.components.optional.providers.services.provider_config import (
+        set_provider_enabled,
+    )
+    for provider_id in all_provider_descriptors():
+        set_provider_enabled(project_root, provider_id, enabled=True)
+
 
 def _ensure_dir_and_stub(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)

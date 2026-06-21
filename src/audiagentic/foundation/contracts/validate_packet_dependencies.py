@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
+from audiagentic.cli_io import print_json
 from audiagentic.paths import REPO_ROOT
 
 REGISTRY_PATH = REPO_ROOT / "docs" / "implementation" / "31_Build_Status_and_Work_Registry.md"
@@ -128,7 +128,7 @@ def run(argv: list[str]) -> int:
     parser.add_argument("--registry", default=str(REGISTRY_PATH))
     args = parser.parse_args(argv)
     result = validate_registry(Path(args.registry))
-    print(json.dumps(result, indent=2, sort_keys=True))
+    print_json(result, indent=2, sort_keys=True)
     return 0 if result["status"] == "ok" else 2
 
 

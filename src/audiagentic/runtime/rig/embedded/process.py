@@ -6,6 +6,7 @@ import sys
 import time
 from pathlib import Path
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.foundation.system.process import executable_command
 from audiagentic.runtime.rig.http import probe_models_endpoint
 
@@ -14,6 +15,17 @@ _LLAMA_ARG_MAP: list[tuple[str, str, str]] = [
 ]
 
 _LLAMA_ARG_KEYS = {key for key, _, _ in _LLAMA_ARG_MAP}
+
+
+def _process_error(prefix: str, code_number: int, message: str, **details: object) -> AudiaGenticError:
+    return make_error(
+        prefix=prefix,
+        component="RIGPROC",
+        number=code_number,
+        kind="runtime-rig",
+        message=message,
+        details=details,
+    )
 
 
 def resolve_platform_dirs(bin_dir: Path) -> tuple[Path, Path]:
@@ -80,6 +92,12 @@ def wait_for_health(
             detail = f"Rig exited early with code {process.returncode}"
             if log_path is not None:
                 detail += f". See log: {log_path}"
-            raise SystemExit(detail)
+            raise _process_error(
+                "EXT",
+                1,
+                detail,
+                returncode=process.returncode,
+                log_path=str(log_path) if log_path is not None else None,
+            )
         time.sleep(0.5)
-    raise SystemExit(f"Rig health check failed for {base_url}/models")
+    raise _process_error("TO", 2, f"Rig health check failed for {base_url}/models", base_url=base_url)

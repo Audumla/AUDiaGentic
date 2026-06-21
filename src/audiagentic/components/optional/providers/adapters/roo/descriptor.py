@@ -1,11 +1,14 @@
 import shutil
 
-from audiagentic.components.optional.providers.adapters.mcp_json import (
+from audiagentic.components.optional.providers.adapters.probe import run_cli
+from audiagentic.components.optional.providers.services.host_capabilities import (
+    list_vscode_extensions,
+)
+from audiagentic.foundation.mcp.json_format import (
     read_mcp_json,
     remove_mcp_json,
     write_mcp_json,
 )
-from audiagentic.components.optional.providers.adapters.probe import run_cli
 
 from ...descriptors.base import (
     AgentFile,
@@ -25,9 +28,8 @@ def _roo_probe(descriptor) -> dict:
     if shutil.which("code") is None:
         return {"available": False, "command": command,
                 "executable": None, "returncode": None, "stdout": "", "stderr": "code not found"}
-    # Use cached extension list if available — avoids spawning VS Code when not needed.
-    from ...descriptors.registry import _list_vscode_extensions
-    exts = _list_vscode_extensions(allow_probe=False)
+    # Use cached extension list if available; avoids spawning VS Code when not needed.
+    exts = list_vscode_extensions(allow_probe=False)
     if exts is not None:
         return {"available": _EXTENSION_ID.lower() in exts, "command": command,
                 "executable": "code", "returncode": 0, "stdout": "", "stderr": ""}
@@ -56,7 +58,7 @@ register(ProviderDescriptor(
     access_mode="env",
     cli_probe=["code", "--list-extensions"],
     cli_install=cli_recipe("vscode", _EXTENSION_ID, executable="code", probe_fn=_roo_probe),
-    vscode_extensions=(
+    host_capabilities=(
         VsCodeExtension(_EXTENSION_ID, "Roo Code"),
     ),
     permissions=ProviderPermissions(

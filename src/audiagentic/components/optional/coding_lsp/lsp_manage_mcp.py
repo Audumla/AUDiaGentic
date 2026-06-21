@@ -22,6 +22,20 @@ def lsp_config_status(root: str = ".") -> dict[str, Any]:
 
 @mcp.tool()
 @log_tool_call
+def lsp_list_implementations(root: str = ".") -> dict[str, Any]:
+    resolved = root if root != "." else str(project_root_from_env())
+    return lsp_config_api.list_implementations(resolved)
+
+
+@mcp.tool()
+@log_tool_call
+def lsp_select_implementation(root: str = ".", implementation: str = "") -> dict[str, Any]:
+    resolved = root if root != "." else str(project_root_from_env())
+    return lsp_config_api.select_implementation(resolved, implementation)
+
+
+@mcp.tool()
+@log_tool_call
 async def lsp_add_language(root: str = ".", language: str = "") -> dict[str, Any]:
     """Enable a language and install its server binaries in one step.
 
@@ -39,6 +53,18 @@ async def lsp_add_language(root: str = ".", language: str = "") -> dict[str, Any
 @log_tool_call
 def lsp_remove_language(root: str, language: str) -> dict[str, Any]:
     return lsp_config_api.remove_language(root, language)
+
+
+@mcp.tool()
+@log_tool_call
+def lsp_set_language_option(root: str, language: str, key: str, value: Any) -> dict[str, Any]:
+    return lsp_config_api.set_language_option(root, language, key, value)
+
+
+@mcp.tool()
+@log_tool_call
+def lsp_reset_language_option(root: str, language: str, key: str) -> dict[str, Any]:
+    return lsp_config_api.reset_language_option(root, language, key)
 
 
 @mcp.tool()

@@ -31,7 +31,7 @@ register(ProviderDescriptor(
             "rm -f \"$HOME/.local/bin/goose\"",
         )),
     ),
-    vscode_extensions=(),
+    host_capabilities=(),
     permissions=ProviderPermissions(
         can_write_files=True,
         can_execute_shell=True,

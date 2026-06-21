@@ -22,7 +22,12 @@ providers:
         encoding="utf-8",
     )
     result = subprocess.run(
-        [sys.executable, "-m", "audiagentic.foundation.contracts.validate_ids", str(tmp_path)],
+        [
+            sys.executable,
+            "-m",
+            "audiagentic.components.optional.providers.validate_ids",
+            str(tmp_path),
+        ],
         cwd=ROOT,
         capture_output=True,
         text=True,

@@ -4,7 +4,7 @@ import json
 import subprocess
 from typing import Any
 
-from audiagentic.components.optional.providers.adapters.mcp_json import (
+from audiagentic.foundation.mcp.json_format import (
     read_mcp_json,
     remove_mcp_json,
     write_mcp_json,
@@ -86,12 +86,13 @@ def _fetch_claude_catalog(provider_cfg: dict[str, Any]) -> list[dict[str, Any]]:
 
 register(ProviderDescriptor(
     provider_id="claude",
+    prompt_aliases=("cld",),
     display_name="Claude (Anthropic)",
     description="Anthropic's Claude Code CLI. Agentic coding assistant with deep codebase understanding and MCP tool use.",
     url="https://claude.ai/code",
     cli_probe=["claude", "--version"],
     cli_install=cli_recipe("npm", "@anthropic-ai/claude-code", executable="claude"),
-    vscode_extensions=(
+    host_capabilities=(
         VsCodeExtension("anthropic.claude-code", "Claude Code"),
     ),
     permissions=ProviderPermissions(

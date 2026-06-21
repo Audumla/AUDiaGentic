@@ -12,6 +12,8 @@ import threading
 import time
 from pathlib import Path
 
+from audiagentic.foundation.contracts.errors import make_error
+
 _process_lock = threading.Lock()
 _LOCK_TIMEOUT = 10.0
 _LOCK_POLL = 0.05
@@ -32,7 +34,13 @@ def next_id(*, counter_path: Path, id_prefix: str) -> str:
         Next ID string (e.g., 'request-1', 'task-1')
     """
     if not id_prefix:
-        raise ValueError("next_id requires id_prefix")
+        raise make_error(
+            prefix="VAL",
+            component="WFID",
+            number=1,
+            kind="workflow",
+            message="next_id requires id_prefix",
+        )
     return _next_id_config_mode(counter_path, id_prefix)
 
 

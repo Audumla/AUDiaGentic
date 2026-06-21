@@ -5,10 +5,10 @@ import logging
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_ndjson, atomic_write_text, load_ndjson
+
+logger = logging.getLogger(__name__)
 
 _CURRENT_LEDGER = "CURRENT_RELEASE_LEDGER.ndjson"
 _HISTORICAL_LEDGER = "LEDGER.ndjson"

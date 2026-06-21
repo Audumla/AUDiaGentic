@@ -87,12 +87,13 @@ def _fetch_opencode_catalog(provider_cfg: dict[str, Any]) -> list[dict[str, Any]
 
 register(ProviderDescriptor(
     provider_id="opencode",
+    prompt_aliases=("opc",),
     display_name="OpenCode",
     description="Terminal-based AI coding assistant. Supports multiple LLM providers via a unified CLI.",
     url="https://opencode.ai",
     cli_probe=["opencode", "--version"],
     cli_install=cli_recipe("npm", "opencode-ai", executable="opencode", probe_fn=_opencode_probe),
-    vscode_extensions=(
+    host_capabilities=(
         VsCodeExtension("sst-dev.opencode", "OpenCode"),
     ),
     permissions=ProviderPermissions(

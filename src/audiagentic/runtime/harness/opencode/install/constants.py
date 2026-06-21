@@ -11,10 +11,6 @@ _OPENCODE_CONFIG = _PKG_ROOT / "config" / "provisioning" / "harness" / "opencode
 DEFAULT_API_KEY = "dummy"
 
 
-def _print(msg: str) -> None:
-    print(msg, flush=True)
-
-
 def load_opencode_config(project_root: Path | None = None) -> dict:
     from audiagentic.runtime.config import load_layered_config
     return load_layered_config(

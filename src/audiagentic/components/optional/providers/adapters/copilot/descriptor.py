@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import shutil
 
-from audiagentic.components.optional.providers.adapters.mcp_json import (
+from audiagentic.components.optional.providers.adapters.probe import run_cli
+from audiagentic.foundation.mcp.json_format import (
     read_mcp_json,
     remove_mcp_json,
     write_mcp_json,
 )
-from audiagentic.components.optional.providers.adapters.probe import run_cli
 
 from ...descriptors.base import (
     AgentFile,
@@ -63,12 +63,13 @@ def _copilot_probe(_descriptor) -> dict:
 
 register(ProviderDescriptor(
     provider_id="copilot",
+    prompt_aliases=("cp",),
     display_name="GitHub Copilot",
     description="GitHub's AI coding assistant. Inline completions, chat, and multi-file edits across VS Code and JetBrains.",
     url="https://github.com/features/copilot",
     cli_probe=["copilot", "--version"],
     cli_install=cli_recipe("npm", "@github/copilot", executable="copilot", probe_fn=_copilot_probe),
-    vscode_extensions=(
+    host_capabilities=(
         VsCodeExtension("GitHub.copilot", "GitHub Copilot"),
         VsCodeExtension("GitHub.copilot-chat", "GitHub Copilot Chat"),
     ),

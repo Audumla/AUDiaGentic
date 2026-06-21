@@ -1,4 +1,6 @@
-type: action
+type: feature
+parent: agent-jobs
+kind: action
 contract-version: v1
 id: ag-implement/doctrine
 title: Implement action doctrine

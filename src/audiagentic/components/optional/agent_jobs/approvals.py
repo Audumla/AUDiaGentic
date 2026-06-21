@@ -7,18 +7,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.io import atomic_write_json
-from audiagentic.foundation.time import now_iso_z
-
-logger = logging.getLogger(__name__)
-
-from jsonschema import Draft202012Validator
-
 from audiagentic.components.optional.agent_jobs.reviews import read_review_bundle
 from audiagentic.components.optional.agent_jobs.state_machine import transition_and_persist
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.contracts.schema_registry import read_schema
+from audiagentic.foundation.contracts.schema_registry import validate_with_schema
+from audiagentic.foundation.io import atomic_write_json
+from audiagentic.foundation.time import now_iso_z
 from audiagentic.runtime.state import jobs_store as store
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TTL = timedelta(hours=8)
 
@@ -34,9 +31,7 @@ def _approval_path(project_root: Path, approval_id: str) -> Path:
 
 
 def _validate_approval(payload: dict[str, Any]) -> list[str]:
-    schema = read_schema("approval-request")
-    validator = Draft202012Validator(schema)
-    return sorted(error.message for error in validator.iter_errors(payload))
+    return validate_with_schema("approval-request", payload)
 
 
 

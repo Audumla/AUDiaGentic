@@ -4,9 +4,16 @@ from pathlib import Path
 
 import audiagentic.foundation.contracts.validate_ids as validate_ids
 
+_PROVIDER_IDS = ("local-openai", "codex")
+
 
 def _write_yaml(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
+
+
+def test_foundation_validator_does_not_import_providers() -> None:
+    source = Path(validate_ids.__file__).read_text(encoding="utf-8")
+    assert "audiagentic.components.optional.providers" not in source
 
 
 def test_validate_ids_ok(tmp_path: Path) -> None:
@@ -22,7 +29,7 @@ components:
     enabled: true
 """.lstrip(),
     )
-    findings = validate_ids.scan_paths([tmp_path])
+    findings = validate_ids.scan_paths([tmp_path], provider_ids=_PROVIDER_IDS)
     assert findings == []
 
 
@@ -39,7 +46,7 @@ components:
     enabled: true
 """.lstrip(),
     )
-    findings = validate_ids.scan_paths([tmp_path])
+    findings = validate_ids.scan_paths([tmp_path], provider_ids=_PROVIDER_IDS)
     assert findings
     issues = " ".join(entry["issue"] for entry in findings)
     assert "invalid ids" in issues
@@ -58,7 +65,7 @@ components:
     enabled: true
 """.lstrip(),
     )
-    findings = validate_ids.scan_paths([tmp_path])
+    findings = validate_ids.scan_paths([tmp_path], provider_ids=_PROVIDER_IDS)
     assert findings == []
 
 
@@ -83,5 +90,5 @@ def test_validate_ids_ignores_schema_contents(tmp_path: Path, monkeypatch) -> No
     monkeypatch.setattr(validate_ids, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(validate_ids, "SCHEMA_DIR", schema_dir)
     monkeypatch.setattr(validate_ids, "validate_schema_files", lambda _path: [])
-    findings = validate_ids.scan_paths([docs_root])
+    findings = validate_ids.scan_paths([docs_root], provider_ids=_PROVIDER_IDS)
     assert findings == []

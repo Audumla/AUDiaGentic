@@ -26,6 +26,16 @@ def _install_agent_ledger(tmp_path: Path) -> None:
     marker.write_text("installed: true\n", encoding="utf-8")
 
 
+def _enable_provider(tmp_path: Path, *provider_ids: str) -> None:
+    """Enable providers so enabled-aware surface projection targets them."""
+    from audiagentic.components.optional.providers.services.provider_config import (
+        set_provider_enabled,
+    )
+
+    for provider_id in provider_ids:
+        set_provider_enabled(tmp_path, provider_id, enabled=True)
+
+
 def test_loads_release_ledger_surface_contribution() -> None:
     contributions = load_surface_contributions()
     by_id = {item.contribution_id: item for item in contributions}
@@ -79,6 +89,8 @@ def test_apply_migrates_legacy_per_block_fences() -> None:
 
 def test_provider_surface_blocks_dedupe_shared_agents_file(tmp_path: Path) -> None:
     _install_agent_ledger(tmp_path)
+    # Two enabled providers share AGENTS.md; the block must still dedupe to one.
+    _enable_provider(tmp_path, "codex", "opencode")
     blocks = build_provider_surface_blocks(tmp_path)
     agents_blocks = [
         block for block in blocks
@@ -121,6 +133,7 @@ def test_plan_provider_surfaces_reports_changes(tmp_path: Path) -> None:
 
 def test_prune_provider_surfaces_removes_legacy_blocks(tmp_path: Path) -> None:
     _install_agent_ledger(tmp_path)
+    _enable_provider(tmp_path, "cline")
     apply_provider_surfaces(tmp_path, provider_id="cline")
     target = tmp_path / ".clinerules" / "audiagentic.md"
     assert target.exists()
@@ -148,6 +161,7 @@ def test_prune_provider_surfaces_removes_legacy_blocks(tmp_path: Path) -> None:
 
 def test_prune_provider_surfaces_leaves_active_blocks(tmp_path: Path) -> None:
     _install_agent_ledger(tmp_path)
+    _enable_provider(tmp_path, "cline")
     apply_provider_surfaces(tmp_path, provider_id="cline")
     target = tmp_path / ".clinerules" / "audiagentic.md"
     content_before = target.read_text(encoding="utf-8")

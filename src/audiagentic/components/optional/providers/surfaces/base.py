@@ -149,22 +149,6 @@ def canonical_tags(syntax: dict[str, Any]) -> list[str]:
     return []
 
 
-def tag_alias_examples(syntax: dict[str, Any]) -> list[str]:
-    aliases = syntax.get("tag-aliases")
-    if not isinstance(aliases, dict):
-        return []
-    preferred_order = ["agp", "agi", "agr", "aga", "agc"]
-    return [f"- `{alias}` -> `{aliases[alias]}`" for alias in preferred_order if isinstance(aliases.get(alias), str)]
-
-
-def provider_alias_examples(syntax: dict[str, Any]) -> list[str]:
-    aliases = syntax.get("provider-aliases")
-    if not isinstance(aliases, dict):
-        return []
-    preferred_order = ["cx", "cld", "cln", "gm", "opc", "cp"]
-    return [f"- `{alias}` -> `{aliases[alias]}`" for alias in preferred_order if isinstance(aliases.get(alias), str)]
-
-
 def render_frontmatter_skill(skill: SkillDefinition, *, root_label: str) -> str:
     trigger_lines = "\n".join(f"- {item}" for item in skill.trigger)
     do_lines = "\n".join(f"- {item}" for item in skill.do)

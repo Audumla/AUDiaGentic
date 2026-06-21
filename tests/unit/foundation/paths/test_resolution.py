@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.paths.resolution import (
     build_layered_path_map,
     load_layered_mapping,
@@ -97,10 +98,10 @@ def test_resolve_required_file_reports_candidates(tmp_path: Path) -> None:
 
     try:
         resolve_required_file(path_map, label="Model")
-    except SystemExit as exc:
+    except AudiaGenticError as exc:
         message = str(exc)
     else:
-        raise AssertionError("expected SystemExit")
+        raise AssertionError("expected AudiaGenticError")
 
     assert "Model not found. Checked:" in message
     assert "provisioning\\rig\\embedded\\missing.gguf" in message

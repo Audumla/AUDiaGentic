@@ -13,6 +13,36 @@ from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
     write_lsp_config,
 )
 from audiagentic.components.optional.coding_lsp.lsp_lifecycle import ServerConfig
+from audiagentic.foundation.features import registry as feature_registry
+from audiagentic.foundation.features.base import BindingDescriptor, FeatureState
+from audiagentic.foundation.features.state import set_feature_state
+
+
+def setup_function() -> None:
+    feature_registry.clear()
+
+
+def teardown_function() -> None:
+    feature_registry.clear()
+
+
+def _enable_language(tmp_path: Path, language: str) -> None:
+    feature_registry.register(
+        BindingDescriptor(
+            parent="coding-lsp",
+            implementation="ag-lsp",
+            feature_kind="language",
+            feature=language,
+            projection_writer_key="coding-lsp.lsp-json",
+        )
+    )
+    set_feature_state(
+        tmp_path,
+        "coding-lsp",
+        "language",
+        language,
+        FeatureState(enabled=True),
+    )
 
 
 def test_read_lsp_config_missing_file() -> None:
@@ -136,15 +166,22 @@ def test_discover_language_servers_returns_dict(tmp_path: Path) -> None:
     assert result == {}
 
 
-def test_discover_language_servers_uses_only_explicit_runtime_config(tmp_path: Path) -> None:
-    lsp_json = tmp_path / ".coding-lsp" / "lsp.json"
-    write_lsp_config(lsp_json, {
-        "python": {
-            "command": ["pyright-langserver", "--stdio"],
-            "fileExtensions": [".py"],
-        }
-    })
-    result = discover_language_servers(tmp_path)
+def test_discover_language_servers_uses_active_feature_state(tmp_path: Path) -> None:
+    # Active languages come from feature state + bindings, not the lsp.json cache.
+    feature_registry.register(
+        BindingDescriptor(
+            parent="coding-lsp",
+            implementation="ag-lsp",
+            feature_kind="language",
+            feature="python",
+            projection_writer_key="coding-lsp.lsp-json",
+        )
+    )
+    set_feature_state(tmp_path, "coding-lsp", "language", "python", FeatureState(enabled=True))
+    try:
+        result = discover_language_servers(tmp_path)
+    finally:
+        feature_registry.clear()
     assert "python" in result
     assert isinstance(result["python"], bool)
 
@@ -161,23 +198,18 @@ def test_cmake_triggers_cpp_detection(tmp_path: Path) -> None:
     assert "cpp" in detected
 
 
-def test_active_dependency_ids_reads_from_lsp_json(tmp_path: Path) -> None:
-    from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
-        CODING_LSP_DIR,
-        write_lsp_config,
-    )
-    lsp_json = tmp_path / CODING_LSP_DIR / "lsp.json"
-    write_lsp_config(lsp_json, {"python": {"command": ["pyright-langserver", "--stdio"], "fileExtensions": [".py"]}})
+def test_active_dependency_ids_reads_from_feature_state(tmp_path: Path) -> None:
+    _enable_language(tmp_path, "python")
     dep_ids = _active_dependency_ids(tmp_path)
     assert "pyright" in dep_ids
     assert "typescript-language-server" not in dep_ids
     assert "clangd" not in dep_ids
 
 
-def test_active_dependency_ids_no_lsp_json_returns_empty(tmp_path: Path) -> None:
+def test_active_dependency_ids_no_enabled_features_returns_empty(tmp_path: Path) -> None:
     (tmp_path / "pyproject.toml").touch()
     dep_ids = _active_dependency_ids(tmp_path)
-    assert dep_ids == [], "No lsp.json means no active deps — lsp.json is the source of truth"
+    assert dep_ids == []
 
 
 def test_active_dependency_ids_no_project_root_returns_empty() -> None:
@@ -186,13 +218,8 @@ def test_active_dependency_ids_no_project_root_returns_empty() -> None:
 
 
 def test_active_dependency_ids_excludes_unconfigured_languages(tmp_path: Path) -> None:
-    from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
-        CODING_LSP_DIR,
-        write_lsp_config,
-    )
     (tmp_path / "pyproject.toml").touch()
     (tmp_path / "Makefile").touch()
-    lsp_json = tmp_path / CODING_LSP_DIR / "lsp.json"
-    write_lsp_config(lsp_json, {"python": {"command": ["pyright-langserver", "--stdio"], "fileExtensions": [".py"]}})
+    _enable_language(tmp_path, "python")
     dep_ids = _active_dependency_ids(tmp_path)
-    assert "clangd" not in dep_ids, "Only configured languages in lsp.json should appear"
+    assert "clangd" not in dep_ids, "Only enabled language features should appear"

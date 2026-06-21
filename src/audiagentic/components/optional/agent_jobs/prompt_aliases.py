@@ -1,7 +1,11 @@
 """Alias and directive normalization helpers for tagged interactive prompts."""
 from __future__ import annotations
 
+import logging
+
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+logger = logging.getLogger(__name__)
 
 SHORT_TAG_PROVIDER_SEPARATOR = "-"
 

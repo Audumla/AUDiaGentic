@@ -6,14 +6,16 @@ in ag.yaml (default: ``pi``). Adding a new harness means:
 
   1. Create ``runtime/harness/<type>/`` with ``install`` and ``runner`` submodules
      that expose the same interface as ``pi/install`` and ``pi/runner``.
-  2. Add the type to ``_REGISTRY`` below.
-  3. Set ``harness.type: <type>`` in ag.yaml or a project-local override.
+  2. Set ``harness.type: <type>`` in ag.yaml or a project-local override.
 """
 from __future__ import annotations
 
 import importlib
+import re
 from dataclasses import dataclass
 from pathlib import Path
+
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 
 
 @dataclass
@@ -27,11 +29,19 @@ class RunnerParams:
     verbose: bool = False
 
 
-# Registry: harness type name → base module path.
-_REGISTRY: dict[str, str] = {
-    "pi": "audiagentic.runtime.harness.pi",
-    "opencode": "audiagentic.runtime.harness.opencode",
-}
+_HARNESS_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def _harness_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
+    return make_error(
+        prefix="CFG",
+        component="HRN",
+        number=code_number,
+        kind="harness",
+        message=message,
+        details=details,
+    )
+
 
 def default_config_path() -> Path:
     """Package-default harness config path (config/provisioning/harness/ag.yaml)."""
@@ -56,13 +66,25 @@ def get_harness_type(project_root: Path | None = None) -> str:
 
 def _mod(subpath: str, project_root: Path | None = None):
     t = get_harness_type(project_root)
-    if t not in _REGISTRY:
-        raise SystemExit(
-            f"Unknown harness type {t!r}. "
-            f"Supported: {sorted(_REGISTRY)}. "
-            f"Set harness.type in ag.yaml."
+    if not isinstance(t, str) or not _HARNESS_TYPE_PATTERN.fullmatch(t):
+        raise _harness_error(
+            1,
+            f"Invalid harness type {t!r}. "
+            "Use a package-style identifier such as 'pi' or 'opencode'.",
+            harness_type=t,
         )
-    return importlib.import_module(f"{_REGISTRY[t]}.{subpath}")
+    try:
+        return importlib.import_module(f"audiagentic.runtime.harness.{t}.{subpath}")
+    except ModuleNotFoundError as exc:
+        expected = f"audiagentic.runtime.harness.{t}"
+        if exc.name and (exc.name == expected or exc.name.startswith(f"{expected}.")):
+            raise _harness_error(
+                2,
+                f"Unknown harness type {t!r}. "
+                "Create runtime/harness/<type>/ or set harness.type in ag.yaml.",
+                harness_type=t,
+            ) from exc
+        raise
 
 
 # --- install / lifecycle ---

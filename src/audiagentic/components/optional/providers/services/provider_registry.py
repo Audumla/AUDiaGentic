@@ -3,16 +3,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from jsonschema import Draft202012Validator
-
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.contracts.schema_registry import read_schema
+from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 
 
 def validate_descriptor(payload: dict[str, Any]) -> list[str]:
-    schema = read_schema("provider-descriptor")
-    validator = Draft202012Validator(schema)
-    return sorted(error.message for error in validator.iter_errors(payload))
+    return validate_with_schema("provider-descriptor", payload)
 
 
 def load_provider_registry(descriptors: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:

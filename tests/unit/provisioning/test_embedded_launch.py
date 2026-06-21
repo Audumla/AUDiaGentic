@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.rig.embedded.config import load_rig_profiles, resolve_model_profile
 from audiagentic.runtime.rig.embedded.launch import resolve_model, runtime_bin_dir
 from audiagentic.runtime.rig.embedded.process import build_command
@@ -47,7 +48,7 @@ MINIMAL_MODELS = {
 # ---------------------------------------------------------------------------
 
 def test_load_rig_profiles_raises_when_file_missing(tmp_path: Path) -> None:
-    with pytest.raises(SystemExit, match="not found"):
+    with pytest.raises(AudiaGenticError, match="not found"):
         load_rig_profiles(tmp_path / "missing.yaml")
 
 
@@ -88,13 +89,13 @@ def test_resolve_model_profile_by_model_file_name(tmp_path: Path) -> None:
 def test_resolve_model_profile_raises_when_no_rig_model(tmp_path: Path) -> None:
     data = {"profile_settings": MINIMAL_MODELS["profile_settings"], "models": MINIMAL_MODELS["models"]}
     p = _write_models(tmp_path, data)
-    with pytest.raises(SystemExit, match="rig_model"):
+    with pytest.raises(AudiaGenticError, match="rig_model"):
         resolve_model_profile(None, None, p)
 
 
 def test_resolve_model_profile_raises_on_unknown_name(tmp_path: Path) -> None:
     p = _write_models(tmp_path, MINIMAL_MODELS)
-    with pytest.raises(SystemExit, match="not found"):
+    with pytest.raises(AudiaGenticError, match="not found"):
         resolve_model_profile("nonexistent", None, p)
 
 
@@ -103,12 +104,12 @@ def test_resolve_model_profile_raises_on_unknown_name(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def test_resolve_model_raises_without_override(tmp_path: Path) -> None:
-    with pytest.raises(SystemExit, match="No model file specified"):
+    with pytest.raises(AudiaGenticError, match="No model file specified"):
         resolve_model(tmp_path, tmp_path, None)
 
 
 def test_resolve_model_raises_when_file_missing(tmp_path: Path) -> None:
-    with pytest.raises(SystemExit, match="Model not found"):
+    with pytest.raises(AudiaGenticError, match="Model not found"):
         resolve_model(tmp_path, tmp_path, "missing.gguf")
 
 
