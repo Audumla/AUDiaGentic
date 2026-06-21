@@ -807,6 +807,9 @@ Migration guardrails (greenfield):
 | 5 | — | unify onto one loader/registry/resolver | all §18 dead code | full suite (KG); delete tests of removed helpers |
 
 **Stages 0–2 detail:** see `multilayer-component-plan-completed.md`.
+**Remaining work (Stage 2 residual → Stage 5):** see the dependency-ordered
+[Completion Execution Sequence](#completion-execution-sequence-remaining-work) (S1–S5)
+near the top of this plan.
 
 ### Stage 3 — Foundation +multi-active +impl-scoped; `providers`
 
