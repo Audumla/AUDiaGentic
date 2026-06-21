@@ -339,6 +339,61 @@ class LspSession:
             "referenceCount": len(references_result),
         }
 
+    def code_actions(
+        self, uri: str, range: dict[str, Any] | None, only: list[str] | None = None,
+        timeout: float = 15.0,
+    ) -> list[dict[str, Any]]:
+        """Get code actions (quick fixes, refactors) for a range."""
+        if not self.has_capability("textDocument/codeAction"):
+            return []
+        params: dict[str, Any] = {
+            "textDocument": {"uri": uri},
+            "range": range or {},
+            "context": {"diagnostics": [], "only": only or []},
+        }
+        result = self.bridge.send_request("textDocument/codeAction", params, timeout=timeout)
+        return result if isinstance(result, list) else []
+
+    def formatting(
+        self, uri: str, options: dict[str, Any] | None = None, timeout: float = 15.0,
+    ) -> list[dict[str, Any]]:
+        """Get document formatting edits."""
+        if not self.has_capability("textDocument/formatting"):
+            return []
+        params: dict[str, Any] = {
+            "textDocument": {"uri": uri},
+            "options": options or {"tabSize": 4, "insertSpaces": True},
+        }
+        result = self.bridge.send_request("textDocument/formatting", params, timeout=timeout)
+        return result if isinstance(result, list) else []
+
+    def range_formatting(
+        self, uri: str, range: dict[str, Any], options: dict[str, Any] | None = None,
+        timeout: float = 15.0,
+    ) -> list[dict[str, Any]]:
+        """Get range formatting edits."""
+        if not self.has_capability("textDocument/rangeFormatting"):
+            return []
+        params: dict[str, Any] = {
+            "textDocument": {"uri": uri},
+            "range": range,
+            "options": options or {"tabSize": 4, "insertSpaces": True},
+        }
+        result = self.bridge.send_request("textDocument/rangeFormatting", params, timeout=timeout)
+        return result if isinstance(result, list) else []
+
+    def organize_imports(
+        self, uri: str, timeout: float = 15.0,
+    ) -> dict[str, Any] | None:
+        """Get organize imports workspace edit."""
+        if not self.has_capability("textDocument/codeAction"):
+            return None
+        actions = self.code_actions(uri, None, only=["source.organizeImports"], timeout=timeout)
+        for action in actions:
+            if isinstance(action, dict) and action.get("edit"):
+                return action.get("edit")
+        return None
+
     def diagnostics(
         self, min_severity: int = 4, limit: int = 0, timeout: float = 30.0,
     ) -> dict[str, list[dict[str, Any]]]:

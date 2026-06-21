@@ -141,6 +141,51 @@ def lsp_symbol_context(file: str, position: str) -> dict[str, Any]:
 
 @mcp.tool()
 @log_tool_call
+def lsp_code_actions(
+    file: str,
+    range_start: str | None = None,
+    range_end: str | None = None,
+    only: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Get available code actions (quick fixes, refactors) for a file or range.
+
+    range_start/range_end: optional "line:column" strings, 1-based.
+    only: optional filter by action kind (e.g. ["quickfix"], ["source.organizeImports"]).
+    Returns list of actions with title, kind, normalized edit preview, and preference.
+    Preview only — does not apply changes.
+    """
+    return lsp_api.code_actions(file, range_start=range_start, range_end=range_end, only=only)
+
+
+@mcp.tool()
+@log_tool_call
+def lsp_format_preview(
+    file: str,
+    range_start: str | None = None,
+    range_end: str | None = None,
+) -> dict[str, Any] | None:
+    """Preview formatting edits for a file or range.
+
+    range_start/range_end: optional "line:column" strings, 1-based. If omitted, formats entire file.
+    Returns list of text edits with repo-relative ranges.
+    Preview only — does not apply changes.
+    """
+    return lsp_api.format_preview(file, range_start=range_start, range_end=range_end)
+
+
+@mcp.tool()
+@log_tool_call
+def lsp_organize_imports_preview(file: str) -> dict[str, Any] | None:
+    """Preview import organization/cleanup edits for a file.
+
+    Returns normalized workspace edit with repo-relative file paths.
+    Preview only — does not apply changes.
+    """
+    return lsp_api.organize_imports_preview(file)
+
+
+@mcp.tool()
+@log_tool_call
 def lsp_diagnostics(
     root: str = ".", min_severity: int = 4, limit: int = 0,
 ) -> dict[str, list[dict[str, Any]]]:
