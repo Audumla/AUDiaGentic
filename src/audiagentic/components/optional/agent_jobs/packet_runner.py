@@ -1,6 +1,7 @@
 """Packet runner for MVP jobs."""
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -12,9 +13,12 @@ from audiagentic.components.optional.agent_jobs.profiles import load_profile
 from audiagentic.components.optional.agent_jobs.records import build_job_record
 from audiagentic.components.optional.agent_jobs.stages import execute_stage
 from audiagentic.components.optional.agent_jobs.state_machine import transition_and_persist
-from audiagentic.foundation.contracts.canonical_ids import canonical_provider_ids, validate_ids
+from audiagentic.components.optional.providers.descriptors.registry import canonical_provider_ids
+from audiagentic.foundation.contracts.canonical_ids import validate_ids
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
+
+logger = logging.getLogger(__name__)
 from audiagentic.runtime.state import jobs_store as store
 
 StageExecutor = Callable[
@@ -184,13 +188,13 @@ def run_packet(
         try:
             transition_and_persist(project_root, job_id, "failed", now_fn=now_fn)
         except AudiaGenticError:
-            pass
+            logger.debug("failed to persist 'failed' transition", exc_info=True)
         raise
     except Exception as exc:  # noqa: BLE001
         try:
             transition_and_persist(project_root, job_id, "failed", now_fn=now_fn)
         except AudiaGenticError:
-            pass
+            logger.debug("failed to persist 'failed' transition", exc_info=True)
         raise AudiaGenticError(
             code="INT-RUN-001",
             kind="agent-jobs",

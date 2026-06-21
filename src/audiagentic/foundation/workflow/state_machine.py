@@ -12,12 +12,25 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+
 from .interfaces import ItemView, WorkflowContext
 from .util import extract_ref_ids
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_STATE_CHANGE_EVENT = "workflow.item.state.changed"
+
+
+def _state_error(code_number: int, message: str, **details: Any) -> AudiaGenticError:
+    return make_error(
+        prefix="VAL",
+        component="WFSM",
+        number=code_number,
+        kind="workflow",
+        message=message,
+        details=details,
+    )
 
 
 class StateMachine:
@@ -39,9 +52,9 @@ class StateMachine:
         old = data.get("state", self.ctx.config.initial_state(item.kind, wf_name))
 
         if new_state not in wf["values"]:
-            raise ValueError(f"unknown state {new_state} for workflow")
+            raise _state_error(1, f"unknown state {new_state} for workflow", state=new_state)
         if new_state not in wf["transitions"].get(old, []):
-            raise ValueError(f"invalid transition {old} -> {new_state}")
+            raise _state_error(2, f"invalid transition {old} -> {new_state}", old_state=old, new_state=new_state)
 
         data["state"] = new_state
         timestamp = datetime.now(timezone.utc).isoformat()
@@ -88,7 +101,7 @@ class StateMachine:
             return DEFAULT_STATE_CHANGE_EVENT
         event_type = configured()
         if not isinstance(event_type, str) or not event_type:
-            raise ValueError("state_change_event_type must return a non-empty string")
+            raise _state_error(3, "state_change_event_type must return a non-empty string")
         return event_type
 
     def apply_action(
@@ -102,7 +115,7 @@ class StateMachine:
         action = self.ctx.config.lifecycle_action(name)
         transition_to = action.get("transition_to")
         if not transition_to:
-            raise ValueError(f"lifecycle action '{name}' has no transition_to state")
+            raise _state_error(4, f"lifecycle action '{name}' has no transition_to state", action=name)
         return self.state(id_, transition_to, reason=reason, actor=actor, metadata=metadata)
 
     def is_terminal(self, id_: str) -> bool:
@@ -166,7 +179,7 @@ class StateMachine:
                         actor=actor,
                         metadata=cascade_metadata,
                     )
-                except Exception:
+                except AudiaGenticError:
                     logger.warning(
                         "cascade failed %s -> %s",
                         item.data.get("id"),

@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from audiagentic.cli_io import print_error
+
 if TYPE_CHECKING:
     from audiagentic.runtime.harness import RunnerParams
 
@@ -16,12 +18,12 @@ logger = logging.getLogger(__name__)
 def _status(msg: str) -> None:
     """Print a startup status line to stderr. Set AUDIAGENTIC_STARTUP_STATUS=0 to suppress."""
     if os.environ.get("AUDIAGENTIC_STARTUP_STATUS", "1") != "0":
-        print(f"[audiagentic] {msg}", file=sys.stderr, flush=True)
+        print_error(f"[audiagentic] {msg}")
 
 
 def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams | None = None) -> int:
     if not project_root.exists():
-        print(f"Project root does not exist: {project_root}", file=sys.stderr)
+        print_error(f"Project root does not exist: {project_root}")
         return 1
 
     from audiagentic.runtime.home import global_harness_runtime
@@ -29,7 +31,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
     harness_runtime = global_harness_runtime()
 
     if not (harness_runtime / "cli" / "node_modules" / ".bin").exists():
-        print("Harness not installed. Run: audiagentic install", file=sys.stderr)
+        print_error("Harness not installed. Run: audiagentic install")
         return 1
 
     # Check for updates if auto-update is enabled
@@ -44,16 +46,12 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
     # Sync providers.yaml with actual host state on first run only.
     # Subsequent reconciliations are available via the provider MCP server.
     try:
-        from audiagentic.components.optional.providers.services.provider_config import (
-            _providers_yaml_path,
-        )
+        from audiagentic.components.optional.providers.services.lifecycle import reconcile_all_providers
+        from audiagentic.components.optional.providers.services.provider_config import _providers_yaml_path
 
         providers_path = _providers_yaml_path(project_root)
         if not providers_path.exists():
             _status("reconciling providers...")
-            from audiagentic.components.optional.providers.services.lifecycle import (
-                reconcile_all_providers,
-            )
 
             def _on_provider(provider_id: str, status: str) -> None:
                 if status in ("enabled", "disabled"):
@@ -102,7 +100,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
         try:
             signal.signal(signal.SIGTERM, _sigterm_handler)
         except (OSError, ValueError):
-            pass
+            logger.debug("Could not register SIGTERM handler (non-Linux or signal already set)")
 
         try:
             return run_agent(ctx, args, smoke=False)

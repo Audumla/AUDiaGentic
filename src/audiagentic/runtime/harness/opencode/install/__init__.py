@@ -11,8 +11,8 @@ import logging
 import shutil
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
+from audiagentic.cli_io import print_message
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.runtime.harness.reload import (
     build_runtime_sync as _build_sync,
 )
@@ -22,6 +22,7 @@ from audiagentic.runtime.harness.reload import (
 
 from . import constants as _c
 
+logger = logging.getLogger(__name__)
 _TARGET = "opencode-runtime"
 
 
@@ -124,7 +125,14 @@ def materialize_agent_config(
 
     model_name: str = harness_cfg.get("rig", {}).get("model", "")
     if not model_name:
-        raise SystemExit("No model configured. Set 'model' in ag.yaml.")
+        raise make_error(
+            prefix="CFG",
+            component="HCFG",
+            number=10,
+            kind="harness-config",
+            message="No model configured. Set 'model' in ag.yaml.",
+            details={"field": "rig.model"},
+        )
 
     model_profile: dict = {}
     if _RIG_CONFIG.exists():
@@ -132,8 +140,8 @@ def materialize_agent_config(
             profile_name, rig_model_id = load_rig_model(_RIG_CONFIG)
             ref = profile_name if model_name == rig_model_id else model_name
             model_profile = resolve_profile_definition(ref, _RIG_CONFIG)
-        except SystemExit:
-            pass
+        except AudiaGenticError:
+            logger.warning("could not resolve model profile, using empty", exc_info=True)
 
     (root / ".mcp.json").write_text(
         json.dumps(_build_mcp_config(harness_cfg, project_root=root), indent=2) + "\n",
@@ -152,18 +160,23 @@ def materialize_agent_config(
         encoding="utf-8",
     )
 
-    _c._print(f"Materialized opencode config in {root}")
+    print_message(f"Materialized opencode config in {root}")
 
 
 def install_to(target: Path, project_root: Path | None = None) -> int:
     import subprocess
-    import sys
 
     npm = shutil.which("npm")
     if npm is None:
-        raise SystemExit("npm is required to install opencode.")
+        raise make_error(
+            prefix="CFG",
+            component="OCINST",
+            number=1,
+            kind="opencode-harness",
+            message="npm is required to install opencode.",
+        )
 
-    _c._print("Installing opencode CLI")
+    print_message("Installing opencode CLI")
     subprocess.run([npm, "install", "-g", "opencode-ai"], check=True)
 
     root = _resolve_project_root(project_root)
@@ -196,17 +209,17 @@ def mcp_config_path(project_root: Path | None = None) -> Path:
 
 
 def read_mcp_config(path: Path) -> dict:
-    from audiagentic.components.optional.providers.adapters.mcp_json import read_mcp_json
+    from audiagentic.foundation.mcp.json_format import read_mcp_json
     return read_mcp_json(path)
 
 
 def write_mcp_config(path: Path, entries: dict) -> None:
-    from audiagentic.components.optional.providers.adapters.mcp_json import write_mcp_json
+    from audiagentic.foundation.mcp.json_format import write_mcp_json
     write_mcp_json(path, entries)
 
 
 def remove_mcp_config(path: Path, name: str) -> bool:
-    from audiagentic.components.optional.providers.adapters.mcp_json import remove_mcp_json
+    from audiagentic.foundation.mcp.json_format import remove_mcp_json
     return remove_mcp_json(path, name)
 
 
@@ -222,10 +235,10 @@ def refresh_harness_config_if_installed(
         from audiagentic.runtime.harness.config import load_harness_config
         harness_cfg = load_harness_config(project_root=project_root)
         materialize_agent_config(project_root, harness_cfg, project_root=project_root)
-    except Exception:
-        logger.warning("Failed to refresh opencode harness config for %s", component_id, exc_info=True)
+    except AudiaGenticError:
+        logger.warning("Failed to refresh opencode harness config for %s", component_id, exc_info=True, extra={"component": component_id})
     try:
         request_runtime_reload(project_root, reason=reason, component_id=component_id)
-    except Exception:
-        logger.warning("Failed to request runtime reload for opencode %s", component_id, exc_info=True)
+    except AudiaGenticError:
+        logger.warning("Failed to request runtime reload for opencode %s", component_id, exc_info=True, extra={"component": component_id})
     return True
