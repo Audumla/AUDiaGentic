@@ -5,6 +5,8 @@ import logging
 import sys
 from pathlib import Path
 
+from audiagentic.cli_io import print_message
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,7 +22,7 @@ def prompt_update(info: dict) -> str:
     """Show the update prompt. Returns 'yes', 'no', or 'skip'."""
     latest = info["latest"]
     current = info["current"]
-    print(f"\n  audiagentic {latest} available  (installed: {current})")
+    print_message(f"\n  audiagentic {latest} available  (installed: {current})")
     answer = _ask("  Update now? [y/N/s=skip this version] ")
     if answer in ("y", "yes"):
         return "yes"
@@ -52,15 +54,15 @@ def maybe_prompt_update(project_root: Path | None = None) -> None:
             from .runner import install_version
             result = install_version(info["latest"])
             if result.get("ok") == "scheduled":
-                print(f"\n  Closing audiagentic — update to {info['latest']} will install in the new window.\n")
+                print_message(f"\n  Closing audiagentic — update to {info['latest']} will install in the new window.\n")
                 sys.exit(0)
             elif result.get("ok"):
-                print(f"\n  Updated to {info['latest']}. Restart audiagentic to use the new version.\n")
+                print_message(f"\n  Updated to {info['latest']}. Restart audiagentic to use the new version.\n")
                 sys.exit(0)
             else:
                 record_failed_install(info["latest"])
                 if not result.get("locked"):
-                    print(f"\n  Update failed: {result.get('error')}. Continuing with current version.\n")
+                    print_message(f"\n  Update failed: {result.get('error')}. Continuing with current version.\n")
     except Exception:
         logger.warning("Update failed unexpectedly", exc_info=True)
 
@@ -71,28 +73,28 @@ def run_update_now() -> int:
         from .checker import check_update, current_version
         info = check_update(force=True)
         if not info:
-            print(f"Already up to date (version {current_version()}).")
+            print_message(f"Already up to date (version {current_version()}).")
             return 0
         answer = prompt_update(info)
         if answer == "skip":
             from .checker import skip_version
             skip_version(info["latest"])
-            print("Version skipped.")
+            print_message("Version skipped.")
             return 0
         if answer == "yes":
             from .runner import install_version
             result = install_version(info["latest"])
             if result.get("ok") == "scheduled":
-                print(f"\nClosing audiagentic — update to {info['latest']} will install in the new window.")
+                print_message(f"\nClosing audiagentic — update to {info['latest']} will install in the new window.")
                 sys.exit(0)
             elif result.get("ok"):
-                print(f"\nUpdated to {info['latest']}. Restart audiagentic to use the new version.")
+                print_message(f"\nUpdated to {info['latest']}. Restart audiagentic to use the new version.")
                 return 0
             else:
-                print(f"\nUpdate failed: {result.get('error')}")
+                print_message(f"\nUpdate failed: {result.get('error')}")
                 return 1
-        print("Update cancelled.")
+        print_message("Update cancelled.")
         return 0
     except Exception as exc:  # noqa: BLE001
-        print(f"Update check failed: {exc}")
+        print_message(f"Update check failed: {exc}")
         return 1

@@ -1,10 +1,13 @@
 """Job record contract helpers."""
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+logger = logging.getLogger(__name__)
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.runtime.state.jobs_store import validate_job_record
 

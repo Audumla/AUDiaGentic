@@ -15,7 +15,7 @@ register(ProviderDescriptor(
     url="https://www.all-hands.dev",
     cli_probe=["openhands", "--version"],
     cli_install=cli_recipe("uv", "openhands", "--python", "3.12", executable="openhands", probe_fn=_openhands_probe),
-    vscode_extensions=(),
+    host_capabilities=(),
     permissions=ProviderPermissions(
         can_write_files=True,
         can_execute_shell=True,

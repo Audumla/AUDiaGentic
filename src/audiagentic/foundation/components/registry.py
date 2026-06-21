@@ -3,12 +3,12 @@
 import logging
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
-from audiagentic.runtime.config import load_yaml_file
-from audiagentic.runtime.home import audiagentic_home
+from audiagentic.foundation.home import audiagentic_home
+from audiagentic.foundation.io import load_yaml_file
 
 from .base import SCOPE_HARNESS, ComponentDescriptor, McpServerDeclaration
+
+logger = logging.getLogger(__name__)
 
 _registry: dict[str, ComponentDescriptor] = {}
 _aliases: dict[str, str] = {}

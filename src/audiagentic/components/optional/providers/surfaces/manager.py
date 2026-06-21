@@ -7,6 +7,7 @@ from typing import Any
 from audiagentic.foundation.contracts.output import ComponentOutputEvent, ComponentOutputSink
 from audiagentic.foundation.io import atomic_write_text
 
+from ..descriptors.feature_mapping import KIND_SKILLS, KIND_SURFACE
 from .base import SurfaceBlock, apply_managed_blocks
 from .contributions import load_surface_contributions
 from .registry import load_contribution_renderer_registry
@@ -17,6 +18,19 @@ def _emit(output: ComponentOutputSink | None, message: str, level: str = "info",
         output(ComponentOutputEvent(message=message, kind="log", level=level, data=data))
 
 
+def _active_feature_providers(project_root: Path, kind: str) -> set[str]:
+    """Providers whose feature of `kind` resolves active (enabled-aware projection)."""
+    from audiagentic.components.optional.providers.services.feature_resolution import (
+        resolve_active_provider_features,
+    )
+
+    return {
+        resolved.provider_id
+        for resolved in resolve_active_provider_features(project_root)
+        if resolved.kind == kind
+    }
+
+
 def build_provider_surface_blocks(
     project_root: Path,
     *,
@@ -24,7 +38,13 @@ def build_provider_surface_blocks(
 ) -> list[SurfaceBlock]:
     contributions = load_surface_contributions(project_root=project_root)
     renderers = load_contribution_renderer_registry()
-    provider_ids = [provider_id] if provider_id else sorted(renderers)
+    # Enabled-aware: writing surfaces for all providers would create redundant
+    # files (CLAUDE.md, AGENTS.md, ...) for providers the user does not use. An
+    # explicit provider_id is honoured as-is (caller targets that provider).
+    if provider_id:
+        provider_ids = [provider_id]
+    else:
+        provider_ids = sorted(_active_feature_providers(project_root, KIND_SURFACE) & set(renderers))
     blocks: dict[tuple[Path, str], SurfaceBlock] = {}
     for current_provider_id in provider_ids:
         renderer = renderers.get(current_provider_id)
@@ -87,15 +107,23 @@ def prune_provider_surfaces(
     _emit(on_progress, f"Pruning stale surface blocks ({len(contributions)} active contributions)")
 
     # Group active blocks by path (deduped, same as build_provider_surface_blocks).
+    # Enabled-aware: a disabled provider renders no *active* blocks, so its managed
+    # region is stripped — but its file paths stay prune candidates so the stale
+    # region is actually visited and emptied.
+    enabled_surface_providers = _active_feature_providers(project_root, KIND_SURFACE)
     active_by_path: dict[Path, dict[str, SurfaceBlock]] = defaultdict(dict)
+    rendered_paths: set[Path] = set()
     for pid in provider_ids:
         renderer = renderers.get(pid)
         if renderer is None:
             continue
+        pid_active = pid in enabled_surface_providers
         for block in renderer(project_root=project_root, contributions=contributions):
-            active_by_path[block.path].setdefault(block.block_id, block)
+            rendered_paths.add(block.path)
+            if pid_active:
+                active_by_path[block.path].setdefault(block.block_id, block)
 
-    candidate_paths: set[Path] = set(active_by_path)
+    candidate_paths: set[Path] = set(rendered_paths)
 
     from audiagentic.components.optional.providers.descriptors.registry import all_descriptors
 
@@ -106,6 +134,7 @@ def prune_provider_surfaces(
     active_tags = active_tag_ids(project_root)
     inactive_tags = [tag_id for tag_id in tag_ids if tag_id not in active_tags]
     descriptor_ids = provider_ids if provider_id else sorted(descriptors)
+    enabled_skill_providers = _active_feature_providers(project_root, KIND_SKILLS)
 
     # Delete generated skill files for tags whose owning component is no longer
     # active. These are whole managed files (no region to strip), so the region
@@ -119,17 +148,23 @@ def prune_provider_surfaces(
             candidate_paths.add(project_root / descriptor.instruction_file)
         if not descriptor.skill_surface_path:
             continue
+        # Enabled-aware: a disabled provider keeps no skill files (all tags removed);
+        # an enabled provider keeps active-tag skills and drops inactive-tag ones.
+        pid_active = pid in enabled_skill_providers
+        keep_tags = active_tags if pid_active else []
+        remove_tags = inactive_tags if pid_active else tag_ids
         candidate_paths.update(
             project_root / descriptor.skill_surface_path.format(tag=tag_id)
-            for tag_id in active_tags
+            for tag_id in keep_tags
         )
-        for tag_id in inactive_tags:
+        for tag_id in remove_tags:
             skill_path = project_root / descriptor.skill_surface_path.format(tag=tag_id)
             if not skill_path.exists():
                 continue
             skill_path.unlink()
             deleted.append(str(skill_path))
-            _emit(on_progress, f"Removed orphaned skill {skill_path.name} (tag {tag_id} inactive)")
+            reason = "tag inactive" if pid_active else "provider disabled"
+            _emit(on_progress, f"Removed orphaned skill {skill_path.name} ({reason})")
             parent = skill_path.parent
             # Clean up an emptied per-tag directory (e.g. .claude/skills/<tag>/).
             if parent.name == tag_id and parent != project_root and not any(parent.iterdir()):

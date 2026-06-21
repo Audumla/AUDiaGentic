@@ -6,9 +6,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from audiagentic.foundation.io import atomic_write_text
+
+logger = logging.getLogger(__name__)
 
 _TEMPLATES = Path(__file__).parent / "templates"
 

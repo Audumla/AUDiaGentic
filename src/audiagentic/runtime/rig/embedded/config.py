@@ -5,7 +5,19 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.runtime.config import load_yaml_file
+
+
+def _embedded_config_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
+    return make_error(
+        prefix="CFG",
+        component="RIGCFG",
+        number=code_number,
+        kind="runtime-rig",
+        message=message,
+        details=details,
+    )
 
 
 @dataclass
@@ -26,7 +38,7 @@ def rig_config_path() -> Path:
 def load_rig_profiles(profiles_path: Path | None = None) -> dict[str, object]:
     path = profiles_path or rig_config_path()
     if not path.exists():
-        raise SystemExit(f"Rig config not found: {path}")
+        raise _embedded_config_error(1, f"Rig config not found: {path}", path=str(path))
     return load_yaml_file(path)
 
 
@@ -34,13 +46,13 @@ def load_rig_model(profiles_path: Path | None = None) -> tuple[str, str]:
     data = load_rig_profiles(profiles_path)
     raw = data.get("rig_model", {})
     if not isinstance(raw, dict):
-        raise SystemExit(f"Invalid rig_model config: {rig_config_path()}")
+        raise _embedded_config_error(2, f"Invalid rig_model config: {rig_config_path()}")
     profile = raw.get("profile")
     model_id = raw.get("model_id")
     if not isinstance(profile, str) or not profile:
-        raise SystemExit(f"rig_model.profile is required in {rig_config_path()}")
+        raise _embedded_config_error(3, f"rig_model.profile is required in {rig_config_path()}")
     if not isinstance(model_id, str) or not model_id:
-        raise SystemExit(f"rig_model.model_id is required in {rig_config_path()}")
+        raise _embedded_config_error(4, f"rig_model.model_id is required in {rig_config_path()}")
     return profile, model_id
 
 
@@ -48,10 +60,10 @@ def resolve_profile_definition(profile_name: str, profiles_path: Path | None = N
     data = load_rig_profiles(profiles_path)
     models = data.get("models", {})
     if not isinstance(models, dict):
-        raise SystemExit(f"Invalid rig config: {rig_config_path()}")
+        raise _embedded_config_error(5, f"Invalid rig config: {rig_config_path()}")
     raw = models.get(profile_name)
     if not isinstance(raw, dict):
-        raise SystemExit(f"Model profile not found: {profile_name}")
+        raise _embedded_config_error(6, f"Model profile not found: {profile_name}", profile=profile_name)
 
     settings = data.get("profile_settings", {})
     if not isinstance(settings, dict):
@@ -64,7 +76,11 @@ def resolve_profile_definition(profile_name: str, profiles_path: Path | None = N
     for setting_name in extends:
         block = settings.get(setting_name, {})
         if not isinstance(block, dict):
-            raise SystemExit(f"Profile setting not found or invalid: {setting_name}")
+            raise _embedded_config_error(
+                7,
+                f"Profile setting not found or invalid: {setting_name}",
+                setting=setting_name,
+            )
         _deep_merge(merged, block)
 
     local = {k: v for k, v in raw.items() if k != "extends"}
@@ -116,7 +132,7 @@ def resolve_model_profile(
     data = load_rig_profiles(profiles_path)
     models = data.get("models", {})
     if not isinstance(models, dict):
-        raise SystemExit(f"Invalid rig config: {rig_config_path()}")
+        raise _embedded_config_error(8, f"Invalid rig config: {rig_config_path()}")
 
     target = requested or os.environ.get("AUDIAGENTIC_RIG_MODEL_PROFILE")
     rig_profile, rig_model_id = load_rig_model(profiles_path)
@@ -133,11 +149,11 @@ def resolve_model_profile(
     if not target:
         target = rig_profile
     if not target:
-        raise SystemExit(f"No model profile specified and no rig_model.profile set in {rig_config_path()}")
+        raise _embedded_config_error(9, f"No model profile specified and no rig_model.profile set in {rig_config_path()}")
 
     raw = models.get(target)
     if not isinstance(raw, dict):
-        raise SystemExit(f"Model profile not found: {target}")
+        raise _embedded_config_error(10, f"Model profile not found: {target}", profile=target)
 
     resolved = resolve_profile_definition(target, profiles_path)
     server_cfg = resolved.get("server", {})

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.config import load_layered_config, load_yaml_file, save_yaml_file
 
 
@@ -15,7 +16,12 @@ def config_path(scope: str, project_root: Path) -> Path:
         from audiagentic.runtime.home import audiagentic_home
 
         return audiagentic_home() / "config" / "harness" / "ag.yaml"
-    raise RuntimeError(f"unsupported scope: {scope}")
+    raise AudiaGenticError(
+        code="VAL-SESSVIS-001",
+        kind="session",
+        message="unsupported visibility config scope",
+        details={"scope": scope},
+    )
 
 
 def effective_cli_visibility(project_root: Path) -> dict[str, bool]:
@@ -41,11 +47,21 @@ def set_cli_visibility(
     scope: str,
 ) -> dict[str, Any]:
     if show_thinking_blocks is None and show_tool_blocks is None:
-        raise RuntimeError("at least one visibility toggle must be provided")
+        raise AudiaGenticError(
+            code="VAL-SESSVIS-002",
+            kind="session",
+            message="at least one visibility toggle must be provided",
+            details={},
+        )
 
     path = config_path(scope, project_root)
     if not path.exists():
-        raise RuntimeError(f"missing harness config: {path}")
+        raise AudiaGenticError(
+            code="RES-SESSVIS-001",
+            kind="session",
+            message="missing harness config",
+            details={"path": str(path)},
+        )
 
     current = load_yaml_file(path)
     ui = current.get("ui")
@@ -53,7 +69,12 @@ def set_cli_visibility(
         ui = {}
         current["ui"] = ui
     if not isinstance(ui, dict):
-        raise RuntimeError(f"invalid ui config mapping: {path}")
+        raise AudiaGenticError(
+            code="VAL-SESSVIS-003",
+            kind="session",
+            message="invalid ui config mapping",
+            details={"path": str(path)},
+        )
 
     updates: dict[str, bool] = {}
     if show_thinking_blocks is not None:

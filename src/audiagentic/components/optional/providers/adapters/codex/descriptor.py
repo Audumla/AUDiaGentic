@@ -22,12 +22,13 @@ from ...descriptors.registry import register
 
 register(ProviderDescriptor(
     provider_id="codex",
+    prompt_aliases=("cx",),
     display_name="Codex (OpenAI)",
     description="OpenAI's CLI coding agent. Runs tasks autonomously in a sandboxed environment.",
     url="https://github.com/openai/codex",
     cli_probe=["codex", "--version"],
     cli_install=cli_recipe("npm", "@openai/codex", executable="codex"),
-    vscode_extensions=(
+    host_capabilities=(
         VsCodeExtension("openai.chatgpt", "ChatGPT / OpenAI"),
     ),
     permissions=ProviderPermissions(

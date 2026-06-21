@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.workflow.propagation.rules import (
     action_complete_parent,
     rule_all_children_in_set,
@@ -173,7 +174,7 @@ def test_action_complete_parent_raises_without_blocking_set() -> None:
     ctx = FakeContext()
     ctx.add_item("t-1", "task", state="done")
     engine = FakeEngine(ctx, {})
-    with pytest.raises(ValueError, match="parent_blocking_set"):
+    with pytest.raises(AudiaGenticError, match="parent_blocking_set"):
         action_complete_parent(
             engine, "t-1",
             {"required_state_set": "complete", "parent_field": "plan_ref", "target_state": "done"},

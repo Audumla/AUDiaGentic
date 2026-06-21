@@ -4,11 +4,8 @@ import os
 import shutil
 from pathlib import Path
 
+from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.runtime.harness.paths import _HARNESS_CONFIG, _PKG_ROOT
-
-
-def _print(msg: str) -> None:
-    print(msg, flush=True)
 
 # Empty string when env var unset — install_to falls back to pi.yaml agent.version
 AGENT_VERSION = os.environ.get("AUDIAGENTIC_PI_AGENT_VERSION", "")
@@ -27,7 +24,13 @@ DEFAULT_API_KEY = "dummy"
 def _npm() -> str:
     resolved = shutil.which("npm")
     if resolved is None:
-        raise SystemExit("npm is required to install the AudiaGentic agent.")
+        raise make_error(
+            prefix="CFG",
+            component="PIINST",
+            number=5,
+            kind="pi-harness",
+            message="npm is required to install the AudiaGentic agent.",
+        )
     return resolved
 
 

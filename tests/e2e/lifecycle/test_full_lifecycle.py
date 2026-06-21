@@ -34,7 +34,7 @@ def test_install_detect_uninstall_roundtrip(tmp_path) -> None:
         sandbox.cleanup()
 
 
-def test_sync_preserves_config_and_refreshes_managed_prompt(tmp_path) -> None:
+def test_sync_preserves_config_and_prompt_overrides(tmp_path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "lifecycle-sync")
     try:
         apply_fresh_install(sandbox.repo)
@@ -43,13 +43,14 @@ def test_sync_preserves_config_and_refreshes_managed_prompt(tmp_path) -> None:
         provider_path.write_text("contract-version: v1\nproviders:\n  custom: {}\n", encoding="utf-8")
 
         prompt_path = sandbox.repo / ".audiagentic" / "prompts" / "ag-review" / "default.md"
-        prompt_path.write_text("corrupted managed prompt", encoding="utf-8")
+        prompt_path.parent.mkdir(parents=True, exist_ok=True)
+        prompt_path.write_text("custom prompt override", encoding="utf-8")
 
         result = sync_managed_baseline(sandbox.repo)
 
         assert ".audiagentic/config/runtime/providers.yaml" in result["preserved-files"]
         assert "custom" in provider_path.read_text(encoding="utf-8")
-        assert "corrupted managed prompt" not in prompt_path.read_text(encoding="utf-8")
-        assert ".audiagentic/prompts/ag-review/default.md" in result["refreshed-files"]
+        assert prompt_path.read_text(encoding="utf-8") == "custom prompt override"
+        assert ".audiagentic/prompts/ag-review/default.md" not in result["refreshed-files"]
     finally:
         sandbox.cleanup()

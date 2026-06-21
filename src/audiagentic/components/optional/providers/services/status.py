@@ -10,7 +10,10 @@ from audiagentic.components.optional.providers.services.provider_catalog import 
     read_model_catalog,
     runtime_catalog_path,
 )
-from audiagentic.components.optional.providers.services.provider_config import load_provider_config
+from audiagentic.components.optional.providers.services.provider_config import (
+    apply_feature_enabled_state,
+    load_provider_config,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 from ..descriptors import interrogate as _interrogate
@@ -83,6 +86,7 @@ def _provider_entry(
         "display_name": descriptor.display_name if descriptor else provider_id,
         "registered": descriptor is not None,
         "cli": None,
+        "host_capabilities": [],
         "vscode_project": (project_root / ".vscode").exists(),
         "vscode_extensions": [],
         "permissions": {
@@ -95,6 +99,7 @@ def _provider_entry(
         "agent_files": [],
     }
     entry["interrogation"] = interrogation
+    host_capabilities = interrogation.get("host_capabilities", [])
     vscode_extensions = interrogation.get("vscode_extensions", [])
     vscode_applicable = bool(interrogation.get("vscode_project") and vscode_extensions)
     vscode_installed = None
@@ -116,6 +121,7 @@ def _provider_entry(
             "installed": vscode_installed,
             "extensions": vscode_extensions,
         },
+        "host-capabilities": host_capabilities,
     }
     entry["cli-installed"] = entry["installation"]["cli"]["installed"]
     entry["vscode-extension-installed"] = vscode_installed
@@ -197,7 +203,11 @@ def build_provider_status(
         "providers": [
             _provider_entry(
                 provider_id=item,
-                provider_cfg=providers.get(item, {"enabled": False, "access-mode": "none"}),
+                provider_cfg=apply_feature_enabled_state(
+                    project_root,
+                    item,
+                    providers.get(item, {"enabled": False, "access-mode": "none"}),
+                ),
                 project_root=project_root,
                 include_probes=include_probes,
                 now_fn=now_fn,

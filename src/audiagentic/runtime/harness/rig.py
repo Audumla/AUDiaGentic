@@ -11,6 +11,24 @@ import os
 import subprocess
 import sys
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.runtime.rig.models import (
+    load_model_profile,
+    query_server_model,
+    query_server_version,
+)
+
+
+def _rig_launch_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
+    return make_error(
+        prefix="EXT",
+        component="RIG",
+        number=code_number,
+        kind="runtime-rig",
+        message=message,
+        details=details,
+    )
+
 
 def launch_rig_if_needed(
     model: str,
@@ -58,8 +76,13 @@ def launch_rig_if_needed(
             check=False,
         )
         if completed.returncode != 0:
-            raise SystemExit(
-                completed.stderr.strip() or completed.stdout.strip() or "Failed to launch embedded rig."
+            detail = completed.stderr.strip() or completed.stdout.strip() or "Failed to launch embedded rig."
+            raise _rig_launch_error(
+                4,
+                detail,
+                returncode=completed.returncode,
+                profile=profile_name,
+                port=rig_port,
             )
 
         payload = json.loads(completed.stdout.strip())
@@ -69,14 +92,6 @@ def launch_rig_if_needed(
         os.environ["AUDIAGENTIC_AG_BASE_URL"] = endpoint
         os.environ.setdefault("AUDIAGENTIC_AG_MODEL", model_id)
         return endpoint, model_id, pid, True
-
-
-
-from audiagentic.runtime.rig.models import (
-    load_model_profile,
-    query_server_model,
-    query_server_version,
-)
 
 __all__ = [
     "launch_rig_if_needed",

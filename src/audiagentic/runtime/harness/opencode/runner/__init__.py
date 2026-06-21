@@ -7,12 +7,18 @@ CLI invocation (opencode CLI vs pi TUI).
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+
+from audiagentic.cli_io import print_message
+from audiagentic.foundation.contracts.errors import make_error
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -58,9 +64,15 @@ def build_global_context(
     )
 
     if shutil.which("opencode") is None:
-        raise SystemExit(
-            "opencode CLI not found on PATH. "
-            "Install it with: audiagentic install  or  npm install -g opencode-ai"
+        raise make_error(
+            prefix="CFG",
+            component="OCINST",
+            number=2,
+            kind="opencode-harness",
+            message=(
+                "opencode CLI not found on PATH. "
+                "Install it with: audiagentic install  or  npm install -g opencode-ai"
+            ),
         )
 
     harness_cfg = load_harness_config(project_root=project_root)
@@ -69,8 +81,13 @@ def build_global_context(
         or harness_cfg.get("rig", {}).get("model")
     )
     if not requested_model:
-        raise SystemExit(
-            "No model configured. Set AUDIAGENTIC_AG_MODEL or rig.model in ag.yaml."
+        raise make_error(
+            prefix="CFG",
+            component="HCFG",
+            number=11,
+            kind="harness-config",
+            message="No model configured. Set AUDIAGENTIC_AG_MODEL or rig.model in ag.yaml.",
+            details={"field": "rig.model"},
         )
 
     profile_name, model_profile = load_model_profile(None, requested_model)
@@ -137,7 +154,13 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
 
     executable = shutil.which("opencode")
     if executable is None:
-        raise SystemExit("opencode CLI not found on PATH")
+        raise make_error(
+            prefix="CFG",
+            component="OCINST",
+            number=3,
+            kind="opencode-harness",
+            message="opencode CLI not found on PATH",
+        )
 
     env = _build_run_env(ctx)
     ctx.agent_log_dir.mkdir(parents=True, exist_ok=True)
@@ -146,32 +169,39 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
     log_path = ctx.agent_log_dir / f"{mode}-{stamp}.log"
 
     if smoke:
-        print(f"Checking local LLM endpoint: {ctx.endpoint}/models")
+        print_message(f"Checking local LLM endpoint: {ctx.endpoint}/models")
         require_models_endpoint(ctx.endpoint, timeout=15)
-        print(f"Checking opencode CLI: {executable}")
+        print_message(f"Checking opencode CLI: {executable}")
         result = subprocess.run(
             [executable, "--version"],
             capture_output=True, text=True, check=False,
         )
         if result.returncode != 0:
-            raise SystemExit(f"opencode --version failed: {result.stderr.strip()}")
+            raise make_error(
+                prefix="EXT",
+                component="OCINST",
+                number=4,
+                kind="opencode-harness",
+                message=f"opencode --version failed: {result.stderr.strip()}",
+                details={"returncode": result.returncode},
+            )
         version = (result.stdout + result.stderr).strip().split("\n")[0]
-        print(f"opencode: {version}")
+        print_message(f"opencode: {version}")
         log_path.write_text(f"smoke ok\nopencode: {version}\n", encoding="utf-8")
         return 0
 
     ui_cfg = ctx.harness_cfg.get("ui", {})
     if ui_cfg.get("show_startup_info", True):
-        print("AUDiaGentic (opencode)")
-        print(f"  Project:  {ctx.project_root}")
-        print(f"  Provider: {ctx.provider}")
-        print(f"  Model:    {ctx.model}")
-        print(f"  Endpoint: {ctx.endpoint}")
+        print_message("AUDiaGentic (opencode)")
+        print_message(f"  Project:  {ctx.project_root}")
+        print_message(f"  Provider: {ctx.provider}")
+        print_message(f"  Model:    {ctx.model}")
+        print_message(f"  Endpoint: {ctx.endpoint}")
         if ctx.server_version:
-            print(f"  Server:   {ctx.server_version}")
-        print(f"  MCP:      {'enabled' if ctx.enable_mcp else 'disabled'}")
-        print(f"  Log:      {log_path}")
-        print()
+            print_message(f"  Server:   {ctx.server_version}")
+        print_message(f"  MCP:      {'enabled' if ctx.enable_mcp else 'disabled'}")
+        print_message(f"  Log:      {log_path}")
+        print_message("")
 
     cmd = [executable] + agent_args
 

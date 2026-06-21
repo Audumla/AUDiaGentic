@@ -10,12 +10,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.io import atomic_write_ndjson, atomic_write_text
 from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
-
-from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import atomic_write_ndjson, atomic_write_text
 
 STALE_AFTER_SECONDS = 300
 
@@ -58,8 +57,8 @@ def _acquire_lock(project_root: Path) -> tuple[Path, str | None]:
             try:
                 os.kill(pid, 0)
                 pid_alive = True
-            except Exception:
-                pass
+            except OSError:
+                pid_alive = False
 
         if age <= STALE_AFTER_SECONDS and pid_alive:
             raise AudiaGenticError(

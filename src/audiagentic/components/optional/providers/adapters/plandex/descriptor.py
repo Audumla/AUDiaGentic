@@ -8,7 +8,7 @@ register(ProviderDescriptor(
     url="https://plandex.ai",
     cli_probe=["plandex", "--version"],
     cli_install=cli_recipe("brew", "plandex-ai/tap/plandex", executable="plandex", uninstall_package="plandex"),
-    vscode_extensions=(),
+    host_capabilities=(),
     permissions=ProviderPermissions(
         can_write_files=True,
         can_execute_shell=True,

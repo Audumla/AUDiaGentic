@@ -14,50 +14,173 @@ from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
     available_language_specs,
     detect_project_languages,
     load_runtime_servers,
-    read_lsp_config,
     write_lsp_config,
+)
+from audiagentic.components.optional.coding_lsp.runtime_resolver import (
+    active_language_bindings,
+    active_lsp_implementation,
+    resolve_active_runtime_servers,
 )
 from audiagentic.foundation.components.dependencies import (
     build_dependency_probes,
     build_dependency_workflow,
     detect_missing,
 )
+from audiagentic.foundation.components.ids import COMPONENT_CODING_LSP
+from audiagentic.foundation.features.base import FeatureState
+from audiagentic.foundation.features.lifecycle import enable_implementation
+from audiagentic.foundation.features.options import validate_option
+from audiagentic.foundation.features.registry import get_implementation, get_implementations
+from audiagentic.foundation.features.state import (
+    get_feature_state,
+    set_feature_state,
+)
 from audiagentic.foundation.workflow.invocation.steps import SequenceStep
 
 from .lsp_api import _sync_to_providers, resolve_project_root
 
-# Probes for every supported language (status checks scope by configured ids).
-_LSP_PROBES = build_dependency_probes(language_registry.dependency_cfgs())
+
+def _lsp_probes() -> dict[str, Any]:
+    """Probes for every supported language (status checks scope by configured ids).
+
+    Resolved lazily, not at import: the language catalog is sourced from the
+    registered feature descriptors, which are not populated until
+    register_all_components() runs.
+    """
+    return build_dependency_probes(language_registry.dependency_cfgs())
 
 
 def _configured_language_ids(project_root: Path | None) -> list[str]:
-    """Languages explicitly enabled in lsp.json — the sole source of activation."""
+    """Languages enabled in feature state and supported by the active implementation."""
     if project_root is None:
         return []
-    lsp_json = resolve_project_root(project_root) / CODING_LSP_DIR / "lsp.json"
-    configured, _, _ = load_runtime_servers(lsp_json)
-    return list(configured.keys())
+    return [binding.feature for binding in active_language_bindings(resolve_project_root(project_root))]
 
 
 def configured_dependency_ids(project_root: Path | None) -> list[str]:
-    """Return dependency IDs for languages explicitly configured in lsp.json."""
+    """Return dependency IDs for active language features."""
     return language_registry.dependency_ids(_configured_language_ids(project_root))
 
 
-def missing_configured_dependencies(project_root: Path | None) -> list[str]:
-    """Dep ids for configured languages whose server binary is not installed."""
-    configured = configured_dependency_ids(project_root)
-    probes = build_dependency_probes(
-        language_registry.dependency_cfgs(_configured_language_ids(project_root))
+def active_implementation_dependency_cfgs(project_root: Path | None) -> dict[str, dict[str, Any]]:
+    if project_root is None:
+        return {}
+    implementation_id = active_lsp_implementation(resolve_project_root(project_root))
+    descriptor = get_implementation(COMPONENT_CODING_LSP, implementation_id)
+    return dict(descriptor.dependencies) if descriptor else {}
+
+
+def active_dependency_cfgs(project_root: Path | None) -> dict[str, dict[str, Any]]:
+    if project_root is None:
+        return {}
+    resolved = resolve_project_root(project_root)
+    return {
+        **active_implementation_dependency_cfgs(resolved),
+        **language_registry.dependency_cfgs(_configured_language_ids(resolved)),
+    }
+
+
+def active_dependency_ids(project_root: Path | None) -> list[str]:
+    return list(active_dependency_cfgs(project_root))
+
+
+def _set_language_feature_enabled(project_root: Path, language: str, enabled: bool) -> None:
+    state = get_feature_state(project_root, COMPONENT_CODING_LSP, "language", language)
+    set_feature_state(
+        project_root,
+        COMPONENT_CODING_LSP,
+        "language",
+        language,
+        FeatureState(enabled=enabled, options=state.options),
     )
+
+
+def _regenerate_lsp_cache(project_root: Path) -> None:
+    """Regenerate the lsp.json cache as a pure projection of feature state.
+
+    lsp.json is a generated cache only — the source of truth is feature state plus
+    active implementation bindings (`resolve_active_runtime_servers`, which already
+    merges language-spec settings with feature `server-settings`). Enable/disable
+    and option changes mutate only feature state, then call this to refresh the
+    cache; nothing read-modify-writes individual lsp.json entries.
+    """
+    servers = resolve_active_runtime_servers(project_root)
+    payload = {
+        language: {
+            "command": list(cfg.command),
+            "fileExtensions": list(cfg.file_extensions),
+            "workspaceConfigFiles": list(cfg.workspace_config_files),
+            "settings": dict(cfg.settings),
+            "label": cfg.label,
+        }
+        for language, cfg in servers.items()
+    }
+    write_lsp_config(project_root / CODING_LSP_DIR / "lsp.json", payload)
+
+
+def set_language_option(root: str, language: str, key: str, value: Any) -> dict[str, Any]:
+    project_root = resolve_project_root(root)
+    spec = language_registry.get_language(language)
+    if spec is None:
+        return {"ok": False, "error": f"Unknown language: {language}"}
+    schema = spec.options_schema.get(key)
+    if schema is None:
+        return {"ok": False, "error": f"unknown option: {key}"}
+    try:
+        validate_option(key, value, schema)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+    state = get_feature_state(project_root, COMPONENT_CODING_LSP, "language", language)
+    options = dict(state.options)
+    options[key] = value
+    set_feature_state(
+        project_root,
+        COMPONENT_CODING_LSP,
+        "language",
+        language,
+        FeatureState(enabled=state.enabled, options=options),
+    )
+    _regenerate_lsp_cache(project_root)
+    _sync_to_providers(project_root)
+    return {"ok": True, "language": language, "option": key, "value": value}
+
+
+def reset_language_option(root: str, language: str, key: str) -> dict[str, Any]:
+    project_root = resolve_project_root(root)
+    spec = language_registry.get_language(language)
+    if spec is None:
+        return {"ok": False, "error": f"Unknown language: {language}"}
+    if key not in spec.options_schema:
+        return {"ok": False, "error": f"unknown option: {key}"}
+    state = get_feature_state(project_root, COMPONENT_CODING_LSP, "language", language)
+    options = dict(state.options)
+    removed = key in options
+    options.pop(key, None)
+    set_feature_state(
+        project_root,
+        COMPONENT_CODING_LSP,
+        "language",
+        language,
+        FeatureState(enabled=state.enabled, options=options),
+    )
+    _regenerate_lsp_cache(project_root)
+    _sync_to_providers(project_root)
+    return {"ok": True, "language": language, "option": key, "removed": removed}
+
+
+def missing_configured_dependencies(project_root: Path | None) -> list[str]:
+    """Dep ids for active implementation/languages whose binaries are not installed."""
+    configured = active_dependency_ids(project_root)
+    probes = build_dependency_probes(active_dependency_cfgs(project_root))
     return detect_missing(probes, configured)
 
 
 def config_status(root: str = ".") -> dict[str, Any]:
     project_root = resolve_project_root(root)
     lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
-    configured, config_errors, config_exists = load_runtime_servers(lsp_path)
-    deps = _LSP_PROBES
+    _cache_config, config_errors, config_exists = load_runtime_servers(lsp_path)
+    configured = resolve_active_runtime_servers(project_root)
+    deps = _lsp_probes()
     missing_deps = detect_missing(deps, configured_dependency_ids(project_root))
 
     language_status: dict[str, dict[str, Any]] = {}
@@ -65,33 +188,65 @@ def config_status(root: str = ".") -> dict[str, Any]:
         lang_spec = language_registry.get_language(lang)
         dep_ids = (lang_spec.dependency.id,) if (lang_spec and lang_spec.dependency) else ()
         binary_ok = all(dep_id not in missing_deps for dep_id in dep_ids)
+        feature_state = get_feature_state(project_root, COMPONENT_CODING_LSP, "language", lang)
         language_status[lang] = {
             "configured": True,
+            "feature_enabled": feature_state.enabled,
+            "feature_options": dict(feature_state.options),
             "binary_available": binary_ok,
             "command": cfg.command,
         }
 
     return {
         "project_root": str(project_root),
-        "config_exists": config_exists,
-        "config_valid": config_exists and not config_errors,
-        "config_errors": config_errors,
+        # Health of the generated .coding-lsp/lsp.json cache/projection — not the
+        # source of truth for configuration (that is feature state + bindings).
+        "projection_cache": {
+            "exists": config_exists,
+            "valid": config_exists and not config_errors,
+            "errors": config_errors,
+        },
+        "implementation": active_lsp_implementation(project_root),
         "languages": language_status,
         "missing_binaries": [lang for lang, status in language_status.items() if not status["binary_available"]],
         "detectable": list(detect_project_languages(project_root).keys()),
     }
 
 
+def list_implementations(root: str = ".") -> dict[str, Any]:
+    project_root = resolve_project_root(root)
+    implementations = get_implementations(COMPONENT_CODING_LSP)
+    return {
+        "active": active_lsp_implementation(project_root),
+        "implementations": {
+            implementation_id: {
+                "display_name": descriptor.display_name,
+                "description": descriptor.description,
+            }
+            for implementation_id, descriptor in implementations.items()
+        },
+    }
+
+
+def select_implementation(root: str, implementation: str) -> dict[str, Any]:
+    project_root = resolve_project_root(root)
+    result = enable_implementation(project_root, COMPONENT_CODING_LSP, implementation)
+    if not result.get("ok"):
+        return result
+    _sync_to_providers(project_root)
+    return result
+
+
 def add_language(root: str, language: str) -> dict[str, Any]:
     project_root = resolve_project_root(root)
-    lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
     specs = available_language_specs()
     if language not in specs:
         return {"ok": False, "error": f"Unknown language: {language}. Available: {list(specs.keys())}"}
-    configured = read_lsp_config(lsp_path)
-    configured[language] = specs[language]
-    write_lsp_config(lsp_path, configured)
+    # Enablement is feature state; lsp.json is then regenerated as a pure cache.
+    _set_language_feature_enabled(project_root, language, True)
+    _regenerate_lsp_cache(project_root)
     _sync_to_providers(project_root)
+    lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
     return {"ok": True, "language": language, "path": str(lsp_path)}
 
 
@@ -107,19 +262,18 @@ async def enable_language(root: str, language: str, *, run_with_output) -> dict[
 
     The client only names the language; dependency ids and server binaries are
     resolved internally. Atomic for a newly added language: if the dependency
-    install fails, the language is removed again so lsp.json never references an
-    uninstalled server. Re-enabling an already-configured language is not rolled
-    back on install failure.
+    install fails, the language feature is disabled again so generated cache
+    never references an uninstalled server. Re-enabling an already-configured
+    language is not rolled back on install failure.
     """
     project_root = resolve_project_root(root)
-    lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
-    already_configured = language in read_lsp_config(lsp_path)
+    already_configured = get_feature_state(project_root, COMPONENT_CODING_LSP, "language", language).enabled
 
     added = add_language(str(project_root), language)
     if not added.get("ok"):
         return added
 
-    missing = detect_missing(_LSP_PROBES, language_registry.dependency_ids([language]))
+    missing = detect_missing(_lsp_probes(), language_registry.dependency_ids([language]))
     if not missing:
         return {**added, "dependencies": "already installed"}
 
@@ -144,14 +298,20 @@ def remove_language(root: str, language: str) -> dict[str, Any]:
     from audiagentic.components.optional.coding_lsp.lsp_api import _session_manager
 
     project_root = resolve_project_root(root)
-    lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
-    configured = read_lsp_config(lsp_path)
-    if language not in configured:
+    state = get_feature_state(project_root, COMPONENT_CODING_LSP, "language", language)
+    if not state.enabled:
         return {"ok": False, "error": f"Language not configured: {language}"}
-    del configured[language]
-    write_lsp_config(lsp_path, configured)
-    _sync_to_providers(project_root)
+    # Disable in feature state; lsp.json is then regenerated as a pure cache.
+    _set_language_feature_enabled(project_root, language, False)
+    _regenerate_lsp_cache(project_root)
     _session_manager.shutdown_session(project_root, language)
+    # Prune the removed language from provider configs, then sync remaining state.
+    from audiagentic.components.optional.coding_lsp.language_servers_sync import (
+        prune_language_servers_from_providers,
+    )
+    prune_language_servers_from_providers(project_root)
+    _sync_to_providers(project_root)
+    lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
     return {"ok": True, "language": language, "path": str(lsp_path)}
 
 
@@ -173,14 +333,14 @@ async def install_lsp_dependencies(
 ) -> dict[str, Any]:
     """Install language-server binaries — scoped to configured languages.
 
-    The workflow is built only from dependencies of languages enabled in
-    lsp.json, so a server for a non-enabled language can never be installed.
-    Empty `names` installs the configured-but-missing set; explicit `names`
-    must belong to configured languages or are rejected.
+    The workflow is built only from dependencies of enabled language features,
+    so a server for a non-enabled language can never be installed. Empty `names`
+    installs the configured-but-missing set; explicit `names` must belong to
+    configured languages or are rejected.
     """
     project_root = resolve_project_root(root)
-    configured = configured_dependency_ids(project_root)
-    dep_cfgs = language_registry.dependency_cfgs(_configured_language_ids(project_root))
+    configured = active_dependency_ids(project_root)
+    dep_cfgs = active_dependency_cfgs(project_root)
 
     if names:
         stray = [n for n in names if n not in configured]
@@ -209,7 +369,7 @@ async def install_lsp_dependencies(
 
 def list_missing(root: str = ".") -> dict[str, Any]:
     project_root = resolve_project_root(root)
-    deps = _LSP_PROBES
+    deps = _lsp_probes()
     missing = detect_missing(deps, configured_dependency_ids(project_root))
     return {
         "project_root": str(project_root),

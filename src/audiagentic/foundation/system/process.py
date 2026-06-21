@@ -15,6 +15,19 @@ import sys
 import time
 from pathlib import Path
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+
+
+def _process_error(prefix: str, code_number: int, message: str, **details: object) -> AudiaGenticError:
+    return make_error(
+        prefix=prefix,
+        component="PROC",
+        number=code_number,
+        kind="system-process",
+        message=message,
+        details=details,
+    )
+
 
 def choose_free_port(host: str) -> int:
     """Return a free TCP port on *host* chosen from the ephemeral range."""
@@ -27,7 +40,7 @@ def choose_free_port(host: str) -> int:
             except OSError:
                 continue
             return port
-    raise SystemExit(f"Unable to find free port on {host}")
+    raise _process_error("RES", 1, f"Unable to find free port on {host}", host=host)
 
 
 def candidate_ports(host: str, requested_port: int) -> list[int]:
@@ -87,7 +100,7 @@ class StartupLock:
     lock_path:
         Full path to the lock file.  The parent directory is created if absent.
     timeout:
-        Seconds to wait before raising ``SystemExit``.
+        Seconds to wait before raising ``AudiaGenticError``.
     """
 
     def __init__(self, lock_path: Path, timeout: float = 30.0) -> None:
@@ -112,8 +125,12 @@ class StartupLock:
                     self._path.unlink(missing_ok=True)
                 except (ValueError, OSError):
                     self._path.unlink(missing_ok=True)
-        raise SystemExit(
-            f"Timed out waiting for startup lock: {self._path}"
+        raise _process_error(
+            "TO",
+            2,
+            f"Timed out waiting for startup lock: {self._path}",
+            path=str(self._path),
+            timeout=self._timeout,
         )
 
     def __exit__(self, *_: object) -> None:

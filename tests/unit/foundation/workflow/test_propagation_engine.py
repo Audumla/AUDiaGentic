@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.workflow.propagation.engine import StatePropagationEngine
 
 from .conftest import FakeContext
@@ -61,7 +62,7 @@ def _engine(ctx: FakeContext, config: dict | None = None, tmp_path: Path | None 
 # ── constructor guards ────────────────────────────────────────────────────────
 
 def test_enabled_without_config_path_raises() -> None:
-    with pytest.raises(ValueError, match="config_path"):
+    with pytest.raises(AudiaGenticError, match="config_path"):
         StatePropagationEngine(ctx=FakeContext(), enabled=True, config_path=None)
 
 

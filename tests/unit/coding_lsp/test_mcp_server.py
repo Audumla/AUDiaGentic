@@ -33,3 +33,44 @@ def test_lsp_config_status_delegates_to_api() -> None:
     with patch("audiagentic.components.optional.coding_lsp.lsp_config_api.config_status", return_value={"ok": True}) as mock:
         assert lsp_manage_mcp.lsp_config_status(".") == {"ok": True}
         mock.assert_called_once_with(".")
+
+
+def test_lsp_list_implementations_delegates_to_api() -> None:
+    with patch(
+        "audiagentic.components.optional.coding_lsp.lsp_config_api.list_implementations",
+        return_value={"active": "ag-lsp"},
+    ) as mock:
+        assert lsp_manage_mcp.lsp_list_implementations("root") == {"active": "ag-lsp"}
+        mock.assert_called_once_with("root")
+
+
+def test_lsp_select_implementation_delegates_to_api() -> None:
+    with patch(
+        "audiagentic.components.optional.coding_lsp.lsp_config_api.select_implementation",
+        return_value={"ok": True},
+    ) as mock:
+        assert lsp_manage_mcp.lsp_select_implementation("root", "agent-lsp") == {"ok": True}
+        mock.assert_called_once_with("root", "agent-lsp")
+
+
+def test_lsp_set_language_option_delegates_to_api() -> None:
+    with patch(
+        "audiagentic.components.optional.coding_lsp.lsp_config_api.set_language_option",
+        return_value={"ok": True},
+    ) as mock:
+        result = lsp_manage_mcp.lsp_set_language_option(
+            "root", "python", "server-settings", {"x": True}
+        )
+        assert result == {"ok": True}
+        mock.assert_called_once_with("root", "python", "server-settings", {"x": True})
+
+
+def test_lsp_reset_language_option_delegates_to_api() -> None:
+    with patch(
+        "audiagentic.components.optional.coding_lsp.lsp_config_api.reset_language_option",
+        return_value={"ok": True},
+    ) as mock:
+        assert lsp_manage_mcp.lsp_reset_language_option(
+            "root", "python", "server-settings"
+        ) == {"ok": True}
+        mock.assert_called_once_with("root", "python", "server-settings")

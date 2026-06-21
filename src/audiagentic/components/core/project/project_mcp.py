@@ -2,22 +2,18 @@
 from __future__ import annotations
 
 import logging
-import sys
 from typing import Any
-
-try:
-    from mcp.server.fastmcp import FastMCP
-except ImportError:
-    print("Error: mcp package not installed. Run: pip install mcp", file=sys.stderr)
-    sys.exit(1)
 
 from audiagentic.foundation.components.ids import COMPONENT_PROJECT
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.foundation.mcp.component_server import (
+    FastMCP,
     log_tool_call,
+    mcp_server,
     project_root_from_env,
     report_error,
+    run_mcp_server,
     server_instructions,
     tool_description,
 )
@@ -35,10 +31,7 @@ def _server_decl():
 
 def build_server() -> FastMCP:
     decl = _server_decl()
-    mcp = FastMCP(
-        "ag-project-mgmt",
-        instructions=server_instructions(decl),
-    )
+    mcp = mcp_server(__name__, instructions=server_instructions(decl))
 
     @mcp.tool(description=tool_description(decl, "project_status"))
     @log_tool_call
@@ -114,8 +107,6 @@ def build_server() -> FastMCP:
 def main() -> int:
     import argparse
 
-    from audiagentic.foundation.logging import bootstrap
-
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--project-root", default=None)
     args, _ = parser.parse_known_args()
@@ -124,8 +115,7 @@ def main() -> int:
 
         os.environ["AUDIAGENTIC_REPO_ROOT"] = args.project_root
 
-    bootstrap("project")
-    build_server().run()
+    run_mcp_server(build_server(), "project")
     return 0
 
 

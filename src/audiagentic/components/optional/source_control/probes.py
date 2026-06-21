@@ -1,8 +1,7 @@
 """Source-control-specific dependency probes.
 
-Loaded via the ``custom:`` probe seam in source-control.yaml. These live with
-the component that owns the tool (GitHub CLI), keeping foundation toolchain
-detection tool-agnostic.
+These live with the component that owns the tool (GitHub CLI), keeping
+foundation toolchain detection tool-agnostic.
 """
 from __future__ import annotations
 

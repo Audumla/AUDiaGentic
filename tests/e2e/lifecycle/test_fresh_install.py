@@ -28,10 +28,10 @@ def test_fresh_install_creates_scaffold_and_manifest(tmp_path: Path) -> None:
         assert result["status"] == "success"
         assert (sandbox.repo / ".audiagentic" / "config" / "project.yaml").is_file()
         assert (sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml").is_file()
-        assert (
+        assert not (
             sandbox.repo / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml"
-        ).is_file()
-        assert (sandbox.repo / ".audiagentic" / "prompts" / "ag-review" / "default.md").is_file()
+        ).exists()
+        assert not (sandbox.repo / ".audiagentic" / "prompts").exists()
         # Component markers are the new install record
         assert (sandbox.repo / ".audiagentic" / "components" / "project.yaml").is_file()
         assert any(
@@ -40,10 +40,6 @@ def test_fresh_install_creates_scaffold_and_manifest(tmp_path: Path) -> None:
         )
 
         project_cfg = _load_yaml(sandbox.repo / ".audiagentic" / "config" / "project.yaml")
-        provider_cfg = _load_yaml(
-            sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml"
-        )
-
         validator = Draft202012Validator(read_schema("project-config"))
         assert not list(validator.iter_errors(project_cfg))
 

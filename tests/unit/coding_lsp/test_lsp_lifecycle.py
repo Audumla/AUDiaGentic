@@ -35,6 +35,27 @@ def test_client_capabilities_has_required_keys() -> None:
     assert caps["workspace"]["workspaceFolders"] is True
 
 
+def test_client_capabilities_includes_all_planned_features() -> None:
+    caps = LspSession._client_capabilities()
+    td = caps["textDocument"]
+    assert "codeAction" in td
+    assert "completion" in td
+    assert "signatureHelp" in td
+    assert "formatting" in td
+    assert "rangeFormatting" in td
+    assert "inlayHint" in td
+    assert "callHierarchy" in td
+    assert "typeDefinition" in td
+    assert "implementation" in td
+
+
+def test_client_capabilities_general_position_encodings() -> None:
+    caps = LspSession._client_capabilities()
+    assert "general" in caps
+    assert "utf-8" in caps["general"]["positionEncodings"]
+    assert "utf-16" in caps["general"]["positionEncodings"]
+
+
 def test_workspace_symbol_returns_empty_on_none() -> None:
     session = LspSession(_make_config(), "/tmp")
     session.bridge = MagicMock()
@@ -137,9 +158,10 @@ def test_diagnostics_logs_warning_on_request_failure(caplog) -> None:
     session.bridge = MagicMock()
     session.bridge.send_request = MagicMock(side_effect=RuntimeError("boom"))
 
-    logger_name = "audiagentic.components.optional.coding_lsp.lsp_lifecycle"
-    with caplog.at_level(logging.WARNING, logger=logger_name):
-        result = session.diagnostics()
-
-    assert result == {}
-    assert any("diagnostics request failed" in r.getMessage() for r in caplog.records)
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    try:
+        session.diagnostics()
+        assert False, "should have raised"
+    except AudiaGenticError as e:
+        assert "EXT-LSP-008" in e.code
+        assert "Workspace diagnostics request failed" in e.message

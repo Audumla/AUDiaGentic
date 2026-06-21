@@ -12,6 +12,7 @@ from typing import Any, Protocol, TextIO
 
 from jsonschema import Draft202012Validator
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import read_schema
 from audiagentic.foundation.time import now_iso_z
 
@@ -216,8 +217,11 @@ class NormalizedEventSink:
             if errors:
                 error_msgs = ", ".join(e.message for e in errors)
                 if self.invalid_event_policy == "fail":
-                    raise ValueError(
-                        f"normalized event failed schema validation: {error_msgs}"
+                    raise AudiaGenticError(
+                        code="VAL-PROV-SINK-001",
+                        kind="providers-streaming",
+                        message=f"normalized event failed schema validation: {error_msgs}",
+                        details={"errors": error_msgs},
                     )
                 elif self.invalid_event_policy == "quarantine":
                     logger.warning("quarantining invalid event: %s", error_msgs)

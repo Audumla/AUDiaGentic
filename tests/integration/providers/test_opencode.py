@@ -154,8 +154,8 @@ def test_opencode_adapter_requires_command(monkeypatch) -> None:
             "require_executable",
             lambda _provider_id, _command: (_ for _ in ()).throw(
                 AudiaGenticError(
-                    code="PRV-EXTERNAL-011",
-                    kind="external",
+                    code="EXT-OPENC-001",
+                    kind="providers",
                     message="missing",
                     details={"provider-id": "opencode"},
                 )
@@ -163,7 +163,7 @@ def test_opencode_adapter_requires_command(monkeypatch) -> None:
         )
         opencode.run({"provider-id": "opencode"}, {"default-model": "openai/gpt-5"})
     except AudiaGenticError as exc:
-        assert exc.code == "PRV-EXTERNAL-011"
+        assert exc.code == "EXT-OPENC-001"
         assert exc.details["provider-id"] == "opencode"
     else:
         raise AssertionError("expected AudiaGenticError")

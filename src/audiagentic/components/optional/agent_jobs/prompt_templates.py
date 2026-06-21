@@ -34,7 +34,38 @@ def load_prompt_template(project_root: Path, *, tag: str, provider_id: str, temp
     for path in candidates:
         if path.exists():
             return path.read_text(encoding="utf-8"), path
+    packaged = _load_packaged_prompt_template(tag=tag, template_name=template_name)
+    if packaged is not None:
+        return packaged
     return None, None
+
+
+def _load_packaged_prompt_template(*, tag: str, template_name: str | None) -> tuple[str, Path | None] | None:
+    from audiagentic.components.optional.providers.tags.registry import (
+        all_tags_loaded,  # noqa: PLC0415
+    )
+
+    descriptor = all_tags_loaded().get(tag)
+    if descriptor is None and tag.startswith("ag-"):
+        descriptor = all_tags_loaded().get(tag.removeprefix("ag-"))
+    if descriptor is None:
+        return None
+
+    requested = template_name or "default"
+    for prompt in descriptor.prompts:
+        if prompt.name != requested:
+            continue
+        source = descriptor.config_dir / prompt.content_file
+        if source.exists():
+            return source.read_text(encoding="utf-8"), source
+        bodies = [
+            instruction.body.strip()
+            for instruction in descriptor.instructions
+            if instruction.body.strip()
+        ]
+        content = "\n\n".join(bodies) or descriptor.description or f"{descriptor.display_name} prompt"
+        return content.rstrip() + "\n", None
+    return None
 
 
 def load_prompt_context(project_root: Path, context_name: str | None) -> tuple[str | None, Path | None]:

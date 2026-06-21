@@ -48,7 +48,8 @@ def test_opencode_roundtrip_and_preserves_mcp(tmp_path: Path) -> None:
     # remove by our language id finds the mapped opencode key
     assert remove_language_servers_opencode(path, "python") is True
     data = json.loads(path.read_text(encoding="utf-8"))
-    assert data["lsp"] == {}
+    # the empty container is dropped entirely, not left as "lsp": {}
+    assert "lsp" not in data
     assert data["mcp"] == {"ag-lsp": {"command": "x"}}
 
 
@@ -103,6 +104,17 @@ def test_qwen_roundtrip_string_command_split(tmp_path: Path) -> None:
     data = json.loads(path.read_text(encoding="utf-8"))
     assert "python" not in data
     assert data["typescript"] == {"command": "user-server"}
+
+
+def test_qwen_removes_dedicated_file_when_empty(tmp_path: Path) -> None:
+    # The qwen LS config is a dedicated file keyed at the root; removing the last
+    # language deletes the file rather than leaving an empty "{}".
+    path = tmp_path / ".lsp.json"
+    write_language_servers_qwen(path, {"python": _PY})
+    assert path.exists()
+
+    assert remove_language_servers_qwen(path, "python") is True
+    assert not path.exists()
 
 
 def test_qwen_skips_empty_command(tmp_path: Path) -> None:

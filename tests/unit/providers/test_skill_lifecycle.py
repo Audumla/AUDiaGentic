@@ -105,6 +105,15 @@ def test_prune_keeps_active_tag_skill_files(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("<!-- MANAGED_BY_AUDIAGENTIC -->\n# active skill\n", encoding="utf-8")
 
+    # Enabled-aware: a skill-capable provider must be enabled for its active-tag
+    # skills to survive prune.
+    from audiagentic.components.optional.providers.services.provider_config import (
+        set_provider_enabled,
+    )
+    for descriptor in all_descriptors().values():
+        if descriptor.skill_surface_path:
+            set_provider_enabled(tmp_path, descriptor.provider_id, enabled=True)
+
     # Tag is active → its skill files must survive prune.
     monkeypatch.setattr(contributions, "active_tag_ids", lambda project_root=None: {tag_id})
 

@@ -74,5 +74,10 @@ def remove_language_servers_qwen(path: Path, language: str) -> bool:
     if language not in data:
         return False
     del data[language]
-    _save_json(path, data)
+    if data:
+        _save_json(path, data)
+    else:
+        # The whole file is the language-server container (keyed at the root),
+        # so remove it entirely rather than leaving an empty "{}".
+        path.unlink(missing_ok=True)
     return True
