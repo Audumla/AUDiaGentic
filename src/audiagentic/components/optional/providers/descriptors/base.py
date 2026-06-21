@@ -5,17 +5,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.optional.coding_lsp.language_servers import LanguageServerEntry
 from audiagentic.foundation.mcp import McpServerEntry
 from audiagentic.foundation.workflow.invocation.steps import CallableStep, SequenceStep, ShellStep
-
-
-@dataclass(frozen=True)
-class LanguageServerEntry:
-    """A single language server entry for provider config sync."""
-    language: str
-    command: list[str]
-    file_extensions: list[str] = field(default_factory=list)
-    settings: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -51,9 +43,15 @@ class LanguageServersConfigSpec:
 
 
 @dataclass(frozen=True)
-class VsCodeExtension:
-    extension_id: str
+class HostCapability:
+    host: str
+    capability_id: str
     display_name: str
+
+
+def VsCodeExtension(extension_id: str, display_name: str) -> HostCapability:
+    """Compatibility constructor for VS Code extension host capabilities."""
+    return HostCapability("vscode", extension_id, display_name)
 
 
 @dataclass(frozen=True)
@@ -121,9 +119,10 @@ class ProviderDescriptor:
     display_name: str
     description: str = ""
     url: str = ""
+    prompt_aliases: tuple[str, ...] = field(default_factory=tuple)
     cli_probe: list[str] | None = None
     cli_install: CliInstallRecipe | None = None
-    vscode_extensions: tuple[VsCodeExtension, ...] = field(default_factory=tuple)
+    host_capabilities: tuple[HostCapability, ...] = field(default_factory=tuple)
     permissions: ProviderPermissions = field(default_factory=ProviderPermissions)
     agent_files: tuple[AgentFile, ...] = field(default_factory=tuple)
     # access-mode written to providers.yaml when this provider is first enabled.
@@ -151,6 +150,14 @@ class ProviderDescriptor:
     # as self-providing LSP and is excluded from the generic ag-lsp MCP projection.
     # Receives project_root; returns a result dict.
     on_lsp_enabled: Callable[[Path | None], dict[str, Any]] | None = None
+
+    @property
+    def vscode_extensions(self) -> tuple[HostCapability, ...]:
+        return tuple(
+            capability
+            for capability in self.host_capabilities
+            if capability.host == "vscode"
+        )
 
     @property
     def install_mode(self) -> str:

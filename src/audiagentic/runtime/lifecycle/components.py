@@ -5,10 +5,6 @@ import logging
 import shutil
 from pathlib import Path
 
-from audiagentic.foundation.time import now_iso_z
-
-logger = logging.getLogger(__name__)
-
 from audiagentic.foundation.components.base import (
     MODE_CREATE_IF_MISSING,
     MODE_GENERATED_MANAGED,
@@ -24,12 +20,15 @@ from audiagentic.foundation.components.registry import (
     marker_path,
     resolve_component_id,
 )
+from audiagentic.foundation.time import now_iso_z
 from audiagentic.runtime.config import load_yaml_file, save_yaml_file
 from audiagentic.runtime.harness import build_runtime_sync
 
 from .baseline_sync import sync_managed_baseline
 from .component_mcp import _refresh_mcp_config_if_needed
 from .observers import fire_post_disable, fire_post_enable, fire_post_install, fire_post_uninstall
+
+logger = logging.getLogger(__name__)
 
 _REMOVE_ALWAYS = {MODE_REQUIRED_MANAGED, MODE_GENERATED_MANAGED, MODE_RUNTIME_ONLY}
 _REMOVE_WITH_CONFIGS = {MODE_CREATE_IF_MISSING}
@@ -59,7 +58,7 @@ def _read_marker(component_id: str, project_root: Path) -> dict:
     try:
         return load_yaml_file(path)
     except Exception:
-        logger.warning("Failed to read marker for %s", component_id, exc_info=True)
+        logger.warning("Failed to read marker for %s", component_id, exc_info=True, extra={"component": component_id})
         return {}
 
 

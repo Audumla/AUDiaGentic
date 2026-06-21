@@ -6,13 +6,12 @@ import shutil
 import subprocess
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
+from audiagentic.cli_io import print_message
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.runtime.harness.reload import (
     build_runtime_sync as _build_sync,
 )
 from audiagentic.runtime.harness.reload import (
-    runtime_reload_request_path,
     write_reload_marker,
 )
 
@@ -20,6 +19,7 @@ from . import constants as _c
 from .config import materialize_agent_config
 from .patches import apply_lockdown_patches
 
+logger = logging.getLogger(__name__)
 _TARGET = "pi-runtime"
 
 
@@ -65,14 +65,28 @@ def _validate_agent_install(npm_dir: Path) -> None:
     """Verify that the agent install is complete — detect empty dist/ in nested packages."""
     pi_pkg = npm_dir / "node_modules" / "@earendil-works" / "pi-coding-agent"
     if not pi_pkg.exists():
-        raise SystemExit(f"Agent install failed: {pi_pkg} not found after npm install")
+        raise make_error(
+            prefix="RES",
+            component="PIINST",
+            number=6,
+            kind="pi-harness",
+            message=f"Agent install failed: {pi_pkg} not found after npm install",
+            details={"path": str(pi_pkg)},
+        )
     # Walk nested @earendil-works packages and check that each dist/ is non-empty.
     for pkg_dir in (pi_pkg / "node_modules" / "@earendil-works").glob("*"):
         dist = pkg_dir / "dist"
         if dist.exists() and not any(dist.iterdir()):
-            raise SystemExit(
+            raise make_error(
+                prefix="RES",
+                component="PIINST",
+                number=7,
+                kind="pi-harness",
+                message=(
                 f"Agent install incomplete: {pkg_dir.name}/dist is empty.\n"
                 f"Run: npm install --prefix {npm_dir} to retry."
+                ),
+                details={"package": pkg_dir.name, "path": str(dist)},
             )
 
 
@@ -86,10 +100,10 @@ def install_to(target: Path, project_root: Path | None = None) -> int:
     for platform_dir in ("windows", "macOS", "linux"):
         (rig_bin / "llama-server" / platform_dir).mkdir(parents=True, exist_ok=True)
     (rig_bin / "models").mkdir(parents=True, exist_ok=True)
-    _c._print(f"Rig binary dir: {rig_bin / 'llama-server'}")
-    _c._print("  Place llama-server binaries in the platform subfolder (windows/macOS/linux).")
-    _c._print(f"Model dir:      {rig_bin / 'models'}")
-    _c._print("  Place .gguf model files here.")
+    print_message(f"Rig binary dir: {rig_bin / 'llama-server'}")
+    print_message("  Place llama-server binaries in the platform subfolder (windows/macOS/linux).")
+    print_message(f"Model dir:      {rig_bin / 'models'}")
+    print_message("  Place .gguf model files here.")
 
     npm = _c._npm()
     pi_cfg = _c.load_pi_config(project_root=project_root)
@@ -101,7 +115,7 @@ def install_to(target: Path, project_root: Path | None = None) -> int:
     # dependency tree in a single pass. Sequential installs cause npm to
     # reorganize the tree on the second call, which can leave nested package
     # dist/ directories empty (observed with pi-tui on Node 22+).
-    _c._print(
+    print_message(
         f"Installing AudiaGentic agent {agent_version} + MCP adapter {mcp_adapter_version} into {npm_dir}"
     )
     subprocess.run(
@@ -176,12 +190,12 @@ def refresh_harness_config_if_installed(
         return False
     try:
         refresh_materialized_agent_config(harness_runtime, project_root=project_root)
-    except Exception:
-        logger.warning("Failed to refresh agent config for %s", component_id, exc_info=True)
+    except AudiaGenticError:
+        logger.warning("Failed to refresh agent config for %s", component_id, exc_info=True, extra={"component": component_id})
     try:
         request_runtime_reload(project_root, reason=reason, component_id=component_id)
-    except Exception:
-        logger.warning("Failed to request runtime reload for %s", component_id, exc_info=True)
+    except AudiaGenticError:
+        logger.warning("Failed to request runtime reload for %s", component_id, exc_info=True, extra={"component": component_id})
     return True
 
 

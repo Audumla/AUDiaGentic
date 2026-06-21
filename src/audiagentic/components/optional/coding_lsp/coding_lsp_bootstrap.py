@@ -9,9 +9,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
-from audiagentic.components.optional.coding_lsp import language_registry
 from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
     CODING_LSP_DIR,
 )
@@ -22,6 +19,7 @@ from audiagentic.foundation.components.dependencies import (
     detect_missing,
 )
 from audiagentic.foundation.components.ids import COMPONENT_CODING_LSP
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event import get_bus
 from audiagentic.runtime.lifecycle.observers import (
     COMPONENT_DISABLED,
@@ -30,14 +28,11 @@ from audiagentic.runtime.lifecycle.observers import (
     COMPONENT_UNINSTALLED,
 )
 
+logger = logging.getLogger(__name__)
+
 _REGISTERED = False
 
 _TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
-
-# Dependency facts come from the per-language registry, not the component YAML.
-_LSP_PROBES = build_dependency_probes(language_registry.dependency_cfgs())
-_LSP_DEP_LABELS = build_dependency_labels(language_registry.dependency_cfgs())
-LSP_DEPENDENCY_IDS = list(_LSP_PROBES.keys())
 
 
 def _format_command(command: list[str]) -> str:
@@ -91,7 +86,7 @@ def _on_enabled(project_root: Path) -> None:
                 "Synced generic ag-lsp MCP to providers: %s",
                 ", ".join(generic_result["synced"]),
             )
-    except Exception:
+    except AudiaGenticError:
         logger.warning("Failed to sync coding-lsp provider config", exc_info=True)
 
 
@@ -118,7 +113,7 @@ def _on_disabled(project_root: Path | None = None) -> None:
                     "Pruned generic ag-lsp MCP from providers: %s",
                     ", ".join(generic_result["pruned"]),
                 )
-        except Exception:
+        except AudiaGenticError:
             logger.warning("Failed to prune coding-lsp provider config", exc_info=True)
 
 
@@ -136,14 +131,15 @@ def register() -> None:
 
 
 def _active_dependency_ids(project_root: Path | None) -> list[str]:
-    """Return dependency IDs for languages explicitly configured in lsp.json.
+    """Return dependency IDs for active implementation and configured languages.
 
-    lsp.json is the sole source of active languages. Nothing auto-detects or
+    Feature state is the source of active languages. Nothing auto-detects or
     auto-populates it; languages are added explicitly via lsp_add_language.
-    No configured languages means no dependencies and no install prompt.
+    Implementation dependencies are included when a non-default implementation
+    is selected. lsp.json is only a generated runtime cache/projection.
     """
-    from audiagentic.components.optional.coding_lsp.lsp_config_api import configured_dependency_ids
-    return configured_dependency_ids(project_root)
+    from audiagentic.components.optional.coding_lsp.lsp_config_api import active_dependency_ids
+    return active_dependency_ids(project_root)
 
 
 def status_payload(project_root: Path | None = None) -> dict[str, Any]:
@@ -156,19 +152,24 @@ def status_payload(project_root: Path | None = None) -> dict[str, Any]:
     active_dep_ids = _active_dependency_ids(project_root)
     if not active_dep_ids:
         return {}
-    missing = detect_missing(_LSP_PROBES, active_dep_ids)
+    from audiagentic.components.optional.coding_lsp.lsp_config_api import active_dependency_cfgs
+
+    dep_cfgs = active_dependency_cfgs(project_root)
+    probes = build_dependency_probes(dep_cfgs)
+    missing = detect_missing(probes, active_dep_ids)
     if not missing:
         return {}
 
     install_commands = build_dependency_install_commands(
-        language_registry.dependency_cfgs(), missing, workflow_id="coding-lsp"
+        dep_cfgs, missing, workflow_id="coding-lsp"
     )
+    dep_labels = build_dependency_labels(dep_cfgs)
 
     offers = []
     for dep_id in missing:
         commands = install_commands.get(dep_id) or []
         cmd = " && ".join(_format_command(command) for command in commands) if commands else "install manually"
-        label = _LSP_DEP_LABELS.get(dep_id, dep_id)
+        label = dep_labels.get(dep_id, dep_id)
         offers.append(f"Install {label}: {cmd}")
 
     return {

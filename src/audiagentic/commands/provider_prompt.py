@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
+
+from audiagentic.cli_io import print_error, print_json, print_message
 
 
 def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
@@ -26,21 +27,28 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
         flags=re.IGNORECASE,
     )
     if reconcile_all_match or reconcile_one_match:
-        from audiagentic.components.optional.providers.services.lifecycle import (
-            reconcile_all_providers,
-            reconcile_provider,
-        )
+        try:
+            from audiagentic.components.optional.providers.services.lifecycle import (
+                reconcile_all_providers,
+                reconcile_provider,
+            )
+        except ImportError:
+            print_error("providers component not available")
+            return 1
 
         def _progress(event) -> None:
             message = getattr(event, "message", str(event))
-            print(message, flush=True)
+            print_message(message)
 
         if reconcile_all_match:
             result = reconcile_all_providers(project_root=project_root, on_progress=_progress)
-        else:
+        elif reconcile_one_match:
             result = reconcile_provider(reconcile_one_match.group(1).lower(), project_root=project_root, on_progress=_progress)
+        else:
+            print_error("providers component not available")
+            return 1
 
-        print(json.dumps(result, indent=2), flush=True)
+        print_json(result)
         return 0 if result.get("ok", True) else 1
 
     match = re.fullmatch(
@@ -54,11 +62,15 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
     action = match.group(1).lower()
     provider_id = match.group(2).lower()
 
-    from audiagentic.components.optional.providers.services.lifecycle import (
-        install_provider_cli,
-        repair_provider_cli,
-        uninstall_provider_cli,
-    )
+    try:
+        from audiagentic.components.optional.providers.services.lifecycle import (
+            install_provider_cli,
+            repair_provider_cli,
+            uninstall_provider_cli,
+        )
+    except ImportError:
+        print_error("providers component not available")
+        return 1
 
     handlers = {
         "install": install_provider_cli,
@@ -68,13 +80,18 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
 
     def _progress(event) -> None:
         message = getattr(event, "message", str(event))
-        print(f"[{provider_id}] {message}", flush=True)
+        print_message(f"[{provider_id}] {message}")
 
-    result = handlers[action](
+    handler = handlers.get(action)
+    if handler is None:
+        print_error("providers component not available")
+        return 1
+
+    result = handler(
         provider_id,
         dry_run=False,
         project_root=project_root,
         on_progress=_progress,
     )
-    print(json.dumps(result, indent=2), flush=True)
+    print_json(result)
     return 0 if result.get("status") in {"installed", "uninstalled", "repaired", "skipped"} else 1

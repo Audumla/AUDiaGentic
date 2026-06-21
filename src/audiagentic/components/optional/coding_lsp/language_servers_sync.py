@@ -1,9 +1,4 @@
-"""Language server sync from LSP component to provider configs.
-
-When the coding-lsp component is enabled, discovers which language servers
-are available on the system and writes them to each provider's config that
-declares a language_servers_config spec.
-"""
+"""Language server projection events from the LSP component."""
 from __future__ import annotations
 
 import logging
@@ -11,257 +6,247 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
-    CODING_LSP_DIR,
-    load_runtime_servers,
+from audiagentic.components.optional.coding_lsp import language_registry
+from audiagentic.components.optional.coding_lsp.runtime_resolver import (
+    active_language_bindings,
+    active_lsp_implementation,
+    resolve_active_runtime_servers,
 )
-from audiagentic.components.optional.providers.descriptors.base import LanguageServerEntry
-from audiagentic.components.optional.providers.descriptors.registry import all_descriptors
-from audiagentic.components.optional.providers.services.mcp import (
-    sync_managed_provider_mcp_subset,
+from audiagentic.foundation.components.ids import COMPONENT_CODING_LSP
+from audiagentic.foundation.event import DeliveryMode, get_bus
+from audiagentic.foundation.features.registry import (
+    get_binding_writer,
+    get_bindings,
+    get_implementation,
+    get_implementations,
+    register_binding_writer,
 )
+from audiagentic.components.optional.coding_lsp.language_servers import LanguageServerEntry
 from audiagentic.foundation.mcp import McpServerEntry
 from audiagentic.runtime.harness.paths import find_package_root
 
 logger = logging.getLogger(__name__)
 
-_AG_LSP_MANAGED_ID = "coding-lsp/ag-lsp"
+_LSP_PROVIDER_SYNC_EVENT = "coding-lsp.provider-projection.sync"
 
 
-def _ag_lsp_entry() -> tuple[str, McpServerEntry]:
-    python = sys.executable.replace("\\", "/")
-    src_dir = str(find_package_root(Path(__file__)).parent).replace("\\", "/")
-    return (
-        "ag-lsp",
-        McpServerEntry(
-            name="ag-lsp",
-            command=python,
-            args=("-m", "audiagentic.components.optional.coding_lsp.lsp_mcp"),
-            env={"PYTHONPATH": src_dir},
-        ),
+def _publish_provider_projection(
+    project_root: Path,
+    *,
+    action: str,
+    default: dict[str, Any],
+    **payload: Any,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    get_bus().publish(
+        _LSP_PROVIDER_SYNC_EVENT,
+        {
+            "project_root": project_root,
+            "action": action,
+            "result": result,
+            **payload,
+        },
+        metadata={
+            "source_component": COMPONENT_CODING_LSP,
+            "subject": {"kind": "component", "id": COMPONENT_CODING_LSP},
+        },
+        mode=DeliveryMode.SYNC,
     )
+    return result or default
 
 
-def sync_language_servers_to_providers(project_root: Path) -> dict[str, Any]:
-    """Discover available language servers and sync to all providers with language_servers_config.
+def _agent_lsp_args(project_root: Path) -> tuple[str, ...]:
+    args: list[str] = []
+    for language, server in resolve_active_runtime_servers(project_root).items():
+        command = ",".join(server.command)
+        if command:
+            args.append(f"{language}:{command}")
+    return tuple(args)
 
-    Returns summary of sync results per provider.
-    """
-    lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
-    try:
-        configured, errors, exists = load_runtime_servers(lsp_path)
-    except Exception:
-        logger.warning("Failed to load language server config", exc_info=True)
-        configured, errors, exists = {}, ["load failed"], lsp_path.exists()
 
-    if errors:
-        return {"ok": True, "synced": [], "skipped": "invalid lsp config", "errors": errors}
-    if not exists or not configured:
-        return {"ok": True, "synced": [], "skipped": "no valid configured language servers"}
+def _generic_mcp_projection_spec(implementation: str) -> dict[str, Any]:
+    descriptor = get_implementation(COMPONENT_CODING_LSP, implementation)
+    if descriptor is None:
+        return {}
+    projection = descriptor.raw.get("projection") or {}
+    if not isinstance(projection, dict):
+        return {}
+    spec = projection.get("generic-mcp") or {}
+    return spec if isinstance(spec, dict) else {}
 
-    servers_to_write: dict[str, LanguageServerEntry] = {}
-    for lang, server in configured.items():
-        servers_to_write[lang] = LanguageServerEntry(
-            language=lang,
+
+def _generic_mcp_managed_ids() -> set[str]:
+    ids: set[str] = set()
+    for descriptor in get_implementations(COMPONENT_CODING_LSP).values():
+        projection = descriptor.raw.get("projection") or {}
+        if not isinstance(projection, dict):
+            continue
+        generic_mcp = projection.get("generic-mcp") or {}
+        if not isinstance(generic_mcp, dict):
+            continue
+        managed_id = generic_mcp.get("managed-id")
+        if isinstance(managed_id, str) and managed_id:
+            ids.add(managed_id)
+    return ids
+
+
+def _render_projection_value(value: Any) -> Any:
+    if value == "package-python":
+        return sys.executable.replace("\\", "/")
+    if value == "package-src":
+        return str(find_package_root(Path(__file__)).parent).replace("\\", "/")
+    return value
+
+
+def _generic_mcp_projection(project_root: Path, implementation: str) -> dict[str, tuple[str, McpServerEntry]]:
+    spec = _generic_mcp_projection_spec(implementation)
+    managed_id = spec.get("managed-id")
+    name = spec.get("name")
+    command = spec.get("command")
+    if not all(isinstance(item, str) and item for item in (managed_id, name, command)):
+        return {}
+    raw_args = spec.get("args", ())
+    args = tuple(str(_render_projection_value(arg)) for arg in raw_args) if isinstance(raw_args, list) else ()
+    if spec.get("args-from-runtime-servers") is True:
+        args = (*args, *_agent_lsp_args(project_root))
+    raw_env = spec.get("env") or {}
+    env = (
+        {str(key): str(_render_projection_value(value)) for key, value in raw_env.items()}
+        if isinstance(raw_env, dict)
+        else {}
+    )
+    return {
+        managed_id: (
+            name,
+            McpServerEntry(
+                name=name,
+                command=str(_render_projection_value(command)),
+                args=args,
+                env=env,
+            ),
+        )
+    }
+
+
+def _lsp_json_language_server_projection(project_root: Path, feature: str) -> dict[str, LanguageServerEntry]:
+    server = resolve_active_runtime_servers(project_root).get(feature)
+    if server is None:
+        return {}
+    return {
+        feature: LanguageServerEntry(
+            language=feature,
             command=list(server.command),
             file_extensions=list(server.file_extensions),
             settings=dict(server.settings),
         )
-
-    results: dict[str, dict[str, Any]] = {}
-    synced: list[str] = []
-    skipped: list[str] = []
-
-    for descriptor in all_descriptors().values():
-        spec = descriptor.language_servers_config
-        if spec is None:
-            skipped.append(descriptor.provider_id)
-            continue
-
-        try:
-            config_path = spec.config_path
-            if callable(config_path):
-                config_path = config_path(project_root)
-            else:
-                config_path = project_root / config_path
-
-            spec.writer(config_path, servers_to_write)
-            synced.append(descriptor.provider_id)
-            results[descriptor.provider_id] = {
-                "ok": True,
-                "config_path": str(config_path),
-                "servers_written": list(servers_to_write.keys()),
-            }
-        except Exception:
-            logger.warning(
-                "Failed to sync language servers to %s",
-                descriptor.provider_id,
-                exc_info=True,
-            )
-            results[descriptor.provider_id] = {
-                "ok": False,
-                "error": "sync failed",
-            }
-            skipped.append(descriptor.provider_id)
-
-    return {
-        "ok": True,
-        "synced": synced,
-        "skipped": skipped,
-        "servers": list(servers_to_write.keys()),
-        "details": results,
     }
+
+
+def _register_builtin_binding_writers() -> None:
+    register_binding_writer(
+        COMPONENT_CODING_LSP,
+        "coding-lsp.lsp-json",
+        _lsp_json_language_server_projection,
+        projection_kind="language-server",
+    )
+
+
+_register_builtin_binding_writers()
+
+
+def _generic_lsp_projection_for_active_implementation(
+    project_root: Path,
+) -> dict[str, tuple[str, McpServerEntry]]:
+    _register_builtin_binding_writers()
+    active_implementation = active_lsp_implementation(project_root)
+    seen_writer_keys: set[str] = set()
+    desired: dict[str, tuple[str, McpServerEntry]] = {}
+    for (implementation, _feature_kind, _feature), binding in get_bindings(COMPONENT_CODING_LSP).items():
+        if implementation != active_implementation:
+            continue
+        writer_key = binding.projection_writer_key
+        if not writer_key or writer_key in seen_writer_keys:
+            continue
+        writer = get_binding_writer(COMPONENT_CODING_LSP, writer_key, projection_kind="generic-mcp")
+        desired.update(
+            writer(project_root) if writer is not None else _generic_mcp_projection(project_root, implementation)
+        )
+        seen_writer_keys.add(writer_key)
+    return desired
+
+
+def sync_language_servers_to_providers(project_root: Path) -> dict[str, Any]:
+    """Publish active language server config projection for provider observers."""
+    try:
+        _register_builtin_binding_writers()
+        configured: dict[str, LanguageServerEntry] = {}
+        for binding in active_language_bindings(project_root):
+            writer = get_binding_writer(
+                COMPONENT_CODING_LSP,
+                binding.projection_writer_key,
+                projection_kind="language-server",
+            )
+            if writer is not None:
+                configured.update(writer(project_root, binding.feature))
+    except Exception:
+        logger.warning("Failed to resolve active language server config", exc_info=True)
+        return {"ok": True, "synced": [], "skipped": "resolve failed", "errors": ["resolve failed"]}
+
+    if not configured:
+        return {"ok": True, "synced": [], "skipped": "no valid configured language servers"}
+
+    return _publish_provider_projection(
+        project_root,
+        action="sync-language-servers",
+        servers=configured,
+        default={"ok": True, "synced": [], "skipped": "no provider projection handler"},
+    )
 
 
 def sync_generic_lsp_mcp_to_providers(project_root: Path) -> dict[str, Any]:
-    """Propagate ag-lsp only to providers without native language server config."""
-    results: dict[str, dict[str, Any]] = {}
-    synced: list[str] = []
-    skipped: list[str] = []
-    desired_entry = {_AG_LSP_MANAGED_ID: _ag_lsp_entry()}
-
-    for descriptor in all_descriptors().values():
-        if descriptor.mcp_config is None:
-            skipped.append(descriptor.provider_id)
-            continue
-        self_provides_lsp = (
-            descriptor.language_servers_config is not None
-            or descriptor.on_lsp_enabled is not None
-        )
-        desired = {} if self_provides_lsp else desired_entry
-        result = sync_managed_provider_mcp_subset(
-            provider_id=descriptor.provider_id,
-            project_root=project_root,
-            desired_entries=desired,
-            managed_ids={_AG_LSP_MANAGED_ID},
-        )
-        results[descriptor.provider_id] = result
-        synced.append(descriptor.provider_id)
-
-    return {
-        "ok": True,
-        "synced": synced,
-        "skipped": skipped,
-        "details": results,
-    }
+    """Publish selected generic LSP MCP projection for provider observers."""
+    desired_entry = _generic_lsp_projection_for_active_implementation(project_root)
+    return _publish_provider_projection(
+        project_root,
+        action="sync-generic-mcp",
+        desired_entries=desired_entry,
+        managed_ids=_generic_mcp_managed_ids(),
+        default={"ok": True, "synced": [], "skipped": "no provider projection handler"},
+    )
 
 
 def provision_provider_lsp_support(project_root: Path) -> dict[str, Any]:
-    """Let providers that self-provide LSP install/configure their support.
-
-    Fires each descriptor's `on_lsp_enabled` hook (e.g. pi installs the pi-lens
-    extension). Best-effort: a failing provider is logged and skipped, never
-    blocking other providers or the enable flow.
-    """
-    results: dict[str, dict[str, Any]] = {}
-    provisioned: list[str] = []
-    skipped: list[str] = []
-
-    for descriptor in all_descriptors().values():
-        hook = descriptor.on_lsp_enabled
-        if hook is None:
-            skipped.append(descriptor.provider_id)
-            continue
-        try:
-            results[descriptor.provider_id] = hook(project_root)
-            provisioned.append(descriptor.provider_id)
-        except Exception:
-            logger.warning(
-                "Failed to provision LSP support for %s",
-                descriptor.provider_id,
-                exc_info=True,
-            )
-            results[descriptor.provider_id] = {"ok": False, "error": "provision failed"}
-
-    return {
-        "ok": True,
-        "provisioned": provisioned,
-        "skipped": skipped,
-        "details": results,
-    }
+    """Publish request for providers that self-provide LSP to configure support."""
+    return _publish_provider_projection(
+        project_root,
+        action="provision-support",
+        default={"ok": True, "provisioned": [], "skipped": "no provider projection handler"},
+    )
 
 
 def prune_language_servers_from_providers(project_root: Path) -> dict[str, Any]:
-    """Remove synced language server entries from provider configs on disable.
+    """Publish request to remove coding-lsp language server entries from providers.
 
-    Removes exactly the languages configured in lsp.json (the ones sync wrote),
-    via each provider's remover. Unmanaged/user-added entries are preserved.
-    If lsp.json is gone, there is nothing known to remove.
+    Used on component disable/uninstall, so it prunes *every* supported language,
+    not just the currently-active set: by the time this fires the feature state
+    may already be cleared (``resolve_active_runtime_servers`` would be empty),
+    which would otherwise orphan previously-projected entries in provider configs.
+    The per-provider removers are idempotent (no-op when the language is absent).
     """
-    lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
-    try:
-        configured, errors, exists = load_runtime_servers(lsp_path)
-    except Exception:
-        logger.warning("Failed to load language server config", exc_info=True)
-        configured, errors, exists = {}, ["load failed"], lsp_path.exists()
-    languages = list(configured.keys()) if (exists and not errors) else []
-
-    results: dict[str, dict[str, Any]] = {}
-    pruned: list[str] = []
-    skipped: list[str] = []
-
-    for descriptor in all_descriptors().values():
-        spec = descriptor.language_servers_config
-        if spec is None:
-            skipped.append(descriptor.provider_id)
-            continue
-
-        try:
-            config_path = spec.config_path
-            if callable(config_path):
-                config_path = config_path(project_root)
-            else:
-                config_path = project_root / config_path
-
-            removed = [lang for lang in languages if spec.remover(config_path, lang)]
-            pruned.append(descriptor.provider_id)
-            results[descriptor.provider_id] = {
-                "ok": True,
-                "config_path": str(config_path),
-                "removed": removed,
-            }
-        except Exception:
-            logger.warning(
-                "Failed to prune language servers from %s",
-                descriptor.provider_id,
-                exc_info=True,
-            )
-            results[descriptor.provider_id] = {
-                "ok": False,
-                "error": "prune failed",
-            }
-
-    return {
-        "ok": True,
-        "pruned": pruned,
-        "skipped": skipped,
-        "languages": languages,
-        "details": results,
-    }
+    languages = list(language_registry.all_languages().keys())
+    return _publish_provider_projection(
+        project_root,
+        action="prune-language-servers",
+        languages=languages,
+        default={"ok": True, "pruned": [], "skipped": "no provider projection handler", "languages": languages},
+    )
 
 
 def prune_generic_lsp_mcp_from_providers(project_root: Path) -> dict[str, Any]:
-    """Remove coding-lsp managed ag-lsp entries from every provider MCP config."""
-    results: dict[str, dict[str, Any]] = {}
-    pruned: list[str] = []
-    skipped: list[str] = []
-
-    for descriptor in all_descriptors().values():
-        if descriptor.mcp_config is None:
-            skipped.append(descriptor.provider_id)
-            continue
-        result = sync_managed_provider_mcp_subset(
-            provider_id=descriptor.provider_id,
-            project_root=project_root,
-            desired_entries={},
-            managed_ids={_AG_LSP_MANAGED_ID},
-        )
-        results[descriptor.provider_id] = result
-        pruned.append(descriptor.provider_id)
-
-    return {
-        "ok": True,
-        "pruned": pruned,
-        "skipped": skipped,
-        "details": results,
-    }
+    """Publish request to remove coding-lsp managed generic LSP MCP entries."""
+    return _publish_provider_projection(
+        project_root,
+        action="prune-generic-mcp",
+        managed_ids=_generic_mcp_managed_ids(),
+        default={"ok": True, "pruned": [], "skipped": "no provider projection handler"},
+    )
