@@ -1,0 +1,9 @@
+type: binding
+contract-version: v1
+parent: coding-lsp
+implementation: ag-lsp
+feature-kind: language
+feature: typescript
+uses-dependencies: [typescript-language-server]
+projection:
+  writer-key: coding-lsp.lsp-json

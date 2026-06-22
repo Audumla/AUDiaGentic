@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "job-id",
+    "prompt-id",
+    "provider-id",
+    "surface",
+    "stage",
+    "event-kind",
+    "message",
+    "timestamp"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "job-id": {
+      "type": "string"
+    },
+    "prompt-id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "provider-id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "surface": {
+      "type": "string",
+      "enum": [
+        "cli",
+        "vscode"
+      ]
+    },
+    "stage": {
+      "type": "string"
+    },
+    "event-kind": {
+      "type": "string",
+      "enum": [
+        "input-requested",
+        "input-submitted",
+        "input-applied",
+        "input-rejected",
+        "input-timeout",
+        "pause-requested",
+        "resume-requested",
+        "turn-complete"
+      ]
+    },
+    "message": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string"
+    },
+    "details": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

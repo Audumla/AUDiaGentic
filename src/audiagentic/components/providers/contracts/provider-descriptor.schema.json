@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "provider-id",
+    "install-mode",
+    "supports-jobs",
+    "supports-interactive",
+    "supports-skill-wrapper",
+    "supports-structured-output",
+    "supports-server-session",
+    "supports-baseline-healthcheck"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "provider-id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+    },
+    "install-mode": {
+      "type": "string"
+    },
+    "supports-jobs": {
+      "type": "boolean"
+    },
+    "supports-interactive": {
+      "type": "boolean"
+    },
+    "supports-skill-wrapper": {
+      "type": "boolean"
+    },
+    "supports-structured-output": {
+      "type": "boolean"
+    },
+    "supports-server-session": {
+      "type": "boolean"
+    },
+    "supports-baseline-healthcheck": {
+      "type": "boolean"
+    },
+    "supports-prompt-tag-launch": {
+      "type": "boolean"
+    },
+    "prompt-tag-syntaxes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "prefix-token-v1"
+        ]
+      }
+    },
+    "prompt-tag-cli-mode": {
+      "type": "string",
+      "enum": [
+        "native-pass-through",
+        "wrapper-normalize",
+        "extension-normalize",
+        "bridge-wrapper",
+        "unsupported"
+      ]
+    },
+    "prompt-tag-vscode-mode": {
+      "type": "string",
+      "enum": [
+        "native-pass-through",
+        "wrapper-normalize",
+        "extension-normalize",
+        "bridge-wrapper",
+        "unsupported"
+      ]
+    },
+    "requires-surface-settings-sync": {
+      "type": "boolean"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "supports-prompt-tag-launch"
+        ],
+        "properties": {
+          "supports-prompt-tag-launch": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "prompt-tag-syntaxes",
+          "prompt-tag-cli-mode",
+          "prompt-tag-vscode-mode",
+          "requires-surface-settings-sync"
+        ]
+      }
+    }
+  ]
+}
