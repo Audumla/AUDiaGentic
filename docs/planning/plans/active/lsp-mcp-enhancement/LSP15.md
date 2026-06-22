@@ -2,7 +2,7 @@
 id: LSP15
 order: 15
 plan: plan-lsp-mcp-enhancement
-state: draft
+state: done
 wave: W5.1
 phase: Phase 1
 ---
