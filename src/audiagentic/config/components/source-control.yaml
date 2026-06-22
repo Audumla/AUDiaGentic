@@ -1,0 +1,131 @@
+type: component
+contract-version: v1
+id: source-control
+display-name: Source Control
+description: Source control — installs and manages official git and GitHub MCP servers for providers
+detection-marker: .audiagentic/components/source-control.yaml
+depends-on:
+  - project
+
+dependencies:
+  git:
+    display-name: Git
+    probe: binary:git
+    via:
+      winget: Git.Git
+      scoop: git
+      brew: git
+      apt: git
+      dnf: git
+      pacman: git
+      choco: git
+
+  gh:
+    display-name: GitHub CLI
+    probe: binary:gh
+    via:
+      winget: GitHub.cli
+      scoop: gh
+      brew: gh
+      apt: gh
+      dnf: gh
+      pacman: github-cli
+      choco: gh
+
+  uv:
+    display-name: uv
+    probe: toolchain:uv
+    via:
+      winget: astral-sh.uv
+      scoop: uv
+      brew: uv
+    platform-fallback:
+      linux: [sh, -c, "curl -LsSf https://astral.sh/uv/install.sh | sh"]
+
+  gh-mcp:
+    display-name: GitHub MCP Extension
+    probe: command:gh mcp --help
+    requires: [gh]
+    toolchain: gh_extension
+    package: shuymn/gh-mcp
+    uninstall-package: gh-mcp
+
+files:
+  - path: .audiagentic/components/source-control.yaml
+    lifecycle: create-if-missing
+    description: Installation marker
+mcp-servers:
+  - name: ag-sc-mgmt
+    module: audiagentic.components.source_control.source_control_mcp
+    direct-tools: [get_source_control_status, install_dependencies, uninstall_dependencies]
+    description: Source control component management
+    propagate: audiagentic
+    instructions: >
+      Use get_source_control_status to check git, gh CLI, gh mcp extension, and uv (uvx).
+      The status includes a missing-dependencies list. If any are missing and the user
+      wants them installed, ASK the user first which to install, then call
+      install_dependencies(names=[...]). External MCP servers (git, github) are then
+      registered automatically into the audiagentic mcp.json on next refresh. Use
+      uninstall_dependencies(names=[...]) only when the user explicitly asks — never on
+      component uninstall.
+    tool-descriptions:
+      get_source_control_status: Return availability of git, gh CLI, gh mcp, uv plus list of missing dependencies.
+      install_dependencies: Install named source-control dependencies (git, gh, gh-mcp, uv) via host package manager after user confirms.
+      uninstall_dependencies: Uninstall named source-control dependencies via host package manager (explicit user action only).
+external-mcp-servers:
+  - name: git
+    command: uvx
+    args: [mcp-server-git, --repository, .]
+    requires: [uvx]
+    propagate: audiagentic,providers
+    description: Local git operations via official mcp-server-git
+    instructions: >
+      Use git MCP tools for local repository operations: status, diff, log,
+      commit, branch management, and staging.
+  - name: github
+    command: gh
+    args: [mcp, serve]
+    env:
+      GITHUB_TOKEN: "${GITHUB_TOKEN}"
+    requires: [gh]
+    probe: [gh, mcp, serve, --help]
+    propagate: audiagentic,providers
+    description: GitHub API operations via official gh mcp serve
+    instructions: >
+      Use github MCP tools for GitHub API operations: pull requests, issues,
+      releases, workflow dispatch, and code search.
+harness-instructions:
+  - section: "What you can do"
+    content: |
+      ### ag-sc-mgmt
+      - `get_source_control_status` — Check git, gh, gh-mcp, uv availability and list missing dependencies
+      - `install_dependencies` — Install missing dependencies (git, gh, gh-mcp, uv) after user confirms
+      - `uninstall_dependencies` — Uninstall named dependencies (explicit user action; not on component uninstall)
+
+      When installing the source-control component: check missing-dependencies, ASK the user
+      which to install, then call install_dependencies. The harness config and mcp.json are
+      refreshed automatically after install — no manual refresh step is needed.
+
+      ### Official MCP servers (installed by this component)
+
+      **git** (`mcp-server-git` via uvx)
+      - Git operations: status, diff, log, commit, branch, stage
+
+      **github** (`gh mcp serve` via GitHub CLI)
+      - GitHub operations: pull requests, issues, releases, workflow dispatch, code search
+
+lifecycle-hook: audiagentic.components.source_control.source_control_bootstrap.on_component_lifecycle
+status-hook: audiagentic.components.source_control.source_control_bootstrap.status_payload
+
+contributions:
+  - id: source-control/doctrine
+    owner: source-control
+    title: Source control doctrine
+    preferred-targets:
+      - skill
+      - instruction
+    content:
+      body: |
+        Do not invoke git or GitHub APIs directly — use the MCP tools.
+
+

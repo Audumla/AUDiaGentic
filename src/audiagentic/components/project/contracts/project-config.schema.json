@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "project-id",
+    "project-name",
+    "workflow-profile",
+    "tracked-docs-root",
+    "runtime-root",
+    "release-strategy"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "project-id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "project-name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "workflow-profile": {
+      "type": "string",
+      "enum": [
+        "lite",
+        "standard",
+        "strict"
+      ]
+    },
+    "tracked-docs-root": {
+      "const": "docs"
+    },
+    "runtime-root": {
+      "const": ".audiagentic/runtime"
+    },
+    "release-strategy": {
+      "type": "string"
+    },
+    "workflow-overrides": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "prompt-launch": {
+      "type": "object",
+      "properties": {
+        "syntax": {
+          "type": "string",
+          "const": "prefix-token-v1"
+        },
+        "allow-adhoc-target": {
+          "type": "boolean"
+        },
+        "default-review-policy": {
+          "type": "object",
+          "properties": {
+            "required-reviews": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "aggregation-rule": {
+              "type": "string",
+              "enum": [
+                "all-pass",
+                "majority-pass"
+              ]
+            },
+            "require-distinct-reviewers": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "required-reviews",
+            "aggregation-rule",
+            "require-distinct-reviewers"
+          ],
+          "additionalProperties": false
+        },
+        "default-stream-controls": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "tee-console": { "type": "boolean" },
+            "capture-stdout": { "type": "boolean" },
+            "capture-stderr": { "type": "boolean" },
+            "capture-progress": { "type": "boolean" },
+            "event-format": {
+              "type": "string",
+              "enum": ["ndjson"]
+            },
+            "timeout-warning-seconds": { "type": ["number", "null"] },
+            "timeout-seconds": { "type": ["number", "null"] },
+            "sink-error-policy": {
+              "type": "string",
+              "enum": ["warn", "fail", "normalize"]
+            },
+            "control-validation-policy": {
+              "type": "string",
+              "enum": ["normalize", "warn", "fail"]
+            },
+            "termination-policy": {
+              "type": "string",
+              "enum": ["graceful-kill", "warn-only"]
+            },
+            "invalid-event-policy": {
+              "type": "string",
+              "enum": ["quarantine", "fail", "warn"]
+            },
+            "event-write-policy": {
+              "type": "string",
+              "enum": ["locked-append", "append"]
+            },
+            "event-schema-validation": { "type": "boolean" },
+            "in-memory-max-bytes": { "type": ["integer", "null"] },
+            "large-output-warning-bytes": { "type": ["integer", "null"] },
+            "overflow-policy": {
+              "type": "string",
+              "enum": ["warn-only", "fail", "truncate-head", "truncate-tail"]
+            },
+            "overflow-marker-text": { "type": "string" }
+          },
+          "required": [
+            "enabled",
+            "tee-console",
+            "capture-stdout",
+            "capture-stderr",
+            "capture-progress",
+            "event-format"
+          ],
+          "additionalProperties": false
+        },
+        "default-input-controls": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "tee-console": { "type": "boolean" },
+            "capture-stdin": { "type": "boolean" },
+            "capture-input-events": { "type": "boolean" },
+            "allow-pause-resume": { "type": "boolean" },
+            "event-format": {
+              "type": "string",
+              "enum": ["ndjson"]
+            }
+          },
+          "required": [
+            "enabled",
+            "tee-console",
+            "capture-stdin",
+            "capture-input-events",
+            "allow-pause-resume",
+            "event-format"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "syntax"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}

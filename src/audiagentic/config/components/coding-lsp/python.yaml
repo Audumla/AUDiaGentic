@@ -1,0 +1,22 @@
+type: feature
+contract-version: v1
+parent: coding-lsp
+kind: language
+id: python
+display-name: Python (pyright)
+language-id: python
+server:
+  command: [pyright-langserver, --stdio]
+  file-extensions: [.py, .pyi]
+  workspace-config-files: [pyrightconfig.json]
+detection-markers: [pyproject.toml, setup.py, requirements.txt, setup.cfg, Pipfile]
+dependencies:
+  pyright:
+    display-name: Pyright (Python LSP)
+    probe: binary:pyright-langserver
+    toolchain: uv
+    package: pyright
+options-schema:
+  server-settings:
+    type: object
+    default: {}

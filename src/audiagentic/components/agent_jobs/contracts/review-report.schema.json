@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "review-id",
+    "subject",
+    "reviewer",
+    "criteria",
+    "findings",
+    "recommendation",
+    "follow-up-actions",
+    "created-at"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "review-id": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "job",
+            "artifact",
+            "packet",
+            "adhoc"
+          ]
+        },
+        "job-id": {
+          "type": "string"
+        },
+        "artifact-id": {
+          "type": "string"
+        },
+        "packet-id": {
+          "type": "string"
+        },
+        "adhoc-id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "reviewer": {
+      "type": "object",
+      "required": [
+        "provider-id",
+        "surface",
+        "session-id",
+        "prompt-id",
+        "reviewer-key"
+      ],
+      "properties": {
+        "provider-id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "surface": {
+          "type": "string",
+          "enum": [
+            "cli",
+            "vscode"
+          ]
+        },
+        "session-id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prompt-id": {
+          "type": "string"
+        },
+        "reviewer-key": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "finding-id",
+          "severity",
+          "blocking",
+          "summary",
+          "suggested-fix"
+        ],
+        "properties": {
+          "finding-id": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "minor",
+              "major",
+              "critical"
+            ]
+          },
+          "blocking": {
+            "type": "boolean"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "suggested-fix": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "recommendation": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "pass-with-notes",
+        "rework",
+        "block"
+      ]
+    },
+    "follow-up-actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "created-at": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}
