@@ -3,6 +3,7 @@ id: LSP22
 order: 22
 plan: plan-lsp-mcp-enhancement
 state: not_done
+complexity: complex
 wave: deferred
 phase: post-v1
 ---
