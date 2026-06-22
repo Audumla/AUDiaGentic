@@ -12,7 +12,7 @@ for path in (str(ROOT), str(SRC)):
         sys.path.insert(0, path)
 
 _ledger_history = pytest.importorskip(
-    "audiagentic.components.optional.ledger.history_import",
+    "audiagentic.components.ledger.history_import",
     reason="ledger history_import module not present in this build",
 )
 import_legacy_history = _ledger_history.import_legacy_history

@@ -15,7 +15,7 @@ from tests.integration.providers.harness import (
     uninstall_provider,
 )
 
-from audiagentic.components.optional.providers.workflow import supports_provider_cli_workflow
+from audiagentic.components.providers.workflow import supports_provider_cli_workflow
 
 pytestmark = [
     pytest.mark.mutates_host,

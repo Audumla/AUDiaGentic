@@ -520,7 +520,31 @@ def _resolve_language_server(file_path: Path, project_root: Path) -> tuple[str, 
     servers = discover_servers(project_root)
     server = resolve_server_for_file(file_path, servers)
     if server is None:
-        return None
+        ext = file_path.suffix.lower()
+        from audiagentic.components.coding_lsp import language_registry
+        from audiagentic.foundation.components.ids import COMPONENT_CODING_LSP
+        from audiagentic.foundation.features.base import FeatureState
+        from audiagentic.foundation.features.state import (
+            get_feature_state,
+            set_feature_state,
+        )
+        for lang_id, spec in language_registry.all_languages().items():
+            if ext in spec.file_extensions and lang_id not in servers:
+                state = get_feature_state(project_root, COMPONENT_CODING_LSP, "language", lang_id)
+                if not state.enabled:
+                    set_feature_state(
+                        project_root,
+                        COMPONENT_CODING_LSP,
+                        "language",
+                        lang_id,
+                        FeatureState(enabled=True, options=dict(state.options)),
+                    )
+                    servers = discover_servers(project_root)
+                    server = resolve_server_for_file(file_path, servers)
+                    if server is not None:
+                        break
+        if server is None:
+            return None
     for language, candidate in servers.items():
         if candidate == server:
             return language, server

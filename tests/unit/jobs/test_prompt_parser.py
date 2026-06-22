@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.optional.agent_jobs.prompt_parser import parse_prompt_launch_request
+from audiagentic.components.agent_jobs.prompt_parser import parse_prompt_launch_request
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 

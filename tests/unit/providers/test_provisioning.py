@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.optional.providers.descriptors.registry import all_descriptors
-from audiagentic.components.optional.providers.services.lifecycle import (
+from audiagentic.components.providers.descriptors.registry import all_descriptors
+from audiagentic.components.providers.services.lifecycle import (
     install_provider_cli,
     provider_cli_plan,
     provision_all_provider_clis,
@@ -62,8 +62,8 @@ def test_provider_cli_install_dry_run_does_not_touch_host() -> None:
 
 
 def test_codex_provider_cli_install_uses_workflow(monkeypatch) -> None:
-    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
-    import audiagentic.components.optional.providers.workflow.provider_cli as provider_workflow
+    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.workflow.provider_cli as provider_workflow
 
     class FakeStep:
         id = "install"
@@ -107,8 +107,8 @@ def test_codex_provider_cli_install_uses_workflow(monkeypatch) -> None:
 
 
 def test_codex_provider_cli_uninstall_uses_workflow(monkeypatch) -> None:
-    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
-    import audiagentic.components.optional.providers.workflow.provider_cli as provider_workflow
+    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.workflow.provider_cli as provider_workflow
 
     class FakeStep:
         id = "uninstall"
@@ -159,8 +159,8 @@ def test_provider_cli_uninstall_dry_run_does_not_touch_host() -> None:
 
 
 def test_pi_provider_cli_install_uses_harness_installer(monkeypatch) -> None:
-    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
-    import audiagentic.components.optional.providers.workflow.provider_cli as provider_workflow
+    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.workflow.provider_cli as provider_workflow
     from audiagentic.foundation.workflow.invocation import StepResult
 
     class FakeCallableStep:
@@ -182,8 +182,8 @@ def test_pi_provider_cli_install_uses_harness_installer(monkeypatch) -> None:
 
 
 def test_pi_provider_cli_uninstall_uses_harness_uninstaller(monkeypatch) -> None:
-    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
-    import audiagentic.components.optional.providers.workflow.provider_cli as provider_workflow
+    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.workflow.provider_cli as provider_workflow
     from audiagentic.foundation.workflow.invocation import StepResult
 
     class FakeCallableStep:
@@ -231,7 +231,7 @@ def test_all_provider_cli_dry_run_covers_installable_providers() -> None:
 def test_reconcile_provider_enables_when_cli_available_and_not_enabled(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
@@ -251,8 +251,8 @@ def test_reconcile_provider_enables_when_cli_available_and_not_enabled(
 def test_reconcile_provider_disables_when_cli_absent_and_was_enabled(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
-    from audiagentic.components.optional.providers.services.provider_config import (
+    import audiagentic.components.providers.services.lifecycle as lifecycle
+    from audiagentic.components.providers.services.provider_config import (
         set_provider_enabled,
     )
 
@@ -274,8 +274,8 @@ def test_reconcile_provider_disables_when_cli_absent_and_was_enabled(
 def test_reconcile_provider_noop_when_already_in_sync_enabled(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
-    from audiagentic.components.optional.providers.services.provider_config import (
+    import audiagentic.components.providers.services.lifecycle as lifecycle
+    from audiagentic.components.providers.services.provider_config import (
         set_provider_enabled,
     )
 
@@ -296,7 +296,7 @@ def test_reconcile_provider_noop_when_already_in_sync_enabled(
 def test_reconcile_provider_noop_when_already_in_sync_disabled(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
@@ -314,7 +314,7 @@ def test_reconcile_provider_noop_when_already_in_sync_disabled(
 def test_reconcile_all_providers_returns_one_entry_per_descriptor(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
@@ -328,7 +328,7 @@ def test_reconcile_all_providers_returns_one_entry_per_descriptor(
     assert result["action"] == "reconcile"
     assert result["ok"] is True
     # vscode-method providers are excluded from auto-reconcile
-    from audiagentic.components.optional.providers.descriptors.registry import (
+    from audiagentic.components.providers.descriptors.registry import (
         all_descriptors as _all,
     )
     expected = {
@@ -343,8 +343,8 @@ def test_reconcile_provider_does_not_fetch_catalog_by_default(
     monkeypatch, tmp_path: Path
 ) -> None:
     """fetch_catalog defaults False — catalog fn must not be called during reconcile."""
-    import audiagentic.components.optional.providers.services.catalog as catalog_mod
-    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.catalog as catalog_mod
+    import audiagentic.components.providers.services.lifecycle as lifecycle
 
     catalog_called: list[str] = []
 
@@ -370,7 +370,7 @@ def test_reconcile_provider_fetches_catalog_when_flag_set(
     monkeypatch, tmp_path: Path
 ) -> None:
     """fetch_catalog=True must trigger catalog fetch when enabling a provider."""
-    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle as lifecycle
 
     catalog_called: list[str] = []
 
@@ -381,7 +381,7 @@ def test_reconcile_provider_fetches_catalog_when_flag_set(
                    "executable": "/usr/bin/claude", "returncode": 0, "stdout": "1.0", "stderr": ""},
     )
 
-    import audiagentic.components.optional.providers.services.catalog as catalog_mod
+    import audiagentic.components.providers.services.catalog as catalog_mod
     monkeypatch.setattr(
         catalog_mod,
         "fetch_provider_catalog",
@@ -395,7 +395,7 @@ def test_reconcile_provider_fetches_catalog_when_flag_set(
 
 
 def test_reconcile_provider_emits_progress(monkeypatch, tmp_path: Path) -> None:
-    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
@@ -414,8 +414,8 @@ def test_reconcile_provider_emits_progress(monkeypatch, tmp_path: Path) -> None:
 def test_reconcile_all_providers_does_not_fetch_catalogs_by_default(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.optional.providers.services.catalog as catalog_mod
-    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.catalog as catalog_mod
+    import audiagentic.components.providers.services.lifecycle as lifecycle
 
     catalog_called: list[str] = []
 
@@ -439,7 +439,7 @@ def test_reconcile_all_providers_does_not_fetch_catalogs_by_default(
 def test_reconcile_all_providers_emits_progress_with_total(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.optional.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle as lifecycle
     from audiagentic.foundation.contracts.output import ComponentOutputEvent
 
     monkeypatch.setattr(

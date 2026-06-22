@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 
-from audiagentic.components.optional.providers.services.provider_config import (
+from audiagentic.components.providers.services.provider_config import (
     is_provider_enabled,
     load_provider_config,
     patch_provider_config,

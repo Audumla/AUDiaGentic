@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from audiagentic.execution.jobs.stages import execute_stage, stage_output_path
+from audiagentic.components.agent_jobs.stages import execute_stage, stage_output_path
 from tests.helpers import sandbox as sandbox_helper
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError

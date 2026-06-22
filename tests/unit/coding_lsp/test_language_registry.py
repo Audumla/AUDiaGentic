@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import subprocess
 
-from audiagentic.components.optional.coding_lsp import language_registry
+from audiagentic.components.coding_lsp import language_registry
 from audiagentic.foundation.components.dependencies import build_dependency_workflow
 from audiagentic.foundation.features.base import FeatureDescriptor, OptionSchema
 

@@ -22,27 +22,27 @@ import pytest
 import tomllib
 import yaml
 
-from audiagentic.components.optional.providers.descriptors.base import (
+from audiagentic.components.providers.descriptors.base import (
     McpConfigSpec,
     ProviderDescriptor,
 )
-from audiagentic.components.optional.providers.descriptors.registry import (
+from audiagentic.components.providers.descriptors.registry import (
     get_descriptor,
 )
-from audiagentic.components.optional.providers.services.lifecycle import (
+from audiagentic.components.providers.services.lifecycle import (
     install_provider_cli,
     uninstall_provider_cli,
 )
-from audiagentic.components.optional.providers.services.mcp import (
+from audiagentic.components.providers.services.mcp import (
     add_provider_mcp_server,
     list_provider_mcp_servers,
     remove_provider_mcp_server,
 )
-from audiagentic.components.optional.providers.services.provider_config import (
+from audiagentic.components.providers.services.provider_config import (
     is_provider_enabled,
     set_provider_enabled,
 )
-from audiagentic.components.optional.providers.surfaces.manager import (
+from audiagentic.components.providers.surfaces.manager import (
     apply_provider_surfaces,
     prune_provider_surfaces,
 )
@@ -390,7 +390,7 @@ class TestProviderDisableRemovesMcp:
                 config_path.write_text('{"mcpServers": {}}', encoding="utf-8")
 
         # Sync generic LSP MCP to providers
-        from audiagentic.components.optional.coding_lsp.language_servers_sync import (
+        from audiagentic.components.coding_lsp.language_servers_sync import (
             sync_generic_lsp_mcp_to_providers,
         )
         sync_result = sync_generic_lsp_mcp_to_providers(project_root)

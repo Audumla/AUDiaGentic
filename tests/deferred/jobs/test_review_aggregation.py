@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from audiagentic.execution.jobs.reviews import build_review_bundle
+from audiagentic.components.agent_jobs.reviews import build_review_bundle
 
 
 def _report(review_id: str, reviewer_key: str, recommendation: str) -> dict[str, str]:

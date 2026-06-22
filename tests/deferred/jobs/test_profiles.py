@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from audiagentic.execution.jobs.profiles import (
+from audiagentic.components.agent_jobs.profiles import (
     BUILTIN_PROFILES,
     apply_overrides,
     load_profile,

@@ -10,8 +10,8 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.components.optional.providers.adapters.copilot import adapter as copilot
-from audiagentic.components.optional.providers.protocols.streaming import (
+from audiagentic.components.providers.adapters.copilot import adapter as copilot
+from audiagentic.components.providers.protocols.streaming import (
     provider_streaming as streaming,
 )
 

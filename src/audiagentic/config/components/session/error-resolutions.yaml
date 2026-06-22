@@ -1,0 +1,6 @@
+VAL-SESSVIS-001: "The visibility config scope must be 'project' or 'global'."
+VAL-SESSVIS-002: "At least one visibility toggle (show_thinking_blocks or show_tool_blocks) must be provided."
+RES-SESSVIS-001: "The harness config file does not exist. Run a fresh install or check the config path."
+VAL-SESSVIS-003: "The ui config mapping is invalid. Check the harness config file structure."
+CFG-SESSSTAT-001: "No model is configured in the harness config. Set the model in harness/ag.yaml."
+RES-SESSSTAT-001: "The materialized models config file does not exist. Check the runtime harness setup."

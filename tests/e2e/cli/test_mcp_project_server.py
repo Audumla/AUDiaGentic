@@ -33,7 +33,7 @@ def _mcp(*messages: dict, project_root: Path) -> list[dict]:
         [
             sys.executable,
             "-m",
-            "audiagentic.components.core.project.project_mcp",
+            "audiagentic.components.project.project_mcp",
             "--project-root",
             str(project_root),
         ],

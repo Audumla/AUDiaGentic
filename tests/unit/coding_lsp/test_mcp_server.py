@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from audiagentic.components.optional.coding_lsp import lsp_api, lsp_manage_mcp, lsp_mcp
+from audiagentic.components.coding_lsp import lsp_api, lsp_manage_mcp, lsp_mcp
 
 
 def test_parse_position_basic() -> None:
@@ -24,20 +24,20 @@ def test_parse_position_no_column() -> None:
 
 
 def test_lsp_definition_delegates_to_api() -> None:
-    with patch("audiagentic.components.optional.coding_lsp.lsp_api.definition", return_value=[{"ok": True}]) as mock:
+    with patch("audiagentic.components.coding_lsp.lsp_api.definition", return_value=[{"ok": True}]) as mock:
         assert lsp_mcp.lsp_definition("file.py", "1:1") == [{"ok": True}]
         mock.assert_called_once_with("file.py", "1:1")
 
 
 def test_lsp_config_status_delegates_to_api() -> None:
-    with patch("audiagentic.components.optional.coding_lsp.lsp_config_api.config_status", return_value={"ok": True}) as mock:
+    with patch("audiagentic.components.coding_lsp.lsp_config_api.config_status", return_value={"ok": True}) as mock:
         assert lsp_manage_mcp.lsp_config_status(".") == {"ok": True}
         mock.assert_called_once_with(".")
 
 
 def test_lsp_list_implementations_delegates_to_api() -> None:
     with patch(
-        "audiagentic.components.optional.coding_lsp.lsp_config_api.list_implementations",
+        "audiagentic.components.coding_lsp.lsp_config_api.list_implementations",
         return_value={"active": "ag-lsp"},
     ) as mock:
         assert lsp_manage_mcp.lsp_list_implementations("root") == {"active": "ag-lsp"}
@@ -46,7 +46,7 @@ def test_lsp_list_implementations_delegates_to_api() -> None:
 
 def test_lsp_select_implementation_delegates_to_api() -> None:
     with patch(
-        "audiagentic.components.optional.coding_lsp.lsp_config_api.select_implementation",
+        "audiagentic.components.coding_lsp.lsp_config_api.select_implementation",
         return_value={"ok": True},
     ) as mock:
         assert lsp_manage_mcp.lsp_select_implementation("root", "agent-lsp") == {"ok": True}
@@ -55,7 +55,7 @@ def test_lsp_select_implementation_delegates_to_api() -> None:
 
 def test_lsp_set_language_option_delegates_to_api() -> None:
     with patch(
-        "audiagentic.components.optional.coding_lsp.lsp_config_api.set_language_option",
+        "audiagentic.components.coding_lsp.lsp_config_api.set_language_option",
         return_value={"ok": True},
     ) as mock:
         result = lsp_manage_mcp.lsp_set_language_option(
@@ -67,7 +67,7 @@ def test_lsp_set_language_option_delegates_to_api() -> None:
 
 def test_lsp_reset_language_option_delegates_to_api() -> None:
     with patch(
-        "audiagentic.components.optional.coding_lsp.lsp_config_api.reset_language_option",
+        "audiagentic.components.coding_lsp.lsp_config_api.reset_language_option",
         return_value={"ok": True},
     ) as mock:
         assert lsp_manage_mcp.lsp_reset_language_option(

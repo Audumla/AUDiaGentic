@@ -4,22 +4,22 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from audiagentic.components.optional.providers.adapters.codex.mcp_format import (
+from audiagentic.components.providers.adapters.codex.mcp_format import (
     read_codex_toml,
     remove_codex_toml,
     write_codex_toml,
 )
-from audiagentic.components.optional.providers.adapters.continue_.mcp_format import (
+from audiagentic.components.providers.adapters.continue_.mcp_format import (
     read_continue_json,
     remove_continue_json,
     write_continue_json,
 )
-from audiagentic.components.optional.providers.adapters.goose.mcp_format import (
+from audiagentic.components.providers.adapters.goose.mcp_format import (
     read_goose_yaml,
     remove_goose_yaml,
     write_goose_yaml,
 )
-from audiagentic.components.optional.providers.services.mcp import (
+from audiagentic.components.providers.services.mcp import (
     add_provider_mcp_server,
     list_provider_mcp_servers,
     reload_provider_mcp,
@@ -438,7 +438,7 @@ class TestSyncManagedProviderMcpSubset:
 
 class TestMcpConfigSpecOnDescriptors:
     def test_file_watch_providers_have_mcp_json(self) -> None:
-        from audiagentic.components.optional.providers.descriptors.registry import get_descriptor
+        from audiagentic.components.providers.descriptors.registry import get_descriptor
         for pid in ("claude", "qwen"):
             desc = get_descriptor(pid)
             assert desc.mcp_config is not None, f"{pid} missing mcp_config"
@@ -451,14 +451,14 @@ class TestMcpConfigSpecOnDescriptors:
         assert opencode.mcp_config.refresh_mode == "file-watch"
 
     def test_restart_required_providers(self) -> None:
-        from audiagentic.components.optional.providers.descriptors.registry import get_descriptor
+        from audiagentic.components.providers.descriptors.registry import get_descriptor
         for pid in ("gemini", "cline", "codex", "copilot", "roo", "pi"):
             desc = get_descriptor(pid)
             assert desc.mcp_config is not None, f"{pid} missing mcp_config"
             assert desc.mcp_config.refresh_mode == "restart-required"
 
     def test_special_format_providers(self) -> None:
-        from audiagentic.components.optional.providers.descriptors.registry import get_descriptor
+        from audiagentic.components.providers.descriptors.registry import get_descriptor
         goose = get_descriptor("goose")
         assert goose.mcp_config.format == "goose-yaml"
         assert goose.mcp_config.config_path == ".goose/config.yaml"
@@ -472,13 +472,13 @@ class TestMcpConfigSpecOnDescriptors:
         assert codex.mcp_config.config_path == ".codex/config.toml"
 
     def test_providers_without_mcp_config(self) -> None:
-        from audiagentic.components.optional.providers.descriptors.registry import get_descriptor
+        from audiagentic.components.providers.descriptors.registry import get_descriptor
         for pid in ("aider", "plandex", "openhands", "local-openai"):
             desc = get_descriptor(pid)
             assert desc.mcp_config is None, f"{pid} should have no mcp_config"
 
     def test_goose_and_continue_have_restart_required(self) -> None:
-        from audiagentic.components.optional.providers.descriptors.registry import get_descriptor
+        from audiagentic.components.providers.descriptors.registry import get_descriptor
         for pid in ("goose", "continue"):
             desc = get_descriptor(pid)
             assert desc.mcp_config.refresh_mode == "restart-required"

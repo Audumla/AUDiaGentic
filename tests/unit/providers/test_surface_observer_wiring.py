@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.optional.providers.surfaces import observer
+from audiagentic.components.providers.surfaces import observer
 
 
 @pytest.fixture()

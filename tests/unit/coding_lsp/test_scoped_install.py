@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from audiagentic.components.optional.coding_lsp import lsp_config_api
-from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
+from audiagentic.components.coding_lsp import lsp_config_api
+from audiagentic.components.coding_lsp.coding_lsp_config import (
     read_lsp_config,
     write_lsp_config,
 )
@@ -46,7 +46,7 @@ def _register_language_binding(language: str) -> None:
 def _configure(tmp_path: Path, *languages: str) -> None:
     servers = {}
     for lang in languages:
-        from audiagentic.components.optional.coding_lsp import language_registry
+        from audiagentic.components.coding_lsp import language_registry
         spec = language_registry.get_language(lang)
         servers[lang] = language_registry.server_spec_dict(spec)
         feature_registry.register(
@@ -76,11 +76,8 @@ def test_configured_dependency_ids_only_enabled(tmp_path: Path) -> None:
 def test_install_rejects_non_enabled_dependency(tmp_path: Path) -> None:
     _configure(tmp_path, "python")
 
-    async def _never(**_kw):  # run_with_output must not be reached
-        raise AssertionError("install should be rejected before running")
-
     result = asyncio.run(
-        lsp_config_api.install_lsp_dependencies(["clangd"], run_with_output=_never, root=str(tmp_path))
+        lsp_config_api.install_lsp_dependencies(["clangd"], root=str(tmp_path))
     )
     assert result["ok"] is False
     assert "clangd" in result["error"]
@@ -90,11 +87,8 @@ def test_install_empty_skips_when_nothing_missing(tmp_path: Path, monkeypatch) -
     _configure(tmp_path, "python")
     monkeypatch.setattr(lsp_config_api, "missing_configured_dependencies", lambda root: [])
 
-    async def _never(**_kw):
-        raise AssertionError("nothing to install")
-
     result = asyncio.run(
-        lsp_config_api.install_lsp_dependencies([], run_with_output=_never, root=str(tmp_path))
+        lsp_config_api.install_lsp_dependencies([], root=str(tmp_path))
     )
     assert result["ok"] is True
     assert result["installed"] == []
@@ -103,17 +97,11 @@ def test_install_empty_skips_when_nothing_missing(tmp_path: Path, monkeypatch) -
 def test_install_empty_targets_configured_missing(tmp_path: Path, monkeypatch) -> None:
     _configure(tmp_path, "python")
     monkeypatch.setattr(lsp_config_api, "missing_configured_dependencies", lambda root: ["pyright"])
-    captured: dict[str, object] = {}
-
-    async def _capture(*, ctx, logger, heartbeat_message, work):
-        captured["ran"] = True
-        return {"ok": True}
 
     result = asyncio.run(
-        lsp_config_api.install_lsp_dependencies([], run_with_output=_capture, root=str(tmp_path))
+        lsp_config_api.install_lsp_dependencies([], root=str(tmp_path))
     )
-    assert result == {"ok": True}
-    assert captured["ran"] is True
+    assert result.status == "ok"
 
 
 def test_install_accepts_active_implementation_dependency(tmp_path: Path) -> None:
@@ -132,18 +120,12 @@ def test_install_accepts_active_implementation_dependency(tmp_path: Path) -> Non
         )
     )
     set_implementation_state(tmp_path, "coding-lsp", "agent-lsp", ImplementationState(enabled=True))
-    captured: dict[str, object] = {}
-
-    async def _capture(*, ctx, logger, heartbeat_message, work):
-        captured["ran"] = True
-        return {"ok": True}
 
     result = asyncio.run(
-        lsp_config_api.install_lsp_dependencies(["agent-lsp"], run_with_output=_capture, root=str(tmp_path))
+        lsp_config_api.install_lsp_dependencies(["agent-lsp"], root=str(tmp_path))
     )
 
-    assert result == {"ok": True}
-    assert captured["ran"] is True
+    assert result.status == "ok"
 
 
 def test_enable_language_installs_then_enables(tmp_path: Path, monkeypatch) -> None:
@@ -159,7 +141,7 @@ def test_enable_language_installs_then_enables(tmp_path: Path, monkeypatch) -> N
     monkeypatch.setattr(lsp_config_api, "install_lsp_dependencies", _ok)
 
     result = asyncio.run(
-        lsp_config_api.enable_language(str(tmp_path), "python", run_with_output=_never)
+        lsp_config_api.enable_language(str(tmp_path), "python")
     )
     assert result["ok"] is True
     assert result["installed"] == ["pyright"]
@@ -180,7 +162,7 @@ def test_enable_language_rolls_back_on_install_failure(tmp_path: Path, monkeypat
     monkeypatch.setattr(lsp_config_api, "install_lsp_dependencies", _fail)
 
     result = asyncio.run(
-        lsp_config_api.enable_language(str(tmp_path), "python", run_with_output=_never)
+        lsp_config_api.enable_language(str(tmp_path), "python")
     )
     assert result["ok"] is False
     assert result["rolled_back"] is True
@@ -247,5 +229,3 @@ def test_language_option_rejects_unknown_option(tmp_path: Path) -> None:
     assert "unknown option" in result["error"]
 
 
-async def _never(**_kw):
-    raise AssertionError("run_with_output must not be called directly")

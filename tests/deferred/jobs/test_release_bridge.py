@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 SRC = ROOT / "src"
 for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
+
+pytest.importorskip("audiagentic.execution.jobs.records", reason="audiagentic.execution.jobs module deferred in current architecture")
 
 from audiagentic.execution.jobs.records import build_job_record
 from audiagentic.execution.jobs.release_bridge import build_change_event_from_job, emit_job_change

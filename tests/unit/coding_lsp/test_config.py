@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.optional.coding_lsp.coding_lsp_bootstrap import _active_dependency_ids
-from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
+from audiagentic.components.coding_lsp.coding_lsp_bootstrap import _active_dependency_ids
+from audiagentic.components.coding_lsp.coding_lsp_config import (
     detect_project_languages,
     discover_language_servers,
     load_runtime_servers,
@@ -12,7 +12,7 @@ from audiagentic.components.optional.coding_lsp.coding_lsp_config import (
     resolve_server_for_file,
     write_lsp_config,
 )
-from audiagentic.components.optional.coding_lsp.lsp_lifecycle import ServerConfig
+from audiagentic.components.coding_lsp.lsp_lifecycle import ServerConfig
 from audiagentic.foundation.features import registry as feature_registry
 from audiagentic.foundation.features.base import BindingDescriptor, FeatureState
 from audiagentic.foundation.features.state import set_feature_state

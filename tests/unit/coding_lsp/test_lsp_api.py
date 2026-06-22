@@ -3,9 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from audiagentic.components.optional.coding_lsp import lsp_api, lsp_config_api
-from audiagentic.components.optional.coding_lsp.coding_lsp_config import write_lsp_config
-from audiagentic.components.optional.coding_lsp.lsp_lifecycle import ServerConfig
+from audiagentic.components.coding_lsp import lsp_api, lsp_config_api
+from audiagentic.components.coding_lsp.coding_lsp_config import write_lsp_config
+from audiagentic.components.coding_lsp.lsp_lifecycle import ServerConfig
 from audiagentic.foundation.features import registry as feature_registry
 from audiagentic.foundation.features.base import (
     BindingDescriptor,
@@ -207,3 +207,41 @@ def test_open_file_session_uses_sync_document(tmp_path: Path, monkeypatch) -> No
     lsp_api.document_symbols(str(nested))
 
     mock_session.sync_document.assert_called_once()
+
+
+def test_resolve_language_server_auto_enables_language(tmp_path: Path, monkeypatch) -> None:
+    """When a file extension matches an unconfigured language, the language should be auto-enabled."""
+    (tmp_path / ".audiagentic").mkdir()
+    ts_file = tmp_path / "src" / "agent.ts"
+    ts_file.parent.mkdir(parents=True)
+    ts_file.write_text("export const x = 1;\n", encoding="utf-8")
+
+    feature_registry.register(
+        BindingDescriptor(
+            parent="coding-lsp",
+            implementation="ag-lsp",
+            feature_kind="language",
+            feature="typescript",
+            projection_writer_key="coding-lsp.lsp-json",
+        )
+    )
+    state = get_feature_state(tmp_path, "coding-lsp", "language", "typescript")
+    assert state.enabled is False
+
+    mock_server = MagicMock()
+    captured: dict[str, object] = {}
+
+    def _fake_get_or_create(project_root, language, server):
+        captured["language"] = language
+        captured["server"] = server
+        mock_session = MagicMock()
+        return mock_session
+
+    monkeypatch.setattr(lsp_api._session_manager, "get_or_create", _fake_get_or_create)
+
+    result = lsp_api.definition(str(ts_file), "1:1")
+
+    assert isinstance(result, list)
+    assert captured.get("language") == "typescript"
+    updated_state = get_feature_state(tmp_path, "coding-lsp", "language", "typescript")
+    assert updated_state.enabled is True

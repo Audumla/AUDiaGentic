@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from audiagentic.components.optional.providers.descriptors.base import (
+from audiagentic.components.providers.descriptors.base import (
     AgentFile,
     McpConfigSpec,
     ProviderDescriptor,
 )
-from audiagentic.components.optional.providers.descriptors.feature_mapping import (
+from audiagentic.components.providers.descriptors.feature_mapping import (
     KIND_MCP,
     KIND_SKILLS,
     KIND_SURFACE,
@@ -59,7 +59,7 @@ def test_derived_features_are_implementation_scoped_to_the_provider() -> None:
 def test_real_providers_register_expected_impl_features() -> None:
     # all_descriptors() re-syncs implementation + feature registration for every
     # built-in provider; assert the derived impl-scoped features are present.
-    from audiagentic.components.optional.providers.descriptors import (
+    from audiagentic.components.providers.descriptors import (
         registry as descriptor_registry,
     )
 

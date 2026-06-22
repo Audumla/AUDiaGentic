@@ -1,0 +1,6 @@
+CON-ARCHIVE-001: "The current ledger has no events to archive. Record change events before archiving."
+VAL-FRAGMENT-001: "The change event failed schema validation. Check the required fields in the event."
+CON-FRAGMENT-001: "A fragment with this event-id already exists with different content. Use a new event-id."
+CON-SYNCL-001: "Another process holds the sync lock. Wait for it to complete or remove the stale lock."
+VAL-RELINST-001: "The release type is not supported. Supported types: python, node, java, go, rust, simple."
+INT-RELEASE-001: "The ledger archive event was not handled. Check the event bus and ledger component."

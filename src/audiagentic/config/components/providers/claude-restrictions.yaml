@@ -1,0 +1,20 @@
+policies:
+  default:
+    allowed: []
+  actions:
+    implement:
+      allowed:
+        - Read
+        - Edit
+        - Write
+        - Bash
+        - Agent
+        - TodoWrite
+    plan:
+      allowed:
+        - Read
+        - Agent
+    review:
+      allowed:
+        - Read
+        - TodoWrite

@@ -25,7 +25,7 @@ providers:
         [
             sys.executable,
             "-m",
-            "audiagentic.components.optional.providers.validate_ids",
+            "audiagentic.components.providers.validate_ids",
             str(tmp_path),
         ],
         cwd=ROOT,

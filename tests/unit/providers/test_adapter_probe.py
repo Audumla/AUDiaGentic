@@ -14,8 +14,8 @@ import sys
 
 import pytest
 
-from audiagentic.components.optional.providers.adapters import probe
-from audiagentic.components.optional.providers.adapters.probe import (
+from audiagentic.components.providers.adapters import probe
+from audiagentic.components.providers.adapters.probe import (
     probe_cli_version,
     run_cli,
 )
@@ -99,7 +99,7 @@ def test_run_cli_executes_cmd_shim_that_bare_list_cannot(tmp_path, monkeypatch) 
 
 def test_opencode_probe_delegates_to_shared_helper(monkeypatch) -> None:
     """Regression: opencode probe routes through probe_cli_version, not a bare run."""
-    from audiagentic.components.optional.providers.adapters.opencode import descriptor as oc
+    from audiagentic.components.providers.adapters.opencode import descriptor as oc
 
     seen: dict[str, object] = {}
 

@@ -12,9 +12,9 @@ for path in (str(ROOT), str(SRC)):
 
 from tests.helpers import sandbox as sandbox_helper
 
-from audiagentic.components.optional.agent_jobs import review_launch
-from audiagentic.components.optional.agent_jobs.prompt_launch import launch_prompt_request
-from audiagentic.components.optional.agent_jobs.prompt_parser import parse_prompt_launch_request
+from audiagentic.components.agent_jobs import review_launch
+from audiagentic.components.agent_jobs.prompt_launch import launch_prompt_request
+from audiagentic.components.agent_jobs.prompt_parser import parse_prompt_launch_request
 from audiagentic.runtime.state.jobs_store import job_record_path
 
 

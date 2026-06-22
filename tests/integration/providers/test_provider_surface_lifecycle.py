@@ -87,10 +87,10 @@ def setup_provider_surfaces(project_root: Path) -> None:
     # Enabled-aware projection: a provider only receives managed MCP entries and
     # surface files when it is enabled. Enable every provider so propagation and
     # surface apply target the stub configs / surface files created above.
-    from audiagentic.components.optional.providers.descriptors.registry import (
+    from audiagentic.components.providers.descriptors.registry import (
         all_descriptors as all_provider_descriptors,
     )
-    from audiagentic.components.optional.providers.services.provider_config import (
+    from audiagentic.components.providers.services.provider_config import (
         set_provider_enabled,
     )
     for provider_id in all_provider_descriptors():
@@ -109,7 +109,7 @@ def apply_surfaces(project_root: Path) -> None:
     Surface changes may not fire in test isolation (no event bus), so we call
     these explicitly.
     """
-    from audiagentic.components.optional.providers.surfaces.manager import (
+    from audiagentic.components.providers.surfaces.manager import (
         apply_provider_surfaces,
         prune_provider_surfaces,
     )
@@ -185,7 +185,7 @@ def managed_blocks_in(file_path: Path) -> set[str]:
     if not match:
         return set()
     titles = re.findall(r"^#{1,6}\s+(.+?)\s*$", match.group(1), re.MULTILINE)
-    from audiagentic.components.optional.providers.surfaces.contributions import (
+    from audiagentic.components.providers.surfaces.contributions import (
         load_surface_contributions,
     )
     id_by_title = {c.title.strip(): c.contribution_id for c in load_surface_contributions()}
@@ -209,7 +209,7 @@ def _provider_mcp_server_names(component_id: str) -> set[str]:
 
 def _component_contribution_block_ids(component_id: str) -> set[str]:
     """Compute expected surface block IDs for a component (project_root=None scan)."""
-    from audiagentic.components.optional.providers.surfaces.contributions import (
+    from audiagentic.components.providers.surfaces.contributions import (
         load_surface_contributions,
     )
 

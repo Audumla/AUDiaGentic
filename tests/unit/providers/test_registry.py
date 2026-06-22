@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from audiagentic.components.optional.providers.services.provider_registry import (
+from audiagentic.components.providers.services.provider_registry import (
     load_provider_registry,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError

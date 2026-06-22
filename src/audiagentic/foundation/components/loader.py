@@ -23,10 +23,7 @@ logger = logging.getLogger(__name__)
 # Resolve relative to the installed package — works in both editable installs and wheels.
 _PACKAGE_DIR = Path(__file__).resolve().parents[2]  # audiagentic/
 _COMPONENTS_CONFIG_DIR = _PACKAGE_DIR / "config" / "components"
-_ALL_COMPONENT_CONFIG_DIRS = [
-    _COMPONENTS_CONFIG_DIR / "core",
-    _COMPONENTS_CONFIG_DIR / "optional",
-]
+_ALL_COMPONENT_CONFIG_DIRS = [_COMPONENTS_CONFIG_DIR]
 
 
 def _component_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
@@ -41,7 +38,7 @@ def _component_error(code_number: int, message: str, **details: object) -> Audia
 
 
 def component_yaml_path(component_id: str) -> Path:
-    """Return the config YAML path for a component, searching core then optional."""
+    """Return the config YAML path for a component in the unified components dir."""
     for base in _ALL_COMPONENT_CONFIG_DIRS:
         candidate = base / f"{component_id}.yaml"
         if candidate.exists():
@@ -124,8 +121,8 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
         for hi in (data.get("harness-instructions") or [])
     )
 
-    # Components under a "core" subdirectory are automatically core
-    is_core = bool(data.get("core", False)) or path.parent.name == "core"
+    # Core flag is determined solely by the YAML descriptor's core field
+    is_core = bool(data.get("core", False))
 
     descriptor = ComponentDescriptor(
         type=data["type"],
@@ -155,7 +152,7 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
 def register_all_components(config_dirs: list[Path] | None = None) -> list[ComponentDescriptor]:
     """Load and register every *.yaml file across all component config dirs.
 
-    Defaults to config/components/{core,optional}/ (top-level YAMLs only).
+    Defaults to config/components/ (top-level YAMLs only).
     Idempotent — re-registering an already-known component id is a no-op overwrite.
 
     After loading descriptors, imports any declared lifecycle-observer modules so
@@ -194,6 +191,13 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
             except Exception:
                 logger.warning("Failed to import lifecycle observer for %s", descriptor.component_id, exc_info=True)
     initialize_lifecycle_hook_dispatch()
+
+    from audiagentic.foundation.contracts.error_resolutions import (
+        load_all_error_resolutions,
+    )
+
+    load_all_error_resolutions(targets)
+
     return descriptors
 
 
