@@ -1,9 +1,0 @@
-type: binding
-contract-version: v1
-parent: coding-lsp
-implementation: agent-lsp
-feature-kind: language
-feature: typescript
-uses-dependencies: [agent-lsp, typescript-language-server]
-projection:
-  writer-key: agent-lsp.mcp-args

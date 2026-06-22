@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from audiagentic.components.optional.providers.services.models import resolve_model_selection
-from audiagentic.components.optional.providers.services.provider_catalog import (
+from audiagentic.components.providers.services.models import resolve_model_selection
+from audiagentic.components.providers.services.provider_catalog import (
     build_model_catalog,
     validate_model_catalog,
 )

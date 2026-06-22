@@ -12,9 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.optional.providers import skill_surfaces
-from audiagentic.components.optional.providers.descriptors.registry import all_descriptors
-from audiagentic.components.optional.providers.surfaces import contributions, manager
+from audiagentic.components.providers import skill_surfaces
+from audiagentic.components.providers.descriptors.registry import all_descriptors
+from audiagentic.components.providers.surfaces import contributions, manager
 
 
 def _skill_paths_for_tag(project_root: Path, tag_id: str) -> list[Path]:
@@ -29,13 +29,13 @@ def _skill_paths_for_tag(project_root: Path, tag_id: str) -> list[Path]:
 # ── active_tag_ids ────────────────────────────────────────────────────────────
 
 def test_active_tag_ids_none_returns_all_loaded() -> None:
-    from audiagentic.components.optional.providers.tags.registry import all_tags_loaded
+    from audiagentic.components.providers.tags.registry import all_tags_loaded
 
     assert contributions.active_tag_ids(None) == set(all_tags_loaded())
 
 
 def test_active_tag_ids_filters_by_owner_state(monkeypatch: pytest.MonkeyPatch) -> None:
-    from audiagentic.components.optional.providers.tags.base import ActionDescriptor
+    from audiagentic.components.providers.tags.base import ActionDescriptor
 
     def _tag(tag_id: str, owner: str) -> ActionDescriptor:
         return ActionDescriptor(
@@ -53,7 +53,7 @@ def test_active_tag_ids_filters_by_owner_state(monkeypatch: pytest.MonkeyPatch) 
         "tag-noowner": _tag("tag-noowner", ""),
     }
     monkeypatch.setattr(
-        "audiagentic.components.optional.providers.tags.registry.all_tags_loaded",
+        "audiagentic.components.providers.tags.registry.all_tags_loaded",
         lambda: fake_tags,
     )
     monkeypatch.setattr(
@@ -107,7 +107,7 @@ def test_prune_keeps_active_tag_skill_files(
 
     # Enabled-aware: a skill-capable provider must be enabled for its active-tag
     # skills to survive prune.
-    from audiagentic.components.optional.providers.services.provider_config import (
+    from audiagentic.components.providers.services.provider_config import (
         set_provider_enabled,
     )
     for descriptor in all_descriptors().values():
@@ -128,7 +128,7 @@ def test_prune_keeps_active_tag_skill_files(
 
 def test_skill_generation_skips_inactive_tags(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "audiagentic.components.optional.providers.surfaces.contributions.active_tag_ids",
+        "audiagentic.components.providers.surfaces.contributions.active_tag_ids",
         lambda project_root=None: set(),
     )
     skills = skill_surfaces._load_skills_from_registry(Path("/tmp/project"))

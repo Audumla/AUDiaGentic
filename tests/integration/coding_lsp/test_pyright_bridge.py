@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 from tests.integration.coding_lsp.conftest import requires_pyright
 
-from audiagentic.components.optional.coding_lsp.lsp_bridge import LspJsonRpc
+from audiagentic.components.coding_lsp.lsp_bridge import LspJsonRpc
 
 
 @requires_pyright
@@ -40,7 +40,7 @@ def test_pyright_workspace_symbols():
     """Test workspace/symbol request against pyright."""
     from pathlib import Path
 
-    from audiagentic.components.optional.coding_lsp.lsp_lifecycle import (
+    from audiagentic.components.coding_lsp.lsp_lifecycle import (
         LspSession,
         ServerConfig,
     )

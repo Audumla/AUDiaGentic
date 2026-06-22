@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from audiagentic.components.optional.providers.services.provider_config import (
+from audiagentic.components.providers.services.provider_config import (
     validate_prompt_surface,
     validate_provider_config,
 )

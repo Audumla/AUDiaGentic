@@ -7,15 +7,11 @@ from audiagentic.foundation.features import registry as feature_registry
 
 
 def _coding_lsp_yaml_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "src" / "audiagentic" / "config" / "components" / "optional" / "coding-lsp.yaml"
+    return Path(__file__).resolve().parents[3] / "src" / "audiagentic" / "config" / "components" / "coding-lsp.yaml"
 
 
-def _optional_config_dir() -> Path:
+def _config_dir() -> Path:
     return _coding_lsp_yaml_path().parent
-
-
-def _core_config_dir() -> Path:
-    return _optional_config_dir().parent / "core"
 
 
 def setup_function() -> None:
@@ -42,7 +38,7 @@ def test_coding_lsp_yaml_loads() -> None:
 def test_coding_lsp_has_lifecycle_observer() -> None:
     path = _coding_lsp_yaml_path()
     descriptor = register_from_yaml(path)
-    assert descriptor.lifecycle_observer == "audiagentic.components.optional.coding_lsp.coding_lsp_bootstrap"
+    assert descriptor.lifecycle_observer == "audiagentic.components.coding_lsp.coding_lsp_bootstrap"
 
 
 def test_coding_lsp_has_detection_marker() -> None:
@@ -52,7 +48,7 @@ def test_coding_lsp_has_detection_marker() -> None:
 
 
 def test_coding_lsp_registers_nested_implementation_and_language_features() -> None:
-    register_all_components([_core_config_dir(), _optional_config_dir()])
+    register_all_components([_config_dir()])
 
     assert feature_registry.get_implementation("coding-lsp", "ag-lsp") is not None
     agent_lsp = feature_registry.get_implementation("coding-lsp", "agent-lsp")
@@ -64,7 +60,7 @@ def test_coding_lsp_registers_nested_implementation_and_language_features() -> N
 
 
 def test_coding_lsp_registers_ag_lsp_language_bindings() -> None:
-    register_all_components([_core_config_dir(), _optional_config_dir()])
+    register_all_components([_config_dir()])
 
     bindings = feature_registry.get_bindings("coding-lsp")
 

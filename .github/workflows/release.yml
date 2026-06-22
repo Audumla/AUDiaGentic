@@ -47,7 +47,7 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          from audiagentic.components.optional.release import release_api
+          from audiagentic.components.release import release_api
 
           result = release_api.finalize(
               project_root=Path(".").resolve(),

@@ -13,7 +13,7 @@ for path in (str(ROOT), str(SRC)):
 
 from tests.helpers import sandbox as sandbox_helper  # noqa: E402
 
-from audiagentic.components.optional.release.release_please.manage import (
+from audiagentic.components.release.release_please.manage import (
     BASELINE_WORKFLOW,
     CANDIDATE_NAME,
     LEGACY_NAME,

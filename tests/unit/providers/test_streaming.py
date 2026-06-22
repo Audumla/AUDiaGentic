@@ -4,10 +4,10 @@ import io
 import json
 from pathlib import Path
 
-from audiagentic.components.optional.providers.protocols.streaming import (
+from audiagentic.components.providers.protocols.streaming import (
     provider_streaming as streaming,
 )
-from audiagentic.components.optional.providers.protocols.streaming.sinks import (
+from audiagentic.components.providers.protocols.streaming.sinks import (
     ConsoleSink,
     InMemorySink,
 )

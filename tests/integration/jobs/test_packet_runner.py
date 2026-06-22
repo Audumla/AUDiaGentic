@@ -11,8 +11,8 @@ for path in (str(ROOT), str(SRC)):
 
 from tests.helpers import sandbox as sandbox_helper
 
-from audiagentic.components.optional.agent_jobs.packet_runner import run_packet
-from audiagentic.components.optional.agent_jobs.stages import stage_output_path
+from audiagentic.components.agent_jobs.packet_runner import run_packet
+from audiagentic.components.agent_jobs.stages import stage_output_path
 from audiagentic.runtime.state.jobs_store import job_record_path
 
 

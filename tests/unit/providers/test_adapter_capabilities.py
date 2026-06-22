@@ -16,11 +16,11 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.optional.providers.descriptors.base import (
+from audiagentic.components.providers.descriptors.base import (
     LanguageServerEntry,
     ProviderDescriptor,
 )
-from audiagentic.components.optional.providers.descriptors.registry import all_descriptors
+from audiagentic.components.providers.descriptors.registry import all_descriptors
 from audiagentic.foundation.mcp import McpServerEntry
 
 _DESCRIPTORS = all_descriptors()

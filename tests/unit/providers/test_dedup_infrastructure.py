@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from audiagentic.components.optional.providers.adapters.cli import require_executable
-from audiagentic.components.optional.providers.protocols.streaming.base_extractor import (
+from audiagentic.components.providers.adapters.cli import require_executable
+from audiagentic.components.providers.protocols.streaming.base_extractor import (
     BaseEventExtractor,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -137,7 +137,7 @@ def test_require_executable_raises_when_not_found(monkeypatch) -> None:
 
 def test_build_extractor_stream_sinks_no_event_sink() -> None:
     """When no working-root/job-id, no NormalizedEventSink exists; extractor not added."""
-    from audiagentic.components.optional.providers.protocols.streaming.provider_streaming import (
+    from audiagentic.components.providers.protocols.streaming.provider_streaming import (
         build_extractor_stream_sinks,
     )
 
@@ -156,10 +156,10 @@ def test_build_extractor_stream_sinks_no_event_sink() -> None:
 
 def test_build_extractor_stream_sinks_with_event_sink(tmp_path) -> None:
     """With working-root+job-id, extractor replaces the NormalizedEventSink."""
-    from audiagentic.components.optional.providers.protocols.streaming.provider_streaming import (
+    from audiagentic.components.providers.protocols.streaming.provider_streaming import (
         build_extractor_stream_sinks,
     )
-    from audiagentic.components.optional.providers.protocols.streaming.sinks import (
+    from audiagentic.components.providers.protocols.streaming.sinks import (
         NormalizedEventSink,
     )
 
@@ -185,13 +185,13 @@ def test_build_extractor_stream_sinks_with_event_sink(tmp_path) -> None:
 # ── Adapter extractor_name values ────────────────────────────────────────────
 
 @pytest.mark.parametrize("adapter_path,cls_name,expected_name", [
-    ("audiagentic.components.optional.providers.adapters.claude.adapter", "ClaudeEventExtractor", "claude-stream-json"),
-    ("audiagentic.components.optional.providers.adapters.cline.adapter", "ClineEventExtractor", "cline-ndjson"),
-    ("audiagentic.components.optional.providers.adapters.codex.adapter", "CodexEventExtractor", "codex-milestone"),
-    ("audiagentic.components.optional.providers.adapters.copilot.adapter", "CopilotEventExtractor", "copilot-plaintext"),
-    ("audiagentic.components.optional.providers.adapters.gemini.adapter", "GeminiEventExtractor", "gemini-plaintext"),
-    ("audiagentic.components.optional.providers.adapters.opencode.adapter", "OpencodeEventExtractor", "opencode-ndjson"),
-    ("audiagentic.components.optional.providers.adapters.qwen.adapter", "QwenEventExtractor", "qwen-plaintext"),
+    ("audiagentic.components.providers.adapters.claude.adapter", "ClaudeEventExtractor", "claude-stream-json"),
+    ("audiagentic.components.providers.adapters.cline.adapter", "ClineEventExtractor", "cline-ndjson"),
+    ("audiagentic.components.providers.adapters.codex.adapter", "CodexEventExtractor", "codex-milestone"),
+    ("audiagentic.components.providers.adapters.copilot.adapter", "CopilotEventExtractor", "copilot-plaintext"),
+    ("audiagentic.components.providers.adapters.gemini.adapter", "GeminiEventExtractor", "gemini-plaintext"),
+    ("audiagentic.components.providers.adapters.opencode.adapter", "OpencodeEventExtractor", "opencode-ndjson"),
+    ("audiagentic.components.providers.adapters.qwen.adapter", "QwenEventExtractor", "qwen-plaintext"),
 ])
 def test_adapter_extractor_name(adapter_path, cls_name, expected_name) -> None:
     import importlib

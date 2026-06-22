@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.optional.agent_jobs.prompt_syntax import (
+from audiagentic.components.agent_jobs.prompt_syntax import (
     load_canonical_tags,
     load_no_body_required_tags,
     load_prompt_syntax,

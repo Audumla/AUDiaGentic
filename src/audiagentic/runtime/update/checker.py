@@ -1,4 +1,4 @@
-﻿"""Check for available audiagentic updates via GitHub Releases API."""
+"""Check for available audiagentic updates via GitHub Releases API."""
 from __future__ import annotations
 
 import json

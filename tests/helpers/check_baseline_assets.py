@@ -18,7 +18,7 @@ def _build_skill_surface_paths() -> list[str]:
     are only generated when the component is active.
     """
     try:
-        from audiagentic.components.optional.agent_jobs.prompt_syntax import load_prompt_syntax
+        from audiagentic.components.agent_jobs.prompt_syntax import load_prompt_syntax
         from audiagentic.foundation.components.registry import is_enabled, is_installed
     except ImportError:
         return []

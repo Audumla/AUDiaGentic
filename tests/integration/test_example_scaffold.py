@@ -6,7 +6,7 @@ import tests.dev.seed_example_project as seed_example_project
 import yaml
 from jsonschema import Draft202012Validator
 
-from audiagentic.components.optional.agent_jobs.prompt_syntax import load_prompt_syntax
+from audiagentic.components.agent_jobs.prompt_syntax import load_prompt_syntax
 from audiagentic.foundation.contracts.schema_registry import read_schema
 
 

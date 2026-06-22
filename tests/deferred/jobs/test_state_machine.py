@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from audiagentic.execution.jobs.records import build_job_record
-from audiagentic.execution.jobs.state_machine import (
+from audiagentic.components.agent_jobs.records import build_job_record
+from audiagentic.components.agent_jobs.state_machine import (
     LEGAL_TRANSITIONS,
     transition_and_persist,
     transition_job,

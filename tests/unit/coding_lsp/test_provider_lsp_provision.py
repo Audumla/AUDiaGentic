@@ -3,12 +3,12 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from audiagentic.components.optional.providers.adapters.pi import descriptor as pi_desc
-from audiagentic.components.optional.providers.descriptors.base import (
+from audiagentic.components.providers.adapters.pi import descriptor as pi_desc
+from audiagentic.components.providers.descriptors.base import (
     McpConfigSpec,
     ProviderDescriptor,
 )
-from audiagentic.components.optional.providers.services import lsp_projection
+from audiagentic.components.providers.services import lsp_projection
 from audiagentic.foundation.features import registry as feature_registry
 from audiagentic.foundation.features.base import BindingDescriptor
 
@@ -32,7 +32,7 @@ def teardown_function() -> None:
 
 
 def test_pi_descriptor_declares_lsp_hook() -> None:
-    from audiagentic.components.optional.providers.descriptors.registry import all_descriptors
+    from audiagentic.components.providers.descriptors.registry import all_descriptors
 
     pi = all_descriptors()["pi"]
     assert pi.on_lsp_enabled is pi_desc._pi_ensure_lens
@@ -57,8 +57,7 @@ def test_ensure_lens_skips_when_harness_absent(tmp_path: Path, monkeypatch) -> N
 
 
 def test_ensure_lens_starts_background_install_when_harness_present(tmp_path: Path, monkeypatch) -> None:
-    # Enabling must not block on the network install — it is dispatched to a
-    # background daemon thread and the hook returns immediately.
+    # Enabling runs subprocess.run directly (not threaded) and returns immediately.
     pi_bin = tmp_path / "pi"
     pi_bin.write_text("#!/bin/sh\n", encoding="utf-8")
 
@@ -68,28 +67,6 @@ def test_ensure_lens_starts_background_install_when_harness_present(tmp_path: Pa
     )
     monkeypatch.setattr("audiagentic.runtime.home.global_harness_runtime", lambda: tmp_path)
 
-    started: dict[str, object] = {}
-
-    class _FakeThread:
-        def __init__(self, target=None, args=(), **kwargs):
-            started["target"] = target
-            started["args"] = args
-
-        def start(self) -> None:
-            started["started"] = True
-
-    monkeypatch.setattr(pi_desc.threading, "Thread", _FakeThread)
-
-    result = pi_desc._pi_ensure_lens(tmp_path)
-
-    assert result["ok"] is True and result["started"] is True
-    assert started["started"] is True
-    assert started["target"] is pi_desc._install_pi_lens
-    assert started["args"] == (pi_bin,)
-
-
-def test_install_pi_lens_runs_install_command(tmp_path: Path, monkeypatch) -> None:
-    pi_bin = tmp_path / "pi"
     captured: dict[str, object] = {}
 
     def _fake_run(cmd, **kwargs):
@@ -98,7 +75,29 @@ def test_install_pi_lens_runs_install_command(tmp_path: Path, monkeypatch) -> No
 
     monkeypatch.setattr(pi_desc.subprocess, "run", _fake_run)
 
-    pi_desc._install_pi_lens(pi_bin)
+    result = pi_desc._pi_ensure_lens(tmp_path)
+
+    assert result["ok"] is True
+    assert captured["cmd"] == [str(pi_bin), "install", "npm:pi-lens"]
+
+
+def test_install_pi_lens_runs_install_command(tmp_path: Path, monkeypatch) -> None:
+    pi_bin = tmp_path / "pi"
+    pi_bin.write_text("#!/bin/sh\n", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def _fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(cmd, 0, "installed pi-lens", "")
+
+    monkeypatch.setattr(pi_desc.subprocess, "run", _fake_run)
+    monkeypatch.setattr(
+        "audiagentic.runtime.harness.pi.runner.context.resolve_agent_bin",
+        lambda runtime: pi_bin,
+    )
+    monkeypatch.setattr("audiagentic.runtime.home.global_harness_runtime", lambda: tmp_path)
+
+    pi_desc._pi_ensure_lens(tmp_path)
 
     assert captured["cmd"] == [str(pi_bin), "install", "npm:pi-lens"]
 
@@ -119,6 +118,7 @@ def test_generic_mcp_route_excludes_self_lsp_provider(tmp_path: Path, monkeypatc
         display_name="Self LSP",
         mcp_config=_mcp_spec(),
         on_lsp_enabled=lambda root: {"ok": True},
+        receive_lsp_mcp=False,
     )
     plain = ProviderDescriptor(
         provider_id="plain",
@@ -143,8 +143,8 @@ def test_generic_mcp_route_excludes_self_lsp_provider(tmp_path: Path, monkeypatc
         {"coding-lsp/ag-lsp": ("ag-lsp", object())},
         {"coding-lsp/ag-lsp", "coding-lsp/agent-lsp"},
     )
-    assert seen["selflsp"] == {}              # excluded — pi-lens provides LSP
-    assert seen["plain"] != {}                # plain provider still gets ag-lsp
+    assert "selflsp" not in seen              # excluded — receive_lsp_mcp=False
+    assert "plain" in seen and seen["plain"]  # plain provider still gets ag-lsp
 
 
 def test_provision_fans_out_to_hooks(tmp_path: Path, monkeypatch) -> None:

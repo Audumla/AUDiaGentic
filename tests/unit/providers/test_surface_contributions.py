@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import audiagentic.components.optional.providers  # noqa: F401
-from audiagentic.components.optional.providers.surfaces.base import (
+import audiagentic.components.providers  # noqa: F401
+from audiagentic.components.providers.surfaces.base import (
     MANAGED_REGION_BEGIN,
     MANAGED_REGION_END,
     SurfaceBlock,
     apply_managed_blocks,
 )
-from audiagentic.components.optional.providers.surfaces.contributions import (
+from audiagentic.components.providers.surfaces.contributions import (
     load_surface_contributions,
 )
-from audiagentic.components.optional.providers.surfaces.manager import (
+from audiagentic.components.providers.surfaces.manager import (
     apply_provider_surfaces,
     build_provider_surface_blocks,
     plan_provider_surfaces,
@@ -28,7 +28,7 @@ def _install_agent_ledger(tmp_path: Path) -> None:
 
 def _enable_provider(tmp_path: Path, *provider_ids: str) -> None:
     """Enable providers so enabled-aware surface projection targets them."""
-    from audiagentic.components.optional.providers.services.provider_config import (
+    from audiagentic.components.providers.services.provider_config import (
         set_provider_enabled,
     )
 
