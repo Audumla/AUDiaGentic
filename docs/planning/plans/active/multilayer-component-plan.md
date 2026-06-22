@@ -9,6 +9,10 @@ summary: Evolve toward a multilayer component architecture with unified state ma
 
 Evolve toward a multilayer component architecture with unified state machines and generic host capabilities
 
+## Reference
+
+- [Completed plan](../completed/multilayer-component-plan-completed.md) — core design, state model, descriptor model, resolution model, stages 0-3 detail
+
 ## Items
 
 - [ML01](multilayer-component/ML01.md)
