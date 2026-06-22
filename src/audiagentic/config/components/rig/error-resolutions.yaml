@@ -1,0 +1,5 @@
+CFG-RIGBIN-001: "The current platform is not supported for embedded rig binaries. Supported: win32, darwin, linux."
+CON-RIGBIN-004: "Downloaded binary SHA256 checksum does not match. The file may be corrupted — re-download."
+RES-RIGBIN-002: "No matching binary asset found for this platform in the latest release."
+RES-RIGBIN-003: "The expected binary was not found after extraction. The archive may be incomplete."
+RES-RIGBIN-005: "Could not locate the inner executable in the extracted archive. Check the archive structure."
