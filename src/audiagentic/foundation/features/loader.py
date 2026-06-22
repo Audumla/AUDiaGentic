@@ -56,7 +56,6 @@ def load_feature_from_yaml(path: Path) -> FeatureDescriptor:
         raise _descriptor_error(
             path,
             "VAL-FDESC-003",
-            field="implementation",
             value=implementation,
         )
     scope = data.get("scope") or (FEATURE_SCOPE_IMPLEMENTATION if implementation else FEATURE_SCOPE_SHARED)
@@ -64,7 +63,6 @@ def load_feature_from_yaml(path: Path) -> FeatureDescriptor:
         raise _descriptor_error(
             path,
             "VAL-FDESC-004",
-            field="scope",
             value=scope,
             allowed=[FEATURE_SCOPE_SHARED, FEATURE_SCOPE_IMPLEMENTATION],
         )
@@ -73,7 +71,6 @@ def load_feature_from_yaml(path: Path) -> FeatureDescriptor:
         raise _descriptor_error(
             path,
             "VAL-FDESC-005",
-            field="dependencies",
             value=dependencies,
         )
     descriptor = FeatureDescriptor(
@@ -108,7 +105,6 @@ def load_implementation_from_yaml(path: Path) -> ImplementationDescriptor:
         raise _descriptor_error(
             path,
             "VAL-FDESC-007",
-            field="dependencies",
             value=dependencies,
         )
     descriptor = ImplementationDescriptor(
@@ -142,7 +138,6 @@ def load_binding_from_yaml(path: Path) -> BindingDescriptor:
         raise _descriptor_error(
             path,
             "VAL-FDESC-009",
-            field="uses-dependencies",
             value=uses_dependencies,
         )
     projection = data.get("projection") or {}
@@ -150,7 +145,6 @@ def load_binding_from_yaml(path: Path) -> BindingDescriptor:
         raise _descriptor_error(
             path,
             "VAL-FDESC-010",
-            field="projection",
             value=projection,
         )
     writer_key = projection.get("writer-key", "")
@@ -158,7 +152,6 @@ def load_binding_from_yaml(path: Path) -> BindingDescriptor:
         raise _descriptor_error(
             path,
             "VAL-FDESC-011",
-            field="projection.writer-key",
             value=writer_key,
         )
     descriptor = BindingDescriptor(
@@ -182,7 +175,6 @@ def register_from_yaml(path: Path) -> FeatureDescriptor | ImplementationDescript
         raise _descriptor_error(
             path,
             "VAL-FDESC-012",
-            field="type",
             value=type_value,
         )
     try:
@@ -191,7 +183,6 @@ def register_from_yaml(path: Path) -> FeatureDescriptor | ImplementationDescript
         raise _descriptor_error(
             path,
             "VAL-FDESC-012",
-            field="type",
             value=type_value,
             supported=[t.value for t in DescriptorType],
         )
@@ -205,7 +196,6 @@ def register_from_yaml(path: Path) -> FeatureDescriptor | ImplementationDescript
     raise _descriptor_error(
         path,
         "VAL-FDESC-012",
-        field="type",
         value=type_value,
         supported=[t.value for t in DescriptorType],
     )
