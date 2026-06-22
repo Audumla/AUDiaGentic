@@ -3,6 +3,7 @@ id: LSP20
 order: 20
 plan: plan-lsp-mcp-enhancement
 state: not_done
+complexity: complex
 wave: W6
 phase: Phase 2
 ---
