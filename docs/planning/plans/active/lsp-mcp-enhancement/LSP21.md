@@ -3,6 +3,7 @@ id: LSP21
 order: 21
 plan: plan-lsp-mcp-enhancement
 state: not_done
+validate-first: true
 complexity: complex
 wave: W7
 phase: Phase 3-7
