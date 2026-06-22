@@ -3,3 +3,4 @@ VAL-PROJFILE-002: "The resolved path escapes the project root — this is a secu
 RES-PROJFILE-001: "The file was not found at the specified path. Verify the path is correct and the file exists."
 VAL-PROJFILE-003: "The path points to a directory, not a file. Provide a file path instead."
 VAL-PROJFILE-004: "The JSON file could not be parsed. Check for syntax errors in the file."
+CON-PROJCOMP-001: "Core components cannot be uninstalled. Only optional components can be removed."
