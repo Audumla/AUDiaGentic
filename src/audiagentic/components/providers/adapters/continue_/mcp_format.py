@@ -1,0 +1,74 @@
+"""Continue config.json MCP server format handlers.
+
+Format: {"mcpServers": [{"name": ..., "command": ..., "args": [...]}]}
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from audiagentic.foundation.mcp import McpServerEntry
+
+
+def read_continue_json(path: Path) -> dict[str, McpServerEntry]:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    result = {}
+    for server in data.get("mcpServers", []):
+        name = server.get("name", "")
+        if not name:
+            continue
+        result[name] = McpServerEntry(
+            name=name,
+            command=server.get("command", ""),
+            args=tuple(server.get("args", [])),
+            env=dict(server.get("env", {})),
+        )
+    return result
+
+
+def write_continue_json(path: Path, entries: dict[str, McpServerEntry]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing: dict[str, Any] = {}
+    if path.exists():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    servers: list[dict[str, Any]] = list(existing.get("mcpServers", []))
+    by_name = {s.get("name"): i for i, s in enumerate(servers)}
+    for name, entry in entries.items():
+        server_entry: dict[str, Any] = {
+            "name": entry.name,
+            "command": entry.command,
+            "args": list(entry.args),
+        }
+        if entry.env:
+            server_entry["env"] = dict(entry.env)
+        if name in by_name:
+            servers[by_name[name]] = server_entry
+        else:
+            servers.append(server_entry)
+    existing["mcpServers"] = servers
+    path.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+
+
+def remove_continue_json(path: Path, name: str) -> bool:
+    if not path.exists():
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False
+    servers = data.get("mcpServers", [])
+    new_servers = [s for s in servers if s.get("name") != name]
+    if len(new_servers) == len(servers):
+        return False
+    data["mcpServers"] = new_servers
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return True

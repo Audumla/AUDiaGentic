@@ -1,0 +1,23 @@
+type: feature
+contract-version: v1
+parent: coding-lsp
+kind: language
+id: typescript
+display-name: TypeScript (tsserver)
+language-id: typescript
+server:
+  command: [typescript-language-server, --stdio]
+  file-extensions: [.ts, .tsx, .js, .jsx, .mjs, .cjs]
+  workspace-config-files: [tsconfig.json]
+detection-markers: [tsconfig.json, package.json]
+dependencies:
+  typescript-language-server:
+    display-name: TypeScript Language Server
+    probe: all-binaries:typescript-language-server,tsserver
+    toolchain: npm
+    package: [typescript-language-server, typescript]
+    uninstall-package: [typescript-language-server, typescript]
+options-schema:
+  server-settings:
+    type: object
+    default: {}

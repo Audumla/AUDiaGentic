@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "stage-result",
+    "artifacts",
+    "next-stage-recommendation"
+  ],
+  "properties": {
+    "stage-result": {
+      "type": "string",
+      "enum": [
+        "success",
+        "failure",
+        "skipped"
+      ]
+    },
+    "artifacts": {
+      "type": "array"
+    },
+    "next-stage-recommendation": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "stop",
+        "escalate"
+      ]
+    },
+    "warnings": {
+      "type": "array"
+    }
+  }
+}

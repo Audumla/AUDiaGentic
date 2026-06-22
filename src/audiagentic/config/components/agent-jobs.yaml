@@ -1,0 +1,47 @@
+type: component
+contract-version: v1
+id: agent-jobs
+display-name: Agent Jobs
+description: Execution/jobs layer — workflow action tags, job records, session artifacts, and prompt tag doctrine.
+detection-marker: .audiagentic/components/agent-jobs.yaml
+depends-on:
+  - project
+feature-kinds:
+  - action
+files:
+  - path: .audiagentic/components/agent-jobs.yaml
+    lifecycle: create-if-missing
+    description: Installation marker
+  - path: .audiagentic/runtime/jobs
+    lifecycle: runtime-only
+    recursive: true
+    description: Job records and artifacts
+  - path: .audiagentic/runtime/sessions
+    lifecycle: runtime-only
+    recursive: true
+    description: Agent session input and review state
+  - path: .audiagentic/skills/ag-implement/skill.md
+    lifecycle: required-managed
+    description: ag-implement canonical skill source
+  - path: .audiagentic/skills/ag-plan/skill.md
+    lifecycle: required-managed
+    description: ag-plan canonical skill source
+  - path: .audiagentic/skills/ag-review/skill.md
+    lifecycle: required-managed
+    description: ag-review canonical skill source
+
+contributions:
+  - id: agent-jobs/prompt-tags
+    owner: agent-jobs
+    title: Prompt tag doctrine
+    preferred-targets:
+      - instruction
+    content:
+      body: |
+        - First non-empty line is the routing tag; remaining lines are the raw prompt body.
+        - Route tagged prompts through the AUDiaGentic workflow bridge — do not handle inline.
+        - Keep tag semantics identical to the launch contract; do not invent aliases.
+        - Preserve raw prompt text and provenance: provider-id, surface, session-id survive normalization.
+  - config: components/agent-jobs/ag-implement.yaml
+  - config: components/agent-jobs/ag-plan.yaml
+  - config: components/agent-jobs/ag-review.yaml
