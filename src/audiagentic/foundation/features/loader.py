@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.errors import AudiaGenticError, get_error_message
 from audiagentic.foundation.io import load_yaml_file
 
 from .base import (
@@ -18,11 +18,11 @@ from .options import load_option_schema
 from .registry import register
 
 
-def _descriptor_error(path: Path, code: str, message: str, **details: Any) -> AudiaGenticError:
+def _descriptor_error(path: Path, code: str, **details: Any) -> AudiaGenticError:
     return AudiaGenticError(
         code=code,
         kind="feature-descriptors",
-        message=message,
+        message=get_error_message(code),
         details={"path": str(path), **details},
     )
 
@@ -33,7 +33,6 @@ def _require_string(data: dict[str, Any], key: str, path: Path) -> str:
         raise _descriptor_error(
             path,
             "VAL-FDESC-001",
-            "feature descriptor field must be a non-empty string",
             field=key,
             value=value,
         )
@@ -46,7 +45,6 @@ def load_feature_from_yaml(path: Path) -> FeatureDescriptor:
         raise _descriptor_error(
             path,
             "VAL-FDESC-002",
-            "expected feature descriptor type",
             expected="feature",
             actual=data.get("type"),
         )
@@ -58,7 +56,6 @@ def load_feature_from_yaml(path: Path) -> FeatureDescriptor:
         raise _descriptor_error(
             path,
             "VAL-FDESC-003",
-            "feature implementation field must be a string",
             field="implementation",
             value=implementation,
         )
@@ -67,7 +64,6 @@ def load_feature_from_yaml(path: Path) -> FeatureDescriptor:
         raise _descriptor_error(
             path,
             "VAL-FDESC-004",
-            "invalid feature scope",
             field="scope",
             value=scope,
             allowed=[FEATURE_SCOPE_SHARED, FEATURE_SCOPE_IMPLEMENTATION],
@@ -77,7 +73,6 @@ def load_feature_from_yaml(path: Path) -> FeatureDescriptor:
         raise _descriptor_error(
             path,
             "VAL-FDESC-005",
-            "feature dependencies must be a mapping",
             field="dependencies",
             value=dependencies,
         )
@@ -103,7 +98,6 @@ def load_implementation_from_yaml(path: Path) -> ImplementationDescriptor:
         raise _descriptor_error(
             path,
             "VAL-FDESC-006",
-            "expected implementation descriptor type",
             expected="implementation",
             actual=data.get("type"),
         )
@@ -114,7 +108,6 @@ def load_implementation_from_yaml(path: Path) -> ImplementationDescriptor:
         raise _descriptor_error(
             path,
             "VAL-FDESC-007",
-            "implementation dependencies must be a mapping",
             field="dependencies",
             value=dependencies,
         )
@@ -137,7 +130,6 @@ def load_binding_from_yaml(path: Path) -> BindingDescriptor:
         raise _descriptor_error(
             path,
             "VAL-FDESC-008",
-            "expected binding descriptor type",
             expected="binding",
             actual=data.get("type"),
         )
@@ -150,7 +142,6 @@ def load_binding_from_yaml(path: Path) -> BindingDescriptor:
         raise _descriptor_error(
             path,
             "VAL-FDESC-009",
-            "binding uses-dependencies must be a list of strings",
             field="uses-dependencies",
             value=uses_dependencies,
         )
@@ -159,7 +150,6 @@ def load_binding_from_yaml(path: Path) -> BindingDescriptor:
         raise _descriptor_error(
             path,
             "VAL-FDESC-010",
-            "binding projection must be a mapping",
             field="projection",
             value=projection,
         )
@@ -168,7 +158,6 @@ def load_binding_from_yaml(path: Path) -> BindingDescriptor:
         raise _descriptor_error(
             path,
             "VAL-FDESC-011",
-            "binding projection.writer-key must be a string",
             field="projection.writer-key",
             value=writer_key,
         )
@@ -193,7 +182,6 @@ def register_from_yaml(path: Path) -> FeatureDescriptor | ImplementationDescript
         raise _descriptor_error(
             path,
             "VAL-FDESC-012",
-            "descriptor type field must be a non-empty string",
             field="type",
             value=type_value,
         )
@@ -203,7 +191,6 @@ def register_from_yaml(path: Path) -> FeatureDescriptor | ImplementationDescript
         raise _descriptor_error(
             path,
             "VAL-FDESC-012",
-            "unsupported feature descriptor type",
             field="type",
             value=type_value,
             supported=[t.value for t in DescriptorType],
@@ -218,7 +205,6 @@ def register_from_yaml(path: Path) -> FeatureDescriptor | ImplementationDescript
     raise _descriptor_error(
         path,
         "VAL-FDESC-012",
-        "unsupported feature descriptor type",
         field="type",
         value=type_value,
         supported=[t.value for t in DescriptorType],
