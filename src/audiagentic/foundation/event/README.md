@@ -11,9 +11,11 @@ The event layer is the communication backbone between components. It allows comp
 ## Architecture
 
 ```
-Publisher → StructuredLog (JSONL) + EventBus → Subscribers
-                                              ↓
-                                        FileEventStore (optional)
+Publisher → EventService → StructuredLog (JSONL) + EventBus → Subscribers
+                                             ↓
+                                       FileEventStore (optional)
+                                             ↓
+                                       ReplayService
 ```
 
 ## Components
@@ -55,6 +57,14 @@ Canonical dataclass wrapper for all events. Auto-generates metadata:
 
 Serializable via `to_dict()` / `from_dict()`.
 
+### EventService (`event_service.py`)
+
+Thin publisher that writes canonical event records to `StructuredLog` (local JSONL) and dispatches through `EventBus` (shared runtime delivery). Workflow-specific behavior (propagation, automation) lives in event subscribers, not here.
+
+- `publish(event_type, payload, metadata, mode)` — emits to log + bus
+- `sync_delivery_mode()` — returns SYNC mode for synchronous lifecycle delivery
+- `supports_sync` — always `True` for in-process bus
+
 ### StructuredLog (`event_log.py`)
 
 Append-only JSONL structured logger aligned with the OpenTelemetry Logs data model. Each record includes `timestamp`, `observed_timestamp`, `severity_text`, `body`, and `attributes`, with optional `trace_id` and `span_id`. Event publishers use `emit_event()` to project `EventEnvelope` into this schema. Domain modules should delegate operational/audit records here instead of deriving component-specific log formats inside reusable foundation code.
@@ -67,6 +77,13 @@ Optional file-based event persistence with atomic writes (temp file + rename). B
 - `query(from_timestamp, to_timestamp, event_type_pattern)` — filtered retrieval
 - `cleanup(older_than_days)` — retention management
 - Filename format: `{timestamp}_{sanitized_type}_{event_id}.json`
+
+### ReplayService (`event_replay.py`)
+
+Replays persisted events from `FileEventStore`. Optionally re-dispatches to subscribers.
+
+- `replay(from_timestamp, to_timestamp, event_type_pattern)` — returns count of replayed events
+- `dispatch_on_replay` — when `True`, replayed events trigger subscribers
 
 ### Configuration (`event_config.py`)
 
@@ -108,11 +125,18 @@ Follows spec-23 dot-notation: `{component}.{noun}.{verb}` or `{component}.{noun}
 ### Publishing an event
 
 ```python
-from audiagentic.foundation.event import StructuredLog, get_bus, DeliveryMode
+from audiagentic.foundation.event import EventService, StructuredLog, get_bus
 from pathlib import Path
 
-# Via StructuredLog (local JSONL):
+# Via EventService (log + bus):
 log = StructuredLog(Path("runtime/planning/events.jsonl"))
+service = EventService(log)
+service.publish(
+    "planning.item.state.changed",
+    {"id": "task-001", "old_state": "draft", "new_state": "in_progress"},
+    {"subject": {"kind": "task", "id": "task-001"}},
+    mode="sync",
+)
 
 # Direct to bus:
 bus = get_bus()
@@ -156,7 +180,9 @@ class MQTTBus(EventBusProtocol):
 |------|----------------|
 | `event_bus.py` | EventBus, EventBusProtocol, singleton, pattern matching, cycle detection |
 | `envelope.py` | EventEnvelope dataclass with auto-metadata |
+| `event_service.py` | EventService — publishes to log + bus |
 | `event_log.py` | StructuredLog — OpenTelemetry-style JSONL writer |
 | `event_store.py` | FileEventStore — optional file persistence with atomic writes |
+| `event_replay.py` | ReplayService — replay persisted events |
 | `event_config.py` | EventLayerConfig dataclasses and YAML loader |
 | `event_exceptions.py` | EventBusError, CycleDetectedError, SubscriberError, PersistenceError |
