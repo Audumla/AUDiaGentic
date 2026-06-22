@@ -1,18 +1,34 @@
 ---
 id: LSP13
 order: 13
-plan: unknown
+plan: plan-lsp-mcp-enhancement
 state: draft
 wave: W4.1
+phase: Phase 0
 ---
 
 # Cache TTLs for diagnostics and capabilities
 
-## Wave 4 — Caching & observability
+## Context
 
-Add TTL-based expiry for diagnostics and capabilities cache.
+Wave W4.1 — Caching & observability (completes Phase 0).
 
-**Validate:** Stale entries expire; survive no content change.
+## Steps
 
-**Depends:** LSP04
-**Files:** `lsp_lifecycle.py`
+Add cache TTLs for diagnostics and capabilities. Stale entries expire; survive no content change.
+
+## Files
+
+`lsp_lifecycle.py`
+
+## Validation
+
+Stale entries expire; survive no content change.
+
+## Dependencies
+
+LSP04
+
+## Notes
+
+

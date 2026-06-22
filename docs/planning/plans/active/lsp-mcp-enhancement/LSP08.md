@@ -1,15 +1,34 @@
 ---
 id: LSP08
 order: 8
-plan: unknown
+plan: plan-lsp-mcp-enhancement
 state: draft
 wave: W2.4
+phase: Phase 0
 ---
 
-# Stderr drain thread
+# stderr drain thread
 
-## Wave 2 — Request lifecycle & resilience
+## Context
 
-Spawn a daemon thread reading `stderr` to `logger.debug`. Prevents fills-pipe regression.
+Wave W2.4 — Request lifecycle & resilience.
 
-**Files:** `lsp_bridge.py`
+## Steps
+
+Spawn a daemon thread reading `stderr` to `logger.debug`. It is captured as a PIPE today but never read; a chatty server fills the OS pipe buffer, blocks on write, and presents as a hang.
+
+## Files
+
+`lsp_bridge.py`
+
+## Validation
+
+Chatty fake server does not wedge the request loop (fills-pipe regression test).
+
+## Dependencies
+
+None (independent; group here)
+
+## Notes
+
+
