@@ -18,6 +18,9 @@ files:
   - path: .audiagentic/config/interoperability/events.yaml
     lifecycle: create-if-missing
     description: Project event definitions
+  - path: .audiagentic/prompts/ag-review/default.md
+    lifecycle: required-managed
+    description: Ag-review prompt template
 mcp-servers:
   - name: ag-project-mgmt
     module: audiagentic.components.project.project_mcp
