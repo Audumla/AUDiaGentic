@@ -7,9 +7,7 @@ Components:
 - EventBus / EventBusProtocol: in-process dispatch with SYNC/ASYNC modes
 - EventEnvelope: canonical event wrapper
 - FileEventStore: optional file-based persistence
-- ReplayService: replay persisted events
 - StructuredLog: OpenTelemetry-style append-only JSONL log
-- EventService: publishes to local log + shared EventBus
 - EventLayerConfig: event-layer settings loaded from `.audiagentic/event/config.yaml`
 - CodeFormatter: opt-in code formatting on task completion events
 """
@@ -32,8 +30,6 @@ from .event_config import (
 )
 from .event_exceptions import CycleDetectedError, EventBusError, PersistenceError, SubscriberError
 from .event_log import StructuredLog, now_iso
-from .event_replay import ReplayService
-from .event_service import EventService
 from .event_store import FileEventStore
 
 __all__ = [
@@ -47,14 +43,12 @@ __all__ = [
     "PersistenceError",
     "EventEnvelope",
     "FileEventStore",
-    "ReplayService",
     "EventStoreSettings",
     "EventCycleDetectionSettings",
     "EventReplaySettings",
     "EventLayerConfig",
     "load_event_config",
     "StructuredLog",
-    "EventService",
     "now_iso",
     "get_bus",
     "reset_bus",
