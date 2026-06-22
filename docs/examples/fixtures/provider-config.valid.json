@@ -1,0 +1,26 @@
+{
+  "contract-version": "v1",
+  "providers": {
+    "local-openai": {
+      "enabled": true,
+      "install-mode": "external-configured",
+      "access-mode": "none",
+      "base-url": "http://localhost:8000/v1",
+      "default-model": "qwen-coder",
+      "model-aliases": {
+        "fast": "qwen-coder",
+        "deep": "qwen-max"
+      },
+      "catalog-refresh": {
+        "source": "static",
+        "max-age-hours": 168
+      }
+    },
+    "claude": {
+      "enabled": false,
+      "install-mode": "external-configured",
+      "access-mode": "env",
+      "auth-ref": "env:ANTHROPIC_API_KEY"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "contract-version": "v1",
+  "job-id": "job_20260330_0002",
+  "packet-id": "pkt-job-003",
+  "project-id": "my-project",
+  "provider-id": "local-openai",
+  "workflow-profile": "lite",
+  "state": "failed",
+  "created-at": "2026-03-30T00:00:00Z",
+  "updated-at": "2026-03-30T00:00:30Z",
+  "artifacts": [],
+  "approvals": []
+}

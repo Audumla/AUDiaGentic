@@ -1,0 +1,8 @@
+{
+  "contract-version": "v1",
+  "event-id": 3,
+  "event-type": "job-state-changed",
+  "project-id": "my-project",
+  "source-kind": "job-service",
+  "source-id": "job_001"
+}

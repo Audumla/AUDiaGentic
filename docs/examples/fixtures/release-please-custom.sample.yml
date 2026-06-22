@@ -1,0 +1,10 @@
+name: release-please
+
+on:
+  push:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Custom workflow"
