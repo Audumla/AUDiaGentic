@@ -9,6 +9,10 @@ summary: Enhance LSP bridge and MCP integration for better reliability, performa
 
 Enhance LSP bridge and MCP integration for better reliability, performance, and feature coverage
 
+## Reference
+
+- [Plan Context](lsp-mcp-enhancement/PLAN_CONTEXT.md) — tools table, agent workflows, provider routing policy, test strategy, risks, decisions
+
 ## Items
 
 - [LSP01](lsp-mcp-enhancement/LSP01.md)
