@@ -225,7 +225,7 @@ def make_error_code(prefix: str, component: str, number: int) -> str:
 def to_error_envelope(error: AudiaGenticError) -> dict[str, Any]:
     _validate_code(error.code)
     _validate_kind(error.kind)
-    return {
+    envelope: dict[str, Any] = {
         "contract-version": "v1",
         "ok": False,
         "error-code": error.code,
@@ -233,6 +233,35 @@ def to_error_envelope(error: AudiaGenticError) -> dict[str, Any]:
         "message": error.message,
         "details": redact_details(error.details) or {},
     }
+    resolution = get_error_resolution(error.code)
+    if resolution:
+        envelope["resolution"] = resolution
+    return envelope
+
+
+# ---------------------------------------------------------------------------
+# Error resolution registry — maps error codes to agent-facing resolution text.
+# ---------------------------------------------------------------------------
+
+_ERROR_RESOLUTIONS: dict[str, str] = {}
+
+
+def register_error_resolution(code: str, resolution: str) -> None:
+    """Register an agent-facing resolution for an error code.
+
+    The resolution is included automatically in error envelopes returned to
+    agents, and is also available via the ``error_resolve`` MCP tool.
+
+    Args:
+        code: Full error code (e.g. "VAL-PROJFILE-001").
+        resolution: Human-readable instructions the agent can follow.
+    """
+    _ERROR_RESOLUTIONS[code] = resolution
+
+
+def get_error_resolution(code: str) -> str | None:
+    """Return the registered resolution for an error code, or None."""
+    return _ERROR_RESOLUTIONS.get(code)
 
 
 ERROR_ENVELOPE_SCHEMA = {

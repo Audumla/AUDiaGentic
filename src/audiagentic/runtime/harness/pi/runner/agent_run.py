@@ -22,7 +22,7 @@ def check_endpoint(ctx: AgentContext) -> None:
 
 def direct_mcp_smoke(ctx: AgentContext, env: dict[str, str]) -> None:
     completed = subprocess.run(
-        [sys.executable, "-m", "audiagentic.components.core.session.session_mcp", "--readonly", "--smoke-only", "--direct-smoke"],
+        [sys.executable, "-m", "audiagentic.components.session.session_mcp", "--readonly", "--smoke-only", "--direct-smoke"],
         cwd=ctx.project_root,
         env=env,
         check=False,

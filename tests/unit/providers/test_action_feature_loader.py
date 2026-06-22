@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.optional.providers.tags import registry
-from audiagentic.components.optional.providers.tags.loader import (
+from audiagentic.components.providers.tags import registry
+from audiagentic.components.providers.tags.loader import (
     _load_tags_from_component_config,
     load_action_feature_from_yaml,
     load_tag_from_yaml,

@@ -52,7 +52,7 @@ def test_install_release_creates_release_workflow(tmp_path):
     content = wf.read_text(encoding="utf-8")
     assert "on:" in content or "jobs:" in content
     assert "PYTHONPATH: src" in content
-    assert "from audiagentic.components.optional.release import release_api" in content
+    assert "from audiagentic.components.release import release_api" in content
     assert "scripts/components/optional/ledger/finalize_ledger.py" not in content
 
 

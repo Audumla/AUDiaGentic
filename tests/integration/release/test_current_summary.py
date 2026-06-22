@@ -12,7 +12,7 @@ for path in (str(ROOT), str(SRC)):
 
 from tests.helpers import sandbox as sandbox_helper
 
-from audiagentic.components.optional.ledger.current_summary import regenerate_current_release
+from audiagentic.components.ledger.current_summary import regenerate_current_release
 
 FIXTURES = ROOT / "docs" / "examples" / "fixtures"
 

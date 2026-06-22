@@ -13,7 +13,7 @@ def _write_yaml(path: Path, content: str) -> None:
 
 def test_foundation_validator_does_not_import_providers() -> None:
     source = Path(validate_ids.__file__).read_text(encoding="utf-8")
-    assert "audiagentic.components.optional.providers" not in source
+    assert "audiagentic.components.providers" not in source
 
 
 def test_validate_ids_ok(tmp_path: Path) -> None:

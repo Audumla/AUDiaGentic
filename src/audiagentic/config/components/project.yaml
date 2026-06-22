@@ -21,7 +21,7 @@ files:
 mcp-servers:
   - name: ag-project-mgmt
     module: audiagentic.components.project.project_mcp
-    direct-tools: [project_status, list_components, install_component, uninstall_component, enable_component, disable_component, read_project_file]
+    direct-tools: [project_status, list_components, install_component, uninstall_component, enable_component, disable_component, read_project_file, error_resolve]
     description: Project MCP server for project-level component management
     propagate: audiagentic
     instructions: >

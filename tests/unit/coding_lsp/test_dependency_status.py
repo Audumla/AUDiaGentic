@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.optional.coding_lsp import coding_lsp_bootstrap, language_registry
+from audiagentic.components.coding_lsp import coding_lsp_bootstrap, language_registry
 from audiagentic.foundation.components.dependencies import build_dependency_install_commands
 
 
@@ -24,7 +24,7 @@ def test_status_payload_uses_workflow_derived_install_commands(tmp_path: Path, m
     monkeypatch.setattr(coding_lsp_bootstrap, "_active_dependency_ids", lambda project_root: ["pyright"])
     monkeypatch.setattr(coding_lsp_bootstrap, "detect_missing", lambda probes, names: ["pyright"])
     monkeypatch.setattr(
-        "audiagentic.components.optional.coding_lsp.lsp_config_api.active_dependency_cfgs",
+        "audiagentic.components.coding_lsp.lsp_config_api.active_dependency_cfgs",
         lambda project_root: language_registry.dependency_cfgs(["python"]),
     )
 

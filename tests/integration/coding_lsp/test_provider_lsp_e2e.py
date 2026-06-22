@@ -28,17 +28,17 @@ from tests.integration.providers.harness import (
     install_provider,
 )
 
-from audiagentic.components.optional.coding_lsp import language_registry, lsp_api, lsp_config_api
-from audiagentic.components.optional.coding_lsp.language_servers_sync import (
+from audiagentic.components.coding_lsp import language_registry, lsp_api, lsp_config_api
+from audiagentic.components.coding_lsp.language_servers_sync import (
     prune_generic_lsp_mcp_from_providers,
     prune_language_servers_from_providers,
     sync_generic_lsp_mcp_to_providers,
     sync_language_servers_to_providers,
 )
-from audiagentic.components.optional.providers.adapters.opencode.language_servers import (
+from audiagentic.components.providers.adapters.opencode.language_servers import (
     _to_opencode_key,
 )
-from audiagentic.components.optional.providers.descriptors.registry import all_descriptors
+from audiagentic.components.providers.descriptors.registry import all_descriptors
 from audiagentic.foundation.components.dependencies import build_dependency_workflow
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.runtime.lifecycle.components import enable_component, install_component
@@ -123,7 +123,7 @@ def provisioned_project(tmp_path_factory) -> Path:
         assert_health_ok(provider_id, result)
 
     # 4. enable generic MCP LSP providers (no CLI install needed — they receive ag-lsp)
-    from audiagentic.components.optional.providers.services.provider_config import (
+    from audiagentic.components.providers.services.provider_config import (
         set_provider_enabled,
     )
     for provider_id in GENERIC_MCP_LSP_PROVIDERS:

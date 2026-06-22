@@ -17,7 +17,7 @@ def _component_name(path: Path) -> str:
 
 def _same_component_imports(path: Path) -> set[str]:
     component = _component_name(path)
-    package_prefix = f"audiagentic.components.optional.{component}"
+    package_prefix = f"audiagentic.components.{component}"
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     imports: set[str] = set()
     for node in ast.walk(tree):

@@ -206,7 +206,7 @@ def _call_keepalive(
 
 def test_session_server_exposes_expected_tools(tmp_path: Path) -> None:
     names = _tools_list(
-        "audiagentic.components.core.session.session_mcp",
+        "audiagentic.components.session.session_mcp",
         tmp_path,
         extra_args=["--readonly", "--smoke-only"],
     )
@@ -222,7 +222,7 @@ def test_session_server_exposes_expected_tools(tmp_path: Path) -> None:
 
 def test_session_server_status_returns_environment(tmp_path: Path) -> None:
     result = _call(
-        "audiagentic.components.core.session.session_mcp",
+        "audiagentic.components.session.session_mcp",
         "status",
         {},
         project_root=tmp_path,
@@ -234,7 +234,7 @@ def test_session_server_status_returns_environment(tmp_path: Path) -> None:
 
 
 def test_project_server_exposes_expected_tools(tmp_path: Path) -> None:
-    names = _tools_list("audiagentic.components.core.project.project_mcp", tmp_path)
+    names = _tools_list("audiagentic.components.project.project_mcp", tmp_path)
     assert {
         "project_status",
         "list_components",
@@ -247,7 +247,7 @@ def test_project_server_exposes_expected_tools(tmp_path: Path) -> None:
 
 def test_project_server_lists_optional_components_not_installed(tmp_path: Path) -> None:
     result = _call(
-        "audiagentic.components.core.project.project_mcp",
+        "audiagentic.components.project.project_mcp",
         "list_components",
         {},
         project_root=tmp_path,
@@ -260,7 +260,7 @@ def test_project_server_lists_optional_components_not_installed(tmp_path: Path) 
 
 
 def test_providers_server_exposes_expected_tools(tmp_path: Path) -> None:
-    names = _tools_list("audiagentic.components.optional.providers.providers_mcp", tmp_path)
+    names = _tools_list("audiagentic.components.providers.providers_mcp", tmp_path)
     assert {
         "list_providers",
         "get_provider_status",
@@ -271,7 +271,7 @@ def test_providers_server_exposes_expected_tools(tmp_path: Path) -> None:
 
 def test_providers_server_lists_known_providers(tmp_path: Path) -> None:
     result = _call(
-        "audiagentic.components.optional.providers.providers_mcp",
+        "audiagentic.components.providers.providers_mcp",
         "list_providers",
         {},
         project_root=tmp_path,
@@ -284,7 +284,7 @@ def test_providers_server_lists_known_providers(tmp_path: Path) -> None:
 
 def test_release_please_server_exposes_expected_tools(tmp_path: Path) -> None:
     names = _tools_list(
-        "audiagentic.components.optional.release.release_please.release_please_mcp",
+        "audiagentic.components.release.release_please.release_please_mcp",
         tmp_path,
     )
     assert {
@@ -295,7 +295,7 @@ def test_release_please_server_exposes_expected_tools(tmp_path: Path) -> None:
 
 def test_session_server_update_rig(tmp_path: Path) -> None:
     result = _call_keepalive(
-        "audiagentic.components.core.session.session_mcp",
+        "audiagentic.components.session.session_mcp",
         "update_rig",
         {"scope": "local"},
         project_root=tmp_path,
@@ -308,7 +308,7 @@ def test_session_server_update_rig(tmp_path: Path) -> None:
 
 
 def test_session_server_detects_active_embedded_rig_profile(monkeypatch) -> None:
-    from audiagentic.components.core.session.session_embedded_rig import (
+    from audiagentic.components.session.session_embedded_rig import (
         active_embedded_rig_profile,
     )
 

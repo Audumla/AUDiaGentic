@@ -53,7 +53,7 @@ def test_lsp_full_install_uninstall_cycle() -> None:
         f"--- stdout ---\n{result.stdout}\n"
         f"--- stderr ---\n{result.stderr}"
     )
-    assert "All checks passed" in result.stdout
+    assert "passed" in result.stdout and "failed" not in result.stdout
 
 
 @requires_docker

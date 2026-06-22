@@ -1,4 +1,4 @@
-﻿"""Download and install a new audiagentic version from GitHub Releases."""
+"""Download and install a new audiagentic version from GitHub Releases."""
 from __future__ import annotations
 
 import logging

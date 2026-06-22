@@ -9,7 +9,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.components.optional.providers.adapters.qwen import adapter as qwen
+from audiagentic.components.providers.adapters.qwen import adapter as qwen
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 

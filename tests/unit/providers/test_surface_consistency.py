@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-import audiagentic.components.optional.providers  # noqa: F401
-from audiagentic.components.optional.providers.surfaces.contributions import (
+import audiagentic.components.providers  # noqa: F401
+from audiagentic.components.providers.surfaces.contributions import (
     build_summary_contributions,
     load_surface_contributions,
 )

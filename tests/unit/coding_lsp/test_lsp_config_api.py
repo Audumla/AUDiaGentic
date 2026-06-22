@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from audiagentic.components.optional.coding_lsp.lsp_config_api import (
+from audiagentic.components.coding_lsp.lsp_config_api import (
     remove_language,
 )
 from audiagentic.foundation.features import registry as feature_registry
@@ -43,17 +43,17 @@ def test_remove_language_calls_prune_providers(tmp_path: Path) -> None:
     _enable_language(tmp_path, "python")
 
     with patch(
-        "audiagentic.components.optional.coding_lsp.language_servers_sync.prune_language_servers_from_providers"
+        "audiagentic.components.coding_lsp.language_servers_sync.prune_language_servers_from_providers"
     ) as mock_prune:
         mock_prune.return_value = {"ok": True, "pruned": []}
         with patch(
-            "audiagentic.components.optional.coding_lsp.lsp_config_api._sync_to_providers"
+            "audiagentic.components.coding_lsp.lsp_config_api._sync_to_providers"
         ):
             with patch(
-                "audiagentic.components.optional.coding_lsp.lsp_config_api._regenerate_lsp_cache"
+                "audiagentic.components.coding_lsp.lsp_config_api._regenerate_lsp_cache"
             ):
                 with patch(
-                    "audiagentic.components.optional.coding_lsp.lsp_api._session_manager"
+                    "audiagentic.components.coding_lsp.lsp_api._session_manager"
                 ):
                     result = remove_language(str(tmp_path), "python")
 

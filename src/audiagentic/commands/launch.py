@@ -46,8 +46,8 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
     # Sync providers.yaml with actual host state on first run only.
     # Subsequent reconciliations are available via the provider MCP server.
     try:
-        from audiagentic.components.optional.providers.services.lifecycle import reconcile_all_providers
-        from audiagentic.components.optional.providers.services.provider_config import _providers_yaml_path
+        from audiagentic.components.providers.services.lifecycle import reconcile_all_providers
+        from audiagentic.components.providers.services.provider_config import _providers_yaml_path
 
         providers_path = _providers_yaml_path(project_root)
         if not providers_path.exists():

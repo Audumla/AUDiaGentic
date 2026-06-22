@@ -3,17 +3,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from audiagentic.components.optional.providers.adapters.opencode.language_servers import (
+from audiagentic.components.providers.adapters.opencode.language_servers import (
     read_language_servers_opencode,
     remove_language_servers_opencode,
     write_language_servers_opencode,
 )
-from audiagentic.components.optional.providers.adapters.qwen.language_servers import (
+from audiagentic.components.providers.adapters.qwen.language_servers import (
     read_language_servers_qwen,
     remove_language_servers_qwen,
     write_language_servers_qwen,
 )
-from audiagentic.components.optional.providers.descriptors.base import LanguageServerEntry
+from audiagentic.components.providers.descriptors.base import LanguageServerEntry
 
 _PY = LanguageServerEntry(
     language="python",

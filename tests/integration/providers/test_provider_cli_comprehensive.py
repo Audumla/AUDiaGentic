@@ -24,11 +24,11 @@ from tests.integration.providers.harness import (
     uninstall_provider,
 )
 
-from audiagentic.components.optional.providers.descriptors.base import (
+from audiagentic.components.providers.descriptors.base import (
     CliInstallRecipe,
     ProviderDescriptor,
 )
-from audiagentic.components.optional.providers.descriptors.registry import (
+from audiagentic.components.providers.descriptors.registry import (
     all_descriptors,
     get_descriptor,
 )
