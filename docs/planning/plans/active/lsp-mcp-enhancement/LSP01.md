@@ -4,16 +4,38 @@ order: 1
 plan: plan-lsp-mcp-enhancement
 state: draft
 wave: W0.1
+phase: Phase 0
 ---
 
 # Reader-loop notification dispatch
 
-## Wave 0 — Reader-loop message demux
+## Context
 
-The reader loop only routes responses; notifications and server→client requests are dropped.
+Wave W0.1 — Reader-loop message demux (unblocks everything).
 
-**Steps:** In `_reader_loop`, branch on message shape — `id` present + in `_pending` → response; `method` present + no `id` → notification → invoke registered callback map. Add `on_notification(method, handler)` registration.
+## Steps
 
-**Validate:** Fake server emits `textDocument/publishDiagnostics`; handler fires.
+The reader loop currently only routes responses (`id in _pending`); notifications and server→client requests are dropped.
 
-**Files:** `lsp_bridge.py`
+In `_reader_loop`, branch on message shape:
+- `id` present + in `_pending` → response (current path)
+- `method` present + no `id` → notification → invoke a registered callback map keyed by method
+- neither → log + drop
+
+Add `on_notification(method, handler)` registration.
+
+## Files
+
+`lsp_bridge.py`
+
+## Validation
+
+Fake server emits `textDocument/publishDiagnostics`; handler fires.
+
+## Dependencies
+
+None — first wave.
+
+## Notes
+
+Nothing downstream works until this is fixed. Gates Wave 5 (diagnostics).
