@@ -1,16 +1,39 @@
 ---
 id: LSP12
 order: 12
-plan: unknown
+plan: plan-lsp-mcp-enhancement
 state: draft
 wave: W3.3
+phase: Phase 0
 ---
 
 # Project-root marker resolution
 
-## Wave 3 — Handshake correctness
+## Context
 
-Resolve to `Cargo.toml`/`tsconfig.json`/`compile_commands.json` dir, not cwd.
+Wave W3.3 — Handshake correctness (prerequisites for later tool phases).
 
-**Validate:** Nested file resolves to marker root.
-**Files:** `lsp_api.py`
+## Steps
+
+Sessions are keyed on the passed root/cwd, but `rust-analyzer`/`typescript-language-server`/`clangd` need the project-marker directory:
+- Rust: `Cargo.toml`
+- TypeScript: `tsconfig.json`/`package.json`
+- C/C++: `compile_commands.json`
+
+Resolve to marker dir, not cwd. A wrong root yields empty or misconfigured results that look like missing capability.
+
+## Files
+
+`lsp_api.py` `resolve_project_root`/`_open_file_session`, per-language markers
+
+## Validation
+
+Nested file resolves to marker root.
+
+## Dependencies
+
+None
+
+## Notes
+
+

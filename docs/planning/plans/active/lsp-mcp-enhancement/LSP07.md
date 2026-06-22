@@ -1,18 +1,34 @@
 ---
 id: LSP07
 order: 7
-plan: unknown
+plan: plan-lsp-mcp-enhancement
 state: draft
 wave: W2.3
+phase: Phase 0
 ---
 
 # In-flight tracking and clean fail on server exit
 
-## Wave 2 — Request lifecycle & resilience
+## Context
 
-On `_process` exit, fail all `_pending` with a crashed-server envelope.
+Wave W2.3 — Request lifecycle & resilience.
 
-**Validate:** Kill server mid-request → caller gets envelope, not a hang.
+## Steps
 
-**Depends:** LSP04
-**Files:** `lsp_bridge.py`
+Already partially present (reader-loop except sets pending events); make it deterministic — on `_process` exit, fail all `_pending` with a crashed-server envelope.
+
+## Files
+
+`lsp_bridge.py`
+
+## Validation
+
+Kill server mid-request → caller gets envelope, not a hang.
+
+## Dependencies
+
+LSP04
+
+## Notes
+
+
