@@ -1,0 +1,26 @@
+{
+  "contract-version": "v1",
+  "review-id": "rvr_20260330_0001",
+  "subject": {
+    "kind": "artifact"
+  },
+  "reviewer": {
+    "provider-id": "claude",
+    "surface": "desktop",
+    "session-id": "sess_044",
+    "prompt-id": "prm_20260330_0044",
+    "reviewer-key": "claude:cli:sess_044"
+  },
+  "criteria": [],
+  "findings": [
+    {
+      "finding-id": "fdg_001",
+      "severity": "warning",
+      "blocking": "yes",
+      "summary": "Bad"
+    }
+  ],
+  "recommendation": "approve",
+  "follow-up-actions": "fix it",
+  "created-at": "2026-03-30T03:00:00Z"
+}

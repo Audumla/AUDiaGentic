@@ -9,6 +9,16 @@ summary: Address duplication, misplaced logic, and cross-cutting concerns that s
 
 Address duplication, misplaced logic, and cross-cutting concerns that survived the size pass
 
+## Execution Order
+
+Recommended: **A1 → A2 → B2 → B1 → A3**. B3 is investigate-only; C is opportunistic.
+
+## Explicitly Rejected
+
+- Merging the cwd-walking `_resolve_project_root` in logging/install into A1 (different logic)
+- Splitting `event_bus.py`, `steps.py`, `provider_streaming.py` (cohesive)
+- Blind merge of B3 before diffing (may be intentional per-harness variants)
+
 ## Items
 
 - [R201](refactor-round2/R201.md)

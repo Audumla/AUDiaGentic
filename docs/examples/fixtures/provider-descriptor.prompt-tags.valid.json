@@ -1,0 +1,18 @@
+{
+  "contract-version": "v1",
+  "provider-id": "claude",
+  "install-mode": "external-configured",
+  "supports-jobs": true,
+  "supports-interactive": true,
+  "supports-skill-wrapper": true,
+  "supports-structured-output": true,
+  "supports-server-session": false,
+  "supports-baseline-healthcheck": true,
+  "supports-prompt-tag-launch": true,
+  "prompt-tag-syntaxes": [
+    "prefix-token-v1"
+  ],
+  "prompt-tag-cli-mode": "wrapper-normalize",
+  "prompt-tag-vscode-mode": "extension-normalize",
+  "requires-surface-settings-sync": true
+}

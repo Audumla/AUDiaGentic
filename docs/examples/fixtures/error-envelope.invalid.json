@@ -1,0 +1,8 @@
+{
+  "contract-version": "v1",
+  "ok": true,
+  "error-code": "FND-VALIDATION-001",
+  "error-kind": "invalid-kind",
+  "message": "bad",
+  "details": {}
+}

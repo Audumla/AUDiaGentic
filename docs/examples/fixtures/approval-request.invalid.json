@@ -1,0 +1,12 @@
+{
+  "contract-version": "v1",
+  "approval-id": "apr_999",
+  "project-id": "my-project",
+  "kind": "release-finalize",
+  "source-kind": "release-service",
+  "source-id": "rel_999",
+  "summary": "Bad approval",
+  "state": "unknown",
+  "requested-at": "2026-03-29T00:02:00Z",
+  "expires-at": "2026-03-29T08:02:00Z"
+}
