@@ -264,6 +264,15 @@ def get_error_resolution(code: str) -> str | None:
     return _ERROR_RESOLUTIONS.get(code)
 
 
+def get_error_message(code: str) -> str:
+    """Return the human-readable message for an error code.
+
+    Looks up the resolution registry. Falls back to the code itself when
+    no message is registered, so callers never get an empty string.
+    """
+    return _ERROR_RESOLUTIONS.get(code, code)
+
+
 ERROR_ENVELOPE_SCHEMA = {
     "type": "object",
     "required": [
