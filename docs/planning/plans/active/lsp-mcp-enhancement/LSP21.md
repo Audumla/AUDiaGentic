@@ -2,7 +2,7 @@
 id: LSP21
 order: 21
 plan: plan-lsp-mcp-enhancement
-state: draft
+state: not_done
 wave: W7
 phase: Phase 3-7
 ---

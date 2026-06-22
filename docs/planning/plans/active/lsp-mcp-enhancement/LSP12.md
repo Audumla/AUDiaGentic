@@ -2,7 +2,7 @@
 id: LSP12
 order: 12
 plan: plan-lsp-mcp-enhancement
-state: draft
+state: done
 wave: W3.3
 phase: Phase 0
 ---

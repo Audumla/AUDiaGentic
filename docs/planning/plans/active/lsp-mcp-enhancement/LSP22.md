@@ -2,7 +2,7 @@
 id: LSP22
 order: 22
 plan: plan-lsp-mcp-enhancement
-state: draft
+state: not_done
 wave: deferred
 phase: post-v1
 ---
