@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from audiagentic.execution.jobs import control as job_control
+from audiagentic.components.agent_jobs import control as job_control
 
 
 def test_build_job_control_request_requires_supported_action() -> None:

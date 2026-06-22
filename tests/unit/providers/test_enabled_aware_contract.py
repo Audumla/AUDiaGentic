@@ -10,11 +10,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.optional.providers.services.feature_resolution import (
+from audiagentic.components.providers.services.feature_resolution import (
     enabled_provider_ids,
     resolve_active_provider_features,
 )
-from audiagentic.components.optional.providers.services.provider_config import set_provider_enabled
+from audiagentic.components.providers.services.provider_config import set_provider_enabled
 from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
 from audiagentic.foundation.features.base import FeatureState
 from audiagentic.foundation.features.state import set_implementation_feature_state

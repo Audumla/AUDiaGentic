@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.optional.coding_lsp.runtime_resolver import (
+from audiagentic.components.coding_lsp.runtime_resolver import (
     active_language_bindings,
     active_lsp_implementation,
     resolve_active_runtime_servers,

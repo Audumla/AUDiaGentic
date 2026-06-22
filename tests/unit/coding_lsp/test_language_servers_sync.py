@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.optional.coding_lsp import language_registry
-from audiagentic.components.optional.coding_lsp.language_servers_sync import (
+from audiagentic.components.coding_lsp import language_registry
+from audiagentic.components.coding_lsp.language_servers_sync import (
     prune_generic_lsp_mcp_from_providers,
     prune_language_servers_from_providers,
     sync_generic_lsp_mcp_to_providers,
@@ -49,7 +49,7 @@ def _enable_python(tmp_path: Path, *, settings: dict | None = None) -> None:
 def test_sync_skips_when_config_missing(tmp_path: Path, monkeypatch) -> None:
     published: list[dict] = []
     monkeypatch.setattr(
-        "audiagentic.components.optional.coding_lsp.language_servers_sync._publish_provider_projection",
+        "audiagentic.components.coding_lsp.language_servers_sync._publish_provider_projection",
         lambda root, **payload: published.append(payload) or payload["default"],
     )
     result = sync_language_servers_to_providers(tmp_path)
@@ -62,7 +62,7 @@ def test_sync_writes_real_entries(tmp_path: Path, monkeypatch) -> None:
     _enable_python(tmp_path, settings={"python": {"analysis": "basic"}})
     published: dict[str, object] = {}
     monkeypatch.setattr(
-        "audiagentic.components.optional.coding_lsp.language_servers_sync._publish_provider_projection",
+        "audiagentic.components.coding_lsp.language_servers_sync._publish_provider_projection",
         lambda root, **payload: published.update(payload) or {"ok": True, "synced": ["codex"]},
     )
 
@@ -81,7 +81,7 @@ def test_prune_requests_full_catalog(tmp_path: Path, monkeypatch) -> None:
     # has already been cleared.
     published: dict[str, object] = {}
     monkeypatch.setattr(
-        "audiagentic.components.optional.coding_lsp.language_servers_sync._publish_provider_projection",
+        "audiagentic.components.coding_lsp.language_servers_sync._publish_provider_projection",
         lambda root, **payload: published.update(payload) or {
             "ok": True,
             "pruned": ["codex"],
@@ -104,7 +104,7 @@ def test_prune_requests_catalog_regardless_of_active_state(tmp_path: Path, monke
     # catalog; the per-provider removers are idempotent no-ops when absent.
     published: dict[str, object] = {}
     monkeypatch.setattr(
-        "audiagentic.components.optional.coding_lsp.language_servers_sync._publish_provider_projection",
+        "audiagentic.components.coding_lsp.language_servers_sync._publish_provider_projection",
         lambda root, **payload: published.update(payload) or {
             "ok": True,
             "pruned": [],
@@ -146,7 +146,7 @@ def test_generic_mcp_projection_uses_implementation_descriptor(tmp_path: Path, m
     set_feature_state(tmp_path, "coding-lsp", "language", "python", FeatureState(enabled=True))
     published: dict[str, object] = {}
     monkeypatch.setattr(
-        "audiagentic.components.optional.coding_lsp.language_servers_sync._publish_provider_projection",
+        "audiagentic.components.coding_lsp.language_servers_sync._publish_provider_projection",
         lambda root, **payload: published.update(payload) or {"ok": True, "synced": ["codex"]},
     )
 
@@ -172,7 +172,7 @@ def test_prune_generic_mcp_uses_descriptor_managed_ids(tmp_path: Path, monkeypat
     )
     published: dict[str, object] = {}
     monkeypatch.setattr(
-        "audiagentic.components.optional.coding_lsp.language_servers_sync._publish_provider_projection",
+        "audiagentic.components.coding_lsp.language_servers_sync._publish_provider_projection",
         lambda root, **payload: published.update(payload) or {
             "ok": True,
             "pruned": ["codex"],

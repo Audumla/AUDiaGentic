@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.optional.providers import providers_api
-from audiagentic.components.optional.providers.services import host_capabilities
-from audiagentic.components.optional.providers.services.status import build_provider_status
+from audiagentic.components.providers import providers_api
+from audiagentic.components.providers.services import host_capabilities
+from audiagentic.components.providers.services.status import build_provider_status
 
 
 def test_provider_status_reports_cli_and_catalog(tmp_path: Path) -> None:

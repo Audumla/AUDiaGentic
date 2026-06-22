@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from audiagentic.components.optional.providers.protocols.streaming.completion import (
+from audiagentic.components.providers.protocols.streaming.completion import (
     CompletionStatus,
     Decision,
     NormalizationMethod,

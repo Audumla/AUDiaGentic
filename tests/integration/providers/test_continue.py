@@ -9,7 +9,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.components.optional.providers.adapters.continue_ import adapter as continue_
+from audiagentic.components.providers.adapters.continue_ import adapter as continue_
 
 
 def test_continue_adapter_contract() -> None:

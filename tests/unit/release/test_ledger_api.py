@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.optional.ledger import ledger_api
+from audiagentic.components.ledger import ledger_api
 from audiagentic.foundation.io import atomic_write_text
 
 

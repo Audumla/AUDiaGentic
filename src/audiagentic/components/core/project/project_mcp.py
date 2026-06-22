@@ -19,6 +19,7 @@ from audiagentic.foundation.mcp.component_server import (
 )
 
 from . import project_api
+from audiagentic.foundation.contracts.errors import get_error_resolution
 
 register_all_components()
 
@@ -92,6 +93,24 @@ def build_server() -> FastMCP:
             return project_api.read_project_file(project_root_from_env(), relative_path)
         except Exception as exc:
             return report_error("project", "read_project_file", exc, logger)
+
+    @mcp.tool(description=tool_description(decl, "error_resolve"))
+    @log_tool_call
+    def error_resolve(error_code: str) -> dict[str, Any]:
+        """Look up the registered resolution for an AUDiaGentic error code."""
+        resolution = get_error_resolution(error_code)
+        if resolution is None:
+            return {
+                "error_code": error_code,
+                "ok": True,
+                "resolution": None,
+                "message": f"No resolution registered for error code {error_code}",
+            }
+        return {
+            "error_code": error_code,
+            "ok": True,
+            "resolution": resolution,
+        }
 
     @mcp.tool(description=tool_description(decl, "runtime_sync_contract"))
     @log_tool_call

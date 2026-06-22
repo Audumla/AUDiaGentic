@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from audiagentic import launcher
-from audiagentic.components.core.session.session_visibility import set_cli_visibility
+from audiagentic.components.session.session_visibility import set_cli_visibility
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.runtime.harness.pi.install import request_runtime_reload
@@ -81,7 +81,7 @@ def test_providers_component_uses_optional_server_module_in_mcp_config(
     providers = payload["mcpServers"]["ag-providers-mgmt"]
     assert providers["args"] == [
         "-m",
-        "audiagentic.components.optional.providers.providers_mcp",
+        "audiagentic.components.providers.providers_mcp",
     ]
 
 
@@ -103,7 +103,7 @@ def test_ledger_component_uses_optional_server_module_in_mcp_config(
     ledger = payload["mcpServers"]["ag-ledger"]
     assert ledger["args"] == [
         "-m",
-        "audiagentic.components.optional.ledger.ledger_mcp",
+        "audiagentic.components.ledger.ledger_mcp",
     ]
 
 
@@ -123,7 +123,7 @@ def test_component_mcp_metadata_loads_from_yaml() -> None:
     assert "set_cli_visibility" in session_decl.tool_descriptions
 
     assert ledger_decl is not None
-    assert ledger_decl.module == "audiagentic.components.optional.ledger.ledger_mcp"
+    assert ledger_decl.module == "audiagentic.components.ledger.ledger_mcp"
 
 
 def test_component_install_refreshes_materialized_agent_config(
@@ -227,7 +227,7 @@ def test_set_cli_visibility_updates_project_config_and_requests_reload(
         lambda project_root, *, reason, component_id=None, has_mcp_servers=True: reload_calls.append((project_root, reason)),
     )
     monkeypatch.setattr(
-        "audiagentic.components.core.session.session_visibility.effective_cli_visibility",
+        "audiagentic.components.session.session_visibility.effective_cli_visibility",
         lambda project_root: {
             "show_thinking_blocks": False,
             "show_tool_blocks": True,

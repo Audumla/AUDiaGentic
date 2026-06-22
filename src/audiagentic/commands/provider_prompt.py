@@ -28,7 +28,7 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
     )
     if reconcile_all_match or reconcile_one_match:
         try:
-            from audiagentic.components.optional.providers.services.lifecycle import (
+            from audiagentic.components.providers.services.lifecycle import (
                 reconcile_all_providers,
                 reconcile_provider,
             )
@@ -63,7 +63,7 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
     provider_id = match.group(2).lower()
 
     try:
-        from audiagentic.components.optional.providers.services.lifecycle import (
+        from audiagentic.components.providers.services.lifecycle import (
             install_provider_cli,
             repair_provider_cli,
             uninstall_provider_cli,

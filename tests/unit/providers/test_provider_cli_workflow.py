@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.optional.providers.descriptors.registry import (
+from audiagentic.components.providers.descriptors.registry import (
     all_descriptors,
     get_descriptor,
 )
-from audiagentic.components.optional.providers.workflow import provider_cli as workflow
+from audiagentic.components.providers.workflow import provider_cli as workflow
 from audiagentic.foundation.workflow.invocation import StepResult
 
 

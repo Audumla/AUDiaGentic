@@ -37,7 +37,7 @@ def test_fallback_to_wrapper_when_hook_unavailable():
     # which allows normal Claude planning to proceed
     # The actual fallback mechanism is tested through the hook logic
     # For now, just verify the module is correctly structured
-    from audiagentic.components.optional.providers.adapters.claude.hooks import (
+    from audiagentic.components.providers.adapters.claude.hooks import (
         PreToolUse_handler,
         UserPromptSubmit_handler,
     )

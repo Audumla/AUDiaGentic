@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from unittest.mock import MagicMock
 
-from audiagentic.components.optional.coding_lsp.lsp_lifecycle import (
+from audiagentic.components.coding_lsp.lsp_lifecycle import (
     LspSession,
     ServerConfig,
 )

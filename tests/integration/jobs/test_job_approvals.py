@@ -12,14 +12,14 @@ for path in (str(ROOT), str(SRC)):
 
 from tests.helpers import sandbox as sandbox_helper
 
-from audiagentic.components.optional.agent_jobs.approvals import (
+from audiagentic.components.agent_jobs.approvals import (
     build_approval_request,
     check_job_approval,
     request_approval,
     request_job_approval,
 )
-from audiagentic.components.optional.agent_jobs.records import build_job_record
-from audiagentic.components.optional.agent_jobs.reviews import (
+from audiagentic.components.agent_jobs.records import build_job_record
+from audiagentic.components.agent_jobs.reviews import (
     build_review_bundle,
     persist_review_bundle,
 )

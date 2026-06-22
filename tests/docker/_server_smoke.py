@@ -12,16 +12,16 @@ os.environ.setdefault("AUDIAGENTIC_REPO_ROOT", "/app")
 
 # (label, module, "build"|None=use .mcp, [read-only no-arg tools to execute])
 SERVERS = [
-    ("project-manage", "audiagentic.components.core.project.project_mcp", "build", ["list_components", "project_status"]),
-    ("session-manage", "audiagentic.components.core.session.session_mcp", "build", ["config", "cli_visibility"]),
-    ("ledger-write", "audiagentic.components.optional.ledger.ledger_mcp", None, ["get_current_summary"]),
-    ("ledger-manage", "audiagentic.components.optional.ledger.ledger_manage_mcp", None, ["get_ledger_status"]),
-    ("lsp", "audiagentic.components.optional.coding_lsp.lsp_mcp", None, []),
-    ("lsp-manage", "audiagentic.components.optional.coding_lsp.lsp_manage_mcp", None, ["lsp_config_status", "lsp_list_languages", "lsp_list_missing"]),
-    ("providers-manage", "audiagentic.components.optional.providers.providers_mcp", "build", ["list_providers", "list_provider_descriptors"]),
-    ("source-control", "audiagentic.components.optional.source_control.source_control_mcp", None, ["get_source_control_status"]),
-    ("release-manage", "audiagentic.components.optional.release.release_mcp", None, ["get_release_status"]),
-    ("release-please", "audiagentic.components.optional.release.release_please.release_please_mcp", None, []),
+    ("project-manage", "audiagentic.components.project.project_mcp", "build", ["list_components", "project_status"]),
+    ("session-manage", "audiagentic.components.session.session_mcp", "build", ["config", "cli_visibility"]),
+    ("ledger-write", "audiagentic.components.ledger.ledger_mcp", None, ["get_current_summary"]),
+    ("ledger-manage", "audiagentic.components.ledger.ledger_manage_mcp", None, ["get_ledger_status"]),
+    ("lsp", "audiagentic.components.coding_lsp.lsp_mcp", None, []),
+    ("lsp-manage", "audiagentic.components.coding_lsp.lsp_manage_mcp", None, ["lsp_config_status", "lsp_list_languages", "lsp_list_missing"]),
+    ("providers-manage", "audiagentic.components.providers.providers_mcp", "build", ["list_providers", "list_provider_descriptors"]),
+    ("source-control", "audiagentic.components.source_control.source_control_mcp", None, ["get_source_control_status"]),
+    ("release-manage", "audiagentic.components.release.release_mcp", None, ["get_release_status"]),
+    ("release-please", "audiagentic.components.release.release_please.release_please_mcp", None, []),
 ]
 
 

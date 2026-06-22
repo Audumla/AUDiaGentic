@@ -16,7 +16,7 @@ def _json_dump(obj: object) -> str:
 
 
 def _cmd_component(args: argparse.Namespace, project_root: Path) -> int:
-    from audiagentic.components.core.project import project_api
+    from audiagentic.components.project import project_api
     from audiagentic.foundation.components.loader import register_all_components
     from audiagentic.foundation.components.registry import (
         all_descriptors,
@@ -47,7 +47,7 @@ def _cmd_component(args: argparse.Namespace, project_root: Path) -> int:
             }
             if desc.scope == "project" and hasattr(desc, "cli_probe") and desc.cli_probe:
                 try:
-                    from audiagentic.components.optional.providers.descriptors.registry import get_descriptor as _get_provider_descriptor
+                    from audiagentic.components.providers.descriptors.registry import get_descriptor as _get_provider_descriptor
                 except ImportError:
                     pass
                 else:

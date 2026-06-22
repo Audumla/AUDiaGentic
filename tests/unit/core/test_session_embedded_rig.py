@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.core.session.session_embedded_rig import (
+from audiagentic.components.session.session_embedded_rig import (
     _update_global_embedded_rig_impl,
 )
 

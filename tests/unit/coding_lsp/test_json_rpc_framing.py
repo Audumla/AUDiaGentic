@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from audiagentic.components.optional.coding_lsp.lsp_bridge import (
+from audiagentic.components.coding_lsp.lsp_bridge import (
     LspJsonRpc,
 )
 
@@ -386,8 +386,8 @@ def test_fail_all_pending_sets_error_responses() -> None:
 
 
 def test_session_manager_rebuilds_dead_session() -> None:
-    from audiagentic.components.optional.coding_lsp.lsp_session_manager import SessionManager
-    from audiagentic.components.optional.coding_lsp.lsp_lifecycle import ServerConfig
+    from audiagentic.components.coding_lsp.lsp_session_manager import SessionManager
+    from audiagentic.components.coding_lsp.lsp_lifecycle import ServerConfig
 
     manager = SessionManager()
     config = ServerConfig(command=["fake-server"], file_extensions=[".py"])
@@ -418,7 +418,7 @@ def test_session_manager_rebuilds_dead_session() -> None:
     def fake_init(*args, **kwargs):
         return RebuildSession()
 
-    import audiagentic.components.optional.coding_lsp.lsp_session_manager as sm_mod
+    import audiagentic.components.coding_lsp.lsp_session_manager as sm_mod
     original_cls = sm_mod.LspSession
     sm_mod.LspSession = fake_init  # type: ignore[assignment]
 

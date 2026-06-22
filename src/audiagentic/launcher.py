@@ -171,7 +171,7 @@ def _main(argv: list[str] | None = None) -> int:
 
     if args.command == "job-control":
         try:
-            from audiagentic.components.optional.agent_jobs.control import (
+            from audiagentic.components.agent_jobs.control import (
                 build_job_control_request,
                 request_job_control,
             )
@@ -213,7 +213,7 @@ def _main(argv: list[str] | None = None) -> int:
 
     if args.command == "release-bootstrap":
         try:
-            from audiagentic.components.optional.ledger.ledger_bootstrap import bootstrap_ledger
+            from audiagentic.components.ledger.ledger_bootstrap import bootstrap_ledger
         except ImportError:
             print_error("ledger component not available")
             return 1

@@ -13,13 +13,13 @@ for path in (str(ROOT), str(SRC)):
 
 from tests.helpers import sandbox as sandbox_helper  # noqa: E402
 
-from audiagentic.components.optional.ledger.audit import generate_audit_and_checkin  # noqa: E402
-from audiagentic.components.optional.ledger.current_summary import (
+from audiagentic.components.ledger.audit import generate_audit_and_checkin  # noqa: E402
+from audiagentic.components.ledger.current_summary import (
     regenerate_current_release,  # noqa: E402
 )
-from audiagentic.components.optional.ledger.fragments import record_change_event  # noqa: E402
-from audiagentic.components.optional.ledger.sync import sync_current_release_ledger  # noqa: E402
-from audiagentic.components.optional.release import release_api  # noqa: E402
+from audiagentic.components.ledger.fragments import record_change_event  # noqa: E402
+from audiagentic.components.ledger.sync import sync_current_release_ledger  # noqa: E402
+from audiagentic.components.release import release_api  # noqa: E402
 
 FIXTURES = ROOT / "docs" / "examples" / "fixtures"
 

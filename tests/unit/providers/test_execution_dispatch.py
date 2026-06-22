@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from audiagentic.components.optional.providers.adapters.codex import adapter as codex_adapter
-from audiagentic.components.optional.providers.services.execution import execute_provider
+from audiagentic.components.providers.adapters.codex import adapter as codex_adapter
+from audiagentic.components.providers.services.execution import execute_provider
 
 
 def test_execute_provider_normalizes_adapter_result(monkeypatch) -> None:

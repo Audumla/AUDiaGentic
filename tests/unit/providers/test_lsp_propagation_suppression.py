@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.optional.coding_lsp.language_servers_sync import (
+from audiagentic.components.coding_lsp.language_servers_sync import (
     sync_generic_lsp_mcp_to_providers,
 )
-from audiagentic.components.optional.providers.services import lsp_projection
-from audiagentic.components.optional.providers.services.provider_config import set_provider_enabled
+from audiagentic.components.providers.services import lsp_projection
+from audiagentic.components.providers.services.provider_config import set_provider_enabled
 from audiagentic.foundation.features import registry as feature_registry
 from audiagentic.foundation.features.base import (
     BindingDescriptor,
@@ -25,11 +25,12 @@ def _enable(tmp_path: Path, *provider_ids: str) -> None:
 
 
 class _Provider:
-    def __init__(self, provider_id: str, *, native: bool, has_mcp: bool = True) -> None:
+    def __init__(self, provider_id: str, *, native: bool, has_mcp: bool = True, receive_lsp_mcp: bool = True) -> None:
         self.provider_id = provider_id
         self.mcp_config = object() if has_mcp else None
         self.language_servers_config = object() if native else None
         self.on_lsp_enabled = None
+        self.receive_lsp_mcp = receive_lsp_mcp
 
 
 def setup_function() -> None:
@@ -55,7 +56,7 @@ def _register_lsp_descriptors() -> None:
                         "managed-id": "coding-lsp/ag-lsp",
                         "name": "ag-lsp",
                         "command": "package-python",
-                        "args": ["-m", "audiagentic.components.optional.coding_lsp.lsp_mcp"],
+                        "args": ["-m", "audiagentic.components.coding_lsp.lsp_mcp"],
                         "env": {"PYTHONPATH": "package-src"},
                     }
                 }
@@ -148,7 +149,7 @@ def test_sync_generic_lsp_projects_agent_lsp_when_active(tmp_path: Path, monkeyp
     _enable(tmp_path, "claude")
     published: dict[str, object] = {}
     monkeypatch.setattr(
-        "audiagentic.components.optional.coding_lsp.language_servers_sync._publish_provider_projection",
+        "audiagentic.components.coding_lsp.language_servers_sync._publish_provider_projection",
         lambda root, **payload: published.update(payload) or {"ok": True, "synced": ["claude"]},
     )
 
@@ -170,7 +171,7 @@ def test_sync_generic_lsp_projects_agent_lsp_args(tmp_path: Path, monkeypatch) -
     _enable(tmp_path, "claude")
     published: dict[str, object] = {}
     monkeypatch.setattr(
-        "audiagentic.components.optional.coding_lsp.language_servers_sync._publish_provider_projection",
+        "audiagentic.components.coding_lsp.language_servers_sync._publish_provider_projection",
         lambda root, **payload: published.update(payload) or {"ok": True, "synced": ["claude"]},
     )
 
