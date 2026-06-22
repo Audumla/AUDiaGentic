@@ -41,11 +41,11 @@ def _require_string(data: dict[str, Any], key: str, path: Path) -> str:
 
 def load_feature_from_yaml(path: Path) -> FeatureDescriptor:
     data = load_yaml_file(path)
-    if data.get("type") != "feature":
+    if data.get("type") != DescriptorType.FEATURE.value:
         raise _descriptor_error(
             path,
             "VAL-FDESC-002",
-            expected="feature",
+            expected=DescriptorType.FEATURE.value,
             actual=data.get("type"),
         )
     parent = _require_string(data, "parent", path)
@@ -94,11 +94,11 @@ def load_feature_from_yaml(path: Path) -> FeatureDescriptor:
 
 def load_implementation_from_yaml(path: Path) -> ImplementationDescriptor:
     data = load_yaml_file(path)
-    if data.get("type") != "implementation":
+    if data.get("type") != DescriptorType.IMPLEMENTATION.value:
         raise _descriptor_error(
             path,
             "VAL-FDESC-006",
-            expected="implementation",
+            expected=DescriptorType.IMPLEMENTATION.value,
             actual=data.get("type"),
         )
     parent = _require_string(data, "parent", path)
@@ -126,11 +126,11 @@ def load_implementation_from_yaml(path: Path) -> ImplementationDescriptor:
 
 def load_binding_from_yaml(path: Path) -> BindingDescriptor:
     data = load_yaml_file(path)
-    if data.get("type") != "binding":
+    if data.get("type") != DescriptorType.BINDING.value:
         raise _descriptor_error(
             path,
             "VAL-FDESC-008",
-            expected="binding",
+            expected=DescriptorType.BINDING.value,
             actual=data.get("type"),
         )
     parent = _require_string(data, "parent", path)
