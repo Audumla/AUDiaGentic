@@ -10,7 +10,6 @@ from .base import (
     FEATURE_SCOPE_IMPLEMENTATION,
     FEATURE_SCOPE_SHARED,
     BindingDescriptor,
-    DescriptorType,
     FeatureDescriptor,
     ImplementationDescriptor,
 )
@@ -188,40 +187,20 @@ def load_binding_from_yaml(path: Path) -> BindingDescriptor:
 
 def register_from_yaml(path: Path) -> FeatureDescriptor | ImplementationDescriptor | BindingDescriptor:
     data = load_yaml_file(path)
-    type_value = data.get("type")
-    if not isinstance(type_value, str) or not type_value:
-        raise _descriptor_error(
-            path,
-            "VAL-FDESC-012",
-            "descriptor type field must be a non-empty string",
-            field="type",
-            value=type_value,
-        )
-    try:
-        descriptor_type = DescriptorType.from_string(type_value)
-    except ValueError:
-        raise _descriptor_error(
-            path,
-            "VAL-FDESC-012",
-            "unsupported feature descriptor type",
-            field="type",
-            value=type_value,
-            supported=[t.value for t in DescriptorType],
-        )
-    if descriptor_type == DescriptorType.FEATURE:
+    descriptor_type = data.get("type")
+    if descriptor_type == "feature":
         return load_feature_from_yaml(path)
-    if descriptor_type == DescriptorType.IMPLEMENTATION:
+    if descriptor_type == "implementation":
         return load_implementation_from_yaml(path)
-    if descriptor_type == DescriptorType.BINDING:
+    if descriptor_type == "binding":
         return load_binding_from_yaml(path)
-    # Unreachable, but keep for type safety
     raise _descriptor_error(
         path,
         "VAL-FDESC-012",
         "unsupported feature descriptor type",
         field="type",
-        value=type_value,
-        supported=[t.value for t in DescriptorType],
+        value=descriptor_type,
+        supported=["feature", "implementation", "binding"],
     )
 
 
@@ -232,9 +211,8 @@ def load_features_from_dir(
 ) -> list[FeatureDescriptor | ImplementationDescriptor | BindingDescriptor]:
     pattern = "**/*.yaml" if recursive else "*.yaml"
     descriptors: list[FeatureDescriptor | ImplementationDescriptor | BindingDescriptor] = []
-    valid_types = {t.value for t in DescriptorType}
     for path in sorted(config_dir.glob(pattern)):
         data = load_yaml_file(path)
-        if data.get("type") in valid_types:
+        if data.get("type") in {"feature", "implementation", "binding"}:
             descriptors.append(register_from_yaml(path))
     return descriptors
