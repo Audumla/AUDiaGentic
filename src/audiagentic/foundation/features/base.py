@@ -1,12 +1,29 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 FEATURE_SCOPE_SHARED = "shared"
 FEATURE_SCOPE_IMPLEMENTATION = "implementation"
 IMPLEMENTATION_CARDINALITY_EXCLUSIVE = "exclusive"
 IMPLEMENTATION_CARDINALITY_MULTI = "multi"
+
+
+class DescriptorType(str, Enum):
+    FEATURE = "feature"
+    IMPLEMENTATION = "implementation"
+    BINDING = "binding"
+
+    @classmethod
+    def from_string(cls, value: str) -> "DescriptorType":
+        try:
+            return cls(value)
+        except ValueError:
+            raise ValueError(
+                f"Unknown descriptor type '{value}'. "
+                f"Supported: feature, implementation, binding"
+            ) from None
 
 
 @dataclass(frozen=True)
