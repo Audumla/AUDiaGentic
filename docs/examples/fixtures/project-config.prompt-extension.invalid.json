@@ -1,0 +1,18 @@
+{
+  "contract-version": "v1",
+  "project-id": "sample-project",
+  "project-name": "Sample Project",
+  "workflow-profile": "standard",
+  "tracked-docs-root": "docs",
+  "runtime-root": ".audiagentic/runtime",
+  "release-strategy": "release-please",
+  "prompt-launch": {
+    "syntax": "front-matter-v1",
+    "allow-adhoc-target": "yes",
+    "default-review-policy": {
+      "required-reviews": 0,
+      "aggregation-rule": "weighted-vote",
+      "require-distinct-reviewers": "sometimes"
+    }
+  }
+}

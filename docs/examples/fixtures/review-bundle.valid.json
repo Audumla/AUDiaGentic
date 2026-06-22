@@ -1,0 +1,27 @@
+{
+  "contract-version": "v1",
+  "review-bundle-id": "rvb_20260330_0001",
+  "subject": {
+    "kind": "artifact",
+    "job-id": "job_20260330_0007",
+    "artifact-id": "art_job_0007_impl_plan"
+  },
+  "required-reviews": 2,
+  "aggregation-rule": "all-pass",
+  "require-distinct-reviewers": true,
+  "reports": [
+    {
+      "review-id": "rvr_20260330_0001",
+      "reviewer-key": "claude:cli:sess_044",
+      "recommendation": "pass"
+    },
+    {
+      "review-id": "rvr_20260330_0002",
+      "reviewer-key": "codex:vscode:sess_015",
+      "recommendation": "pass-with-notes"
+    }
+  ],
+  "decision": "approved",
+  "status": "complete",
+  "updated-at": "2026-03-30T03:15:00Z"
+}

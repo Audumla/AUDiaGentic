@@ -1,0 +1,9 @@
+{
+  "contract-version": "v1",
+  "provider-id": "local-openai",
+  "status": "healthy",
+  "configured": true,
+  "latency-ms": 10,
+  "error": null,
+  "checked-at": "2026-03-30T00:00:00Z"
+}

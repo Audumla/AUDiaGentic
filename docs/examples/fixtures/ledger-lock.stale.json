@@ -1,0 +1,6 @@
+{
+  "pid": 99999,
+  "hostname": "localhost",
+  "acquired-at": "2026-03-28T00:00:00Z",
+  "command": "sync-current-release-ledger"
+}

@@ -1,0 +1,18 @@
+{
+  "canonical-provider-ids": [
+    "local-openai",
+    "claude",
+    "codex",
+    "gemini",
+    "qwen",
+    "copilot",
+    "continue",
+    "cline"
+  ],
+  "canonical-component-ids": [
+    "project",
+    "agent-ledger",
+    "agent-jobs",
+    "providers"
+  ]
+}
