@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "provider-id",
+    "status",
+    "configured",
+    "latency-ms",
+    "error",
+    "checked-at"
+  ],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "provider-id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "healthy",
+        "unhealthy",
+        "unknown"
+      ]
+    },
+    "configured": {
+      "type": "boolean"
+    },
+    "latency-ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "checked-at": {
+      "type": "string"
+    }
+  }
+}
