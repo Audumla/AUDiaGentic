@@ -34,4 +34,4 @@ def test_load_all_error_resolutions_populates_registry() -> None:
 def test_load_error_resolutions_from_component_returns_count() -> None:
     config_dir = Path(__file__).resolve().parents[3] / "src" / "audiagentic" / "config" / "components"
     count = load_error_resolutions_from_component("project", config_dir)
-    assert count == 5
+    assert count == 6
