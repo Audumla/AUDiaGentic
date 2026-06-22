@@ -1,12 +1,38 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 FEATURE_SCOPE_SHARED = "shared"
 FEATURE_SCOPE_IMPLEMENTATION = "implementation"
 IMPLEMENTATION_CARDINALITY_EXCLUSIVE = "exclusive"
 IMPLEMENTATION_CARDINALITY_MULTI = "multi"
+
+
+class DescriptorType(str, Enum):
+    """Typed descriptor kind for YAML loading.
+
+    Replaces string-based dispatch in the loader to catch typos immediately.
+    """
+    FEATURE = "feature"
+    IMPLEMENTATION = "implementation"
+    BINDING = "binding"
+
+    @classmethod
+    def from_string(cls, value: str) -> "DescriptorType":
+        """Parse a YAML type string into a DescriptorType.
+
+        Raises ValueError for unknown values.
+        """
+        try:
+            return cls(value)
+        except ValueError:
+            known = ", ".join(t.value for t in cls)
+            raise ValueError(
+                f"Unknown descriptor type {value!r}. "
+                f"Supported: {known}"
+            ) from None
 
 
 @dataclass(frozen=True)
