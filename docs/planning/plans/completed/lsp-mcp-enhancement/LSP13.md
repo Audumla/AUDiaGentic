@@ -1,7 +1,7 @@
 ---
 id: LSP13
 order: 13
-plan: plan-lsp-mcp-enhancement-completed
+plan: plan-lsp-mcp-enhancement
 state: done
 wave: W4.1
 phase: Phase 0
