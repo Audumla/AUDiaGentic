@@ -1,0 +1,9 @@
+{
+  "contract-version": "v1",
+  "project-id": "MyProject",
+  "project-name": "My Project",
+  "workflow-profile": "lite",
+  "tracked-docs-root": "docs",
+  "runtime-root": ".audiagentic/runtime",
+  "release-strategy": "release-please"
+}

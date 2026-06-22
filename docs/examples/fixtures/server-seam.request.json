@@ -1,0 +1,7 @@
+{
+  "packet-id": "pkt-job-srv-001",
+  "project-id": "my-project",
+  "provider-id": "local-openai",
+  "workflow-profile": "lite",
+  "job-id": "job_20260330_0501"
+}

@@ -1,0 +1,14 @@
+{
+  "contract-version": "v1",
+  "packet-id": "pkt-job-003",
+  "project-id": "my-project",
+  "provider-id": "local-openai",
+  "workflow-profile": "lite",
+  "job-id": "job_20260330_0001",
+  "expected-stage-order": [
+    "plan",
+    "implement",
+    "summary"
+  ],
+  "expected-final-state": "completed"
+}

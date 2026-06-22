@@ -9,6 +9,12 @@ summary: Address Standards 1/5/8/9 violations, dead code removal, and compositio
 
 Address Standards 1/5/8/9 violations, dead code removal, and composition-root architecture correction
 
+## Deferred
+
+| Item | Standard | Reason | Priority |
+|---|---|---|---|
+| `binaries.py:170-182` — `taskkill`/`pkill` | Standard 4 | OS process management, not editor coupling. Already abstracted via `sys.platform`. | Low |
+
 ## Items
 
 - [CC01](code-cleanup/CC01.md)

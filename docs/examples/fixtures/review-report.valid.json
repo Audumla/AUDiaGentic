@@ -1,0 +1,35 @@
+{
+  "contract-version": "v1",
+  "review-id": "rvr_20260330_0001",
+  "subject": {
+    "kind": "artifact",
+    "job-id": "job_20260330_0007",
+    "artifact-id": "art_job_0007_impl_plan"
+  },
+  "reviewer": {
+    "provider-id": "claude",
+    "surface": "cli",
+    "session-id": "sess_044",
+    "prompt-id": "prm_20260330_0044",
+    "reviewer-key": "claude:cli:sess_044"
+  },
+  "criteria": [
+    "matches packet scope",
+    "covers tests"
+  ],
+  "findings": [
+    {
+      "finding-id": "fdg_001",
+      "severity": "major",
+      "blocking": true,
+      "summary": "Missing invalid fixture coverage.",
+      "suggested-fix": "Add invalid fixtures."
+    }
+  ],
+  "recommendation": "rework",
+  "follow-up-actions": [
+    "add invalid fixtures",
+    "rerun schema validation"
+  ],
+  "created-at": "2026-03-30T03:00:00Z"
+}

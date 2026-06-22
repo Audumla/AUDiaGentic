@@ -1,0 +1,9 @@
+{
+  "change-class": "code-fix",
+  "files": [
+    "src/core/ledger.py"
+  ],
+  "technical-summary": "Added ledger append helper.",
+  "user-summary-candidate": "Improved change ledger recording.",
+  "status": "unreleased"
+}

@@ -1,0 +1,18 @@
+{
+  "contract-version": "v1",
+  "prompt-id": "prm_20260330_0001",
+  "source": {
+    "kind": "interactive-prompt",
+    "surface": "terminal",
+    "provider-id": "codex",
+    "session-id": "sess_001",
+    "model-id": "gpt-5.4-mini",
+    "model-alias": "fast-default"
+  },
+  "tag": "adhoc",
+  "target": {
+    "kind": "packet"
+  },
+  "workflow-profile": "standard",
+  "prompt-body": ""
+}
