@@ -153,7 +153,7 @@ def build_global_context(
 
 
 def run_agent(ctx, params: list[str] | RunnerParams, **kw):
-    return _forward("runner", "run_agent", ctx, params, project_root=ctx.project_root, **kw)
+    return _forward("runner", "run_agent", ctx, params, **kw)
 
 
 def translate_agent_args(params: RunnerParams) -> list[str]:
