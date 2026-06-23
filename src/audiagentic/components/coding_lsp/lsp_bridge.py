@@ -11,7 +11,7 @@ import subprocess
 import threading
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import IO, Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 
@@ -238,11 +238,14 @@ class LspJsonRpc:
     def _write_message(self, obj: dict[str, Any]) -> None:
         if self._process is None or self._process.poll() is not None:
             raise _lsp_error("EXT-LSP-002", "Language server process is not running")
+        stdin = self._process.stdin
+        if stdin is None:
+            raise _lsp_error("EXT-LSP-002", "Language server stdin is not available")
         payload = json.dumps(obj, separators=(",", ":")).encode("utf-8")
         header = f"Content-Length: {len(payload)}\r\n\r\n".encode("ascii")
         try:
-            self._process.stdin.write(header + payload)
-            self._process.stdin.flush()
+            stdin.write(header + payload)
+            stdin.flush()
         except (BrokenPipeError, OSError):
             raise _lsp_error("EXT-LSP-009", "Lost connection to language server")
 
@@ -297,7 +300,7 @@ class LspJsonRpc:
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise _lsp_error("EXT-LSP-002", f"Invalid JSON-RPC message: {exc}")
 
-    def _read_header(self, stream: subprocess.PIPE) -> bytes | None:
+    def _read_header(self, stream: IO[bytes]) -> bytes | None:
         header_parts: list[bytes] = []
         while True:
             line = self._read_line(stream)
@@ -307,7 +310,7 @@ class LspJsonRpc:
             if line in (b"\r\n", b"\n", b""):
                 return b"".join(header_parts)
 
-    def _read_line(self, stream: subprocess.PIPE) -> bytes | None:
+    def _read_line(self, stream: IO[bytes]) -> bytes | None:
         try:
             return stream.readline()
         except OSError:
@@ -327,7 +330,7 @@ class LspJsonRpc:
         except OSError:
             pass
 
-    def _read_exact(self, stream: subprocess.PIPE, length: int) -> bytes | None:
+    def _read_exact(self, stream: IO[bytes], length: int) -> bytes | None:
         data = bytearray()
         while len(data) < length:
             chunk = stream.read(min(length - len(data), 65536))
@@ -347,7 +350,7 @@ class LspJsonRpc:
         return None
 
     def __del__(self) -> None:
-        if self._process is not None and isinstance(self._process, subprocess.Popen) and self._process.poll() is None:
+        if self._process is not None and self._process.poll() is None:
             try:
                 self._process.terminate()
             except OSError:

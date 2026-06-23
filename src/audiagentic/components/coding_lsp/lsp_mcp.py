@@ -27,6 +27,8 @@ def lsp_capabilities(file: str) -> dict[str, Any]:
     """Show which LSP methods the language server supports for a file.
 
     Use this to check available capabilities before calling other tools.
+    If this returns no supported methods, the file's language may not be enabled
+    or its language server binary may be missing.
     Returns a list of supported method labels (e.g. definition, hover, codeAction).
     """
     return lsp_api.server_capabilities(file)
@@ -37,6 +39,8 @@ def lsp_capabilities(file: str) -> dict[str, Any]:
 def lsp_symbols(query: str, root: str = ".") -> list[dict[str, Any]]:
     """Search for workspace-level symbols matching the query string.
 
+    Query should be a symbol name or identifier substring, not arbitrary text.
+    Use grep/text search for comments, strings, or non-symbol content.
     Returns normalized symbols with name, kind, file (repo-relative path), and range.
     Use the returned location to feed position-based tools (lsp_definition, lsp_hover).
     """
@@ -61,6 +65,8 @@ def lsp_definition(file: str, position: str) -> list[dict[str, Any]]:
 
     position: "line:column" string, 1-based (e.g. "10:5" = line 10, column 5).
     Returns normalized locations with repo-relative file path and range.
+    If this returns an empty list, check lsp_capabilities(file) before assuming
+    no definition exists.
     """
     return lsp_api.definition(file, position)
 
@@ -86,6 +92,8 @@ def lsp_references(
     position: "line:column" string, 1-based (e.g. "10:5" = line 10, column 5).
     include_declaration: whether to include the symbol's own declaration (default: True).
     Returns normalized locations with repo-relative file path and range.
+    If this returns an empty list, check lsp_capabilities(file) before assuming
+    no references exist.
     """
     return lsp_api.references(file, position, include_declaration)
 
@@ -191,6 +199,8 @@ def lsp_diagnostics(
 ) -> dict[str, list[dict[str, Any]]]:
     """Get workspace-wide diagnostics from the language server.
 
+    Use this for workspace/server diagnostics. For a specific changed file,
+    prefer lsp_file_diagnostics(file) because it opens/syncs that file first.
     min_severity: filter threshold — 1=Error only, 2=Warning+, 3=Info+, 4=All (default).
     limit: max total diagnostics returned, 0 = unlimited.
     Returns dict mapping file URI to list of diagnostics.
@@ -220,6 +230,7 @@ def lsp_file_diagnostics(
 ) -> list[dict[str, Any]]:
     """Get diagnostics for a single file.
 
+    Preferred for changed files or files the agent is actively editing.
     Opens/syncs the file, waits for publishDiagnostics, returns cached result.
     min_severity: 1=Error only, 2=Warning+, 3=Info+, 4=All (default).
     timeout_ms: max wait time for server to publish (default: 5000ms).
