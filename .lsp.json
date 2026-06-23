@@ -1,12 +1,12 @@
 {
-  "python": {
-    "command": "pyright-langserver",
-    "args": [
-      "--stdio"
-    ],
-    "extensionToLanguage": {
-      ".py": "python",
-      ".pyi": "python"
+  "version": 1,
+  "servers": {
+    "python": {
+      "command": ["pyright-langserver", "--stdio"],
+      "file_extensions": [".py", ".pyi"],
+      "workspace_config_files": ["pyrightconfig.json"],
+      "settings": {},
+      "label": "Python (pyright)"
     }
   }
 }
