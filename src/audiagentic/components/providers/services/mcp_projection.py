@@ -43,7 +43,7 @@ def sync_component_mcp_to_providers(
             managed_id = mcp_def.managed_id or mcp_def.name
             managed_ids.add(managed_id)
             if "providers" in mcp_def.propagate and provider_active:
-                command, args, env = component_mcp_launch(
+                command, subcommand, args = component_mcp_launch(
                     mcp_def.module, extra_args=tuple(mcp_def.args)
                 )
                 desired_entries[managed_id] = (
@@ -51,8 +51,8 @@ def sync_component_mcp_to_providers(
                     McpServerEntry(
                         name=mcp_def.name,
                         command=command,
-                        args=args,
-                        env=env,
+                        args=(subcommand, *args),
+                        env={},
                     ),
                 )
         for mcp_def in descriptor.external_mcp_servers or ():

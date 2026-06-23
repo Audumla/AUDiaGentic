@@ -72,6 +72,9 @@ def _load_contributions(raw: Any) -> tuple[ActionInstruction, ...]:
         body = content.get("body") if isinstance(content, dict) else None
         if not all(isinstance(v, str) and v for v in (contribution_id, title, body)):
             continue
+        assert isinstance(contribution_id, str)
+        assert isinstance(title, str)
+        assert isinstance(body, str)
         preferred = entry.get("preferred-targets") or []
         contributions.append(ActionInstruction(
             contribution_id=contribution_id,
@@ -105,6 +108,9 @@ def _load_primary_instruction(data: dict, path: Path) -> ActionInstruction | Non
     body = content.get("body") if isinstance(content, dict) else None
     if not all(isinstance(v, str) and v for v in (contribution_id, title, body)):
         return None
+    assert isinstance(contribution_id, str)
+    assert isinstance(title, str)
+    assert isinstance(body, str)
     preferred = data.get("preferred-targets") or []
     return ActionInstruction(
         contribution_id=contribution_id,
