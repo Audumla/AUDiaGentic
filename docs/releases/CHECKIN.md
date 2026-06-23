@@ -1,18 +1,155 @@
 # Check-In Summary
 
-Total changes: 14
+Total changes: 151
 
-- Fixed startup logging errors when another AUDiaGentic process still has diagnostic log open on Windows.
-- Refactored coding LSP so MCP tools are thin wrappers over internal LSP services.
-- Refactored optional components so module names are explicit and MCP servers stay thin wrappers over internal APIs.
-- Cleaned leftover old module references after component naming refactor.
-- Cleaned MCP tool names and removed confusing public provider config-edit tools.
-- AUDiaGentic now tracks which provider MCP entries it owns, so renames and cleanup do not disturb external entries.
-- Made ledger reads cheaper and manifest handling safer.
-- Added batched ledger recording to avoid repeated sync work.
-- Made fragments the sole source of truth for current release ledger sync.
-- Toolchain declarations consolidated from 12 Python files into a single YAML-driven loader. Foundation layout cleaned up.
-- Dependency declarations moved out of hardcoded Python into component YAML files. Install/uninstall logic now expressed as workflow steps, eliminating a separate dependency management lane.
-- Added SelectStep workflow primitive for N-variant runtime dispatch. Layer boundaries enforced: toolchains/ never imported from dependency layer. Probe-guard pattern extracted to shared helper.
-- Provider descriptors no longer import foundation toolchains directly. Install specs are now declared via cli_recipe() which builds steps through the toolchain loader.
-- Fixed provider CLI plan crash and state machine protocol mismatch. All pre-existing provider and provisioning test failures resolved.
+- Deduplicate streaming timestamp helper — now uses shared foundation.time
+- Deduplicate MCP sync logic — one shared body, two thin wrappers
+- Consolidate stub adapter bodies — 6 adapters now share 2 helpers
+- Clean up 4 tiny workflow/harness files — dead code removed, small modules merged
+- Split 6 large files (>400 lines) into focused modules by logical concern
+- Fixed several error-handling bugs: a NameError in the updater spawn path, silent diagnostics/validation failures now logged, and cascade failures raised to warning level.
+- Added regression tests covering the error-handling bug fixes so they don't reappear.
+- Fixed provider CLIs (opencode and others) reporting WinError 2 on Windows by running their version probes through the shell so npm-installed .CMD shims resolve correctly.
+- Verified every provider installs and runs correctly in Docker, and added a test ensuring no provider's availability check crashes or falsely reports installed when its CLI is missing.
+- Slimmed the generated agent instruction files (CLAUDE.md etc.) and made them consistent across all providers, removing duplicated doctrine to cut context overhead.
+- Added an update_global_embedded_rig tool to update the shared global embedded rig binaries, warning when a project-local rig overrides them.
+- Added a console logging format that prints clean user-facing lines instead of raw log records.
+- Tidied import ordering in coding-lsp modules and an LSP e2e test.
+- Stopped tracking generated provider surfaces and operational artifacts (gitignore + untrack), and moved canonical skills to .agents/.
+- Stopped tracking the generated .mcp.json (machine-local absolute paths); now gitignored.
+- Refactored Claude hook handling and prompt-launch review pipeline into smaller, single-purpose modules and fixed a duplicated stdin-handling code path in the hook CLI.
+- Enabling a language LSP now installs its language server automatically in one step — you just name the language (e.g. python) and the matching server binary is resolved and installed for you, with rollback if the install fails. Also fixed project-root detection to stop at your home folder so temp/working dirs no longer pick up home's LSP config.
+- Consolidated duplicated _project_root() helper into single canonical implementation.
+- Extracted duplicated MCP server helpers into shared component_server module.
+- Split LSP API into operations and config/dependency modules for single-responsibility.
+- Extracted MCP propagation logic from lifecycle components module into dedicated module.
+- When the coding-lsp component is enabled, the pi agent now automatically installs the pi-lens extension, which auto-discovers your installed language servers from PATH — so enabling a language (which installs its server) just works in pi with no extra setup. pi uses pi-lens for code intelligence instead of the generic LSP bridge.
+- Collapsed 9 near-identical render_contributions functions into a single factory.
+- Fixed opencode language-server config: Python now correctly configures opencode's built-in 'pyright' server (and C++ its 'clangd' server) instead of creating a mismatched 'python' entry. The LSP component stays language-agnostic; the opencode adapter maps to opencode's server names internally.
+- Disabling a component now removes its instruction blocks (e.g. ag-* tag doctrine) from AGENTS.md and other provider files, instead of leaving them stranded until uninstall.
+- Fixed agents being told to use LSP tools (lsp_diagnostics, lsp_symbols) that aren't available to them. The LSP tool list is no longer duplicated into instruction files (AGENTS.md/CLAUDE.md/GEMINI.md); agents discover LSP tools directly from the MCP server, so only agents that actually have the LSP server see those tools.
+- Managed sections in agent instruction files (AGENTS.md, CLAUDE.md, etc.) are now wrapped in a single clean region with readable `## Title` headings and a 'managed by AUDiaGentic' notice, instead of noisy per-block <!-- AUDIAGENTIC:BEGIN/END --> comments around every entry. Old files migrate automatically on the next surface apply.
+- Disabling or uninstalling a component that contributes workflow tags now removes its generated skill/command files from every provider (Claude, Codex, OpenCode, Cline, Gemini), not just the doctrine blocks - and they return on re-enable.
+- Added the first reusable component-feature foundation slice and aligned the multilayer plan before moving to the next staged migration.
+- Prepared the agent-jobs action migration by proving feature-loaded actions preserve existing tag behavior.
+- Moved agent job actions onto the new feature descriptor format without changing prompt or surface behavior.
+- Completed the agent-jobs action descriptor cutover to feature-only loading.
+- Added the generic implementation and binding foundation needed before migrating coding-lsp.
+- Moved coding-lsp languages and the native ag-lsp implementation onto the reusable feature/implementation descriptor pattern without changing runtime behavior.
+- Made coding-lsp provider projection implementation-aware so AG LSP can be turned off when another LSP implementation is selected.
+- Added explicit ag-lsp-to-language bindings so LSP implementations can declare which language features they support and what each language requires.
+- LSP status now shows which implementation is active and how configured languages map to feature state.
+- Added LSP management tools for listing and switching active LSP implementations.
+- Added the alternate agent-lsp implementation path and projection so coding-lsp can switch between native ag-lsp and external agent-lsp.
+- LSP language features now have validated options that persist in feature state and affect runtime language server settings.
+- Updated the multilayer component plan to show what has landed and identify the remaining major LSP cutover decision.
+- Updated the multilayer component plan with completed stage details and clarified the next LSP decommission action.
+- Added the missing LSP switch persistence test and clarified writer-key status in the plan.
+- Clarified Stage 2 decommission sequencing so writer-key projection is unblocked before resolver-driven projection work starts.
+- Implemented binding writer-key dispatch for generic LSP projection and updated the Stage 2 plan status.
+- Added resolver-driven active LSP runtime server config as the next Stage 2 decommission step.
+- Moved LSP session discovery and native provider sync onto the feature-state runtime resolver.
+- Moved remaining LSP activation/dependency tests off lsp.json and shrank the legacy language registry path.
+- Completed writer-key dispatch for both generic MCP and native language-server LSP projections.
+- Completed Stage 2 LSP source-of-truth cleanup: active feature state and bindings now drive session/provider projections, with lsp.json kept as generated cache only.
+- Added the provider Stage 3 bridge: providers now participate in the reusable implementation layer while existing provider config/output behavior remains compatible.
+- Foundation now supports per-provider features, so each AI provider can own and configure its own capabilities independently.
+- Planning doc updated to record provider-migration progress and the chosen approach for modeling provider capabilities.
+- Each AI provider's capabilities (MCP, language-server support, surface files, skills) are now modelled as independent per-provider features.
+- AUDiaGentic can now compute which provider capabilities are active per enabled provider, the basis for unifying provider config projection.
+- MCP server config is now written only to enabled providers and cleaned up from disabled ones, avoiding stale config for providers you do not use.
+- Provider surface files (CLAUDE.md, AGENTS.md, skills) are now written only for enabled providers and cleaned up when a provider is disabled.
+- Language-server config is now synced only to enabled providers (and cleaned from disabled ones), completing enabled-aware projection for all provider capabilities.
+- Added reviewed architectural integrity findings to the multilayer component plan with validity and target-stage classification.
+- Hardened the feature binding loader so non-LSP bindings cannot silently inherit a language-specific default.
+- Provider VS Code extension probe failures now use AUDiaGentic's standard error envelope instead of raw framework-specific strings.
+- VS Code extension status is now optional/unknown when unavailable, rather than treated as a framework failure or false negative.
+- Feature and provider action descriptor loaders now use AUDiaGentic's standard structured error management instead of raw ValueError validation failures.
+- Corrected new structured error codes to match AUDiaGentic naming conventions and documented the error-code audit follow-up.
+- Removed unused surface helpers that hardcoded provider alias names.
+- Removed dead internal helper functions and verified module boundaries are clean.
+- Added architecture review findings and closeout gates for component isolation and config-driven capability management.
+- Foundation no longer reaches into the providers component for provider ids; provider-id discovery now lives with the providers.
+- Tidied LSP code and instructions by removing a dead constant and correcting docs to reflect feature-state-driven language config.
+- Cleaned up LSP config handling so language state, default implementation, discovery, and project-root detection no longer treat the lsp.json cache as a source of truth.
+- Moved VS Code host probing out of the provider registry and into a host capability service.
+- Decoupled runtime MCP projection from provider internals and removed unused runtime-owned harness provider descriptor.
+- Replaced the temporary MCP projection sink registry with lifecycle/event-bus based provider projection.
+- Added event migration candidates and non-event architecture cleanup items to the multi-layer component plan.
+- Decoupled provider reconcile from runtime MCP sync helpers and moved shared MCP JSON helpers into foundation.
+- Moved LSP provider projection to event-driven provider-owned handling and removed provider imports from the LSP sync module.
+- Moved provider-aware ID validation out of foundation and into the providers component wrapper.
+- Updated the multi-layer component plan with the valid architecture review findings while filtering out overbroad cleanup work.
+- Added a concise ordered completion plan for the remaining multi-layer component architecture work.
+- Small cleanups fixed inline logger eliminated silent error swallowing reconciled plan items
+- Fixed ledger fragment filename sanitization for Windows compatibility
+- Docker e2e fixes
+- Cleaned stale plan status so the next implementation step is based on current architecture state.
+- Each AI provider's config-writing capabilities (MCP and language-server config) are now individually tested via the provider's own adapter, catching mis-wired providers.
+- Completed foundation config isolation and small error/schema cleanup items from the architecture plan.
+- Lifecycle-unit, release-integration, and release-e2e tests now run in the normal test suite instead of Docker-only, since they were verified not to touch the real environment.
+- Moved provider aliases into provider descriptors and removed central provider/harness edit lists.
+- Generalized provider host capability metadata while keeping VS Code as the only concrete host probe for now.
+- Converted a small public-boundary error slice to structured errors and removed a broad silent swallow in ledger sync.
+- Converted additional MCP and LSP public-boundary errors to structured AUDiaGentic errors.
+- Lifecycle and provider integration tests now run in the normal test suite (not Docker-only) by redirecting the AUDiaGentic home to a temp dir, with verified zero pollution of the real environment.
+- LSP generic MCP projection now comes from implementation descriptors, so new supported LSP implementations no longer require editing the sync module for managed IDs or entry builders.
+- Provider and MCP error reporting now avoids leaking raw provider streams or obvious secrets in returned error envelopes.
+- Event bus diagnostic logs now include structured fields, making subscriptions and subscriber failures easier to trace in JSON logs.
+- CLI and lifecycle e2e tests now run on the host (they only write config, not code); tests that actually install code remain isolated.
+- Dependency probes now use simple declarative probe syntax instead of Python module paths in shipped config, without adding a new registry layer.
+- Consolidated MCP server construction onto a single foundation factory and shared entry point, removing duplicated bootstrap and import-guard boilerplate across four servers.
+- Removed a duplicate surface-file dataclass by reusing the shared component-file type.
+- Factored the shared shape of component and surface descriptors into a common base tier, removing duplicated field declarations without conflating the two domains.
+- Factored the feature, implementation, and binding descriptors onto a shared base tier, removing duplicated field declarations while keeping each type distinct.
+- Baseline sync no longer creates prompt syntax or prompt catalog files for unfinished agent-jobs surfaces; those values are derived from descriptors at runtime with project overrides still supported.
+- Baseline sync now only copies declared source files and no longer embeds component-specific rendering logic for virtual assets.
+- Fixed stale LSP projection tests that broke after projection facts moved into descriptor metadata.
+- Release finalization now uses evented ledger ownership for archive/sync work while keeping the synchronous release API behavior unchanged.
+- Framework validation and shared config/path/process helpers now use AUDiaGentic's structured error model instead of raw exceptions or process exits. Plan now records completed A14/A26 slices and remaining classification work.
+- Generic harness and rig helpers now report structured AUDiaGentic errors instead of terminating the process. Remaining exit cleanup is limited to CLI/harness-specific flows that need classification.
+- LSP language config is now sourced from the shared feature catalog, removing a duplicate config parser.
+- A26 complete. Shared library code now reports structured AUDiaGentic errors instead of exiting the process. Remaining exits are intentional CLI boundaries.
+- Removed import-time evaluation of LSP language dependencies so the shared feature catalog is the live source at runtime.
+- Component CLI no longer duplicates harness refresh logic. Lifecycle mutations now go through the project component API, keeping side effects centralized without adding unnecessary eventing.
+- Removed dead provider surface bridge config and code now that provider capabilities come from the provider descriptors.
+- Unified CLI output: all CLI and harness print calls now route through cli_io module for consistent stdout/stderr separation and JSON serialization.
+- Fixed structured errors so they can carry tracebacks and chain causes; exceptions raised through context managers no longer crash.
+- Cleaned up the LSP language catalog so feature descriptors are the source of truth and the LSP registry is only a runtime adapter.
+- Cleaned up import-ordering lint errors so the source tree passes Ruff.
+- Validated the provider-LSP end-to-end suite in Docker (25 passed); the prior failure was a Windows volume-mount issue, fixed by baking source into the image.
+- Made all Docker test images use a consistent source-baking approach so they run on Windows, and fixed two images that could not build.
+- Disabling the LSP component now fully removes its language-server config from every provider, leaving no empty 'lsp' block behind.
+- Decoupled CLI layer from optional components using service registry. Fixed error handling in schema/ID validators.
+- Enabling the LSP component no longer hangs/times out — the pi-lens extension install now runs in the background instead of blocking the request.
+- Fix LSP management MCP instructions to include lsp_list_languages and lsp_list_missing
+- Fix: removing an LSP language now properly cleans up provider config entries
+- Add regression test: removing an LSP language must prune provider configs
+- Fixed remaining architecture warnings: error handling, silent exceptions, missing loggers.
+- Enhance code-cleanup.md with detailed remediation plan for remaining architecture violations
+- Fix remaining architecture violations: raw ValueError -> AudiaGenticError, silent except:pass, missing loggers
+- Scoped all outstanding plan items with concrete implementation plans.
+- Split cleanup plan into active and completed docs; added 5 unswept standards
+- Validation pass 4: added 5 Std 8 sites, corrected Std 9 count 13->10, clarified redaction scope
+- Completed 6 cleanup items: error redaction, cli_registry revert, 7 except Exception fixes, ID constants deprecation, 10 extra={} logs, SystemExit fix
+- Hardened LSP transport layer: notification dispatch, server request handling, method-specific timeouts, crash recovery, expanded client capabilities, and file-level diagnostics with publishDiagnostics cache.
+- Code cleanup pass 4: 7 items completed. Error detail redaction, 7 except Exception fixes, 10 entity log extras, cli_registry revert, SystemExit narrowing, packet_runner logging, LanguageServerEntry moved out of foundation.
+- Completed LSP MCP enhancement plan: capability discovery, normalized schemas, 18 documented MCP tools, navigation expansion (typeDef, impl, callHierarchy, symbolContext), code actions/format preview, provider routing policy, post-edit feedback loop. Fixed hardcoded paths in config.
+- Refactored the foundation layer to support a more modular component architecture.
+- Restructured planning documents: each plan now has an index file linking to individual item files for better traceability and state tracking
+- Restored full execution detail to plan items — each item now includes line anchors, budgets, and acceptance criteria
+- Split remaining docs root plans into actionable items; moved completed plans to completed/ directory
+- Verified plan content coverage, added missing deferred/rejected items, removed redundant originals
+- Clean up stale tests: removed dead smoke tool test, updated component registry test after planning component removal
+- Fix options provenance bug and clean up 7 stale tests across registry, LSP, contracts, lifecycle, and tools
+- Fixed LSP diagnostics on Windows: single-file diagnostics no longer return empty due to drive-letter/URI casing mismatches, and workspace diagnostics fail fast with clear guidance instead of hanging 30s on servers (like pyright) that don't support workspace pull diagnostics.
+- Fix e2e test subprocess PYTHONPATH and update stale assertions for prompts lifecycle change
+- Workspace diagnostics now work with pyright: lsp_diagnostics falls back to a pyright --outputjson project scan when the language server doesn't support LSP workspace pull, instead of hanging. Capability reporting fixed so lsp_capabilities lists the methods a server actually supports.
+- Wired up dependency version checking, harness instruction derivation, and contribution config reference validation — all previously implemented but not connected.
+- Code cleanup: removed duplicated logic, dead branches, and verbose patterns across 7 files.
+- Flattened feature state to composite keys, eliminating error-prone 3-level nesting with automatic backward-compatible migration.
+- Reconciled plan items: ML05 verified done via dead code audit, ML06 unblocked. Cross-plan duplicates (CC07/ML01, CC09/ML03) documented.
+- Code simplification pass: reduced code size and complexity across 10 files by eliminating repetitive patterns, removing dead code, and extracting shared helpers.
+- Verified CC09/ML03 VS Code extensions.json implementation complete. Fixed missing _ensure_dict utility that blocked provider adapter imports.
+- ML06: Resolved stale open questions in LSP plan docs, fixed lsp.json documentation, verified Docker e2e test readiness.
+- Split logging formatter/handler classes into dedicated formatters.py module for better separation of concerns.

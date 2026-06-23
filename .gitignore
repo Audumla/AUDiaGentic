@@ -16,6 +16,12 @@
 /.roo/
 /agent/
 /.mcp.json
+# Generated provider agent instruction files (MANAGED_BY_AUDIAGENTIC — regenerated from component configs)
+/AGENTS.md
+/CLAUDE.md
+/COPILOT.md
+/GEMINI.md
+/QWEN.md
 /.audiagentic/components/
 /.audiagentic/runtime/
 /.audiagentic/sessions/
