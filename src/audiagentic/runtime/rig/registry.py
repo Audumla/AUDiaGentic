@@ -87,7 +87,7 @@ def _clear_rig_state() -> None:
 
 def _query_server_model(endpoint: str, timeout: float = 2.0) -> str | None:
     probe = probe_models_endpoint(endpoint, timeout=timeout)
-    return None if probe is None else probe.first_model_id
+    return probe.first_model_id if probe else None
 
 
 def adopt_rig_state(port: int, *, endpoint: str | None = None, model: str | None = None) -> dict | None:

@@ -23,6 +23,11 @@ def _io_error(code_number: int, message: str, **details: Any) -> AudiaGenticErro
     )
 
 
+def _ensure_dict(data: Any) -> dict[str, Any]:
+    """Return data if it's a dict, otherwise return an empty dict."""
+    return data if isinstance(data, dict) else {}
+
+
 def atomic_write_text(path: Path, content: str) -> None:
     """Atomically write text via a temp file + fsync + rename."""
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -23,6 +23,7 @@ dependencies:
   gh:
     display-name: GitHub CLI
     probe: binary:gh
+    version: ">=2.60.0"
     via:
       winget: GitHub.cli
       scoop: gh

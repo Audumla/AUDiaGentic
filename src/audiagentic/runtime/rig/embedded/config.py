@@ -4,6 +4,7 @@ import copy
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.runtime.config import load_yaml_file
@@ -160,9 +161,11 @@ def resolve_model_profile(
     agent_cfg = resolved.get("agent", {})
     prompt_cfg = resolved.get("prompt", {})
     proxy_cfg = resolved.get("proxy", {})
+    resolved_model_file = resolved.get("model_file")
+    model_file_value: str | None = cast(str, resolved_model_file) if isinstance(resolved_model_file, str) else None
     return ModelProfile(
         name=target,
-        model_file=resolved.get("model_file") if isinstance(resolved.get("model_file"), str) else None,
+        model_file=model_file_value,
         server_cfg=server_cfg if isinstance(server_cfg, dict) else {},
         agent_cfg=agent_cfg if isinstance(agent_cfg, dict) else {},
         chat_template_kwargs=(

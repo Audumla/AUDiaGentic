@@ -32,10 +32,8 @@ def privilege_prefix() -> tuple[str, ...]:
     """
     if sys.platform.startswith("win"):
         return ()
-    try:
-        if os.getuid() == 0:
-            return ()
-    except AttributeError:
+    getuid = getattr(os, "getuid", None)
+    if getuid is None or getuid() == 0:
         return ()
     return ("sudo",)
 

@@ -16,7 +16,7 @@ class DescriptorType(str, Enum):
     BINDING = "binding"
 
     @classmethod
-    def from_string(cls, value: str) -> "DescriptorType":
+    def from_string(cls, value: str) -> DescriptorType:
         try:
             return cls(value)
         except ValueError:
@@ -109,6 +109,7 @@ class ResolvedFeatureConfig:
     component_options: dict[str, Any]
     feature_options: dict[str, Any]
     effective_options: dict[str, Any]
+    option_provenance: dict[str, ResolvedOption] | None = None
 
 
 @dataclass(frozen=True)
@@ -124,3 +125,4 @@ class ResolvedImplementationConfig:
     component_options: dict[str, Any]
     implementation_options: dict[str, Any]
     effective_options: dict[str, Any]
+    option_provenance: dict[str, ResolvedOption] | None = None

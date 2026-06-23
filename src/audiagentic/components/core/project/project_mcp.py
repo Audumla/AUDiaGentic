@@ -7,6 +7,7 @@ from typing import Any
 from audiagentic.foundation.components.ids import COMPONENT_PROJECT
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
+from audiagentic.foundation.contracts.errors import get_error_resolution
 from audiagentic.foundation.mcp.component_server import (
     FastMCP,
     log_tool_call,
@@ -19,7 +20,6 @@ from audiagentic.foundation.mcp.component_server import (
 )
 
 from . import project_api
-from audiagentic.foundation.contracts.errors import get_error_resolution
 
 register_all_components()
 
@@ -119,6 +119,21 @@ def build_server() -> FastMCP:
             return project_api.runtime_sync_contract()
         except Exception as exc:
             return report_error("project", "runtime_sync_contract", exc, logger)
+
+    @mcp.tool()
+    @log_tool_call
+    def get_option_provenance(component_id: str | None = None) -> dict[str, Any]:
+        """Return option provenance for all features and implementations.
+
+        Shows which layer provided each option value. Source values:
+        'schema-default', 'component-state', 'feature-state', 'implementation-state'.
+
+        If component_id is provided, only returns provenance for that component.
+        """
+        try:
+            return project_api.get_option_provenance(project_root_from_env(), component_id)
+        except Exception as exc:
+            return report_error("project", "get_option_provenance", exc, logger)
 
     return mcp
 

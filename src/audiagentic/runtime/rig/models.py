@@ -104,4 +104,4 @@ def query_server_model(endpoint: str, timeout: float = 10.0) -> str | None:
     """Return the first model ID reported by the rig's /models endpoint."""
     from audiagentic.runtime.rig.http import probe_models_endpoint
     probe = probe_models_endpoint(endpoint, timeout=timeout)
-    return None if probe is None else probe.first_model_id
+    return probe.first_model_id if probe else None

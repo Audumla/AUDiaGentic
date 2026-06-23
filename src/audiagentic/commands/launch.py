@@ -84,7 +84,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
         enable_mcp=enable_mcp,
     )
 
-    if runner_params is not None:
+    if runner_params:
         args = translate_agent_args(runner_params) + args
 
     if ctx.manages_rig:
@@ -103,8 +103,8 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
             logger.debug("Could not register SIGTERM handler (non-Linux or signal already set)")
 
         try:
-            return run_agent(ctx, args, smoke=False)
+            return run_agent(ctx, args, smoke=False)  # type: ignore[arg-type]
         finally:
             shutdown_rig_if_last(rig_port)
     else:
-        return run_agent(ctx, args, smoke=False)
+        return run_agent(ctx, args, smoke=False)  # type: ignore[arg-type]

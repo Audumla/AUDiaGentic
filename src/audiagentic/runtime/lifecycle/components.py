@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import shutil
 from pathlib import Path
+from typing import cast
 
 from audiagentic.foundation.components.base import (
     MODE_CREATE_IF_MISSING,
@@ -11,6 +12,7 @@ from audiagentic.foundation.components.base import (
     MODE_REQUIRED_MANAGED,
     MODE_RUNTIME_ONLY,  # uninstall logic only
 )
+from audiagentic.foundation.components.hooks import get_component_status, invoke_hook
 from audiagentic.foundation.components.ids import COMPONENT_PROJECT
 from audiagentic.foundation.components.registry import (
     all_descriptors,
@@ -111,8 +113,6 @@ def get_owned_files(
 
 
 def _resolve_and_run_post_install(hook_path: str, project_root: Path) -> None:
-    from audiagentic.foundation.components.hooks import invoke_hook
-
     invoke_hook(hook_path, project_root=project_root, failure_label="post_install")
 
 
@@ -124,6 +124,7 @@ def install_component(
     version: str = DEFAULT_VERSION,
     installation_kind: str | None = None,
     last_lifecycle_action: str | None = None,
+    lifecycle_modes: set[str] | None = None,
 ) -> dict:
     resolved_id = resolve_component_id(component_id) or component_id
     descriptor = get_descriptor(component_id)
@@ -137,6 +138,8 @@ def install_component(
             project_root,
             source_root=source_root,
             component_ids={component_id},
+            lifecycle_modes=lifecycle_modes,
+            refresh_overrides=True,
         )
     marker: dict = {
         "component-id": resolved_id,
@@ -159,17 +162,16 @@ def install_component(
         root=str(root),
         baseline_sync=report,
     )
-    from audiagentic.foundation.components.hooks import get_component_status  # noqa: PLC0415
     status_payload = get_component_status(descriptor, project_root)
     if status_payload:
         result["component_status"] = status_payload
         missing = status_payload.get("missing-dependencies") or []
-        follow_up = status_payload.get("follow_up")
-        if isinstance(follow_up, dict):
-            result["follow_up"] = follow_up
+        if follow_up := status_payload.get("follow_up"):
+            if isinstance(follow_up, dict):
+                result["follow_up"] = follow_up
         if missing:
-            install_offer = status_payload.get("dependency-install-offer", "")
-            result["next-step"] = f"Missing: {', '.join(missing)}. {install_offer}".strip()
+            offer = status_payload.get("dependency-install-offer", "")
+            result["next-step"] = f"Missing: {', '.join(missing)}. {offer}".strip()
     return result
 
 
@@ -205,9 +207,8 @@ def uninstall_component(
     # Always remove the marker — it is system-owned, not user config
     mpath = _get_marker_path(resolved_id, project_root)
     if mpath.exists():
+        deleted.append(mpath)
         mpath.unlink()
-        if mpath not in deleted:
-            deleted.append(mpath)
     fire_post_uninstall(resolved_id, project_root)
     _refresh_mcp_config_if_needed(descriptor, project_root, reason="component-uninstalled")
     return _component_result(
@@ -227,33 +228,27 @@ def uninstall_all_components(
     deleted: list[Path] = []
     for component_id in all_descriptors():
         result = uninstall_component(component_id, project_root, remove_configs=remove_configs)
-        deleted.extend(Path(path) for path in result.get("deleted", []) if isinstance(path, str))
+        deleted.extend(Path(p) for p in cast(list[str], result.get("deleted") or []) if isinstance(p, str))
     return deleted
 
 
-def enable_component(component_id: str, project_root: Path) -> dict:
+def _toggle_component(component_id: str, project_root: Path, *, enabled: bool, event_fn, reason_suffix: str) -> dict:
     resolved_id = resolve_component_id(component_id) or component_id
     if not is_installed(resolved_id, project_root):
         return {"ok": False, "error": f"component {component_id} is not installed"}
     descriptor = get_descriptor(component_id)
     data = _read_marker(resolved_id, project_root)
     data["component-id"] = resolved_id
-    data["enabled"] = True
+    data["enabled"] = enabled
     _write_marker(resolved_id, project_root, data)
-    fire_post_enable(resolved_id, project_root)
-    _refresh_mcp_config_if_needed(descriptor, project_root, reason="component-enabled")
-    return _component_result(resolved_id, reason="component-enabled", enabled=True)
+    event_fn(resolved_id, project_root)
+    _refresh_mcp_config_if_needed(descriptor, project_root, reason=f"component-{reason_suffix}")
+    return _component_result(resolved_id, reason=f"component-{reason_suffix}", enabled=enabled)
+
+
+def enable_component(component_id: str, project_root: Path) -> dict:
+    return _toggle_component(component_id, project_root, enabled=True, event_fn=fire_post_enable, reason_suffix="enabled")
 
 
 def disable_component(component_id: str, project_root: Path) -> dict:
-    resolved_id = resolve_component_id(component_id) or component_id
-    if not is_installed(resolved_id, project_root):
-        return {"ok": False, "error": f"component {component_id} is not installed"}
-    descriptor = get_descriptor(component_id)
-    data = _read_marker(resolved_id, project_root)
-    data["component-id"] = resolved_id
-    data["enabled"] = False
-    _write_marker(resolved_id, project_root, data)
-    fire_post_disable(resolved_id, project_root)
-    _refresh_mcp_config_if_needed(descriptor, project_root, reason="component-disabled")
-    return _component_result(resolved_id, reason="component-disabled", enabled=False)
+    return _toggle_component(component_id, project_root, enabled=False, event_fn=fire_post_disable, reason_suffix="disabled")

@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 
 from .base import OptionSchema
+
+
+@dataclass(frozen=True)
+class ResolvedOption:
+    """Tracks the resolved value and its source layer for provenance debugging."""
+    value: Any
+    source: str  # 'schema-default' | 'component-state' | 'feature-state' | 'implementation-state'
 
 
 def _option_error(code_number: int, message: str, **details: Any) -> AudiaGenticError:
@@ -87,6 +95,7 @@ def resolve_options(
     schema: dict[str, OptionSchema],
     *layers: dict[str, Any],
     reject_unknown: bool = True,
+    layer_names: list[str] | None = None,
 ) -> dict[str, Any]:
     resolved = {
         key: option.default
@@ -103,3 +112,46 @@ def resolve_options(
             validate_option(key, value, schema[key])
             resolved[key] = value
     return resolved
+
+
+def resolve_options_with_provenance(
+    schema: dict[str, OptionSchema],
+    *layers: dict[str, Any],
+    reject_unknown: bool = True,
+    layer_names: list[str] | None = None,
+) -> tuple[dict[str, Any], dict[str, ResolvedOption]]:
+    """Resolve options and track which layer provided each value.
+
+    Returns (resolved_dict, provenance_map). The provenance map keys are option
+    names and values are ResolvedOption(value, source) where source is the layer
+    name that last set the value.
+
+    Layer names default to 'schema-default' for defaults, then 'layer-0', 'layer-1',
+    etc. Pass explicit layer_names for meaningful labels like 'component-state',
+    'feature-state', 'implementation-state'.
+    """
+    if layer_names is None:
+        layer_names = [f"layer-{i}" for i in range(len(layers))]
+
+    provenance: dict[str, ResolvedOption] = {}
+
+    # Seed with schema defaults
+    for key, option in schema.items():
+        if option.default is not None:
+            provenance[key] = ResolvedOption(value=option.default, source="schema-default")
+
+    resolved = {k: v.value for k, v in provenance.items()}
+    for i, layer in enumerate(layers):
+        layer_name = layer_names[i] if i < len(layer_names) else f"layer-{i}"
+        for key, value in layer.items():
+            if key not in schema:
+                if reject_unknown:
+                    raise _option_error(9, f"{key}: unknown option", option=key)
+                resolved[key] = value
+                provenance[key] = ResolvedOption(value=value, source=layer_name)
+                continue
+            validate_option(key, value, schema[key])
+            resolved[key] = value
+            provenance[key] = ResolvedOption(value=value, source=layer_name)
+
+    return resolved, provenance
