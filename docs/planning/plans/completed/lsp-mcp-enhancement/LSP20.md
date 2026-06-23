@@ -2,7 +2,8 @@
 id: LSP20
 order: 20
 plan: plan-lsp-mcp-enhancement
-state: not_done
+state: superseded
+superseded-by: plan-lsp-capability-expansion
 validate-first: true
 complexity: complex
 wave: W6
@@ -35,6 +36,18 @@ Wave W6 — Capability discovery + tool ergonomics (Phase 2).
 ## Validation
 
 Agent can ask what LSP can do for current file. Every MCP tool has a description and documented parameters. Position round-trip has no off-by-one. Success and error results share a documented envelope shape across all tools.
+
+## Architecture Standards Assessment
+
+**Standards risk: Standard #6 (MCP Server Construction) and #8 (Error Handling).** All tools must use `mcp_server(__name__)` — existing tools comply. Result envelopes must be consistent (W6.3.4 addresses this directly). Error handling must use `AudiaGenticError` with canonical codes.
+
+## Resolution Assessment
+
+**Complexity: Moderate.** Many touch points, but each sub-task is self-contained.
+
+**Solution:** W6.1: add `lsp_capabilities(file_or_language)` MCP tool. W6.2: normalize symbols/locations/hovers to shared schema. W6.3: docstrings on every MCP tool, self-documenting position format, document min_severity semantics, one consistent result/error envelope, symbol→position workflow note.
+
+**Why moderate:** 3 files but many touch points across all MCP tools. Each sub-task is independent and can be validated separately.
 
 ## Dependencies
 

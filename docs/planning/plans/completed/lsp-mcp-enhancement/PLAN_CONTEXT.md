@@ -175,10 +175,12 @@ Deferred from `coding-lsp` v1:
 
 ## Open Questions
 
-- Should OpenCode receive hybrid `ag-lsp` by default after v1, or only with config opt-in?
-- Should Codex native `language_servers` remain enabled if enhanced MCP becomes primary?
-- Should lint dependencies install with language enablement in `coding-quality`, or require separate explicit enable?
-- Should `coding-quality` aggregate into `coding-lsp` diagnostics, or remain separate MCP tools?
+All open questions resolved by the decisions below (2026-06 audit).
+
+- ~~Should OpenCode receive hybrid `ag-lsp` by default after v1, or only with config opt-in?~~ → **Resolved:** Keep OpenCode `native` for v1; revisit `hybrid` after validation.
+- ~~Should Codex native `language_servers` remain enabled if enhanced MCP becomes primary?~~ → **Resolved:** Codex uses native LSP; generic ag-lsp is suppressed in codex config.
+- ~~Should lint dependencies install with language enablement in `coding-quality`, or require separate explicit enable?~~ → **Resolved:** Lint/format tools belong to `coding-quality`, not `coding-lsp`.
+- ~~Should `coding-quality` aggregate into `coding-lsp` diagnostics, or remain separate MCP tools?~~ → **Resolved:** `coding-quality` is a separate plan/component.
 
 ## Decisions From Review
 

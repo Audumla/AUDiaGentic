@@ -2,7 +2,8 @@
 id: LSP21
 order: 21
 plan: plan-lsp-mcp-enhancement
-state: not_done
+state: superseded
+superseded-by: plan-lsp-capability-expansion (CAP01–07); caller fixes in CAP01 step 6; W7.5 deferred
 validate-first: true
 complexity: complex
 wave: W7
@@ -34,6 +35,18 @@ Multiple — see per-wave detail in plan
 ## Validation
 
 Per-wave acceptance criteria in plan.
+
+## Architecture Standards Assessment
+
+**Standards risk: Standard #6 (MCP Server Construction) and #8 (Error Handling).** All new tools must use `mcp_server(__name__)`. Result envelopes must follow the W6.3.4 convention. Provider routing (W7.3) must use config-driven policy, not hardcoded per-provider logic (Standard #2).
+
+## Resolution Assessment
+
+**Complexity: Complicated.** 5 phases with dependencies across waves.
+
+**Solution:** W7.1: navigation tools (type definition, implementation, call hierarchy, symbol context). W7.2: code actions + format preview. W7.3: provider routing policy (config-driven). W7.4: agent feedback loop. W7.5: coding-quality split. Each phase is capability-gated and independent.
+
+**Why complicated:** 5 phases, each with dependencies. LSP20 is a prerequisite. Significant new functionality. Provider routing must respect Standard #2 (config-driven).
 
 ## Dependencies
 
