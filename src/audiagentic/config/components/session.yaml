@@ -31,11 +31,11 @@ mcp-servers:
 harness-instructions:
   - section: "What you can do"
     content: |
-      ### Session
-      - `mcp_status` — Check harness status and configuration
-      - `mcp_config` — Show harness configuration
-      - `mcp_set_auto_update` — Enable or disable auto-update
-      - `mcp_cli_visibility` — Show whether thinking/tool blocks are visible
-      - `mcp_set_cli_visibility` — Show or hide thinking/tool blocks in the CLI
-      - `mcp_refresh_harness_config` — Regenerate mcp.json/SYSTEM.md from current component state after install/uninstall
-      - `mcp_update_rig` — Update llama.cpp rig binaries for `local` or `global` scope
+       ### Session
+       - `status` — Check harness status and configuration
+       - `config` — Show harness configuration
+       - `set_auto_update` — Enable or disable auto-update
+       - `cli_visibility` — Show whether thinking/tool blocks are visible
+       - `set_cli_visibility` — Show or hide thinking/tool blocks in the CLI
+       - `refresh_harness_config` — Regenerate mcp.json/SYSTEM.md from current component state after install/uninstall
+       - `update_rig` — Update llama.cpp rig binaries for "local" or "global" scope
