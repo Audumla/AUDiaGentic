@@ -386,8 +386,8 @@ def test_fail_all_pending_sets_error_responses() -> None:
 
 
 def test_session_manager_rebuilds_dead_session() -> None:
-    from audiagentic.components.coding_lsp.lsp_session_manager import SessionManager
     from audiagentic.components.coding_lsp.lsp_lifecycle import ServerConfig
+    from audiagentic.components.coding_lsp.lsp_session_manager import SessionManager
 
     manager = SessionManager()
     config = ServerConfig(command=["fake-server"], file_extensions=[".py"])

@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.foundation.contracts.errors import get_error_resolution, register_error_resolution
 from audiagentic.foundation.contracts.error_resolutions import (
     load_all_error_resolutions,
     load_error_resolutions_from_component,
 )
+from audiagentic.foundation.contracts.errors import get_error_resolution, register_error_resolution
 
 
 def test_get_error_resolution_returns_registered() -> None:

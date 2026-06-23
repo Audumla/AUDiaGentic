@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from audiagentic.components.coding_lsp import language_registry
 from audiagentic.components.coding_lsp.language_servers_sync import (
@@ -47,30 +48,30 @@ def _enable_python(tmp_path: Path, *, settings: dict | None = None) -> None:
 
 
 def test_sync_skips_when_config_missing(tmp_path: Path, monkeypatch) -> None:
-    published: list[dict] = []
+    called: list[object] = []
     monkeypatch.setattr(
-        "audiagentic.components.coding_lsp.language_servers_sync._publish_provider_projection",
-        lambda root, **payload: published.append(payload) or payload["default"],
+        "audiagentic.components.providers.services.lsp_projection.sync_language_servers_to_provider_configs",
+        lambda root, servers: called.append((root, servers)) or {"ok": True},
     )
     result = sync_language_servers_to_providers(tmp_path)
     assert result["synced"] == []
     assert result["skipped"] == "no valid configured language servers"
-    assert published == []
+    assert called == []
 
 
 def test_sync_writes_real_entries(tmp_path: Path, monkeypatch) -> None:
     _enable_python(tmp_path, settings={"python": {"analysis": "basic"}})
-    published: dict[str, object] = {}
+    captured: dict[str, Any] = {}
     monkeypatch.setattr(
-        "audiagentic.components.coding_lsp.language_servers_sync._publish_provider_projection",
-        lambda root, **payload: published.update(payload) or {"ok": True, "synced": ["codex"]},
+        "audiagentic.components.providers.services.lsp_projection.sync_language_servers_to_provider_configs",
+        lambda root, servers: captured.update({"root": root, "servers": servers}) or {"ok": True, "synced": ["codex"]},
     )
 
     result = sync_language_servers_to_providers(tmp_path)
 
     assert result["synced"] == ["codex"]
-    assert published["action"] == "sync-language-servers"
-    entries = published["servers"]
+    assert captured["root"] == tmp_path
+    entries = captured["servers"]
     assert entries["python"].command == ["pyright-langserver", "--stdio"]
     assert entries["python"].file_extensions == [".py", ".pyi"]
 
@@ -79,13 +80,13 @@ def test_prune_requests_full_catalog(tmp_path: Path, monkeypatch) -> None:
     # Disable/uninstall prunes every supported language (not just currently-active
     # ones), so previously-projected entries are never orphaned when feature state
     # has already been cleared.
-    published: dict[str, object] = {}
+    captured: dict[str, Any] = {}
     monkeypatch.setattr(
-        "audiagentic.components.coding_lsp.language_servers_sync._publish_provider_projection",
-        lambda root, **payload: published.update(payload) or {
+        "audiagentic.components.providers.services.lsp_projection.prune_language_servers_from_provider_configs",
+        lambda root, languages: captured.update({"root": root, "languages": languages}) or {
             "ok": True,
             "pruned": ["codex"],
-            "details": {"codex": {"removed": payload["languages"]}},
+            "details": {"codex": {"removed": languages}},
         },
     )
 
@@ -93,28 +94,27 @@ def test_prune_requests_full_catalog(tmp_path: Path, monkeypatch) -> None:
 
     catalog = set(language_registry.all_languages())
     assert result["pruned"] == ["codex"]
-    assert published["action"] == "prune-language-servers"
     assert "python" in catalog
-    assert set(published["languages"]) == catalog
+    assert set(captured["languages"]) == catalog
     assert set(result["details"]["codex"]["removed"]) == catalog
 
 
 def test_prune_requests_catalog_regardless_of_active_state(tmp_path: Path, monkeypatch) -> None:
     # No languages enabled in feature state, but prune still targets the whole
     # catalog; the per-provider removers are idempotent no-ops when absent.
-    published: dict[str, object] = {}
+    captured: dict[str, Any] = {}
     monkeypatch.setattr(
-        "audiagentic.components.coding_lsp.language_servers_sync._publish_provider_projection",
-        lambda root, **payload: published.update(payload) or {
+        "audiagentic.components.providers.services.lsp_projection.prune_language_servers_from_provider_configs",
+        lambda root, languages: captured.update({"root": root, "languages": languages}) or {
             "ok": True,
             "pruned": [],
-            "languages": payload["languages"],
+            "languages": languages,
         },
     )
     result = prune_language_servers_from_providers(tmp_path)
     catalog = set(language_registry.all_languages())
     assert set(result["languages"]) == catalog
-    assert set(published["languages"]) == catalog
+    assert set(captured["languages"]) == catalog
 
 
 def test_generic_mcp_projection_uses_implementation_descriptor(tmp_path: Path, monkeypatch) -> None:
@@ -144,18 +144,31 @@ def test_generic_mcp_projection_uses_implementation_descriptor(tmp_path: Path, m
         )
     )
     set_feature_state(tmp_path, "coding-lsp", "language", "python", FeatureState(enabled=True))
-    published: dict[str, object] = {}
+    captured: dict[str, Any] = {}
     monkeypatch.setattr(
-        "audiagentic.components.coding_lsp.language_servers_sync._publish_provider_projection",
-        lambda root, **payload: published.update(payload) or {"ok": True, "synced": ["codex"]},
+        "audiagentic.components.providers.services.lsp_projection.sync_generic_lsp_mcp_to_provider_configs",
+        lambda root, desired_entries, managed_ids: captured.update({
+            "root": root,
+            "desired_entries": desired_entries,
+            "managed_ids": managed_ids,
+        }) or {"ok": True, "synced": ["codex"]},
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.coding_lsp.language_servers_sync.shutil.which",
+        lambda command: None,
     )
 
     result = sync_generic_lsp_mcp_to_providers(tmp_path)
 
     assert result["synced"] == ["codex"]
-    assert published["action"] == "sync-generic-mcp"
-    assert published["managed_ids"] == {"coding-lsp/custom-lsp"}
-    managed_id, entry = next(iter(published["desired_entries"].items()))
+    assert result["mcp_command_status"] == {
+        "commands": ["custom-lsp"],
+        "missing": ["custom-lsp"],
+        "ok": False,
+    }
+    assert captured["root"] == tmp_path
+    assert captured["managed_ids"] == {"coding-lsp/custom-lsp"}
+    managed_id, entry = next(iter(captured["desired_entries"].items()))
     assert managed_id == "coding-lsp/custom-lsp"
     assert entry[0] == "custom-lsp"
     assert entry[1].command == "custom-lsp"
@@ -170,17 +183,17 @@ def test_prune_generic_mcp_uses_descriptor_managed_ids(tmp_path: Path, monkeypat
             raw={"projection": {"generic-mcp": {"managed-id": "coding-lsp/custom-lsp"}}},
         )
     )
-    published: dict[str, object] = {}
+    captured: dict[str, Any] = {}
     monkeypatch.setattr(
-        "audiagentic.components.coding_lsp.language_servers_sync._publish_provider_projection",
-        lambda root, **payload: published.update(payload) or {
+        "audiagentic.components.providers.services.lsp_projection.prune_generic_lsp_mcp_from_provider_configs",
+        lambda root, managed_ids: captured.update({"root": root, "managed_ids": managed_ids}) or {
             "ok": True,
             "pruned": ["codex"],
-            "managed_ids": payload["managed_ids"],
+            "managed_ids": managed_ids,
         },
     )
 
     result = prune_generic_lsp_mcp_from_providers(tmp_path)
 
     assert result["managed_ids"] == {"coding-lsp/custom-lsp"}
-    assert published["action"] == "prune-generic-mcp"
+    assert captured["root"] == tmp_path

@@ -25,7 +25,8 @@ def test_scaffold_seed_creates_layout(tmp_path: Path) -> None:
     seed_example_project.seed_example_project(target)
     assert (target / ".audiagentic" / "config" / "runtime" / "providers.yaml").is_file()
     assert not (target / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml").exists()
-    assert not (target / ".audiagentic" / "prompts").exists()
+    # The ag-review prompt is a required managed baseline asset (see release ledger).
+    assert (target / ".audiagentic" / "prompts" / "ag-review" / "default.md").is_file()
     assert (target / ".github" / "workflows" / "release.yml").is_file()
 
 

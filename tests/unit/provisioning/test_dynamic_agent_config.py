@@ -79,8 +79,9 @@ def test_providers_component_uses_optional_server_module_in_mcp_config(
     payload = json.loads((harness_root / "agent" / "mcp.json").read_text(encoding="utf-8"))
 
     providers = payload["mcpServers"]["ag-providers-mgmt"]
+    assert providers["command"] == "audiagentic"
     assert providers["args"] == [
-        "-m",
+        "mcp",
         "audiagentic.components.providers.providers_mcp",
     ]
 
@@ -101,8 +102,9 @@ def test_ledger_component_uses_optional_server_module_in_mcp_config(
     payload = json.loads((harness_root / "agent" / "mcp.json").read_text(encoding="utf-8"))
 
     ledger = payload["mcpServers"]["ag-ledger"]
+    assert ledger["command"] == "audiagentic"
     assert ledger["args"] == [
-        "-m",
+        "mcp",
         "audiagentic.components.ledger.ledger_mcp",
     ]
 

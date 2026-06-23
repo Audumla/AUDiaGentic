@@ -101,7 +101,7 @@ def test_install_empty_targets_configured_missing(tmp_path: Path, monkeypatch) -
     result = asyncio.run(
         lsp_config_api.install_lsp_dependencies([], root=str(tmp_path))
     )
-    assert result.status == "ok"
+    assert result["status"] == "ok"
 
 
 def test_install_accepts_active_implementation_dependency(tmp_path: Path) -> None:
@@ -125,7 +125,7 @@ def test_install_accepts_active_implementation_dependency(tmp_path: Path) -> Non
         lsp_config_api.install_lsp_dependencies(["agent-lsp"], root=str(tmp_path))
     )
 
-    assert result.status == "ok"
+    assert result["status"] == "ok"
 
 
 def test_enable_language_installs_then_enables(tmp_path: Path, monkeypatch) -> None:
