@@ -89,6 +89,24 @@ def test_diagnostics_uses_session_manager_public_api(monkeypatch) -> None:
     assert called["limit"] == 10
 
 
+def test_diagnostics_initializes_active_sessions(monkeypatch) -> None:
+    server = ServerConfig(command=["pyright-langserver", "--stdio"], file_extensions=[".py"])
+    initialized: list[tuple[Path, str, ServerConfig]] = []
+
+    monkeypatch.setattr(lsp_api, "resolve_active_runtime_servers", lambda project_root: {"python": server})
+
+    def _fake_get_or_create(project_root, language, server_config):
+        initialized.append((project_root, language, server_config))
+        return MagicMock()
+
+    monkeypatch.setattr(lsp_api._session_manager, "get_or_create", _fake_get_or_create)
+    monkeypatch.setattr(lsp_api._session_manager, "diagnostics", lambda project_root, **kwargs: {})
+
+    lsp_api.diagnostics(".")
+
+    assert initialized == [(Path.cwd(), "python", server)]
+
+
 def test_config_status_reports_missing_config(tmp_path: Path) -> None:
     (tmp_path / ".audiagentic").mkdir()
     status = lsp_config_api.config_status(str(tmp_path))

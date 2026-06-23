@@ -6,6 +6,7 @@ markers are written, but that the managed files are present and non-empty.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -21,7 +22,9 @@ def _cli(*args: str, project: Path | None = None, expect_rc: int = 0) -> dict | 
     if project is not None:
         cmd += ["--project", str(project)]
     cmd += list(args)
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join([str(_ROOT / "src"), env.get("PYTHONPATH", "")])
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", env=env)
     assert result.returncode == expect_rc, (
         f"CLI {args!r} rc={result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
     )
@@ -63,14 +66,13 @@ def test_install_project_seeds_project_yaml(tmp_path):
     assert project_yaml.stat().st_size > 0
 
 
-def test_reinstall_project_refreshes_required_managed(tmp_path):
+def test_reinstall_project_preserves_prompts_create_if_missing(tmp_path):
     _cli("component", "install", "project", project=tmp_path)
     prompt = tmp_path / ".audiagentic" / "prompts" / "ag-review" / "default.md"
-    original = prompt.read_text(encoding="utf-8")
-    prompt.write_text("corrupted", encoding="utf-8")
+    prompt.write_text("custom content", encoding="utf-8")
 
     _cli("component", "install", "project", project=tmp_path)
-    assert prompt.read_text(encoding="utf-8") == original
+    assert prompt.read_text(encoding="utf-8") == "custom content"
 
 
 def test_reinstall_project_preserves_create_if_missing(tmp_path):

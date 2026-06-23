@@ -27,7 +27,7 @@ def test_hook_chain_settings_json_exists():
 
 def test_hook_handlers_module_exists():
     """Verify hook handlers module exists at its canonical location."""
-    handlers_path = ROOT / 'src' / 'audiagentic' / 'components' / 'optional' / 'providers' / 'adapters' / 'claude' / 'hooks.py'
+    handlers_path = ROOT / 'src' / 'audiagentic' / 'components' / 'providers' / 'adapters' / 'claude' / 'hooks.py'
     assert handlers_path.exists()
 
 

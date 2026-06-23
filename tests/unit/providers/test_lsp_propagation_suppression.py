@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from audiagentic.components.coding_lsp.language_servers_sync import (
     sync_generic_lsp_mcp_to_providers,
@@ -133,7 +134,9 @@ def test_sync_generic_lsp_routes_by_provider_capability(tmp_path: Path, monkeypa
 
     assert result["ok"] is True
     assert "aider" in result["skipped"]
-    assert captured["codex"] == {}
+    # codex has both mcp_config and language_servers_config — should receive MCP
+    assert "coding-lsp/ag-lsp" in captured["codex"]
+    assert captured["codex"]["coding-lsp/ag-lsp"][0] == "ag-lsp"
     assert list(captured["claude"]) == ["coding-lsp/ag-lsp"]
     assert captured["claude"]["coding-lsp/ag-lsp"][0] == "ag-lsp"
 
@@ -147,10 +150,13 @@ def test_sync_generic_lsp_projects_agent_lsp_when_active(tmp_path: Path, monkeyp
         ImplementationState(enabled=True),
     )
     _enable(tmp_path, "claude")
-    published: dict[str, object] = {}
+    published: dict[str, Any] = {}
     monkeypatch.setattr(
-        "audiagentic.components.coding_lsp.language_servers_sync._publish_provider_projection",
-        lambda root, **payload: published.update(payload) or {"ok": True, "synced": ["claude"]},
+        "audiagentic.components.providers.services.lsp_projection.sync_generic_lsp_mcp_to_provider_configs",
+        lambda root, desired_entries, managed_ids: published.update({
+            "desired_entries": desired_entries,
+            "managed_ids": managed_ids,
+        }) or {"ok": True, "synced": ["claude"]},
     )
 
     result = sync_generic_lsp_mcp_to_providers(tmp_path)
@@ -169,10 +175,13 @@ def test_sync_generic_lsp_projects_agent_lsp_args(tmp_path: Path, monkeypatch) -
         ImplementationState(enabled=True),
     )
     _enable(tmp_path, "claude")
-    published: dict[str, object] = {}
+    published: dict[str, Any] = {}
     monkeypatch.setattr(
-        "audiagentic.components.coding_lsp.language_servers_sync._publish_provider_projection",
-        lambda root, **payload: published.update(payload) or {"ok": True, "synced": ["claude"]},
+        "audiagentic.components.providers.services.lsp_projection.sync_generic_lsp_mcp_to_provider_configs",
+        lambda root, desired_entries, managed_ids: published.update({
+            "desired_entries": desired_entries,
+            "managed_ids": managed_ids,
+        }) or {"ok": True, "synced": ["claude"]},
     )
 
     result = sync_generic_lsp_mcp_to_providers(tmp_path)
