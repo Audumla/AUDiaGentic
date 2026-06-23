@@ -17,7 +17,9 @@ Usage
 from __future__ import annotations
 
 import argparse
+import importlib
 import logging
+import sys
 from pathlib import Path
 
 from audiagentic.cli_io import print_error, print_json, print_message
@@ -37,7 +39,7 @@ logger = logging.getLogger(__name__)
 def _cmd_install(target: Path, project_root: Path) -> int:
     print_message(f"Installing AUDiaGentic harness into {target}")
     rc = install_to(target, project_root=project_root)
-    if rc == 0:
+    if not rc:
         # Auto-install harness components
         try:
             from audiagentic.foundation.components.loader import register_all_components
@@ -55,6 +57,56 @@ def _cmd_install(target: Path, project_root: Path) -> int:
 def _cmd_update() -> int:
     from audiagentic.runtime.update.prompt import run_update_now
     return run_update_now()
+
+
+def _cmd_mcp(module_name: str, module_args: list[str]) -> int:
+    module = importlib.import_module(module_name)
+    main = getattr(module, "main", None)
+    if not callable(main):
+        raise AudiaGenticError(
+            code="CFG-MCP-002",
+            kind="mcp",
+            message="MCP module does not expose a callable main()",
+            details={"module": module_name},
+        )
+    old_argv = sys.argv
+    try:
+        sys.argv = [module_name, *module_args]
+        result = main()
+    finally:
+        sys.argv = old_argv
+    return result if isinstance(result, int) else 0
+
+
+def _regenerate_provider_configs(project_root: Path) -> dict[str, object]:
+    """Regenerate every provider's MCP config from current component state.
+
+    Chains the two projections that own provider MCP entries so a single refresh
+    rewrites them all in managed launcher form (module renames are picked up
+    automatically):
+      - provider reconcile: component servers (ag-ledger, ag-release-please, …)
+        plus external servers (git, github).
+      - LSP generic-mcp projection: the language-server bridge (ag-lsp).
+    Each is best-effort: a missing/disabled component never fails the refresh.
+    """
+    result: dict[str, object] = {}
+    try:
+        from audiagentic.components.providers.services.reconcile import (
+            reconcile_all_providers,
+        )
+        reconciled = reconcile_all_providers(project_root=project_root)
+        result["providers_reconciled"] = len(reconciled.get("providers", []))
+    except Exception as exc:  # noqa: BLE001
+        result["providers_error"] = str(exc)
+    try:
+        from audiagentic.components.coding_lsp.language_servers_sync import (
+            sync_generic_lsp_mcp_to_providers,
+        )
+        lsp = sync_generic_lsp_mcp_to_providers(project_root)
+        result["lsp_synced"] = lsp.get("synced", [])
+    except Exception as exc:  # noqa: BLE001
+        result["lsp_error"] = str(exc)
+    return result
 
 
 def _main(argv: list[str] | None = None) -> int:
@@ -138,11 +190,19 @@ def _main(argv: list[str] | None = None) -> int:
 
     subparsers.add_parser("update-binaries", help="Update llama-server binaries to latest release")
 
-    subparsers.add_parser("refresh", help="Regenerate agent config (mcp.json, SYSTEM.md) from current component state")
+    subparsers.add_parser("refresh", help="Regenerate provider MCP configs (.mcp.json, opencode, …) and agent config from current component state")
+
+    mcp_parser = subparsers.add_parser("mcp", help="Run a component MCP server module over stdio")
+    mcp_parser.add_argument("module", metavar="MODULE")
+    mcp_parser.add_argument("module_args", nargs=argparse.REMAINDER)
 
     args, remaining = parser.parse_known_args(argv)
 
     project_root = Path(args.project).resolve() if args.project else Path.cwd()
+
+    def _resolve_project_root(explicit: str | None) -> Path:
+        """Resolve an explicit project root or fall back to the default."""
+        return Path(explicit).resolve() if explicit else project_root
 
     import atexit
 
@@ -169,6 +229,9 @@ def _main(argv: list[str] | None = None) -> int:
     if args.command == "update":
         return _cmd_update()
 
+    if args.command == "mcp":
+        return _cmd_mcp(args.module, args.module_args or [])
+
     if args.command == "job-control":
         try:
             from audiagentic.components.agent_jobs.control import (
@@ -181,7 +244,7 @@ def _main(argv: list[str] | None = None) -> int:
 
         from audiagentic.runtime.state.jobs_store import read_job_record
 
-        control_root = Path(args.project_root).resolve() if args.project_root else project_root
+        control_root = _resolve_project_root(args.project_root)
         job = read_job_record(control_root, args.job_id)
         payload = build_job_control_request(
             job_id=args.job_id,
@@ -197,7 +260,7 @@ def _main(argv: list[str] | None = None) -> int:
     if args.command == "session-input":
         from audiagentic.runtime.state.session_input_store import build_and_persist_session_input
 
-        input_root = Path(args.project_root).resolve() if args.project_root else project_root
+        input_root = _resolve_project_root(args.project_root)
         record = build_and_persist_session_input(
             input_root,
             job_id=args.job_id,
@@ -218,7 +281,7 @@ def _main(argv: list[str] | None = None) -> int:
             print_error("ledger component not available")
             return 1
 
-        bootstrap_root = Path(args.project_root).resolve() if args.project_root else project_root
+        bootstrap_root = _resolve_project_root(args.project_root)
         result = bootstrap_ledger(bootstrap_root)
         print_json(result, sort_keys=True)
         return 0
@@ -234,14 +297,16 @@ def _main(argv: list[str] | None = None) -> int:
             build_runtime_sync,
             refresh_harness_config_if_installed,
         )
+        # Regenerate provider MCP configs (.mcp.json, .opencode/opencode.json, …)
+        # from current component state — independent of whether the agent harness
+        # is installed.
+        provider_configs = _regenerate_provider_configs(project_root)
         refreshed = refresh_harness_config_if_installed(project_root, reason="manual-refresh")
-        if not refreshed:
-            print_error("Harness not installed. Run: audiagentic install")
-            return 1
         print_json({
             "ok": True,
-            "refreshed": True,
-            "sync": build_runtime_sync(reason="manual-refresh"),
+            "provider_configs": provider_configs,
+            "harness_refreshed": refreshed,
+            "sync": build_runtime_sync(reason="manual-refresh") if refreshed else None,
         })
         return 0
 

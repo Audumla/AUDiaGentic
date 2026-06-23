@@ -30,17 +30,34 @@ class BaselineAsset:
     target: str
     mode: str
     recursive: bool = False
+    component_root: str = ""
 
 
 def _iter_component_assets(component_ids: set[str] | None = None) -> Iterable[BaselineAsset]:
+    from pathlib import Path
+
     from audiagentic.foundation.components import all_descriptors
+    from audiagentic.foundation.components.base import MODE_REQUIRED_MANAGED
     from audiagentic.foundation.components.loader import register_all_components
+    from audiagentic.paths import REPO_ROOT
     register_all_components()
     for descriptor in all_descriptors().values():
         if component_ids is not None and descriptor.component_id not in component_ids:
             continue
+        yaml_path = descriptor.yaml_path
+        if yaml_path is None:
+            continue
+        component_root = str(Path(yaml_path).parent / descriptor.component_id)
         for cf in descriptor.files:
-            yield BaselineAsset(cf.rel_path, cf.rel_path, cf.lifecycle, cf.recursive)
+            source = cf.rel_path
+            asset_component_root = ""
+            if cf.lifecycle == MODE_REQUIRED_MANAGED:
+                stripped_source = source[len(".audiagentic/"):] if source.startswith(".audiagentic/") else source
+                source_path = Path(REPO_ROOT) / component_root / stripped_source
+                if source_path.exists():
+                    asset_component_root = component_root
+                    source = stripped_source
+            yield BaselineAsset(source, cf.rel_path, cf.lifecycle, cf.recursive, asset_component_root)
 
 
 def list_baseline_assets() -> list[dict[str, object]]:
@@ -66,7 +83,11 @@ def ensure_project_layout(target_root: Path) -> None:
 
 
 def _iter_source_files(source_root: Path, asset: BaselineAsset) -> Iterable[tuple[Path, Path]]:
-    source_base = source_root / asset.source
+    if asset.component_root:
+        component_root_path = (source_root / asset.component_root).resolve()
+        source_base = component_root_path / asset.source
+    else:
+        source_base = source_root / asset.source
     if not source_base.exists():
         return []
     if asset.recursive:
@@ -88,11 +109,27 @@ def _same_file_contents(left: Path, right: Path) -> bool:
     return left.read_bytes() == right.read_bytes()
 
 
+def _append_report(report: dict, key: str, value: object) -> None:
+    """Append a value to a report list, creating it if needed."""
+    if key not in report:
+        report[key] = []
+    report[key].append(value)
+
+
+def _resolve_source(source_root: Path, asset: BaselineAsset) -> Path:
+    """Resolve the source path for an asset."""
+    if asset.component_root:
+        return (source_root / asset.component_root).resolve() / asset.source
+    return source_root / asset.source
+
+
 def sync_managed_baseline(
     target_root: Path,
     *,
     source_root: Path | None = None,
     component_ids: set[str] | None = None,
+    lifecycle_modes: set[str] | None = None,
+    refresh_overrides: bool = False,
 ) -> dict[str, object]:
     source_root = (source_root or REPO_ROOT).resolve()
     target_root = target_root.resolve()
@@ -111,25 +148,21 @@ def sync_managed_baseline(
 
     for asset in _iter_component_assets(component_ids):
         if asset.mode == MODE_RUNTIME_ONLY:
-            cast = report["excluded-paths"]
-            assert isinstance(cast, list)
-            cast.append(asset.target if asset.target.endswith("/**") else f"{asset.target}/**")
+            _append_report(report, "excluded-paths", asset.target if asset.target.endswith("/**") else f"{asset.target}/**")
+            continue
+        if lifecycle_modes is not None and asset.mode not in lifecycle_modes:
             continue
         if asset.mode == MODE_GENERATED_MANAGED:
-            cast = report["skipped-files"]
-            assert isinstance(cast, list)
-            cast.append({"path": asset.target, "reason": MODE_GENERATED_MANAGED})
+            _append_report(report, "skipped-files", {"path": asset.target, "reason": MODE_GENERATED_MANAGED})
             continue
 
         if asset.mode == MODE_CREATE_IF_MISSING:
             target_path = target_root / asset.target
             relative_target = asset.target.replace("\\", "/")
             if target_path.exists():
-                preserved = report["preserved-files"]
-                assert isinstance(preserved, list)
-                preserved.append(relative_target)
+                _append_report(report, "preserved-files", relative_target)
             else:
-                source_base = source_root / asset.source
+                source_base = _resolve_source(source_root, asset)
                 if source_base.exists():
                     if asset.recursive and source_base.is_dir():
                         copied = False
@@ -149,16 +182,12 @@ def sync_managed_baseline(
                     else:
                         target_path.parent.mkdir(parents=True, exist_ok=True)
                         target_path.write_text("# Installation marker\n", encoding="utf-8")
-                created = report["created-files"]
-                assert isinstance(created, list)
-                created.append(relative_target)
+                _append_report(report, "created-files", relative_target)
             continue
 
-        source_base = source_root / asset.source
+        source_base = _resolve_source(source_root, asset)
         if not source_base.exists():
-            warnings = report["warnings"]
-            assert isinstance(warnings, list)
-            warnings.append(f"missing source asset: {asset.source}")
+            _append_report(report, "warnings", f"missing source asset: {asset.source}")
             continue
 
         for source_path, relative_path in _iter_source_files(source_root, asset):
@@ -170,23 +199,22 @@ def sync_managed_baseline(
                 relative_target = asset.target.replace("\\", "/")
 
             if source_path.resolve() == target_path.resolve():
-                skipped = report["skipped-files"]
-                assert isinstance(skipped, list)
-                skipped.append({"path": relative_target, "reason": "source-equals-target"})
+                _append_report(report, "skipped-files", {"path": relative_target, "reason": "source-equals-target"})
                 continue
 
             if target_path.exists() and _same_file_contents(source_path, target_path):
-                skipped = report["skipped-files"]
-                assert isinstance(skipped, list)
-                skipped.append({"path": relative_target, "reason": "already-current"})
+                _append_report(report, "skipped-files", {"path": relative_target, "reason": "already-current"})
                 continue
 
-            existed = target_path.exists()
-            _copy_file(source_path, target_path)
-            bucket = "refreshed-files" if existed else "created-files"
-            entries = report[bucket]
-            assert isinstance(entries, list)
-            entries.append(relative_target)
+            if target_path.exists():
+                if refresh_overrides:
+                    _copy_file(source_path, target_path)
+                    _append_report(report, "refreshed-files", relative_target)
+                else:
+                    _append_report(report, "preserved-files", relative_target)
+            else:
+                _copy_file(source_path, target_path)
+                _append_report(report, "created-files", relative_target)
 
     return report
 

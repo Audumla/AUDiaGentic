@@ -8,7 +8,7 @@ from .base import (
     ResolvedFeatureConfig,
     ResolvedImplementationConfig,
 )
-from .options import resolve_options
+from .options import resolve_options_with_provenance
 from .state import get_component_state, get_feature_state, get_implementation_state
 
 
@@ -26,10 +26,11 @@ def resolve_feature(project_root: Path, descriptor: FeatureDescriptor) -> Resolv
         descriptor.kind,
         descriptor.feature_id,
     )
-    effective_options = resolve_options(
+    effective_options, option_provenance = resolve_options_with_provenance(
         descriptor.options_schema,
         applicable_component_options,
         feature_state.options,
+        layer_names=["component-state", "feature-state"],
     )
     return ResolvedFeatureConfig(
         descriptor=descriptor,
@@ -37,6 +38,7 @@ def resolve_feature(project_root: Path, descriptor: FeatureDescriptor) -> Resolv
         component_options=component_options,
         feature_options=dict(feature_state.options),
         effective_options=effective_options,
+        option_provenance=option_provenance,
     )
 
 
@@ -56,10 +58,11 @@ def resolve_implementation(
         descriptor.parent,
         descriptor.implementation_id,
     )
-    effective_options = resolve_options(
+    effective_options, option_provenance = resolve_options_with_provenance(
         descriptor.options_schema,
         applicable_component_options,
         implementation_state.options,
+        layer_names=["component-state", "implementation-state"],
     )
     return ResolvedImplementationConfig(
         descriptor=descriptor,
@@ -67,4 +70,5 @@ def resolve_implementation(
         component_options=component_options,
         implementation_options=dict(implementation_state.options),
         effective_options=effective_options,
+        option_provenance=option_provenance,
     )

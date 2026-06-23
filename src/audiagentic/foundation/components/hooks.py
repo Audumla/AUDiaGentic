@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 @cache
 def _resolve_hook(hook_path: str) -> LifecycleHook | None:
     module_name, _, fn_name = hook_path.rpartition(".")
-    if not module_name or not fn_name:
+    if not (module_name and fn_name):
         return None
     try:
         module = __import__(module_name, fromlist=[fn_name])

@@ -51,8 +51,6 @@ def find_repo_root(start: Path | None = None) -> Path:
     for candidate in candidates:
         if (candidate / "pyproject.toml").is_file():
             return candidate
-
-    for candidate in candidates:
         if (candidate / "src" / "audiagentic").is_dir():
             return candidate
 
@@ -72,4 +70,4 @@ def find_repo_root(start: Path | None = None) -> Path:
 
 
 REPO_ROOT: Path = find_repo_root()
-SRC_ROOT: Path = REPO_ROOT / "src" if (REPO_ROOT / "src" / "audiagentic").is_dir() else REPO_ROOT
+SRC_ROOT: Path = REPO_ROOT / "src"

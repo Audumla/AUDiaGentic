@@ -43,21 +43,24 @@ def _harness_error(code_number: int, message: str, **details: object) -> AudiaGe
     )
 
 
+def _forward(module_key: str, fn_name: str, *args, **kwargs):
+    """Forward a call to the active harness module."""
+    project_root = kwargs.get("project_root") or (args[0] if args and hasattr(args[0], "resolve") else None)
+    mod = _mod(module_key, project_root)
+    return getattr(mod, fn_name)(*args, **kwargs)
+
+
 def default_config_path() -> Path:
     """Package-default harness config path (config/provisioning/harness/ag.yaml)."""
     from .paths import _HARNESS_CONFIG
     return _HARNESS_CONFIG
 
 
-def _harness_cfg_path() -> Path:
-    return default_config_path()
-
-
 def get_harness_type(project_root: Path | None = None) -> str:
     """Return the configured harness type for the given project root."""
     from audiagentic.runtime.config import load_layered_config
     cfg = load_layered_config(
-        pkg_default_path=_harness_cfg_path(),
+        pkg_default_path=default_config_path(),
         project_root=project_root,
         namespace="harness/ag",
     )
@@ -90,16 +93,16 @@ def _mod(subpath: str, project_root: Path | None = None):
 # --- install / lifecycle ---
 
 def install_to(target: Path, project_root: Path | None = None) -> int:
-    return _mod("install", project_root).install_to(target, project_root)
+    return _forward("install", "install_to", target, project_root=project_root)
 
 
 def version_info(project_root: Path | None = None) -> dict[str, str]:
     """Configured agent + MCP adapter versions for the active harness."""
-    return _mod("install", project_root).version_info(project_root)
+    return _forward("install", "version_info", project_root=project_root)
 
 
 def uninstall_from(target: Path) -> int:
-    return _mod("install").uninstall_from(target)
+    return _forward("install", "uninstall_from", target)
 
 
 def build_runtime_sync(
@@ -122,17 +125,13 @@ def refresh_harness_config_if_installed(
     reason: str,
     component_id: str | None = None,
 ) -> bool:
-    return _mod("install", project_root).refresh_harness_config_if_installed(
-        project_root, reason=reason, component_id=component_id
-    )
+    return _forward("install", "refresh_harness_config_if_installed", project_root, reason=reason, component_id=component_id)
 
 
 def refresh_materialized_agent_config(
     target: Path, project_root: Path | None = None
 ) -> int:
-    return _mod("install", project_root).refresh_materialized_agent_config(
-        target, project_root
-    )
+    return _forward("install", "refresh_materialized_agent_config", target, project_root=project_root)
 
 
 def request_runtime_reload(
@@ -142,9 +141,7 @@ def request_runtime_reload(
     component_id: str | None = None,
     has_mcp_servers: bool = True,
 ) -> Path:
-    return _mod("install", project_root).request_runtime_reload(
-        project_root, reason=reason, component_id=component_id, has_mcp_servers=has_mcp_servers
-    )
+    return _forward("install", "request_runtime_reload", project_root, reason=reason, component_id=component_id, has_mcp_servers=has_mcp_servers)
 
 
 # --- runner interface ---
@@ -152,15 +149,11 @@ def request_runtime_reload(
 def build_global_context(
     *, project_root: Path, agent_runtime: Path, enable_mcp: bool
 ):
-    return _mod("runner", project_root).build_global_context(
-        project_root=project_root,
-        agent_runtime=agent_runtime,
-        enable_mcp=enable_mcp,
-    )
+    return _forward("runner", "build_global_context", project_root=project_root, agent_runtime=agent_runtime, enable_mcp=enable_mcp)
 
 
-def run_agent(ctx, params: RunnerParams, **kw):
-    return _mod("runner", ctx.project_root).run_agent(ctx, params, **kw)
+def run_agent(ctx, params: list[str] | RunnerParams, **kw):
+    return _forward("runner", "run_agent", ctx, params, project_root=ctx.project_root, **kw)
 
 
 def translate_agent_args(params: RunnerParams) -> list[str]:
@@ -174,7 +167,7 @@ def env_flag(name: str, default: bool = False) -> bool:
 # --- MCP config dispatch ---
 
 def mcp_config_path(project_root: Path | None = None) -> Path:
-    return _mod("install", project_root).mcp_config_path(project_root)
+    return _forward("install", "mcp_config_path", project_root=project_root)
 
 
 def read_mcp_config(path: Path) -> dict:
@@ -197,11 +190,13 @@ def query_rig_server_version(bin_dir: Path, timeout: float = 10.0) -> str | None
 
 
 def load_active_profile(
-    profiles_path: Path | None,
+    requested: str | None,
     model: str,
+    *,
+    rig_config: Path | None = None,
 ) -> tuple[str, dict[str, object]]:
     from audiagentic.runtime.rig.models import load_model_profile
-    return load_model_profile(profiles_path, model)
+    return load_model_profile(requested, model, rig_config=rig_config)
 
 
 def load_pi_config(project_root: Path | None = None) -> dict:

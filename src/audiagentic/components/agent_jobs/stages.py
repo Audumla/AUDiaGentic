@@ -60,9 +60,17 @@ def execute_stage(
             message="stage output failed validation",
             details={"issues": issues, "stage-id": stage.get("id")},
         )
+    stage_id = stage.get("id")
+    if not isinstance(stage_id, str):
+        raise AudiaGenticError(
+            code="VAL-STAGE-002",
+            kind="agent-jobs",
+            message="stage missing valid id",
+            details={"stage": stage},
+        )
     envelope = {
         "contract-version": "v1",
-        "stage-id": stage.get("id"),
+        "stage-id": stage_id,
         "input": {
             "job-record-id": job_record.get("job-id"),
             "packet-id": job_record.get("packet-id"),
@@ -70,5 +78,5 @@ def execute_stage(
         },
         "output": output,
     }
-    atomic_write_json(stage_output_path(project_root, job_record["job-id"], stage.get("id")), envelope)
+    atomic_write_json(stage_output_path(project_root, job_record["job-id"], stage_id), envelope)
     return envelope

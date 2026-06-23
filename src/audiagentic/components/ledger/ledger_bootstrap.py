@@ -24,7 +24,8 @@ def bootstrap_ledger(project_root: Path) -> dict[str, Any]:
     register_all_components()
 
     sync_report = sync_managed_baseline(project_root, source_root=REPO_ROOT)
-    created_files = list(sync_report.get("created-files", []))
+    created_files_raw = sync_report.get("created-files", [])
+    created_files: list[str] = list(created_files_raw) if isinstance(created_files_raw, (list, tuple)) else []
 
     marker_path = project_root / ".audiagentic" / "components" / "project.yaml"
     current_marker: dict[str, Any] | None = None

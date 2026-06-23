@@ -97,6 +97,19 @@ def _is_install_failed(version: str, cache: dict) -> bool:
     return version in cache.get("failed_installs", {})
 
 
+def _is_version_available(latest: str | None, cache: dict, current: str) -> bool:
+    """True if the given version should be offered as an update."""
+    if not latest:
+        return False
+    if latest in cache.get("skipped_versions", []):
+        return False
+    if _is_install_failed(latest, cache):
+        return False
+    if _version_tuple(latest) <= _version_tuple(current):
+        return False
+    return True
+
+
 def check_update(*, force: bool = False) -> dict | None:
     """Return update info if a newer version is available, else None.
 
@@ -118,11 +131,7 @@ def check_update(*, force: bool = False) -> dict | None:
                     latest = cache.get("latest_version")
                     if not latest:
                         return None
-                    if latest in cache.get("skipped_versions", []):
-                        return None
-                    if _is_install_failed(latest, cache):
-                        return None
-                    if _version_tuple(latest) <= _version_tuple(current):
+                    if not _is_version_available(latest, cache, current):
                         return None
                     return {"latest": latest, "current": current}
             except Exception:
@@ -134,13 +143,7 @@ def check_update(*, force: bool = False) -> dict | None:
         cache["latest_version"] = latest
     _write_cache(cache)
 
-    if not latest:
-        return None
-    if latest in cache.get("skipped_versions", []):
-        return None
-    if _is_install_failed(latest, cache):
-        return None
-    if _version_tuple(latest) <= _version_tuple(current):
+    if not _is_version_available(latest, cache, current):
         return None
 
     return {"latest": latest, "current": current}
