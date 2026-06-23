@@ -111,15 +111,40 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
         for ms in (data.get("external-mcp-servers") or [])
     )
 
-    harness_instructions = tuple(
-        HarnessInstruction(
-            section=hi["section"],
-            content=hi["content"],
-            description=hi.get("description", ""),
-            propagate=hi.get("propagate", "audiagentic"),
+    raw_harness_instructions = data.get("harness-instructions") or []
+    if raw_harness_instructions:
+        harness_instructions = tuple(
+            HarnessInstruction(
+                section=hi["section"],
+                content=hi["content"],
+                description=hi.get("description", ""),
+                propagate=hi.get("propagate", "audiagentic"),
+            )
+            for hi in raw_harness_instructions
         )
-        for hi in (data.get("harness-instructions") or [])
-    )
+    else:
+        # Derive harness instructions from MCP server declarations
+        from audiagentic.runtime.harness.system_prompt import (
+            derive_harness_instructions as _derive_harness_instructions,
+        )
+
+        provisional = ComponentDescriptor(
+            type=data["type"],
+            component_id=component_id,
+            display_name=data.get("display-name", component_id),
+            description=data.get("description", ""),
+            detection_marker=data.get("detection-marker", ""),
+            aliases=tuple(data.get("aliases") or []),
+            files=(),
+            depends_on=tuple(data.get("depends-on") or []),
+            yaml_path=path,
+            scope=data.get("scope", SCOPE_PROJECT),
+            mcp_servers=mcp_servers,
+            external_mcp_servers=(),
+            harness_instructions=(),
+            core=bool(data.get("core", False)),
+        )
+        harness_instructions = _derive_harness_instructions(provisional)
 
     # Core flag is determined solely by the YAML descriptor's core field
     is_core = bool(data.get("core", False))
@@ -231,3 +256,31 @@ def _validate_loaded_descriptors(descriptors: list[ComponentDescriptor]) -> None
                     component=descriptor.component_id,
                     dependency=dep,
                 )
+
+    # Check for drift between MCP server declarations and harness instructions
+    from audiagentic.runtime.harness.system_prompt import (
+        check_harness_instruction_drift,
+    )
+
+    for descriptor in descriptors:
+        for warning in check_harness_instruction_drift(descriptor):
+            logger.warning(warning)
+
+    # Validate contribution config references resolve to existing files
+    from audiagentic.components.providers.surfaces.base import (
+        validate_config_reference,
+    )
+
+    for descriptor in descriptors:
+        if not descriptor.yaml_path or not descriptor.yaml_path.exists():
+            continue
+        data = load_yaml_file(descriptor.yaml_path)
+        raw_list = data.get("contributions") or data.get("surface-contributions") or []
+        for raw in raw_list:
+            if not isinstance(raw, dict):
+                continue
+            config_ref = raw.get("config")
+            if isinstance(config_ref, str):
+                warning = validate_config_reference(config_ref, descriptor.component_id)
+                if warning:
+                    logger.warning(warning)

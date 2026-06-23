@@ -6,6 +6,13 @@ from pathlib import Path
 from audiagentic.cli_io import print_error, print_json, print_message
 
 
+def _print_progress(event, prefix: str | None = None) -> None:
+    message = getattr(event, "message", str(event))
+    if prefix:
+        message = f"[{prefix}] {message}"
+    print_message(message)
+
+
 def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
     """Handle unambiguous provider lifecycle prompts directly with live output.
 
@@ -36,14 +43,10 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
             print_error("providers component not available")
             return 1
 
-        def _progress(event) -> None:
-            message = getattr(event, "message", str(event))
-            print_message(message)
-
         if reconcile_all_match:
-            result = reconcile_all_providers(project_root=project_root, on_progress=_progress)
+            result = reconcile_all_providers(project_root=project_root, on_progress=_print_progress)
         elif reconcile_one_match:
-            result = reconcile_provider(reconcile_one_match.group(1).lower(), project_root=project_root, on_progress=_progress)
+            result = reconcile_provider(reconcile_one_match.group(1).lower(), project_root=project_root, on_progress=_print_progress)
         else:
             print_error("providers component not available")
             return 1
@@ -78,20 +81,12 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
         "repair": repair_provider_cli,
     }
 
-    def _progress(event) -> None:
-        message = getattr(event, "message", str(event))
-        print_message(f"[{provider_id}] {message}")
-
-    handler = handlers.get(action)
-    if handler is None:
-        print_error("providers component not available")
-        return 1
-
+    handler = handlers[action]
     result = handler(
         provider_id,
         dry_run=False,
         project_root=project_root,
-        on_progress=_progress,
+        on_progress=lambda e: _print_progress(e, prefix=provider_id),
     )
     print_json(result)
     return 0 if result.get("status") in {"installed", "uninstalled", "repaired", "skipped"} else 1

@@ -4,6 +4,7 @@ import argparse
 import os
 import subprocess
 from dataclasses import asdict
+from typing import cast
 
 from audiagentic.cli_io import print_json, print_message
 from audiagentic.runtime.rig.embedded.process import build_command
@@ -15,17 +16,24 @@ DEFAULT_PORT = 42001
 def print_result(result: object, as_json: bool) -> None:
     from audiagentic.runtime.rig.embedded.launch import LaunchResult
 
-    payload = asdict(LaunchResult(**result.__dict__) if hasattr(result, "__dict__") else result)
+    if isinstance(result, LaunchResult):
+        launch_result = result
+    elif hasattr(result, "__dict__"):
+        launch_result = cast(LaunchResult, LaunchResult(**result.__dict__))
+    else:
+        return
+
+    payload = asdict(launch_result)
     if as_json:
         print_json(payload)
         return
     print_message("Embedded rig ready")
-    print_message(f"  PID:      {result.pid}")
-    print_message(f"  Endpoint: {result.base_url}")
-    print_message(f"  Model:    {result.model}")
-    print_message(f"  Binary:   {result.binary}")
-    if result.log_path:
-        print_message(f"  Log:      {result.log_path}")
+    print_message(f"  PID:      {launch_result.pid}")
+    print_message(f"  Endpoint: {launch_result.base_url}")
+    print_message(f"  Model:    {launch_result.model}")
+    print_message(f"  Binary:   {launch_result.binary}")
+    if launch_result.log_path:
+        print_message(f"  Log:      {launch_result.log_path}")
 
 
 def _apply_cli_overrides(server_cfg: dict[str, object], args: argparse.Namespace) -> dict[str, object]:

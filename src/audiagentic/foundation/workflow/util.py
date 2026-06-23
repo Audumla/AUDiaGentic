@@ -7,26 +7,24 @@ from audiagentic.foundation.time import now_iso
 
 
 class Relationships:
+    _DEFAULT_SEQ = 999_999_999
+
     @staticmethod
     def ensure_rel_list(current, ref: str, seq: int | None = None, display: str | None = None):
-        current = list(current or [])
-        current = [r for r in current if r.get("ref") != ref]
-        rel = {"ref": ref}
-        if seq is not None:
-            rel["seq"] = int(seq)
+        current = [r for r in current or [] if r.get("ref") != ref]
+        rel = {"ref": ref, "seq": int(seq) if seq is not None else 999_999_999}
         if display is not None:
             rel["display"] = display
         current.append(rel)
-        current.sort(key=lambda r: (r.get("seq", 999999999), r["ref"]))
+        current.sort(key=lambda r: (r.get("seq", 999_999_999), r["ref"]))
         return current
 
 __all__ = ["Relationships", "body_has_section", "extract_ref_ids", "now_iso", "slugify"]
 
 
 def slugify(s: str) -> str:
-    s = s.lower().strip()
-    s = re.sub(r"[^a-z0-9]+", "-", s)
-    return re.sub(r"-+", "-", s).strip("-") or "item"
+    s = re.sub(r"[^a-z0-9]+", "-", s.lower().strip()).strip("-")
+    return s if s else "item"
 
 
 def body_has_section(body: str, section: str) -> bool:

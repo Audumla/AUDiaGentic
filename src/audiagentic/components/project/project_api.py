@@ -6,6 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
+from audiagentic.foundation.components.registry import is_enabled, is_installed
+from audiagentic.foundation.features.registry import all_features, all_implementations
+from audiagentic.foundation.features.resolver import resolve_feature, resolve_implementation
 from audiagentic.runtime.harness import build_runtime_sync
 
 from . import project_components, project_files
@@ -57,3 +60,56 @@ def runtime_sync_contract() -> dict[str, Any]:
         },
         "example": build_runtime_sync(reason="component-installed", component_id=COMPONENT_PROVIDERS),
     }
+
+
+def get_option_provenance(
+    project_root: Path,
+    component_id: str | None = None,
+) -> dict[str, Any]:
+    """Return option provenance for all features and implementations.
+
+    For each feature/implementation, shows which layer provided each option value.
+    Source values: 'schema-default', 'component-state', 'feature-state', 'implementation-state'.
+
+    If component_id is provided, only returns provenance for that component.
+    """
+    results: dict[str, list[dict[str, Any]]] = {"features": [], "implementations": []}
+
+    for key, descriptor in all_features().items():
+        if component_id and descriptor.parent != component_id:
+            continue
+        if not is_installed(descriptor.parent, project_root):
+            continue
+        if not is_enabled(descriptor.parent, project_root):
+            continue
+        resolved = resolve_feature(project_root, descriptor)
+        if resolved.option_provenance:
+            results["features"].append({
+                "parent": descriptor.parent,
+                "kind": descriptor.kind,
+                "feature_id": descriptor.feature_id,
+                "provenance": {
+                    k: {"value": v.value, "source": v.source}
+                    for k, v in resolved.option_provenance.items()
+                },
+            })
+
+    for key, descriptor in all_implementations().items():
+        if component_id and descriptor.parent != component_id:
+            continue
+        if not is_installed(descriptor.parent, project_root):
+            continue
+        if not is_enabled(descriptor.parent, project_root):
+            continue
+        resolved = resolve_implementation(project_root, descriptor)
+        if resolved.option_provenance:
+            results["implementations"].append({
+                "parent": descriptor.parent,
+                "implementation_id": descriptor.implementation_id,
+                "provenance": {
+                    k: {"value": v.value, "source": v.source}
+                    for k, v in resolved.option_provenance.items()
+                },
+            })
+
+    return results

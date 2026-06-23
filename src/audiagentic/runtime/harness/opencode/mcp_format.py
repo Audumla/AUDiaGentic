@@ -19,7 +19,7 @@ def opencode_mcp_path(project_root: Path | None = None) -> Path:
     if project_root is None:
         import os
         project_root = Path(os.environ.get("AUDIAGENTIC_REPO_ROOT", "."))
-    return project_root / ".mcp.json"
+    return (project_root / ".mcp.json").resolve()
 
 
 def build_opencode_mcp_dict(
