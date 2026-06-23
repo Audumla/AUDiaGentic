@@ -34,6 +34,7 @@ _INITIALIZED = {"jsonrpc": "2.0", "method": "notifications/initialized", "params
 def _mcp(module: str, *messages: dict, project_root: Path, extra_args: list[str] | None = None, timeout: int = 30) -> list[dict]:
     env = dict(os.environ)
     env["AUDIAGENTIC_REPO_ROOT"] = str(project_root)
+    env["PYTHONPATH"] = os.pathsep.join([str(_ROOT / "src"), env.get("PYTHONPATH", "")])
     command = [sys.executable, "-m", module]
     if extra_args:
         command.extend(extra_args)
@@ -146,6 +147,7 @@ def _call_keepalive(
 ) -> dict | list:
     env = dict(os.environ)
     env["AUDIAGENTIC_REPO_ROOT"] = str(project_root)
+    env["PYTHONPATH"] = os.pathsep.join([str(_ROOT / "src"), env.get("PYTHONPATH", "")])
     command = [sys.executable, "-m", module]
     if extra_args:
         command.extend(extra_args)
