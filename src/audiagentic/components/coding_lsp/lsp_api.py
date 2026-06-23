@@ -8,6 +8,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
+from urllib.request import url2pathname
 
 from audiagentic.components.coding_lsp.coding_lsp_config import (
     resolve_server_for_file,
@@ -57,10 +59,10 @@ def file_to_uri(file_path: str | Path) -> str:
 
 def uri_to_repo_relative(uri: str, project_root: Path) -> str:
     """Convert a file:// URI to a repo-relative path string."""
-    try:
-        path = Path.from_uri(uri)  # type: ignore[attr-defined]
-    except (ValueError, AttributeError):
-        path = Path(uri.replace("file://", "", 1))
+    if uri.startswith("file://"):
+        path = Path(url2pathname(unquote(urlparse(uri).path)))
+    else:
+        path = Path(uri)
     try:
         return str(path.relative_to(project_root))
     except ValueError:
@@ -152,14 +154,7 @@ def resolve_project_root(path: str | Path) -> Path:
         home = Path.home().resolve()
     except (RuntimeError, OSError):
         home = None
-    for candidate in (current, *current.parents):
-        if home is not None and (candidate == home or candidate in home.parents):
-            break  # reached home or above — boundary, not a project root
-        # `.audiagentic` is the project marker; lsp.json is a generated cache and
-        # must not define project root.
-        if (candidate / ".audiagentic").exists():
-            return candidate
-    return current
+    return _walk_up_to_marker(resolved, ".audiagentic", home)
 
 
 # Language-specific project markers for LSP server root resolution
@@ -184,23 +179,34 @@ def resolve_language_root(path: str | Path, language: str) -> Path:
     markers = _LANGUAGE_MARKERS.get(language, [])
     if not markers:
         return base_root
-
     resolved = Path(path).resolve()
-    current = resolved if resolved.is_dir() else resolved.parent
     try:
         home = Path.home().resolve()
     except (RuntimeError, OSError):
         home = None
-
+    current = resolved if resolved.is_dir() else resolved.parent
     for candidate in (current, *current.parents):
         if home is not None and (candidate == home or candidate in home.parents):
             break
         if candidate == base_root:
             break
-        for marker in markers:
-            if (candidate / marker).exists():
-                return candidate
+        if any((candidate / marker).exists() for marker in markers):
+            return candidate
     return base_root
+
+
+def _walk_up_to_marker(path: Path, marker: str, home: Path | None) -> Path:
+    """Walk upward from *path* returning the first ancestor containing *marker*.
+
+    Stops at the user home directory (a boundary, not a project root).
+    """
+    current = path.resolve() if path.is_dir() else path.parent
+    for candidate in (current, *current.parents):
+        if home is not None and (candidate == home or candidate in home.parents):
+            break
+        if (candidate / marker).exists():
+            return candidate
+    return current
 
 
 def discover_servers(project_root: str | Path) -> dict[str, Any]:
@@ -403,6 +409,8 @@ def diagnostics(
     root: str = ".", min_severity: int = 4, limit: int = 0,
 ) -> dict[str, list[dict[str, Any]]]:
     project_root = resolve_project_root(root)
+    for language, server in resolve_active_runtime_servers(project_root).items():
+        _session_manager.get_or_create(project_root, language, server)  # type: ignore[reportArgumentType]
     return _session_manager.diagnostics(project_root, min_severity=min_severity, limit=limit)
 
 

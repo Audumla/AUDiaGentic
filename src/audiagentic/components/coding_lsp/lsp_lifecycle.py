@@ -5,18 +5,27 @@ high-level LSP requests (definition, hover, references, rename, symbols).
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
+import subprocess
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, unquote, urlparse
+from urllib.request import url2pathname
 
 from .lsp_bridge import LspJsonRpc, _lsp_error
 
 logger = logging.getLogger(__name__)
 
 _LSP_VERSION = "3.17"
+
+
+def _ensure_list(result: Any) -> list[dict[str, Any]]:
+    """Return result if it's a list, else empty list."""
+    return result if isinstance(result, list) else []
 
 
 def _encode_position(text: str, line: int, character: int, encoding: str = "utf-16") -> tuple[int, int]:
@@ -28,8 +37,6 @@ def _encode_position(text: str, line: int, character: int, encoding: str = "utf-
     if encoding == "utf-8":
         return (line, character)
     # UTF-16: count code units (surrogate pairs = 2 units each)
-    if line < 0 or character < 0:
-        return (line, character)
     lines = text.split("\n")
     if line >= len(lines):
         return (line, character)
@@ -109,6 +116,7 @@ class LspSession:
 
     def did_open(self, uri: str, text: str, language_id: str, version: int = 1) -> None:
         """Open a document in the language server."""
+        uri = self._canonical_uri(uri)
         self._opened_docs[uri] = version
         self._document_text[uri] = text
         self.bridge.send_notification(
@@ -125,6 +133,7 @@ class LspSession:
 
     def did_change(self, uri: str, changes: list[dict[str, Any]], version: int) -> None:
         """Notify the language server of document changes."""
+        uri = self._canonical_uri(uri)
         self._opened_docs[uri] = version
         if changes:
             text = changes[-1].get("text")
@@ -140,6 +149,7 @@ class LspSession:
 
     def sync_document(self, uri: str, text: str, language_id: str) -> None:
         """Open once, then update only when contents change."""
+        uri = self._canonical_uri(uri)
         if uri not in self._opened_docs:
             self.did_open(uri, text, language_id, version=1)
             return
@@ -162,7 +172,7 @@ class LspSession:
             {"query": query},
             timeout=timeout,
         )
-        return result if isinstance(result, list) else []
+        return _ensure_list(result)
 
     def document_symbol(self, uri: str, timeout: float = 15.0) -> list[dict[str, Any]]:
         """Get document-level symbols (outline) for a file."""
@@ -171,7 +181,7 @@ class LspSession:
             {"textDocument": {"uri": uri}},
             timeout=timeout,
         )
-        return result if isinstance(result, list) else []
+        return _ensure_list(result)
 
     def definition(self, uri: str, line: int, character: int, timeout: float = 15.0) -> list[dict[str, Any]]:
         """Go to definition at position."""
@@ -214,7 +224,7 @@ class LspSession:
             },
             timeout=timeout,
         )
-        return result if isinstance(result, list) else []
+        return _ensure_list(result)
 
     def rename(
         self, uri: str, line: int, character: int, new_name: str, timeout: float = 30.0,
@@ -352,7 +362,7 @@ class LspSession:
             "context": {"diagnostics": [], "only": only or []},
         }
         result = self.bridge.send_request("textDocument/codeAction", params, timeout=timeout)
-        return result if isinstance(result, list) else []
+        return _ensure_list(result)
 
     def formatting(
         self, uri: str, options: dict[str, Any] | None = None, timeout: float = 15.0,
@@ -365,7 +375,7 @@ class LspSession:
             "options": options or {"tabSize": 4, "insertSpaces": True},
         }
         result = self.bridge.send_request("textDocument/formatting", params, timeout=timeout)
-        return result if isinstance(result, list) else []
+        return _ensure_list(result)
 
     def range_formatting(
         self, uri: str, range: dict[str, Any], options: dict[str, Any] | None = None,
@@ -380,7 +390,7 @@ class LspSession:
             "options": options or {"tabSize": 4, "insertSpaces": True},
         }
         result = self.bridge.send_request("textDocument/rangeFormatting", params, timeout=timeout)
-        return result if isinstance(result, list) else []
+        return _ensure_list(result)
 
     def organize_imports(
         self, uri: str, timeout: float = 15.0,
@@ -397,11 +407,22 @@ class LspSession:
     def diagnostics(
         self, min_severity: int = 4, limit: int = 0, timeout: float = 30.0,
     ) -> dict[str, list[dict[str, Any]]]:
-        """Pull diagnostics via workspace/diagnostic request (LSP 3.17).
+        """Get workspace-wide diagnostics, keyed by file URI.
 
+        Prefers the LSP 3.17 workspace/diagnostic pull request when the server
+        advertises it. Servers that don't (e.g. pyright, which is push-only) fall
+        back to a batch CLI scan of the project. Both paths return the same shape.
         min_severity: 1=Error, 2=Warning, 3=Information, 4=Hint (default: all)
         limit: max total diagnostics returned, 0 = unlimited
         """
+        if self._supports_workspace_diagnostic():
+            return self._workspace_diagnostics_via_lsp(min_severity, limit, timeout)
+        return self._workspace_diagnostics_via_cli(min_severity, limit, timeout)
+
+    def _workspace_diagnostics_via_lsp(
+        self, min_severity: int, limit: int, timeout: float,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Pull diagnostics via the workspace/diagnostic request (LSP 3.17)."""
         try:
             result = self.bridge.send_request(
                 "workspace/diagnostic",
@@ -421,19 +442,108 @@ class LspSession:
         for item in result.get("items") or []:
             if not isinstance(item, dict) or item.get("kind") != "full":
                 continue
-            uri = item.get("uri", "")
+            uri = self._canonical_uri(item.get("uri", ""))
             diags = [
                 d for d in (item.get("items") or [])
                 if isinstance(d, dict) and d.get("severity", 1) <= min_severity
             ]
             if diags:
                 if limit > 0:
-                    remaining = limit - total
-                    diags = diags[:remaining]
+                    diags = diags[: limit - total]
                 out[uri] = diags
                 total += len(diags)
                 if limit > 0 and total >= limit:
                     break
+        return out
+
+    # Map a language-server launch command to its batch-scan CLI. Only servers
+    # whose CLI emits LSP-compatible JSON for a whole-project scan belong here.
+    _BATCH_DIAGNOSTIC_CLIS: dict[str, str] = {
+        "pyright-langserver": "pyright",
+        "basedpyright-langserver": "basedpyright",
+    }
+    # pyright --outputjson severity strings → LSP DiagnosticSeverity ints.
+    _CLI_SEVERITY: dict[str, int] = {"error": 1, "warning": 2, "information": 3}
+
+    def _batch_cli_name(self) -> str | None:
+        """Resolve the batch-scan CLI for this session's server, or None."""
+        if not self.server_config.command:
+            return None
+        base = Path(self.server_config.command[0]).name
+        if base.lower().endswith(".exe"):
+            base = base[: -len(".exe")]
+        return self._BATCH_DIAGNOSTIC_CLIS.get(base)
+
+    def _workspace_diagnostics_via_cli(
+        self, min_severity: int, limit: int, timeout: float,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Scan the whole project with the server's batch CLI (e.g. pyright --outputjson).
+
+        Used when the language server lacks LSP workspace pull diagnostics. Reports
+        a point-in-time, on-disk scan — not the live editor buffer state.
+        """
+        cli = self._batch_cli_name()
+        if cli is None:
+            raise _lsp_error(
+                "EXT-LSP-004",
+                "No workspace diagnostics available: server lacks LSP pull "
+                "(diagnosticProvider.workspaceDiagnostics) and has no known batch CLI. "
+                "Use lsp_file_diagnostics(file) / lsp_changed_diagnostics(files) instead.",
+                details={"server": self.server_config.command[:1]},
+            )
+        try:
+            proc = subprocess.run(
+                [cli, "--outputjson", str(self.project_root)],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                cwd=str(self.project_root),
+            )
+        except FileNotFoundError:
+            raise _lsp_error(
+                "EXT-LSP-004",
+                f"Workspace diagnostics CLI '{cli}' not found on PATH. "
+                f"Install it (e.g. 'npm i -g {cli}') or use lsp_file_diagnostics(file).",
+                details={"cli": cli},
+            )
+        except subprocess.TimeoutExpired:
+            raise _lsp_error(
+                "EXT-LSP-003",
+                f"Workspace diagnostics scan timed out after {timeout}s",
+                details={"cli": cli, "timeout_s": timeout},
+            )
+        # pyright exits 1 when diagnostics exist, 0 when clean — both carry JSON.
+        try:
+            report = json.loads(proc.stdout)
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise _lsp_error(
+                "EXT-LSP-008",
+                f"Could not parse '{cli} --outputjson' output",
+                details={"error": str(exc), "stderr": proc.stderr[:500]},
+            )
+        out: dict[str, list[dict[str, Any]]] = {}
+        total = 0
+        for entry in report.get("generalDiagnostics") or []:
+            if not isinstance(entry, dict):
+                continue
+            file = entry.get("file")
+            if not file:
+                continue
+            severity = self._CLI_SEVERITY.get(entry.get("severity", ""), 4)
+            if severity > min_severity:
+                continue
+            uri = self._canonical_uri(Path(file).resolve().as_uri())
+            diag = {
+                "severity": severity,
+                "message": entry.get("message", ""),
+                "range": entry.get("range", {}),
+                "code": entry.get("rule", ""),
+                "source": cli,
+            }
+            out.setdefault(uri, []).append(diag)
+            total += 1
+            if limit > 0 and total >= limit:
+                break
         return out
 
     def file_diagnostics(
@@ -444,7 +554,11 @@ class LspSession:
         Re-syncs disk content to the server buffer, waits for a version-correlated
         publish, then returns cached diagnostics. Fails loud on error.
         """
-        uri = Path(file_path).resolve().as_uri()
+        if isinstance(file_path, str) and file_path.startswith("file://"):
+            uri = file_path
+        else:
+            uri = Path(file_path).resolve().as_uri()
+        uri = self._canonical_uri(uri)
         self._sync_file_from_disk(uri)
         self._wait_for_publish(uri, timeout=timeout)
         cached = self._diagnostics_cache.get(uri, {})
@@ -458,7 +572,7 @@ class LspSession:
         """Handle textDocument/publishDiagnostics notification from server."""
         if params is None:
             return
-        uri = params.get("uri", "")
+        uri = self._canonical_uri(params.get("uri", ""))
         diagnostics = params.get("diagnostics", [])
         version = params.get("version")
         self._diagnostics_cache[uri] = {
@@ -470,6 +584,7 @@ class LspSession:
 
     def _sync_file_from_disk(self, uri: str) -> None:
         """Re-read disk content and push to server buffer with version bump."""
+        uri = self._canonical_uri(uri)
         path = self._uri_to_path(uri)
         try:
             text = path.read_text(encoding="utf-8")
@@ -489,6 +604,7 @@ class LspSession:
 
     def _wait_for_publish(self, uri: str, timeout: float = 5.0) -> None:
         """Wait for a version-correlated publishDiagnostics for the given uri."""
+        uri = self._canonical_uri(uri)
         self._diagnostics_event.clear()
         import time as _time
         deadline = _time.monotonic() + timeout
@@ -498,11 +614,6 @@ class LspSession:
             last_change = self._last_change_version.get(uri)
             if cached_version is not None and last_change is not None:
                 if cached_version >= last_change:
-                    return
-            elif cached and cached_version is None:
-                if last_change is not None:
-                    pass
-                elif cached:
                     return
             self._diagnostics_event.wait(timeout=max(0.05, deadline - _time.monotonic()))
             self._diagnostics_event.clear()
@@ -523,34 +634,49 @@ class LspSession:
 
     def has_capability(self, method: str) -> bool:
         """Check if the server supports a given LSP method."""
-        cap_map: dict[str, str] = {
-            "textDocument/definition": "textDocument.definition",
-            "textDocument/hover": "textDocument.hover",
-            "textDocument/references": "textDocument.references",
-            "textDocument/rename": "textDocument.rename",
-            "textDocument/documentSymbol": "textDocument.documentSymbol",
-            "textDocument/typeDefinition": "textDocument.typeDefinition",
-            "textDocument/implementation": "textDocument.implementation",
-            "textDocument/codeAction": "textDocument.codeAction",
-            "textDocument/formatting": "textDocument.formatting",
-            "textDocument/rangeFormatting": "textDocument.rangeFormatting",
-            "textDocument/completion": "textDocument.completion",
-            "textDocument/signatureHelp": "textDocument.signatureHelp",
-            "textDocument/inlayHint": "textDocument.inlayHint",
-            "textDocument/callHierarchy": "textDocument.callHierarchy",
-            "workspace/symbol": "workspace.symbol",
-            "workspace/diagnostic": "workspace.diagnostic",
+        if method == "workspace/diagnostic":
+            return self._supports_workspace_diagnostic()
+        # LSP advertises support as top-level "*Provider" keys in serverCapabilities,
+        # each a bool or an options object (a present object means supported). The
+        # old code looked under textDocument.*/workspace.* — paths that never exist —
+        # so every check returned False and the server looked featureless.
+        provider_map: dict[str, str] = {
+            "textDocument/definition": "definitionProvider",
+            "textDocument/hover": "hoverProvider",
+            "textDocument/references": "referencesProvider",
+            "textDocument/rename": "renameProvider",
+            "textDocument/documentSymbol": "documentSymbolProvider",
+            "textDocument/typeDefinition": "typeDefinitionProvider",
+            "textDocument/implementation": "implementationProvider",
+            "textDocument/codeAction": "codeActionProvider",
+            "textDocument/formatting": "documentFormattingProvider",
+            "textDocument/rangeFormatting": "documentRangeFormattingProvider",
+            "textDocument/completion": "completionProvider",
+            "textDocument/signatureHelp": "signatureHelpProvider",
+            "textDocument/inlayHint": "inlayHintProvider",
+            "textDocument/callHierarchy": "callHierarchyProvider",
+            "workspace/symbol": "workspaceSymbolProvider",
         }
-        cap_path = cap_map.get(method)
-        if not cap_path:
+        key = provider_map.get(method)
+        if key is None:
             return True
-        parts = cap_path.split(".")
-        obj = self._capabilities
-        for part in parts:
-            if not isinstance(obj, dict) or part not in obj:
-                return False
-            obj = obj[part]
-        return bool(obj)
+        value = self._capabilities.get(key)
+        # Present-and-not-disabled means supported. An options object (even empty
+        # {}) counts; only an absent key or an explicit False means unsupported.
+        return key in self._capabilities and value is not False and value is not None
+
+    def _supports_workspace_diagnostic(self) -> bool:
+        """True if the server advertises LSP 3.17 workspace pull diagnostics.
+
+        Pull diagnostics live at top-level ``diagnosticProvider`` (DiagnosticOptions),
+        with ``workspaceDiagnostics: bool`` gating the workspace/diagnostic request.
+        Pyright reports ``workspaceDiagnostics: false`` — sending the request anyway
+        hangs until the 30s timeout. ``diagnosticProvider`` may be a bool or an object.
+        """
+        provider = self._capabilities.get("diagnosticProvider")
+        if isinstance(provider, dict):
+            return bool(provider.get("workspaceDiagnostics"))
+        return bool(provider)
 
     # ── internal ──────────────────────────────────────────────────────────
 
@@ -575,10 +701,35 @@ class LspSession:
         return path.as_uri()
 
     @staticmethod
+    def _canonical_uri(uri: str) -> str:
+        """Canonicalize a file URI for stable keying across client/server variants.
+
+        Client URIs come from ``Path.resolve().as_uri()`` (uppercase Windows drive,
+        ``urllib``-style percent-encoding). Servers (pyright, pylsp, …) frequently
+        publish the same file with a lowercase drive letter and/or different
+        percent-encoding. Keying state dicts on raw strings then misses, so
+        publishDiagnostics never matches the lookup and the tool silently returns
+        no diagnostics. Normalize to one form: decode, uppercase the drive, re-quote.
+        Pure string work — no filesystem I/O (safe in the notification handler).
+        """
+        if not uri.startswith("file://"):
+            return uri
+        rest = unquote(uri[len("file://"):])
+        # "/h:/..." -> "/H:/..." (Windows drive letter)
+        if len(rest) >= 3 and rest[0] == "/" and rest[2] == ":":
+            rest = "/" + rest[1].upper() + rest[2:]
+        return "file://" + quote(rest, safe="/:@")
+
+    @staticmethod
     def _uri_to_path(uri: str) -> Path:
-        """Convert a file:// URI to a filesystem path."""
+        """Convert a file:// URI to a filesystem path.
+
+        Uses url2pathname (works on 3.12); Path.from_uri is 3.13+ only and the
+        runtime here is 3.12, where it raises AttributeError.
+        """
         if uri.startswith("file://"):
-            return Path.from_uri(uri)  # type: ignore[attr-defined]
+            parsed = urlparse(uri)
+            return Path(url2pathname(unquote(parsed.path)))
         return Path(uri)
 
     @staticmethod

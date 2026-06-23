@@ -15,6 +15,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.io import _ensure_dict
+
 from ...descriptors.base import LanguageServerEntry
 
 # opencode keys its `lsp` object by opencode's own built-in server name, which is
@@ -43,7 +45,7 @@ def _load_json(path: Path) -> dict[str, Any]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return {}
-    return data if isinstance(data, dict) else {}
+    return _ensure_dict(data)
 
 
 def _save_json(path: Path, data: dict[str, Any]) -> None:

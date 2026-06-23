@@ -6,6 +6,7 @@ Separated from lsp_api.py (LSP protocol operations) for single-responsibility.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -368,7 +369,14 @@ async def install_lsp_dependencies(
         # of this explicit install — gated on coding-lsp being enabled, never on the
         # enable event. Best-effort: it never fails the server install.
         provision_provider_lsp_support(project_root)
-        return seq.run({})
+        result = seq.run({})
+        return {
+            "status": result.status,
+            "outputs": result.outputs,
+            "progress": [asdict(p) for p in result.progress],
+            "question": asdict(result.question) if result.question else None,
+            "reason": result.reason,
+        }
 
     return await asyncio.to_thread(_work)
 
