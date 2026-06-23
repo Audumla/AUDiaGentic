@@ -28,6 +28,11 @@ CODING_LSP_DIR = Path(".coding-lsp")
 # ── public API ──────────────────────────────────────────────────────────────
 
 
+def _as_path(path: str | Path) -> Path:
+    """Convert str to Path, pass through Path unchanged."""
+    return Path(path) if isinstance(path, str) else path
+
+
 def available_language_specs() -> dict[str, dict[str, Any]]:
     """Return all supported language server specifications, keyed by language."""
     return {
@@ -38,8 +43,7 @@ def available_language_specs() -> dict[str, dict[str, Any]]:
 
 def read_lsp_config(path: Path | str) -> dict[str, dict[str, Any]]:
     """Read lsp.json and return configured servers dict."""
-    if isinstance(path, str):
-        path = Path(path)
+    path = _as_path(path)
     if not path.exists():
         return {}
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -48,8 +52,7 @@ def read_lsp_config(path: Path | str) -> dict[str, dict[str, Any]]:
 
 def write_lsp_config(path: Path | str, servers: dict[str, dict[str, Any]]) -> None:
     """Write server configuration to lsp.json."""
-    if isinstance(path, str):
-        path = Path(path)
+    path = _as_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     data = {"version": 1, "servers": servers}
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
@@ -61,8 +64,7 @@ def detect_project_languages(project_root: Path | str) -> dict[str, str]:
     Advisory only — detection never activates a language. Active languages
     come from feature state and active implementation bindings.
     """
-    if isinstance(project_root, str):
-        project_root = Path(project_root)
+    project_root = _as_path(project_root)
     detected: dict[str, str] = {}
     for language, spec in language_registry.all_languages().items():
         for marker in spec.detection_markers:
@@ -78,8 +80,7 @@ def load_runtime_servers(path: Path | str) -> tuple[dict[str, ServerConfig], lis
     Returns (servers, errors, exists). This validates cache/projection data; the
     active runtime source is feature state plus bindings.
     """
-    if isinstance(path, str):
-        path = Path(path)
+    path = _as_path(path)
     if not path.exists():
         return {}, [], False
 
@@ -147,8 +148,7 @@ def discover_language_servers(project_root: Path | str) -> dict[str, bool]:
     resolved from feature state + the active implementation's bindings (the source
     of truth), not from the generated lsp.json cache.
     """
-    if isinstance(project_root, str):
-        project_root = Path(project_root)
+    project_root = _as_path(project_root)
 
     # Lazy import to avoid an import cycle with runtime_resolver.
     from audiagentic.components.coding_lsp.runtime_resolver import (
@@ -172,8 +172,7 @@ def discover_language_servers(project_root: Path | str) -> dict[str, bool]:
 
 def resolve_server_for_file(file_path: Path | str, servers: dict[str, ServerConfig]) -> ServerConfig | None:
     """Find the language server that handles a given file extension."""
-    if isinstance(file_path, str):
-        file_path = Path(file_path)
+    file_path = _as_path(file_path)
     ext = file_path.suffix.lower()
     for server in servers.values():
         if ext in server.file_extensions:
@@ -183,6 +182,4 @@ def resolve_server_for_file(file_path: Path | str, servers: dict[str, ServerConf
 
 def resolve_root_uri(project_root: Path | str) -> str:
     """Convert project root path to file:// URI."""
-    if isinstance(project_root, str):
-        project_root = Path(project_root)
-    return project_root.resolve().as_uri()
+    return _as_path(project_root).resolve().as_uri()

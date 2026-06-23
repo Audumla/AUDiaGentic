@@ -1,7 +1,8 @@
-"""Language server projection events from the LSP component."""
+"""Language server projection sync from the LSP component."""
 from __future__ import annotations
 
 import logging
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +14,6 @@ from audiagentic.components.coding_lsp.runtime_resolver import (
     resolve_active_runtime_servers,
 )
 from audiagentic.foundation.components.ids import COMPONENT_CODING_LSP
-from audiagentic.foundation.event import DeliveryMode, get_bus
 from audiagentic.foundation.features.registry import (
     get_binding_writer,
     get_bindings,
@@ -21,37 +21,11 @@ from audiagentic.foundation.features.registry import (
     get_implementations,
     register_binding_writer,
 )
+from audiagentic.foundation.io import _ensure_dict
 from audiagentic.foundation.mcp import McpServerEntry
 from audiagentic.foundation.mcp.launch import component_mcp_launch
 
 logger = logging.getLogger(__name__)
-
-_LSP_PROVIDER_SYNC_EVENT = "coding-lsp.provider-projection.sync"
-
-
-def _publish_provider_projection(
-    project_root: Path,
-    *,
-    action: str,
-    default: dict[str, Any],
-    **payload: Any,
-) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    get_bus().publish(
-        _LSP_PROVIDER_SYNC_EVENT,
-        {
-            "project_root": project_root,
-            "action": action,
-            "result": result,
-            **payload,
-        },
-        metadata={
-            "source_component": COMPONENT_CODING_LSP,
-            "subject": {"kind": "component", "id": COMPONENT_CODING_LSP},
-        },
-        mode=DeliveryMode.SYNC,
-    )
-    return result or default
 
 
 def _agent_lsp_args(project_root: Path) -> tuple[str, ...]:
@@ -71,7 +45,7 @@ def _generic_mcp_projection_spec(implementation: str) -> dict[str, Any]:
     if not isinstance(projection, dict):
         return {}
     spec = projection.get("generic-mcp") or {}
-    return spec if isinstance(spec, dict) else {}
+    return _ensure_dict(spec)
 
 
 def _generic_mcp_managed_ids() -> set[str]:
@@ -101,7 +75,9 @@ def _generic_mcp_projection(project_root: Path, implementation: str) -> dict[str
         # Component MCP server launched through the installed console script.
         raw_args = spec.get("args", ())
         extra = tuple(str(a) for a in raw_args) if isinstance(raw_args, list) else ()
-        cmd, args, env = component_mcp_launch(module, extra_args=extra)
+        cmd, subcommand, launch_args = component_mcp_launch(module, extra_args=extra)
+        args = (subcommand, *launch_args)
+        env = {}
     else:
         # Runtime-bridged server (e.g. agent-lsp): explicit command + runtime args.
         command = spec.get("command")
@@ -198,11 +174,23 @@ def _generic_lsp_projection_for_active_implementation(
             writer(project_root) if writer is not None else _generic_mcp_projection(project_root, implementation)
         )
         seen_writer_keys.add(writer_key)
+    if not desired:
+        desired.update(_generic_mcp_projection(project_root, active_implementation))
     return desired
 
 
+def _mcp_command_status(desired: dict[str, tuple[str, McpServerEntry]]) -> dict[str, Any]:
+    commands = sorted({entry.command for _, entry in desired.values()})
+    missing = [command for command in commands if shutil.which(command) is None]
+    return {
+        "commands": commands,
+        "missing": missing,
+        "ok": not missing,
+    }
+
+
 def sync_language_servers_to_providers(project_root: Path) -> dict[str, Any]:
-    """Publish active language server config projection for provider observers."""
+    """Sync active language server config projection to provider configs."""
     try:
         _register_builtin_binding_writers()
         configured: dict[str, LanguageServerEntry] = {}
@@ -221,33 +209,36 @@ def sync_language_servers_to_providers(project_root: Path) -> dict[str, Any]:
     if not configured:
         return {"ok": True, "synced": [], "skipped": "no valid configured language servers"}
 
-    return _publish_provider_projection(
-        project_root,
-        action="sync-language-servers",
-        servers=configured,
-        default={"ok": True, "synced": [], "skipped": "no provider projection handler"},
+    from audiagentic.components.providers.services.lsp_projection import (
+        sync_language_servers_to_provider_configs,
     )
+
+    return sync_language_servers_to_provider_configs(project_root, configured)
 
 
 def sync_generic_lsp_mcp_to_providers(project_root: Path) -> dict[str, Any]:
-    """Publish selected generic LSP MCP projection for provider observers."""
+    """Sync selected generic LSP MCP projection to provider configs."""
     desired_entry = _generic_lsp_projection_for_active_implementation(project_root)
-    return _publish_provider_projection(
-        project_root,
-        action="sync-generic-mcp",
-        desired_entries=desired_entry,
-        managed_ids=_generic_mcp_managed_ids(),
-        default={"ok": True, "synced": [], "skipped": "no provider projection handler"},
+    from audiagentic.components.providers.services.lsp_projection import (
+        sync_generic_lsp_mcp_to_provider_configs,
     )
+
+    result = sync_generic_lsp_mcp_to_provider_configs(
+        project_root,
+        desired_entry,
+        _generic_mcp_managed_ids(),
+    )
+    result["mcp_command_status"] = _mcp_command_status(desired_entry)
+    return result
 
 
 def provision_provider_lsp_support(project_root: Path) -> dict[str, Any]:
-    """Publish request for providers that self-provide LSP to configure support."""
-    return _publish_provider_projection(
-        project_root,
-        action="provision-support",
-        default={"ok": True, "provisioned": [], "skipped": "no provider projection handler"},
+    """Configure provider-specific LSP support for providers that self-provide LSP."""
+    from audiagentic.components.providers.services.lsp_projection import (
+        provision_provider_lsp_support as _provision_provider_lsp_support,
     )
+
+    return _provision_provider_lsp_support(project_root)
 
 
 def prune_language_servers_from_providers(project_root: Path) -> dict[str, Any]:
@@ -260,19 +251,20 @@ def prune_language_servers_from_providers(project_root: Path) -> dict[str, Any]:
     The per-provider removers are idempotent (no-op when the language is absent).
     """
     languages = list(language_registry.all_languages().keys())
-    return _publish_provider_projection(
-        project_root,
-        action="prune-language-servers",
-        languages=languages,
-        default={"ok": True, "pruned": [], "skipped": "no provider projection handler", "languages": languages},
+    from audiagentic.components.providers.services.lsp_projection import (
+        prune_language_servers_from_provider_configs,
     )
+
+    return prune_language_servers_from_provider_configs(project_root, languages)
 
 
 def prune_generic_lsp_mcp_from_providers(project_root: Path) -> dict[str, Any]:
-    """Publish request to remove coding-lsp managed generic LSP MCP entries."""
-    return _publish_provider_projection(
+    """Remove coding-lsp managed generic LSP MCP entries from provider configs."""
+    from audiagentic.components.providers.services.lsp_projection import (
+        prune_generic_lsp_mcp_from_provider_configs,
+    )
+
+    return prune_generic_lsp_mcp_from_provider_configs(
         project_root,
-        action="prune-generic-mcp",
-        managed_ids=_generic_mcp_managed_ids(),
-        default={"ok": True, "pruned": [], "skipped": "no provider projection handler"},
+        _generic_mcp_managed_ids(),
     )

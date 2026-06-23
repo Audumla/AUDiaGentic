@@ -49,15 +49,20 @@ mcp-servers:
     propagate: audiagentic
     instructions: >
       Use these tools for precise code navigation and intelligence.
-      lsp_symbols: search workspace symbols by name — use before grep for symbol lookups.
+      Start with lsp_capabilities(file) when unsure which operations the language
+      server supports. Use lsp_symbols(query) for symbol-name or identifier
+      searches, not arbitrary text search; prefer it before grep for symbol
+      lookups. Use lsp_file_diagnostics(file) for a specific file, especially a
+      changed file. Use lsp_diagnostics(root) for workspace/server diagnostics.
       lsp_definition: go to definition at a file position (format: line:column, 1-based).
       lsp_hover: get type/documentation at a position.
       lsp_references: find all references to a symbol.
       lsp_doc_symbols: get the symbol outline for a file.
-      lsp_diagnostics: get type errors and warnings for open files.
       lsp_rename_preview: preview a rename refactor without applying it.
       These tools only work for languages enabled for the active LSP implementation.
-      Check lsp_config_status if a tool returns no results for a language.
+      Empty results can mean no match, unsupported capability, language not enabled,
+      or missing server binary; verify with lsp_capabilities(file) before treating
+      an empty response as definitive.
 
 harness-instructions:
   - section: "What you can do"
