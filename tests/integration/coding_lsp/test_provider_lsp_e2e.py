@@ -5,7 +5,7 @@ Validates the full chain:
 
   1. install the `coding-lsp` component in a project
   2. install native-LSP provider CLIs (codex, opencode, qwen)
-  3. enable languages in `lsp.json`
+  3. enable languages in feature state (regenerates `lsp.json` cache)
   4. install only the language-server binaries for those configured languages
   5. propagate to providers (native config + generic ag-lsp MCP)
   6. assert each provider's LSP config is correct
@@ -129,7 +129,7 @@ def provisioned_project(tmp_path_factory) -> Path:
     for provider_id in GENERIC_MCP_LSP_PROVIDERS:
         set_provider_enabled(root, provider_id, enabled=True)
 
-    # 5. enable languages in lsp.json
+    # 5. enable languages in feature state (regenerates lsp.json cache)
     for lang in LANGUAGES:
         result = lsp_config_api.add_language(str(root), lang)
         assert result["ok"], f"add_language({lang}) failed: {result}"

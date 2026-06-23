@@ -15,6 +15,7 @@ for _p in (str(_ROOT), str(_ROOT / "src")):
         sys.path.insert(0, _p)
 
 import json
+import os
 import subprocess
 
 import pytest
@@ -25,7 +26,9 @@ def _cli(*args: str, project: Path | None = None, expect_rc: int = 0) -> dict | 
     if project is not None:
         cmd += ["--project", str(project)]
     cmd += list(args)
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join([str(_ROOT / "src"), env.get("PYTHONPATH", "")])
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", env=env)
     assert result.returncode == expect_rc, (
         f"CLI {args!r} returned rc={result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
     )

@@ -27,6 +27,7 @@ _INITIALIZED = {"jsonrpc": "2.0", "method": "notifications/initialized", "params
 
 def _mcp(*messages: dict, project_root: Path) -> list[dict]:
     env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join([str(_ROOT / "src"), env.get("PYTHONPATH", "")])
     # Keep AUDIAGENTIC_REPO_ROOT from container env (template root for baseline_sync).
     # The target project is passed via --project-root, not this env var.
     proc = subprocess.Popen(

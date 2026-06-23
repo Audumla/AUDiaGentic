@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 
@@ -7,6 +8,11 @@ from audiagentic.paths import REPO_ROOT
 
 
 def test_check_baseline_assets_managed_headers() -> None:
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join([
+        str(REPO_ROOT / "src"),
+        env.get("PYTHONPATH", ""),
+    ])
     completed = subprocess.run(
         [
             sys.executable,
@@ -16,6 +22,7 @@ def test_check_baseline_assets_managed_headers() -> None:
             "--check-managed-headers",
         ],
         cwd=REPO_ROOT,
+        env=env,
         check=False,
         capture_output=True,
         text=True,

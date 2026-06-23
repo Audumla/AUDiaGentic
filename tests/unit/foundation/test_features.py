@@ -187,4 +187,4 @@ id: python
     enable_feature(tmp_path, "coding-lsp", "language", "python")
 
     state = load_feature_state(tmp_path)
-    assert state["coding-lsp"]["features"]["language"]["python"]["enabled"] is True
+    assert state["coding-lsp"]["features"]["language:python"]["enabled"] is True

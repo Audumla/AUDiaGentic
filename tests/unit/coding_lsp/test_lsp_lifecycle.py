@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+import json
 from unittest.mock import MagicMock
 
 from audiagentic.components.coding_lsp.lsp_lifecycle import (
@@ -125,6 +125,7 @@ def test_hover_returns_none_on_no_info() -> None:
 def test_get_diagnostics_all() -> None:
     session = LspSession(_make_config(), "/tmp")
     session.bridge = MagicMock()
+    session._capabilities = {"diagnosticProvider": {"workspaceDiagnostics": True}}
     session.bridge.send_request = MagicMock(return_value={
         "items": [
             {"kind": "full", "uri": "file://a.py", "items": [{"severity": 1, "message": "err"}]},
@@ -138,6 +139,7 @@ def test_get_diagnostics_all() -> None:
 def test_get_diagnostics_single_uri() -> None:
     session = LspSession(_make_config(), "/tmp")
     session.bridge = MagicMock()
+    session._capabilities = {"diagnosticProvider": {"workspaceDiagnostics": True}}
     session.bridge.send_request = MagicMock(return_value={
         "items": [
             {"kind": "full", "uri": "file://a.py", "items": [{"severity": 1, "message": "err"}]},
@@ -156,6 +158,7 @@ def test_diagnostics_logs_warning_on_request_failure(caplog) -> None:
     """
     session = LspSession(_make_config(), "/tmp")
     session.bridge = MagicMock()
+    session._capabilities = {"diagnosticProvider": {"workspaceDiagnostics": True}}
     session.bridge.send_request = MagicMock(side_effect=RuntimeError("boom"))
 
     from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -165,3 +168,146 @@ def test_diagnostics_logs_warning_on_request_failure(caplog) -> None:
     except AudiaGenticError as e:
         assert "EXT-LSP-008" in e.code
         assert "Workspace diagnostics request failed" in e.message
+
+
+def test_diagnostics_no_pull_no_cli_fails_fast() -> None:
+    """No workspace pull and no known batch CLI fails fast, never sends the request.
+
+    Regression: pyright reports workspaceDiagnostics=false; sending workspace/diagnostic
+    anyway hangs until the 30s timeout. With no batch CLI for the server, raise
+    EXT-LSP-004 and point to the file-diagnostics tools.
+    """
+    session = LspSession(_make_config(), "/tmp")  # command=["echo", ...] → no CLI
+    session.bridge = MagicMock()
+    session._capabilities = {"diagnosticProvider": {"workspaceDiagnostics": False}}
+
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    try:
+        session.diagnostics()
+        assert False, "should have raised"
+    except AudiaGenticError as e:
+        assert "EXT-LSP-004" in e.code
+        assert "lsp_file_diagnostics" in e.message
+    session.bridge.send_request.assert_not_called()
+
+
+def test_batch_cli_name_maps_pyright() -> None:
+    """pyright-langserver resolves to the pyright batch CLI; unknown servers to None."""
+    pyright = ServerConfig(command=["pyright-langserver", "--stdio"], label="python")
+    based = ServerConfig(command=["/usr/bin/basedpyright-langserver.exe"], label="python")
+    other = ServerConfig(command=["echo"], label="x")
+    assert LspSession(pyright, "/tmp")._batch_cli_name() == "pyright"
+    assert LspSession(based, "/tmp")._batch_cli_name() == "basedpyright"
+    assert LspSession(other, "/tmp")._batch_cli_name() is None
+
+
+def test_diagnostics_falls_back_to_cli_scan(monkeypatch) -> None:
+    """Push-only server (no workspace pull) scans the project via its batch CLI.
+
+    The CLI path must produce the same {uri: [diagnostic]} shape as the LSP pull
+    path and must not touch the LSP request channel.
+    """
+    import subprocess
+    from pathlib import Path
+
+    cfg = ServerConfig(command=["pyright-langserver", "--stdio"], label="python")
+    session = LspSession(cfg, "/tmp")
+    session.bridge = MagicMock()
+    session._capabilities = {}  # no diagnosticProvider → no workspace pull
+
+    target = str((Path("/tmp") / "mod.py").resolve())
+    report = {
+        "generalDiagnostics": [
+            {"file": target, "severity": "error", "message": "boom",
+             "range": {"start": {"line": 1, "character": 0}, "end": {"line": 1, "character": 3}},
+             "rule": "reportUndefinedVariable"},
+            {"file": target, "severity": "warning", "message": "meh",
+             "range": {}, "rule": "reportUnusedVariable"},
+        ]
+    }
+
+    def fake_run(cmd, **kwargs):
+        assert cmd[0] == "pyright" and "--outputjson" in cmd
+        return subprocess.CompletedProcess(cmd, 1, stdout=json.dumps(report), stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = session.diagnostics(min_severity=1)  # errors only
+    session.bridge.send_request.assert_not_called()
+    assert len(result) == 1  # one file
+    (uri, diags), = result.items()
+    assert uri.startswith("file://")
+    assert len(diags) == 1  # warning filtered out by min_severity=1
+    assert diags[0]["severity"] == 1
+    assert diags[0]["code"] == "reportUndefinedVariable"
+    assert diags[0]["source"] == "pyright"
+
+
+def test_diagnostics_cli_missing_binary_raises(monkeypatch) -> None:
+    """A missing batch CLI surfaces EXT-LSP-004 with an install hint, not a hang."""
+    import subprocess
+
+    cfg = ServerConfig(command=["pyright-langserver", "--stdio"], label="python")
+    session = LspSession(cfg, "/tmp")
+    session.bridge = MagicMock()
+    session._capabilities = {}
+
+    def boom(cmd, **kwargs):
+        raise FileNotFoundError(cmd[0])
+
+    monkeypatch.setattr(subprocess, "run", boom)
+
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    try:
+        session.diagnostics()
+        assert False, "should have raised"
+    except AudiaGenticError as e:
+        assert "EXT-LSP-004" in e.code
+        assert "pyright" in e.message
+
+
+def test_has_capability_reads_top_level_providers() -> None:
+    """has_capability must read top-level *Provider keys (pyright's real shape)."""
+    session = LspSession(_make_config(), "/tmp")
+    session._capabilities = {
+        "definitionProvider": {"workDoneProgress": True},
+        "hoverProvider": True,
+        "renameProvider": {"prepareProvider": True},
+        "referencesProvider": False,  # explicitly disabled
+        # completionProvider absent
+    }
+    assert session.has_capability("textDocument/definition")
+    assert session.has_capability("textDocument/hover")
+    assert session.has_capability("textDocument/rename")
+    assert not session.has_capability("textDocument/references")
+    assert not session.has_capability("textDocument/completion")
+
+
+def test_uri_to_path_without_path_from_uri() -> None:
+    """Regression: _uri_to_path must work on Python 3.12 (no Path.from_uri).
+
+    The MCP runtime is 3.12; Path.from_uri is 3.13+ and raised AttributeError,
+    crashing file_diagnostics. url2pathname-based conversion works on both.
+    """
+    import os
+
+    p = LspSession._uri_to_path("file:///H:/a%20b/c.py")
+    # Compare via parts so the test is OS-agnostic for the non-drive segments.
+    assert p.name == "c.py"
+    assert "a b" in p.parts  # percent-decoded space
+    if os.name == "nt":
+        assert str(p) == r"H:\a b\c.py"
+
+
+def test_canonical_uri_collapses_windows_drive_case() -> None:
+    """publishDiagnostics with lowercase drive / alt encoding must key the same.
+
+    Regression: client URIs use uppercase drive (Path.as_uri); servers often
+    publish lowercase. Mismatched keys made file_diagnostics silently return [].
+    """
+    client = "file:///H:/proj/a b/mod.py"
+    server = "file:///h:/proj/a%20b/mod.py"
+    assert LspSession._canonical_uri(client) == LspSession._canonical_uri(server)
+    once = LspSession._canonical_uri(server)
+    assert LspSession._canonical_uri(once) == once  # idempotent
+    assert LspSession._canonical_uri("untitled:foo") == "untitled:foo"

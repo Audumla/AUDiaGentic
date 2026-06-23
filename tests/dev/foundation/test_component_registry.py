@@ -72,7 +72,7 @@ def test_all_descriptors_returns_all_builtin_components() -> None:
     descs = all_descriptors()
     expected = {
         "project", "agent-ledger", "providers",
-        "planning", "agent-jobs",
+        "agent-jobs", "coding-lsp",
     }
     assert expected.issubset(descs.keys())
 
@@ -224,8 +224,8 @@ def test_uninstall_removes_runtime_only_files(tmp_path: Path) -> None:
     ))
     register(desc)
 
-    deleted = uninstall_component("test-uninstall-rt-xyz", tmp_path)
-    assert runtime_file in deleted
+    result = uninstall_component("test-uninstall-rt-xyz", tmp_path)
+    assert str(runtime_file) in result["deleted"]
     assert not runtime_file.exists()
 
     from audiagentic.foundation.components import registry as _reg
@@ -241,8 +241,8 @@ def test_uninstall_removes_required_managed_files(tmp_path: Path) -> None:
     ))
     register(desc)
 
-    deleted = uninstall_component("test-uninstall-rm-xyz", tmp_path)
-    assert managed_file in deleted
+    result = uninstall_component("test-uninstall-rm-xyz", tmp_path)
+    assert str(managed_file) in result["deleted"]
     assert not managed_file.exists()
 
     from audiagentic.foundation.components import registry as _reg
@@ -259,8 +259,8 @@ def test_uninstall_preserves_create_if_missing_without_flag(tmp_path: Path) -> N
     ))
     register(desc)
 
-    deleted = uninstall_component("test-uninstall-cim-xyz", tmp_path, remove_configs=False)
-    assert config_file not in deleted
+    result = uninstall_component("test-uninstall-cim-xyz", tmp_path, remove_configs=False)
+    assert str(config_file) not in result["deleted"]
     assert config_file.exists()
 
     from audiagentic.foundation.components import registry as _reg
@@ -277,8 +277,8 @@ def test_uninstall_removes_create_if_missing_with_flag(tmp_path: Path) -> None:
     ))
     register(desc)
 
-    deleted = uninstall_component("test-uninstall-cim2-xyz", tmp_path, remove_configs=True)
-    assert config_file in deleted
+    result = uninstall_component("test-uninstall-cim2-xyz", tmp_path, remove_configs=True)
+    assert str(config_file) in result["deleted"]
     assert not config_file.exists()
 
     from audiagentic.foundation.components import registry as _reg
@@ -291,8 +291,8 @@ def test_uninstall_tolerates_missing_files(tmp_path: Path) -> None:
     ))
     register(desc)
 
-    deleted = uninstall_component("test-uninstall-missing-xyz", tmp_path)
-    assert deleted == []
+    result = uninstall_component("test-uninstall-missing-xyz", tmp_path)
+    assert result["deleted"] == []
 
     from audiagentic.foundation.components import registry as _reg
     _reg._registry.pop("test-uninstall-missing-xyz", None)
@@ -308,16 +308,17 @@ def test_uninstall_removes_recursive_dir(tmp_path: Path) -> None:
     ))
     register(desc)
 
-    deleted = uninstall_component("test-uninstall-rec-xyz", tmp_path)
-    assert skills_dir in deleted
+    result = uninstall_component("test-uninstall-rec-xyz", tmp_path)
+    assert str(skills_dir) in result["deleted"]
     assert not skills_dir.exists()
 
     from audiagentic.foundation.components import registry as _reg
     _reg._registry.pop("test-uninstall-rec-xyz", None)
 
 
-def test_uninstall_returns_empty_list_for_unknown_component(tmp_path: Path) -> None:
-    assert uninstall_component("nonexistent-xyz", tmp_path) == []
+def test_uninstall_returns_error_for_unknown_component(tmp_path: Path) -> None:
+    result = uninstall_component("nonexistent-xyz", tmp_path)
+    assert result["ok"] is False
 
 
 # ---------------------------------------------------------------------------
