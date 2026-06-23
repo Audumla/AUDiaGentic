@@ -21,7 +21,7 @@ def _adapter_module_path(provider_id: str) -> str | None:
         name = name + "_"
     module_path = f"{_ADAPTER_BASE}.{name}.adapter"
     try:
-        return module_path if importlib.util.find_spec(module_path) is not None else None
+        return module_path if importlib.util.find_spec(module_path) else None
     except (ModuleNotFoundError, AttributeError):
         return None
 

@@ -2,10 +2,160 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any, Protocol
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+
+class ContributionKind(str, Enum):
+    """Type of surface contribution."""
+    RULE = "rule"
+    CONTENT = "content"
+    CONFIG_REFERENCE = "config-reference"
+
+
+@dataclass(frozen=True)
+class ContributionDescriptor:
+    """Typed schema for a contribution entry in component YAML.
+
+    Validates the raw YAML contribution before it becomes a SurfaceContribution.
+    """
+    id: str
+    owner: str
+    kind: ContributionKind = ContributionKind.CONTENT
+    title: str = ""
+    preferred_targets: tuple[str, ...] = ()
+    content: dict[str, Any] | str | None = None
+    config_reference: str | None = None
+    skill_content_file: str | None = None
+
+
+# Known surface types for preferred_targets validation
+KNOWN_SURFACE_TYPES = frozenset({
+    "aider", "claude", "cline", "codex", "copilot", "gemini", "goose",
+})
+
+
+def validate_config_reference(config_path: str, component_id: str) -> str | None:
+    """Validate that a config reference resolves to an existing file.
+
+    Returns None if valid, or a warning message if the file does not exist.
+    Config references are resolved relative to the package config directory.
+    """
+    from audiagentic.foundation.components.loader import (
+        _COMPONENTS_CONFIG_DIR,
+    )
+
+    # Config references are relative to the package config dir (parent of components/)
+    config_base = _COMPONENTS_CONFIG_DIR.parent
+    candidate = config_base / config_path
+    if not candidate.exists():
+        return (
+            f"Component {component_id!r}: config reference {config_path!r} "
+            f"does not exist (resolved to {candidate})"
+        )
+    return None
+
+
+def parse_contribution_descriptor(raw: dict[str, Any], default_owner: str) -> ContributionDescriptor | None:
+    """Parse and validate a raw contribution dict into a typed descriptor.
+
+    Returns None if the entry is invalid or should be skipped (e.g. config references).
+    Raises AudiaGenticError for validation failures.
+    """
+    from audiagentic.foundation.contracts.errors import make_error  # noqa: PLC0415
+
+    # Config references are handled by the tag loader, not surface contributions.
+    if "config" in raw and "id" not in raw:
+        return None
+
+    contribution_id = raw.get("id")
+    if not isinstance(contribution_id, str) or not contribution_id:
+        raise make_error(
+            prefix="VAL",
+            component="SURF",
+            number=1,
+            kind="surface-contributions",
+            message="Contribution missing required 'id' field",
+            details={"raw": raw},
+        )
+
+    owner = raw.get("owner") if isinstance(raw.get("owner"), str) else default_owner
+    if not owner:
+        raise make_error(
+            prefix="VAL",
+            component="SURF",
+            number=2,
+            kind="surface-contributions",
+            message=f"Contribution {contribution_id!r}: missing required 'owner' field",
+            details={"contribution_id": contribution_id},
+        )
+
+    # Parse kind
+    kind_raw = raw.get("kind", "content")
+    try:
+        kind = ContributionKind(kind_raw) if isinstance(kind_raw, str) else ContributionKind.CONTENT
+    except ValueError:
+        raise make_error(
+            prefix="VAL",
+            component="SURF",
+            number=3,
+            kind="surface-contributions",
+            message=f"Contribution {contribution_id!r}: unknown kind {kind_raw!r}",
+            details={
+                "contribution_id": contribution_id,
+                "kind": kind_raw,
+                "allowed": list(ContributionKind.__members__),
+            },
+        )
+
+    # Parse title
+    title = raw.get("title") or raw.get("summary")
+    if not isinstance(title, str) or not title:
+        raise make_error(
+            prefix="VAL",
+            component="SURF",
+            number=4,
+            kind="surface-contributions",
+            message=f"Contribution {contribution_id!r}: missing required 'title' field",
+            details={"contribution_id": contribution_id},
+        )
+
+    # Parse preferred_targets
+    preferred_targets = ()
+    if "preferred-targets" in raw:
+        raw_targets = raw["preferred-targets"]
+        if isinstance(raw_targets, list):
+            for target in raw_targets:
+                if isinstance(target, str) and target:
+                    if target not in KNOWN_SURFACE_TYPES:
+                        import logging  # noqa: PLC0415
+                        logging.getLogger(__name__).warning(
+                            "Contribution %r: unknown preferred-target %r (known: %s)",
+                            contribution_id,
+                            target,
+                            ", ".join(sorted(KNOWN_SURFACE_TYPES)),
+                        )
+                    preferred_targets += (target,)
+
+    # Parse content
+    content = raw.get("content")
+    config_reference = raw.get("config")
+    skill_content_file = raw.get("skill-content-file")
+
+    return ContributionDescriptor(
+        id=contribution_id,
+        owner=owner,
+        kind=kind,
+        title=title,
+        preferred_targets=preferred_targets,
+        content=content,
+        config_reference=config_reference,
+        skill_content_file=skill_content_file,
+    )
+
 
 MANAGED_MARKDOWN_HEADER = "<!-- MANAGED_BY_AUDIAGENTIC: do not edit directly. -->"
 

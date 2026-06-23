@@ -171,7 +171,7 @@ def workflow_provider_cli_plan(
     step = _build_step(provider_id, action, descriptor, dry_run=True)
     if step is None:
         return WorkflowInvocationResult(status="skipped", reason="provider has no installable CLI recipe")
-    return WorkflowInvocationRunner([step]).plan(_build_context(provider_id, descriptor))
+    return WorkflowInvocationRunner([step]).plan(_build_context(provider_id, descriptor))  # type: ignore[reportArgumentType]
 
 
 def workflow_provider_cli_run(
@@ -207,12 +207,12 @@ def workflow_provider_cli_run(
 
     action_config = _action_config(action)
     current_state = action_config["initial_state"]
-    workflow_ctx = ProviderCliWorkflowContext(provider_id, current_state)
-    machine = StateMachine(workflow_ctx)
+    workflow_ctx = ProviderCliWorkflowContext(provider_id, current_state)  # pyright: ignore[reportArgumentType]
+    machine = StateMachine(workflow_ctx)  # pyright: ignore[reportArgumentType]
     resource_id = workflow_ctx._item.data["id"]
     machine.state(resource_id, action_config["start_state"], reason=action)
 
-    invocation = WorkflowInvocationRunner([step]).run(_build_context(provider_id, descriptor))
+    invocation = WorkflowInvocationRunner([step]).run(_build_context(provider_id, descriptor))  # type: ignore[reportArgumentType]
 
     probe = probe_fn(descriptor)
     timed_out = invocation.reason is not None and invocation.reason.startswith("timed out after ")

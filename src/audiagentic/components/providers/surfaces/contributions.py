@@ -7,7 +7,7 @@ import yaml
 
 from audiagentic.foundation.components.ids import COMPONENT_AGENT_JOBS
 
-from .base import SurfaceContribution
+from .base import SurfaceContribution, parse_contribution_descriptor
 
 
 def _as_strings(raw: Any) -> tuple[str, ...]:
@@ -23,24 +23,28 @@ def _contributions_from_data(data: dict[str, Any], component_id: str) -> list[Su
     for raw in raw_list:
         if not isinstance(raw, dict):
             continue
-        # Skip file references — those are action files handled by the tag loader.
-        if "config" in raw:
+        # Parse and validate the contribution descriptor
+        descriptor = parse_contribution_descriptor(raw, component_id)
+        if descriptor is None:
             continue
-        content = raw.get("content") or {}
+
+        # Skip config references — those are action files handled by the tag loader.
+        if descriptor.config_reference:
+            continue
+
+        # Extract body from content
+        content = descriptor.content or {}
         body = content.get("body") if isinstance(content, dict) else raw.get("body")
         if not isinstance(body, str):
             continue
-        contribution_id = raw.get("id")
-        title = raw.get("title") or raw.get("summary")
-        if not all(isinstance(item, str) and item for item in (contribution_id, title)):
-            continue
+
         contributions.append(
             SurfaceContribution(
-                contribution_id=contribution_id,
-                owner_component=raw.get("owner") if isinstance(raw.get("owner"), str) else component_id,
-                title=title,
+                contribution_id=descriptor.id,
+                owner_component=descriptor.owner,
+                title=descriptor.title,
                 body=body,
-                preferred_targets=_as_strings(raw.get("preferred-targets")),
+                preferred_targets=descriptor.preferred_targets,
             )
         )
     return contributions

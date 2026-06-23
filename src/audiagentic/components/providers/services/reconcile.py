@@ -7,14 +7,11 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.output import ComponentOutputEvent, ComponentOutputSink
-from audiagentic.foundation.event import DeliveryMode, get_bus
 
 from ..descriptors.registry import all_descriptors
 from ..surfaces.manager import apply_provider_surfaces, prune_provider_surfaces
 
 logger = logging.getLogger(__name__)
-
-_COMPONENT_MCP_SYNC_EVENT = "lifecycle.component.mcp.sync"
 
 
 def _sync_provider_mcp(project_root: Path, on_progress: ComponentOutputSink | None = None) -> None:
@@ -29,9 +26,11 @@ def _sync_provider_mcp(project_root: Path, on_progress: ComponentOutputSink | No
             is_enabled,
             is_installed,
         )
+        from audiagentic.runtime.lifecycle.component_mcp import (
+            sync_component_mcp_to_provider_configs,
+        )
 
         register_all_components()
-        bus = get_bus()
         for component_id, descriptor in all_component_descriptors().items():
             if not descriptor.mcp_servers and not descriptor.external_mcp_servers:
                 continue
@@ -39,22 +38,37 @@ def _sync_provider_mcp(project_root: Path, on_progress: ComponentOutputSink | No
                 continue
             if not descriptor.core and not is_enabled(component_id, project_root):
                 continue
-            bus.publish(
-                _COMPONENT_MCP_SYNC_EVENT,
-                {
-                    "component_id": component_id,
-                    "project_root": project_root,
-                    "enabled": True,
-                },
-                metadata={
-                    "source_component": "providers",
-                    "subject": {"kind": "component", "id": component_id},
-                },
-                mode=DeliveryMode.SYNC,
-            )
+            sync_component_mcp_to_provider_configs(component_id, project_root)
         _emit(on_progress, "MCP server configs synced")
     except Exception:  # noqa: BLE001
         _emit(on_progress, "MCP server config sync failed (non-fatal)", level="warning")
+
+
+def _sync_vscode_extensions(project_root: Path, on_progress: ComponentOutputSink | None = None) -> None:
+    """Sync VS Code extensions.json from provider host capabilities.
+
+    Generates .vscode/extensions.json with recommendations from all enabled
+    providers that declare VS Code extensions.
+    """
+    from audiagentic.components.providers.services.host_capabilities import is_vscode_project
+    from audiagentic.components.providers.services.lifecycle import _emit
+    try:
+        if not is_vscode_project(project_root):
+            return
+
+        all_extensions = []
+        for provider_id, descriptor in all_descriptors().items():
+            if descriptor.vscode_extensions:
+                all_extensions.extend(descriptor.vscode_extensions)
+
+        if not all_extensions:
+            return
+
+        from audiagentic.components.providers.surfaces.extensions_json import write_extensions_json
+        write_extensions_json(project_root, tuple(all_extensions))
+        _emit(on_progress, "VS Code extensions.json synced")
+    except Exception:  # noqa: BLE001
+        _emit(on_progress, "VS Code extensions.json sync failed (non-fatal)", level="warning")
 
 
 def reconcile_provider(
@@ -104,6 +118,7 @@ def reconcile_provider(
         _seed_provider_config(project_root, provider_id, descriptor, enabled=True)
         surfaces_result = apply_provider_surfaces(project_root, provider_id=provider_id, on_progress=on_progress)
         _sync_provider_mcp(project_root, on_progress)
+        _sync_vscode_extensions(project_root, on_progress)
         action_taken = "enabled"
         if fetch_catalog and descriptor.fetch_catalog_fn is not None:
             try:
@@ -124,6 +139,7 @@ def reconcile_provider(
     else:
         _emit(on_progress, f"{provider_id} already in sync ({('enabled' if currently_enabled else 'disabled')})")
         _sync_provider_mcp(project_root, on_progress)
+        _sync_vscode_extensions(project_root, on_progress)
         action_taken = "ok"
 
     now_enabled = cli_available and action_taken in ("enabled", "ok")

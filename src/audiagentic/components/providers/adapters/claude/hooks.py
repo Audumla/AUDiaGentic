@@ -12,6 +12,7 @@ from audiagentic.cli_io import print_json
 from audiagentic.components.providers.adapters.claude.restrictions import (
     enforce_stage_restrictions,
 )
+from audiagentic.foundation.io import _ensure_dict
 
 __all__ = [
     'detect_and_launch_prompt_tag',
@@ -155,7 +156,7 @@ def _load_hook_payload() -> dict[str, Any]:
         payload = json.loads(raw)
     except json.JSONDecodeError:
         return {}
-    return payload if isinstance(payload, dict) else {}
+    return _ensure_dict(payload)
 
 
 def _resolve_hook_name(explicit_hook: str | None, payload: dict[str, Any]) -> str:
