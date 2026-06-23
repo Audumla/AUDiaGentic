@@ -48,7 +48,7 @@ def _feature_active(project_root: Path, provider_id: str, kind: str, feature_id:
         project_root, COMPONENT_PROVIDERS, provider_id, kind, feature_id
     )
     # Default active when the provider is enabled; only an explicit False disables.
-    return True if explicit is None else explicit
+    return explicit is not False
 
 
 def enabled_provider_ids(project_root: Path) -> set[str]:

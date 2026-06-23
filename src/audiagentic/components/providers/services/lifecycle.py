@@ -73,6 +73,7 @@ def _result(
     probe: dict[str, Any] | None = None,
     reason: str | None = None,
 ) -> dict[str, Any]:
+    effective_reason = reason or (invocation.get("reason") if invocation else None)
     payload: dict[str, Any] = {
         "provider-id": provider_id,
         "action": action,
@@ -81,18 +82,10 @@ def _result(
         "package-name": recipe.package_name if recipe else None,
         "executable": recipe.executable if recipe else None,
         "command": invocation.get("command") if invocation else None,
+        **({"returncode": invocation["returncode"], "stdout": invocation.get("stdout", ""), "stderr": invocation.get("stderr", "")} if invocation and invocation.get("returncode") is not None else {}),
+        **({"probe": probe} if probe else {}),
+        **({"reason": effective_reason} if effective_reason else {}),
     }
-    if invocation is not None and invocation.get("returncode") is not None:
-        payload.update({
-            "returncode": invocation["returncode"],
-            "stdout": invocation.get("stdout", ""),
-            "stderr": invocation.get("stderr", ""),
-        })
-    if probe is not None:
-        payload["probe"] = probe
-    effective_reason = reason or (invocation.get("reason") if invocation else None)
-    if effective_reason:
-        payload["reason"] = effective_reason
     return payload
 
 

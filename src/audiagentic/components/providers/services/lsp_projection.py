@@ -90,10 +90,7 @@ def sync_generic_lsp_mcp_to_provider_configs(
         if not descriptor.receive_lsp_mcp:
             skipped.append(descriptor.provider_id)
             continue
-        if descriptor.language_servers_config is not None:
-            desired = {}
-        else:
-            desired = desired_entry if descriptor.provider_id in enabled else {}
+        desired = desired_entry if descriptor.provider_id in enabled else {}
         result = sync_managed_provider_mcp_subset(
             provider_id=descriptor.provider_id,
             project_root=project_root,
