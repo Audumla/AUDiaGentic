@@ -6,5 +6,6 @@
   "message": "project config failed validation",
   "details": {
     "field": "workflow-profile"
-  }
+  },
+  "resolution": "Provider config failed validation. Check the config fields against the schema."
 }
