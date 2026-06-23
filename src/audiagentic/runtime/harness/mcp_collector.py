@@ -7,7 +7,6 @@ config structure are the responsibility of each harness.
 from __future__ import annotations
 
 import shutil
-import sys
 from pathlib import Path
 
 from audiagentic.foundation.components.loader import register_all_components
@@ -18,15 +17,7 @@ from audiagentic.foundation.components.registry import (
     is_installed,
 )
 from audiagentic.foundation.mcp import McpServerEntry
-
-
-def _python_exe() -> str:
-    return sys.executable.replace("\\", "/")
-
-
-def _src_path() -> str:
-    from audiagentic.runtime.harness.paths import find_package_root
-    return str(find_package_root(Path(__file__)).parent).replace("\\", "/")
+from audiagentic.foundation.mcp.launch import component_mcp_launch
 
 
 def collect_mcp_servers(project_root: Path | None = None) -> dict[str, McpServerEntry]:
@@ -40,8 +31,6 @@ def collect_mcp_servers(project_root: Path | None = None) -> dict[str, McpServer
 
     register_all_components()
 
-    python = _python_exe()
-    src_dir = _src_path()
     servers: dict[str, McpServerEntry] = {}
 
     for cid, descriptor in all_descriptors().items():
@@ -52,11 +41,15 @@ def collect_mcp_servers(project_root: Path | None = None) -> dict[str, McpServer
             continue
 
         for decl in descriptor.mcp_servers:
+            command, subcommand, args = component_mcp_launch(
+                decl.module,
+                extra_args=tuple(decl.args),
+            )
             servers[decl.name] = McpServerEntry(
                 name=decl.name,
-                command=python,
-                args=("-m", decl.module) + tuple(decl.args),
-                env={"PYTHONPATH": src_dir},
+                command=command,
+                args=(subcommand, *args),
+                env={},
             )
 
         probe_cache = get_external_probe_results(cid, project_root)

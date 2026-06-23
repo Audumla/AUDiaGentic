@@ -10,16 +10,14 @@ from pathlib import Path
 
 from audiagentic.foundation.time import now_iso_z
 
+_ALWAYS_RELOAD = {"manual-refresh", "mcp-refresh-tool", "session-ui-visibility-updated"}
+_MCP_RELOAD = {"component-installed", "component-uninstalled", "component-enabled", "component-disabled"}
+
 
 def _runtime_action_for_reason(reason: str, *, has_mcp_servers: bool = True) -> str:
-    if reason in {"manual-refresh", "mcp-refresh-tool", "session-ui-visibility-updated"}:
+    if reason in _ALWAYS_RELOAD:
         return "reload_required"
-    if reason in {
-        "component-installed",
-        "component-uninstalled",
-        "component-enabled",
-        "component-disabled",
-    }:
+    if reason in _MCP_RELOAD:
         return "reload_required" if has_mcp_servers else "refresh_required"
     return "refresh_required"
 

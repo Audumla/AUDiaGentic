@@ -6,11 +6,13 @@ No separate orchestration lane — deps are workflow steps.
 """
 from __future__ import annotations
 
+import logging
+import re
 import shlex
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.foundation.io import load_yaml_file
@@ -24,10 +26,13 @@ from audiagentic.foundation.toolchains.loader import build_step, has_action, raw
 from audiagentic.foundation.workflow.invocation.steps import (
     SelectStep,
     SequenceStep,
+    WorkflowStep,
     planned_commands,
 )
 
 from .loader import component_yaml_path
+
+logger = logging.getLogger(__name__)
 
 
 def _dependency_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
@@ -82,6 +87,113 @@ def _resolve_probe(spec: str) -> Callable[[], bool]:
         module_name, fn_name = dotpath.rsplit(".", 1)
         return getattr(importlib.import_module(module_name), fn_name)
     raise _dependency_error(1, f"unknown probe syntax: {spec!r}", probe=spec)
+
+
+# ---------------------------------------------------------------------------
+# Version constraint checking
+# ---------------------------------------------------------------------------
+
+def _parse_version(version_str: str) -> tuple[int, ...] | None:
+    """Parse a version string into a tuple of integers for comparison.
+
+    Handles versions like '2.60.0', '1.0', '3.14.159', etc.
+    Returns None if the version string cannot be parsed.
+    """
+    match = re.match(r"^(\d+(?:\.\d+)*)", version_str.strip())
+    if not match:
+        return None
+    return tuple(int(part) for part in match.group(1).split("."))
+
+
+def _get_tool_version(binary: str) -> tuple[int, ...] | None:
+    """Get the installed version of a tool by running <binary> --version.
+
+    Returns None if the tool is not available or version cannot be determined.
+    """
+    try:
+        result = subprocess.run(
+            [binary, "--version"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return None
+        output = result.stdout.strip() or result.stderr.strip()
+        return _parse_version(output)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def check_version_constraint(
+    dep_id: str,
+    binary: str,
+    constraint: str,
+) -> str | None:
+    """Check if the installed version of a tool satisfies the version constraint.
+
+    Returns None if satisfied, or a warning message if the constraint is not met.
+    Supports constraints like '>=2.60.0', '<=3.0.0', '>1.0.0', etc.
+    """
+    match = re.match(r"^(>=|<=|>|<|==)?\s*(.+)$", constraint.strip())
+    if not match:
+        logger.warning("Dependency %r: invalid version constraint %r", dep_id, constraint)
+        return None
+
+    operator = match.group(1) or ">="
+    required_str = match.group(2)
+    required = _parse_version(required_str)
+    if required is None:
+        logger.warning("Dependency %r: cannot parse required version %r", dep_id, required_str)
+        return None
+
+    installed = _get_tool_version(binary)
+    if installed is None:
+        logger.info("Dependency %r: cannot determine version for %r", dep_id, binary)
+        return None
+
+    _COMPARE_OPS = {
+        ">=": lambda a, b: a < b,
+        "<=": lambda a, b: a > b,
+        ">": lambda a, b: a <= b,
+        "<": lambda a, b: a >= b,
+        "==": lambda a, b: a != b,
+    }
+    if _COMPARE_OPS.get(operator, lambda a, b: False)(installed, required):
+        return (
+            f"Dependency {dep_id}: installed version "
+            f"{'.'.join(map(str, installed))} does not satisfy {constraint}"
+        )
+
+    return None
+
+
+def validate_dependency_versions(dep_cfgs: dict[str, Any]) -> list[str]:
+    """Validate version constraints for all dependencies.
+
+    Returns a list of warning messages for dependencies that don't meet their
+    version constraints. Empty list if all constraints are satisfied.
+    """
+    warnings = []
+    for dep_id, cfg in dep_cfgs.items():
+        version_constraint = cfg.get("version")
+        if not version_constraint:
+            continue
+
+        # Determine the binary to check
+        probe = cfg.get("probe", "")
+        if probe.startswith("binary:"):
+            binary = probe[7:]
+        else:
+            # Try to determine binary from dep_id or display-name
+            binary = cfg.get("display-name", dep_id).split()[0].lower()
+
+        warning = check_version_constraint(dep_id, binary, version_constraint)
+        if warning:
+            warnings.append(warning)
+
+    return warnings
 
 
 # ---------------------------------------------------------------------------
@@ -147,8 +259,7 @@ def _dep_workflow(dep_id: str, cfg: dict[str, Any], action: str) -> SelectStep:
         if isinstance(pkg_spec, list):
             if not pkg_spec:
                 raise _dependency_error(2, f"{dep_id}: package list must not be empty", dependency=dep_id)
-            pkg = pkg_spec[0]
-            extra = tuple(pkg_spec[1:])
+            pkg, *extra = pkg_spec
         else:
             pkg = pkg_spec
             extra = ()
@@ -221,7 +332,7 @@ def build_dependency_workflow(
         _dep_workflow(dep_id, dep_cfgs[dep_id], action)
         for dep_id in ordered
     )
-    return SequenceStep(id=f"{workflow_id}.{action}", steps=steps, fail_fast=False)
+    return SequenceStep(id=f"{workflow_id}.{action}", steps=cast(tuple[WorkflowStep, ...], steps), fail_fast=False)
 
 
 def build_dependency_probes(dep_cfgs: dict[str, Any]) -> dict[str, Callable[[], bool]]:
@@ -287,5 +398,5 @@ def detect_missing(
     names: list[str] | None = None,
 ) -> list[str]:
     """Return dep ids whose probes fail (not yet satisfied)."""
-    targets = names if names is not None else list(probes.keys())
+    targets = names or list(probes.keys())
     return [n for n in targets if n in probes and not probes[n]()]

@@ -89,6 +89,7 @@ class ShellStep:
         if self.env:
             env.update(self.env)
 
+        process: subprocess.Popen[str] | None = None
         try:
             process = subprocess.Popen(
                 list(command),
@@ -102,12 +103,14 @@ class ShellStep:
             )
             output_lines: list[str] = []
             if self.progress_callback is not None:
+                progress_callback = self.progress_callback
                 def _read_output() -> None:
+                    assert process is not None
                     assert process.stdout is not None
                     for line in process.stdout:
                         stripped = line.rstrip("\n\r")
                         output_lines.append(stripped)
-                        self.progress_callback(stripped)
+                        progress_callback(stripped)  # pyright: ignore[reportOptionalCall]
 
                 reader = threading.Thread(target=_read_output, daemon=True)
                 reader.start()
@@ -118,8 +121,9 @@ class ShellStep:
                 output_lines = stdout_data.splitlines()
             returncode = process.returncode
         except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=5)
+            if process is not None:
+                process.kill()
+                process.wait(timeout=5)
             return StepResult(
                 status="failed",
                 outputs={"command": list(command)},

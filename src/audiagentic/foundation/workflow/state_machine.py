@@ -80,13 +80,12 @@ class StateMachine:
         if action:
             self._cascade(id_, item.kind, action, actor, reason, metadata=metadata)
 
-        event_metadata: dict[str, Any] = {
+        event_metadata = {
             "subject": {"kind": item.kind, "id": id_},
             "triggered_by": "manual",
             "project_root": str(self.ctx.root.resolve()),
+            **(metadata or {}),
         }
-        if metadata:
-            event_metadata.update(metadata)
 
         self.ctx._publish_event(
             self._state_change_event_type(), event_payload, event_metadata, mode="sync"
@@ -167,9 +166,7 @@ class StateMachine:
         source = self.ctx._find(id_)
         for target_kind, target in rules.items():
             for item in self._cascade_targets(source, kind, target_kind):
-                if self.ctx.config.state_in_set(
-                    item.kind, item.data.get("state"), "terminal", item.data.get("workflow")
-                ):
+                if self.is_terminal(item.data["id"]):
                     continue
                 try:
                     self.state(

@@ -24,11 +24,13 @@ def apply_fresh_install(project_root: Path) -> dict:
     register_all_components()
 
     ensure_project_layout(project_root)
-    sync_report = sync_managed_baseline(project_root)
+    from audiagentic.foundation.components.base import MODE_CREATE_IF_MISSING
+    sync_report = sync_managed_baseline(project_root, lifecycle_modes={MODE_CREATE_IF_MISSING})
 
+    from audiagentic.foundation.components.base import MODE_CREATE_IF_MISSING
     from audiagentic.foundation.components.registry import all_descriptors
     for component_id in all_descriptors():
-        kwargs: dict = {"version": DEFAULT_VERSION}
+        kwargs: dict = {"version": DEFAULT_VERSION, "lifecycle_modes": {MODE_CREATE_IF_MISSING}}
         if component_id == COMPONENT_PROJECT:
             kwargs["installation_kind"] = "fresh"
             kwargs["last_lifecycle_action"] = "fresh-install"

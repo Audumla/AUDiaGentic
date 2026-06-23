@@ -6,6 +6,7 @@ Config-driven placeholder rendering and batch item creation.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 
@@ -25,7 +26,7 @@ def _action_error(code_number: int, message: str, **details: object) -> AudiaGen
     )
 
 
-def render(value, context: dict):
+def render(value, context: dict) -> Any:
     """Render a placeholder-bearing value against the context.
 
     Rules:
@@ -81,7 +82,7 @@ class WorkflowActionExecutor:
         for create_key, spec in creates.items():
             local_context = dict(full_context)
             for prior_key, prior_item in created.items():
-                local_context[f"{prior_key}_id"] = prior_item.data["id"]
+                local_context[f"{prior_key}_id"] = prior_item.data["id"]  # pyright: ignore[reportAttributeAccessIssue]
 
             kind = render(spec["kind"], local_context)
             label = render(spec.get("label"), local_context)

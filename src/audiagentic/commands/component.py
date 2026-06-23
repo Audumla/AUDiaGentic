@@ -10,11 +10,6 @@ from audiagentic.cli_io import print_json
 logger = logging.getLogger(__name__)
 
 
-def _json_dump(obj: object) -> str:
-    import json
-    return json.dumps(obj, indent=2)
-
-
 def _cmd_component(args: argparse.Namespace, project_root: Path) -> int:
     from audiagentic.components.project import project_api
     from audiagentic.foundation.components.loader import register_all_components
@@ -34,9 +29,7 @@ def _cmd_component(args: argparse.Namespace, project_root: Path) -> int:
         for cid, desc in sorted(all_descriptors().items()):
             installed = is_installed(cid, project_root)
             enabled = is_enabled(cid, project_root) if installed else None
-            state = "installed" if installed else "not-installed"
-            if installed and not enabled:
-                state = "disabled"
+            state = "disabled" if (installed and not enabled) else ("installed" if installed else "not-installed")
             row = {
                 "component_id": cid,
                 "display_name": desc.display_name,
@@ -45,9 +38,11 @@ def _cmd_component(args: argparse.Namespace, project_root: Path) -> int:
                 "state": state,
                 "scope": desc.scope,
             }
-            if desc.scope == "project" and hasattr(desc, "cli_probe") and desc.cli_probe:
+            if desc.scope == "project" and (getattr(desc, "cli_probe", None)):
                 try:
-                    from audiagentic.components.providers.descriptors.registry import get_descriptor as _get_provider_descriptor
+                    from audiagentic.components.providers.descriptors.registry import (
+                        get_descriptor as _get_provider_descriptor,
+                    )
                 except ImportError:
                     pass
                 else:
@@ -74,26 +69,17 @@ def _cmd_component(args: argparse.Namespace, project_root: Path) -> int:
         print_json(result)
         return 0
 
-    if sub == "install":
-        result = project_api.install_component(project_root, component_id)
+    DISPATCH = {
+        "install": ("install_component", {"remove_configs": False}),
+        "uninstall": ("uninstall_component", {"remove_configs": getattr(args, "remove_configs", False)}),
+        "enable": ("enable_component", {}),
+        "disable": ("disable_component", {}),
+    }
+
+    if sub in DISPATCH:
+        api_method, extra_kwargs = DISPATCH[sub]
+        result = getattr(project_api, f"{api_method}")(project_root, component_id, **extra_kwargs)
         print_json(result)
         return 0 if result.get("ok", True) else 1
-
-    if sub == "uninstall":
-        result = project_api.uninstall_component(
-            project_root, component_id, remove_configs=getattr(args, "remove_configs", False)
-        )
-        print_json(result)
-        return 0 if result.get("ok", True) else 1
-
-    if sub == "enable":
-        result = project_api.enable_component(project_root, component_id)
-        print_json(result)
-        return 0
-
-    if sub == "disable":
-        result = project_api.disable_component(project_root, component_id)
-        print_json(result)
-        return 0
 
     return 1

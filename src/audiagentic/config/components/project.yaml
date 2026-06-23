@@ -19,7 +19,7 @@ files:
     lifecycle: create-if-missing
     description: Project event definitions
   - path: .audiagentic/prompts/ag-review/default.md
-    lifecycle: required-managed
+    lifecycle: create-if-missing
     description: Ag-review prompt template
 mcp-servers:
   - name: ag-project-mgmt
