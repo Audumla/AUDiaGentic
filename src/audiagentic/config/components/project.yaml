@@ -42,11 +42,12 @@ mcp-servers:
 harness-instructions:
   - section: "What you can do"
     content: |
-      ### ag-project-mgmt
-      - `mcp_project_status` — Check project installation state
-      - `mcp_list_components` — List all available components
-      - `mcp_install_component` — Install a component
-      - `mcp_uninstall_component` — Uninstall a component
-      - `mcp_enable_component` — Enable a component
-      - `mcp_disable_component` — Disable a component
-      - `mcp_read_project_file` — Read a project file
+       ### ag-project-mgmt
+       - `project_status` — Check project installation state
+       - `list_components` — List all available components
+       - `install_component` — Install a component
+       - `uninstall_component` — Uninstall a component
+       - `enable_component` — Enable a component
+       - `disable_component` — Disable a component
+       - `read_project_file` — Read a project file
+       - `error_resolve` — Resolve component errors
