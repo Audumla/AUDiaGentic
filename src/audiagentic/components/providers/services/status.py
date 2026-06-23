@@ -102,13 +102,11 @@ def _provider_entry(
     host_capabilities = interrogation.get("host_capabilities", [])
     vscode_extensions = interrogation.get("vscode_extensions", [])
     vscode_applicable = bool(interrogation.get("vscode_project") and vscode_extensions)
-    vscode_installed = None
-    if vscode_applicable:
-        installed_values = [ext.get("installed") for ext in vscode_extensions]
-        if all(value is True for value in installed_values):
-            vscode_installed = True
-        elif any(value is False for value in installed_values):
-            vscode_installed = False
+    vscode_installed = (
+        True if vscode_applicable and all(e.get("installed") is True for e in vscode_extensions)
+        else False if vscode_applicable and any(e.get("installed") is False for e in vscode_extensions)
+        else None
+    )
     entry["installation"] = {
         "cli": {
             "applicable": cli_probe is not None,

@@ -10,8 +10,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from audiagentic.runtime.config import load_yaml_file
 from audiagentic.paths import SRC_ROOT
+from audiagentic.runtime.config import load_yaml_file
 
 logger = logging.getLogger(__name__)
 
