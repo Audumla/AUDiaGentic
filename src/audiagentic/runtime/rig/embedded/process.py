@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
 import time
 from pathlib import Path
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.foundation.system.process import executable_command
+from audiagentic.runtime.rig.errors import make_rig_process_error
 from audiagentic.runtime.rig.http import probe_models_endpoint
 
 _LLAMA_ARG_MAP: list[tuple[str, str, str]] = [
@@ -15,25 +14,6 @@ _LLAMA_ARG_MAP: list[tuple[str, str, str]] = [
 ]
 
 _LLAMA_ARG_KEYS = {key for key, _, _ in _LLAMA_ARG_MAP}
-
-
-def _process_error(prefix: str, code_number: int, message: str, **details: object) -> AudiaGenticError:
-    return make_error(
-        prefix=prefix,
-        component="RIGPROC",
-        number=code_number,
-        kind="runtime-rig",
-        message=message,
-        details=details,
-    )
-
-
-def resolve_platform_dirs(bin_dir: Path) -> tuple[Path, Path]:
-    if sys.platform == "win32":
-        return bin_dir / "llama-server" / "windows", bin_dir / "llamafile" / "windows"
-    if sys.platform == "darwin":
-        return bin_dir / "llama-server" / "macOS", bin_dir / "llamafile" / "macOS"
-    return bin_dir / "llama-server" / "linux", bin_dir / "llamafile" / "linux"
 
 
 def build_command(
@@ -92,7 +72,7 @@ def wait_for_health(
             detail = f"Rig exited early with code {process.returncode}"
             if log_path is not None:
                 detail += f". See log: {log_path}"
-            raise _process_error(
+            raise make_rig_process_error(
                 "EXT",
                 1,
                 detail,
@@ -100,4 +80,4 @@ def wait_for_health(
                 log_path=str(log_path) if log_path is not None else None,
             )
         time.sleep(0.5)
-    raise _process_error("TO", 2, f"Rig health check failed for {base_url}/models", base_url=base_url)
+    raise make_rig_process_error("TO", 2, f"Rig health check failed for {base_url}/models", base_url=base_url)

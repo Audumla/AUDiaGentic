@@ -10,15 +10,20 @@ from pathlib import Path
 
 from audiagentic.cli_io import print_message
 
-logger = logging.getLogger(__name__)
+from . import GITHUB_REPO
 
-GITHUB_REPO = "Audumla/AUDiaGentic"
+logger = logging.getLogger(__name__)
 
 _FROZEN = getattr(sys, "frozen", False)
 
 
+def _safe_version(version: str) -> str:
+    """Replace hyphens with underscores for wheel filename compatibility."""
+    return version.replace("-", "_")
+
+
 def _wheel_url(version: str) -> str:
-    safe_ver = version.replace("-", "_")
+    safe_ver = _safe_version(version)
     return (
         f"https://github.com/{GITHUB_REPO}/releases/download/v{version}/"
         f"audiagentic-{safe_ver}-py3-none-any.whl"
@@ -31,7 +36,7 @@ def _download_wheel(url: str, version: str) -> Path:
     Wheel filename must carry all five tags (name-ver-py-abi-platform.whl)
     so pip can validate and install it without raising 'wrong number of parts'.
     """
-    safe_ver = version.replace("-", "_")
+    safe_ver = _safe_version(version)
     filename = f"audiagentic-{safe_ver}-py3-none-any.whl"
     tmp = Path(tempfile.gettempdir()) / filename
     print_message(f"  Downloading audiagentic {version}...")
@@ -59,25 +64,11 @@ def _schedule_post_exit_install(wheel: Path, version: str) -> dict:
     sure then runs pip, reports the result, and deletes itself.
     Returns {"ok": "scheduled"} so prompt.py knows to call sys.exit().
     """
-    script = (
-        f"# audiagentic auto-update — do not close\n"
-        f"Start-Sleep -Seconds 2\n"
-        f"Write-Host ''\n"
-        f"Write-Host '  Installing audiagentic {version}...'\n"
-        f"& \"{sys.executable}\" -m pip install --no-cache-dir \"{wheel}\"\n"
-        f"if ($LASTEXITCODE -eq 0) {{\n"
-        f"    Write-Host ''\n"
-        f"    Write-Host '  audiagentic {version} installed. Run audiagentic to start.'\n"
-        f"    Remove-Item -Force \"{wheel}\" -ErrorAction SilentlyContinue\n"
-        f"}} else {{\n"
-        f"    Write-Host ''\n"
-        f"    Write-Host '  Install failed. Run manually:'\n"
-        f"    Write-Host \"    pip install `\"{wheel}`\"\"\n"
-        f"}}\n"
-        f"Remove-Item -Force $MyInvocation.MyCommand.Path -ErrorAction SilentlyContinue\n"
-        f"Write-Host ''\n"
-        f"Write-Host '  Press any key to close...'\n"
-        f"$null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')\n"
+    script_template = (Path(__file__).parent / "_update.ps1").read_text(encoding="utf-8")
+    script = script_template.format(
+        version=version,
+        python_exe=sys.executable,
+        wheel=str(wheel),
     )
     script_path = wheel.parent / "_audiagentic_update.ps1"
     script_path.write_text(script, encoding="utf-8")
@@ -134,13 +125,13 @@ def install_version(version: str) -> dict:
             return _schedule_post_exit_install(wheel, version)
         try:
             wheel.unlink()
-        except Exception:  # noqa: BLE001
+        except (OSError, PermissionError):
             logger.debug("Failed to clean up wheel file after install failure", exc_info=True)
         return {"ok": False, "error": f"pip install failed (rc={result.returncode})\n{result.stderr}"}
 
     try:
         wheel.unlink()
-    except Exception:  # noqa: BLE001
+    except (OSError, PermissionError):
         logger.debug("Failed to clean up wheel file after successful install", exc_info=True)
 
     print_message("  Refreshing harness config...")

@@ -88,14 +88,8 @@ class LoggingConfig:
 
 def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
     """Deep-merge overlay onto base. Lists are replaced (caller handles silenced union)."""
-    from copy import deepcopy
-    result = deepcopy(base)
-    for key, value in overlay.items():
-        if isinstance(value, dict) and isinstance(result.get(key), dict):
-            result[key] = _deep_merge(result[key], value)
-        else:
-            result[key] = deepcopy(value)
-    return result
+    from ..util import deep_merge as _shared_deep_merge
+    return _shared_deep_merge(base, overlay)
 
 
 def _safe_load_layered(project_root: Path | None) -> dict[str, Any]:
@@ -291,14 +285,15 @@ def configure_logging(project_root: Path | None = None) -> None:
         root.removeHandler(h)
 
     # Formatter
+    _FORMATTER_REGISTRY: dict[str, Any] = {
+        "dev": lambda colour: _DevFormatter(colour=colour),
+        "console": lambda colour: _ConsoleFormatter(colour=colour),
+        "json": lambda _: _CorrelationJsonFormatter(),
+    }
+
     use_colour = sys.stderr.isatty() and cfg.format == "dev"
-    formatter: logging.Formatter
-    if cfg.format == "dev":
-        formatter = _DevFormatter(colour=use_colour)
-    elif cfg.format == "console":
-        formatter = _ConsoleFormatter(colour=use_colour)
-    else:
-        formatter = _CorrelationJsonFormatter()
+    formatter_factory = _FORMATTER_REGISTRY.get(cfg.format, _FORMATTER_REGISTRY["json"])
+    formatter = formatter_factory(use_colour)
 
     # Stream handler (suppressed when console: false and a file dir is set)
     if cfg.console or cfg.dir is None:

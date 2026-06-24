@@ -20,6 +20,7 @@ import argparse
 import importlib
 import logging
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from audiagentic.cli_io import print_error, print_json, print_message
@@ -54,12 +55,25 @@ def _cmd_install(target: Path, project_root: Path) -> int:
     return rc
 
 
-def _cmd_update() -> int:
+def _cmd_update(args: argparse.Namespace, project_root: Path) -> int:
+    del args, project_root
     from audiagentic.runtime.update.prompt import run_update_now
     return run_update_now()
 
 
-def _cmd_mcp(module_name: str, module_args: list[str]) -> int:
+def _cmd_mcp(
+    module_name_or_args: str | argparse.Namespace,
+    module_args_or_project_root: list[str] | Path = [],
+) -> int:
+    if isinstance(module_name_or_args, str):
+        module_name = module_name_or_args
+        module_args = module_args_or_project_root if isinstance(module_args_or_project_root, list) else []
+    else:
+        args = module_name_or_args
+        project_root = module_args_or_project_root
+        del project_root
+        module_name = args.module
+        module_args = args.module_args or []
     module = importlib.import_module(module_name)
     main = getattr(module, "main", None)
     if not callable(main):
@@ -107,6 +121,103 @@ def _regenerate_provider_configs(project_root: Path) -> dict[str, object]:
     except Exception as exc:  # noqa: BLE001
         result["lsp_error"] = str(exc)
     return result
+
+
+def _cmd_job_control(args: argparse.Namespace, project_root: Path) -> int:
+    try:
+        from audiagentic.components.agent_jobs.control import (
+            build_job_control_request,
+            request_job_control,
+        )
+    except ImportError:
+        print_error("agent_jobs component not available")
+        return 1
+
+    from audiagentic.runtime.state.jobs_store import read_job_record
+
+    control_root = Path(args.project_root).resolve() if args.project_root else project_root
+    job = read_job_record(control_root, args.job_id)
+    payload = build_job_control_request(
+        job_id=args.job_id,
+        project_id=job["project-id"],
+        requested_action=args.action,
+        requested_by=args.requested_by,
+        reason=args.reason,
+    )
+    result = request_job_control(control_root, payload)
+    print_json(result, sort_keys=True)
+    return 0
+
+
+def _cmd_session_input(args: argparse.Namespace, project_root: Path) -> int:
+    from audiagentic.runtime.state.session_input_store import build_and_persist_session_input
+
+    input_root = Path(args.project_root).resolve() if args.project_root else project_root
+    record = build_and_persist_session_input(
+        input_root,
+        job_id=args.job_id,
+        prompt_id=args.prompt_id,
+        provider_id=args.provider_id,
+        surface=args.surface,
+        stage=args.stage,
+        event_kind=args.event_kind,
+        message=args.message,
+    )
+    print_json({"status": "recorded", "record": record}, sort_keys=True)
+    return 0
+
+
+def _cmd_release_bootstrap(args: argparse.Namespace, project_root: Path) -> int:
+    try:
+        from audiagentic.components.ledger.ledger_bootstrap import bootstrap_ledger
+    except ImportError:
+        print_error("ledger component not available")
+        return 1
+
+    bootstrap_root = Path(args.project_root).resolve() if args.project_root else project_root
+    result = bootstrap_ledger(bootstrap_root)
+    print_json(result, sort_keys=True)
+    return 0
+
+
+def _cmd_update_binaries(args: argparse.Namespace, project_root: Path) -> int:
+    del args, project_root
+    from audiagentic.runtime.rig.embedded.binaries import update_binaries
+    harness = global_harness_runtime()
+    update_binaries(runtime_dir=harness)
+    return 0
+
+
+def _cmd_refresh(args: argparse.Namespace, project_root: Path) -> int:
+    from audiagentic.runtime.harness import (
+        build_runtime_sync,
+        refresh_harness_config_if_installed,
+    )
+    # Regenerate provider MCP configs (.mcp.json, .opencode/opencode.json, …)
+    # from current component state — independent of whether the agent harness
+    # is installed.
+    provider_configs = _regenerate_provider_configs(project_root)
+    refreshed = refresh_harness_config_if_installed(project_root, reason="manual-refresh")
+    print_json({
+        "ok": True,
+        "provider_configs": provider_configs,
+        "harness_refreshed": refreshed,
+        "sync": build_runtime_sync(reason="manual-refresh") if refreshed else None,
+    })
+    return 0
+
+
+_COMMAND_HANDLERS: dict[str, Callable] = {
+    "install": _cmd_install,
+    "component": _cmd_component,
+    "update": _cmd_update,
+    "mcp": _cmd_mcp,
+    "job-control": _cmd_job_control,
+    "session-input": _cmd_session_input,
+    "release-bootstrap": _cmd_release_bootstrap,
+    "update-binaries": _cmd_update_binaries,
+    "refresh": _cmd_refresh,
+}
 
 
 def _main(argv: list[str] | None = None) -> int:
@@ -200,10 +311,6 @@ def _main(argv: list[str] | None = None) -> int:
 
     project_root = Path(args.project).resolve() if args.project else Path.cwd()
 
-    def _resolve_project_root(explicit: str | None) -> Path:
-        """Resolve an explicit project root or fall back to the default."""
-        return Path(explicit).resolve() if explicit else project_root
-
     import atexit
 
     from audiagentic.foundation.logging import bootstrap as _log_bootstrap
@@ -219,96 +326,10 @@ def _main(argv: list[str] | None = None) -> int:
 
     atexit.register(_log_exit)
 
-    if args.command == "install":
-        target = Path(args.target).resolve() if args.target else global_harness_runtime()
-        return _cmd_install(target, project_root=project_root)
-
-    if args.command == "component":
-        return _cmd_component(args, project_root)
-
-    if args.command == "update":
-        return _cmd_update()
-
-    if args.command == "mcp":
-        return _cmd_mcp(args.module, args.module_args or [])
-
-    if args.command == "job-control":
-        try:
-            from audiagentic.components.agent_jobs.control import (
-                build_job_control_request,
-                request_job_control,
-            )
-        except ImportError:
-            print_error("agent_jobs component not available")
-            return 1
-
-        from audiagentic.runtime.state.jobs_store import read_job_record
-
-        control_root = _resolve_project_root(args.project_root)
-        job = read_job_record(control_root, args.job_id)
-        payload = build_job_control_request(
-            job_id=args.job_id,
-            project_id=job["project-id"],
-            requested_action=args.action,
-            requested_by=args.requested_by,
-            reason=args.reason,
-        )
-        result = request_job_control(control_root, payload)
-        print_json(result, sort_keys=True)
-        return 0
-
-    if args.command == "session-input":
-        from audiagentic.runtime.state.session_input_store import build_and_persist_session_input
-
-        input_root = _resolve_project_root(args.project_root)
-        record = build_and_persist_session_input(
-            input_root,
-            job_id=args.job_id,
-            prompt_id=args.prompt_id,
-            provider_id=args.provider_id,
-            surface=args.surface,
-            stage=args.stage,
-            event_kind=args.event_kind,
-            message=args.message,
-        )
-        print_json({"status": "recorded", "record": record}, sort_keys=True)
-        return 0
-
-    if args.command == "release-bootstrap":
-        try:
-            from audiagentic.components.ledger.ledger_bootstrap import bootstrap_ledger
-        except ImportError:
-            print_error("ledger component not available")
-            return 1
-
-        bootstrap_root = _resolve_project_root(args.project_root)
-        result = bootstrap_ledger(bootstrap_root)
-        print_json(result, sort_keys=True)
-        return 0
-
-    if args.command == "update-binaries":
-        from audiagentic.runtime.rig.embedded.binaries import update_binaries
-        harness = global_harness_runtime()
-        update_binaries(runtime_dir=harness)
-        return 0
-
-    if args.command == "refresh":
-        from audiagentic.runtime.harness import (
-            build_runtime_sync,
-            refresh_harness_config_if_installed,
-        )
-        # Regenerate provider MCP configs (.mcp.json, .opencode/opencode.json, …)
-        # from current component state — independent of whether the agent harness
-        # is installed.
-        provider_configs = _regenerate_provider_configs(project_root)
-        refreshed = refresh_harness_config_if_installed(project_root, reason="manual-refresh")
-        print_json({
-            "ok": True,
-            "provider_configs": provider_configs,
-            "harness_refreshed": refreshed,
-            "sync": build_runtime_sync(reason="manual-refresh") if refreshed else None,
-        })
-        return 0
+    # Dispatch to command handler via registry
+    handler = _COMMAND_HANDLERS.get(args.command)
+    if handler:
+        return handler(args, project_root)
 
     from audiagentic.runtime.harness import RunnerParams
     params = RunnerParams(

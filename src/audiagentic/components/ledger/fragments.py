@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import random
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,7 +32,6 @@ def _generate_event_id(desc: str | None = None) -> str:
     """Generate a unique event ID: chg_YYYYMMDD_HHMMSS_<desc>."""
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     suffix = f"_{desc}" if desc else ""
-    import random
     rand = random.randint(1000, 9999)
     return f"chg_{ts}{suffix}_{rand}"
 

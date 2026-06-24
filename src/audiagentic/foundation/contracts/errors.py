@@ -24,7 +24,7 @@ Codes must be unique within their (prefix, component) namespace.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -220,6 +220,33 @@ def make_error_code(prefix: str, component: str, number: int) -> str:
     code = f"{prefix}-{component.upper()}-{number:03d}"
     _validate_code(code)
     return code
+
+
+def make_error_factory(prefix: str, component: str, kind: str) -> Callable[..., AudiaGenticError]:
+    """Return a bound error-construction function for a component.
+
+    Each module calls this once at module scope to create its local
+    ``_xxx_error`` helper, replacing the duplicated 8-line pattern:
+
+        def _xxx_error(code_number, message, **details):
+            return make_error(prefix=..., component=..., number=code_number,
+                              kind=..., message=message, details=details)
+
+    Usage::
+
+        _my_error = make_error_factory("VAL", "COMP", "components")
+        raise _my_error(1, "something failed", path=str(path))
+    """
+    def _factory(code_number: int, message: str, **details: Any) -> AudiaGenticError:
+        return make_error(
+            prefix=prefix,
+            component=component,
+            number=code_number,
+            kind=kind,
+            message=message,
+            details=details or None,
+        )
+    return _factory
 
 
 def to_error_envelope(error: AudiaGenticError) -> dict[str, Any]:

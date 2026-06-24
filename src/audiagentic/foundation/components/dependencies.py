@@ -14,7 +14,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.io import load_yaml_file
 from audiagentic.foundation.toolchains.detect import (
     detect_pkg_manager,
@@ -34,58 +34,73 @@ from .loader import component_yaml_path
 
 logger = logging.getLogger(__name__)
 
-
-def _dependency_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
-    return make_error(
-        prefix="VAL",
-        component="DEP",
-        number=code_number,
-        kind="component-dependencies",
-        message=message,
-        details=details,
-    )
+_dependency_error: Any = make_error_factory("VAL", "DEP", "component-dependencies")
 
 
 # ---------------------------------------------------------------------------
 # Probe resolution
 # ---------------------------------------------------------------------------
 
+def _resolve_probe_binary(spec: str) -> Callable[[], bool]:
+    binary = spec[7:]
+    return lambda: tool_available(binary)
+
+
+def _resolve_probe_all_binaries(spec: str) -> Callable[[], bool]:
+    binaries = tuple(part.strip() for part in spec[13:].split(",") if part.strip())
+    return lambda: all(tool_available(binary) for binary in binaries)
+
+
+def _resolve_probe_path(spec: str) -> Callable[[], bool]:
+    p = Path(spec[5:].replace("~", str(Path.home())))
+    return lambda: p.exists()
+
+
+def _resolve_probe_command(spec: str) -> Callable[[], bool]:
+    command = tuple(shlex.split(spec[8:]))
+
+    def _probe_command() -> bool:
+        if not command:
+            return False
+        try:
+            result = subprocess.run(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        return result.returncode == 0
+
+    return _probe_command
+
+
+def _resolve_probe_custom(spec: str) -> Callable[[], bool]:
+    dotpath = spec[7:]
+    import importlib
+    module_name, fn_name = dotpath.rsplit(".", 1)
+    return getattr(importlib.import_module(module_name), fn_name)
+
+
+_PROBE_RESOLVERS: dict[str, Callable[[str], Callable[[], bool]]] = {
+    "binary:": _resolve_probe_binary,
+    "all-binaries:": _resolve_probe_all_binaries,
+    "path:": _resolve_probe_path,
+    "command:": _resolve_probe_command,
+    "custom:": _resolve_probe_custom,
+}
+
+
 def _resolve_probe(spec: str) -> Callable[[], bool]:
-    if spec.startswith("binary:"):
-        binary = spec[7:]
-        return lambda: tool_available(binary)
-    if spec.startswith("all-binaries:"):
-        binaries = tuple(part.strip() for part in spec[13:].split(",") if part.strip())
-        return lambda: all(tool_available(binary) for binary in binaries)
-    if spec.startswith("path:"):
-        p = Path(spec[5:].replace("~", str(Path.home())))
-        return lambda: p.exists()
     if spec == "toolchain:uv":
         return uv_available
-    if spec.startswith("command:"):
-        command = tuple(shlex.split(spec[8:]))
 
-        def _probe_command() -> bool:
-            if not command:
-                return False
-            try:
-                result = subprocess.run(
-                    command,
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                )
-            except (OSError, subprocess.TimeoutExpired):
-                return False
-            return result.returncode == 0
+    for prefix, resolver in _PROBE_RESOLVERS.items():
+        if spec.startswith(prefix):
+            return resolver(spec)
 
-        return _probe_command
-    if spec.startswith("custom:"):
-        dotpath = spec[7:]
-        import importlib
-        module_name, fn_name = dotpath.rsplit(".", 1)
-        return getattr(importlib.import_module(module_name), fn_name)
     raise _dependency_error(1, f"unknown probe syntax: {spec!r}", probe=spec)
 
 

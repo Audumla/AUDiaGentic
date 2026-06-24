@@ -186,19 +186,22 @@ def register_from_yaml(path: Path) -> FeatureDescriptor | ImplementationDescript
             value=type_value,
             supported=[t.value for t in DescriptorType],
         )
-    if descriptor_type == DescriptorType.FEATURE:
-        return load_feature_from_yaml(path)
-    if descriptor_type == DescriptorType.IMPLEMENTATION:
-        return load_implementation_from_yaml(path)
-    if descriptor_type == DescriptorType.BINDING:
-        return load_binding_from_yaml(path)
-    # Unreachable, but keep for type safety
-    raise _descriptor_error(
-        path,
-        "VAL-FDESC-012",
-        value=type_value,
-        supported=[t.value for t in DescriptorType],
-    )
+
+    _DESCRIPTOR_LOADERS: dict[DescriptorType, Any] = {
+        DescriptorType.FEATURE: load_feature_from_yaml,
+        DescriptorType.IMPLEMENTATION: load_implementation_from_yaml,
+        DescriptorType.BINDING: load_binding_from_yaml,
+    }
+
+    loader = _DESCRIPTOR_LOADERS.get(descriptor_type)
+    if loader is None:
+        raise _descriptor_error(
+            path,
+            "VAL-FDESC-012",
+            value=type_value,
+            supported=[t.value for t in DescriptorType],
+        )
+    return loader(path)
 
 
 def load_features_from_dir(
