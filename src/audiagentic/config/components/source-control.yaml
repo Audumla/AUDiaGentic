@@ -3,7 +3,6 @@ contract-version: v1
 id: source-control
 display-name: Source Control
 description: Source control — installs and manages official git and GitHub MCP servers for providers
-detection-marker: .audiagentic/components/source-control.yaml
 depends-on:
   - project
 
@@ -51,10 +50,6 @@ dependencies:
     package: shuymn/gh-mcp
     uninstall-package: gh-mcp
 
-files:
-  - path: .audiagentic/components/source-control.yaml
-    lifecycle: create-if-missing
-    description: Installation marker
 mcp-servers:
   - name: ag-sc-mgmt
     module: audiagentic.components.source_control.source_control_mcp

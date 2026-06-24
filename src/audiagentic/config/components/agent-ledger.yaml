@@ -3,7 +3,6 @@ contract-version: v1
 id: agent-ledger
 display-name: Agent Ledger
 description: Change ledger — fragment recording, sync, audit summaries, and release archiving
-detection-marker: .audiagentic/components/agent-ledger.yaml
 lifecycle-observer: audiagentic.components.ledger.ledger_events
 paths:
   ledger-runtime: .audiagentic/runtime/ledger
@@ -18,9 +17,6 @@ paths:
   audit-summary: AUDIT_SUMMARY.md
   checkin: CHECKIN.md
 files:
-  - path: .audiagentic/components/agent-ledger.yaml
-    lifecycle: create-if-missing
-    description: Installation marker
   - path: .audiagentic/runtime/ledger
     lifecycle: runtime-only
     recursive: true

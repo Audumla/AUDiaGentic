@@ -4,8 +4,7 @@ id: coding-lsp
 display-name: Coding LSP
 description: Language server protocol bridge for AI-assisted code navigation and editing
 lifecycle-observer: audiagentic.components.coding_lsp.coding_lsp_bootstrap
-status-hook: audiagentic.components.coding_lsp.coding_lsp_bootstrap.status_payload
-detection-marker: .audiagentic/components/coding-lsp.yaml
+status-hook: audiagentic.components.coding_lsp.coding_lsp_bootstrap.status_hook
 implementation-cardinality: exclusive
 feature-kinds:
   - language
@@ -16,9 +15,6 @@ feature-kinds:
 # orchestration only — enabling, installing, and propagating LSP capability.
 
 files:
-  - path: .audiagentic/components/coding-lsp.yaml
-    lifecycle: create-if-missing
-    description: Installation marker
   - path: .coding-lsp/logs
     lifecycle: runtime-only
     recursive: true

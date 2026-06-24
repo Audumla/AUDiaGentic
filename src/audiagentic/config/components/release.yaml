@@ -3,14 +3,10 @@ contract-version: v1
 id: release
 display-name: Release
 description: Release management — versioning, changelog rendering, and release manager tooling
-detection-marker: .audiagentic/components/release.yaml
 depends-on:
   - project
   - agent-ledger
 files:
-  - path: .audiagentic/components/release.yaml
-    lifecycle: create-if-missing
-    description: Installation marker
   - path: .github/workflows/release.yml
     lifecycle: required-managed
     description: Release workflow
