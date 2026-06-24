@@ -5,11 +5,6 @@ scope: harness
 id: session
 display-name: Session
 description: Harness status and configuration
-detection-marker: components/session.yaml
-files:
-  - path: components/session.yaml
-    lifecycle: create-if-missing
-    description: Component installation marker
 mcp-servers:
   - name: ag-session-mgmt
     module: audiagentic.components.session.session_mcp

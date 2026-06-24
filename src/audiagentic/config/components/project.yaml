@@ -4,11 +4,7 @@ core: true
 id: project
 display-name: Project
 description: Core project scaffold — config, prompts, and workflow files
-detection-marker: .audiagentic/components/project.yaml
 files:
-  - path: .audiagentic/components/project.yaml
-    lifecycle: create-if-missing
-    description: Installation marker
   - path: .audiagentic/config/project.yaml
     lifecycle: create-if-missing
     description: Project identity and workflow config
