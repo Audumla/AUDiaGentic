@@ -16,8 +16,12 @@ mcp = mcp_server(__name__)
 def plan_create_item(item: dict) -> dict:
     """Create a new plan item in docs/planning/plans/active/<plan>/.
 
-    Required: id, plan, title.
-    Optional: priority (P0/P1/P2/P3/HIGH/MEDIUM), complexity (simple/mid/complex),
+    The 'id' field is auto-generated if not provided — the agent should NOT
+    supply an ID. The ID uses the plan's two-letter uppercase prefix
+    (e.g. 'code-cleanup' → 'CC') followed by a zero-padded sequence number.
+
+    Required: plan, title.
+    Optional: id (auto-generated), priority (P0/P1/P2/P3/HIGH/MEDIUM), complexity (simple/mid/complex),
               order, validate_first, description, steps, files, validation, effort_risk, notes.
     """
     return planning_api.create_item(project_root_from_env(), item)
