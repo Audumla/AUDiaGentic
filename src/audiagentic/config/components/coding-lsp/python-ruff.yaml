@@ -1,0 +1,25 @@
+type: feature
+contract-version: v1
+parent: coding-lsp
+kind: language
+id: python-ruff
+display-name: Python (ruff)
+language-id: python
+server:
+  command: [ruff, server, --preview]
+  file-extensions: [.py, .pyi, .ipynb]
+  workspace-config-files: [ruff.toml, pyproject.toml, .ruff.toml]
+detection-markers: [pyproject.toml, ruff.toml, .ruff.toml]
+dependencies:
+  ruff:
+    display-name: Ruff (Python linter/formatter LSP)
+    probe: binary:ruff
+    toolchain: uv
+    package: ruff
+    uninstall-package: ruff
+    requires:
+      min-version: "0.4.0"
+options-schema:
+  server-settings:
+    type: object
+    default: {}

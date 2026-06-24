@@ -5,27 +5,21 @@ high-level LSP requests (definition, hover, references, rename, symbols).
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
-import subprocess
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, unquote, urlparse
-from urllib.request import url2pathname
 
-from .lsp_bridge import LspJsonRpc, _lsp_error
+from .lsp_bridge import LspJsonRpc
+from .lsp_diagnostics import LspDiagnostics
+from .lsp_protocol_ops import LspProtocolOps
+from .uri_utils import canonical_uri, path_to_language_id, path_to_uri, uri_to_path
 
 logger = logging.getLogger(__name__)
 
 _LSP_VERSION = "3.17"
-
-
-def _ensure_list(result: Any) -> list[dict[str, Any]]:
-    """Return result if it's a list, else empty list."""
-    return result if isinstance(result, list) else []
 
 
 def _encode_position(text: str, line: int, character: int, encoding: str = "utf-16") -> tuple[int, int]:
@@ -49,6 +43,11 @@ def _encode_position(text: str, line: int, character: int, encoding: str = "utf-
     return (line, utf16_char)
 
 
+def _ensure_list(result: Any) -> list[dict[str, Any]]:
+    """Return result if it's a list, else empty list."""
+    return result if isinstance(result, list) else []
+
+
 @dataclass
 class ServerConfig:
     """Configuration for a single language server."""
@@ -57,6 +56,8 @@ class ServerConfig:
     workspace_config_files: list[str] = field(default_factory=list)
     settings: dict[str, Any] = field(default_factory=dict)
     label: str = ""
+    server_id: str = ""
+    init_wait: float = 0.0
 
 
 class LspSession:
@@ -85,6 +86,8 @@ class LspSession:
         self._diagnostics_cache: dict[str, dict[str, Any]] = {}
         self._diagnostics_event = threading.Event()
         self._last_change_version: dict[str, int] = {}
+        self._protocol_ops = LspProtocolOps(self)
+        self._diagnostics_handler = LspDiagnostics(self)
 
     def initialize(self, timeout: float = 30.0) -> dict[str, Any]:
         """Start the language server and complete the initialize handshake."""
@@ -100,6 +103,7 @@ class LspSession:
                 "capabilities": self._client_capabilities(),
                 "initializationOptions": self.server_config.settings,
                 "workspaceFolders": [{"uri": self.root_uri, "name": self.project_root.name}],
+                "workDoneProgress": True,
             },
             timeout=timeout,
         )
@@ -166,457 +170,76 @@ class LspSession:
         self.bridge.send_notification("textDocument/didSave", params)
 
     def workspace_symbol(self, query: str, timeout: float = 15.0) -> list[dict[str, Any]]:
-        """Search for workspace-level symbols matching query."""
-        result = self.bridge.send_request(
-            "workspace/symbol",
-            {"query": query},
-            timeout=timeout,
-        )
-        return _ensure_list(result)
+        return self._protocol_ops.workspace_symbol(query, timeout)
 
     def document_symbol(self, uri: str, timeout: float = 15.0) -> list[dict[str, Any]]:
-        """Get document-level symbols (outline) for a file."""
-        result = self.bridge.send_request(
-            "textDocument/documentSymbol",
-            {"textDocument": {"uri": uri}},
-            timeout=timeout,
-        )
-        return _ensure_list(result)
+        return self._protocol_ops.document_symbol(uri, timeout)
 
     def definition(self, uri: str, line: int, character: int, timeout: float = 15.0) -> list[dict[str, Any]]:
-        """Go to definition at position."""
-        result = self.bridge.send_request(
-            "textDocument/definition",
-            {
-                "textDocument": {"uri": uri},
-                "position": {"line": line, "character": character},
-            },
-            timeout=timeout,
-        )
-        if result is None:
-            return []
-        if isinstance(result, list):
-            return result
-        return [result]
+        return self._protocol_ops.definition(uri, line, character, timeout)
 
     def hover(self, uri: str, line: int, character: int, timeout: float = 15.0) -> dict[str, Any] | None:
-        """Get hover information at position."""
-        result = self.bridge.send_request(
-            "textDocument/hover",
-            {
-                "textDocument": {"uri": uri},
-                "position": {"line": line, "character": character},
-            },
-            timeout=timeout,
-        )
-        return result
+        return self._protocol_ops.hover(uri, line, character, timeout)
 
-    def references(
-        self, uri: str, line: int, character: int, include_declaration: bool = True, timeout: float = 15.0,
-    ) -> list[dict[str, Any]]:
-        """Find all references to the symbol at position."""
-        result = self.bridge.send_request(
-            "textDocument/references",
-            {
-                "textDocument": {"uri": uri},
-                "position": {"line": line, "character": character},
-                "context": {"includeDeclaration": include_declaration},
-            },
-            timeout=timeout,
-        )
-        return _ensure_list(result)
+    def references(self, uri: str, line: int, character: int, include_declaration: bool = True, timeout: float = 15.0) -> list[dict[str, Any]]:
+        return self._protocol_ops.references(uri, line, character, include_declaration, timeout)
 
-    def rename(
-        self, uri: str, line: int, character: int, new_name: str, timeout: float = 30.0,
-    ) -> dict[str, Any] | None:
-        """Get workspace edit for rename (preview, not applied)."""
-        result = self.bridge.send_request(
-            "textDocument/rename",
-            {
-                "textDocument": {"uri": uri},
-                "position": {"line": line, "character": character},
-                "newName": new_name,
-            },
-            timeout=timeout,
-        )
-        return result
+    def rename(self, uri: str, line: int, character: int, new_name: str, timeout: float = 30.0) -> dict[str, Any] | None:
+        return self._protocol_ops.rename(uri, line, character, new_name, timeout)
 
-    def type_definition(
-        self, uri: str, line: int, character: int, timeout: float = 15.0,
-    ) -> list[dict[str, Any]]:
-        """Go to type definition at position."""
-        if not self.has_capability("textDocument/typeDefinition"):
-            return []
-        result = self.bridge.send_request(
-            "textDocument/typeDefinition",
-            {
-                "textDocument": {"uri": uri},
-                "position": {"line": line, "character": character},
-            },
-            timeout=timeout,
-        )
-        if result is None:
-            return []
-        if isinstance(result, list):
-            return result
-        return [result]
+    def type_definition(self, uri: str, line: int, character: int, timeout: float = 15.0) -> list[dict[str, Any]]:
+        return self._protocol_ops.type_definition(uri, line, character, timeout)
 
-    def implementation(
-        self, uri: str, line: int, character: int, timeout: float = 15.0,
-    ) -> list[dict[str, Any]]:
-        """Go to implementation at position."""
-        if not self.has_capability("textDocument/implementation"):
-            return []
-        result = self.bridge.send_request(
-            "textDocument/implementation",
-            {
-                "textDocument": {"uri": uri},
-                "position": {"line": line, "character": character},
-            },
-            timeout=timeout,
-        )
-        if result is None:
-            return []
-        if isinstance(result, list):
-            return result
-        return [result]
+    def implementation(self, uri: str, line: int, character: int, timeout: float = 15.0) -> list[dict[str, Any]]:
+        return self._protocol_ops.implementation(uri, line, character, timeout)
 
-    def call_hierarchy_incoming(
-        self, uri: str, line: int, character: int, timeout: float = 15.0,
-    ) -> list[dict[str, Any]]:
-        """Get incoming calls (callers) for the symbol at position."""
-        if not self.has_capability("textDocument/callHierarchy"):
-            return []
-        items = self.bridge.send_request(
-            "textDocument/prepareCallHierarchy",
-            {
-                "textDocument": {"uri": uri},
-                "position": {"line": line, "character": character},
-            },
-            timeout=timeout,
-        )
-        if not items or not isinstance(items, list):
-            return []
-        all_calls: list[dict[str, Any]] = []
-        for item in items:
-            incoming = self.bridge.send_request(
-                "callHierarchy/incomingCalls",
-                {"item": item},
-                timeout=timeout,
-            )
-            if isinstance(incoming, list):
-                all_calls.extend(incoming)
-        return all_calls
+    def call_hierarchy_incoming(self, uri: str, line: int, character: int, timeout: float = 15.0) -> list[dict[str, Any]]:
+        return self._protocol_ops.call_hierarchy_incoming(uri, line, character, timeout)
 
-    def call_hierarchy_outgoing(
-        self, uri: str, line: int, character: int, timeout: float = 15.0,
-    ) -> list[dict[str, Any]]:
-        """Get outgoing calls (callees) for the symbol at position."""
-        if not self.has_capability("textDocument/callHierarchy"):
-            return []
-        items = self.bridge.send_request(
-            "textDocument/prepareCallHierarchy",
-            {
-                "textDocument": {"uri": uri},
-                "position": {"line": line, "character": character},
-            },
-            timeout=timeout,
-        )
-        if not items or not isinstance(items, list):
-            return []
-        all_calls: list[dict[str, Any]] = []
-        for item in items:
-            outgoing = self.bridge.send_request(
-                "callHierarchy/outgoingCalls",
-                {"item": item},
-                timeout=timeout,
-            )
-            if isinstance(outgoing, list):
-                all_calls.extend(outgoing)
-        return all_calls
+    def call_hierarchy_outgoing(self, uri: str, line: int, character: int, timeout: float = 15.0) -> list[dict[str, Any]]:
+        return self._protocol_ops.call_hierarchy_outgoing(uri, line, character, timeout)
 
-    def symbol_context(
-        self, uri: str, line: int, character: int, timeout: float = 15.0,
-    ) -> dict[str, Any]:
-        """Combined hover + definition + references summary for the symbol at position."""
-        hover_result = self.hover(uri, line, character, timeout=timeout)
-        definition_result = self.definition(uri, line, character, timeout=timeout)
-        references_result = self.references(uri, line, character, timeout=timeout)
-        return {
-            "hover": hover_result,
-            "definitions": definition_result,
-            "references": references_result,
-            "referenceCount": len(references_result),
-        }
+    def inlay_hints(self, uri: str, range: dict[str, Any], timeout: float = 15.0) -> list[dict[str, Any]]:
+        return self._protocol_ops.inlay_hints(uri, range, timeout)
 
-    def code_actions(
-        self, uri: str, range: dict[str, Any] | None, only: list[str] | None = None,
-        timeout: float = 15.0,
-    ) -> list[dict[str, Any]]:
-        """Get code actions (quick fixes, refactors) for a range."""
-        if not self.has_capability("textDocument/codeAction"):
-            return []
-        params: dict[str, Any] = {
-            "textDocument": {"uri": uri},
-            "range": range or {},
-            "context": {"diagnostics": [], "only": only or []},
-        }
-        result = self.bridge.send_request("textDocument/codeAction", params, timeout=timeout)
-        return _ensure_list(result)
+    def signature_help(self, uri: str, line: int, character: int, trigger_character: str | None = None, timeout: float = 15.0) -> dict[str, Any] | None:
+        return self._protocol_ops.signature_help(uri, line, character, trigger_character, timeout)
 
-    def formatting(
-        self, uri: str, options: dict[str, Any] | None = None, timeout: float = 15.0,
-    ) -> list[dict[str, Any]]:
-        """Get document formatting edits."""
-        if not self.has_capability("textDocument/formatting"):
-            return []
-        params: dict[str, Any] = {
-            "textDocument": {"uri": uri},
-            "options": options or {"tabSize": 4, "insertSpaces": True},
-        }
-        result = self.bridge.send_request("textDocument/formatting", params, timeout=timeout)
-        return _ensure_list(result)
+    def type_hierarchy_supertypes(self, uri: str, line: int, character: int, timeout: float = 15.0) -> list[dict[str, Any]]:
+        return self._protocol_ops.type_hierarchy_supertypes(uri, line, character, timeout)
 
-    def range_formatting(
-        self, uri: str, range: dict[str, Any], options: dict[str, Any] | None = None,
-        timeout: float = 15.0,
-    ) -> list[dict[str, Any]]:
-        """Get range formatting edits."""
-        if not self.has_capability("textDocument/rangeFormatting"):
-            return []
-        params: dict[str, Any] = {
-            "textDocument": {"uri": uri},
-            "range": range,
-            "options": options or {"tabSize": 4, "insertSpaces": True},
-        }
-        result = self.bridge.send_request("textDocument/rangeFormatting", params, timeout=timeout)
-        return _ensure_list(result)
+    def type_hierarchy_subtypes(self, uri: str, line: int, character: int, timeout: float = 15.0) -> list[dict[str, Any]]:
+        return self._protocol_ops.type_hierarchy_subtypes(uri, line, character, timeout)
 
-    def organize_imports(
-        self, uri: str, timeout: float = 15.0,
-    ) -> dict[str, Any] | None:
-        """Get organize imports workspace edit."""
-        if not self.has_capability("textDocument/codeAction"):
-            return None
-        actions = self.code_actions(uri, None, only=["source.organizeImports"], timeout=timeout)
-        for action in actions:
-            if isinstance(action, dict) and action.get("edit"):
-                return action.get("edit")
-        return None
+    def completion(self, uri: str, line: int, character: int, trigger_character: str | None = None, timeout: float = 15.0) -> list[dict[str, Any]]:
+        return self._protocol_ops.completion(uri, line, character, trigger_character, timeout)
 
-    def diagnostics(
-        self, min_severity: int = 4, limit: int = 0, timeout: float = 30.0,
-    ) -> dict[str, list[dict[str, Any]]]:
-        """Get workspace-wide diagnostics, keyed by file URI.
+    def symbol_context(self, uri: str, line: int, character: int, timeout: float = 15.0) -> dict[str, Any]:
+        return self._protocol_ops.symbol_context(uri, line, character, timeout)
 
-        Prefers the LSP 3.17 workspace/diagnostic pull request when the server
-        advertises it. Servers that don't (e.g. pyright, which is push-only) fall
-        back to a batch CLI scan of the project. Both paths return the same shape.
-        min_severity: 1=Error, 2=Warning, 3=Information, 4=Hint (default: all)
-        limit: max total diagnostics returned, 0 = unlimited
-        """
-        if self._supports_workspace_diagnostic():
-            return self._workspace_diagnostics_via_lsp(min_severity, limit, timeout)
-        return self._workspace_diagnostics_via_cli(min_severity, limit, timeout)
+    def code_actions(self, uri: str, range: dict[str, Any] | None, only: list[str] | None = None, timeout: float = 15.0) -> list[dict[str, Any]]:
+        return self._protocol_ops.code_actions(uri, range, only, timeout)
 
-    def _workspace_diagnostics_via_lsp(
-        self, min_severity: int, limit: int, timeout: float,
-    ) -> dict[str, list[dict[str, Any]]]:
-        """Pull diagnostics via the workspace/diagnostic request (LSP 3.17)."""
-        try:
-            result = self.bridge.send_request(
-                "workspace/diagnostic",
-                {"identifier": None, "previousResultIds": []},
-                timeout=timeout,
-            )
-        except Exception as exc:
-            raise _lsp_error(
-                "EXT-LSP-008",
-                "Workspace diagnostics request failed",
-                details={"error": str(exc)},
-            )
-        if not isinstance(result, dict):
-            return {}
-        out: dict[str, list[dict[str, Any]]] = {}
-        total = 0
-        for item in result.get("items") or []:
-            if not isinstance(item, dict) or item.get("kind") != "full":
-                continue
-            uri = self._canonical_uri(item.get("uri", ""))
-            diags = [
-                d for d in (item.get("items") or [])
-                if isinstance(d, dict) and d.get("severity", 1) <= min_severity
-            ]
-            if diags:
-                if limit > 0:
-                    diags = diags[: limit - total]
-                out[uri] = diags
-                total += len(diags)
-                if limit > 0 and total >= limit:
-                    break
-        return out
+    def formatting(self, uri: str, options: dict[str, Any] | None = None, timeout: float = 15.0) -> list[dict[str, Any]]:
+        return self._protocol_ops.formatting(uri, options, timeout)
 
-    # Map a language-server launch command to its batch-scan CLI. Only servers
-    # whose CLI emits LSP-compatible JSON for a whole-project scan belong here.
-    _BATCH_DIAGNOSTIC_CLIS: dict[str, str] = {
-        "pyright-langserver": "pyright",
-        "basedpyright-langserver": "basedpyright",
-    }
-    # pyright --outputjson severity strings → LSP DiagnosticSeverity ints.
-    _CLI_SEVERITY: dict[str, int] = {"error": 1, "warning": 2, "information": 3}
+    def range_formatting(self, uri: str, range: dict[str, Any], options: dict[str, Any] | None = None, timeout: float = 15.0) -> list[dict[str, Any]]:
+        return self._protocol_ops.range_formatting(uri, range, options, timeout)
 
-    def _batch_cli_name(self) -> str | None:
-        """Resolve the batch-scan CLI for this session's server, or None."""
-        if not self.server_config.command:
-            return None
-        base = Path(self.server_config.command[0]).name
-        if base.lower().endswith(".exe"):
-            base = base[: -len(".exe")]
-        return self._BATCH_DIAGNOSTIC_CLIS.get(base)
+    def organize_imports(self, uri: str, timeout: float = 15.0) -> dict[str, Any] | None:
+        return self._protocol_ops.organize_imports(uri, timeout)
 
-    def _workspace_diagnostics_via_cli(
-        self, min_severity: int, limit: int, timeout: float,
-    ) -> dict[str, list[dict[str, Any]]]:
-        """Scan the whole project with the server's batch CLI (e.g. pyright --outputjson).
+    def apply_edit(self, edit: dict[str, Any], label: str | None = None) -> dict[str, Any]:
+        return self._protocol_ops.apply_edit(edit, label)
 
-        Used when the language server lacks LSP workspace pull diagnostics. Reports
-        a point-in-time, on-disk scan — not the live editor buffer state.
-        """
-        cli = self._batch_cli_name()
-        if cli is None:
-            raise _lsp_error(
-                "EXT-LSP-004",
-                "No workspace diagnostics available: server lacks LSP pull "
-                "(diagnosticProvider.workspaceDiagnostics) and has no known batch CLI. "
-                "Use lsp_file_diagnostics(file) / lsp_changed_diagnostics(files) instead.",
-                details={"server": self.server_config.command[:1]},
-            )
-        try:
-            proc = subprocess.run(
-                [cli, "--outputjson", str(self.project_root)],
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                cwd=str(self.project_root),
-            )
-        except FileNotFoundError:
-            raise _lsp_error(
-                "EXT-LSP-004",
-                f"Workspace diagnostics CLI '{cli}' not found on PATH. "
-                f"Install it (e.g. 'npm i -g {cli}') or use lsp_file_diagnostics(file).",
-                details={"cli": cli},
-            )
-        except subprocess.TimeoutExpired:
-            raise _lsp_error(
-                "EXT-LSP-003",
-                f"Workspace diagnostics scan timed out after {timeout}s",
-                details={"cli": cli, "timeout_s": timeout},
-            )
-        # pyright exits 1 when diagnostics exist, 0 when clean — both carry JSON.
-        try:
-            report = json.loads(proc.stdout)
-        except (json.JSONDecodeError, ValueError) as exc:
-            raise _lsp_error(
-                "EXT-LSP-008",
-                f"Could not parse '{cli} --outputjson' output",
-                details={"error": str(exc), "stderr": proc.stderr[:500]},
-            )
-        out: dict[str, list[dict[str, Any]]] = {}
-        total = 0
-        for entry in report.get("generalDiagnostics") or []:
-            if not isinstance(entry, dict):
-                continue
-            file = entry.get("file")
-            if not file:
-                continue
-            severity = self._CLI_SEVERITY.get(entry.get("severity", ""), 4)
-            if severity > min_severity:
-                continue
-            uri = self._canonical_uri(Path(file).resolve().as_uri())
-            diag = {
-                "severity": severity,
-                "message": entry.get("message", ""),
-                "range": entry.get("range", {}),
-                "code": entry.get("rule", ""),
-                "source": cli,
-            }
-            out.setdefault(uri, []).append(diag)
-            total += 1
-            if limit > 0 and total >= limit:
-                break
-        return out
+    def diagnostics(self, min_severity: int = 4, limit: int = 0, timeout: float = 30.0) -> dict[str, list[dict[str, Any]]]:
+        return self._diagnostics_handler.diagnostics(min_severity, limit, timeout)
 
-    def file_diagnostics(
-        self, file_path: str | Path, min_severity: int = 4, timeout: float = 5.0,
-    ) -> list[dict[str, Any]]:
-        """Get diagnostics for a single file using publishDiagnostics cache.
-
-        Re-syncs disk content to the server buffer, waits for a version-correlated
-        publish, then returns cached diagnostics. Fails loud on error.
-        """
-        if isinstance(file_path, str) and file_path.startswith("file://"):
-            uri = file_path
-        else:
-            uri = Path(file_path).resolve().as_uri()
-        uri = self._canonical_uri(uri)
-        self._sync_file_from_disk(uri)
-        self._wait_for_publish(uri, timeout=timeout)
-        cached = self._diagnostics_cache.get(uri, {})
-        diags = cached.get("diagnostics", [])
-        return [
-            d for d in diags
-            if isinstance(d, dict) and d.get("severity", 1) <= min_severity
-        ]
+    def file_diagnostics(self, file_path: str | Path, min_severity: int = 4, timeout: float = 5.0) -> list[dict[str, Any]]:
+        return self._diagnostics_handler.file_diagnostics(file_path, min_severity, timeout)
 
     def _on_publish_diagnostics(self, params: dict[str, Any] | None) -> None:
-        """Handle textDocument/publishDiagnostics notification from server."""
-        if params is None:
-            return
-        uri = self._canonical_uri(params.get("uri", ""))
-        diagnostics = params.get("diagnostics", [])
-        version = params.get("version")
-        self._diagnostics_cache[uri] = {
-            "diagnostics": diagnostics,
-            "version": version,
-            "timestamp": __import__("time").monotonic(),
-        }
-        self._diagnostics_event.set()
-
-    def _sync_file_from_disk(self, uri: str) -> None:
-        """Re-read disk content and push to server buffer with version bump."""
-        uri = self._canonical_uri(uri)
-        path = self._uri_to_path(uri)
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as exc:
-            raise _lsp_error("EXT-LSP-006", f"Cannot read file: {path}", details={"error": str(exc)})
-
-        language_id = self._path_to_language_id(str(path))
-        if uri not in self._opened_docs:
-            self.did_open(uri, text, language_id, version=1)
-            self._last_change_version[uri] = 1
-        else:
-            if self._document_text.get(uri) == text:
-                return
-            version = self._opened_docs[uri] + 1
-            self.did_change(uri, [{"text": text}], version)
-            self._last_change_version[uri] = version
-
-    def _wait_for_publish(self, uri: str, timeout: float = 5.0) -> None:
-        """Wait for a version-correlated publishDiagnostics for the given uri."""
-        uri = self._canonical_uri(uri)
-        self._diagnostics_event.clear()
-        import time as _time
-        deadline = _time.monotonic() + timeout
-        while _time.monotonic() < deadline:
-            cached = self._diagnostics_cache.get(uri, {})
-            cached_version = cached.get("version")
-            last_change = self._last_change_version.get(uri)
-            if cached_version is not None and last_change is not None:
-                if cached_version >= last_change:
-                    return
-            self._diagnostics_event.wait(timeout=max(0.05, deadline - _time.monotonic()))
-            self._diagnostics_event.clear()
+        self._diagnostics_handler._on_publish_diagnostics(params)
 
     def shutdown(self) -> None:
         """Graceful shutdown of the language server session."""
@@ -636,10 +259,6 @@ class LspSession:
         """Check if the server supports a given LSP method."""
         if method == "workspace/diagnostic":
             return self._supports_workspace_diagnostic()
-        # LSP advertises support as top-level "*Provider" keys in serverCapabilities,
-        # each a bool or an options object (a present object means supported). The
-        # old code looked under textDocument.*/workspace.* — paths that never exist —
-        # so every check returned False and the server looked featureless.
         provider_map: dict[str, str] = {
             "textDocument/definition": "definitionProvider",
             "textDocument/hover": "hoverProvider",
@@ -655,82 +274,32 @@ class LspSession:
             "textDocument/signatureHelp": "signatureHelpProvider",
             "textDocument/inlayHint": "inlayHintProvider",
             "textDocument/callHierarchy": "callHierarchyProvider",
+            "textDocument/typeHierarchy": "typeHierarchyProvider",
             "workspace/symbol": "workspaceSymbolProvider",
         }
         key = provider_map.get(method)
         if key is None:
             return True
         value = self._capabilities.get(key)
-        # Present-and-not-disabled means supported. An options object (even empty
-        # {}) counts; only an absent key or an explicit False means unsupported.
         return key in self._capabilities and value is not False and value is not None
 
     def _supports_workspace_diagnostic(self) -> bool:
-        """True if the server advertises LSP 3.17 workspace pull diagnostics.
-
-        Pull diagnostics live at top-level ``diagnosticProvider`` (DiagnosticOptions),
-        with ``workspaceDiagnostics: bool`` gating the workspace/diagnostic request.
-        Pyright reports ``workspaceDiagnostics: false`` — sending the request anyway
-        hangs until the 30s timeout. ``diagnosticProvider`` may be a bool or an object.
-        """
+        """True if the server advertises LSP 3.17 workspace pull diagnostics."""
         provider = self._capabilities.get("diagnosticProvider")
         if isinstance(provider, dict):
             return bool(provider.get("workspaceDiagnostics"))
         return bool(provider)
 
+    def _batch_cli_name(self) -> str | None:
+        return self._diagnostics_handler._batch_cli_name()
+
     # ── internal ──────────────────────────────────────────────────────────
 
-    @staticmethod
-    def _path_to_language_id(path: str) -> str:
-        """Infer LSP language ID from file extension."""
-        ext = Path(path).suffix.lower().lstrip(".")
-        mapping = {
-            "py": "python", "pyi": "python",
-            "ts": "typescript", "tsx": "typescriptreact",
-            "js": "javascript", "jsx": "javascriptreact",
-            "rs": "rust",
-            "c": "c", "h": "c",
-            "cpp": "cpp", "cxx": "cpp", "cc": "cpp",
-            "hpp": "cpp", "hxx": "cpp", "hh": "cpp",
-        }
-        return mapping.get(ext, "plaintext")
-
-    @staticmethod
-    def _path_to_uri(path: Path) -> str:
-        """Convert a filesystem path to a file:// URI."""
-        return path.as_uri()
-
-    @staticmethod
-    def _canonical_uri(uri: str) -> str:
-        """Canonicalize a file URI for stable keying across client/server variants.
-
-        Client URIs come from ``Path.resolve().as_uri()`` (uppercase Windows drive,
-        ``urllib``-style percent-encoding). Servers (pyright, pylsp, …) frequently
-        publish the same file with a lowercase drive letter and/or different
-        percent-encoding. Keying state dicts on raw strings then misses, so
-        publishDiagnostics never matches the lookup and the tool silently returns
-        no diagnostics. Normalize to one form: decode, uppercase the drive, re-quote.
-        Pure string work — no filesystem I/O (safe in the notification handler).
-        """
-        if not uri.startswith("file://"):
-            return uri
-        rest = unquote(uri[len("file://"):])
-        # "/h:/..." -> "/H:/..." (Windows drive letter)
-        if len(rest) >= 3 and rest[0] == "/" and rest[2] == ":":
-            rest = "/" + rest[1].upper() + rest[2:]
-        return "file://" + quote(rest, safe="/:@")
-
-    @staticmethod
-    def _uri_to_path(uri: str) -> Path:
-        """Convert a file:// URI to a filesystem path.
-
-        Uses url2pathname (works on 3.12); Path.from_uri is 3.13+ only and the
-        runtime here is 3.12, where it raises AttributeError.
-        """
-        if uri.startswith("file://"):
-            parsed = urlparse(uri)
-            return Path(url2pathname(unquote(parsed.path)))
-        return Path(uri)
+    # Aliases for backward compatibility with callers that reference these methods
+    _path_to_language_id = staticmethod(path_to_language_id)
+    _path_to_uri = staticmethod(path_to_uri)
+    _canonical_uri = staticmethod(canonical_uri)
+    _uri_to_path = staticmethod(uri_to_path)
 
     @staticmethod
     def _client_capabilities() -> dict[str, Any]:
@@ -786,16 +355,17 @@ class LspSession:
                 "rangeFormatting": {"dynamicRegistration": False},
                 "inlayHint": {"dynamicRegistration": False},
                 "callHierarchy": {"dynamicRegistration": False},
+                "diagnostic": {
+                    "dynamicRegistration": False,
+                    "relatedDocumentSupport": False,
+                },
             },
             "workspace": {
                 "symbol": {"dynamicRegistration": False},
                 "workspaceFolders": True,
                 "configuration": True,
-            },
-            "general": {
-                "positionEncodings": ["utf-8", "utf-16"],
-                "markdown": {
-                    "supported": True,
+                "diagnostics": {
+                    "refreshSupport": True,
                 },
             },
         }

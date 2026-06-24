@@ -74,8 +74,10 @@ def test_resolve_active_runtime_servers_uses_enabled_shared_languages(tmp_path: 
     servers = resolve_active_runtime_servers(tmp_path)
 
     assert list(servers) == ["python"]
-    assert servers["python"].command == ["pyright-langserver", "--stdio"]
-    assert ".py" in servers["python"].file_extensions
+    assert isinstance(servers["python"], list)
+    assert len(servers["python"]) == 1
+    assert servers["python"][0].command == ["pyright-langserver", "--stdio"]
+    assert ".py" in servers["python"][0].file_extensions
 
 
 def test_resolve_active_runtime_servers_filters_by_active_implementation_binding(tmp_path: Path) -> None:
@@ -99,7 +101,7 @@ def test_resolve_active_runtime_servers_filters_by_active_implementation_binding
 
     assert [binding.feature for binding in bindings] == ["rust"]
     assert list(servers) == ["rust"]
-    assert servers["rust"].command == ["rust-analyzer"]
+    assert servers["rust"][0].command == ["rust-analyzer"]
 
 
 def test_resolve_active_runtime_servers_applies_language_feature_options(tmp_path: Path) -> None:
@@ -117,4 +119,4 @@ def test_resolve_active_runtime_servers_applies_language_feature_options(tmp_pat
 
     servers = resolve_active_runtime_servers(tmp_path)
 
-    assert servers["python"].settings == {"python.analysis.typeCheckingMode": "strict"}
+    assert servers["python"][0].settings == {"python.analysis.typeCheckingMode": "strict"}

@@ -130,12 +130,15 @@ def load_runtime_servers(path: Path | str) -> tuple[dict[str, ServerConfig], lis
             errors.append(f"{name}: label must be string")
             continue
 
+        init_wait = float(cfg_dict.get("init-wait", 0))
+
         servers[name] = ServerConfig(
             command=command,
             file_extensions=file_extensions,
             workspace_config_files=workspace_files,
             settings=settings,
             label=label,
+            init_wait=init_wait,
         )
 
     return servers, errors, True
@@ -150,7 +153,6 @@ def discover_language_servers(project_root: Path | str) -> dict[str, bool]:
     """
     project_root = _as_path(project_root)
 
-    # Lazy import to avoid an import cycle with runtime_resolver.
     from audiagentic.components.coding_lsp.runtime_resolver import (
         resolve_active_runtime_servers,
     )
@@ -158,25 +160,36 @@ def discover_language_servers(project_root: Path | str) -> dict[str, bool]:
     servers = resolve_active_runtime_servers(project_root)
 
     results: dict[str, bool] = {}
-    for name in servers:
-        lang = language_registry.get_language(name)
+    for language, cfgs in servers.items():
+        lang = language_registry.get_language(language)
         if lang is not None and lang.dependency is not None:
             probe = build_dependency_probes({lang.dependency.id: lang.dependency.cfg})
-            results[name] = probe[lang.dependency.id]()
+            results[language] = probe[lang.dependency.id]()
         else:
-            command = servers[name].command
-            results[name] = bool(command) and shutil.which(command[0]) is not None
+            first_cmd = cfgs[0].command if cfgs else []
+            results[language] = bool(first_cmd) and shutil.which(first_cmd[0]) is not None
 
     return results
 
 
-def resolve_server_for_file(file_path: Path | str, servers: dict[str, ServerConfig]) -> ServerConfig | None:
-    """Find the language server that handles a given file extension."""
+def resolve_server_for_file(
+    file_path: Path | str,
+    servers: dict[str, ServerConfig] | dict[str, list[ServerConfig]],
+) -> ServerConfig | None:
+    """Find a language server that handles a given file extension.
+
+    Accepts both old single-server dict and new multi-server dict shapes.
+    """
     file_path = _as_path(file_path)
     ext = file_path.suffix.lower()
-    for server in servers.values():
-        if ext in server.file_extensions:
-            return server
+    for value in servers.values():
+        if isinstance(value, list):
+            for cfg in value:
+                if ext in cfg.file_extensions:
+                    return cfg
+        else:
+            if ext in value.file_extensions:
+                return value
     return None
 
 

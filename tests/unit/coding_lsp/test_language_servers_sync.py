@@ -72,8 +72,9 @@ def test_sync_writes_real_entries(tmp_path: Path, monkeypatch) -> None:
     assert result["synced"] == ["codex"]
     assert captured["root"] == tmp_path
     entries = captured["servers"]
-    assert entries["python"].command == ["pyright-langserver", "--stdio"]
-    assert entries["python"].file_extensions == [".py", ".pyi"]
+    assert "pyright" in entries
+    assert entries["pyright"].command == ["pyright-langserver", "--stdio"]
+    assert entries["pyright"].file_extensions == [".py", ".pyi"]
 
 
 def test_prune_requests_full_catalog(tmp_path: Path, monkeypatch) -> None:
