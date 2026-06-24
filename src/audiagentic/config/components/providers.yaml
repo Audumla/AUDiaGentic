@@ -6,11 +6,7 @@ description: External provider CLI integration, project surfaces, and provider m
 implementation-cardinality: multi
 post-install: audiagentic.components.providers.services.lifecycle.reconcile_all
 lifecycle-observer: audiagentic.components.providers.surfaces.observer
-detection-marker: .audiagentic/components/providers.yaml
 files:
-  - path: .audiagentic/components/providers.yaml
-    lifecycle: create-if-missing
-    description: Installation marker
   - path: .audiagentic/config/runtime/providers.yaml
     lifecycle: create-if-missing
     description: Provider configuration — models, access mode, execution policy
