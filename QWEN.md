@@ -13,6 +13,37 @@ status ('unreleased'). Other fields are auto-generated.
 - Keep release artifacts and job records synchronized with implementation and review outcomes.
 - Do not bypass ledger updates by editing generated release outputs only.
 
+## Planning process
+
+Use the ag-planning MCP tools to manage plan items in docs/planning/.
+
+## When to use
+- User asks to create a plan or work items for a task
+- Tracking multi-step implementation across sessions
+- Reviewing or updating the state of outstanding items
+
+## Item lifecycle
+1. Create items with plan_create_item — lands in docs/planning/active/<plan>/
+2. Revise content with plan_update_item as work progresses
+3. Mark done with plan_set_state(item_id, 'completed') — moves to completed/
+4. Remove stale or cancelled items with plan_delete_item
+
+## Item ID convention
+Combine a short uppercase plan prefix with a sequence number: CC07, LSP01, ML01.
+Choose a prefix matching the plan name (CC → code-cleanup, LSP → lsp-mcp-enhancement).
+
+## Required fields for plan_create_item
+- id: unique item ID (e.g. "CC20")
+- plan: plan directory name (e.g. "code-cleanup")
+- title: short descriptive title
+
+## Optional fields
+- priority: P0 (critical) / P1 / P2 / P3 / HIGH / MEDIUM (default P2)
+- complexity: simple / mid / complex (default simple)
+- order: integer sort key (default 0)
+- validate_first: true if validation steps must precede implementation (default true)
+- description, steps, files, validation, effort_risk, notes: body section content
+
 ## Release doctrine
 
 Use the configured release manager for versioning and publication.
