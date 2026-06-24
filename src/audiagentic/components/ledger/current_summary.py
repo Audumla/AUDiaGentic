@@ -4,6 +4,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.ledger.paths import (
+    current_ledger_path,
+    releases_dir,
+)
 from audiagentic.foundation.io import atomic_write_text, load_ndjson
 
 
@@ -25,8 +29,8 @@ def _render_markdown(entries: list[dict[str, Any]]) -> str:
 
 
 def regenerate_current_release(project_root: Path) -> Path:
-    ledger_path = project_root / "docs" / "releases" / "CURRENT_RELEASE_LEDGER.ndjson"
-    output_path = project_root / "docs" / "releases" / "CURRENT_RELEASE.md"
+    ledger_path = current_ledger_path(project_root)
+    output_path = releases_dir(project_root) / "CURRENT_RELEASE.md"
     entries = load_ndjson(ledger_path)
     atomic_write_text(output_path, _render_markdown(entries))
     return output_path

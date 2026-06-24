@@ -5,12 +5,18 @@ from __future__ import annotations
 import os
 import platform
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from audiagentic.runtime.harness import build_runtime_sync, refresh_harness_config_if_installed
 
 from . import session_embedded_rig, session_runtime_status, session_visibility
+
+_UPDATE_SCOPE_REGISTRY: dict[str, Callable[..., Any]] = {
+    "local": session_embedded_rig.update_embedded_rig,
+    "global": session_embedded_rig.update_global_embedded_rig,
+}
 
 
 def status(project_root: Path) -> dict[str, Any]:
@@ -87,15 +93,14 @@ async def update_rig(*, scope: str = "local") -> dict[str, Any]:
             "output": "smoke-only: rig update skipped",
             "scope": scope,
         }
-    if scope == "local":
-        return await session_embedded_rig.update_embedded_rig()
-    if scope == "global":
-        return await session_embedded_rig.update_global_embedded_rig()
-    return {
-        "ok": False,
-        "error": "scope must be 'local' or 'global'",
-        "scope": scope,
-    }
+    handler = _UPDATE_SCOPE_REGISTRY.get(scope)
+    if handler is None:
+        return {
+            "ok": False,
+            "error": "scope must be 'local' or 'global'",
+            "scope": scope,
+        }
+    return await handler()
 
 
 def _auto_update_status() -> dict[str, Any]:

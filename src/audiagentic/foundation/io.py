@@ -9,18 +9,9 @@ from typing import Any
 
 import yaml
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.foundation.contracts.errors import make_error_factory
 
-
-def _io_error(code_number: int, message: str, **details: Any) -> AudiaGenticError:
-    return make_error(
-        prefix="CFG",
-        component="IO",
-        number=code_number,
-        kind="config",
-        message=message,
-        details=details,
-    )
+_io_error: Any = make_error_factory("CFG", "IO", "config")
 
 
 def _ensure_dict(data: Any) -> dict[str, Any]:

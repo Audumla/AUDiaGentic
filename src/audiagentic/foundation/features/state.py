@@ -7,41 +7,133 @@ from audiagentic.foundation.io import load_yaml_file, save_yaml_file
 
 from .base import FeatureState, ImplementationState
 
-FEATURE_STATE_PATH = Path(".audiagentic") / "config" / "runtime" / "features.yaml"
+# Runtime state directory. State is sharded per component (parent) so a mutation
+# to component A never rewrites component B's data (write-scope isolation).
+RUNTIME_DIR = Path(".audiagentic") / "config" / "runtime"
+SHARD_DIR = RUNTIME_DIR / "features"
+# Legacy monolithic state file (pre-sharding). Kept only for back-compat reads
+# and one-shot migration; mutations never write it.
+LEGACY_FEATURE_STATE_PATH = RUNTIME_DIR / "features.yaml"
+# Deprecated alias retained for back-compat with external callers/tests.
+FEATURE_STATE_PATH = LEGACY_FEATURE_STATE_PATH
 
 
+def runtime_dir(project_root: Path) -> Path:
+    return project_root / RUNTIME_DIR
+
+
+def shard_dir(project_root: Path) -> Path:
+    return project_root / SHARD_DIR
+
+
+def shard_path(project_root: Path, parent: str) -> Path:
+    """Deterministic per-component shard path. No index file is used."""
+    return shard_dir(project_root) / f"{parent}.yaml"
+
+
+def legacy_feature_state_path(project_root: Path) -> Path:
+    return project_root / LEGACY_FEATURE_STATE_PATH
+
+
+# Deprecated: legacy path accessor retained for back-compat.
 def feature_state_path(project_root: Path) -> Path:
-    return project_root / FEATURE_STATE_PATH
+    return legacy_feature_state_path(project_root)
 
 
-def load_feature_state(project_root: Path) -> dict[str, Any]:
-    path = feature_state_path(project_root)
+def _load_legacy_state(project_root: Path) -> dict[str, Any]:
+    path = legacy_feature_state_path(project_root)
     if not path.exists():
         return {}
     return load_yaml_file(path)
 
 
+def load_feature_state(project_root: Path) -> dict[str, Any]:
+    """Return the whole-document state assembled from all per-component shards.
+
+    Back-compat helper. If shards exist, they are the source of truth; otherwise
+    the legacy monolithic file (if present) is returned.
+    """
+    directory = shard_dir(project_root)
+    if directory.exists():
+        state: dict[str, Any] = {}
+        for shard in sorted(directory.glob("*.yaml")):
+            parent = shard.stem
+            state[parent] = load_yaml_file(shard)
+        if state:
+            return state
+    return _load_legacy_state(project_root)
+
+
 def save_feature_state(project_root: Path, state: dict[str, Any]) -> None:
-    save_yaml_file(feature_state_path(project_root), state, sort_keys=True, atomic=True)
+    """Write the whole-document state out as per-component shards.
+
+    Back-compat helper (migration / bulk writes). Per-component mutations should
+    use set_component_state, which writes only the affected shard.
+    """
+    for parent, component_state in state.items():
+        save_yaml_file(
+            shard_path(project_root, parent),
+            component_state if isinstance(component_state, dict) else {},
+            sort_keys=True,
+            atomic=True,
+        )
 
 
 def get_component_state(project_root: Path, parent: str) -> dict[str, Any]:
-    state = load_feature_state(project_root)
-    component_state = state.get(parent) or {}
+    path = shard_path(project_root, parent)
+    if path.exists():
+        component_state = load_yaml_file(path)
+    else:
+        # Lazy read-migration: pull this parent's slice out of the legacy file.
+        legacy = _load_legacy_state(project_root)
+        component_state = legacy.get(parent) or {}
+        if not isinstance(component_state, dict):
+            return {}
+        if component_state:
+            migrate_component_state_to_flat(component_state)
+            set_component_state(project_root, parent, component_state)
+            return dict(component_state)
+        return {}
     if not isinstance(component_state, dict):
         return {}
-    needs_migration = _needs_migration(component_state)
-    if needs_migration:
+    if _needs_migration(component_state):
         migrate_component_state_to_flat(component_state)
-        state[parent] = component_state
-        save_feature_state(project_root, state)
+        set_component_state(project_root, parent, component_state)
     return dict(component_state)
 
 
 def set_component_state(project_root: Path, parent: str, component_state: dict[str, Any]) -> None:
-    state = load_feature_state(project_root)
-    state[parent] = component_state
-    save_feature_state(project_root, state)
+    # Isolation: only the affected parent's shard is rewritten.
+    save_yaml_file(
+        shard_path(project_root, parent),
+        component_state,
+        sort_keys=True,
+        atomic=True,
+    )
+
+
+def migrate_to_shards(project_root: Path) -> list[str]:
+    """One-shot split of the legacy monolithic features.yaml into per-component shards.
+
+    Each top-level key becomes ``features/{parent}.yaml`` (with nested->flat
+    feature-key migration applied). The legacy file is renamed to
+    ``features.yaml.migrated`` (never deleted) for rollback. Returns the list of
+    parents migrated. No-op (returns []) if the legacy file is absent.
+    """
+    legacy_path = legacy_feature_state_path(project_root)
+    if not legacy_path.exists():
+        return []
+    legacy = load_yaml_file(legacy_path)
+    migrated: list[str] = []
+    for parent, component_state in legacy.items():
+        if not isinstance(component_state, dict):
+            component_state = {}
+        else:
+            migrate_component_state_to_flat(component_state)
+        set_component_state(project_root, parent, component_state)
+        migrated.append(parent)
+    legacy_path.rename(legacy_path.with_suffix(legacy_path.suffix + ".migrated"))
+    return migrated
 
 
 # ---------------------------------------------------------------------------

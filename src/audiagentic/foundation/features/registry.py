@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.foundation.contracts.errors import make_error_factory
 
 from .base import (
     FEATURE_SCOPE_IMPLEMENTATION,
@@ -20,16 +20,7 @@ _implementations: dict[tuple[str, str], ImplementationDescriptor] = {}
 _bindings: dict[tuple[str, str, str, str], BindingDescriptor] = {}
 _binding_writers: dict[tuple[str, str, str], Callable[..., Any]] = {}
 
-
-def _registry_error(code_number: int, message: str, **details: Any) -> AudiaGenticError:
-    return make_error(
-        prefix="CON",
-        component="FREG",
-        number=code_number,
-        kind="feature-registry",
-        message=message,
-        details=details,
-    )
+_registry_error: Any = make_error_factory("CON", "FREG", "feature-registry")
 
 
 def clear() -> None:

@@ -10,6 +10,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.ledger.paths import (
+    current_ledger_path,
+    ledger_fragments_dir,
+    ledger_manifest_path,
+    ledger_sync_dir,
+    safe_json_load,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_ndjson, atomic_write_text
 from audiagentic.foundation.time import now_iso_z
@@ -30,11 +37,11 @@ class SyncResult:
 
 
 def _lock_path(project_root: Path) -> Path:
-    return project_root / ".audiagentic" / "runtime" / "ledger" / "sync" / "lock.json"
+    return ledger_sync_dir(project_root) / "lock.json"
 
 
 def _manifest_path(project_root: Path) -> Path:
-    return project_root / ".audiagentic" / "runtime" / "ledger" / "sync" / "manifest.json"
+    return ledger_manifest_path(project_root)
 
 
 def _acquire_lock(project_root: Path) -> tuple[Path, str | None]:
@@ -84,7 +91,7 @@ def _release_lock(lock_path: Path) -> None:
 
 
 def _fragment_dir(project_root: Path) -> Path:
-    return project_root / ".audiagentic" / "runtime" / "ledger" / "fragments"
+    return ledger_fragments_dir(project_root)
 
 
 def _load_fragments(project_root: Path) -> list[dict[str, Any]]:
@@ -101,28 +108,27 @@ def _load_manifest(project_root: Path) -> dict[str, Any]:
     manifest_path = _manifest_path(project_root)
     if not manifest_path.exists():
         return {}
-    try:
-        return json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    result = safe_json_load(manifest_path)
+    if result is None:
         logger.warning("Corrupt manifest, falling back to full sync", exc_info=True)
         return {}
+    return result
 
 
 def sync_current_release_ledger(project_root: Path) -> SyncResult:
-    ledger_path = project_root / "docs" / "releases" / "CURRENT_RELEASE_LEDGER.ndjson"
     lock_path, warning = _acquire_lock(project_root)
     try:
         fragments = _load_fragments(project_root)
         if not fragments:
-            manifest_path = _manifest_path(project_root)
+            manifest_path = ledger_manifest_path(project_root)
             atomic_write_text(manifest_path, json.dumps({
                 "synced-at": now_iso_z(),
                 "fragment-count": 0,
                 "fragment-ids": [],
-                "ledger-path": str(ledger_path),
+                "ledger-path": str(current_ledger_path(project_root)),
             }, indent=2))
             return SyncResult(
-                ledger_path=ledger_path,
+                ledger_path=current_ledger_path(project_root),
                 manifest_path=manifest_path,
                 fragment_count=0,
                 warning=warning,
@@ -134,8 +140,8 @@ def sync_current_release_ledger(project_root: Path) -> SyncResult:
 
         if synced_ids and synced_ids == current_ids:
             return SyncResult(
-                ledger_path=ledger_path,
-                manifest_path=_manifest_path(project_root),
+                ledger_path=current_ledger_path(project_root),
+                manifest_path=ledger_manifest_path(project_root),
                 fragment_count=len(fragments),
                 warning=warning,
             )
@@ -143,23 +149,23 @@ def sync_current_release_ledger(project_root: Path) -> SyncResult:
         new_ids = current_ids - synced_ids
         if new_ids and synced_ids:
             new_fragments = [f for f in fragments if f["event-id"] in new_ids]
-            atomic_write_ndjson(ledger_path, new_fragments, append=True)
+            atomic_write_ndjson(current_ledger_path(project_root), new_fragments, append=True)
         else:
-            atomic_write_ndjson(ledger_path, fragments)
+            atomic_write_ndjson(current_ledger_path(project_root), fragments)
 
-        manifest_path = _manifest_path(project_root)
+        manifest_path = ledger_manifest_path(project_root)
         atomic_write_text(manifest_path, json.dumps({
             "synced-at": now_iso_z(),
             "fragment-count": len(fragments),
             "fragment-ids": sorted(current_ids),
-            "ledger-path": str(ledger_path),
+            "ledger-path": str(current_ledger_path(project_root)),
         }, indent=2))
     finally:
         _release_lock(lock_path)
 
     return SyncResult(
-        ledger_path=ledger_path,
-        manifest_path=_manifest_path(project_root),
+        ledger_path=current_ledger_path(project_root),
+        manifest_path=ledger_manifest_path(project_root),
         fragment_count=len(fragments),
         warning=warning,
     )

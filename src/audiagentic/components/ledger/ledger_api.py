@@ -13,6 +13,13 @@ from audiagentic.components.ledger.archive import archive_current_ledger
 from audiagentic.components.ledger.audit import generate_audit_and_checkin
 from audiagentic.components.ledger.current_summary import regenerate_current_release
 from audiagentic.components.ledger.fragments import record_change_event as _record
+from audiagentic.components.ledger.paths import (
+    current_ledger_path,
+    ledger_component_marker,
+    ledger_fragments_dir,
+    ledger_manifest_path,
+    releases_dir,
+)
 from audiagentic.components.ledger.sync import sync_current_release_ledger
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import load_ndjson
@@ -48,7 +55,7 @@ def refresh_current_summary(project_root: Path) -> str:
 
 def get_current_summary(project_root: Path) -> str:
     """Return current release summary markdown, regenerating only if missing."""
-    path = project_root / "docs" / "releases" / "CURRENT_RELEASE.md"
+    path = releases_dir(project_root) / "CURRENT_RELEASE.md"
     if not path.exists():
         return refresh_current_summary(project_root)
     return path.read_text(encoding="utf-8")
@@ -101,9 +108,9 @@ def archive_for_release(project_root: Path, release_id: str) -> dict[str, Any]:
 
 def get_status(project_root: Path) -> dict[str, Any]:
     """Return ledger installation state and current fragment/sync status."""
-    marker = project_root / ".audiagentic" / "components" / "agent-ledger.yaml"
-    manifest = project_root / ".audiagentic" / "runtime" / "ledger" / "sync" / "manifest.json"
-    fragments_dir = project_root / ".audiagentic" / "runtime" / "ledger" / "fragments"
+    marker = ledger_component_marker(project_root)
+    manifest = ledger_manifest_path(project_root)
+    fragments_dir = ledger_fragments_dir(project_root)
 
     fragment_count = len(list(fragments_dir.glob("*.json"))) if fragments_dir.exists() else 0
     last_synced: str | None = None
@@ -118,5 +125,5 @@ def get_status(project_root: Path) -> dict[str, Any]:
         "installed": marker.exists(),
         "fragment-count": fragment_count,
         "last-synced": last_synced,
-        "current-ledger": str(project_root / "docs" / "releases" / "CURRENT_RELEASE_LEDGER.ndjson"),
+        "current-ledger": str(current_ledger_path(project_root)),
     }

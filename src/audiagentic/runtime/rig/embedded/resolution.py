@@ -4,29 +4,21 @@ import logging
 import os
 from pathlib import Path
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.foundation.paths.resolution import (
     build_layered_path_map,
     iter_layered_candidates,
     resolve_required_dir,
 )
-from audiagentic.runtime.rig.embedded.process import resolve_platform_dirs
+from audiagentic.runtime.rig.constants import (
+    platform_binary_names,
+    resolve_platform_dirs,
+)
+from audiagentic.runtime.rig.errors import make_rig_resolution_error
 
 logger = logging.getLogger(__name__)
 
 _GLOBAL_RIG_BIN_REL = Path("rig/bin")
 _PROJECT_RIG_BIN_REL = Path("provisioning/rig/embedded/bin")
-
-
-def _resolution_error(prefix: str, code_number: int, message: str, **details: object) -> AudiaGenticError:
-    return make_error(
-        prefix=prefix,
-        component="RIGRES",
-        number=code_number,
-        kind="runtime-rig",
-        message=message,
-        details=details,
-    )
 
 
 def _project_audiagentic_root() -> Path | None:
@@ -66,7 +58,7 @@ def ensure_under(path: Path, root: Path, label: str) -> Path:
     try:
         path.relative_to(root)
     except ValueError as exc:
-        raise _resolution_error(
+        raise make_rig_resolution_error(
             "CON",
             1,
             f"{label} must stay under {root}",
@@ -86,15 +78,10 @@ def find_server_bin(bin_dir: Path, override: str | None) -> Path:
             "AUDIAGENTIC_RIG_SERVER_BIN",
         )
         if not candidate.exists():
-            raise _resolution_error("RES", 2, f"Rig binary not found: {candidate}", path=str(candidate))
+            raise make_rig_resolution_error("RES", 2, f"Rig binary not found: {candidate}", path=str(candidate))
         return candidate
 
-    if os.name == "nt":
-        server_name = "llama-server.exe"
-        fallback_name = "llamafile.exe"
-    else:
-        server_name = "llama-server"
-        fallback_name = "llamafile"
+    server_name, fallback_name = platform_binary_names()
 
     server_bin = server_dir / server_name
     if server_bin.exists():
@@ -104,12 +91,12 @@ def find_server_bin(bin_dir: Path, override: str | None) -> Path:
     if fallback_bin.exists():
         return fallback_bin
 
-    raise _resolution_error("RES", 3, f"Local rig binary not found under {bin_dir}", bin_dir=str(bin_dir))
+    raise make_rig_resolution_error("RES", 3, f"Local rig binary not found under {bin_dir}", bin_dir=str(bin_dir))
 
 
 def resolve_model(bin_dir: Path, server_dir: Path, override: str | None) -> tuple[Path, str]:
     if not override:
-        raise _resolution_error(
+        raise make_rig_resolution_error(
             "CFG",
             4,
             "No model file specified. Set --model-file or AUDIAGENTIC_RIG_MODEL_FILE, or add model_file to the profile.",
@@ -118,7 +105,7 @@ def resolve_model(bin_dir: Path, server_dir: Path, override: str | None) -> tupl
     assert candidate is not None
     if Path(override).is_absolute():
         if not candidate.exists():
-            raise _resolution_error("RES", 5, f"Model not found: {candidate}", path=str(candidate))
+            raise make_rig_resolution_error("RES", 5, f"Model not found: {candidate}", path=str(candidate))
         return candidate, str(candidate)
     ensure_under(candidate, bin_dir, "AUDIAGENTIC_RIG_MODEL_FILE")
     if not candidate.exists():
@@ -129,7 +116,7 @@ def resolve_model(bin_dir: Path, server_dir: Path, override: str | None) -> tupl
         candidate = _first_existing_model(layered_candidates)
         if candidate is None:
             checked = ", ".join(str(path) for path in layered_candidates)
-            raise _resolution_error(
+            raise make_rig_resolution_error(
                 "RES",
                 6,
                 f"Model not found. Checked: {checked}",

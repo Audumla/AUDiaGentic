@@ -12,6 +12,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ..util import pattern_matches
 from .envelope import EventEnvelope
 
 logger = logging.getLogger(__name__)
@@ -136,33 +137,7 @@ class FileEventStore:
 
     def _pattern_matches(self, pattern: str, event_type: str) -> bool:
         """Check if event type matches pattern with wildcard support."""
-        parts = pattern.split(".")
-        event_parts = event_type.split(".")
-
-        if "**" in parts:
-            wildcard_idx = parts.index("**")
-            prefix = parts[:wildcard_idx]
-            suffix = parts[wildcard_idx + 1 :]
-
-            if len(event_parts) < len(prefix) + len(suffix):
-                return False
-
-            if event_parts[: len(prefix)] != prefix:
-                return False
-
-            if suffix and event_parts[-len(suffix) :] != suffix:
-                return False
-
-            return True
-        else:
-            if len(parts) != len(event_parts):
-                return False
-
-            for p, e in zip(parts, event_parts):
-                if p != "*" and p != e:
-                    return False
-
-            return True
+        return pattern_matches(pattern, event_type)
 
     def cleanup(self, older_than_days: int | None = None) -> int:
         """Remove old event files.

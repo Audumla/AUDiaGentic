@@ -10,20 +10,11 @@ from typing import Any
 
 import yaml
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.foundation.contracts.errors import make_error_factory
 
 logger = logging.getLogger(__name__)
 
-
-def _config_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
-    return make_error(
-        prefix="CFG",
-        component="WFPROP",
-        number=code_number,
-        kind="workflow",
-        message=message,
-        details=details,
-    )
+_config_error: Any = make_error_factory("CFG", "WFPROP", "workflow")
 
 
 def load_config(path: Path | None) -> dict[str, Any]:

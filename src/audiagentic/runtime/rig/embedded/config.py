@@ -6,19 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.runtime.config import load_yaml_file
+from audiagentic.runtime.rig.errors import make_rig_config_error_cfg
 
-
-def _embedded_config_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
-    return make_error(
-        prefix="CFG",
-        component="RIGCFG",
-        number=code_number,
-        kind="runtime-rig",
-        message=message,
-        details=details,
-    )
+_embedded_config_error = make_rig_config_error_cfg
 
 
 @dataclass

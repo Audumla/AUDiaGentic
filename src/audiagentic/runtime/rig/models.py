@@ -9,20 +9,11 @@ import logging
 import os
 from pathlib import Path
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.runtime.rig.errors import make_rig_model_error_cfg
 
 logger = logging.getLogger(__name__)
 
-
-def _rig_model_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
-    return make_error(
-        prefix="CFG",
-        component="RIG",
-        number=code_number,
-        kind="runtime-rig",
-        message=message,
-        details=details,
-    )
+_rig_model_error = make_rig_model_error_cfg
 
 
 def load_model_profile(

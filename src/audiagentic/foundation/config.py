@@ -3,20 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.home import audiagentic_home
 from audiagentic.foundation.paths.resolution import load_layered_mapping
 
-
-def _config_error(code_number: int, message: str, **details: Any) -> AudiaGenticError:
-    return make_error(
-        prefix="CFG",
-        component="CONF",
-        number=code_number,
-        kind="config",
-        message=message,
-        details=details,
-    )
+_config_error = make_error_factory("CFG", "CONF", "config")
 
 
 def load_layered_config(

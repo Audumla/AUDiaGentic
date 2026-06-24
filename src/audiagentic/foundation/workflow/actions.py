@@ -8,22 +8,13 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.foundation.contracts.errors import make_error_factory
 
 from .interfaces import WorkflowContext
 
 _PLACEHOLDER_RE = re.compile(r"^\{(\w+)\}$")
 
-
-def _action_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
-    return make_error(
-        prefix="VAL",
-        component="WFACT",
-        number=code_number,
-        kind="workflow",
-        message=message,
-        details=details,
-    )
+_action_error: Any = make_error_factory("VAL", "WFACT", "workflow")
 
 
 def render(value, context: dict) -> Any:
