@@ -22,7 +22,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Python test/runtime tooling required by Docker test harness
 RUN python3 -m pip install --no-cache-dir --break-system-packages --no-compile \
-        "setuptools>=67" wheel pytest pytest-timeout jsonschema
+        "setuptools>=67" wheel pytest pytest-timeout pytest-xdist jsonschema
 
 # Rust toolchain — cargo (rust-analyzer)
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \

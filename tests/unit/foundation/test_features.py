@@ -14,7 +14,14 @@ from audiagentic.foundation.features.lifecycle import (
 )
 from audiagentic.foundation.features.loader import load_feature_from_yaml
 from audiagentic.foundation.features.resolver import resolve_feature
-from audiagentic.foundation.features.state import get_feature_state, load_feature_state
+from audiagentic.foundation.features.state import (
+    get_component_state,
+    get_feature_state,
+    load_feature_state,
+    migrate_to_shards,
+    set_component_state,
+)
+from audiagentic.foundation.io import load_yaml_file
 
 
 def _write(path: Path, text: str) -> Path:
@@ -186,5 +193,63 @@ id: python
 
     enable_feature(tmp_path, "coding-lsp", "language", "python")
 
+    # State is now sharded per component: features/{parent}.yaml.
+    shard = tmp_path / ".audiagentic" / "config" / "runtime" / "features" / "coding-lsp.yaml"
+    assert shard.exists()
+    # Legacy monolithic file is not written by mutations.
+    assert not (tmp_path / ".audiagentic" / "config" / "runtime" / "features.yaml").exists()
+
     state = load_feature_state(tmp_path)
     assert state["coding-lsp"]["features"]["language:python"]["enabled"] is True
+
+
+def test_migrate_to_shards_splits_legacy_file_with_flat_migration(tmp_path: Path) -> None:
+    legacy = tmp_path / ".audiagentic" / "config" / "runtime" / "features.yaml"
+    _write(
+        legacy,
+        """
+coding-lsp:
+  features:
+    language:
+      python:
+        enabled: true
+providers:
+  implementations:
+    claude:
+      enabled: true
+      features:
+        mcp:
+          mcp:
+            enabled: true
+""".strip(),
+    )
+
+    migrated = migrate_to_shards(tmp_path)
+
+    assert set(migrated) == {"coding-lsp", "providers"}
+
+    shard_dir = tmp_path / ".audiagentic" / "config" / "runtime" / "features"
+    coding = load_yaml_file(shard_dir / "coding-lsp.yaml")
+    providers = load_yaml_file(shard_dir / "providers.yaml")
+
+    # Nested -> flat composite keys applied per shard.
+    assert coding["features"]["language:python"]["enabled"] is True
+    assert providers["implementations"]["claude"]["features"]["mcp:mcp"]["enabled"] is True
+
+    # Legacy file renamed, not deleted.
+    assert not legacy.exists()
+    assert legacy.with_suffix(".yaml.migrated").exists()
+
+
+def test_set_component_state_isolation_does_not_rewrite_sibling_shard(tmp_path: Path) -> None:
+    set_component_state(tmp_path, "comp-a", {"features": {"x:1": {"enabled": True}}})
+    shard_a = tmp_path / ".audiagentic" / "config" / "runtime" / "features" / "comp-a.yaml"
+    before = shard_a.read_bytes()
+
+    # Writing component B must not touch component A's shard.
+    set_component_state(tmp_path, "comp-b", {"features": {"y:2": {"enabled": True}}})
+
+    assert shard_a.read_bytes() == before
+    shard_b = tmp_path / ".audiagentic" / "config" / "runtime" / "features" / "comp-b.yaml"
+    assert shard_b.exists()
+    assert get_component_state(tmp_path, "comp-a") == {"features": {"x:1": {"enabled": True}}}

@@ -10,4 +10,4 @@ ENV PYTHONPATH="/app/src"
 # Build: docker build -f tests/docker/Dockerfile.provider-lifecycle-e2e -t audiagentic-provider-lifecycle-e2e .
 # Run:   docker run --rm audiagentic-provider-lifecycle-e2e
 COPY . /app
-CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-timeout pytest-asyncio && /venv/bin/pytest tests/integration/providers/test_provider_full_lifecycle.py -v --tb=short --timeout=300"]
+CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-timeout pytest-xdist pytest-asyncio && /venv/bin/pytest tests/integration/providers/test_provider_full_lifecycle.py -v --tb=short --timeout=300"]

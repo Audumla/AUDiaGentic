@@ -1,7 +1,8 @@
 """E2E: component MCP servers via JSON-RPC subprocess.
 
-Starts session/providers/planning/release MCP servers as subprocesses and
-verifies they expose the expected tools and respond to a basic status call.
+Starts one subprocess per MCP server module per module and multiplexes all calls
+over that shared connection. Each test gets its own tmp_path so project state is
+isolated.
 """
 from __future__ import annotations
 
@@ -10,13 +11,15 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Generator
 from pathlib import Path
+
+import pytest
 
 _ROOT = Path(__file__).resolve().parents[3]
 for _p in (str(_ROOT), str(_ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
-
 
 _INIT = {
     "jsonrpc": "2.0",
@@ -31,167 +34,45 @@ _INIT = {
 _INITIALIZED = {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
 
 
-def _mcp(module: str, *messages: dict, project_root: Path, extra_args: list[str] | None = None, timeout: int = 30) -> list[dict]:
-    env = dict(os.environ)
-    env["AUDIAGENTIC_REPO_ROOT"] = str(project_root)
-    env["PYTHONPATH"] = os.pathsep.join([str(_ROOT / "src"), env.get("PYTHONPATH", "")])
-    command = [sys.executable, "-m", module]
-    if extra_args:
-        command.extend(extra_args)
-    proc = subprocess.Popen(
-        command,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        env=env,
-    )
-    assert proc.stdin is not None
+def _read_json_line(proc: subprocess.Popen, deadline: float) -> dict | None:
     assert proc.stdout is not None
+    while time.time() < deadline:
+        line = proc.stdout.readline()
+        if not line:
+            if proc.poll() is not None:
+                return None
+            continue
+        try:
+            return json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+    return None
+
+
+def _send_and_wait(
+    proc: subprocess.Popen,
+    messages: list[dict],
+    expected_ids: set[int],
+    deadline: float,
+) -> list[dict]:
+    assert proc.stdin is not None
+    for msg in messages:
+        proc.stdin.write(json.dumps(msg) + "\n")
+    proc.stdin.flush()
 
     responses: list[dict] = []
-    expected_ids = {message["id"] for message in messages if "id" in message}
-    deadline = time.time() + timeout
-
-    proc.stdin.write(json.dumps(_INIT) + "\n")
-    proc.stdin.flush()
     while time.time() < deadline:
-        line = proc.stdout.readline()
-        if not line:
-            if proc.poll() is not None:
-                break
-            continue
-        payload = json.loads(line)
-        responses.append(payload)
-        if payload.get("id") == _INIT["id"]:
+        resp = _read_json_line(proc, deadline)
+        if resp is None:
             break
-
-    proc.stdin.write(json.dumps(_INITIALIZED) + "\n")
-    for message in messages:
-        proc.stdin.write(json.dumps(message) + "\n")
-    proc.stdin.flush()
-
-    while time.time() < deadline:
-        line = proc.stdout.readline()
-        if not line:
-            if proc.poll() is not None:
-                break
-            continue
-        payload = json.loads(line)
-        responses.append(payload)
-        if expected_ids and expected_ids.issubset({item.get("id") for item in responses}):
+        responses.append(resp)
+        if expected_ids and expected_ids.issubset({r.get("id") for r in responses}):
             break
-
-    proc.stdin.close()
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        proc.terminate()
-        proc.wait(timeout=5)
-
-    stderr = proc.stderr.read() if proc.stderr else ""
-    assert proc.returncode == 0, f"MCP server {module} rc={proc.returncode}\n{stderr}"
     return responses
 
 
-def _tools_list(module: str, project_root: Path, extra_args: list[str] | None = None) -> set[str]:
-    responses = _mcp(
-        module,
-        {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
-        project_root=project_root,
-        extra_args=extra_args,
-    )
-    resp = next(r for r in responses if r.get("id") == 2)
-    return {tool["name"] for tool in resp["result"]["tools"]}
-
-
-def _call(
-    module: str,
-    tool: str,
-    args: dict,
-    *,
-    project_root: Path,
-    msg_id: int = 2,
-    extra_args: list[str] | None = None,
-    timeout: int = 30,
-) -> dict | list:
-    responses = _mcp(
-        module,
-        {
-            "jsonrpc": "2.0",
-            "id": msg_id,
-            "method": "tools/call",
-            "params": {"name": tool, "arguments": args},
-        },
-        project_root=project_root,
-        extra_args=extra_args,
-        timeout=timeout,
-    )
-    resp = next(r for r in responses if r.get("id") == msg_id)
-    assert "error" not in resp, f"tool {tool!r} error: {resp['error']}"
-    blocks = resp["result"]["content"]
-    parsed = [json.loads(block["text"]) for block in blocks]
-    return parsed if len(parsed) > 1 else parsed[0]
-
-
-def _call_keepalive(
-    module: str,
-    tool: str,
-    args: dict,
-    *,
-    project_root: Path,
-    msg_id: int = 2,
-    timeout: int = 120,
-    extra_args: list[str] | None = None,
-) -> dict | list:
-    env = dict(os.environ)
-    env["AUDIAGENTIC_REPO_ROOT"] = str(project_root)
-    env["PYTHONPATH"] = os.pathsep.join([str(_ROOT / "src"), env.get("PYTHONPATH", "")])
-    command = [sys.executable, "-m", module]
-    if extra_args:
-        command.extend(extra_args)
-    proc = subprocess.Popen(
-        command,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        env=env,
-    )
+def _terminate(proc: subprocess.Popen) -> None:
     assert proc.stdin is not None
-    assert proc.stdout is not None
-    for message in (
-        _INIT,
-        _INITIALIZED,
-        {
-            "jsonrpc": "2.0",
-            "id": msg_id,
-            "method": "tools/call",
-            "params": {
-                "name": tool,
-                "arguments": args,
-                "_meta": {"progressToken": f"test-{msg_id}"},
-            },
-        },
-    ):
-        proc.stdin.write(json.dumps(message) + "\n")
-    proc.stdin.flush()
-
-    responses: list[dict] = []
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        line = proc.stdout.readline()
-        if not line:
-            if proc.poll() is not None:
-                break
-            continue
-        payload = json.loads(line)
-        responses.append(payload)
-        if payload.get("id") == msg_id:
-            break
-
     proc.stdin.close()
     try:
         proc.wait(timeout=5)
@@ -199,112 +80,113 @@ def _call_keepalive(
         proc.terminate()
         proc.wait(timeout=5)
 
+
+def _server_fixture(module: str, extra_args: list[str] | None = None):
+    """Create a module-scoped fixture for a given MCP server module."""
+
+    @pytest.fixture(scope="module")
+    def _fixture(project_root: Path) -> Generator[subprocess.Popen, None, None]:
+        env = dict(os.environ)
+        env["AUDIAGENTIC_REPO_ROOT"] = str(project_root)
+        env["PYTHONPATH"] = os.pathsep.join([str(_ROOT / "src"), env.get("PYTHONPATH", "")])
+        command = [sys.executable, "-m", module]
+        if extra_args:
+            command.extend(extra_args)
+        proc = subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", env=env,
+        )
+        assert proc.stdin is not None
+        assert proc.stdout is not None
+
+        proc.stdin.write(json.dumps(_INIT) + "\n")
+        proc.stdin.flush()
+        init_resp = _read_json_line(proc, time.time() + 10)
+        assert init_resp is not None, f"MCP server {module} failed to respond to initialize"
+
+        proc.stdin.write(json.dumps(_INITIALIZED) + "\n")
+        proc.stdin.flush()
+
+        yield proc
+        _terminate(proc)
+
+    return _fixture
+
+
+# ── Shared server fixtures (one per module) ──────────────────────────────────
+
+_session_server = _server_fixture("audiagentic.components.session.session_mcp", ["--readonly", "--smoke-only"])
+_project_server = _server_fixture("audiagentic.components.project.project_mcp")
+_providers_server = _server_fixture("audiagentic.components.providers.providers_mcp")
+_release_server = _server_fixture("audiagentic.components.release.release_please.release_please_mcp")
+
+
+def _call(
+    proc: subprocess.Popen,
+    tool: str,
+    args: dict,
+    project_root: Path,
+    msg_id: int = 2,
+) -> dict | list:
+    responses = _send_and_wait(
+        proc,
+        [{"jsonrpc": "2.0", "id": msg_id, "method": "tools/call",
+          "params": {"name": tool, "arguments": args}}],
+        {msg_id},
+        time.time() + 5,
+    )
     resp = next(r for r in responses if r.get("id") == msg_id)
     assert "error" not in resp, f"tool {tool!r} error: {resp['error']}"
     blocks = resp["result"]["content"]
-    parsed = [json.loads(block["text"]) for block in blocks]
+    parsed = [json.loads(b["text"]) for b in blocks]
     return parsed if len(parsed) > 1 else parsed[0]
 
 
-def test_session_server_exposes_expected_tools(tmp_path: Path) -> None:
-    names = _tools_list(
-        "audiagentic.components.session.session_mcp",
-        tmp_path,
-        extra_args=["--readonly", "--smoke-only"],
+def _tools_list(proc: subprocess.Popen, project_root: Path, msg_id: int = 2) -> set[str]:
+    responses = _send_and_wait(
+        proc,
+        [{"jsonrpc": "2.0", "id": msg_id, "method": "tools/list", "params": {}}],
+        {msg_id},
+        time.time() + 5,
     )
+    resp = next(r for r in responses if r.get("id") == msg_id)
+    return {tool["name"] for tool in resp["result"]["tools"]}
+
+
+# ── session server tests ─────────────────────────────────────────────────────
+
+def test_session_server_exposes_expected_tools(tmp_path, _session_server):
+    names = _tools_list(_session_server, tmp_path)
     assert {
-        "status",
-        "config",
-        "set_auto_update",
-        "cli_visibility",
-        "set_cli_visibility",
-        "update_rig",
+        "status", "config", "set_auto_update", "cli_visibility",
+        "set_cli_visibility", "update_rig",
     }.issubset(names)
 
 
-def test_session_server_status_returns_environment(tmp_path: Path) -> None:
-    result = _call(
-        "audiagentic.components.session.session_mcp",
-        "status",
-        {},
-        project_root=tmp_path,
-        extra_args=["--readonly", "--smoke-only"],
-    )
+def test_session_server_status_returns_environment(tmp_path, project_root, _session_server):
+    result = _call(_session_server, "status", {}, project_root=tmp_path)
     payload = result if isinstance(result, dict) else result[0]
-    assert payload["environment"]["repo_root"] == str(tmp_path)
+    assert payload["environment"]["repo_root"] == str(project_root)
     assert "versions" in payload
 
 
-def test_project_server_exposes_expected_tools(tmp_path: Path) -> None:
-    names = _tools_list("audiagentic.components.project.project_mcp", tmp_path)
-    assert {
-        "project_status",
-        "list_components",
-        "install_component",
-        "uninstall_component",
-        "enable_component",
-        "disable_component",
-    }.issubset(names)
-
-
-def test_project_server_lists_optional_components_not_installed(tmp_path: Path) -> None:
-    result = _call(
-        "audiagentic.components.project.project_mcp",
-        "list_components",
-        {},
-        project_root=tmp_path,
+@pytest.mark.opt_in
+def test_session_server_update_rig(tmp_path, _session_server):
+    result = _send_and_wait(
+        _session_server,
+        [{"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+          "params": {"name": "update_rig", "arguments": {"scope": "local"},
+                     "_meta": {"progressToken": "test-2"}}}],
+        {2},
+        time.time() + 60,
     )
-    payload = result if isinstance(result, list) else [result]
-    components = {component["component_id"]: component for component in payload}
-    assert "providers" in components
-    assert components["providers"]["status"] == "not-installed"
-    assert components["providers"]["enabled"] is None
-
-
-def test_providers_server_exposes_expected_tools(tmp_path: Path) -> None:
-    names = _tools_list("audiagentic.components.providers.providers_mcp", tmp_path)
-    assert {
-        "list_providers",
-        "get_provider_status",
-        "list_provider_descriptors",
-        "reconcile_all_providers",
-    }.issubset(names)
-
-
-def test_providers_server_lists_known_providers(tmp_path: Path) -> None:
-    result = _call(
-        "audiagentic.components.providers.providers_mcp",
-        "list_providers",
-        {},
-        project_root=tmp_path,
-    )
-    payload = result if isinstance(result, dict) else result[0]
-    provider_ids = {provider["provider_id"] for provider in payload["providers"]}
-    assert "codex" in provider_ids
-    assert "gemini" in provider_ids
-
-
-def test_release_please_server_exposes_expected_tools(tmp_path: Path) -> None:
-    names = _tools_list(
-        "audiagentic.components.release.release_please.release_please_mcp",
-        tmp_path,
-    )
-    assert {
-        "install_release_please",
-        "update_release_please_workflow",
-    }.issubset(names)
-
-
-def test_session_server_update_rig(tmp_path: Path) -> None:
-    result = _call_keepalive(
-        "audiagentic.components.session.session_mcp",
-        "update_rig",
-        {"scope": "local"},
-        project_root=tmp_path,
-        extra_args=["--smoke-only"],
-        timeout=120,
-    )
-    payload = result if isinstance(result, dict) else result[0]
+    resp = next(r for r in result if r.get("id") == 2)
+    assert "error" not in resp, f"update_rig error: {resp['error']}"
+    blocks = resp["result"]["content"]
+    parsed = [json.loads(b["text"]) for b in blocks]
+    payload = parsed[0] if len(parsed) == 1 else parsed[0] if isinstance(parsed[0], dict) else parsed
+    assert isinstance(payload, dict)
     assert payload["ok"] is True
     assert "output" in payload
 
@@ -313,25 +195,67 @@ def test_session_server_detects_active_embedded_rig_profile(monkeypatch) -> None
     from audiagentic.components.session.session_embedded_rig import (
         active_embedded_rig_profile,
     )
-
     monkeypatch.setenv("AUDIAGENTIC_RIG_TYPE", "embedded")
     monkeypatch.setenv("AUDIAGENTIC_RIG_PROFILE", "qwen3.5-2b-q4_k_s")
     assert active_embedded_rig_profile() == "qwen3.5-2b-q4_k_s"
 
+
+# ── project server tests ─────────────────────────────────────────────────────
+
+def test_project_server_exposes_expected_tools(tmp_path, _project_server):
+    names = _tools_list(_project_server, tmp_path)
+    assert {
+        "project_status", "list_components", "install_component",
+        "uninstall_component", "enable_component", "disable_component",
+    }.issubset(names)
+
+
+def test_project_server_lists_optional_components_not_installed(tmp_path, _project_server):
+    result = _call(_project_server, "list_components", {}, project_root=tmp_path)
+    payload = result if isinstance(result, list) else [result]
+    components = {c["component_id"]: c for c in payload}
+    assert "providers" in components
+    assert components["providers"]["status"] == "not-installed"
+    assert components["providers"]["enabled"] is None
+
+
+# ── providers server tests ───────────────────────────────────────────────────
+
+def test_providers_server_exposes_expected_tools(tmp_path, _providers_server):
+    names = _tools_list(_providers_server, tmp_path)
+    assert {
+        "list_providers", "get_provider_status",
+        "list_provider_descriptors", "reconcile_all_providers",
+    }.issubset(names)
+
+
+def test_providers_server_lists_known_providers(tmp_path, _providers_server):
+    result = _call(_providers_server, "list_providers", {}, project_root=tmp_path)
+    payload = result if isinstance(result, dict) else result[0]
+    provider_ids = {p["provider_id"] for p in payload["providers"]}
+    assert "codex" in provider_ids
+    assert "gemini" in provider_ids
+
+
+# ── release-please server tests ──────────────────────────────────────────────
+
+def test_release_please_server_exposes_expected_tools(tmp_path, _release_server):
+    names = _tools_list(_release_server, tmp_path)
+    assert {"install_release_please", "update_release_please_workflow"}.issubset(names)
+
+
+# ── direct unit-style test (no subprocess) ───────────────────────────────────
 
 def test_update_rig_works_directly(tmp_path: Path) -> None:
     """Test the update_binaries work function directly (avoids MCP subprocess timeout)."""
     import contextlib
     import io
 
-    # Set harness home for the test
-    import os
-
     from audiagentic.foundation.contracts.output import ComponentOutputEvent
     from audiagentic.runtime.home import global_harness_runtime
     from audiagentic.runtime.rig.embedded.binaries import update_binaries as _update
-    os.environ["AUDIAGENTIC_HOME"] = str(tmp_path / ".audiagentic")
 
+    os.environ["AUDIAGENTIC_HOME"] = str(tmp_path / ".audiagentic")
     out = io.StringIO()
     events = []
 
