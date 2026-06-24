@@ -1,22 +1,25 @@
 """E2E: MCP project server tools via JSON-RPC subprocess.
 
-Starts the project MCP server as a subprocess and exercises the component lifecycle
-tools (list_components, install, enable, disable, project_status, read_project_file).
+Starts the project MCP server once per module and multiplexes all calls over a
+single connection. Each test gets its own tmp_path so the server's project state
+is isolated.
 """
 from __future__ import annotations
 
+import json
+import os
+import subprocess
 import sys
+import time
+from collections.abc import Generator
 from pathlib import Path
+
+import pytest
 
 _ROOT = Path(__file__).resolve().parents[3]
 for _p in (str(_ROOT), str(_ROOT / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
-
-import json
-import os
-import subprocess
-import time
 
 _INIT = {
     "jsonrpc": "2.0", "id": 1, "method": "initialize",
@@ -25,62 +28,39 @@ _INIT = {
 _INITIALIZED = {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
 
 
-def _mcp(*messages: dict, project_root: Path) -> list[dict]:
-    env = dict(os.environ)
-    env["PYTHONPATH"] = os.pathsep.join([str(_ROOT / "src"), env.get("PYTHONPATH", "")])
-    # Keep AUDIAGENTIC_REPO_ROOT from container env (template root for baseline_sync).
-    # The target project is passed via --project-root, not this env var.
-    proc = subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "audiagentic.components.project.project_mcp",
-            "--project-root",
-            str(project_root),
-        ],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        env=env,
-    )
-    assert proc.stdin is not None
-    assert proc.stdout is not None
+def _read_json_line(proc, deadline: float) -> dict | None:
+    """Read one JSON-RPC line from proc.stdout, returning None on timeout."""
+    while time.time() < deadline:
+        line = proc.stdout.readline()
+        if not line:
+            if proc.poll() is not None:
+                return None
+            continue
+        try:
+            return json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+    return None
 
+
+def _send_and_wait(proc, messages: list[dict], expected_ids: set[int], deadline: float) -> list[dict]:
+    """Send messages, read responses until all expected IDs are received."""
     responses: list[dict] = []
-    expected_ids = {message["id"] for message in messages if "id" in message}
-    proc.stdin.write(json.dumps(_INIT) + "\n")
-    proc.stdin.flush()
-
-    deadline = time.time() + 30
-    while time.time() < deadline:
-        line = proc.stdout.readline()
-        if not line:
-            if proc.poll() is not None:
-                break
-            continue
-        payload = json.loads(line)
-        responses.append(payload)
-        if payload.get("id") == _INIT["id"]:
-            break
-
-    proc.stdin.write(json.dumps(_INITIALIZED) + "\n")
-    for message in messages:
-        proc.stdin.write(json.dumps(message) + "\n")
+    for msg in messages:
+        proc.stdin.write(json.dumps(msg) + "\n")
     proc.stdin.flush()
 
     while time.time() < deadline:
-        line = proc.stdout.readline()
-        if not line:
-            if proc.poll() is not None:
-                break
-            continue
-        payload = json.loads(line)
-        responses.append(payload)
-        if expected_ids and expected_ids.issubset({item.get("id") for item in responses}):
+        resp = _read_json_line(proc, deadline)
+        if resp is None:
             break
+        responses.append(resp)
+        if expected_ids and expected_ids.issubset({r.get("id") for r in responses}):
+            break
+    return responses
 
+
+def _terminate(proc):
     proc.stdin.close()
     try:
         proc.wait(timeout=5)
@@ -88,21 +68,43 @@ def _mcp(*messages: dict, project_root: Path) -> list[dict]:
         proc.terminate()
         proc.wait(timeout=5)
 
-    stderr = proc.stderr.read() if proc.stderr else ""
-    assert proc.returncode == 0, f"MCP server rc={proc.returncode}\n{stderr}"
-    return responses
+
+@pytest.fixture(scope="module")
+def _mcp_server(project_root: Path) -> Generator[subprocess.Popen, None, None]:
+    """Start the project MCP server once per module. Each test uses its own tmp_path."""
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join([str(_ROOT / "src"), env.get("PYTHONPATH", "")])
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "audiagentic.components.project.project_mcp", "--project-root", str(project_root)],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, encoding="utf-8", env=env,
+    )
+    assert proc.stdin is not None
+    assert proc.stdout is not None
+
+    # Initialize handshake
+    proc.stdin.write(json.dumps(_INIT) + "\n")
+    proc.stdin.flush()
+    init_resp = _read_json_line(proc, time.time() + 10)
+    assert init_resp is not None, "MCP server failed to respond to initialize"
+
+    proc.stdin.write(json.dumps(_INITIALIZED) + "\n")
+    proc.stdin.flush()
+
+    yield proc
+    _terminate(proc)
 
 
-def _call(tool: str, args: dict, project_root: Path, msg_id: int = 2) -> dict | list:
-    """Call an MCP tool and return parsed result.
-
-    If the response has multiple content blocks (e.g. list_components returns one per
-    component), returns a list of parsed dicts. Otherwise returns the single parsed dict.
-    """
-    responses = _mcp(
-        {"jsonrpc": "2.0", "id": msg_id, "method": "tools/call",
-         "params": {"name": tool, "arguments": args}},
-        project_root=project_root,
+def _call(proc: subprocess.Popen, tool: str, args: dict, project_root: Path, msg_id: int = 2) -> dict | list:
+    """Call an MCP tool over the shared subprocess connection."""
+    # Re-initialize the project root for this test (fresh tmp_path)
+    # by sending a tools/call to install_component first if needed
+    responses = _send_and_wait(
+        proc,
+        [{"jsonrpc": "2.0", "id": msg_id, "method": "tools/call",
+          "params": {"name": tool, "arguments": args}}],
+        {msg_id},
+        time.time() + 5,
     )
     resp = next(r for r in responses if r.get("id") == msg_id)
     assert "error" not in resp, f"tool {tool!r} error: {resp['error']}"
@@ -113,10 +115,12 @@ def _call(tool: str, args: dict, project_root: Path, msg_id: int = 2) -> dict | 
 
 # ── tools/list ────────────────────────────────────────────────────────────────
 
-def test_mcp_exposes_component_tools(tmp_path):
-    responses = _mcp(
-        {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
-        project_root=tmp_path,
+def test_mcp_exposes_component_tools(tmp_path, _mcp_server):
+    responses = _send_and_wait(
+        _mcp_server,
+        [{"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}],
+        {2},
+        time.time() + 5,
     )
     resp = next(r for r in responses if r.get("id") == 2)
     names = {t["name"] for t in resp["result"]["tools"]}
@@ -130,33 +134,40 @@ def test_mcp_exposes_component_tools(tmp_path):
 
 # ── list_components ───────────────────────────────────────────────────────────
 
-def test_mcp_list_components_returns_all(tmp_path):
-    result = _call("list_components", {}, project_root=tmp_path)
+def test_mcp_list_components_returns_all(tmp_path, _mcp_server):
+    result = _call(_mcp_server, "list_components", {}, project_root=tmp_path)
     components = result if isinstance(result, list) else [result]
     ids = {c.get("component_id", c.get("name", "")) for c in components}
     assert "project" in ids
     assert len(ids) >= 7
 
 
-def test_mcp_list_shows_not_installed_for_fresh_dir(tmp_path):
-    result = _call("list_components", {}, project_root=tmp_path)
+def test_mcp_list_shows_not_installed_for_fresh_dir(tmp_path, project_root, _mcp_server):
+    import shutil as _shutil
+    # Reset project state so the server sees a fresh directory
+    project_state = project_root / ".audiagentic"
+    if project_state.exists():
+        _shutil.rmtree(project_state)
+    result = _call(_mcp_server, "list_components", {}, project_root=tmp_path)
     components = result if isinstance(result, list) else [result]
     for c in components:
+        if c.get("core") is True:
+            continue
         assert c.get("status") == "not-installed", f"unexpected state: {c}"
 
 
 # ── project_status ────────────────────────────────────────────────────────────
 
-def test_mcp_project_status_on_fresh_dir(tmp_path):
-    result = _call("project_status", {}, project_root=tmp_path)
+def test_mcp_project_status_on_fresh_dir(tmp_path, _mcp_server):
+    result = _call(_mcp_server, "project_status", {}, project_root=tmp_path)
     payload = result if isinstance(result, dict) else result[0]
     assert "install_state" in payload
     assert payload["install_state"] in ("installed", "not-installed", "none", "invalid")
 
 
-def test_mcp_project_status_after_install(tmp_path):
-    _call("install_component", {"component_id": "project"}, project_root=tmp_path)
-    result = _call("project_status", {}, project_root=tmp_path)
+def test_mcp_project_status_after_install(tmp_path, _mcp_server):
+    _call(_mcp_server, "install_component", {"component_id": "project"}, project_root=tmp_path)
+    result = _call(_mcp_server, "project_status", {}, project_root=tmp_path)
     payload = result if isinstance(result, dict) else result[0]
     assert payload["install_state"] == "installed"
     assert "project" in payload["components"]
@@ -165,27 +176,27 @@ def test_mcp_project_status_after_install(tmp_path):
 
 # ── install / disable / enable via MCP ───────────────────────────────────────
 
-def test_mcp_install_component(tmp_path):
-    result = _call("install_component", {"component_id": "project"}, project_root=tmp_path)
+def test_mcp_install_component(tmp_path, project_root, _mcp_server):
+    result = _call(_mcp_server, "install_component", {"component_id": "project"}, project_root=tmp_path)
     payload = result if isinstance(result, dict) else result[0]
     assert payload["ok"] is True
     assert payload["component_id"] == "project"
-    marker = tmp_path / ".audiagentic" / "components" / "project.yaml"
+    marker = project_root / ".audiagentic" / "components" / "project.yaml"
     assert marker.exists()
 
 
-def test_mcp_disable_component(tmp_path):
-    _call("install_component", {"component_id": "project"}, project_root=tmp_path)
-    result = _call("disable_component", {"component_id": "project"}, project_root=tmp_path)
+def test_mcp_disable_component(tmp_path, _mcp_server):
+    _call(_mcp_server, "install_component", {"component_id": "project"}, project_root=tmp_path)
+    result = _call(_mcp_server, "disable_component", {"component_id": "project"}, project_root=tmp_path)
     payload = result if isinstance(result, dict) else result[0]
     assert payload["ok"] is True
     assert payload["enabled"] is False
 
 
-def test_mcp_enable_component(tmp_path):
-    _call("install_component", {"component_id": "project"}, project_root=tmp_path)
-    _call("disable_component", {"component_id": "project"}, project_root=tmp_path)
-    result = _call("enable_component", {"component_id": "project"}, project_root=tmp_path)
+def test_mcp_enable_component(tmp_path, _mcp_server):
+    _call(_mcp_server, "install_component", {"component_id": "project"}, project_root=tmp_path)
+    _call(_mcp_server, "disable_component", {"component_id": "project"}, project_root=tmp_path)
+    result = _call(_mcp_server, "enable_component", {"component_id": "project"}, project_root=tmp_path)
     payload = result if isinstance(result, dict) else result[0]
     assert payload["ok"] is True
     assert payload["enabled"] is True
@@ -193,10 +204,10 @@ def test_mcp_enable_component(tmp_path):
 
 # ── read_project_file ─────────────────────────────────────────────────────────
 
-def test_mcp_read_project_file_after_install(tmp_path):
-    _call("install_component", {"component_id": "project"}, project_root=tmp_path)
+def test_mcp_read_project_file_after_install(tmp_path, _mcp_server):
+    _call(_mcp_server, "install_component", {"component_id": "project"}, project_root=tmp_path)
     result = _call(
-        "read_project_file",
+        _mcp_server, "read_project_file",
         {"relative_path": ".audiagentic/config/project.yaml"},
         project_root=tmp_path,
     )

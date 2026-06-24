@@ -29,4 +29,4 @@ RUN apt-get update \
 # provisioning fixture via the real scoped workflows, so the test exercises
 # actual installation, not a pre-baked environment.
 COPY . /app
-CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-timeout pytest-asyncio && /venv/bin/pytest tests/integration/coding_lsp/test_provider_lsp_e2e.py -v --tb=short --timeout=300"]
+CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-timeout pytest-xdist pytest-asyncio && /venv/bin/pytest tests/integration/coding_lsp/test_provider_lsp_e2e.py -v --tb=short --timeout=300"]
