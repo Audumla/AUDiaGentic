@@ -18,8 +18,10 @@ Dependency injection:
 from __future__ import annotations
 
 import json
-import os
-from collections.abc import Callable
+import logging
+
+# Type alias for store interface
+import types
 from pathlib import Path
 from typing import Any
 
@@ -28,30 +30,32 @@ from audiagentic.components.agent_jobs.state_machine import (
     transition_and_persist,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import atomic_write_json
+from audiagentic.foundation.io import atomic_write_json, atomic_write_ndjson
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.runtime.state import jobs_store as _default_store
+from audiagentic.runtime.state.paths import (
+    job_control_events_path,
+    job_control_path,
+)
 
-# Type alias for store interface
-JobStoreInterface = Callable[[Path, str], dict[str, Any]]
+JobStoreInterface = types.ModuleType
+
+logger = logging.getLogger(__name__)
 
 
 
 
 def _control_path(project_root: Path, job_id: str) -> Path:
-    return project_root / ".audiagentic" / "runtime" / "jobs" / job_id / "job-control.json"
+    return job_control_path(project_root, job_id)
 
 
 def _control_events_path(project_root: Path, job_id: str) -> Path:
-    return project_root / ".audiagentic" / "runtime" / "jobs" / job_id / "control-events.ndjson"
+    return job_control_events_path(project_root, job_id)
 
 
 def _append_event(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(payload, sort_keys=True) + "\n")
-        handle.flush()
-        os.fsync(handle.fileno())
+    atomic_write_ndjson(path, [payload], append=True)
 
 
 def build_job_control_request(

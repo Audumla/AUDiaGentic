@@ -7,9 +7,10 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from . import GITHUB_REPO
+
 logger = logging.getLogger(__name__)
 
-GITHUB_REPO = "Audumla/AUDiaGentic"
 _RELEASES_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 _CHECK_INTERVAL = timedelta(hours=24)
 

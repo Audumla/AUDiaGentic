@@ -2,26 +2,46 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.runtime.config import load_layered_config, load_yaml_file, save_yaml_file
 
 
-def config_path(scope: str, project_root: Path) -> Path:
-    if scope == "project":
-        return project_root / ".audiagentic" / "config" / "harness" / "ag.yaml"
-    if scope == "global":
-        from audiagentic.runtime.home import audiagentic_home
+class Scope(str, Enum):
+    """Visibility config scope identifiers."""
+    PROJECT = "project"
+    GLOBAL = "global"
 
-        return audiagentic_home() / "config" / "harness" / "ag.yaml"
-    raise AudiaGenticError(
-        code="VAL-SESSVIS-001",
-        kind="session",
-        message="unsupported visibility config scope",
-        details={"scope": scope},
-    )
+
+def _project_config_path(project_root: Path) -> Path:
+    return project_root / ".audiagentic" / "config" / "harness" / "ag.yaml"
+
+
+def _global_config_path() -> Path:
+    from audiagentic.runtime.home import audiagentic_home
+    return audiagentic_home() / "config" / "harness" / "ag.yaml"
+
+
+_SCOPE_PATH_RESOLVERS: dict[str, Callable[[Path], Path]] = {
+    Scope.PROJECT: _project_config_path,
+    Scope.GLOBAL: lambda project_root: _global_config_path(),
+}
+
+
+def config_path(scope: str, project_root: Path) -> Path:
+    resolver = _SCOPE_PATH_RESOLVERS.get(scope)
+    if resolver is None:
+        raise make_error(
+            prefix="VAL", component="session", number=1,
+            kind="session",
+            message="unsupported visibility config scope",
+            details={"scope": scope},
+        )
+    return resolver(project_root)
 
 
 def effective_cli_visibility(project_root: Path) -> dict[str, bool]:
@@ -47,8 +67,8 @@ def set_cli_visibility(
     scope: str,
 ) -> dict[str, Any]:
     if show_thinking_blocks is None and show_tool_blocks is None:
-        raise AudiaGenticError(
-            code="VAL-SESSVIS-002",
+        raise make_error(
+            prefix="VAL", component="session", number=2,
             kind="session",
             message="at least one visibility toggle must be provided",
             details={},
@@ -56,8 +76,8 @@ def set_cli_visibility(
 
     path = config_path(scope, project_root)
     if not path.exists():
-        raise AudiaGenticError(
-            code="RES-SESSVIS-001",
+        raise make_error(
+            prefix="RES", component="session", number=1,
             kind="session",
             message="missing harness config",
             details={"path": str(path)},
@@ -69,8 +89,8 @@ def set_cli_visibility(
         ui = {}
         current["ui"] = ui
     if not isinstance(ui, dict):
-        raise AudiaGenticError(
-            code="VAL-SESSVIS-003",
+        raise make_error(
+            prefix="VAL", component="session", number=3,
             kind="session",
             message="invalid ui config mapping",
             details={"path": str(path)},

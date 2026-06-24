@@ -12,7 +12,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error_factory
 
 from .interfaces import ItemView, WorkflowContext
 from .util import extract_ref_ids
@@ -21,16 +21,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_STATE_CHANGE_EVENT = "workflow.item.state.changed"
 
-
-def _state_error(code_number: int, message: str, **details: Any) -> AudiaGenticError:
-    return make_error(
-        prefix="VAL",
-        component="WFSM",
-        number=code_number,
-        kind="workflow",
-        message=message,
-        details=details,
-    )
+_state_error: Any = make_error_factory("VAL", "WFSM", "workflow")
 
 
 class StateMachine:

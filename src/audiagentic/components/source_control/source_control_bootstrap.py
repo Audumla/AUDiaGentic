@@ -48,26 +48,23 @@ def ledger_integration_enabled(project_root: Path) -> bool:
     return is_installed(COMPONENT_AGENT_LEDGER, project_root)
 
 
+EVENT_INSTALLED = "lifecycle.component.installed"
+EVENT_UNINSTALLED = "lifecycle.component.uninstalled"
+
+
 def on_component_lifecycle(event_type: str, payload: dict, metadata: dict) -> None:
     component_id = payload.get("component_id")
     project_root = payload.get("project_root")
     if not isinstance(project_root, Path):
         return
 
-    if component_id == COMPONENT_SOURCE_CONTROL:
-        if event_type == "lifecycle.component.installed":
-            _install_post_commit_hook(project_root)
-        elif event_type == "lifecycle.component.uninstalled":
-            _remove_post_commit_hook(project_root)
+    if component_id != COMPONENT_SOURCE_CONTROL:
         return
 
-    if component_id == COMPONENT_AGENT_LEDGER:
-        if not is_installed(COMPONENT_SOURCE_CONTROL, project_root):
-            return
-        if event_type == "lifecycle.component.installed":
-            _install_post_commit_hook(project_root)
-        elif event_type == "lifecycle.component.uninstalled":
-            _remove_post_commit_hook(project_root)
+    if event_type == EVENT_INSTALLED:
+        _install_post_commit_hook(project_root)
+    elif event_type == EVENT_UNINSTALLED:
+        _remove_post_commit_hook(project_root)
 
 
 def _install_post_commit_hook(project_root: Path) -> bool:
@@ -117,19 +114,6 @@ def _remove_post_commit_hook(project_root: Path) -> bool:
     else:
         hook_path.unlink()
     return True
-
-
-def _build_warnings(availability: dict[str, Any]) -> list[str]:
-    warnings = []
-    if not availability["git"]:
-        warnings.append("git not found — install git to enable source control operations")
-    if not availability["uvx"]:
-        warnings.append("uvx not found — install uv to enable git MCP server (mcp-server-git)")
-    if not availability["gh"]:
-        warnings.append("gh CLI not found — install GitHub CLI to enable GitHub MCP server")
-    elif not availability["gh-mcp"]:
-        warnings.append("gh mcp serve not available — run: gh extension install shuymn/gh-mcp")
-    return warnings
 
 
 def status_payload(project_root: Path | None = None) -> dict[str, Any]:

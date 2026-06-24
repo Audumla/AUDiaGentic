@@ -3,9 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.foundation.contracts.errors import make_error_factory
 
 from .base import OptionSchema
+
+_option_error: Any = make_error_factory("VAL", "FOPT", "feature-options")
 
 
 @dataclass(frozen=True)
@@ -13,17 +15,6 @@ class ResolvedOption:
     """Tracks the resolved value and its source layer for provenance debugging."""
     value: Any
     source: str  # 'schema-default' | 'component-state' | 'feature-state' | 'implementation-state'
-
-
-def _option_error(code_number: int, message: str, **details: Any) -> AudiaGenticError:
-    return make_error(
-        prefix="VAL",
-        component="FOPT",
-        number=code_number,
-        kind="feature-options",
-        message=message,
-        details=details,
-    )
 
 
 def option_schema_from_mapping(data: dict[str, Any]) -> OptionSchema:

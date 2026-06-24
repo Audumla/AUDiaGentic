@@ -8,9 +8,9 @@ from typing import Any
 
 from audiagentic.foundation.io import atomic_write_text
 
-logger = logging.getLogger(__name__)
+from . import utils
 
-_TEMPLATES = Path(__file__).parent / "templates"
+logger = logging.getLogger(__name__)
 
 MANAGED_NAME = "release-please.audiagentic.yml"
 LEGACY_NAME = "release-please.yml"
@@ -22,41 +22,6 @@ _MANAGED_FILES = [
     ".release-please-manifest.json",
     ".github/workflows/release.yml",
 ]
-
-BASELINE_WORKFLOW = """name: release-please
-
-on:
-  push:
-    branches:
-      - main
-  pull_request:
-  workflow_dispatch:
-    inputs:
-      release_id:
-        description: Project release identifier
-        required: false
-        default: rel_0001
-
-permissions:
-  contents: write
-
-jobs:
-  release:
-    runs-on: ubuntu-latest
-    env:
-      RELEASE_ID: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_id || 'rel_0001' }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - name: Install runtime dependencies
-        run: python -m pip install --upgrade pip pyyaml jsonschema
-      - name: Bootstrap release-managed state
-        run: python src/audiagentic/channels/cli/main.py release-bootstrap --project-root . --release-id "$RELEASE_ID"
-      - name: Verify installed state
-        run: python src/audiagentic/channels/cli/main.py providers-status --project-root .
-"""
 
 
 def _workflow_dir(project_root: Path) -> Path:
@@ -96,9 +61,7 @@ def update_workflow(project_root: Path, branch: str = "main", python_version: st
     if not workflow_path.exists():
         return {"updated": False, "reason": "workflow not present — run install first"}
     subs = {"__BRANCH__": branch, "__PYTHON_VERSION__": python_version}
-    template = (_TEMPLATES / "release.yml").read_text(encoding="utf-8")
-    for key, value in subs.items():
-        template = template.replace(key, value)
+    template = utils.render("release.yml", subs)
     workflow_path.write_text(template, encoding="utf-8")
     return {"updated": True, "path": str(workflow_path.relative_to(project_root))}
 
@@ -107,8 +70,9 @@ def detect_workflow_state(project_root: Path) -> str:
     workflow_dir = _workflow_dir(project_root)
     managed = workflow_dir / MANAGED_NAME
     legacy = workflow_dir / LEGACY_NAME
+    baseline = utils.render("baseline.yml", {"__PYTHON_VERSION__": "3.13"})
     if managed.exists():
-        return "managed-unmodified" if managed.read_text(encoding="utf-8") == BASELINE_WORKFLOW else "managed-modified"
+        return "managed-unmodified" if managed.read_text(encoding="utf-8") == baseline else "managed-modified"
     if legacy.exists():
         return "legacy-detected"
     if workflow_dir.exists():
@@ -124,18 +88,19 @@ def ensure_baseline(project_root: Path) -> dict[str, Any]:
     legacy = workflow_dir / LEGACY_NAME
     warnings: list[dict[str, str]] = []
     state = detect_workflow_state(project_root)
+    baseline = utils.render("baseline.yml", {"__PYTHON_VERSION__": "3.13"})
 
     if state == "absent":
-        atomic_write_text(managed, BASELINE_WORKFLOW)
+        atomic_write_text(managed, baseline)
     elif state == "legacy-detected":
         workflow_dir.mkdir(parents=True, exist_ok=True)
         legacy.replace(workflow_dir / LEGACY_SUFFIX)
-        atomic_write_text(managed, BASELINE_WORKFLOW)
+        atomic_write_text(managed, baseline)
         warnings.append({"kind": "legacy-rename", "message": "legacy workflow renamed"})
     elif state == "managed-unmodified":
-        atomic_write_text(managed, BASELINE_WORKFLOW)
+        atomic_write_text(managed, baseline)
     elif state in {"managed-modified", "external-unknown"}:
-        atomic_write_text(workflow_dir / CANDIDATE_NAME, BASELINE_WORKFLOW)
+        atomic_write_text(workflow_dir / CANDIDATE_NAME, baseline)
         warnings.append({"kind": "workflow-preserved", "message": "existing workflow preserved"})
 
     return {"state": state, "warnings": warnings}

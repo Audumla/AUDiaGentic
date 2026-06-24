@@ -38,19 +38,19 @@ def privilege_prefix() -> tuple[str, ...]:
     return ("sudo",)
 
 
+PLATFORM_PM_MAP: dict[str, tuple[str, ...]] = {
+    "win": ("winget", "scoop", "choco"),
+    "darwin": ("brew",),
+    "linux": ("apt", "dnf", "pacman"),
+}
+
+
 def detect_pkg_manager() -> str | None:
     """Return the first supported package manager found on the current platform."""
-    if sys.platform.startswith("win"):
-        for pm in ("winget", "scoop", "choco"):
-            if tool_available(pm):
-                return pm
-    elif sys.platform == "darwin":
-        if tool_available("brew"):
-            return "brew"
-    else:
-        for pm in ("apt", "dnf", "pacman"):
-            if tool_available(pm):
-                return pm
+    platform = platform_key()
+    for pm in PLATFORM_PM_MAP.get(platform, ()):
+        if tool_available(pm):
+            return pm
     return None
 
 

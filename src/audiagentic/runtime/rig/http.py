@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.runtime.rig.errors import make_rig_http_error
 
 logger = logging.getLogger(__name__)
 
@@ -15,17 +15,6 @@ logger = logging.getLogger(__name__)
 class ModelsProbeResult:
     payload: dict[str, object]
     first_model_id: str | None
-
-
-def _rig_http_error(prefix: str, code_number: int, message: str, **details: object) -> AudiaGenticError:
-    return make_error(
-        prefix=prefix,
-        component="RIGHTTP",
-        number=code_number,
-        kind="runtime-rig",
-        message=message,
-        details=details,
-    )
 
 
 def probe_models_endpoint(endpoint: str, timeout: float = 10.0) -> ModelsProbeResult | None:
@@ -44,7 +33,7 @@ def require_models_endpoint(endpoint: str, timeout: float = 15.0) -> ModelsProbe
     try:
         with urlopen(status_url, timeout=timeout) as response:
             if response.status != 200:
-                raise _rig_http_error(
+                raise make_rig_http_error(
                     "EXT",
                     1,
                     f"Rig health failed: {status_url} -> HTTP {response.status}",
@@ -61,7 +50,7 @@ def require_models_endpoint(endpoint: str, timeout: float = 15.0) -> ModelsProbe
                 detail = error.get("message") or detail
         except Exception:
             logger.warning("Failed to parse error response from %s", status_url, exc_info=True)
-        raise _rig_http_error(
+        raise make_rig_http_error(
             "EXT",
             2,
             f"Rig not ready: {status_url} -> HTTP {exc.code}: {detail}",
@@ -69,13 +58,13 @@ def require_models_endpoint(endpoint: str, timeout: float = 15.0) -> ModelsProbe
             status=exc.code,
         ) from exc
     except (URLError, OSError, TimeoutError) as exc:
-        raise _rig_http_error("NET", 3, f"Rig unavailable: {status_url}: {exc}", url=status_url) from exc
+        raise make_rig_http_error("NET", 3, f"Rig unavailable: {status_url}: {exc}", url=status_url) from exc
     except json.JSONDecodeError as exc:
-        raise _rig_http_error("EXT", 4, f"Rig health returned invalid JSON: {status_url}", url=status_url) from exc
+        raise make_rig_http_error("EXT", 4, f"Rig health returned invalid JSON: {status_url}", url=status_url) from exc
 
     data = payload.get("data")
     if not isinstance(data, list) or not data:
-        raise _rig_http_error("EXT", 5, f"Rig health returned no models: {status_url}", url=status_url)
+        raise make_rig_http_error("EXT", 5, f"Rig health returned no models: {status_url}", url=status_url)
     return ModelsProbeResult(payload=payload, first_model_id=_extract_first_model_id(payload))
 
 

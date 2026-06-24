@@ -2,20 +2,20 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 from audiagentic.foundation.io import atomic_write_json
+from audiagentic.runtime.state.paths import jobs_root as _jobs_root
+
+logger = logging.getLogger(__name__)
 
 
 def validate_job_record(payload: dict[str, Any]) -> list[str]:
     return validate_with_schema("job-record", payload)
-
-
-def _jobs_root(project_root: Path) -> Path:
-    return project_root / ".audiagentic" / "runtime" / "jobs"
 
 
 def job_dir(project_root: Path, job_id: str) -> Path:
@@ -31,6 +31,7 @@ def read_job_record(project_root: Path, job_id: str) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to read job record", extra={"job-id": job_id, "error": str(exc)})
         raise AudiaGenticError(
             code="IO-JOBSTORE-001",
             kind="state-store",
