@@ -110,13 +110,13 @@ contract-version: v1
 id: my-thing
 display-name: My Thing
 description: One-line summary of what this capability does.
-detection-marker: .audiagentic/components/my-thing.yaml
-
-files:
-  - path: .audiagentic/components/my-thing.yaml
-    lifecycle: create-if-missing
-    description: Installation marker
 ```
+
+The `detection-marker` defaults to `.audiagentic/components/<id>.yaml` (or
+`components/<id>.yaml` for `scope: harness`). The loader also synthesizes a
+`create-if-missing` marker `ComponentFile` at that path when no explicit entry
+matches — you only need `detection-marker:` and `files:` when deviating from the
+default or adding non-marker files.
 
 Fields map to `ComponentDescriptor` in
 [foundation/components/base.py](../src/audiagentic/foundation/components/base.py).
@@ -128,7 +128,7 @@ The full set:
 | `id` | Unique component ID (kebab-case). Used everywhere as the canonical key. |
 | `display-name` | Human label. |
 | `description` | One/two-line summary. |
-| `detection-marker` | A `rel_path` whose presence proves the component is installed (relative to the component root). |
+| `detection-marker` | A `rel_path` proving installation. Defaults to `.audiagentic/components/<id>.yaml` (project scope) or `components/<id>.yaml` (harness scope). Only override for non-default paths. |
 | `aliases` | Alternate IDs that resolve to this component. |
 | `files` | Managed files this component owns (see §5). |
 | `depends-on` | Other component IDs that must be installed first. |
@@ -421,8 +421,10 @@ process.
 To add a new component `my-thing`:
 
 1. **Descriptor.** Create `config/components/my-thing.yaml` with `type: component`,
-   `id`, `display-name`, `description`, `detection-marker`, and a `files:` marker
-   entry (§4–§5).
+    `id`, `display-name`, and `description`. The `detection-marker` and its
+    `create-if-missing` marker file are auto-derived from `id` (and `scope` if
+    harness-scoped). Add explicit `detection-marker:` and `files:` entries only
+    when deviating from the default (§4–§5).
 2. **Package.** Create `components/my_thing/` with `__init__.py`, `my_thing_api.py`
    (pure logic), and a `README.md` stating intent + capabilities.
 3. **MCP server.** Add `my_thing_mcp.py` using `mcp_server(__name__)` and
