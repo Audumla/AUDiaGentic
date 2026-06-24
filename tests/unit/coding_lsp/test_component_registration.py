@@ -70,10 +70,13 @@ def test_coding_lsp_registers_ag_lsp_language_bindings() -> None:
     } == {
         ("ag-lsp", "language", "cpp"),
         ("ag-lsp", "language", "python"),
+        ("ag-lsp", "language", "python-ruff"),
         ("ag-lsp", "language", "rust"),
         ("ag-lsp", "language", "typescript"),
     }
     assert bindings[("ag-lsp", "language", "python")].uses_dependencies == ("pyright",)
     assert bindings[("ag-lsp", "language", "python")].projection_writer_key == "coding-lsp.lsp-json"
+    assert bindings[("ag-lsp", "language", "python-ruff")].uses_dependencies == ("ruff",)
+    assert bindings[("ag-lsp", "language", "python-ruff")].projection_writer_key == "coding-lsp.lsp-json"
     assert bindings[("agent-lsp", "language", "python")].uses_dependencies == ("agent-lsp", "pyright")
     assert bindings[("agent-lsp", "language", "python")].projection_writer_key == "agent-lsp.mcp-args"

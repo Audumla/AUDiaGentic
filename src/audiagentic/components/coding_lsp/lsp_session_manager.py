@@ -1,9 +1,12 @@
 """Session manager: lazy LSP session lifecycle per project root and language."""
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from .coding_lsp_config import discover_language_servers
 from .lsp_lifecycle import LspSession, ServerConfig
@@ -34,29 +37,43 @@ class SessionManager:
         """
         root_key = str(Path(project_root).resolve())
         self._ensure_dir(root_key)
+        sk = self._session_key(language, server_config)
 
-        if language in self._sessions[root_key]:
-            session = self._sessions[root_key][language]
-            self._touch(root_key, language)
+        if sk in self._sessions[root_key]:
+            session = self._sessions[root_key][sk]
+            self._touch(root_key, sk)
             if session.is_ready():
                 return session
-            # Dead/wedged session — shut down and rebuild
             session.shutdown()
 
         session = LspSession(server_config, project_root)
         session.initialize()
         session.initialized()
-        self._sessions[root_key][language] = session
-        self._touch(root_key, language)
+        if server_config.init_wait > 0:
+            time.sleep(server_config.init_wait)
+        self._sessions[root_key][sk] = session
+        self._touch(root_key, sk)
         return session
 
-    def shutdown_session(self, project_root: str | Path, language: str) -> None:
-        """Shut down a specific language session."""
+    def shutdown_session(
+        self, project_root: str | Path, language: str, server_id: str = "",
+    ) -> None:
+        """Shut down a specific language session.
+
+        If server_id is given, shuts down only that server's session.
+        If server_id is empty, shuts down ALL sessions for the language.
+        """
         root_key = str(Path(project_root).resolve())
-        session = self._sessions.get(root_key, {}).pop(language, None)
-        if session:
-            session.shutdown()
-        self._last_used.get(root_key, {}).pop(language, None)
+        lang_sessions = self._sessions.get(root_key, {})
+        to_remove = []
+        for sk, session in lang_sessions.items():
+            lang_part, _, sid_part = sk.partition(":")
+            if lang_part == language and (not server_id or sid_part == server_id):
+                session.shutdown()
+                to_remove.append(sk)
+        for sk in to_remove:
+            lang_sessions.pop(sk, None)
+            self._last_used.get(root_key, {}).pop(sk, None)
 
     def shutdown_all(self) -> None:
         """Shut down all sessions."""
@@ -76,14 +93,13 @@ class SessionManager:
         now = time.monotonic()
         shutdown: list[str] = []
         for root_key in list(self._sessions.keys()):
-            for language in list(self._sessions[root_key].keys()):
-                last = self._last_used.get(root_key, {}).get(language, 0)
+            for sk in list(self._sessions[root_key].keys()):
+                last = self._last_used.get(root_key, {}).get(sk, 0)
                 if now - last > timeout:
-                    self._sessions[root_key][language].shutdown()
-                    del self._sessions[root_key][language]
-                    self._last_used.get(root_key, {}).pop(language, None)
-                    shutdown.append(f"{root_key}/{language}")
-        # Clean up empty roots
+                    self._sessions[root_key][sk].shutdown()
+                    del self._sessions[root_key][sk]
+                    self._last_used.get(root_key, {}).pop(sk, None)
+                    shutdown.append(f"{root_key}/{sk}")
         for root_key in list(self._sessions.keys()):
             if not self._sessions[root_key]:
                 del self._sessions[root_key]
@@ -93,12 +109,14 @@ class SessionManager:
     def status(self) -> dict[str, Any]:
         """Return status of all sessions."""
         roots: dict[str, list[dict[str, Any]]] = {}
-        for root_key, langs in self._sessions.items():
+        for root_key, sessions in self._sessions.items():
             root_status: list[dict[str, Any]] = []
-            for language, session in langs.items():
-                last = self._last_used.get(root_key, {}).get(language, 0)
+            for sk, session in sessions.items():
+                language, _, server_id = sk.partition(":")
+                last = self._last_used.get(root_key, {}).get(sk, 0)
                 root_status.append({
                     "language": language,
+                    "server_id": server_id,
                     "ready": session.is_ready(),
                     "last_used_ago_s": round(time.monotonic() - last, 1),
                     "server": session.server_config.command[0] if session.server_config.command else "unknown",
@@ -134,7 +152,20 @@ class SessionManager:
 
         all_diagnostics: dict[str, list[dict[str, Any]]] = {}
         for session in self._sessions.get(root_key, {}).values():
-            all_diagnostics.update(session.diagnostics(min_severity=min_severity, limit=limit))
+            try:
+                for uri, diags in session.diagnostics(min_severity=min_severity, limit=limit).items():
+                    existing = all_diagnostics.setdefault(uri, [])
+                    existing_keys = {
+                        (d.get("source"), d.get("code"), str(d.get("range", {})), d.get("message", "")[:80])
+                        for d in existing
+                    }
+                    for d in diags:
+                        key = (d.get("source"), d.get("code"), str(d.get("range", {})), d.get("message", "")[:80])
+                        if key not in existing_keys:
+                            existing.append(d)
+                            existing_keys.add(key)
+            except Exception as exc:
+                logger.warning("Workspace diagnostics failed for session: %s", exc)
 
         self._diagnostics_cache[cache_key] = (time.monotonic(), all_diagnostics)
         return all_diagnostics
@@ -155,11 +186,16 @@ class SessionManager:
 
     # ── internal ──────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _session_key(language: str, server_config: ServerConfig) -> str:
+        sid = server_config.server_id or (server_config.command[0] if server_config.command else "unknown")
+        return f"{language}:{sid}"
+
     def _ensure_dir(self, root_key: str) -> None:
         if root_key not in self._sessions:
             self._sessions[root_key] = {}
             self._last_used[root_key] = {}
 
-    def _touch(self, root_key: str, language: str) -> None:
-        self._last_used.setdefault(root_key, {})[language] = time.monotonic()
+    def _touch(self, root_key: str, key: str) -> None:
+        self._last_used.setdefault(root_key, {})[key] = time.monotonic()
 

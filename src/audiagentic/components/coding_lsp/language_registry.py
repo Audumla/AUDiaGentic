@@ -58,6 +58,7 @@ class LanguageSpec:
     file_extensions: tuple[str, ...]
     workspace_config_files: tuple[str, ...] = ()
     detection_markers: tuple[str, ...] = ()
+    init_wait: float = 0.0
     dependency: LanguageDependency | None = None
     settings: dict[str, Any] = field(default_factory=dict)
     options_schema: dict[str, OptionSchema] = field(default_factory=dict)
@@ -108,6 +109,7 @@ def language_spec_from_data(data: dict[str, Any], *, source: str = "<descriptor>
         file_extensions=tuple(server.get("file-extensions", [])),
         workspace_config_files=tuple(server.get("workspace-config-files", [])),
         detection_markers=tuple(data.get("detection-markers", [])),
+        init_wait=float(server.get("init-wait", 0)),
         dependency=dependency,
         settings=dict(server.get("settings", {})),
         options_schema=load_option_schema(data.get("options-schema")),
@@ -124,6 +126,7 @@ def language_spec_from_feature(descriptor: FeatureDescriptor) -> LanguageSpec:
         file_extensions=spec.file_extensions,
         workspace_config_files=spec.workspace_config_files,
         detection_markers=spec.detection_markers,
+        init_wait=spec.init_wait,
         dependency=spec.dependency,
         settings=spec.settings,
         options_schema=descriptor.options_schema,

@@ -107,16 +107,29 @@ def _regenerate_lsp_cache(project_root: Path) -> None:
     cache; nothing read-modify-writes individual lsp.json entries.
     """
     servers = resolve_active_runtime_servers(project_root)
-    payload = {
-        language: {
-            "command": list(cfg.command),
-            "fileExtensions": list(cfg.file_extensions),
-            "workspaceConfigFiles": list(cfg.workspace_config_files),
-            "settings": dict(cfg.settings),
-            "label": cfg.label,
-        }
-        for language, cfg in servers.items()
-    }
+    payload: dict[str, Any] = {}
+    for language, cfgs in servers.items():
+        if len(cfgs) == 1:
+            cfg = cfgs[0]
+            payload[language] = {
+                "command": list(cfg.command),
+                "fileExtensions": list(cfg.file_extensions),
+                "workspaceConfigFiles": list(cfg.workspace_config_files),
+                "settings": dict(cfg.settings),
+                "label": cfg.label,
+            }
+        else:
+            payload[language] = [
+                {
+                    "server_id": cfg.server_id,
+                    "command": list(cfg.command),
+                    "fileExtensions": list(cfg.file_extensions),
+                    "workspaceConfigFiles": list(cfg.workspace_config_files),
+                    "settings": dict(cfg.settings),
+                    "label": cfg.label,
+                }
+                for cfg in cfgs
+            ]
     write_lsp_config(project_root / CODING_LSP_DIR / "lsp.json", payload)
 
 
@@ -186,7 +199,7 @@ def config_status(root: str = ".") -> dict[str, Any]:
     missing_deps = detect_missing(deps, configured_dependency_ids(project_root))
 
     language_status: dict[str, dict[str, Any]] = {}
-    for lang, cfg in configured.items():
+    for lang, cfgs in configured.items():
         lang_spec = language_registry.get_language(lang)
         dep_ids = (lang_spec.dependency.id,) if (lang_spec and lang_spec.dependency) else ()
         binary_ok = all(dep_id not in missing_deps for dep_id in dep_ids)
@@ -196,7 +209,13 @@ def config_status(root: str = ".") -> dict[str, Any]:
             "feature_enabled": feature_state.enabled,
             "feature_options": dict(feature_state.options),
             "binary_available": binary_ok,
-            "command": cfg.command,
+            "servers": [
+                {
+                    "server_id": cfg.server_id,
+                    "command": cfg.command,
+                }
+                for cfg in cfgs
+            ],
         }
 
     return {
