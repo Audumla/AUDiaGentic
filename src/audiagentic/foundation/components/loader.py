@@ -11,6 +11,7 @@ from audiagentic.foundation.io import load_yaml_file
 _component_error: Any = make_error_factory("VAL", "COMP", "components")
 
 from .base import (
+    SCOPE_HARNESS,
     SCOPE_PROJECT,
     ComponentDescriptor,
     ComponentFile,
@@ -72,6 +73,33 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
         )
         for f in (data.get("files") or [])
     )
+
+    # Default detection-marker from id when not explicitly declared
+    raw_scope = data.get("scope", SCOPE_PROJECT)
+    if not data.get("detection-marker"):
+        if raw_scope == SCOPE_HARNESS:
+            data["detection-marker"] = f"components/{component_id}.yaml"
+        else:
+            data["detection-marker"] = f".audiagentic/components/{component_id}.yaml"
+
+    # Synthesize marker ComponentFile when no file entry matches the detection-marker
+    detected_marker = data["detection-marker"]
+    if not any(f.get("path") == detected_marker for f in (data.get("files") or [])):
+        marker_file = {
+            "path": detected_marker,
+            "lifecycle": "create-if-missing",
+            "description": "Installation marker",
+        }
+        data.setdefault("files", []).insert(0, marker_file)
+        files = tuple(
+            ComponentFile(
+                rel_path=f["path"],
+                lifecycle=f["lifecycle"],
+                recursive=bool(f.get("recursive", False)),
+                description=f.get("description", ""),
+            )
+            for f in data["files"]
+        )
     mcp_servers = tuple(
         McpServerDeclaration(
             name=ms["name"],
