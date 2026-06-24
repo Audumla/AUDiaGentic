@@ -5,14 +5,8 @@ display-name: Agent Planning
 description: >
   Plan item management — track multi-step implementation work across sessions.
   Implementations may back this with local markdown files, a hosted issue tracker,
-  or any other planning store; only one implementation is active at a time.
-detection-marker: .audiagentic/components/agent-planning.yaml
+  or any other planning store; only one is active at a time.
 implementation-cardinality: exclusive
-
-files:
-  - path: .audiagentic/components/agent-planning.yaml
-    lifecycle: create-if-missing
-    description: Installation marker
 
 mcp-servers:
   - name: ag-planning-mgmt
