@@ -1,0 +1,25 @@
+type: implementation
+contract-version: v1
+parent: agent-planning
+id: planning-local-docs
+display-name: Local Planning Docs
+default: true
+description: >
+  Home-rolled plan item management. Items are markdown files stored under
+  docs/planning/active/ (pending) and docs/planning/completed/.
+  No external service required.
+
+paths:
+  plans-root: docs/planning/
+  active-dir: docs/planning/active
+  completed-dir: docs/planning/completed
+  template: docs/planning/TEMPLATE_ITEM.md
+
+files:
+  - path: docs/planning
+    lifecycle: runtime-only
+    recursive: true
+    description: Plan item documents
+  - path: .audiagentic/skills/ag-planning/skill.md
+    lifecycle: required-managed
+    description: ag-planning skill source

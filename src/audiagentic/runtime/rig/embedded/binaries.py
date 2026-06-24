@@ -15,20 +15,16 @@ from pathlib import Path
 from typing import NamedTuple
 
 from audiagentic.cli_io import print_error, print_message
-from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.foundation.system.process import executable_command
+from audiagentic.runtime.rig.constants import (
+    GITHUB_API,
+    GITHUB_REPO,
+    PLATFORM_PATTERNS,
+    platform_dir_name,
+)
+from audiagentic.runtime.rig.errors import make_rig_binary_error
 
 logger = logging.getLogger(__name__)
-
-GITHUB_REPO = "ggml-org/llama.cpp"
-GITHUB_API = f"https://api.github.com/repos/{GITHUB_REPO}"
-
-# Filename patterns per platform: (display_name, regex_pattern, is_zip, inner_exe)
-_PLATFORM_PATTERNS = {
-    "win32": ("Windows", re.compile(r"^llama-[a-zA-Z0-9]+-bin-win-cpu-x64\.zip$", re.I), True, "llama-server.exe"),
-    "darwin": ("macOS", re.compile(r"^llama-[a-zA-Z0-9]+-bin-macos-arm64\.tar\.gz$", re.I), False, "llama-server"),
-    "linux": ("Linux", re.compile(r"^llama-[a-zA-Z0-9]+-bin-ubuntu-x64\.tar\.gz$", re.I), False, "llama-server"),
-}
 
 
 class ReleaseInfo(NamedTuple):
@@ -57,7 +53,7 @@ def _latest_release() -> dict:
 
 def _find_asset_for_platform(release: dict, plat: str) -> ReleaseInfo | None:
     """Find the matching asset for the given platform in the release."""
-    display, pattern, is_zip, inner_exe = _PLATFORM_PATTERNS[plat]
+    display, pattern, is_zip, inner_exe = PLATFORM_PATTERNS[plat]
     tag = release.get("tag_name", release.get("name", "unknown"))
 
     # Try to find a SHA256 file alongside the asset
@@ -107,13 +103,13 @@ def _verify_sha256(path: Path, expected: str | None) -> None:
         return
     h = hashlib.sha256(path.read_bytes()).hexdigest()
     if h != expected:
-        raise make_error(
-            prefix="CON",
-            component="RIGBIN",
-            number=4,
-            kind="runtime-rig",
-            message=f"SHA256 mismatch: got {h}, expected {expected}",
-            details={"path": str(path), "actual": h, "expected": expected},
+        raise make_rig_binary_error(
+            "CON",
+            4,
+            f"SHA256 mismatch: got {h}, expected {expected}",
+            path=str(path),
+            actual=h,
+            expected=expected,
         )
     print_message("  SHA256 verified")
 
@@ -147,13 +143,12 @@ def _flatten_extracted_archive(dest_dir: Path, inner_exe: str) -> None:
     if extracted_root is None and (dest_dir / inner_exe).exists():
         return
     if extracted_root is None:
-        raise make_error(
-            prefix="RES",
-            component="RIGBIN",
-            number=5,
-            kind="runtime-rig",
-            message=f"Could not find {inner_exe} in extracted archive",
-            details={"dest_dir": str(dest_dir), "inner_exe": inner_exe},
+        raise make_rig_binary_error(
+            "RES",
+            5,
+            f"Could not find {inner_exe} in extracted archive",
+            dest_dir=str(dest_dir),
+            inner_exe=inner_exe,
         )
 
     for child in extracted_root.iterdir():
@@ -186,39 +181,36 @@ def update_binaries(runtime_dir: Path | None = None, target_bin_dir: Path | None
     """Download and install llama-server binaries for the current platform."""
 
     plat = sys.platform
-    if plat not in _PLATFORM_PATTERNS:
-        raise make_error(
-            prefix="CFG",
-            component="RIGBIN",
-            number=1,
-            kind="runtime-rig",
-            message=f"Unsupported platform: {plat}",
-            details={"platform": plat},
+    if plat not in PLATFORM_PATTERNS:
+        raise make_rig_binary_error(
+            "CFG",
+            1,
+            f"Unsupported platform: {plat}",
+            platform=plat,
         )
 
     # Fetch latest release dynamically
     release_data = _latest_release()
     release = _find_asset_for_platform(release_data, plat)
     if not release:
-        raise make_error(
-            prefix="RES",
-            component="RIGBIN",
-            number=2,
-            kind="runtime-rig",
-            message=f"Could not find matching asset for {plat}",
-            details={"platform": plat},
+        raise make_rig_binary_error(
+            "RES",
+            2,
+            f"Could not find matching asset for {plat}",
+            platform=plat,
         )
 
     print_message(f"Found release {release.tag}, downloading {release.filename}")
 
+    plat_dir = platform_dir_name()
     # Determine target directory
     if target_bin_dir:
-        target_dir = target_bin_dir / "llama-server" / ("windows" if plat == "win32" else ("macOS" if plat == "darwin" else "linux"))
+        target_dir = target_bin_dir / "llama-server" / plat_dir
     elif runtime_dir:
-        target_dir = runtime_dir / "bin" / "llama-server" / ("windows" if plat == "win32" else ("macOS" if plat == "darwin" else "linux"))
+        target_dir = runtime_dir / "bin" / "llama-server" / plat_dir
     else:
         # Default: bundled embedded rig bin next to this module.
-        target_dir = Path(__file__).parent / "bin" / "llama-server" / ("windows" if plat == "win32" else ("macOS" if plat == "darwin" else "linux"))
+        target_dir = Path(__file__).parent / "bin" / "llama-server" / plat_dir
 
     target_dir.mkdir(parents=True, exist_ok=True)
 
@@ -241,13 +233,11 @@ def update_binaries(runtime_dir: Path | None = None, target_bin_dir: Path | None
 
     bin_path = target_dir / release.inner_exe
     if not bin_path.exists():
-        raise make_error(
-            prefix="RES",
-            component="RIGBIN",
-            number=3,
-            kind="runtime-rig",
-            message=f"{release.inner_exe} not found after extraction",
-            details={"path": str(bin_path)},
+        raise make_rig_binary_error(
+            "RES",
+            3,
+            f"{release.inner_exe} not found after extraction",
+            path=str(bin_path),
         )
 
     # Set executable permission on Unix

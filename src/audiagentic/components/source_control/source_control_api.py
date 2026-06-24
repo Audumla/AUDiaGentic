@@ -33,21 +33,19 @@ def get_source_control_status() -> dict[str, Any]:
     return result
 
 
-async def install_dependencies(names: list[str]) -> dict[str, Any]:
-    workflow = load_dependency_workflow("source-control", action="install")
+def _run_workflow(action: str, names: list[str]) -> dict[str, Any]:
+    workflow = load_dependency_workflow("source-control", action=action)
     filtered = workflow.steps if not names else tuple(
         s for s in workflow.steps if s.id in names
     )
-    seq = SequenceStep(id="install", steps=filtered, fail_fast=False)
-    result = await asyncio.to_thread(seq.run, {})
+    seq = SequenceStep(id=action, steps=filtered, fail_fast=False)
+    result = asyncio.get_event_loop().run_until_complete(asyncio.to_thread(seq.run, {}))
     return {"status": result.status, "reason": result.reason or "", "outputs": result.outputs}
+
+
+async def install_dependencies(names: list[str]) -> dict[str, Any]:
+    return _run_workflow("install", names)
 
 
 async def uninstall_dependencies(names: list[str]) -> dict[str, Any]:
-    workflow = load_dependency_workflow("source-control", action="uninstall")
-    filtered = workflow.steps if not names else tuple(
-        s for s in workflow.steps if s.id in names
-    )
-    seq = SequenceStep(id="uninstall", steps=filtered, fail_fast=False)
-    result = await asyncio.to_thread(seq.run, {})
-    return {"status": result.status, "reason": result.reason or "", "outputs": result.outputs}
+    return _run_workflow("uninstall", names)

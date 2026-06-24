@@ -1,0 +1,120 @@
+type: component
+contract-version: v1
+id: agent-planning
+display-name: Agent Planning
+description: >
+  Plan item management — track multi-step implementation work across sessions.
+  Implementations may back this with local markdown files, a hosted issue tracker,
+  or any other planning store; only one implementation is active at a time.
+detection-marker: .audiagentic/components/agent-planning.yaml
+implementation-cardinality: exclusive
+
+files:
+  - path: .audiagentic/components/agent-planning.yaml
+    lifecycle: create-if-missing
+    description: Installation marker
+
+mcp-servers:
+  - name: ag-planning-mgmt
+    module: audiagentic.components.planning.planning_manage_mcp
+    direct-tools:
+      - planning_status
+      - planning_list_implementations
+      - planning_select_implementation
+    description: Planning component management — status and implementation selection
+    propagate: audiagentic
+    instructions: >
+      Use planning_status to check the active implementation and current item counts.
+      Use planning_list_implementations to see all available implementations and which is active.
+      Use planning_select_implementation to switch between implementations.
+
+  - name: ag-planning
+    module: audiagentic.components.planning.planning_mcp
+    direct-tools:
+      - plan_create_item
+      - plan_list_items
+      - plan_get_item
+      - plan_set_state
+      - plan_update_item
+      - plan_delete_item
+    description: Plan item management — create, list, update, transition, and remove items
+    propagate: audiagentic,providers
+    instructions: >
+      Use plan_create_item to add a new plan item to a named plan under docs/planning/active/.
+      Use plan_list_items to inspect items; filter by state ('active'/'completed') or plan name.
+      Use plan_get_item to read the full content of a specific item by ID.
+      Use plan_set_state(item_id, 'completed') to mark an item done — it moves to completed/.
+      Use plan_update_item to revise frontmatter fields or body sections without recreating.
+      Use plan_delete_item to permanently remove a cancelled or stale item.
+      Item IDs follow <PLAN-PREFIX><N> (e.g. CC07, LSP01). Plan names are kebab-case (e.g. code-cleanup).
+    tool-descriptions:
+      plan_create_item: >
+        Create a new plan item. Required: id, plan, title.
+        Optional: priority (P0/P1/P2/P3/HIGH/MEDIUM), complexity (simple/mid/complex),
+        order, validate_first, description, steps, files, validation, effort_risk, notes.
+      plan_list_items: >
+        List plan items. state: 'active'/'pending' or 'completed' (omit for all).
+        plan: directory name like 'code-cleanup' (omit for all plans).
+      plan_get_item: Read a plan item by ID, returning frontmatter and all body sections.
+      plan_set_state: >
+        Transition item state. 'pending' keeps it in active/; 'completed' moves it to completed/.
+        Also accepts 'not_done' as a legacy alias for 'pending'.
+      plan_update_item: >
+        Update frontmatter fields (priority, complexity, order, etc.) or body sections
+        (title, description, steps, files, validation, effort_risk, notes) of an existing item.
+      plan_delete_item: Permanently delete a plan item by ID.
+
+harness-instructions:
+  - section: "What you can do"
+    propagate: audiagentic
+    content: |
+      ### ag-planning-mgmt
+      - `planning_status` — Active implementation and pending/completed item counts
+      - `planning_list_implementations` — Available implementations and active selection
+      - `planning_select_implementation` — Switch the active planning implementation
+
+      ### ag-planning
+      - `plan_create_item` — Create a plan item in docs/planning/active/<plan>/
+      - `plan_list_items` — List active or completed items (filter by plan name)
+      - `plan_get_item` — Read a plan item by ID
+      - `plan_set_state` — Transition state: 'completed' moves item to completed/
+      - `plan_update_item` — Update fields or sections of an existing item
+      - `plan_delete_item` — Permanently remove a plan item
+
+contributions:
+  - id: agent-planning/process
+    owner: agent-planning
+    title: Planning process
+    preferred-targets:
+      - skill
+      - instruction
+    content:
+      body: |
+        Use the ag-planning MCP tools to manage plan items in docs/planning/.
+
+        ## When to use
+        - User asks to create a plan or work items for a task
+        - Tracking multi-step implementation across sessions
+        - Reviewing or updating the state of outstanding items
+
+        ## Item lifecycle
+        1. Create items with plan_create_item — lands in docs/planning/active/<plan>/
+        2. Revise content with plan_update_item as work progresses
+        3. Mark done with plan_set_state(item_id, 'completed') — moves to completed/
+        4. Remove stale or cancelled items with plan_delete_item
+
+        ## Item ID convention
+        Combine a short uppercase plan prefix with a sequence number: CC07, LSP01, ML01.
+        Choose a prefix matching the plan name (CC → code-cleanup, LSP → lsp-mcp-enhancement).
+
+        ## Required fields for plan_create_item
+        - id: unique item ID (e.g. "CC20")
+        - plan: plan directory name (e.g. "code-cleanup")
+        - title: short descriptive title
+
+        ## Optional fields
+        - priority: P0 (critical) / P1 / P2 / P3 / HIGH / MEDIUM (default P2)
+        - complexity: simple / mid / complex (default simple)
+        - order: integer sort key (default 0)
+        - validate_first: true if validation steps must precede implementation (default true)
+        - description, steps, files, validation, effort_risk, notes: body section content

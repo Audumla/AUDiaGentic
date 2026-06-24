@@ -9,8 +9,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.foundation.system.process import candidate_ports
+from audiagentic.runtime.rig.constants import DEFAULT_HOST, DEFAULT_PORT
 from audiagentic.runtime.rig.embedded.config import (
     ModelProfile,
     resolve_model_profile,
@@ -24,22 +24,9 @@ from audiagentic.runtime.rig.embedded.resolution import (
     resolve_model,
     runtime_bin_dir,
 )
+from audiagentic.runtime.rig.errors import make_rig_launch_error_ext
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 42001
-
-
-def _launch_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
-    return make_error(
-        prefix="EXT",
-        component="RIGLAUNCH",
-        number=code_number,
-        kind="runtime-rig",
-        message=message,
-        details=details,
-    )
 
 
 @dataclass
@@ -238,7 +225,7 @@ def start_embedded_rig(
             on_progress(f"[rig] healthy at {base_url}")
         return result
 
-    raise _launch_error(1, last_error or f"Unable to launch rig on {host}", host=host, port=port)
+    raise make_rig_launch_error_ext(1, last_error or f"Unable to launch rig on {host}", host=host, port=port)
 
 
 # -- backward-compatible re-exports --

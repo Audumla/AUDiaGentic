@@ -5,6 +5,18 @@ display-name: Agent Ledger
 description: Change ledger — fragment recording, sync, audit summaries, and release archiving
 detection-marker: .audiagentic/components/agent-ledger.yaml
 lifecycle-observer: audiagentic.components.ledger.ledger_events
+paths:
+  ledger-runtime: .audiagentic/runtime/ledger
+  sync-dir: .audiagentic/runtime/ledger/sync
+  lock-file: lock.json
+  manifest-file: manifest.json
+  fragments-dir: .audiagentic/runtime/ledger/fragments
+  releases-dir: docs/releases
+  current-ledger: CURRENT_RELEASE_LEDGER.ndjson
+  historical-ledger: LEDGER.ndjson
+  current-summary: CURRENT_RELEASE.md
+  audit-summary: AUDIT_SUMMARY.md
+  checkin: CHECKIN.md
 files:
   - path: .audiagentic/components/agent-ledger.yaml
     lifecycle: create-if-missing

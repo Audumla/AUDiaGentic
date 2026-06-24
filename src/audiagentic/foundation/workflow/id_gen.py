@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from audiagentic.foundation.contracts.errors import make_error
+from audiagentic.foundation.system.process import pid_alive
 
 _process_lock = threading.Lock()
 _LOCK_TIMEOUT = 10.0
@@ -102,15 +103,8 @@ class _IdLock:
         except (OSError, ValueError):
             self._path.unlink(missing_ok=True)
             return True
-        if _pid_alive(holder):
+        if pid_alive(holder):
             return False
         self._path.unlink(missing_ok=True)
         return True
 
-
-def _pid_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-        return True
-    except OSError:
-        return False

@@ -16,36 +16,39 @@ Dependency injection:
 
 from __future__ import annotations
 
-import json
+import logging
 import os
+
+# Type alias for job store interface
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.io import atomic_write_ndjson
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.runtime.state import jobs_store as _default_store
+from audiagentic.runtime.state.paths import (
+    job_input_events_path,
+    job_input_path,
+    job_stdin_log_path,
+)
 
-# Type alias for job store interface
 JobStoreInterface = Callable[[Path, str], dict[str, Any]]
 
-
-
-
-def _job_runtime_root(project_root: Path, job_id: str) -> Path:
-    return project_root / ".audiagentic" / "runtime" / "jobs" / job_id
+logger = logging.getLogger(__name__)
 
 
 def session_input_path(project_root: Path, job_id: str) -> Path:
-    return _job_runtime_root(project_root, job_id) / "input.ndjson"
+    return job_input_path(project_root, job_id)
 
 
 def session_input_events_path(project_root: Path, job_id: str) -> Path:
-    return _job_runtime_root(project_root, job_id) / "input-events.ndjson"
+    return job_input_events_path(project_root, job_id)
 
 
 def session_stdin_log_path(project_root: Path, job_id: str) -> Path:
-    return _job_runtime_root(project_root, job_id) / "stdin.log"
+    return job_stdin_log_path(project_root, job_id)
 
 
 def build_session_input_record(
@@ -78,10 +81,7 @@ def build_session_input_record(
 
 def _append_ndjson(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(payload, sort_keys=True) + "\n")
-        handle.flush()
-        os.fsync(handle.fileno())
+    atomic_write_ndjson(path, [payload], append=True)
 
 
 def _append_text(path: Path, text: str) -> None:

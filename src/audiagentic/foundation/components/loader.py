@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.io import load_yaml_file
+
+_component_error: Any = make_error_factory("VAL", "COMP", "components")
 
 from .base import (
     SCOPE_PROJECT,
@@ -24,17 +27,6 @@ logger = logging.getLogger(__name__)
 _PACKAGE_DIR = Path(__file__).resolve().parents[2]  # audiagentic/
 _COMPONENTS_CONFIG_DIR = _PACKAGE_DIR / "config" / "components"
 _ALL_COMPONENT_CONFIG_DIRS = [_COMPONENTS_CONFIG_DIR]
-
-
-def _component_error(code_number: int, message: str, **details: object) -> AudiaGenticError:
-    return make_error(
-        prefix="VAL",
-        component="COMP",
-        number=code_number,
-        kind="components",
-        message=message,
-        details=details,
-    )
 
 
 def component_yaml_path(component_id: str) -> Path:

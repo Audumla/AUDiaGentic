@@ -7,6 +7,9 @@ from pathlib import Path
 
 from audiagentic.cli_io import print_message
 
+from .checker import check_update, current_version, record_failed_install, skip_version
+from .runner import install_version
+
 logger = logging.getLogger(__name__)
 
 
@@ -53,7 +56,6 @@ def maybe_prompt_update(project_root: Path | None = None) -> None:
     if not sys.stdout.isatty():
         return
     try:
-        from .checker import check_update, skip_version
         info = check_update()
         if not info:
             return
@@ -62,8 +64,6 @@ def maybe_prompt_update(project_root: Path | None = None) -> None:
             skip_version(info["latest"])
             return
         if answer == "yes":
-            from .checker import record_failed_install
-            from .runner import install_version
             result = install_version(info["latest"])
             exit_code, should_exit = _handle_install_result(result, info["latest"])
             if should_exit:
@@ -78,19 +78,16 @@ def maybe_prompt_update(project_root: Path | None = None) -> None:
 def run_update_now() -> int:
     """Explicit update — bypass cache, always prompt, used by `audiagentic update` command."""
     try:
-        from .checker import check_update, current_version
         info = check_update(force=True)
         if not info:
             print_message(f"Already up to date (version {current_version()}).")
             return 0
         answer = prompt_update(info)
         if answer == "skip":
-            from .checker import skip_version
             skip_version(info["latest"])
             print_message("Version skipped.")
             return 0
         if answer == "yes":
-            from .runner import install_version
             result = install_version(info["latest"])
             exit_code, should_exit = _handle_install_result(result, info["latest"])
             if should_exit:
