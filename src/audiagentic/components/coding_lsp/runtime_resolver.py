@@ -53,12 +53,16 @@ def active_language_bindings(project_root: Path) -> list[BindingDescriptor]:
     return bindings
 
 
-def resolve_active_runtime_servers(project_root: Path) -> dict[str, ServerConfig]:
-    servers: dict[str, ServerConfig] = {}
+def resolve_active_runtime_servers(project_root: Path) -> dict[str, list[ServerConfig]]:
+    """Return all active server configs per language, ordered (semantic server first).
+
+    Returns dict[language → list[ServerConfig]] where each ServerConfig has
+    server_id set to the dependency id from the language YAML. Multiple entries
+    per language are possible when >1 server feature is active for that language.
+    """
+    servers: dict[str, list[ServerConfig]] = {}
     for binding in active_language_bindings(project_root):
         language = binding.feature
-        if language in servers:
-            continue
         spec = language_registry.get_language(language)
         if spec is None:
             continue
@@ -66,11 +70,17 @@ def resolve_active_runtime_servers(project_root: Path) -> dict[str, ServerConfig
         server_settings = state.options.get("server-settings", {})
         if not isinstance(server_settings, dict):
             server_settings = {}
-        servers[language] = ServerConfig(
+        dep_id = spec.dependency.id if spec.dependency is not None else spec.id
+        cfg = ServerConfig(
             command=list(spec.command),
             file_extensions=list(spec.file_extensions),
             workspace_config_files=list(spec.workspace_config_files),
             settings={**dict(spec.settings), **server_settings},
             label=spec.display_name,
+            server_id=dep_id,
+            init_wait=spec.init_wait,
         )
+        existing_ids = {s.server_id for s in servers.get(language, [])}
+        if dep_id not in existing_ids:
+            servers.setdefault(language, []).append(cfg)
     return servers

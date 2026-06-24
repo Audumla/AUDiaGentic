@@ -12,6 +12,7 @@ def _python_config() -> ServerConfig:
         command=["pyright-langserver", "--stdio"],
         file_extensions=[".py", ".pyi"],
         label="python",
+        server_id="pyright",
     )
 
 
@@ -74,9 +75,8 @@ def test_idle_check_shuts_down_old_sessions() -> None:
         mock.is_ready.return_value = True
         MockSession.return_value = mock
         mgr.get_or_create("/tmp", "python", _python_config())
-        # Mark as old — find actual root key
         root_key = list(mgr._last_used.keys())[0]
-        mgr._last_used[root_key]["python"] = time.monotonic() - 2000
+        mgr._last_used[root_key]["python:pyright"] = time.monotonic() - 2000
         shutdown = mgr.idle_check(timeout=100)
         assert len(shutdown) == 1
         mock.shutdown.assert_called_once()
@@ -115,3 +115,49 @@ def test_get_diagnostics_for_project() -> None:
         MockSession.return_value = mock
         mgr.get_or_create("/tmp", "python", _python_config())
         assert mgr.diagnostics("/tmp") == {"file:///tmp/test.py": [{"message": "bad"}]}
+
+
+def test_two_servers_same_language_create_two_sessions() -> None:
+    mgr = SessionManager()
+    cfg1 = ServerConfig(command=["server-a"], file_extensions=[".py"], server_id="a")
+    cfg2 = ServerConfig(command=["server-b"], file_extensions=[".py"], server_id="b")
+    with patch("audiagentic.components.coding_lsp.lsp_session_manager.LspSession") as MockSession:
+        mock = MagicMock()
+        mock.is_ready.return_value = True
+        MockSession.return_value = mock
+        mgr.get_or_create("/tmp", "python", cfg1)
+        mgr.get_or_create("/tmp", "python", cfg2)
+        assert MockSession.call_count == 2
+        assert mgr.status()["total_sessions"] == 2
+
+
+def test_shutdown_session_by_server_id() -> None:
+    mgr = SessionManager()
+    cfg1 = ServerConfig(command=["server-a"], file_extensions=[".py"], server_id="a")
+    cfg2 = ServerConfig(command=["server-b"], file_extensions=[".py"], server_id="b")
+    with patch("audiagentic.components.coding_lsp.lsp_session_manager.LspSession") as MockSession:
+        mock = MagicMock()
+        mock.is_ready.return_value = True
+        MockSession.return_value = mock
+        mgr.get_or_create("/tmp", "python", cfg1)
+        mgr.get_or_create("/tmp", "python", cfg2)
+        mgr.shutdown_session("/tmp", "python", server_id="a")
+        assert mgr.status()["total_sessions"] == 1
+
+
+def test_diagnostics_merge_deduplicates() -> None:
+    from pathlib import Path
+    mgr = SessionManager()
+    diag = {"source": "pyright", "code": "E001", "range": {}, "message": "err", "severity": 1}
+    with patch("audiagentic.components.coding_lsp.lsp_session_manager.LspSession") as MockSession:
+        mock1 = MagicMock()
+        mock1.is_ready.return_value = True
+        mock1.diagnostics.return_value = {"file:///f.py": [diag]}
+        MockSession.return_value = mock1
+        mgr.get_or_create("/tmp", "python", ServerConfig(command=["a"], server_id="a"))
+        mock2 = MagicMock()
+        mock2.is_ready.return_value = True
+        mock2.diagnostics.return_value = {"file:///f.py": [diag]}
+        mgr._sessions[str(Path("/tmp").resolve())]["python:b"] = mock2
+        result = mgr.diagnostics("/tmp")
+        assert len(result.get("file:///f.py", [])) == 1

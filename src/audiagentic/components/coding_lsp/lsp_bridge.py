@@ -13,6 +13,7 @@ import time
 from collections.abc import Callable
 from typing import IO, Any
 
+from audiagentic.components.coding_lsp.lsp_constants import DEFAULT_TIMEOUT, METHOD_TIMEOUTS
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 
 logger = logging.getLogger(__name__)
@@ -42,33 +43,6 @@ def _lsp_error(code: str, message: str, *, details: dict[str, Any] | None = None
         message=message,
         details=details,
     )
-
-
-# Method→timeout map (performance budgets from plan)
-_METHOD_TIMEOUTS: dict[str, float] = {
-    # File-level queries
-    "textDocument/definition": 3.0,
-    "textDocument/hover": 3.0,
-    "textDocument/references": 3.0,
-    "textDocument/typeDefinition": 3.0,
-    "textDocument/implementation": 3.0,
-    "textDocument/documentSymbol": 3.0,
-    "textDocument/codeAction": 3.0,
-    "textDocument/formatting": 3.0,
-    "textDocument/rangeFormatting": 3.0,
-    "textDocument/rename": 3.0,
-    "textDocument/completion": 3.0,
-    "textDocument/signatureHelp": 3.0,
-    "textDocument/inlayHint": 3.0,
-    # Workspace-level queries
-    "workspace/symbol": 8.0,
-    "workspace/diagnostic": 30.0,
-    "workspace/configuration": 5.0,
-    # Lifecycle
-    "initialize": 30.0,
-    "shutdown": 5.0,
-}
-_DEFAULT_TIMEOUT = 30.0
 
 
 class LspJsonRpc:
@@ -124,40 +98,57 @@ class LspJsonRpc:
                 self._next_id += 1
                 id = self._next_id
         if timeout is None:
-            timeout = _METHOD_TIMEOUTS.get(method, _DEFAULT_TIMEOUT)
-        event = threading.Event()
-        with self._lock:
-            self._pending[id] = event
-        msg = {"jsonrpc": "2.0", "method": method, "params": params, "id": id}
-        start = time.monotonic()
-        try:
-            self._write_message(msg)
-            if not event.wait(timeout):
-                self._send_cancel(id)
-                raise _lsp_error(
-                    "EXT-LSP-003",
-                    f"LSP request '{method}' timed out after {timeout}s",
-                    details={"method": method, "timeout_s": timeout, "request_id": id},
-                )
+            timeout = METHOD_TIMEOUTS.get(method, DEFAULT_TIMEOUT)
+
+        max_retries = 3
+        attempt = 0
+        first_response = None
+
+        while True:
+            attempt += 1
+            event = threading.Event()
+            req_id = id + attempt - 1
             with self._lock:
-                response = self._responses.pop(id, None)
-            if response is None:
-                raise _lsp_error("EXT-LSP-008", f"No response for request {id}; server likely crashed")
-            if "error" in response:
-                err = response["error"]
-                lsp_code = err.get("code", -1)
-                lsp_message = err.get("message", "unknown")
-                raise _lsp_error(
-                    "EXT-LSP-001",
-                    f"LSP error {lsp_code}: {lsp_message}",
-                    details={"lsp-code": lsp_code, "lsp-message": lsp_message, "data": err.get("data")},
-                )
-            return response.get("result")
-        finally:
-            with self._lock:
-                self._pending.pop(id, None)
-            elapsed_ms = (time.monotonic() - start) * 1000
-            logger.debug("LSP %s took %.1fms", method, elapsed_ms)
+                self._pending[req_id] = event
+            msg = {"jsonrpc": "2.0", "method": method, "params": params, "id": req_id}
+            start = time.monotonic()
+            try:
+                self._write_message(msg)
+                if not event.wait(timeout):
+                    self._send_cancel(req_id)
+                    raise _lsp_error(
+                        "EXT-LSP-003",
+                        f"LSP request '{method}' timed out after {timeout}s",
+                        details={"method": method, "timeout_s": timeout, "request_id": id},
+                    )
+                with self._lock:
+                    response = self._responses.pop(req_id, None)
+                if response is None:
+                    raise _lsp_error("EXT-LSP-008", f"No response for request {id}; server likely crashed")
+                if "error" in response:
+                    err = response["error"]
+                    lsp_code = err.get("code", -1)
+                    lsp_message = err.get("message", "unknown")
+                    should_retry = attempt <= max_retries and (
+                        (lsp_code == -32801 and "cargo metadata" in lsp_message) or
+                        (lsp_code == -32801 and "content modified" in lsp_message) or
+                        (lsp_code == -32602 and "No references found" in lsp_message)
+                    )
+                    if should_retry:
+                        logger.debug("Server indexing, retrying %s (attempt %d/%d)", method, attempt, max_retries)
+                        time.sleep(1.0 * attempt)
+                        continue
+                    raise _lsp_error(
+                        "EXT-LSP-001",
+                        f"LSP error {lsp_code}: {lsp_message}",
+                        details={"lsp-code": lsp_code, "lsp-message": lsp_message, "data": err.get("data")},
+                    )
+                return response.get("result")
+            finally:
+                with self._lock:
+                    self._pending.pop(req_id, None)
+                elapsed_ms = (time.monotonic() - start) * 1000
+                logger.debug("LSP %s took %.1fms", method, elapsed_ms)
 
     def _send_cancel(self, request_id: int) -> None:
         """Send $/cancelRequest to stop an abandoned in-flight request."""
