@@ -1,0 +1,29 @@
+FROM audia-test-base:latest
+
+ENV AUDIAGENTIC_DOCKER_TESTS=1
+ENV AUDIAGENTIC_REAL_PROVIDER_CLI_TESTS=1
+ENV AUDIAGENTIC_REPO_ROOT=/app
+
+# uv tool install puts binaries here — must be on PATH for probes to work
+ENV PATH="/root/.local/bin:$PATH"
+
+WORKDIR /app
+
+# Pre-install language servers for e2e tests
+RUN apt-get update && apt-get install -y --no-install-recommends clangd && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y --no-install-recommends nodejs && rm -rf /var/lib/apt/lists/*
+RUN npm install -g typescript@latest typescript-language-server
+RUN uv tool install pyright && uv tool install ruff
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    . "$HOME/.cargo/env" && \
+    rustup component add rust-analyzer rustfmt && \
+    ln -sf /root/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rust-analyzer /root/.local/bin/rust-analyzer
+
+# Source baked in (not bind-mounted — avoids Windows Docker Desktop deadlock)
+COPY . /app
+
+# Install project + test deps
+RUN uv venv /venv && \
+    uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-timeout pytest-xdist pytest-asyncio
+
+CMD ["/venv/bin/pytest", "tests/integration/coding_lsp/test_mcp_tools_e2e.py", "-v", "--tb=short", "--timeout=120"]

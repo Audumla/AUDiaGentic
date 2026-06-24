@@ -30,10 +30,11 @@ logger = logging.getLogger(__name__)
 
 def _agent_lsp_args(project_root: Path) -> tuple[str, ...]:
     args: list[str] = []
-    for language, server in resolve_active_runtime_servers(project_root).items():
-        command = ",".join(server.command)
-        if command:
-            args.append(f"{language}:{command}")
+    for language, servers in resolve_active_runtime_servers(project_root).items():
+        for server in servers:
+            command = ",".join(server.command)
+            if command:
+                args.append(f"{language}:{command}")
     return tuple(args)
 
 
@@ -99,17 +100,19 @@ def _generic_mcp_projection(project_root: Path, implementation: str) -> dict[str
 
 
 def _lsp_json_language_server_projection(project_root: Path, feature: str) -> dict[str, LanguageServerEntry]:
-    server = resolve_active_runtime_servers(project_root).get(feature)
-    if server is None:
+    servers = resolve_active_runtime_servers(project_root).get(feature, [])
+    if not servers:
         return {}
-    return {
-        feature: LanguageServerEntry(
+    entries: dict[str, LanguageServerEntry] = {}
+    for server in servers:
+        sid = server.server_id or feature
+        entries[sid] = LanguageServerEntry(
             language=feature,
             command=list(server.command),
             file_extensions=list(server.file_extensions),
             settings=dict(server.settings),
         )
-    }
+    return entries
 
 
 def _agent_lsp_mcp_args_projection(project_root: Path) -> dict[str, tuple[str, McpServerEntry]]:

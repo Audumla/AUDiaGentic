@@ -9,6 +9,7 @@ server:
   command: [rust-analyzer]
   file-extensions: [.rs]
   workspace-config-files: [Cargo.toml, Cargo.lock]
+  init-wait: 5
 detection-markers: [Cargo.toml, Cargo.lock]
 dependencies:
   rust-analyzer:

@@ -252,6 +252,62 @@ def lsp_changed_diagnostics(
     return lsp_api.changed_diagnostics(files, min_severity=min_severity, limit=limit)
 
 
+@mcp.tool()
+@log_tool_call
+def lsp_inlay_hints(
+    file: str, range_start: str, range_end: str,
+) -> list[dict[str, Any]]:
+    """Get inlay hints (inline type annotations) for a code range.
+
+    file: path to the source file.
+    range_start/range_end: "line:column" strings, 1-based.
+    Returns list of inlay hint objects with label, position, and kind.
+    """
+    return lsp_api.inlay_hints(file, range_start, range_end)
+
+
+@mcp.tool()
+@log_tool_call
+def lsp_signature_help(file: str, position: str) -> dict[str, Any] | None:
+    """Get function signature help at the given position.
+
+    file: path to the source file.
+    position: "line:column" string, 1-based (e.g. "10:5").
+    Returns signature info with parameters, active signature, and documentation.
+    """
+    return lsp_api.signature_help(file, position)
+
+
+@mcp.tool()
+@log_tool_call
+def lsp_type_hierarchy(
+    file: str, position: str, direction: str = "supertypes",
+) -> list[dict[str, Any]]:
+    """Get type hierarchy (supertypes or subtypes) for the type at position.
+
+    file: path to the source file.
+    position: "line:column" string, 1-based.
+    direction: "supertypes" (parent types) or "subtypes" (child types).
+    Returns list of type items with name, kind, file, and range.
+    """
+    return lsp_api.type_hierarchy(file, position, direction=direction)
+
+
+@mcp.tool()
+@log_tool_call
+def lsp_completion(
+    file: str, position: str, trigger_character: str | None = None,
+) -> list[dict[str, Any]]:
+    """Get completion items at the given position.
+
+    file: path to the source file.
+    position: "line:column" string, 1-based.
+    trigger_character: optional character that triggered completion (e.g. ".").
+    Returns list of completion items with label, kind, detail, and documentation.
+    """
+    return lsp_api.completion(file, position, trigger_character=trigger_character)
+
+
 def main() -> None:
     """Entry point for harness invocation."""
     run_mcp_server(mcp, "coding-lsp")
