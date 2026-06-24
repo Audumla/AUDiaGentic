@@ -52,8 +52,8 @@ _MCP_CONFIG_PATHS: dict[str, str] = {
 }
 
 # Components under test for parametrized tests
-_PROPAGATION_COMPONENTS = ["agent-ledger", "coding-lsp", "source-control"]
-_SURFACE_COMPONENTS = ["agent-ledger", "source-control", "coding-lsp"]
+_PROPAGATION_COMPONENTS = ["agent-ledger", "agent-planning", "coding-lsp", "source-control"]
+_SURFACE_COMPONENTS = ["agent-ledger", "agent-planning", "source-control", "coding-lsp"]
 
 
 # --------------------------------------------------------------------------- #
