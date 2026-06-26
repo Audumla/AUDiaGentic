@@ -7,7 +7,6 @@ from audiagentic.foundation.mcp import McpServerEntry
 from audiagentic.foundation.mcp.launch import component_mcp_launch
 
 from ..descriptors.registry import all_descriptors
-from .feature_resolution import resolve_active_provider_features
 from .mcp import sync_managed_provider_mcp_subset
 
 
@@ -24,19 +23,16 @@ def sync_component_mcp_to_providers(
     if not descriptor.mcp_servers and not descriptor.external_mcp_servers:
         return
 
-    active_mcp_providers = {
-        resolved.provider_id
-        for resolved in resolve_active_provider_features(project_root)
-        if resolved.kind == "mcp"
-    }
-
     providers = all_descriptors()
     for provider_id, pdesc in providers.items():
         if pdesc.mcp_config is None:
             continue
-        provider_active = enabled and provider_id in active_mcp_providers
         if not pdesc.receive_lsp_mcp:
             continue
+        # Project to every MCP-capable provider regardless of whether its CLI is
+        # currently active/installed — inactive providers stay configured and
+        # ready, so switching to them never leaves stale or missing MCP entries.
+        provider_active = enabled
         desired_entries: dict[str, tuple[str, McpServerEntry]] = {}
         managed_ids: set[str] = set()
         for mcp_def in descriptor.mcp_servers or ():
