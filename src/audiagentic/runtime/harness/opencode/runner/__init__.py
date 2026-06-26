@@ -219,14 +219,16 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
                 }, indent=2) + "\n"
             )
 
-        completed = subprocess.run(cmd, cwd=ctx.agent_work, env=env, check=False)
+        from audiagentic.foundation.system.supervised_process import supervised_run
+
+        returncode = supervised_run(cmd, cwd=ctx.agent_work, env=env)
 
         with log_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps({
                 "event": "agent_run_finished",
-                "returncode": int(completed.returncode),
+                "returncode": int(returncode),
             }) + "\n")
-        return int(completed.returncode)
+        return int(returncode)
     finally:
         if ctx.manages_rig:
             if ctx.rig_pid:
