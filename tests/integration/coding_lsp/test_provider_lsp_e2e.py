@@ -251,14 +251,15 @@ def test_generic_provider_has_ag_lsp(provisioned_project: Path, provider_id: str
 
 
 @pytest.mark.parametrize("provider_id", DEDICATED_NATIVE_MCP_PROVIDERS)
-def test_native_lsp_providers_do_not_get_generic_ag_lsp(provisioned_project: Path, provider_id: str) -> None:
+def test_native_lsp_providers_have_own_language_server_config(provisioned_project: Path, provider_id: str) -> None:
+    """Native LSP providers have their own language_servers_config.
+    Generic ag-lsp MCP co-exists — all enabled components propagate to all providers.
+    """
     descriptor = _PROVIDERS[provider_id]
-    spec = descriptor.mcp_config
-    if spec is None:
-        return
+    spec = descriptor.language_servers_config
+    assert spec is not None, f"{provider_id} should have language_servers_config"
     config_path = spec.config_path(provisioned_project) if callable(spec.config_path) else (provisioned_project / spec.config_path)
-    servers = spec.reader(config_path)
-    assert "ag-lsp" not in servers, f"{provider_id} should use native LSP, not generic ag-lsp"
+    assert config_path.exists(), f"{provider_id} native LSP config not written: {config_path}"
 
 
 # ---------------------------------------------------------------------------
