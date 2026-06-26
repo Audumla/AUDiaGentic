@@ -251,9 +251,28 @@ def render_instruction_file(
     provider_id: str,
     instruction_file: str,
     adapter_dir: Path,
+    display_name: str | None = None,
 ) -> str:
     """Render a provider's managed instruction file from its template."""
-    return f"{MANAGED_MARKDOWN_HEADER}\n"
+    template_text = _load_template(adapter_dir, "instruction.md", "default_instruction.md")
+    if display_name is None:
+        from audiagentic.components.providers.descriptors.registry import (
+            all_descriptors,  # noqa: PLC0415
+        )
+
+        descriptor = all_descriptors().get(provider_id)
+        display_name = descriptor.display_name if descriptor is not None else provider_id
+    rendered = template_text.replace("$display_name", display_name).rstrip() + "\n"
+    return apply_managed_header(rendered)
+
+
+def is_component_active(project_root: Path, component_id: str) -> bool:
+    """Return True when a component is both installed and enabled."""
+    from audiagentic.foundation.components.loader import register_all_components  # noqa: PLC0415
+    from audiagentic.foundation.components.registry import is_enabled, is_installed  # noqa: PLC0415
+
+    register_all_components()
+    return is_installed(component_id, project_root) and is_enabled(component_id, project_root)
 
 
 def render_rules_file(*, adapter_dir: Path, filename: str = "prompt-tags.md") -> str:
