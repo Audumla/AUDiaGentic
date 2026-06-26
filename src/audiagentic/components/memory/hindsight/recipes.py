@@ -31,9 +31,21 @@ from audiagentic.components.providers.services.recipes import (
     ProviderRecipeResult,
     RecipeState,
 )
+from audiagentic.foundation.toolchains.artifact_registry import ArtifactRegistry
+from audiagentic.foundation.toolchains.managed_block import (
+    apply_managed_block,
+    block_artifact_id,
+    remove_managed_block,
+)
 from audiagentic.foundation.toolchains.probes import CommandProbe
 
 _SHELL_METACHARS = ("|", "&&", ";", ">", "<")
+RULE_TEXT = """Use Hindsight memory when prior project context may help.
+- Recall before design/history questions or non-trivial work.
+- Retain durable decisions, user preferences, architecture constraints, and outcomes.
+- Do not retain secrets, credentials, or transient noise.
+"""
+_RULE_BLOCK_ID = "hindsight-memory"
 
 
 def _command_parts(command: str) -> list[str]:
@@ -451,6 +463,138 @@ class GuidanceOnlyRecipe:
         return self.probe(context)
 
 
+class RulesOnlyRecipe:
+    """Rule-block recipe for providers with instructions but no native installer."""
+
+    def __init__(
+        self,
+        row: HindsightRecipeRow,
+        rule_path: str | Path,
+        *,
+        project_root: Path | None = None,
+    ) -> None:
+        self.provider_id = row.provider_id
+        self.capability_id = "hindsight"
+        self.backend_id = None
+        self.recipe_kind = ProviderRecipeKind.RULES
+        self.display_name = row.display_name
+        self.source_url = row.source_url
+        self.source_date = row.source_date
+        self._row = row
+        self._project_root = Path(project_root) if project_root else None
+        self._rule_path = _absolute_project_path(rule_path, self._project_root)
+        self.recipe_id = f"hindsight:{self.provider_id}:rules"
+
+    def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        if not self._rule_path.exists():
+            return ProviderRecipeResult.ok(
+                RecipeState.ABSENT,
+                status="rule block absent",
+                source_url=self.source_url,
+                source_date=self.source_date,
+                action_needed=self._row.audia_action,
+            )
+        text = self._rule_path.read_text(encoding="utf-8")
+        state = (
+            RecipeState.VERIFIED
+            if f"audiagentic:{_RULE_BLOCK_ID}" in text
+            else RecipeState.ABSENT
+        )
+        return ProviderRecipeResult.ok(
+            state,
+            artifacts=[block_artifact_id(self._rule_path, _RULE_BLOCK_ID)]
+            if state is RecipeState.VERIFIED
+            else [],
+            status="rule block present" if state is RecipeState.VERIFIED else "rule block absent",
+            source_url=self.source_url,
+            source_date=self.source_date,
+            action_needed=self._row.audia_action,
+        )
+
+    def install(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        return ProviderRecipeResult.ok(
+            RecipeState.INSTALLING,
+            status="rules-only integration",
+            source_url=self.source_url,
+            source_date=self.source_date,
+        )
+
+    def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        change = apply_managed_block(self._rule_path, _RULE_BLOCK_ID, RULE_TEXT)
+        if self._project_root:
+            ArtifactRegistry(self._project_root).register(self.recipe_id, blocks=[change])
+        return ProviderRecipeResult.ok(
+            RecipeState.CONFIGURING,
+            artifacts=[change.artifact_id],
+            status="rule block written",
+            source_url=self.source_url,
+            source_date=self.source_date,
+            action_needed=self._row.audia_action,
+        )
+
+    def verify(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        result = self.probe(context)
+        if result.state is RecipeState.VERIFIED:
+            return result
+        return ProviderRecipeResult.fail(
+            "rule block missing after configure",
+            source_url=self.source_url,
+            action_needed=self._row.audia_action,
+        )
+
+    def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        return ProviderRecipeResult.ok(
+            RecipeState.ABSENT,
+            status="rules-only integration",
+            source_url=self.source_url,
+            source_date=self.source_date,
+        )
+
+    def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        if self._project_root:
+            report = ArtifactRegistry(self._project_root).prune(self.recipe_id)
+            if not report.ok:
+                return ProviderRecipeResult.fail(
+                    "; ".join(report.errors),
+                    source_url=self.source_url,
+                    action_needed=self._row.audia_action,
+                )
+            return ProviderRecipeResult.ok(
+                RecipeState.ABSENT,
+                status=f"removed {len(report.removed_blocks)} rule blocks",
+                source_url=self.source_url,
+                source_date=self.source_date,
+            )
+        change = remove_managed_block(self._rule_path, _RULE_BLOCK_ID)
+        return ProviderRecipeResult.ok(
+            RecipeState.ABSENT,
+            status="rule block removed" if change.existed else "rule block already absent",
+            source_url=self.source_url,
+            source_date=self.source_date,
+        )
+
+    def dry_run(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        probed = self.probe(context)
+        if probed.state is RecipeState.VERIFIED:
+            return ProviderRecipeResult.ok(
+                RecipeState.VERIFIED,
+                status="already provisioned (dry-run)",
+                source_url=self.source_url,
+                source_date=self.source_date,
+                action_needed=self._row.audia_action,
+            )
+        return ProviderRecipeResult.ok(
+            RecipeState.ABSENT,
+            status=f"would write rule block to {self._rule_path}",
+            source_url=self.source_url,
+            source_date=self.source_date,
+            action_needed=self._row.audia_action,
+        )
+
+    def to_result(self, base) -> ProviderRecipeResult:
+        return base
+
+
 def _parameterize_command(
     command: str,
     backend: HindsightBackendConfig,
@@ -567,6 +711,7 @@ def build_hindsight_recipe(
     launch-wrapper when source_status is not 'verified'.
     """
     harness_path = _resolve_harness_config_path(provider_id, project_root)
+    rule_path = _resolve_rule_path(provider_id, project_root)
 
     # Source gate for native/launch-wrapper
     if row.recipe_kind in (ProviderRecipeKind.HOOKS, ProviderRecipeKind.WRAPPER_CLI):
@@ -585,11 +730,21 @@ def build_hindsight_recipe(
     if row.recipe_kind in (ProviderRecipeKind.MCP_CONFIG, ProviderRecipeKind.HYBRID):
         if harness_path:
             target = HindsightTarget(config_path=harness_path)
-            inner = HindsightMcpRecipe(backend, target)
+            registry = ArtifactRegistry(project_root) if project_root else None
+            inner = HindsightMcpRecipe(
+                backend,
+                target,
+                registry=registry,
+                recipe_id=f"hindsight:{provider_id}:mcp",
+            )
             return _McpConfigAdapter(row, inner)
+        if rule_path:
+            return RulesOnlyRecipe(row, rule_path, project_root=project_root)
         return GuidanceOnlyRecipe(row)
 
     if row.recipe_kind == ProviderRecipeKind.GUIDANCE_ONLY:
+        if rule_path:
+            return RulesOnlyRecipe(row, rule_path, project_root=project_root)
         return GuidanceOnlyRecipe(row)
 
     return GuidanceOnlyRecipe(row)
@@ -608,6 +763,29 @@ def _resolve_harness_config_path(provider_id: str, project_root: Path | None = N
         resolved = config_path(project_root)
         return str(resolved)
     return str(config_path)
+
+
+def _absolute_project_path(path: str | Path, project_root: Path | None = None) -> Path:
+    target = Path(path)
+    if target.is_absolute() or project_root is None:
+        return target
+    return Path(project_root) / target
+
+
+def _resolve_rule_path(provider_id: str, project_root: Path | None = None) -> Path | None:
+    """Resolve a provider instruction/rules file from generic descriptor metadata."""
+    descriptor = get_descriptor(provider_id)
+    if descriptor is None:
+        return None
+    rel_path = descriptor.instruction_file
+    if rel_path is None:
+        for agent_file in descriptor.agent_files:
+            if agent_file.managed and agent_file.rel_path.lower().endswith((".md", ".mdx")):
+                rel_path = agent_file.rel_path
+                break
+    if rel_path is None:
+        return None
+    return _absolute_project_path(rel_path, Path(project_root) if project_root else None)
 
 
 def register_hindsight_recipes(
@@ -640,6 +818,118 @@ def register_hindsight_recipes(
         registered.append(recipe)
 
     return registered
+
+
+def _run_provision(recipe: Any, context: dict[str, Any]) -> ProviderRecipeResult:
+    if hasattr(recipe, "provision"):
+        result = recipe.provision(context)
+        return recipe.to_result(result) if hasattr(recipe, "to_result") else result
+
+    owned: list[str] = []
+    probed = recipe.probe(context)
+    if probed.success and probed.state is RecipeState.VERIFIED:
+        return probed
+    for operation in (recipe.install, recipe.configure):
+        result = operation(context)
+        owned.extend(result.artifacts_owned)
+        if not result.success:
+            return ProviderRecipeResult(
+                success=result.success,
+                state=result.state,
+                artifacts_owned=owned,
+                status=result.status,
+                error=result.error,
+                details=dict(result.details),
+                source_url=result.source_url,
+                source_date=result.source_date,
+                action_needed=result.action_needed,
+            )
+    verified = recipe.verify(context)
+    return ProviderRecipeResult(
+        success=verified.success,
+        state=verified.state,
+        artifacts_owned=[*owned, *verified.artifacts_owned],
+        status=verified.status,
+        error=verified.error,
+        details=dict(verified.details),
+        source_url=verified.source_url,
+        source_date=verified.source_date,
+        action_needed=verified.action_needed,
+    )
+
+
+def _run_teardown(recipe: Any, context: dict[str, Any]) -> ProviderRecipeResult:
+    if hasattr(recipe, "teardown"):
+        result = recipe.teardown(context)
+        return recipe.to_result(result) if hasattr(recipe, "to_result") else result
+
+    for operation in (recipe.prune, recipe.uninstall):
+        result = operation(context)
+        if not result.success:
+            return result
+    probed = recipe.probe(context)
+    if probed.success and probed.state is RecipeState.ABSENT:
+        return ProviderRecipeResult.ok(
+            RecipeState.ABSENT,
+            status="removed",
+            source_url=getattr(recipe, "source_url", ""),
+            source_date=getattr(recipe, "source_date", ""),
+        )
+    return ProviderRecipeResult.fail(
+        "integration still present after teardown",
+        source_url=getattr(recipe, "source_url", ""),
+        action_needed=getattr(recipe, "_row", None).audia_action
+        if getattr(recipe, "_row", None)
+        else "",
+    )
+
+
+def apply_hindsight(
+    project_root: Path,
+    *,
+    backend: HindsightBackendConfig | None = None,
+    provider_ids: list[str] | None = None,
+    context: dict[str, Any] | None = None,
+) -> dict[str, ProviderRecipeResult]:
+    """Provision Hindsight recipes from the contained memory implementation."""
+    registry = ProviderRecipeRegistry()
+    recipes = register_hindsight_recipes(
+        registry,
+        backend=backend,
+        project_root=project_root,
+    )
+    selected = set(provider_ids) if provider_ids is not None else None
+    ctx = context or {}
+    results: dict[str, ProviderRecipeResult] = {}
+    for recipe in recipes:
+        if selected is not None and recipe.provider_id not in selected:
+            continue
+        results[recipe.provider_id] = _run_provision(recipe, ctx)
+    return results
+
+
+def teardown_hindsight(
+    project_root: Path,
+    *,
+    backend: HindsightBackendConfig | None = None,
+    provider_ids: list[str] | None = None,
+    context: dict[str, Any] | None = None,
+) -> dict[str, ProviderRecipeResult]:
+    """Remove Hindsight artifacts managed by the contained memory implementation."""
+    registry = ProviderRecipeRegistry()
+    recipes = register_hindsight_recipes(
+        registry,
+        backend=backend,
+        project_root=project_root,
+    )
+    selected = set(provider_ids) if provider_ids is not None else None
+    ctx = context or {}
+    results: dict[str, ProviderRecipeResult] = {}
+    for recipe in recipes:
+        if selected is not None and recipe.provider_id not in selected:
+            continue
+        results[recipe.provider_id] = _run_teardown(recipe, ctx)
+    return results
 
 
 class _McpConfigAdapter:
@@ -807,6 +1097,10 @@ __all__ = [
     "GuidanceOnlyRecipe",
     "HooksInstallerRecipe",
     "PluginConfigRecipe",
+    "RULE_TEXT",
+    "RulesOnlyRecipe",
+    "apply_hindsight",
     "build_hindsight_status",
     "register_hindsight_recipes",
+    "teardown_hindsight",
 ]

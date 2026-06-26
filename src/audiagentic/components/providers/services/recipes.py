@@ -69,7 +69,7 @@ class ProviderRecipeResult:
     error: str | None = None
     details: dict[str, Any] = field(default_factory=dict)
     source_url: str = ""
-    """URL to official integration docs (e.g. Hindsight provider page)."""
+    """URL to official integration docs for the capability recipe."""
     source_date: str = ""
     """Date the source was checked (ISO format)."""
     action_needed: str = ""

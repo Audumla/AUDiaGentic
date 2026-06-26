@@ -150,9 +150,9 @@ matrix:
     display_name: OpenHands
     integration_type: mcp+rules
     recipe_kind: hybrid
-    install_command: pip install hindsight-openhands && hindsight-openhands init --api-token TOKEN --bank-id ID
-    uninstall_command: hindsight-openhands uninstall
-    status_command: hindsight-openhands status
+    install_command: ""
+    uninstall_command: ""
+    status_command: ""
     config_artifacts:
       - ./config.toml (MCP server entry under [mcp])
       - ./AGENTS.md (recall/retain rule)
@@ -161,13 +161,15 @@ matrix:
       - Linux
       - Windows
     scope: project-local
-    audia_action: call_official_installer
+    audia_action: action_needed
     source_url: https://hindsight.vectorize.io/sdks/integrations/openhands
     source_date: "2026-06-26"
-    source_status: verified
+    source_status: blocked
     notes: >-
-      Native Streamable-HTTP MCP support in config.toml + AGENTS.md rule.
-      Project-local scope.
+      Official integration exists, but AUDiaGentic cannot automate it until
+      OpenHands exposes a generic mcp_config writer for config.toml or the
+      Hindsight installer is represented as structured shell steps. Rule-block
+      fallback may still write AGENTS.md via the memory/hindsight implementation.
 
   - provider_id: roo
     display_name: Roo Code

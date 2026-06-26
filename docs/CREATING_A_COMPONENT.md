@@ -1,213 +1,115 @@
 # Creating a Component
 
-A guide for agents and contributors adding a new capability to AUDiaGentic.
+How to add a capability to AUDiaGentic. Companion: [ARCHITECTURE_STANDARDS.md](ARCHITECTURE_STANDARDS.md) (the non-negotiable rules this guide operationalizes).
 
-This document explains every concept involved — **components**, **implementations**,
-**features**, **bindings**, and **options** — and walks through the files you create
-and how the runtime discovers them. Read it end-to-end before adding a component;
-the pieces interlock.
+## 1. Mental model
 
-> Companion reading: [ARCHITECTURE_STANDARDS.md](ARCHITECTURE_STANDARDS.md) defines
-> the non-negotiable rules (layering, config-over-code, MCP construction) that this
-> guide operationalizes.
+A **component** is an installable product capability ("Agent planning", "Coding LSP", "Source control"). It is declared as a YAML descriptor (data) and backed by a Python package (code).
 
----
-
-## 1. The mental model
-
-A **component** is a product capability you can install into a project (or the shared
-harness). "Agent planning", "Coding LSP", "Agent ledger", "Source control" are
-components. Each one is declared as data — a YAML descriptor — and backed by Python
-modules that implement its behavior and expose it over MCP.
-
-The configuration layer has two tiers:
+Optional sub-tiers, only needed when the capability has swappable backends or per-item sub-capabilities:
 
 ```text
-Component            (config/components/<id>.yaml)          — the installable unit
-  ├── Implementation (config/components/<id>/<impl>.yaml)   — a swappable backend
-  ├── Feature        (config/components/<id>/<feat>.yaml)   — an optional capability
-  └── Binding        (config/components/<id>/<bind>.yaml)   — wires an impl to a feature
+Component        config/components/<id>.yaml          the installable unit
+  Implementation config/components/<id>/<impl>.yaml   a swappable backend (one active if `exclusive`)
+  Feature        config/components/<id>/<feat>.yaml   an optional sub-capability (e.g. a language)
+  Binding        config/components/<id>/<bind>.yaml   declares impl X supports feature Y + how
 ```
 
-- A **component** is the thing a user installs. It owns managed files, MCP servers,
-  harness instructions, and lifecycle hooks.
-- An **implementation** is one interchangeable way of backing the component. A
-  planning component might be backed by local markdown files *or* a hosted issue
-  tracker; only one is active at a time when the component is `exclusive`.
-- A **feature** is an optional, user-selectable capability within the component —
-  e.g. each programming language is a `language` feature of `coding-lsp`.
-- A **binding** declares that a given implementation supports a given feature, and
-  names the dependencies and projection writer used when that pair is active.
-- **Options** are typed, validated settings attached to any of the above. They
-  resolve through layers (schema default → component → feature/implementation state)
-  with full provenance.
-
-Not every component needs all four tiers. The simplest component is a single YAML
-descriptor plus one MCP server module. The feature/implementation/binding tier is
-only needed when the capability has swappable backends or per-item sub-capabilities.
-
----
+**Options** are typed, validated settings attachable to any tier. The simplest component is one YAML descriptor + one MCP server module — skip the feature tier entirely unless you need it.
 
 ## 2. Where things live
 
 ```text
 src/audiagentic/
   config/components/
-    <id>.yaml                 # the component descriptor (REQUIRED)
-    <id>/                     # optional: feature-layer descriptors + companion assets
-      <impl>.yaml             #   implementation descriptor(s)
-      <feature>.yaml          #   feature descriptor(s)
-      <impl>.<feature>.yaml   #   binding descriptor(s)
-      error-resolutions.yaml  #   optional: error-code → guidance map
-  components/
-    <id>/
-      __init__.py
-      <id>_api.py             # pure logic — no MCP, no I/O framework coupling
-      <id>_mcp.py             # MCP server: thin tool wrappers over the api
-      <id>_paths.py           # path helpers (optional)
-      <id>_bootstrap.py       # lifecycle observer / status hook (optional)
-      README.md               # component intent + capabilities
+    <id>.yaml                 # component descriptor (REQUIRED)
+    <id>/                     # optional feature-layer descriptors (scanned ONE level deep only)
+      <impl>.yaml             #   implementation
+      <feature>.yaml          #   feature
+      <impl>.<feature>.yaml   #   binding
+      error-resolutions.yaml  #   optional: error-code → guidance
+  components/<id>/
+    __init__.py
+    <id>_api.py               # pure logic — no MCP, no I/O-framework coupling
+    <id>_mcp.py               # MCP server: thin tool wrappers over the api
+    <id>_bootstrap.py         # optional: lifecycle observer / status hook
+    README.md                 # intent + capabilities
 ```
 
-The descriptor under `config/components/` is **data**. The package under
-`components/` is **code**. Keep them separate: the loader reads YAML, the YAML names
-dotted module paths, and the runtime imports those modules lazily.
+Descriptor under `config/components/` is **data**; package under `components/` is **code**. YAML names dotted module paths; the runtime imports them lazily.
 
----
+## 3. Discovery
 
-## 3. Discovery: how the runtime finds your component
+`foundation/components/loader.py::register_all_components()` globs `config/components/*.yaml` and `config/components/*/*.yaml`, reads each file's `type`, and registers it. `type: component` → `ComponentDescriptor`; `type: feature|implementation|binding` → handed to `foundation/features/loader.py`. It validates IDs/links and imports each declared `lifecycle-observer` module.
 
-`foundation/components/loader.py::register_all_components()` is the entry point. It:
+Hard constraints:
+- **No Python import lists / registries by hand** — dropping the YAML *is* the registration (Std §5).
+- Feature-layer YAML must be **at most one directory deep**; deeper is not scanned.
+- `type` is the discriminator — wrong value = silently parsed as the other kind.
 
-1. Globs `config/components/*.yaml` (top level) and `config/components/*/*.yaml`
-   (one level deep).
-2. For each file, reads `type`:
-   - `type: component` → registered as a `ComponentDescriptor`.
-   - `type: feature | implementation | binding` → handed to
-     `foundation/features/loader.py` and registered in the feature registry.
-3. Validates IDs and dependency links.
-4. Imports each component's `lifecycle-observer` module (if declared) so it can
-   self-register event-bus subscriptions.
+## 4. Component descriptor
 
-Consequences you must respect:
-
-- **No Python import lists.** You never edit a registry by hand. Dropping the YAML
-  file *is* the registration (Architecture Standard §5).
-- Feature-layer YAML must live **at most one directory deep** under
-  `config/components/`. Deeper nesting is not scanned.
-- The descriptor `type` field is the discriminator. Get it wrong and the file is
-  silently treated as the other kind.
-
----
-
-## 4. The component descriptor
-
-Minimal viable descriptor (`config/components/my-thing.yaml`):
+Minimal (`config/components/my-thing.yaml`):
 
 ```yaml
 type: component
 contract-version: v1
 id: my-thing
 display-name: My Thing
-description: One-line summary of what this capability does.
+description: One-line summary.
 ```
 
-The `detection-marker` defaults to `.audiagentic/components/<id>.yaml` (or
-`components/<id>.yaml` for `scope: harness`). The loader also synthesizes a
-`create-if-missing` marker `ComponentFile` at that path when no explicit entry
-matches — you only need `detection-marker:` and `files:` when deviating from the
-default or adding non-marker files.
+`detection-marker` defaults to `.audiagentic/components/<id>.yaml` (project scope) or `components/<id>.yaml` (harness scope), and a `create-if-missing` marker file is auto-synthesized there. Only set `detection-marker:`/`files:` when deviating from the default.
 
-Fields map to `ComponentDescriptor` in
-[foundation/components/base.py](../src/audiagentic/foundation/components/base.py).
-The full set:
+Fields map to `ComponentDescriptor` ([base.py](../src/audiagentic/foundation/components/base.py)):
 
 | YAML key | Meaning |
 |---|---|
-| `type` | Always `component` for a component descriptor. |
-| `id` | Unique component ID (kebab-case). Used everywhere as the canonical key. |
-| `display-name` | Human label. |
-| `description` | One/two-line summary. |
-| `detection-marker` | A `rel_path` proving installation. Defaults to `.audiagentic/components/<id>.yaml` (project scope) or `components/<id>.yaml` (harness scope). Only override for non-default paths. |
-| `aliases` | Alternate IDs that resolve to this component. |
-| `files` | Managed files this component owns (see §5). |
-| `depends-on` | Other component IDs that must be installed first. |
-| `scope` | `project` (installs into `project_root/.audiagentic/`) or `harness` (installs into `audiagentic_home()`, shared across projects). Default `project`. |
-| `core` | `true` ⇒ component cannot be uninstalled. |
-| `mcp-servers` | Python-module MCP servers (see §6). |
+| `type` | Always `component`. |
+| `id` | Unique kebab-case ID; the canonical key everywhere. |
+| `display-name` / `description` | Human label / short summary. |
+| `detection-marker` | `rel_path` proving installation. Defaults from `id`; override only for non-default paths. |
+| `aliases` | Alternate IDs resolving to this component. |
+| `files` | Managed files this component owns (§5). |
+| `depends-on` | Component IDs that must install first. |
+| `scope` | `project` (→ `project_root/.audiagentic/`) or `harness` (→ `audiagentic_home()`, shared). Default `project`. |
+| `core` | `true` ⇒ cannot be uninstalled. |
+| `mcp-servers` | Python-module MCP servers (§6). |
 | `external-mcp-servers` | MCP servers backed by an external command, gated on PATH tools. |
-| `harness-instructions` | Markdown sections injected into the agent harness (see §7). |
-| `contributions` | Reusable doctrine blocks routed to skills/instruction files (see §7). |
-| `feature-kinds` | List of feature kinds this component defines (see §8). |
-| `implementation-cardinality` | `exclusive` (one impl active) or `multi` (several). Omit if the component has no implementations. |
-| `post-install` | Dotted path to `fn(project_root)` run after install. |
-| `lifecycle-observer` | Dotted **module** path imported at registration so it can subscribe to the event bus. |
-| `lifecycle-hook` | Dotted path to `fn(event_type, payload, metadata)`. |
-| `status-hook` | Dotted path to `fn(project_root) -> dict` powering status output. |
+| `harness-instructions` | Markdown sections injected into the agent harness (§7). |
+| `contributions` | Reusable doctrine blocks routed to skills/instruction files (§7). |
+| `feature-kinds` | Feature kinds this component defines (§8). |
+| `implementation-cardinality` | `exclusive` (one impl active) or `multi`. Omit if no implementations. |
+| `post-install` | Dotted `fn(project_root)` run after install. |
+| `lifecycle-observer` | Dotted **module** imported at registration to self-subscribe to the event bus. |
+| `lifecycle-hook` | Dotted `fn(event_type, payload, metadata)`. |
+| `status-hook` | Dotted `fn(project_root) -> dict` powering status. |
 
----
+## 5. Managed files
 
-## 5. Managed files and lifecycle modes
+Each `files:` entry is a `ComponentFile` with a `lifecycle:` mode:
 
-Each entry in `files:` is a `ComponentFile` with a `lifecycle` mode:
-
-| Mode (`lifecycle:`) | Behavior |
+| Mode | Behavior |
 |---|---|
-| `required-managed` | Owned and overwritten by AUDiaGentic on apply. The component is the source of truth. |
-| `create-if-missing` | Written once at install; never overwritten. Used for install markers and user-editable seeds. |
-| `generated-managed` | Regenerated from component config on apply (projections, caches). Never hand-edit. |
+| `required-managed` | Owned and overwritten on apply; component is source of truth. |
+| `create-if-missing` | Written once at install, never overwritten (markers, user-editable seeds). |
+| `generated-managed` | Regenerated from config on apply (projections, caches). Never hand-edit. |
 | `runtime-only` | Created at runtime (logs, scratch). Not installed, not managed. |
 
-`recursive: true` marks a directory tree. The `detection-marker` is conventionally a
-`create-if-missing` marker file under `.audiagentic/components/`.
-
----
+`recursive: true` marks a directory tree.
 
 ## 6. MCP servers
 
-A component exposes its tools to agents via MCP servers. Two declaration shapes:
-`mcp-servers:` (Python module) and `external-mcp-servers:` (external CLI). But more
-importantly, most components ship **two servers with different roles** — keep them
-distinct.
+Most components ship **two** servers — keep the roles distinct:
 
-### 6.1 Management server vs activity server
+| Role | Naming | `propagate` | Purpose |
+|---|---|---|---|
+| **Management** | `<comp>-mgmt` | `audiagentic` | Operator console: status, select implementation, add/remove features, install deps, set options. Never handed to providers. |
+| **Activity** | `<comp>` | `audiagentic,providers` | The product itself: the tools that do the component's actual work, loaded into providers. |
 
-A typical component declares two MCP servers:
+`propagate` is the knob; `-mgmt` suffix signals the role. Rule of thumb: **management → `audiagentic`; activity → include `providers`** unless the provider already self-provides the capability (e.g. `ag-lsp` activity stays `audiagentic` because providers self-provide LSP). A component may declare only one server (pure activity, e.g. `git`) and add management later.
 
-| Role | Naming | `propagate` | Audience | Purpose |
-|---|---|---|---|---|
-| **Management** | `<comp>-mgmt` | `audiagentic` | The AUDiaGentic agent driven by the `audiagentic` CLI — **only** | Configure, inspect, and control the component: status, list/select implementation, add/remove features, install dependencies, set options. |
-| **Activity** | `<comp>` | `audiagentic,providers` (or `providers`) | The AUDiaGentic agent **and** the downstream provider harnesses | The capability itself — the tools that do the actual work the component exists to provide. |
-
-The split is fundamental:
-
-- The **management server** is an *operator console*. It changes how the component is
-  configured for a project. It must never be handed to providers — a provider doing
-  real work has no business switching the planning backend or installing a language
-  server. Hence `propagate: audiagentic` (CLI-side only).
-- The **activity server** is the *product*. It is what gets loaded into providers so
-  they can actually use the capability while doing their work — creating plan items,
-  recording ledger events, navigating code. Hence `propagate` includes `providers`.
-
-Examples from the codebase:
-
-- `ag-planning-mgmt` (status, `planning_select_implementation`) — `audiagentic` only.
-  `ag-planning` (`plan_create_item`, `plan_set_state`, …) — `audiagentic,providers`.
-- `ag-ledger-mgmt` vs `ag-ledger`; `ag-lsp-mgmt` vs `ag-lsp`; `ag-sc-mgmt`,
-  `ag-release-mgmt`, `ag-project-mgmt`, etc.
-
-`propagate` is the knob; the naming convention (`-mgmt` suffix) is how you signal the
-role. They are not always 1:1 with audience — e.g. `ag-lsp` (activity) is
-`propagate: audiagentic` because providers self-provide LSP and should not receive the
-AUDiaGentic bridge. The rule of thumb: **management → `audiagentic`; activity →
-include `providers` unless the provider already has that capability natively.**
-
-A component may also declare only one server (pure activity, e.g. `git`/`github`) or
-add a management server later once it grows configurable state.
-
-### 6.2 Declaration shapes
-
-`mcp-servers:` — backed by a Python module in your component package:
+Declaration (`mcp-servers:`, Python module):
 
 ```yaml
 mcp-servers:
@@ -217,21 +119,15 @@ mcp-servers:
     description: Short summary shown in tool listings.
     propagate: audiagentic,providers
     instructions: >
-      Usage doctrine for the agent: when to call each tool, gotchas, ordering.
+      Usage doctrine: when to call each tool, gotchas, ordering.
     tool-descriptions:
       my_thing_do: Longer per-tool description and arg notes.
 ```
 
-- `module` — dotted path to the server module. It must build its server with
-  `mcp_server(__name__)` and run via `run_mcp_server(...)` (Architecture Standard §6).
-  Never construct `FastMCP` directly.
-- `direct-tools` — tools surfaced directly to the agent harness.
-- `propagate` — who receives this server: `audiagentic` (the AUDiaGentic agent),
-  `providers` (downstream provider harnesses), or `audiagentic,providers` (both).
-- `instructions` / `tool-descriptions` — usage doctrine lives **here**, next to the
-  server, not duplicated into every provider's instruction file (it drifts).
+- `module` must build with `mcp_server(__name__)` and run via `run_mcp_server(...)` — never construct `FastMCP` directly (Std §6).
+- `instructions`/`tool-descriptions` live **here**, next to the server — not duplicated into provider instruction files.
 
-The server module itself stays thin — tools delegate to a pure `_api` module:
+The module stays thin; tools delegate to the pure `_api`:
 
 ```python
 # components/my_thing/my_thing_mcp.py
@@ -249,330 +145,123 @@ def my_thing_do(item: dict) -> dict:
     return my_thing_api.do(project_root_from_env(), item)
 ```
 
-For tools backed by an external CLI (not a Python module), use
-`external-mcp-servers:` with `command`, `requires` (PATH tools that gate inclusion),
-and an optional `probe` command to verify usability.
+For external-CLI tools use `external-mcp-servers:` with `command`, `requires` (PATH tools that gate inclusion), and optional `probe`.
 
-### 6.3 Ownership boundary: provider-consumable vs provider-specific
+### Ownership boundary (hard rule)
 
-This is easy to get wrong, so treat it as a hard rule:
+A component may expose a capability **consumable by providers**; it may **not** encode **provider-specific rendering**.
 
-- A component may expose a capability that is **consumable by providers**.
-- That does **not** mean the component may encode **provider-specific rendering**.
+- **Allowed** in a non-provider component: generic capability state, implementation selection, provider-agnostic export data, neutral refresh hints, activity tools any provider may call.
+- **Forbidden** unless the component *is* `providers`: hard-coded provider IDs (`if provider_id == "claude"`), provider file paths (`{"codex": "AGENTS.md"}`), provider-specific syntax branches, or code that writes `CLAUDE.md`/`AGENTS.md`/provider config directly.
 
-In practice:
+Ownership split: **capability components** own upstream truth (selected impl, validated options, generic state, provider-agnostic exports). **The providers component / adapters** own downstream truth (which providers support it, what files they write, how generic data renders into surfaces).
 
-- **Allowed in a non-provider component:** generic capability state, implementation
-  selection, provider-agnostic config/export data, neutral refresh hints, and
-  MCP/activity tools that any provider may call.
-- **Not allowed in a non-provider component:** hard-coded provider IDs, provider
-  instruction/config file paths, provider-specific syntax branches, or logic that
-  rewrites downstream provider surfaces directly.
-
-Examples of what must stay out of `components/<id>/` unless `<id>` is `providers`:
-
-- `if provider_id == "claude": ...`
-- mappings like `{ "codex": "AGENTS.md", "copilot": ".github/copilot-instructions.md" }`
-- component-owned code that writes `CLAUDE.md`, `AGENTS.md`, provider JSON/YAML, or
-  other provider adapter outputs directly
-
-Ownership rule:
-
-- **Capability components** own the upstream truth: selected implementation,
-  validated options, generic runtime state, and any provider-agnostic export data.
-- **The providers component and provider adapters** own the downstream truth:
-  which providers support the capability, what files they write, what syntax they
-  need, and how generic capability data is rendered into provider surfaces.
-
-Controlled exceptions:
-
-- If a non-provider component must notify providers, return or emit a neutral
-  capability-change hint only (for example, `needs_provider_recipe_refresh`).
-- The providers component must own the observer/reconcile code that consumes that
-  hint.
-- Any unavoidable cross-component adapter must live in one small boundary module
-  with architecture tests proving the dependency direction and blocking direct
-  imports from the capability component into provider services.
-
-If a backend has provider-specific integration docs (for example, a memory backend
-with different setup instructions per provider), keep that knowledge in one
-implementation-owned containment package such as
-`components/<component>/<implementation>/`. Do not embed backend-specific modules
-in provider core. Provider code should expose generic seams (descriptor lookup,
-recipe/result contracts, config writers), not backend names.
-
----
+If cross-component notification is unavoidable: the capability component emits a neutral hint (e.g. `needs_provider_recipe_refresh`); the providers component owns the observer that consumes it; any adapter lives in one small boundary module with architecture tests proving the dependency direction. Backend-specific integration knowledge (e.g. per-provider setup for a memory backend) stays in an implementation-owned package like `components/<component>/<implementation>/`, never in provider core.
 
 ## 7. Harness instructions and contributions
 
-Two ways to inject guidance for the agent:
+- **`harness-instructions:`** — markdown sections merged into the harness prompt (`section`, `content`, `propagate`). The tool catalog is **auto-generated** from `mcp-servers[].direct-tools` + `tool-descriptions` — do NOT hand-write one. Use this for operating rules and doctrine that can't be derived from MCP declarations.
+- **`contributions:`** — reusable doctrine blocks with `preferred-targets` (`skill`, `instruction`); the surface system routes them to the right artifact. Use for process doctrine ("Planning process", "Release doctrine").
 
-- **`harness-instructions:`** — markdown sections merged into the harness prompt.
-  Each has a `section` (grouping header), `content`, and `propagate`. The "What you
-  can do" tool catalog is **auto-generated** from `mcp-servers[].direct-tools` and
-  `tool-descriptions` at load time — do NOT hand-write a tool catalog. Use
-  `harness-instructions:` for operating rules, context, and doctrine that cannot be
-  derived from MCP declarations (e.g. install gating, feature explanations).
+Both take `propagate` (`audiagentic` / `providers`). `propagate: providers` controls only *where guidance surfaces* — it does not transfer ownership of provider-specific rendering into the declaring component.
 
-- **`contributions:`** — reusable doctrine blocks with `preferred-targets`
-  (e.g. `skill`, `instruction`). The surface system routes them into the right
-  artifact (a generated skill file, an instruction file) rather than hardcoding
-  where the text lands. Use for process doctrine ("Planning process", "Release
-  doctrine") that should appear as a skill or in CLAUDE.md.
+## 8. Features, implementations, bindings
 
-Both support `propagate` with the same `audiagentic` / `providers` semantics as MCP
-servers. `propagate: providers` only controls where guidance or tools are surfaced;
-it does **not** transfer ownership of provider-specific rendering into the component
-that declared them.
+The swappable-backend tier. Use it only for (a) interchangeable backends or (b) per-item optional sub-capabilities; otherwise skip §8. Unless the component *is* `providers`, implementations own the **generic backend contract only** — never provider matrices, paths, or render decisions. All three types are parsed by [features/loader.py](../src/audiagentic/foundation/features/loader.py) / [features/base.py](../src/audiagentic/foundation/features/base.py).
 
----
-
-## 8. Features, implementations, and bindings
-
-This is the swappable-backend tier. Reach for it when the component has either
-(a) interchangeable backends, or (b) per-item optional sub-capabilities. If neither
-applies, skip this section entirely.
-
-Before modeling implementations, answer one boundary question explicitly:
-
-- Does this component own only the generic backend contract?
-- Or does it also own provider adaptation?
-
-Unless the component itself is `providers`, the answer should almost always be:
-**generic backend contract only**. Implementations may describe generic capabilities
-and export provider-agnostic facts, but provider compatibility matrices, provider
-file paths, and provider-specific render decisions belong in provider-owned code.
-
-All three descriptor types are parsed by
-[foundation/features/loader.py](../src/audiagentic/foundation/features/loader.py)
-and modeled in
-[foundation/features/base.py](../src/audiagentic/foundation/features/base.py).
-
-### 8.1 Feature kinds and cardinality
-
-On the **component** descriptor:
-
+**Feature kinds / cardinality** (on the component):
 ```yaml
-feature-kinds: [language]            # the kinds of feature this component defines
-implementation-cardinality: exclusive   # exclusive | multi
+feature-kinds: [language]              # namespaces of features this component defines
+implementation-cardinality: exclusive  # exclusive | multi
 ```
 
-`feature-kinds` declares the namespaces of features (coding-lsp defines the
-`language` kind — Python, Rust, etc.). `implementation-cardinality` controls whether
-one implementation is active at a time (`exclusive`) or several (`multi`).
-
-### 8.2 Implementation descriptor
-
-A swappable backend (`config/components/coding-lsp/ag-lsp.yaml`):
-
+**Implementation** — a swappable backend (`coding-lsp/ag-lsp.yaml`):
 ```yaml
 type: implementation
-contract-version: v1
 parent: coding-lsp
 id: ag-lsp
-display-name: AG LSP
-description: AUDiaGentic native MCP language-server bridge
-default: true                  # active impl when the user has not chosen one
+default: true                  # active when user hasn't chosen
 options-schema:
-  mutation-enabled:
-    type: boolean
-    default: false
-    description: Allow LSP mutation tools (rename, apply, format).
-projection:                    # how this impl is surfaced (e.g. as an MCP server)
-  generic-mcp:
-    managed-id: coding-lsp/ag-lsp
-    name: ag-lsp
-    module: audiagentic.components.coding_lsp.lsp_mcp
+  mutation-enabled: { type: boolean, default: false }
+projection:                    # what the runtime generates when active
+  generic-mcp: { managed-id: coding-lsp/ag-lsp, name: ag-lsp, module: audiagentic.components.coding_lsp.lsp_mcp }
 ```
+Key fields: `parent`, `id`, `default`, `options-schema`, `dependencies`, optional `projection`.
 
-Key fields: `parent` (the component id), `id`, `default`, `options-schema`,
-`dependencies`, and an optional `projection` describing what the runtime generates
-when this implementation is active.
-
-### 8.3 Feature descriptor
-
-An optional capability within the component
-(`config/components/coding-lsp/python.yaml`):
-
+**Feature** — an optional capability (`coding-lsp/python.yaml`):
 ```yaml
 type: feature
-contract-version: v1
 parent: coding-lsp
 kind: language                 # must be one of the component's feature-kinds
 id: python
-display-name: Python (pyright)
-# ...feature-specific facts (server command, file extensions, markers)...
 dependencies:
-  pyright:
-    display-name: Pyright (Python LSP)
-    probe: binary:pyright-langserver
-    toolchain: uv
-    package: pyright
+  pyright: { probe: binary:pyright-langserver, toolchain: uv, package: pyright }
 options-schema:
-  server-settings:
-    type: object
-    default: {}
+  server-settings: { type: object, default: {} }
 ```
+Key fields: `parent`, `kind`, `id`, `scope`. **Scope** is `shared` (applies regardless of impl) or `implementation` (only for one named `implementation:`). Setting `implementation:` defaults scope to `implementation`.
 
-Key fields: `parent`, `kind`, `id`, plus `scope`. **Scope** is `shared` (the feature
-applies regardless of implementation) or `implementation` (it only exists for one
-named `implementation:`). If you set `implementation:`, scope defaults to
-`implementation` automatically.
-
-### 8.4 Binding descriptor
-
-A binding says "implementation X supports feature Y, and here is how"
-(`config/components/coding-lsp/ag-lsp.python.yaml`):
-
+**Binding** — derived glue saying "impl X supports feature Y" (`coding-lsp/ag-lsp.python.yaml`):
 ```yaml
 type: binding
-contract-version: v1
 parent: coding-lsp
 implementation: ag-lsp
 feature-kind: language
 feature: python
 uses-dependencies: [pyright]       # which of the feature's deps this pairing needs
-projection:
-  writer-key: coding-lsp.lsp-json  # registered generator that writes the projection
+projection: { writer-key: coding-lsp.lsp-json }   # registered generator for runtime files
 ```
-
-Bindings are **derived glue**: no display name, no own dependencies — they
-*reference* the feature's dependencies via `uses-dependencies` and name a
-`projection.writer-key` (a registered generator that produces runtime files when the
-impl+feature pair is active). The full identity is
-`(parent, implementation, feature-kind, feature)`.
-
-### 8.5 The matrix
-
-With N implementations and M features of a kind, you have up to N×M bindings. Each
-binding that exists declares that pairing is supported; a missing binding means that
-implementation does not support that feature.
-
----
+Bindings have no display name and no own dependencies — they reference the feature's deps and name a `projection.writer-key`. Identity: `(parent, implementation, feature-kind, feature)`. A missing binding means that impl does not support that feature (N impls × M features = up to N×M bindings).
 
 ## 9. Options and resolution
 
-Options give any descriptor typed, validated settings. Declared as `options-schema:`
-(parsed by [foundation/features/options.py](../src/audiagentic/foundation/features/options.py)):
-
+Declared as `options-schema:` ([options.py](../src/audiagentic/foundation/features/options.py)):
 ```yaml
 options-schema:
-  retries:
-    type: integer        # bool|boolean, string|str, int|integer, float|number, enum, list, object
-    default: 3
-    min: 0
-    max: 10
-  mode:
-    type: enum
-    values: [fast, safe]
-    default: safe
+  retries: { type: integer, default: 3, min: 0, max: 10 }   # bool|string|int|float|enum|list|object
+  mode:    { type: enum, values: [fast, safe], default: safe }
 ```
+Validation enforces type, `enum` membership, numeric `min`/`max`. Unknown keys rejected unless `allow-unknown: true`.
 
-Validation enforces type, `enum` membership, and numeric `min`/`max`. Unknown keys
-are rejected unless `allow-unknown: true`.
-
-**Resolution layers.** `resolve_options(schema, *layers)` merges, last-wins, in order:
-
-```text
-schema-default  →  component-state  →  feature-state / implementation-state
-```
-
-`resolve_options_with_provenance(...)` returns the same values plus a map of which
-layer set each one (`ResolvedOption(value, source)`) — use it when debugging why an
-option has a given value.
-
----
+`resolve_options(schema, *layers)` merges last-wins: **schema-default → component-state → feature/implementation-state**. `resolve_options_with_provenance(...)` returns the same values plus which layer set each (use when debugging an option's value).
 
 ## 10. Dependencies and toolchains
 
-Dependencies declared on a feature/implementation are installed through the workflow
-step system ([foundation/components/dependencies.py](../src/audiagentic/foundation/components/dependencies.py)),
-not ad-hoc shell calls. A dependency entry names:
+Feature/impl `dependencies:` install through the workflow step system ([dependencies.py](../src/audiagentic/foundation/components/dependencies.py)), not ad-hoc shell. Each entry names:
+- `probe` — presence check, e.g. `binary:pyright-langserver` or `all-binaries:a,b`.
+- `toolchain` / `package` — how to install (e.g. `uv` + package name).
 
-- `probe` — how to detect it's present, e.g. `binary:pyright-langserver` or
-  `all-binaries:a,b`.
-- `toolchain` / `package` — how to install it (e.g. `uv` + a package name).
-
-Platform/package-manager resolution lives in
-[foundation/toolchains/detect.py](../src/audiagentic/foundation/toolchains/detect.py)
-(`detect_pkg_manager`, `platform_key`, `uv_available`, `privilege_prefix`). The
-dependency runner builds `SequenceStep`/`SelectStep` trees so the same declaration
-works across platforms.
-
----
+Platform/package-manager resolution lives in [toolchains/detect.py](../src/audiagentic/foundation/toolchains/detect.py); the runner builds `SequenceStep`/`SelectStep` trees so one declaration works cross-platform.
 
 ## 11. Lifecycle hooks
 
-Optional integration points, all declared on the component descriptor as dotted
-paths:
+Declared on the component as dotted paths:
+- `post-install: pkg.mod.fn` — `fn(project_root)` once after install.
+- `lifecycle-observer: pkg.mod` — **module** imported at registration; self-registers event-bus subscribers at import time.
+- `lifecycle-hook: pkg.mod.fn` — `fn(event_type, payload, metadata)` per event.
+- `status-hook: pkg.mod.fn` — `fn(project_root) -> dict` for status.
 
-- `post-install: pkg.mod.fn` — `fn(project_root)` runs once after install.
-- `lifecycle-observer: pkg.mod` — the **module** is imported at registration; it
-  self-registers event-bus subscribers at import time. Use this to react to events
-  (e.g. regenerate a projection when config changes).
-- `lifecycle-hook: pkg.mod.fn` — `fn(event_type, payload, metadata)` dispatched per
-  lifecycle event.
-- `status-hook: pkg.mod.fn` — `fn(project_root) -> dict` feeding status reporting.
+Keep observers idempotent — `register_all_components()` may run multiple times per process.
 
-Keep observers idempotent — `register_all_components()` can run multiple times in a
-process.
+## 12. Recipe — add component `my-thing`
 
----
-
-## 12. Step-by-step recipe
-
-To add a new component `my-thing`:
-
-1. **Descriptor.** Create `config/components/my-thing.yaml` with `type: component`,
-    `id`, `display-name`, and `description`. The `detection-marker` and its
-    `create-if-missing` marker file are auto-derived from `id` (and `scope` if
-    harness-scoped). Add explicit `detection-marker:` and `files:` entries only
-    when deviating from the default (§4–§5).
-2. **Package.** Create `components/my_thing/` with `__init__.py`, `my_thing_api.py`
-   (pure logic), and a `README.md` stating intent + capabilities.
-3. **MCP server.** Add `my_thing_mcp.py` using `mcp_server(__name__)` and
-   `run_mcp_server(...)`; declare it under `mcp-servers:` with `direct-tools`,
-   `propagate`, and `instructions` (§6).
-4. **Harness guidance.** The tool catalog is auto-generated from `mcp-servers[].direct-tools`
-    — do NOT hand-write it. Add `harness-instructions:` for operating rules and context
-    only, plus any `contributions:` doctrine blocks (§7).
-5. **(Optional) Feature tier.** If the component has swappable backends or
-   per-item capabilities: set `feature-kinds` and `implementation-cardinality` on
-   the component, then add `implementation`, `feature`, and `binding` YAML files
-   under `config/components/my-thing/` (§8).
-6. **(Optional) Options.** Add `options-schema:` to whichever descriptors need
-   typed settings (§9).
-7. **(Optional) Dependencies & hooks.** Declare `dependencies:` on features/impls
-   (§10) and any `lifecycle-observer` / `status-hook` / `post-install` (§11).
-8. **Verify.** Run `register_all_components()` (it runs on any component CLI command
-   or MCP server start) and confirm your descriptor loads without validation errors.
-   Then exercise the MCP tools.
+1. **Descriptor.** `config/components/my-thing.yaml` with `type: component`, `id`, `display-name`, `description` (marker auto-derived; §4).
+2. **Package.** `components/my_thing/` with `__init__.py`, `my_thing_api.py` (pure logic), `README.md`.
+3. **MCP server.** `my_thing_mcp.py` via `mcp_server(__name__)`/`run_mcp_server(...)`; declare under `mcp-servers:` with `direct-tools`, `propagate`, `instructions` (§6).
+4. **Harness guidance.** Add `harness-instructions:` for rules/context (tool catalog auto-generates — don't write one) and `contributions:` doctrine (§7).
+5. **(Optional) Feature tier.** Set `feature-kinds` + `implementation-cardinality`, add impl/feature/binding YAML (§8).
+6. **(Optional) Options.** `options-schema:` on whichever descriptors need settings (§9).
+7. **(Optional) Deps & hooks.** `dependencies:` (§10), `lifecycle-observer`/`status-hook`/`post-install` (§11).
+8. **Verify.** Run any component CLI command or start the MCP server (both trigger `register_all_components()`); confirm no validation errors, then exercise the tools.
 
 ### Guardrails (from ARCHITECTURE_STANDARDS.md)
-
-- Extensibility = dropping a YAML file. **Never** add Python import lists or
-  `if/elif` chains branching on component IDs (§2, §5).
+- Extensibility = dropping a YAML file. Never add import lists or `if/elif` on component IDs (§2, §5).
 - MCP servers via `mcp_server(__name__)` only (§6).
-- Generated/projected files go through a registered `(path, generator)` pair, not
-  path-branching code (§7).
-- Respect layering: foundation imports nothing from runtime/components; runtime
-  imports no specific optional component (§1).
-
----
+- Generated files go through a registered `(path, generator)` pair, not path-branching (§7).
+- Respect layering: foundation imports nothing from runtime/components (§1).
 
 ## 13. Reference components
 
-Study these as worked examples:
-
-- **`config/components/planning.yaml`** + `components/planning/` — a clean
-  component with two MCP servers (management + tools), `contributions`,
-  `implementation-cardinality: exclusive`, and a single implementation in
-  `config/components/planning/planning-local-docs.yaml`.
-- **`config/components/coding-lsp.yaml`** + `config/components/coding-lsp/` —
-  the full feature tier: `feature-kinds`, implementations (`ag-lsp.yaml`), features
-  (`python.yaml`), and bindings (`ag-lsp.python.yaml`) with projections and
-  dependencies.
-- **`config/components/project.yaml`** and **`session.yaml`** — always-on
-  `core: true` components that cannot be uninstalled.
-</content>
-</invoke>
+- **`planning.yaml`** + `components/planning/` — clean two-server (mgmt + activity) component, `contributions`, `exclusive`, one implementation.
+- **`coding-lsp.yaml`** + `config/components/coding-lsp/` — full feature tier: `feature-kinds`, implementations, features, bindings with projections + dependencies.
+- **`project.yaml`** / **`session.yaml`** — always-on `core: true` components.

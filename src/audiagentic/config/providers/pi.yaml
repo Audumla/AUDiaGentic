@@ -1,0 +1,48 @@
+# Pi Coding Agent — provider descriptor
+# Custom case: callable install/uninstall, custom probe, on_lsp_enabled hook
+
+provider_id: pi
+display_name: "Pi Coding Agent"
+description: "Lightweight local coding agent TUI by Earendil Works. Supports MCP tool use via the pi-mcp-adapter extension."
+url: "https://www.earendilworks.com/pi"
+access_mode: "none"
+
+cli_probe: null
+
+cli_install:
+  package_manager: "pi-harness"
+  package_name: "audiagentic-pi-harness"
+  executable: "pi"
+  install:
+    type: callable
+    id: install
+    fn: "audiagentic.components.providers.adapters.pi.descriptor:_pi_install"
+  uninstall:
+    type: callable
+    id: uninstall
+    fn: "audiagentic.components.providers.adapters.pi.descriptor:_pi_uninstall"
+  probe_fn: "audiagentic.components.providers.adapters.pi.descriptor:_pi_probe"
+
+host_capabilities: []
+
+permissions:
+  can_write_files: true
+  can_execute_shell: true
+  can_browse_web: false
+  can_read_env: true
+  notes: "TUI coding agent; MCP tool use available when pi-mcp-adapter is installed"
+
+agent_files:
+  - rel_path: ".pi"
+    managed: false
+    description: "Pi agent runtime directory"
+
+mcp_config:
+  config_path: ".mcp.json"
+  reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
+  writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
+  remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
+  format: "mcp-json"
+  refresh_mode: "restart-required"
+
+on_lsp_enabled: "audiagentic.components.providers.adapters.pi.descriptor:_pi_ensure_lens"
