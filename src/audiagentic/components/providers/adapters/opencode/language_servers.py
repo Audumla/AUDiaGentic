@@ -26,8 +26,23 @@ from ...descriptors.base import LanguageServerEntry
 _LANGUAGE_TO_OPENCODE_KEY = {
     "python": "pyright",
     "cpp": "clangd",
+    "markdown": "marksman",
+    "python-ruff": "ruff",
+    "rust": "rust",
+    "typescript": "typescript",
+    "yaml": "yaml-ls",
 }
 _OPENCODE_KEY_TO_LANGUAGE = {v: k for k, v in _LANGUAGE_TO_OPENCODE_KEY.items()}
+
+_LANGUAGE_ALIASES = {
+    "python": {"python", "pyright"},
+    "cpp": {"cpp", "clangd"},
+    "markdown": {"markdown", "marksman"},
+    "python-ruff": {"python-ruff", "ruff"},
+    "rust": {"rust", "rust-analyzer"},
+    "typescript": {"typescript", "typescript-language-server"},
+    "yaml": {"yaml", "yaml-ls"},
+}
 
 
 def _to_opencode_key(language: str) -> str:
@@ -79,6 +94,8 @@ def write_language_servers_opencode(path: Path, entries: dict[str, LanguageServe
         lsp = {}
         data["lsp"] = lsp
     for name, entry in entries.items():
+        for alias in _LANGUAGE_ALIASES.get(name, {name}):
+            lsp.pop(alias, None)
         node: dict[str, Any] = {
             "command": list(entry.command),
             "extensions": list(entry.file_extensions),
@@ -92,10 +109,15 @@ def write_language_servers_opencode(path: Path, entries: dict[str, LanguageServe
 def remove_language_servers_opencode(path: Path, language: str) -> bool:
     data = _load_json(path)
     lsp = data.get("lsp", {})
-    key = _to_opencode_key(language)
-    if not isinstance(lsp, dict) or key not in lsp:
+    if not isinstance(lsp, dict):
         return False
-    del lsp[key]
+    removed = False
+    for alias in _LANGUAGE_ALIASES.get(language, {language, _to_opencode_key(language)}):
+        if alias in lsp:
+            del lsp[alias]
+            removed = True
+    if not removed:
+        return False
     # Drop the container entirely when the last managed server is gone, rather
     # than leaving an empty "lsp": {}.
     if not lsp:

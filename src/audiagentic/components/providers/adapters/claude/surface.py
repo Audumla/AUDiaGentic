@@ -8,6 +8,7 @@ from ...surfaces.base import (
     SurfaceBlock,
     SurfaceContribution,
     apply_managed_header,
+    is_component_active,
     render_frontmatter_skill,
     render_instruction_file,
     resolve_tag_path,
@@ -52,11 +53,12 @@ def render(
             render_frontmatter_skill(skill, root_label=path_template.format(tag=skill.tag))
         )
 
-    surfaces[project_root / "CLAUDE.md"] = render_instruction_file(
-        provider_id="claude",
-        instruction_file="CLAUDE.md",
-        adapter_dir=_ADAPTER_DIR,
-    )
+    if is_component_active(project_root, "agent-jobs"):
+        surfaces[project_root / "CLAUDE.md"] = render_instruction_file(
+            provider_id="claude",
+            instruction_file="CLAUDE.md",
+            adapter_dir=_ADAPTER_DIR,
+        )
     return surfaces
 
 
