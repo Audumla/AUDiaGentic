@@ -69,7 +69,10 @@ def plan_get_item(item_id: str) -> dict:
 def plan_set_state(item_id: str, new_state: str) -> dict:
     """Transition a plan item to a new state.
 
-    new_state: 'pending' keeps item in active/; 'completed' moves it to completed/.
+    new_state: 'pending' moves item to active/ (recreates active/<plan>/ if needed);
+               'completed' moves item to completed/.
+    Works in both directions — completed items can be reverted to active,
+    and active items can be marked completed.
     """
     return planning_api.set_state(project_root_from_env(), item_id, new_state)
 
@@ -90,6 +93,18 @@ def plan_update_item(item_id: str, updates: dict) -> dict:
 def plan_delete_item(item_id: str) -> dict:
     """Permanently delete a plan item by ID."""
     return planning_api.delete_item(project_root_from_env(), item_id)
+
+
+@mcp.tool()
+@log_tool_call
+def plan_list_standards() -> list:
+    """List the architecture and design standards for this project.
+
+    Returns a list of standards with id, title, path (relative to project root),
+    and description. Standards are loaded from docs/planning/STANDARDS_CONFIG.md.
+    Use this to discover which standards apply before creating or updating plan items.
+    """
+    return planning_api.list_standards(project_root_from_env())
 
 
 # ---------------------------------------------------------------------------
