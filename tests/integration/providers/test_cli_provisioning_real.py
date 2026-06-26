@@ -13,10 +13,6 @@ from tests.integration.providers.harness import (
     uninstall_provider,
 )
 
-pytestmark = pytest.mark.skipif(
-    os.environ.get("AUDIAGENTIC_REAL_PROVIDER_CLI_TESTS") != "1",
-    reason="real provider CLI install tests are Docker-only and opt-in",
-)
 pytestmark = [
     pytest.mark.mutates_host,
     pytest.mark.opt_in,
