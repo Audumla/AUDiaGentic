@@ -35,15 +35,3 @@ mcp-servers:
       enable_component: Enable a component in target project. Harness config is regenerated automatically — no manual refresh needed.
       disable_component: Disable a component in target project. Harness config is regenerated automatically — no manual refresh needed.
       read_project_file: Read a file inside project .audiagentic directory.
-harness-instructions:
-  - section: "What you can do"
-    content: |
-       ### ag-project-mgmt
-       - `project_status` — Check project installation state
-       - `list_components` — List all available components
-       - `install_component` — Install a component
-       - `uninstall_component` — Uninstall a component
-       - `enable_component` — Enable a component
-       - `disable_component` — Disable a component
-       - `read_project_file` — Read a project file
-       - `error_resolve` — Resolve component errors

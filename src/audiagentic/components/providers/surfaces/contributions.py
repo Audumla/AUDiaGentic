@@ -194,4 +194,23 @@ def load_surface_contributions(
     ):
         contributions.extend(build_summary_contributions(project_root=project_root))
 
+    # Memory dynamic contributions — only if memory component is installed+enabled
+    if project_root is None or (
+        is_installed("memory", project_root) and is_enabled("memory", project_root)
+    ):
+        from audiagentic.components.memory.memory_api import (  # noqa: PLC0415
+            build_memory_contributions,
+        )
+
+        for raw_contrib in build_memory_contributions(project_root=project_root):
+            contributions.append(
+                SurfaceContribution(
+                    contribution_id=raw_contrib["contribution_id"],
+                    owner_component=raw_contrib["owner_component"],
+                    title=raw_contrib["title"],
+                    body=raw_contrib["body"],
+                    preferred_targets=raw_contrib.get("preferred_targets", ()),
+                )
+            )
+
     return contributions

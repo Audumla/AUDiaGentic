@@ -21,10 +21,29 @@ def plan_create_item(item: dict) -> dict:
     (e.g. 'code-cleanup' → 'CC') followed by a zero-padded sequence number.
 
     Required: plan, title.
-    Optional: id (auto-generated), priority (P0/P1/P2/P3/HIGH/MEDIUM), complexity (simple/mid/complex),
+    Optional: priority (P0/P1/P2/P3/HIGH/MEDIUM), complexity (simple/mid/complex),
               order, validate_first, description, steps, files, validation, effort_risk, notes.
+    Returns: {id, title, plan, path}
     """
     return planning_api.create_item(project_root_from_env(), item)
+
+
+@mcp.tool()
+@log_tool_call
+def plan_list_groups(state: str | None = None, plan: str | None = None) -> list:
+    """List plan items grouped by plan.
+
+    Returns a list of plan groups, each containing:
+    - plan: the plan name
+    - item_count: total items in this plan
+    - active_count: items not completed
+    - completed_count: completed items
+    - items: list of item summaries
+
+    state: 'active'/'pending' for active items, 'completed' for done, omit for all.
+    plan: directory name like 'code-cleanup' (omit for all plans).
+    """
+    return planning_api.list_items_grouped(project_root_from_env(), state, plan)
 
 
 @mcp.tool()
@@ -71,6 +90,77 @@ def plan_update_item(item_id: str, updates: dict) -> dict:
 def plan_delete_item(item_id: str) -> dict:
     """Permanently delete a plan item by ID."""
     return planning_api.delete_item(project_root_from_env(), item_id)
+
+
+# ---------------------------------------------------------------------------
+# Review tools
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+@log_tool_call
+def plan_create_review(review: dict) -> dict:
+    """Create a new review linked to a plan item.
+
+    The review dict requires keys: review-of (or review_of) for parent item ID, title.
+    Optional keys: notes, findings, conclusion, reviewed-by.
+    ID is auto-generated (e.g. RV01).
+    Returns {id, title, review-of, plan, path}
+    """
+    return planning_api.create_review(project_root_from_env(), review)
+
+
+@mcp.tool()
+@log_tool_call
+def plan_list_reviews(
+    state: str | None = None,
+    plan: str | None = None,
+    review_of: str | None = None,
+) -> list:
+    """List reviews, optionally filtered by state, plan, or parent item.
+
+    state: 'created'/'considered' for active, 'closed' for completed, omit for all.
+    plan: directory name like 'code-cleanup' (omit for all plans).
+    review_of: parent item ID to filter by (omit for all).
+    """
+    return planning_api.list_reviews(project_root_from_env(), state, plan, review_of)
+
+
+@mcp.tool()
+@log_tool_call
+def plan_get_review(review_id: str) -> dict:
+    """Read a review by ID, returning frontmatter + parsed body sections."""
+    return planning_api.get_review(project_root_from_env(), review_id)
+
+
+@mcp.tool()
+@log_tool_call
+def plan_set_review_state(review_id: str, new_state: str) -> dict:
+    """Transition a review to a new state.
+
+    'closed' moves the review to completed/.
+    'created'/'considered' keep it in active/.
+    Returns {id, state, path}
+    """
+    return planning_api.set_review_state(project_root_from_env(), review_id, new_state)
+
+
+@mcp.tool()
+@log_tool_call
+def plan_update_review(review_id: str, updates: dict) -> dict:
+    """Update frontmatter fields and/or body sections of a review.
+
+    Frontmatter keys: reviewed-by, reviewed-at.
+    Section keys: title, notes, findings, conclusion.
+    Returns {id, path}
+    """
+    return planning_api.update_review(project_root_from_env(), review_id, updates)
+
+
+@mcp.tool()
+@log_tool_call
+def plan_delete_review(review_id: str) -> dict:
+    """Permanently delete a review."""
+    return planning_api.delete_review(project_root_from_env(), review_id)
 
 
 def main() -> None:
