@@ -13,7 +13,10 @@ from audiagentic.components.agent_jobs.prompt_syntax import (
 from audiagentic.components.agent_jobs.records import build_job_record
 from audiagentic.components.agent_jobs.state_machine import TERMINAL_STATES
 from audiagentic.components.providers.services.models import resolve_model_selection
-from audiagentic.components.providers.services.provider_config import load_provider_config
+from audiagentic.components.providers.services.provider_config import (
+    is_provider_enabled,
+    load_provider_config,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.time import now_iso_z
@@ -24,6 +27,71 @@ from audiagentic.runtime.state import jobs_store as store
 def load_project_config(project_root: Path) -> dict[str, Any]:
     path = project_root / ".audiagentic" / "config" / "project.yaml"
     return load_yaml_file(path)
+
+
+def _resolve_agent_provider_model(
+    project_root: Path,
+    request: dict[str, Any],
+) -> tuple[str, str | None, str | None]:
+    """Resolve provider_id, model_id, model_alias from agent profile or request.
+
+    Precedence:
+      1. agent-profile-id in request -> resolve profile -> override provider/model
+      2. Explicit provider-id / model-id in request source
+      3. Default agent profile
+      4. Fallback to local-openai (backward compat)
+
+    Returns (provider_id, model_id, model_alias).
+    """
+    source = request.get("source", {})
+    explicit_provider = source.get("provider-id")
+    explicit_model = source.get("model-id")
+    explicit_alias = source.get("model-alias")
+
+    agent_profile_id = request.get("agent-profile-id")
+    if agent_profile_id:
+        from audiagentic.components.agents.agents_api import resolve_profile
+        resolved = resolve_profile(project_root, agent_profile_id)
+        provider_id = resolved["provider_id"]
+        if not is_provider_enabled(project_root, provider_id):
+            raise AudiaGenticError(
+                code="CON-AGJ-002",
+                kind="agent-jobs",
+                message="agent profile references a disabled provider",
+                details={
+                    "profile_id": agent_profile_id,
+                    "provider_id": provider_id,
+                },
+            )
+        return provider_id, resolved.get("model_id"), resolved.get("model_alias")
+
+    if explicit_provider or explicit_model:
+        return explicit_provider or "local-openai", explicit_model, explicit_alias
+
+    try:
+        from audiagentic.components.agents.agents_api import resolve_default_profile
+        resolved = resolve_default_profile(project_root)
+        provider_id = resolved["provider_id"]
+        if not is_provider_enabled(project_root, provider_id):
+            raise AudiaGenticError(
+                code="CON-AGJ-002",
+                kind="agent-jobs",
+                message="default agent profile references a disabled provider",
+                details={
+                    "profile_id": resolved["profile_id"],
+                    "provider_id": provider_id,
+                },
+            )
+        return provider_id, resolved.get("model_id"), resolved.get("model_alias")
+    except AudiaGenticError as exc:
+        if exc.code == "RES-AGP-003":
+            raise AudiaGenticError(
+                code="CON-AGJ-001",
+                kind="agent-jobs",
+                message="no default agent profile and no explicit provider/model in request",
+                details={},
+            ) from exc
+        raise
 
 
 def _apply_launch_defaults(project_root: Path, request: dict[str, Any]) -> dict[str, Any]:
@@ -102,13 +170,13 @@ def _build_job_from_request(
     timestamp = (now_fn or now_iso_z)()
     target = request["target"]
     provider_config = load_provider_config(project_root).get("providers", {})
-    provider_id = request["source"].get("provider-id") or "local-openai"
+    provider_id, resolved_model, resolved_alias = _resolve_agent_provider_model(project_root, request)
     selection = resolve_model_selection(
         provider_id=provider_id,
         provider_config=provider_config.get(provider_id, {}),
         job_request={
-            "model-id": request["source"].get("model-id"),
-            "model-alias": request["source"].get("model-alias"),
+            "model-id": resolved_model or request["source"].get("model-id"),
+            "model-alias": resolved_alias or request["source"].get("model-alias"),
         },
         catalog=None,
     )
@@ -167,13 +235,15 @@ def _resume_job_from_request(project_root: Path, request: dict[str, Any], *, now
             details={"job-id": job_id, "state": job["state"]},
         )
     provider_config = load_provider_config(project_root).get("providers", {})
-    provider_id = request["source"].get("provider-id") or job["provider-id"]
+    provider_id, resolved_model, resolved_alias = _resolve_agent_provider_model(project_root, request)
+    if not provider_id:
+        provider_id = job["provider-id"]
     selection = resolve_model_selection(
         provider_id=provider_id,
         provider_config=provider_config.get(provider_id, {}),
         job_request={
-            "model-id": request["source"].get("model-id") or job.get("model-id"),
-            "model-alias": request["source"].get("model-alias") or job.get("model-alias"),
+            "model-id": resolved_model or request["source"].get("model-id") or job.get("model-id"),
+            "model-alias": resolved_alias or request["source"].get("model-alias") or job.get("model-alias"),
         },
         catalog=None,
     )
