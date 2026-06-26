@@ -68,6 +68,8 @@ def _resolve_probe_command(spec: str) -> Callable[[], bool]:
                 check=False,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=10,
             )
         except (OSError, subprocess.TimeoutExpired):
@@ -131,6 +133,8 @@ def _get_tool_version(binary: str) -> tuple[int, ...] | None:
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=10,
         )
         if result.returncode != 0:
