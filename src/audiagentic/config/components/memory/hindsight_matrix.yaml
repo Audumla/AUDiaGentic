@@ -1,0 +1,417 @@
+# Hindsight provider recipe matrix — source-backed integration data
+#
+# This file is the authoritative matrix for Hindsight integration recipes
+# across AUDiaGentic providers. Each row captures provider-specific
+# integration facts. Edit this file to add/remove/update providers.
+#
+# Fields:
+#   provider_id        unique provider identifier
+#   display_name       human-readable name
+#   integration_type   descriptive label (hooks, plugin, mcp, wrapper, etc.)
+#   recipe_kind        one of: hooks, plugin_config, mcp_config, wrapper_cli,
+#                      hybrid, guidance_only, command_installer, rules,
+#                      context_provider, native_passthrough
+#   install_command    official install command (empty if unknown)
+#   uninstall_command  official uninstall command (empty if unknown)
+#   status_command     command to check integration status (empty if unknown)
+#   config_artifacts   list of config files/artifacts created
+#   platform_constraints: list of supported platforms (macOS, Linux, Windows)
+#   scope              project-local | global | both
+#   source_status      verified | unconfirmed | blocked | no_hindsight
+#   audia_action       call_official_installer | manage_config_writes |
+#                      action_needed | no_source
+#   source_url         official documentation URL
+#   source_date        date source was checked (ISO format)
+#   notes              additional context or blockers
+
+matrix:
+  - provider_id: codex
+    display_name: Codex
+    integration_type: hooks
+    recipe_kind: hooks
+    install_command: curl -fsSL https://hindsight.vectorize.io/get-codex | bash
+    uninstall_command: curl -fsSL https://hindsight.vectorize.io/get-codex | bash -s -- --uninstall
+    status_command: ""
+    config_artifacts:
+      - ~/.hindsight/codex.json
+      - ~/.hindsight/codex/settings.json
+    platform_constraints:
+      - macOS
+      - Linux
+      - Windows
+    scope: global
+    audia_action: call_official_installer
+    source_url: https://hindsight.vectorize.io/sdks/integrations/codex
+    source_date: "2026-06-26"
+    source_status: verified
+    notes: >-
+      Three Python lifecycle hooks: session_start.py (SessionStart),
+      recall.py (UserPromptSubmit), retain.py (Stop). Config in ~/.hindsight/.
+      Pure Python stdlib, cross-platform.
+
+  - provider_id: claude
+    display_name: Claude Code
+    integration_type: plugin
+    recipe_kind: plugin_config
+    install_command: claude plugin marketplace add vectorize-io/hindsight && claude plugin install hindsight-memory
+    uninstall_command: ""
+    status_command: ""
+    config_artifacts:
+      - ~/.hindsight/claude-code.json
+      - ${CLAUDE_PLUGIN_DATA}/venv
+      - ~/.hindsight/profiles/claude-code.log
+    platform_constraints:
+      - macOS
+      - Linux
+      - Windows
+    scope: global
+    audia_action: call_official_installer
+    source_url: https://hindsight.vectorize.io/sdks/integrations/claude-code
+    source_date: "2026-06-26"
+    source_status: verified
+    notes: >-
+      Plugin combines lifecycle hooks (session_start.py, recall.py, retain.py,
+      session_end.py) + MCP server (mcp_server.py with agent_knowledge_* tools)
+      + skill (create-agent). Config in ~/.hindsight/.
+
+  - provider_id: cline
+    display_name: Cline
+    integration_type: hooks
+    recipe_kind: hooks
+    install_command: pip install hindsight-cline && hindsight-cline install --api-url URL --api-token KEY
+    uninstall_command: hindsight-cline uninstall
+    status_command: ""
+    config_artifacts:
+      - ~/.hindsight/cline.json
+      - settings.json
+    platform_constraints:
+      - macOS
+      - Linux
+    scope: both
+    audia_action: call_official_installer
+    source_url: https://hindsight.vectorize.io/sdks/integrations/cline
+    source_date: "2026-06-26"
+    source_status: verified
+    notes: >-
+      macOS/Linux only (no Windows). Requires Python 3. Lifecycle hooks for
+      TaskStart, UserPromptSubmit, TaskComplete, TaskCancel. --global flag
+      for all-project install or per-project.
+
+  - provider_id: copilot
+    display_name: GitHub Copilot
+    integration_type: mcp+rules
+    recipe_kind: hybrid
+    install_command: pip install hindsight-copilot && hindsight-copilot init --api-token TOKEN --bank-id ID
+    uninstall_command: hindsight-copilot uninstall
+    status_command: hindsight-copilot status
+    config_artifacts:
+      - ./.vscode/mcp.json
+      - ./.github/copilot-instructions.md
+    platform_constraints:
+      - macOS
+      - Linux
+      - Windows
+    scope: project-local
+    audia_action: call_official_installer
+    source_url: https://hindsight.vectorize.io/sdks/integrations/github-copilot
+    source_date: "2026-06-26"
+    source_status: verified
+    notes: >-
+      VS Code MCP server config (.vscode/mcp.json with HTTP server) +
+      Copilot instructions rule (.github/copilot-instructions.md).
+      Project-local scope.
+
+  - provider_id: opencode
+    display_name: OpenCode
+    integration_type: plugin
+    recipe_kind: plugin_config
+    install_command: Add "@vectorize-io/opencode-hindsight" to plugin array in opencode.json
+    uninstall_command: Remove plugin from opencode.json plugin array
+    status_command: ""
+    config_artifacts:
+      - ~/.hindsight/opencode.json
+      - opencode.json (plugin array entry)
+    platform_constraints:
+      - macOS
+      - Linux
+      - Windows
+    scope: both
+    audia_action: manage_config_writes
+    source_url: https://hindsight.vectorize.io/sdks/integrations/opencode
+    source_date: "2026-06-26"
+    source_status: verified
+    notes: >-
+      Plugin registers custom tools (hindsight_retain, hindsight_recall,
+      hindsight_reflect), hooks on session.created, session.idle, and
+      compaction events. Env vars unreliable on Windows for plugin runtime.
+      Project-local (opencode.json) or global (~/.config/opencode/opencode.json).
+
+  - provider_id: openhands
+    display_name: OpenHands
+    integration_type: mcp+rules
+    recipe_kind: hybrid
+    install_command: pip install hindsight-openhands && hindsight-openhands init --api-token TOKEN --bank-id ID
+    uninstall_command: hindsight-openhands uninstall
+    status_command: hindsight-openhands status
+    config_artifacts:
+      - ./config.toml (MCP server entry under [mcp])
+      - ./AGENTS.md (recall/retain rule)
+    platform_constraints:
+      - macOS
+      - Linux
+      - Windows
+    scope: project-local
+    audia_action: call_official_installer
+    source_url: https://hindsight.vectorize.io/sdks/integrations/openhands
+    source_date: "2026-06-26"
+    source_status: verified
+    notes: >-
+      Native Streamable-HTTP MCP support in config.toml + AGENTS.md rule.
+      Project-local scope.
+
+  - provider_id: roo
+    display_name: Roo Code
+    integration_type: mcp+rules
+    recipe_kind: hybrid
+    install_command: pip install hindsight-roo-code && hindsight-roo-code install
+    uninstall_command: ""
+    status_command: ""
+    config_artifacts:
+      - .roo/mcp.json
+      - .roo/rules/hindsight-memory.md
+    platform_constraints:
+      - macOS
+      - Linux
+      - Windows
+    scope: both
+    audia_action: call_official_installer
+    source_url: https://hindsight.vectorize.io/sdks/integrations/roo-code
+    source_date: "2026-06-26"
+    source_status: verified
+    notes: >-
+      MCP server config + custom rules (system-prompt injection via .roo/rules/).
+      Project-local (.roo/) or global (~/.roo/) with --global flag.
+
+  - provider_id: continue_
+    display_name: Continue
+    integration_type: context+mcp+rules
+    recipe_kind: hybrid
+    install_command: pip install hindsight-continue && hindsight-continue
+    uninstall_command: ""
+    status_command: ""
+    config_artifacts:
+      - config.yaml (HTTP context provider entry for Continue)
+    platform_constraints:
+      - macOS
+      - Linux
+      - Windows
+    scope: project-local
+    audia_action: call_official_installer
+    source_url: https://hindsight.vectorize.io/sdks/integrations/continue
+    source_date: "2026-06-26"
+    source_status: verified
+    notes: >-
+      HTTP context provider (adapter server on 127.0.0.1:8123 implementing
+      Continue's context provider contract) + optional MCP server + rules for
+      automatic recall/retain in agent mode.
+
+  - provider_id: aider
+    display_name: Aider
+    integration_type: wrapper
+    recipe_kind: wrapper_cli
+    install_command: pip install hindsight-aider aider-chat
+    uninstall_command: pip uninstall hindsight-aider
+    status_command: ""
+    config_artifacts:
+      - .aider.hindsight-memory.md (recalled memory file, passed via --read)
+    platform_constraints:
+      - macOS
+      - Linux
+      - Windows
+    scope: project-local
+    audia_action: call_official_installer
+    source_url: https://hindsight.vectorize.io/sdks/integrations/aider
+    source_date: "2026-06-26"
+    source_status: verified
+    notes: >-
+      Drop-in wrapper CLI: hindsight-aider wraps aider, writes recalled context
+      to read-only file before launch, reads chat-history file after exit for
+      retain. Scoped per git repo.
+
+  - provider_id: gemini
+    display_name: Gemini (Spark)
+    integration_type: mcp
+    recipe_kind: mcp_config
+    install_command: ""
+    uninstall_command: ""
+    status_command: ""
+    config_artifacts:
+      - antigravity.yaml (hosted agent manifest)
+      - ~/.gemini/antigravity/mcp_config.json (desktop/IDE config)
+    platform_constraints:
+      - macOS
+      - Linux
+      - Windows
+    scope: global
+    audia_action: manage_config_writes
+    source_url: https://hindsight.vectorize.io/sdks/integrations/gemini-spark
+    source_date: "2026-06-26"
+    source_status: verified
+    notes: >-
+      Cloud-based agent; Spark's built-in MCP support via OAuth 2.1.
+      No hook-based auto-recall/retain — agent calls tools when planner
+      judges useful. Self-hosted requires Cloudflare OAuth proxy + tunnel.
+
+  - provider_id: windsurf
+    display_name: Windsurf
+    integration_type: mcp+rules
+    recipe_kind: hybrid
+    install_command: pip install hindsight-windsurf && hindsight-windsurf init --api-token TOKEN --bank-id ID
+    uninstall_command: hindsight-windsurf uninstall
+    status_command: hindsight-windsurf status
+    config_artifacts:
+      - ~/.codeium/windsurf/mcp_config.json (global MCP config)
+      - ./.windsurf/rules/hindsight.md (workspace rule, trigger: always_on)
+    platform_constraints:
+      - macOS
+      - Linux
+      - Windows
+    scope: both
+    audia_action: call_official_installer
+    source_url: https://hindsight.vectorize.io/sdks/integrations/windsurf
+    source_date: "2026-06-26"
+    source_status: verified
+    notes: >-
+      MCP config is global (~/.codeium/windsurf/), rules are project-local
+      (.windsurf/rules/ with always-on trigger).
+
+  - provider_id: cursor
+    display_name: Cursor
+    integration_type: mcp+hooks+plugin
+    recipe_kind: hybrid
+    install_command: pip install hindsight-cursor && hindsight-cursor init --api-url URL --api-token TOKEN
+    uninstall_command: ""
+    status_command: ""
+    config_artifacts:
+      - ~/.hindsight/cursor.json
+      - .cursor-plugin/hindsight-memory/
+      - .cursor/mcp.json
+      - ~/.hindsight/cursor-state/state/
+    platform_constraints:
+      - macOS
+      - Linux
+      - Windows
+    scope: both
+    audia_action: call_official_installer
+    source_url: https://hindsight.vectorize.io/sdks/integrations/cursor
+    source_date: "2026-06-26"
+    source_status: verified
+    notes: >-
+      Cursor hook-based plugin (SessionStart for recall, stop for retain) +
+      MCP support (.cursor/mcp.json) + skill (hindsight-recall) + rule
+      (hindsight-memory.mdc). Global config + project-local plugin files.
+
+  - provider_id: goose
+    display_name: Goose
+    integration_type: none
+    recipe_kind: guidance_only
+    install_command: ""
+    uninstall_command: ""
+    status_command: ""
+    config_artifacts: []
+    platform_constraints:
+      - macOS
+      - Linux
+      - Windows
+    scope: project-local
+    audia_action: no_source
+    source_url: ""
+    source_date: "2026-06-26"
+    source_status: no_hindsight
+    notes: >-
+      No official Hindsight integration for Goose. Could connect via generic
+      MCP server fallback if Goose supports MCP.
+
+  - provider_id: local_openai
+    display_name: Local OpenAI
+    integration_type: none
+    recipe_kind: guidance_only
+    install_command: ""
+    uninstall_command: ""
+    status_command: ""
+    config_artifacts: []
+    platform_constraints:
+      - macOS
+      - Linux
+      - Windows
+    scope: project-local
+    audia_action: no_source
+    source_url: ""
+    source_date: "2026-06-26"
+    source_status: no_hindsight
+    notes: >-
+      No official Hindsight integration for Local OpenAI. Could connect via
+      generic MCP server (hindsight-local-mcp) if the client supports MCP.
+
+  - provider_id: pi
+    display_name: Pi
+    integration_type: none
+    recipe_kind: guidance_only
+    install_command: ""
+    uninstall_command: ""
+    status_command: ""
+    config_artifacts: []
+    platform_constraints:
+      - macOS
+      - Linux
+      - Windows
+    scope: project-local
+    audia_action: no_source
+    source_url: ""
+    source_date: "2026-06-26"
+    source_status: no_hindsight
+    notes: >-
+      No official Hindsight integration for Pi. Could connect via generic
+      MCP server fallback if Pi supports MCP.
+
+  - provider_id: plandex
+    display_name: Plandex
+    integration_type: none
+    recipe_kind: guidance_only
+    install_command: ""
+    uninstall_command: ""
+    status_command: ""
+    config_artifacts: []
+    platform_constraints:
+      - macOS
+      - Linux
+      - Windows
+    scope: project-local
+    audia_action: no_source
+    source_url: ""
+    source_date: "2026-06-26"
+    source_status: no_hindsight
+    notes: >-
+      No official Hindsight integration for Plandex. Could connect via generic
+      MCP server fallback if Plandex supports MCP.
+
+  - provider_id: qwen
+    display_name: Qwen Code
+    integration_type: none
+    recipe_kind: guidance_only
+    install_command: ""
+    uninstall_command: ""
+    status_command: ""
+    config_artifacts: []
+    platform_constraints:
+      - macOS
+      - Linux
+      - Windows
+    scope: project-local
+    audia_action: no_source
+    source_url: ""
+    source_date: "2026-06-26"
+    source_status: no_hindsight
+    notes: >-
+      No official Hindsight integration for Qwen Code. Could connect via
+      generic MCP server fallback if Qwen supports MCP.
