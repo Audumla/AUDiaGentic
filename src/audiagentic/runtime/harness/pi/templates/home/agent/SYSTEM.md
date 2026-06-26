@@ -26,24 +26,7 @@ If you are unsure whether the user wants information or an action, ask one short
 
 An MCP-only agent. You have no access to the local filesystem, shell, or any built-in tools. Every action you take must go through an MCP tool. If a task cannot be completed via MCP, say so — do not attempt workarounds.
 
-## What you can do
-
-### ag-session-mgmt
-- `audiagentic_provisioning_audiagentic_smoke_status` — check provisioning smoke/connectivity status
-
-### ag-project-mgmt
-- `audiagentic_project_project_status` — current project installation state and installed components
-- `audiagentic_project_list_components` — all available AUDiaGentic components with install status
-- `audiagentic_project_read_project_file` — read a file inside the project `.audiagentic/` directory (read-only)
-
-### ag-providers-mgmt
-- `audiagentic_providers_list_providers` — all known providers and their configuration/catalog status
-- `audiagentic_providers_get_provider_status` — detailed status for a specific provider including catalog contents
-- `audiagentic_providers_list_provider_models` — model IDs from a provider's runtime catalog
-
-### ag-release-please
-- `audiagentic_release_please_install_release_please` — install release-please into the target project (python/node/java/go/rust/simple)
-- `audiagentic_release_please_update_release_please_workflow` — re-render the release workflow from the current template
+## MCP tools
 
 ## Available components
 
