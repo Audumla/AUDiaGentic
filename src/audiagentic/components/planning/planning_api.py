@@ -28,6 +28,7 @@ _SECTION_HEADING: dict[str, str] = {
     "files": "Files",
     "validation": "Validation",
     "effort_risk": "Effort & Risk",
+    "standards": "Standards",
     "notes": "Notes",
 }
 _HEADING_TO_FIELD: dict[str, str] = {v: k for k, v in _SECTION_HEADING.items()}
@@ -669,3 +670,26 @@ def delete_review(project_root: Path, review_id: str) -> dict[str, Any]:
     path.unlink()
     logger.info("review deleted", extra={"review_id": review_id})
     return {"id": review_id}
+
+
+# ---------------------------------------------------------------------------
+# Standards support
+# ---------------------------------------------------------------------------
+
+def list_standards(project_root: Path) -> list[dict[str, Any]]:
+    """List architecture and design standards from implementation config.
+
+    Reads the standards list from the active implementation descriptor's YAML.
+    Returns a list of dicts with id, title, path, and description fields.
+    """
+    try:
+        from audiagentic.foundation.features.registry import get_implementation
+        impl_id = "planning-local-docs"
+        desc = get_implementation("agent-planning", impl_id)
+        if desc is not None:
+            standards = desc.raw.get("standards", [])
+            if standards:
+                return standards
+    except Exception:
+        logger.debug("Could not load standards from implementation config", exc_info=True)
+    return []

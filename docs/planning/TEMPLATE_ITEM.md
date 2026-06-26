@@ -20,4 +20,8 @@ complexity: <simple|mid|complex>
 
 ## Effort & Risk
 
+## Standards
+
+<standard-id> — <which rules apply>
+
 ## Notes
