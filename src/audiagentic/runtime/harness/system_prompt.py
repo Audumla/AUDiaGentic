@@ -34,45 +34,39 @@ def derive_harness_instructions(descriptor: ComponentDescriptor) -> tuple[Harnes
     if not descriptor.mcp_servers:
         return ()
 
-    sections: dict[str, list[str]] = {}
+    section = "MCP tools"
+    all_lines: list[str] = []
 
     for server in descriptor.mcp_servers:
         if not server.direct_tools or not isinstance(server.direct_tools, list):
             continue
 
-        section = f"MCP tools ({server.name})"
-        if section not in sections:
-            sections[section] = []
-
-        lines = [f"## {section}", ""]
+        all_lines.append(f"### {server.name}")
         if server.description:
-            lines.append(f"{server.description}")
-            lines.append("")
+            all_lines.append(f"{server.description}")
+            all_lines.append("")
 
-        lines.append("Available tools:")
+        all_lines.append("Available tools:")
         for tool in server.direct_tools:
             desc = server.tool_descriptions.get(tool, "")
             if desc:
-                lines.append(f"- `{tool}`: {desc}")
+                all_lines.append(f"- `{tool}`: {desc}")
             else:
-                lines.append(f"- `{tool}`")
-        lines.append("")
+                all_lines.append(f"- `{tool}`")
+        all_lines.append("")
 
-        sections[section] = lines
-
-    if not sections:
+    if not all_lines:
         return ()
 
-    instructions = []
-    for section, lines in sections.items():
-        instructions.append(HarnessInstruction(
-            section=section,
-            content="\n".join(lines),
-            description=f"Derived harness instructions for {descriptor.component_id}",
-            propagate=descriptor.mcp_servers[0].propagate if descriptor.mcp_servers else "audiagentic",
-        ))
+    content = "\n".join(all_lines)
+    propagate = descriptor.mcp_servers[0].propagate if descriptor.mcp_servers else "audiagentic"
 
-    return tuple(instructions)
+    return (HarnessInstruction(
+        section=section,
+        content=content,
+        description=f"Derived harness instructions for {descriptor.component_id}",
+        propagate=propagate,
+    ),)
 
 
 def check_harness_instruction_drift(descriptor: ComponentDescriptor) -> list[str]:
