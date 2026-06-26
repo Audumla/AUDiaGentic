@@ -107,6 +107,36 @@ def test_diagnostics_initializes_active_sessions(monkeypatch) -> None:
     assert initialized == [(Path.cwd(), "python", server)]
 
 
+def test_diagnostics_skips_broken_sessions(monkeypatch) -> None:
+    pyright = ServerConfig(command=["pyright-langserver", "--stdio"], file_extensions=[".py"], server_id="pyright")
+    ruff = ServerConfig(command=["ruff", "server"], file_extensions=[".py"], server_id="ruff")
+    attempted: list[str] = []
+
+    monkeypatch.setattr(
+        lsp_api,
+        "resolve_active_runtime_servers",
+        lambda project_root: {"python": [pyright], "python-ruff": [ruff]},
+    )
+
+    def _fake_get_or_create(project_root, language, server_config):
+        attempted.append(server_config.server_id)
+        if server_config.server_id == "pyright":
+            raise RuntimeError("boom")
+        return MagicMock()
+
+    monkeypatch.setattr(lsp_api._session_manager, "get_or_create", _fake_get_or_create)
+    monkeypatch.setattr(
+        lsp_api._session_manager,
+        "diagnostics",
+        lambda project_root, **kwargs: {"file:///tmp/test.py": []},
+    )
+
+    result = lsp_api.diagnostics(".")
+
+    assert result == {"file:///tmp/test.py": []}
+    assert attempted == ["pyright", "ruff"]
+
+
 def test_config_status_reports_missing_config(tmp_path: Path) -> None:
     (tmp_path / ".audiagentic").mkdir()
     status = lsp_config_api.config_status(str(tmp_path))
@@ -262,6 +292,74 @@ def test_resolve_language_server_auto_enables_language(tmp_path: Path, monkeypat
     assert isinstance(result, list)
     assert captured.get("language") == "typescript"
     updated_state = get_feature_state(tmp_path, "coding-lsp", "language", "typescript")
+    assert updated_state.enabled is True
+
+
+def test_resolve_language_server_matches_makefile_basename(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / ".audiagentic").mkdir()
+    mk = tmp_path / "Makefile"
+    mk.write_text("all:\n\t@echo ok\n", encoding="utf-8")
+
+    feature_registry.register(
+        BindingDescriptor(
+            parent="coding-lsp",
+            implementation="ag-lsp",
+            feature_kind="language",
+            feature="make",
+            projection_writer_key="coding-lsp.lsp-json",
+        )
+    )
+    state = get_feature_state(tmp_path, "coding-lsp", "language", "make")
+    assert state.enabled is False
+
+    captured: dict[str, object] = {}
+
+    def _fake_get_or_create(project_root, language, server):
+        captured["language"] = language
+        mock_session = MagicMock()
+        return mock_session
+
+    monkeypatch.setattr(lsp_api._session_manager, "get_or_create", _fake_get_or_create)
+
+    result = lsp_api.document_symbols(str(mk))
+
+    assert isinstance(result, list)
+    assert captured.get("language") == "make"
+    updated_state = get_feature_state(tmp_path, "coding-lsp", "language", "make")
+    assert updated_state.enabled is True
+
+
+def test_resolve_language_server_auto_enables_yaml(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / ".audiagentic").mkdir()
+    yaml_file = tmp_path / "docker-compose.yml"
+    yaml_file.write_text("services:\n  app:\n    image: busybox\n", encoding="utf-8")
+
+    feature_registry.register(
+        BindingDescriptor(
+            parent="coding-lsp",
+            implementation="ag-lsp",
+            feature_kind="language",
+            feature="yaml",
+            projection_writer_key="coding-lsp.lsp-json",
+        )
+    )
+    state = get_feature_state(tmp_path, "coding-lsp", "language", "yaml")
+    assert state.enabled is False
+
+    captured: dict[str, object] = {}
+
+    def _fake_get_or_create(project_root, language, server):
+        captured["language"] = language
+        mock_session = MagicMock()
+        return mock_session
+
+    monkeypatch.setattr(lsp_api._session_manager, "get_or_create", _fake_get_or_create)
+
+    result = lsp_api.document_symbols(str(yaml_file))
+
+    assert isinstance(result, list)
+    assert captured.get("language") == "yaml"
+    updated_state = get_feature_state(tmp_path, "coding-lsp", "language", "yaml")
     assert updated_state.enabled is True
 
 
@@ -469,6 +567,58 @@ def test_server_capabilities_includes_type_hierarchy_when_supported(tmp_path: Pa
 
     result = lsp_api.server_capabilities(str(py_file))
     assert "typeHierarchy" in result["supported"]
+
+
+def test_server_capabilities_skips_failed_server_and_reports_it(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / ".audiagentic").mkdir()
+    py_file = tmp_path / "test.py"
+    py_file.write_text("x = 1\n", encoding="utf-8")
+
+    broken = ServerConfig(command=["pyright-langserver"], file_extensions=[".py"], server_id="pyright", label="Python (pyright)")
+    good = ServerConfig(command=["ruff", "server"], file_extensions=[".py"], server_id="ruff", label="Python (ruff)")
+    monkeypatch.setattr(lsp_api, "discover_servers_multi", lambda pr: {"python": [broken], "python-ruff": [good]})
+
+    good_session = MagicMock()
+    good_session.has_capability.side_effect = lambda m: m == "textDocument/hover"
+    good_session.capabilities.return_value = {"hoverProvider": True}
+
+    def _fake_get_or_create(project_root, language, cfg):
+        if cfg.server_id == "pyright":
+            raise RuntimeError("init failed")
+        return good_session
+
+    monkeypatch.setattr(lsp_api._session_manager, "get_or_create", _fake_get_or_create)
+
+    result = lsp_api.server_capabilities(str(py_file))
+
+    assert "hover" in result["supported"]
+    assert any(server.get("error") == "failed to initialize" for server in result["servers"])
+
+
+def test_open_file_session_skips_failed_server(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / ".audiagentic").mkdir()
+    py_file = tmp_path / "test.py"
+    py_file.write_text("x = 1\n", encoding="utf-8")
+
+    broken = ServerConfig(command=["pyright-langserver"], file_extensions=[".py"], server_id="pyright")
+    good = ServerConfig(command=["ruff", "server"], file_extensions=[".py"], server_id="ruff")
+    monkeypatch.setattr(lsp_api, "discover_servers_multi", lambda pr: {"python": [broken], "python-ruff": [good]})
+
+    good_session = MagicMock()
+    good_session.has_capability.return_value = True
+    good_session.sync_document = MagicMock()
+
+    def _fake_get_or_create(project_root, language, cfg):
+        if cfg.server_id == "pyright":
+            raise RuntimeError("init failed")
+        return good_session
+
+    monkeypatch.setattr(lsp_api._session_manager, "get_or_create", _fake_get_or_create)
+
+    session, _ = lsp_api._open_file_session(str(py_file), "textDocument/hover")
+
+    assert session is good_session
+    good_session.sync_document.assert_called_once()
 
 
 # ── CAP07: Install recipe validation ────────────────────────────────────────
