@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+from audiagentic.components.memory.hindsight.matrix import HindsightRecipeRow
 from audiagentic.components.memory.hindsight.mcp_recipe import (
     HindsightMcpRecipe,
     HindsightTarget,
     build_hindsight_entry,
 )
+from audiagentic.components.memory.hindsight.recipes import (
+    RulesOnlyRecipe,
+    apply_hindsight,
+    teardown_hindsight,
+)
 from audiagentic.components.memory.hindsight_export import HindsightBackendConfig
+from audiagentic.components.providers.services.recipes import ProviderRecipeKind
 from audiagentic.foundation.toolchains.artifact_registry import ArtifactRegistry
 from audiagentic.foundation.toolchains.config_reader import load_config
 from audiagentic.foundation.toolchains.recipe_contract import RecipeState
@@ -105,3 +112,57 @@ def test_entry_builder_override(tmp_path):
     assert load_config(cfg)["mcpServers"]["hindsight"] == {
         "custom": "https://hs.example.com"
     }
+
+
+def test_rules_only_recipe_writes_and_removes_rule_block(tmp_path):
+    rule_file = tmp_path / "AGENTS.md"
+    rule_file.write_text("User rules stay.\n", encoding="utf-8")
+    row = HindsightRecipeRow(
+        provider_id="test",
+        display_name="Test",
+        integration_type="rules-only",
+        recipe_kind=ProviderRecipeKind.GUIDANCE_ONLY,
+        audia_action="no_source",
+    )
+    recipe = RulesOnlyRecipe(row, rule_file, project_root=tmp_path)
+
+    result = recipe.configure({})
+    assert result.success
+    text = rule_file.read_text(encoding="utf-8")
+    assert "User rules stay." in text
+    assert "audiagentic:hindsight-memory" in text
+    assert "Recall before design/history questions" in text
+
+    removed = recipe.prune({})
+    assert removed.success
+    assert "audiagentic:hindsight-memory" not in rule_file.read_text(encoding="utf-8")
+    assert "User rules stay." in rule_file.read_text(encoding="utf-8")
+
+
+def test_hindsight_orchestration_entrypoints_run_selected_provider(tmp_path, monkeypatch):
+    rule_file = tmp_path / "AGENTS.md"
+    row = HindsightRecipeRow(
+        provider_id="test",
+        display_name="Test",
+        integration_type="rules-only",
+        recipe_kind=ProviderRecipeKind.GUIDANCE_ONLY,
+        audia_action="no_source",
+    )
+
+    def fake_register(registry, backend=None, project_root=None):
+        recipe = RulesOnlyRecipe(row, rule_file, project_root=project_root)
+        registry.register(recipe)
+        return [recipe]
+
+    monkeypatch.setattr(
+        "audiagentic.components.memory.hindsight.recipes.register_hindsight_recipes",
+        fake_register,
+    )
+
+    applied = apply_hindsight(tmp_path, backend=_backend(), provider_ids=["test"])
+    assert applied["test"].success
+    assert "audiagentic:hindsight-memory" in rule_file.read_text(encoding="utf-8")
+
+    torn_down = teardown_hindsight(tmp_path, backend=_backend(), provider_ids=["test"])
+    assert torn_down["test"].success
+    assert "audiagentic:hindsight-memory" not in rule_file.read_text(encoding="utf-8")
