@@ -5,7 +5,11 @@ has been moved to lsp_config_api.py.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
+import shutil
+import sys
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
@@ -13,6 +17,7 @@ from urllib.request import url2pathname
 
 from audiagentic.components.coding_lsp.lsp_constants import (
     COMPLETION_KIND_LABELS,
+    FILE_BASENAME_TO_LANGUAGE,
     LANGUAGE_MARKERS,
     METHOD_LABELS,
     SYMBOL_KIND_LABELS,
@@ -26,6 +31,67 @@ from audiagentic.components.coding_lsp.runtime_resolver import (
 logger = logging.getLogger(__name__)
 
 _session_manager = SessionManager()
+
+
+def _get_session_or_none(
+    project_root: Path, language: str, cfg: ServerConfig,
+) -> LspSession | None:
+    """Best-effort session acquisition.
+
+    A single broken or missing server should not make unrelated LSP tools fail
+    for the whole workspace. Callers that can degrade should use this helper.
+    """
+    try:
+        return _session_manager.get_or_create(project_root, language, cfg)
+    except Exception:
+        logger.warning(
+            "Failed to start LSP server %s for %s",
+            cfg.server_id or cfg.command[:1],
+            language,
+            exc_info=True,
+        )
+        return None
+
+
+def _file_matches_patterns(file_path: Path, patterns: list[str] | tuple[str, ...]) -> bool:
+    """Match by extension ('.py') or exact basename ('Makefile')."""
+    ext = file_path.suffix.lower()
+    name = file_path.name.lower()
+    for pattern in patterns:
+        normalized = pattern.lower()
+        if normalized.startswith("."):
+            if ext == normalized:
+                return True
+        elif name == normalized:
+            return True
+    return False
+
+
+def _refresh_path_after_install() -> None:
+    """Refresh PATH from OS after package manager install.
+
+    On Windows, winget/scoop may add directories to PATH that the current
+    process doesn't see until restart. Re-read from registry to pick them up.
+    """
+    if not sys.platform.startswith("win"):
+        return
+    try:
+        import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, r"Environment", 0, winreg.KEY_READ
+        ) as key:
+            path_val, _ = winreg.QueryValueEx(key, "PATH")
+            os.environ["PATH"] = path_val
+    except Exception:
+        pass
+
+
+def _find_binary_after_install(name: str) -> bool:
+    """Check if binary is now available after install (may need PATH refresh)."""
+    if shutil.which(name):
+        return True
+    _refresh_path_after_install()
+    return shutil.which(name) is not None
 
 
 def _is_mutation_enabled(project_root: Path) -> bool:
@@ -258,21 +324,56 @@ def _resolve_language_servers_for_file(
 
     for language, cfgs in servers_by_lang.items():
         for cfg in cfgs:
-            if ext in cfg.file_extensions:
+            if _file_matches_patterns(file_path, cfg.file_extensions):
+                # Auto-install missing binary for already-configured languages
+                binary = cfg.command[0] if cfg.command else None
+                if binary and not _find_binary_after_install(binary):
+                    spec = _lr.get_language(language)
+                    if spec and spec.dependency:
+                        try:
+                            from audiagentic.components.coding_lsp.lsp_config_api import (
+                                install_lsp_dependencies,
+                            )
+                            asyncio.run(
+                                install_lsp_dependencies([spec.dependency.id], root=str(project_root))
+                            )
+                            _refresh_path_after_install()
+                        except Exception:
+                            logger.warning(
+                                "Auto-install failed for %s (%s)", language, spec.dependency.id,
+                                exc_info=True,
+                            )
                 matches.append((language, cfg))
 
     if not matches:
         for lang_id, spec in _lr.all_languages().items():
-            if ext in spec.file_extensions and lang_id not in servers_by_lang:
+            if _file_matches_patterns(file_path, spec.file_extensions) and lang_id not in servers_by_lang:
                 state = get_feature_state(project_root, COMPONENT_CODING_LSP, "language", lang_id)
                 if not state.enabled:
                     set_feature_state(
                         project_root, COMPONENT_CODING_LSP, "language", lang_id,
                         FeatureState(enabled=True, options=dict(state.options)),
                     )
+                    # Auto-install missing server binary from recipe
+                    if spec.dependency:
+                        binary = spec.command[0] if spec.command else None
+                        if binary and not _find_binary_after_install(binary):
+                            try:
+                                from audiagentic.components.coding_lsp.lsp_config_api import (
+                                    install_lsp_dependencies,
+                                )
+                                asyncio.run(
+                                    install_lsp_dependencies([spec.dependency.id], root=str(project_root))
+                                )
+                                _refresh_path_after_install()
+                            except Exception:
+                                logger.warning(
+                                    "Auto-install failed for %s (%s)", lang_id, spec.dependency.id,
+                                    exc_info=True,
+                                )
                     servers_by_lang = discover_servers_multi(project_root)
                     for cfg in servers_by_lang.get(lang_id, []):
-                        if ext in cfg.file_extensions:
+                        if _file_matches_patterns(file_path, cfg.file_extensions):
                             matches.append((lang_id, cfg))
 
     return matches
@@ -287,7 +388,9 @@ def pick_capable(
     Returns None if no server supports the method.
     """
     for language, cfg in _resolve_language_servers_for_file(file_path, project_root):
-        session = _session_manager.get_or_create(project_root, language, cfg)
+        session = _get_session_or_none(project_root, language, cfg)
+        if session is None:
+            continue
         if session.has_capability(method):
             return session
     return None
@@ -299,7 +402,9 @@ def all_sessions_for_file(
     """Return all warmed sessions that handle this file (across all servers)."""
     sessions = []
     for language, cfg in _resolve_language_servers_for_file(file_path, project_root):
-        sessions.append(_session_manager.get_or_create(project_root, language, cfg))
+        session = _get_session_or_none(project_root, language, cfg)
+        if session is not None:
+            sessions.append(session)
     return sessions
 
 
@@ -314,9 +419,14 @@ def workspace_symbols(query: str, root: str = ".") -> list[dict[str, Any]]:
                 session = _session_manager.get_or_create(project_root, language, cfg)
                 if not session.has_capability("workspace/symbol"):
                     continue
-                from audiagentic.components.coding_lsp.lsp_constants import EXTENSION_TO_LANGUAGE
                 for f in project_root.iterdir():
-                    ext_lang = EXTENSION_TO_LANGUAGE.get(f.suffix.lstrip("."))
+                    if f.suffix:
+                        from audiagentic.components.coding_lsp.lsp_constants import (
+                            EXTENSION_TO_LANGUAGE,
+                        )
+                        ext_lang = EXTENSION_TO_LANGUAGE.get(f.suffix.lstrip("."))
+                    else:
+                        ext_lang = FILE_BASENAME_TO_LANGUAGE.get(f.name.lower())
                     if ext_lang:
                         try:
                             text = f.read_text(encoding="utf-8", errors="replace")
@@ -620,7 +730,7 @@ def diagnostics(
     project_root = resolve_project_root(root)
     for language, servers in resolve_active_runtime_servers(project_root).items():
         for cfg in servers:
-            _session_manager.get_or_create(project_root, language, cfg)
+            _get_session_or_none(project_root, language, cfg)
     return _session_manager.diagnostics(project_root, min_severity=min_severity, limit=limit)
 
 
@@ -689,7 +799,15 @@ def server_capabilities(file: str) -> dict[str, Any]:
     language = language_servers[0][0]
 
     for lang, cfg in language_servers:
-        session = _session_manager.get_or_create(project_root, lang, cfg)
+        session = _get_session_or_none(project_root, lang, cfg)
+        if session is None:
+            servers_out.append({
+                "server_id": cfg.server_id,
+                "label": cfg.label,
+                "supported": [],
+                "error": "failed to initialize",
+            })
+            continue
         caps = session.capabilities()
         supported = [label for method, label in method_labels.items() if session.has_capability(method)]
         all_supported.update(supported)
@@ -755,15 +873,37 @@ def _open_file_session(file: str, method: str = "") -> tuple[Any, str]:
 
     sessions_for_method: list[Any] = []
     fallback: Any = None
+    errors: list[str] = []
     for language, cfg in language_servers:
-        session = _session_manager.get_or_create(project_root, language, cfg)
+        session = _get_session_or_none(project_root, language, cfg)
+        if session is None:
+            errors.append(cfg.server_id or "unknown")
+            continue
         session.sync_document(uri, text, _lang_to_id(language))
         if fallback is None:
             fallback = session
         if method and session.has_capability(method):
             sessions_for_method.append(session)
 
-    chosen = sessions_for_method[0] if sessions_for_method else fallback
+    if fallback is None:
+        detail = f" (failed servers: {', '.join(errors)})" if errors else ""
+        return {"error": f"No working language server for {file}{detail}"}, uri
+
+    if sessions_for_method:
+        # Prefer semantic servers (pyright, tsserver, etc.) over linters (ruff, etc.)
+        # Heuristic: servers with "langserver" or "analyzer" in command are semantic
+        def _server_priority(session: Any) -> int:
+            cmd = session.server_config.command
+            cmd_str = " ".join(cmd).lower()
+            if any(kw in cmd_str for kw in ("langserver", "analyzer", "tsserver")):
+                return 0  # Highest priority: semantic server
+            if any(kw in cmd_str for kw in ("ruff", "clippy", "eslint")):
+                return 2  # Lowest priority: linter
+            return 1  # Unknown server: medium priority
+        sessions_for_method.sort(key=_server_priority)
+        chosen = sessions_for_method[0]
+    else:
+        chosen = fallback
     return chosen, uri
 
 
