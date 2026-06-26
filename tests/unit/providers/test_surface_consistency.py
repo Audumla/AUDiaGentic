@@ -3,8 +3,8 @@
 Two concerns:
 1. The synthetic contributions stay slim — no duplicated prompt-tag doctrine,
    no removed blocks creeping back.
-2. The tracked agent files (CLAUDE.md etc.) carry ONLY managed content, so every
-   provider sees identical, generated instructions with no hand-edited drift.
+2. The tracked agent files (CLAUDE.md etc.) keep provider/shared instruction
+   text separate from the managed region and never regress to harness-only text.
 """
 from __future__ import annotations
 
@@ -66,22 +66,30 @@ def test_removed_contributions_stay_removed() -> None:
         assert gone not in ids, f"{gone} reappeared as a contribution"
 
 
-# ── tracked agent files carry only managed content ────────────────────────────
+# ── tracked agent files keep clean non-harness prefixes ───────────────────────
 
 def _existing_agent_files() -> list[Path]:
     return [_REPO_ROOT / rel for rel in _AGENT_FILES if (_REPO_ROOT / rel).exists()]
 
 
 @pytest.mark.parametrize("path", _existing_agent_files(), ids=lambda p: p.name)
-def test_agent_file_has_no_unmanaged_content(path: Path) -> None:
-    """Every non-blank line is the managed header or inside the managed region."""
+def test_agent_file_has_no_harness_only_prompt_text(path: Path) -> None:
+    """Provider surfaces must not carry harness-only provisioning prompt text."""
     text = path.read_text(encoding="utf-8")
-    leftover = [
-        line
-        for line in _REGION.sub("", text).splitlines()
-        if line.strip() and line.strip() != _HEADER
-    ]
-    assert not leftover, f"{path.name} has unmanaged content: {leftover[:3]}"
+    assert "You are the AUDiaGentic provisioning agent" not in text
+    assert "This agent only handles AUDiaGentic provisioning via MCP tools." not in text
+    assert "An MCP-only agent." not in text
+    assert "You only act on requests that can be fulfilled using the MCP tools listed below." not in text
+
+
+@pytest.mark.parametrize("path", _existing_agent_files(), ids=lambda p: p.name)
+def test_agent_file_prefix_is_header_plus_optional_instruction_text(path: Path) -> None:
+    """Outside managed region we keep only the file header and optional base instructions."""
+    text = path.read_text(encoding="utf-8")
+    leftover = _REGION.sub("", text).strip()
+    if not leftover:
+        return
+    assert leftover.startswith(_HEADER)
 
 
 @pytest.mark.parametrize("path", _existing_agent_files(), ids=lambda p: p.name)

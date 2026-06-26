@@ -59,6 +59,10 @@ pytestmark = [
         os.environ.get("AUDIAGENTIC_DOCKER_TESTS") != "1",
         reason="provider lifecycle tests run in Docker",
     ),
+    pytest.mark.skipif(
+        os.environ.get("AUDIAGENTIC_REAL_PROVIDER_CLI_TESTS") != "1",
+        reason="provider lifecycle tests require real provider CLI install",
+    ),
 ]
 
 register_all_components()

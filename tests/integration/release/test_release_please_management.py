@@ -14,13 +14,18 @@ for path in (str(ROOT), str(SRC)):
 from tests.helpers import sandbox as sandbox_helper  # noqa: E402
 
 from audiagentic.components.release.release_please.manage import (
-    BASELINE_WORKFLOW,
     CANDIDATE_NAME,
     LEGACY_NAME,
     LEGACY_SUFFIX,
     MANAGED_NAME,
+    _render_baseline,
     ensure_baseline,
 )  # noqa: E402
+
+
+def _baseline() -> str:
+    """Return the rendered baseline workflow for test comparisons."""
+    return _render_baseline()
 
 
 def test_release_please_absent_installs_baseline(tmp_path: Path) -> None:
@@ -29,7 +34,7 @@ def test_release_please_absent_installs_baseline(tmp_path: Path) -> None:
         result = ensure_baseline(sandbox.repo)
         managed = sandbox.repo / ".github" / "workflows" / MANAGED_NAME
         assert managed.is_file()
-        assert managed.read_text(encoding="utf-8") == BASELINE_WORKFLOW
+        assert managed.read_text(encoding="utf-8") == _baseline()
         assert result["warnings"] == []
     finally:
         sandbox.cleanup()
@@ -73,10 +78,10 @@ def test_release_please_managed_unmodified_refresh(tmp_path: Path) -> None:
         workflow_dir = sandbox.repo / ".github" / "workflows"
         workflow_dir.mkdir(parents=True)
         managed = workflow_dir / MANAGED_NAME
-        managed.write_text(BASELINE_WORKFLOW, encoding="utf-8")
+        managed.write_text(_baseline(), encoding="utf-8")
 
         result = ensure_baseline(sandbox.repo)
-        assert managed.read_text(encoding="utf-8") == BASELINE_WORKFLOW
+        assert managed.read_text(encoding="utf-8") == _baseline()
         assert result["warnings"] == []
     finally:
         sandbox.cleanup()

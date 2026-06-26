@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import audiagentic.components.providers  # noqa: F401
+from audiagentic.components.providers.skill_surfaces import build_skill_surfaces
 from audiagentic.components.providers.surfaces.base import (
     MANAGED_REGION_BEGIN,
     MANAGED_REGION_END,
@@ -129,6 +130,19 @@ def test_plan_provider_surfaces_reports_changes(tmp_path: Path) -> None:
     assert result["files"][0]["changed"] is True
     block_ids = result["files"][0]["block-ids"]
     assert "agent-ledger/process" in block_ids
+
+
+def test_no_instruction_file_when_agent_jobs_inactive(tmp_path: Path) -> None:
+    from audiagentic.components.agent_jobs.prompt_syntax import load_prompt_syntax
+    from audiagentic.foundation.components.loader import register_all_components
+
+    register_all_components()
+    syntax = load_prompt_syntax(tmp_path)
+
+    surfaces = build_skill_surfaces(tmp_path, syntax)
+
+    assert tmp_path / "AGENTS.md" not in surfaces
+    assert tmp_path / "CLAUDE.md" not in surfaces
 
 
 def test_prune_provider_surfaces_removes_legacy_blocks(tmp_path: Path) -> None:
