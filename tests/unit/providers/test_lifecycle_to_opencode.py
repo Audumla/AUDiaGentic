@@ -42,4 +42,7 @@ def test_bootstrap_on_enabled_projects_ag_lsp_to_opencode(tmp_path: Path) -> Non
     mcp_servers = data.get("mcp", {})
     assert "ag-lsp" in mcp_servers, f"ag-lsp not in opencode.json. Keys: {list(mcp_servers.keys())}"
     assert mcp_servers["ag-lsp"]["type"] == "local"
-    assert mcp_servers["ag-lsp"]["command"][:2] == ["audiagentic", "mcp"]
+    from audiagentic.foundation.mcp.launch import mcp_interpreter
+    command = mcp_servers["ag-lsp"]["command"]
+    assert command[:3] == [mcp_interpreter(), "-m", "audiagentic.launcher"]
+    assert "mcp" in command

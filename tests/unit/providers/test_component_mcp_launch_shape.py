@@ -5,6 +5,7 @@ from typing import Any
 
 from audiagentic.components.providers.services import mcp_projection
 from audiagentic.foundation.components.base import ComponentDescriptor, McpServerDeclaration
+from audiagentic.foundation.mcp.launch import mcp_interpreter
 from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
 
 
@@ -28,7 +29,6 @@ def test_provider_component_mcp_projection_uses_audiagentic_mcp(monkeypatch, tmp
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(mcp_projection, "get_descriptor", lambda component_id: descriptor)
-    monkeypatch.setattr(mcp_projection, "resolve_active_provider_features", lambda root: [type("Resolved", (), {"provider_id": "fake", "kind": "mcp"})()])
     monkeypatch.setattr(mcp_projection, "all_descriptors", lambda: {"fake": provider})
 
     def _fake_sync(*, provider_id, project_root, desired_entries, managed_ids):
@@ -43,8 +43,8 @@ def test_provider_component_mcp_projection_uses_audiagentic_mcp(monkeypatch, tmp
     assert captured["managed_ids"] == {"sample/ag-sample"}
     name, entry = captured["desired_entries"]["sample/ag-sample"]
     assert name == "ag-sample"
-    assert entry.command == "audiagentic"
-    assert entry.args == ("mcp", "audiagentic.components.sample.sample_mcp", "--flag")
+    assert entry.command == mcp_interpreter()
+    assert entry.args == ("-m", "audiagentic.launcher", "mcp", "audiagentic.components.sample.sample_mcp", "--flag")
     assert entry.env == {}
 
 
@@ -70,6 +70,6 @@ def test_harness_mcp_collector_uses_audiagentic_mcp(monkeypatch, tmp_path: Path)
     servers = collect_mcp_servers(tmp_path)
 
     entry = servers["ag-sample"]
-    assert entry.command == "audiagentic"
-    assert entry.args == ("mcp", "audiagentic.components.sample.sample_mcp", "--flag")
+    assert entry.command == mcp_interpreter()
+    assert entry.args == ("-m", "audiagentic.launcher", "mcp", "audiagentic.components.sample.sample_mcp", "--flag")
     assert entry.env == {}
