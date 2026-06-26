@@ -128,7 +128,7 @@ def _next_item_id(project_root: Path, plan: str) -> str:
     return f"{prefix}{max_num + 1:02d}"
 
 
-def _list_items_grouped(
+def list_items_grouped(
     project_root: Path,
     state: str | None = None,
     plan: str | None = None,
@@ -185,17 +185,23 @@ def _require_item(project_root: Path, item_id: str) -> Path:
 
 
 def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
-    """Create a new plan item. Required keys: id, plan, title."""
+    """Create a new plan item. Required keys: plan, title.
+
+    If 'id' is not provided, it is auto-generated using the plan prefix
+    and next available sequence number.
+    """
     item_id = item.get("id")
     plan = item.get("plan")
     title = item.get("title")
 
-    if not item_id:
-        raise AudiaGenticError(code="VAL-PLN-002", kind="validation", message="item 'id' is required")
     if not plan:
         raise AudiaGenticError(code="VAL-PLN-003", kind="validation", message="item 'plan' is required")
     if not title:
         raise AudiaGenticError(code="VAL-PLN-004", kind="validation", message="item 'title' is required")
+
+    # Auto-generate ID if not provided
+    if not item_id:
+        item_id = _next_item_id(project_root, plan)
 
     if _find_item(project_root, item_id) is not None:
         raise AudiaGenticError(
@@ -222,7 +228,12 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
     target.write_text(_render_item(fm, body), encoding="utf-8")
 
     logger.info("plan item created", extra={"item_id": item_id, "plan": plan_slug})
-    return {"ok": True, "id": item_id, "path": str(target.relative_to(project_root))}
+    return {
+        "id": item_id,
+        "title": title,
+        "plan": plan_slug,
+        "path": str(target.relative_to(project_root)),
+    }
 
 
 def list_items(
@@ -298,6 +309,10 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
     else:
         target.write_text(_render_item(fm, body), encoding="utf-8")
 
+    # Clean up empty plan dirs in the source state (item was moved away)
+    source_dir = _state_dir(project_root, "completed" if new_state in _ACTIVE_STATES else "pending")
+    _cleanup_empty_plan_dirs(project_root, path.parent.name, [source_dir])
+
     logger.info("plan item state changed", extra={"item_id": item_id, "state": canonical_state})
     return {"ok": True, "id": item_id, "state": canonical_state, "path": str(target.relative_to(project_root))}
 
@@ -319,20 +334,338 @@ def update_item(project_root: Path, item_id: str, updates: dict[str, Any]) -> di
         elif key in _SECTION_HEADING or key == "title":
             sections[key] = value
 
-    title = sections.pop("title", None) or re.match(r"^# (.+)$", body, re.MULTILINE)
-    if hasattr(title, "group"):
-        title = title.group(1).strip()  # type: ignore[union-attr]
+    title = sections.pop("title", None)
+    if title is None:
+        match = re.match(r"^# (.+)$", body, re.MULTILINE)
+        title = match.group(1).strip() if match else item_id
 
-    new_body = _build_body(title or item_id, sections)
+    new_body = _build_body(title, sections)
     path.write_text(_render_item(fm, new_body), encoding="utf-8")
 
     logger.info("plan item updated", extra={"item_id": item_id})
     return {"ok": True, "id": item_id, "path": str(path.relative_to(project_root))}
 
 
+def _remove_empty_ancestors(dir_path: Path) -> None:
+    """Recursively remove empty directories from dir_path up to (but not including) state_dir."""
+    state_dir = dir_path.parent
+    current = dir_path
+    while current != state_dir and current.exists():
+        try:
+            current.rmdir()
+            logger.debug("removed empty dir", extra={"dir": str(current)})
+            current = current.parent
+        except OSError:
+            break
+
+
+def _cleanup_empty_plan_dirs(project_root: Path, plan_slug: str, state_dirs: list[Path]) -> None:
+    """Remove empty plan directories after item/review operations.
+
+    If a plan directory has no items and no reviews remaining, remove it
+    and any ancestor directories that become empty.
+    """
+    for state_dir in state_dirs:
+        plan_dir = state_dir / plan_slug
+        if not plan_dir.exists():
+            continue
+        has_items = any(plan_dir.glob("*.md"))
+        has_reviews = any(plan_dir.glob("reviews/**/*.md"))
+        if not has_items and not has_reviews:
+            _remove_empty_ancestors(plan_dir)
+            logger.info("removed empty plan dir", extra={"plan": plan_slug, "state_dir": str(state_dir)})
+
+
 def delete_item(project_root: Path, item_id: str) -> dict[str, Any]:
     """Permanently delete a plan item."""
     path = _require_item(project_root, item_id)
+    plan_slug = path.parent.name
     path.unlink()
     logger.info("plan item deleted", extra={"item_id": item_id})
+    state_dirs = [
+        planning_paths.plans_active_dir(project_root),
+        planning_paths.plans_completed_dir(project_root),
+    ]
+    _cleanup_empty_plan_dirs(project_root, plan_slug, state_dirs)
     return {"ok": True, "id": item_id}
+
+
+# ---------------------------------------------------------------------------
+# Review support
+# ---------------------------------------------------------------------------
+
+# Reviews are items stored in active/<plan>/reviews/<parent-id>/RV01.md
+# They use the same structure as regular items but with review-of frontmatter
+# and their own state machine: created → considered → closed
+
+_REVIEW_STATES = {"created", "considered", "closed"}
+
+
+def _next_review_id(project_root: Path, plan_slug: str, parent_id: str) -> str:
+    """Auto-generate the next review ID (RV##) for an item within a plan."""
+    active_reviews_dir = planning_paths.plans_active_dir(project_root) / plan_slug / "reviews"
+    completed_reviews_dir = planning_paths.plans_completed_dir(project_root) / plan_slug / "reviews"
+
+    max_num = 0
+    for state_dir in (active_reviews_dir, completed_reviews_dir):
+        if not state_dir.exists():
+            continue
+        for path in state_dir.rglob("*.md"):
+            match = re.match(r"^RV(\d+)$", path.stem)
+            if match:
+                num = int(match.group(1))
+                if num > max_num:
+                    max_num = num
+
+    return f"RV{max_num + 1:02d}"
+
+
+def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
+    """Create a new review linked to a plan item.
+
+    Required: review-of (parent item ID), title.
+    Optional: notes, findings, conclusion, reviewed-by.
+    ID is auto-generated (e.g. RV01).
+    Returns {id, title, review-of, plan, path}
+    """
+    review_id = review.get("id")
+    parent_id = review.get("review-of") or review.get("review_of")
+    title = review.get("title")
+
+    if not parent_id:
+        raise AudiaGenticError(code="VAL-PLN-008", kind="validation", message="review 'review-of' (or 'review_of') is required")
+    if not title:
+        raise AudiaGenticError(code="VAL-PLN-009", kind="validation", message="review 'title' is required")
+
+    # Verify parent item exists
+    parent_path = _find_item(project_root, parent_id)
+    if parent_path is None:
+        raise AudiaGenticError(
+            code="VAL-PLN-010",
+            kind="validation",
+            message=f"parent item not found: {parent_id!r}",
+        )
+
+    plan_slug = parent_path.parent.name
+    parent_fm, _ = _parse_frontmatter(parent_path.read_text(encoding="utf-8"))
+
+    # Auto-generate ID if not provided
+    if not review_id:
+        review_id = _next_review_id(project_root, plan_slug, parent_path.stem)
+
+    if _find_item(project_root, review_id) is not None:
+        raise AudiaGenticError(
+            code="VAL-PLN-011",
+            kind="validation",
+            message=f"review already exists: {review_id!r}",
+        )
+
+    # Build frontmatter — reviews use review-of instead of plan prefix
+    fm: dict[str, Any] = {
+        "id": review_id,
+        "review-of": parent_path.stem,
+        "plan": parent_fm.get("plan", _plan_frontmatter_value(plan_slug)),
+        "state": "created",
+        "reviewed-by": review.get("reviewed-by", ""),
+        "reviewed-at": review.get("reviewed-at", ""),
+    }
+    # Reviews use notes, findings, conclusion sections
+    _REVIEW_SECTIONS = {"notes": "Notes", "findings": "Findings", "conclusion": "Conclusion"}
+    sections = {k: review.get(k, "") for k in _REVIEW_SECTIONS}
+    parts = [f"# {title}"]
+    for key, heading in _REVIEW_SECTIONS.items():
+        content = sections.get(key, "")
+        parts.append(f"\n## {heading}\n\n{content}")
+    body = "\n".join(parts) + "\n"
+
+    target = (
+        planning_paths.plans_active_dir(project_root)
+        / plan_slug
+        / "reviews"
+        / parent_path.stem
+        / f"{review_id}.md"
+    )
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(_render_item(fm, body), encoding="utf-8")
+
+    logger.info("review created", extra={"review_id": review_id, "review_of": parent_id, "plan": plan_slug})
+    return {
+        "id": review_id,
+        "title": title,
+        "review-of": parent_id,
+        "plan": plan_slug,
+        "path": str(target.relative_to(project_root)),
+    }
+
+
+def list_reviews(
+    project_root: Path,
+    state: str | None = None,
+    plan: str | None = None,
+    review_of: str | None = None,
+) -> list[dict[str, Any]]:
+    """List reviews, optionally filtered by state, plan, or parent item.
+
+    state: 'created'/'considered' → active; 'closed' → completed; None → all.
+    plan: directory name like 'code-cleanup' (omit for all plans).
+    review_of: parent item ID to filter by (omit for all).
+    """
+    if state in ("created", "considered"):
+        search_dirs = [planning_paths.plans_active_dir(project_root)]
+    elif state == "closed":
+        search_dirs = [planning_paths.plans_completed_dir(project_root)]
+    else:
+        search_dirs = [
+            planning_paths.plans_active_dir(project_root),
+            planning_paths.plans_completed_dir(project_root),
+        ]
+
+    plan_slug = _plan_slug(plan) if plan else None
+    results: list[dict[str, Any]] = []
+
+    for search_dir in search_dirs:
+        if not search_dir.exists():
+            continue
+        for path in sorted(search_dir.rglob("*.md")):
+            # Reviews live under <plan>/reviews/<parent-id>/
+            parts = path.relative_to(search_dir).parts
+            if len(parts) < 3 or parts[1] != "reviews":
+                continue
+            if plan_slug and parts[0] != plan_slug:
+                continue
+            if review_of and parts[2] != review_of:
+                continue
+            text = path.read_text(encoding="utf-8")
+            fm, body = _parse_frontmatter(text)
+            title_match = re.match(r"^# (.+)$", body, re.MULTILINE)
+            results.append({
+                "id": fm.get("id", path.stem),
+                "review-of": fm.get("review-of", ""),
+                "plan": fm.get("plan", ""),
+                "state": fm.get("state", "created"),
+                "reviewed-by": fm.get("reviewed-by", ""),
+                "reviewed-at": fm.get("reviewed-at", ""),
+                "title": title_match.group(1).strip() if title_match else "",
+                "path": str(path.relative_to(project_root)),
+            })
+
+    return results
+
+
+def set_review_state(project_root: Path, review_id: str, new_state: str) -> dict[str, Any]:
+    """Transition a review to a new state.
+
+    'closed' moves the review to completed/.
+    'created'/'considered' keep it in active/.
+    Returns {id, state, path}
+    """
+    if new_state not in _REVIEW_STATES:
+        raise AudiaGenticError(
+            code="VAL-PLN-012",
+            kind="validation",
+            message=f"invalid review state: {new_state!r}",
+            details={"valid": sorted(_REVIEW_STATES)},
+        )
+
+    path = _require_item(project_root, review_id)
+    text = path.read_text(encoding="utf-8")
+    fm, body = _parse_frontmatter(text)
+    # Only allow state transitions on reviews (has review-of frontmatter)
+    if "review-of" not in fm:
+        raise AudiaGenticError(
+            code="VAL-PLN-013",
+            kind="validation",
+            message=f"not a review: {review_id!r}",
+        )
+
+    plan_slug = path.parent.parent.parent.name
+    parent_id = path.parent.name
+
+    target_dir = (
+        planning_paths.plans_completed_dir(project_root)
+        if new_state == "closed"
+        else planning_paths.plans_active_dir(project_root)
+    )
+    fm["state"] = new_state
+    target = target_dir / plan_slug / "reviews" / parent_id / path.name
+    if target != path:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_render_item(fm, body), encoding="utf-8")
+        path.unlink()
+    else:
+        target.write_text(_render_item(fm, body), encoding="utf-8")
+
+    logger.info("review state changed", extra={"review_id": review_id, "state": new_state})
+    return {"id": review_id, "state": new_state, "path": str(target.relative_to(project_root))}
+
+
+def get_review(project_root: Path, review_id: str) -> dict[str, Any]:
+    """Read a review by ID, returning frontmatter + parsed body sections."""
+    path = _require_item(project_root, review_id)
+    text = path.read_text(encoding="utf-8")
+    fm, body = _parse_frontmatter(text)
+    title_match = re.match(r"^# (.+)$", body, re.MULTILINE)
+    sections = _parse_sections(body)
+    # Reviews also have findings and conclusion sections
+    for heading in ("Findings", "Conclusion"):
+        matches = list(re.finditer(rf"^## {heading}\n\n(.*?)(?=^## |\Z)", body, re.MULTILINE | re.DOTALL))
+        if matches:
+            sections[heading.lower()] = matches[-1].group(1).strip()
+    return {
+        **fm,
+        **sections,
+        "title": fm.get("title", title_match.group(1).strip() if title_match else review_id),
+        "path": str(path.relative_to(project_root)),
+    }
+
+
+def update_review(project_root: Path, review_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+    """Update frontmatter fields and/or body sections of a review.
+
+    Frontmatter keys: reviewed-by, reviewed-at.
+    Section keys: title, notes, findings, conclusion.
+    Returns {id, path}
+    """
+    path = _require_item(project_root, review_id)
+    text = path.read_text(encoding="utf-8")
+    fm, body = _parse_frontmatter(text)
+    title_match = re.match(r"^# (.+)$", body, re.MULTILINE)
+    title = title_match.group(1).strip() if title_match else review_id
+
+    # Parse review-specific sections
+    _REVIEW_SECTIONS = {"notes": "Notes", "findings": "Findings", "conclusion": "Conclusion"}
+    sections: dict[str, str] = {}
+    for key, heading in _REVIEW_SECTIONS.items():
+        matches = list(re.finditer(rf"^## {heading}\n\n(.*?)(?=^## |\Z)", body, re.MULTILINE | re.DOTALL))
+        if matches:
+            sections[key] = matches[-1].group(1).strip()
+
+    for key, value in updates.items():
+        if key in ("reviewed-by", "reviewed-at", "review-of", "review_of", "id", "plan", "state"):
+            fm[key] = value
+        elif key in _REVIEW_SECTIONS or key == "title":
+            sections[key] = value
+        elif key == "title":
+            title = value
+
+    if "title" in updates:
+        title = updates["title"]
+
+    # Build review body
+    parts = [f"# {title}"]
+    for key, heading in _REVIEW_SECTIONS.items():
+        content = sections.get(key, "")
+        parts.append(f"\n## {heading}\n\n{content}")
+    new_body = "\n".join(parts) + "\n"
+    path.write_text(_render_item(fm, new_body), encoding="utf-8")
+
+    logger.info("review updated", extra={"review_id": review_id})
+    return {"id": review_id, "path": str(path.relative_to(project_root))}
+
+
+def delete_review(project_root: Path, review_id: str) -> dict[str, Any]:
+    """Permanently delete a review."""
+    path = _require_item(project_root, review_id)
+    path.unlink()
+    logger.info("review deleted", extra={"review_id": review_id})
+    return {"id": review_id}
