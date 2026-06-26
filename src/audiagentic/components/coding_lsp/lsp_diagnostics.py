@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -15,6 +16,32 @@ from .lsp_bridge import _lsp_error
 from .lsp_constants import BATCH_DIAGNOSTIC_CLIS, CLI_SEVERITY
 
 logger = logging.getLogger(__name__)
+
+
+def _run_batch_cli(
+    command: list[str], *, cwd: Path, timeout: float,
+) -> subprocess.CompletedProcess[str]:
+    """Run batch-diagnostics CLI portably.
+
+    Windows package-manager installs often expose CLIs via `.cmd` shims, which
+    fail under a bare argv `Popen` path (`WinError 2`). Route through the shell
+    there so PATHEXT resolution works, while keeping direct argv exec elsewhere.
+    """
+    kwargs = {
+        "capture_output": True,
+        "text": True,
+        "timeout": timeout,
+        "cwd": str(cwd),
+        "stdin": subprocess.DEVNULL,
+        "check": False,
+    }
+    if os.name == "nt":
+        return subprocess.run(
+            subprocess.list2cmdline(command),
+            shell=True,
+            **kwargs,
+        )
+    return subprocess.run(command, **kwargs)
 
 
 class LspDiagnostics:
@@ -123,12 +150,10 @@ class LspDiagnostics:
                 details={"server": self._session.server_config.command[:1]},
             )
         try:
-            proc = subprocess.run(
+            proc = _run_batch_cli(
                 [cli, "--outputjson", str(self._project_root)],
-                capture_output=True,
-                text=True,
+                cwd=self._project_root,
                 timeout=timeout,
-                cwd=str(self._project_root),
             )
         except FileNotFoundError:
             raise _lsp_error(
