@@ -16,7 +16,7 @@ from typing import Any, cast
 
 from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.io import load_yaml_file
-from audiagentic.foundation.toolchains.detect import (
+from audiagentic.foundation.toolchains import (
     detect_pkg_manager,
     platform_key,
     tool_available,
