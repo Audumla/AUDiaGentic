@@ -7,8 +7,9 @@ launch.py, binaries.py, process.py, and resolution.py.
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
+
+from audiagentic.runtime.system.platform import platform_key
 
 # ---------------------------------------------------------------------------
 # Server defaults
@@ -31,7 +32,7 @@ GITHUB_API = f"https://api.github.com/repos/{GITHUB_REPO}"
 # ---------------------------------------------------------------------------
 
 PLATFORM_DIR_MAP: dict[str, str] = {
-    "win32": "windows",
+    "win": "windows",
     "darwin": "macOS",
     "linux": "linux",
 }
@@ -39,7 +40,7 @@ PLATFORM_DIR_MAP: dict[str, str] = {
 
 def platform_dir_name() -> str:
     """Return the directory name for the current platform."""
-    return PLATFORM_DIR_MAP.get(sys.platform, "linux")
+    return PLATFORM_DIR_MAP.get(platform_key(), "linux")
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +48,7 @@ def platform_dir_name() -> str:
 # ---------------------------------------------------------------------------
 
 PLATFORM_PATTERNS: dict[str, tuple[str, re.Pattern, bool, str]] = {
-    "win32": ("Windows", re.compile(r"^llama-[a-zA-Z0-9]+-bin-win-cpu-x64\.zip$", re.I), True, "llama-server.exe"),
+    "win": ("Windows", re.compile(r"^llama-[a-zA-Z0-9]+-bin-win-cpu-x64\.zip$", re.I), True, "llama-server.exe"),
     "darwin": ("macOS", re.compile(r"^llama-[a-zA-Z0-9]+-bin-macos-arm64\.tar\.gz$", re.I), False, "llama-server"),
     "linux": ("Linux", re.compile(r"^llama-[a-zA-Z0-9]+-bin-ubuntu-x64\.tar\.gz$", re.I), False, "llama-server"),
 }
@@ -59,7 +60,7 @@ PLATFORM_PATTERNS: dict[str, tuple[str, re.Pattern, bool, str]] = {
 
 def platform_binary_names() -> tuple[str, str]:
     """Return (server_name, fallback_name) for the current platform."""
-    if sys.platform == "win32":
+    if platform_key() == "win":
         return "llama-server.exe", "llamafile.exe"
     return "llama-server", "llamafile"
 
