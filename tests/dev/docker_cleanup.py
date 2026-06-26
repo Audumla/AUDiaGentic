@@ -6,11 +6,15 @@ import sys
 
 SAFE_IMAGE_PATTERNS = (
     "audiagentic",
-    "audia-provider-cli-test",
+    "audia-test-base",
     "audiagentic-test",
-    "audiagentic-release-test",
-    "audiagentic-lifecycle-tests",
-    "audiagentic-provider-cli-tests",
+    "audia-packaging",
+    "audia-provider-cli-test",
+    "audia-provider-cli-comprehensive",
+    "audiagentic-provider-lifecycle-e2e",
+    "audia-provider-lsp-e2e",
+    "audia-mcp-tools-e2e",
+    "audiagentic-lsp-install-test",
     "python:3.12-slim",
 )
 

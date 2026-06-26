@@ -143,6 +143,59 @@ Use environment variables consistently. Established variables:
 
 ---
 
+## Parallel execution and `no_parallel`
+
+The suite runs under `pytest-xdist`. The consolidated runner and CI use
+`-n auto --dist loadgroup`, so the whole suite is **one safe command** — you do
+not split runs by hand.
+
+Safety comes from an enforcement hook in `tests/conftest.py`:
+
+- A test marked `@pytest.mark.no_parallel` shares a stateful resource (e.g. a
+  long-lived LSP subprocess held by a module-scoped fixture).
+- The hook finds every **module** containing such a test and pins the *entire
+  module* to one `xdist_group`. With `--dist loadgroup` that forces the module
+  onto a single worker, where its tests run serially, while the rest of the
+  suite still fans out.
+
+So the rule for authors is simply: **mark the test `no_parallel`** — never try
+to manage worker placement yourself. Marking one test pins its whole module.
+
+```python
+@pytest.mark.no_parallel  # shares the module-scoped LSP connection
+def test_lsp_completion_returns_items(...): ...
+```
+
+---
+
+## Recipe / mutating test isolation — do NOT collapse
+
+`mutates_host` tests exercise the **real MCP install recipes**: they install a
+language server or provider CLI from a clean toolchain, assert it is present and
+`detect_missing` is empty, then uninstall and assert it is gone again. The
+install/uninstall *is the contract under test*.
+
+Two failure modes silently invalidate these tests — both are banned:
+
+1. **Baking the dependency into the image.** If `pyright` / `clangd` /
+   `rust-analyzer` / a provider CLI is pre-installed, the recipe finds it already
+   present and the "installed" assertion passes without the recipe doing
+   anything. The clean suite image (`Dockerfile.test`) is therefore deliberately
+   a **clean toolchain** and runs `-m "not mutates_host"`.
+
+2. **Sharing one container across mutating tests.** One test's installed binary
+   leaks into the next test's "assert absent" check. So each mutating scenario
+   runs in its **own image / fresh container** (mirrored by
+   `tests/dev/run_provider_cli_isolated.py`, which spins a fresh container per
+   provider).
+
+Consequence for the image layout: the clean, non-mutating suite is consolidated
+into one image, but the mutating recipe images stay separate **on purpose**.
+When adding a recipe test, give it an isolated image — never fold it into the
+shared suite image, and never bake its dependency into any image a recipe runs in.
+
+---
+
 ## Timeouts
 
 Global default: **30 seconds** (`timeout = 30` in `pyproject.toml`).
@@ -325,13 +378,34 @@ For slow compile steps (e.g. `cargo install rust-analyzer` ≈ 10–15 min): ins
 once and do not cycle — mark with `@pytest.mark.timeout(900)` and add a comment
 explaining why cycling is skipped.
 
+### Image layout (collapsed)
+
+The historical per-scenario image sprawl is collapsed only where safe (see
+*Recipe / mutating test isolation*):
+
+| Image                              | Dockerfile                          | Purpose                                                    |
+| ---------------------------------- | ----------------------------------- | ---------------------------------------------------------- |
+| `audia-test-base`                  | `Dockerfile.test-base`              | Shared toolchain base for all suite/recipe images          |
+| `audiagentic-test`                 | `Dockerfile.test`                   | **Clean, non-mutating whole suite** (`run_suite.sh`)       |
+| `audia-packaging`                  | `Dockerfile.packaging`              | Clean-room wheel: install + server-smoke + release e2e     |
+| `audia-provider-cli-test`          | `Dockerfile.provider-cli-test`      | Provider CLI provisioning recipe (isolated)                |
+| `audia-provider-cli-comprehensive` | `Dockerfile.provider-cli-comprehensive` | Provider CLI comprehensive recipe (isolated)          |
+| `audiagentic-provider-lifecycle-e2e` | `Dockerfile.provider-lifecycle-e2e` | Provider full lifecycle recipe (isolated)               |
+| `audia-provider-lsp-e2e`           | `Dockerfile.provider-lsp-e2e`       | Provider LSP install recipe (isolated)                     |
+| `audia-mcp-tools-e2e`              | `Dockerfile.mcp-tools-e2e`          | LSP MCP tools — *consumes* pre-baked servers (isolated)    |
+| `audiagentic-lsp-install-test`     | `Dockerfile.lsp-install-test`       | Clean LSP install recipe; slow rust compile (~15 min)      |
+
+The former `install-test`, `release-test` and `server-smoke` images merged into
+`audia-packaging`; `shell-stdout-test` folded into the clean suite image.
+
 ### Build once, run many
 
 ```bash
 make build-base             # Build audia-test-base (once, or on Dockerfile.test-base change)
 make build-lsp-install      # Build LSP install test image
-make test-lsp-docker        # Run LSP install tests (no rebuild; bind-mounts source)
-make test-docker            # Run full Docker suite
+make test-lsp-docker        # Run LSP install recipe in docker
+make test-docker            # Run the clean non-mutating suite in docker
+make test-packaging-docker  # Run clean-room wheel/install/server checks
 ```
 
 ---
@@ -340,15 +414,21 @@ make test-docker            # Run full Docker suite
 
 | Command / target                       | Markers included      | Markers excluded         | Environment vars required    |
 | -------------------------------------- | --------------------- | ------------------------ | ---------------------------- |
+| `make test-all`                        | host suite + docker (if daemon) | `opt_in`       | auto                         |
+| `make test-fast`                       | host suite only       | `docker`, `mutates_host` | —                            |
 | `make test-unit`                       | `unit`                | —                        | —                            |
 | `make test`                            | `unit`, `integration` | `mutates_host`, `opt_in` | —                            |
-| `make test AUDIAGENTIC_DOCKER_TESTS=1` | `unit`, `integration` | `mutates_host`, `opt_in` | `AUDIAGENTIC_DOCKER_TESTS=1` |
-| `make test-docker`                     | all                   | `opt_in`                 | runs inside Docker           |
+| `make test-docker`                     | clean non-mutating suite | `mutates_host`, `opt_in` | runs inside Docker        |
+| `make test-packaging-docker`           | clean-room wheel/install/server | —                | runs inside Docker           |
+| `make test-lsp-docker`                 | LSP install recipe    | —                        | runs inside Docker           |
 | `pytest -m smoke`                      | `smoke`               | —                        | —                            |
 | `pytest -m 'not slow'`                 | all except `slow`     | —                        | —                            |
 
-In CI, `make test-docker` is the authoritative run. Local `make test` is the fast
-feedback loop. Both must pass before merge.
+`make test-all` (→ `python tests/run_all.py`) is the single front door: it runs
+the whole host suite in parallel and, when a Docker daemon is reachable, builds
+the image set once and runs the in-container suites (mutating recipe images each
+in their own fresh container). In CI the `tests` + `docker-tests` jobs cover the
+same ground as a parallel matrix.
 
 ---
 
@@ -365,6 +445,12 @@ feedback loop. Both must pass before merge.
 ## Running tests
 
 ```bash
+# Everything appropriate to this machine, one command:
+#   host suite in parallel, + docker suites if a daemon is reachable
+make test-all                 # or: python tests/run_all.py
+python tests/run_all.py --fast       # host only, never touch docker
+python tests/run_all.py --lsp-install # also the slow (~15 min) LSP install image
+
 # Fast feedback — unit only
 make test-unit
 

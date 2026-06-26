@@ -1,3 +1,3 @@
-from . import descriptor
+from . import adapter, descriptor, surface
 
-__all__ = ["descriptor"]
+__all__ = ["adapter", "descriptor", "surface"]
