@@ -1,9 +1,10 @@
 # Hindsight Per-Provider Strategy Matrix (HM08)
 
 Authoritative mapping of every AUDiaGentic provider to its Hindsight integration
-strategy — what we **can** do and what we **cannot** (yet). Sources verified
-against the official Hindsight integration pages (hindsight.vectorize.io) and our
-adapter descriptors. Live test server: `http://10.10.100.10:8888/mcp`.
+strategy — what we **can** do and what we **cannot** (yet). This matrix is the
+planning source of truth, but entries are executable only when their source
+status is `verified` with exact official evidence from `hindsight.vectorize.io`
+or inspected installer source. Live test server: `http://10.10.100.10:8888/mcp`.
 
 ## Strategy kinds
 
@@ -15,18 +16,18 @@ adapter descriptors. Live test server: `http://10.10.100.10:8888/mcp`.
 
 ## Matrix
 
-| Provider | Hindsight official? | Native mechanism | Our `mcp_config` | Strategy we ship | Confidence |
+| Provider | Hindsight official? | Native mechanism | Our `mcp_config` | Strategy we ship | Source status |
 |---|---|---|---|---|---|
-| **claude** | ✅ | plugin: `claude plugin install hindsight-memory` (hooks) | `.mcp.json` | native-installer | verified |
-| **codex** | ✅ | installer `get-codex` (hooks) | `.codex/config.toml` | native-installer | verified (script read) |
-| **opencode** | ✅ | plugin entry `@vectorize-io/opencode-hindsight` in `opencode.json` | `.opencode/opencode.json` | native-installer (plugin) | verified |
-| **cline** | ✅ | `hindsight-cline install` (lifecycle hooks, no MCP) | `.mcp.json` (unused for HS) | native-installer | verified — **⚠ macOS/Linux only** |
-| **aider** | ✅ | `pip install hindsight-aider`; run `hindsight-aider` instead of `aider` | none | launch-wrapper | verified — **changes launch cmd** |
-| **copilot** | ✅ | MCP into `.vscode/mcp.json` + rule in `.github/copilot-instructions.md` | `.mcp.json` | mcp-config + rule | verified — **⚠ path differs** |
-| **openhands** | ✅ | MCP into `config.toml` + rule | **none** | mcp-config + rule | **⚠ BLOCKED — adapter has no `mcp_config`** |
-| **continue_** | ✅ | MCP client + optional auto recall/retain | `.continue/config.json` | mcp-config (+ rule) | verified |
-| **roo** | ✅ | MCP client | `.mcp.json` | mcp-config (+ rule) | verified |
-| **gemini** | ✅ | MCP client (OAuth proxy for Cloud) | `.gemini/settings.json` | mcp-config | verified — self-hosted direct; **Cloud needs OAuth proxy** |
+| **claude** | ✅ | plugin/hooks | `.mcp.json` | native-installer | unconfirmed until exact official commands + uninstall captured |
+| **codex** | ✅ | installer `get-codex` (hooks) | `.codex/config.toml` | native-installer | partial: official URL known; exact flags/config/probes need capture |
+| **opencode** | ✅ | plugin | `.opencode/opencode.json` | native-installer (plugin) | unconfirmed until exact official install/uninstall captured |
+| **cline** | ✅ | lifecycle hooks, no MCP | `.mcp.json` (unused for HS) | native-installer | unconfirmed; macOS/Linux only must be verified |
+| **aider** | ✅ | launch wrapper | none | launch-wrapper | unconfirmed until package/binary/config/uninstall captured |
+| **copilot** | ✅ | MCP + rule | `.mcp.json` | mcp-config + rule | unconfirmed path mismatch: `.vscode/mcp.json` vs `.mcp.json` |
+| **openhands** | ✅ | MCP into `config.toml` + rule | **none** | mcp-config + rule | blocked: adapter has no `mcp_config` |
+| **continue_** | ✅ | MCP client + optional auto recall/retain | `.continue/config.json` | mcp-config (+ rule) | unconfirmed until exact official config path/rule captured |
+| **roo** | ✅ | MCP client | `.mcp.json` | mcp-config (+ rule) | unconfirmed until exact official config path/rule captured |
+| **gemini** | ✅ | MCP client (OAuth proxy for Cloud) | `.gemini/settings.json` | mcp-config | partial: self-hosted direct likely; Cloud OAuth proxy separate |
 | **goose** | ❌ not listed | — | `.goose/config.yaml` | fallback-mcp | MCP-capable; our rule, no official hooks |
 | **pi** | ❌ not listed | — | `.mcp.json` | fallback-mcp | unverified harness |
 | **qwen** | ❌ not listed | — | `.mcp.json` | fallback-mcp | not in official list |
@@ -44,8 +45,8 @@ adapter descriptors. Live test server: `http://10.10.100.10:8888/mcp`.
 
 ## What we CAN do cleanly
 
-- **Full native lifecycle:** claude, codex, opencode (install + connection config + official uninstall).
-- **MCP-config + rule:** copilot (pending path confirm), continue_, roo, gemini (self-hosted).
+- **Full native lifecycle:** only after HM08/HM04 source audit verifies exact official commands and uninstall behavior.
+- **MCP-config + rule:** copilot (pending path confirm), continue_, roo, gemini (self-hosted) after config path/rule source capture.
 - **Generic MCP fallback:** goose, pi, qwen.
 - **Rules-only:** plandex, local_openai (and any provider on an unsupported platform).
 
@@ -57,4 +58,5 @@ adapter descriptors. Live test server: `http://10.10.100.10:8888/mcp`.
 - aider → `HINDSIGHT_API_TOKEN` env (+ pip install).
 - claude → `~/.hindsight/claude-code.json`.
 
-All five accept our backend config (`mcp_url`, `api_key`) non-interactively, so no guided install is required.
+These seams are candidate targets until source status is verified. Do not turn them
+into executable HindsightSpec commands without exact official evidence.

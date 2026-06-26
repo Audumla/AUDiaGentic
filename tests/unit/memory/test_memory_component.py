@@ -65,7 +65,7 @@ class TestDescriptorLoading:
         assert schema["timeout-seconds"].default == 30
 
     def test_hindsight_has_no_provider_matrix(self, project_root: Path) -> None:
-        """Provider matrix is provider-owned knowledge, not memory-owned."""
+        """Provider matrix is implementation code, not descriptor config."""
         impl = get_implementation("memory", "hindsight")
         assert impl is not None
         assert "provider-matrix" not in impl.raw
@@ -174,64 +174,23 @@ class TestMemoryStatus:
         assert result["configured"] is True
 
 
-class TestDynamicContributions:
-    """Test that memory exports provider-agnostic contributions."""
+class TestBoundaryExports:
+    """Test that memory exports state/config only."""
 
-    def test_no_config_returns_empty(self, project_root: Path) -> None:
-        """Unconfigured memory contributes nothing."""
-        from audiagentic.components.memory.memory_api import build_memory_contributions
+    def test_no_dynamic_surface_contribution_api(self) -> None:
+        """Memory must not render provider surface content."""
+        import audiagentic.components.memory.memory_api as memory_api
 
-        contribs = build_memory_contributions(project_root=project_root)
-        assert contribs == []
+        assert not hasattr(memory_api, "build_memory_contributions")
 
-    def test_configured_memory_contributes(self, project_root: Path) -> None:
-        """Configured memory exports contribution with backend info."""
-        from audiagentic.components.memory.memory_api import (
-            build_memory_contributions,
-            memory_set_config,
-        )
+    def test_set_config_returns_refresh_hint(self, project_root: Path) -> None:
+        """Providers may use the neutral refresh hint to reconcile themselves."""
+        from audiagentic.components.memory.memory_api import memory_set_config
 
-        memory_set_config(project_root, "hindsight", {
+        result = memory_set_config(project_root, "hindsight", {
             "base-url": "https://hindsight.example.com",
         })
-        contribs = build_memory_contributions(project_root=project_root)
-        assert len(contribs) == 1
-        contrib = contribs[0]
-        assert contrib["contribution_id"] == "memory/hindsight"
-        assert contrib["owner_component"] == "memory"
-        assert "Hindsight" in contrib["title"]
-        assert "hindsight.example.com" in contrib["body"]
-
-    def test_contribution_has_no_provider_ids(self, project_root: Path) -> None:
-        """Memory contribution does not encode provider IDs."""
-        from audiagentic.components.memory.memory_api import (
-            build_memory_contributions,
-            memory_set_config,
-        )
-
-        memory_set_config(project_root, "hindsight", {
-            "base-url": "https://hindsight.example.com",
-        })
-        contribs = build_memory_contributions(project_root=project_root)
-        body = contribs[0]["body"]
-        # Should not contain provider IDs or file paths
-        assert "claude" not in body.lower()
-        assert "opencode" not in body.lower()
-        assert "AGENTS.md" not in body
-        assert "CLAUDE.md" not in body
-
-    def test_no_base_url_returns_empty(self, project_root: Path) -> None:
-        """Config without base-url contributes nothing (not actionable)."""
-        from audiagentic.components.memory.memory_api import (
-            build_memory_contributions,
-            memory_set_config,
-        )
-
-        memory_set_config(project_root, "hindsight", {
-            "timeout-seconds": 60,
-        })
-        contribs = build_memory_contributions(project_root=project_root)
-        assert contribs == []
+        assert result["needs_provider_recipe_refresh"] is True
 
 
 class TestIdempotentApply:

@@ -35,15 +35,16 @@ component — memory does not:
 - Branch on provider-specific syntax
 - Render provider-specific content
 
-Surface projection flows through the contribution system: memory exports
-provider-agnostic content via `build_memory_contributions`, and the providers
-component renders it into each provider's instruction/config files.
+Backend-specific provider integration is contained under the active memory
+implementation (for Hindsight: `memory/hindsight/`) and uses generic provider
+seams. Memory core returns neutral refresh hints when backend config changes; it
+does not render provider files or call provider services directly.
 
 ### v1 Design Decisions
 
-- **No activity server**: v1 ships config projection only. An `ag-memory`
-  activity server (retain/recall/reflect) is deferred until the config and
-  surface contract is stable.
+- **No activity server**: v1 stores backend config only. An `ag-memory`
+  activity server (retain/recall/reflect) is deferred until the memory/provider
+  recipe contract is stable.
 
 ## Adding a New Memory Implementation
 
@@ -52,7 +53,7 @@ component renders it into each provider's instruction/config files.
    - `options-schema` with implementation-specific config keys
 
 2. Test: verify `memory_select_implementation('<impl>')` works, config persists,
-   and provider surfaces update correctly via the contribution system.
+   and provider recipe refresh hints are returned.
 
-3. Provider-specific rendering (if needed) lives in the providers component,
-   not in the memory component.
+3. Backend-specific provider recipes (if needed) live under the implementation
+   package, not memory core and not provider core.
