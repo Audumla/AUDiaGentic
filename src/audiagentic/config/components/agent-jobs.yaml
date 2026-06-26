@@ -5,6 +5,7 @@ display-name: Agent Jobs
 description: Execution/jobs layer — workflow action tags, job records, session artifacts, and prompt tag doctrine.
 depends-on:
   - project
+  - agents
 feature-kinds:
   - action
 files:
