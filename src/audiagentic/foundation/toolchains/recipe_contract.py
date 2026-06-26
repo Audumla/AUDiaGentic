@@ -1,0 +1,208 @@
+"""Provisioning recipe contract — generic lifecycle for installable integrations.
+
+A :class:`ProvisioningRecipe` is the orchestration contract that provider/component
+code implements to install, configure, verify, and remove a host integration
+(an MCP server registration, a hook, a plugin, a language server, ...).
+
+Deliberately provider-agnostic: this module names no providers, no components,
+and encodes no capability semantics. Concrete recipes compose the generic
+primitives in this package — :mod:`steps`, :mod:`probes`, :mod:`config_patcher`,
+:mod:`artifact_registry` — into a capability-specific lifecycle.
+
+Lifecycle state machine::
+
+    absent --install--> installing --configure--> configuring --verify--> verified
+       ^                                                                      |
+       +----------------------------- uninstall/prune ------------------------+
+
+Any step may transition to ``error``.
+"""
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any
+
+
+class RecipeState(str, Enum):
+    """Lifecycle position of an integration managed by a recipe."""
+
+    ABSENT = "absent"
+    INSTALLING = "installing"
+    CONFIGURING = "configuring"
+    VERIFIED = "verified"
+    ERROR = "error"
+
+
+@dataclass
+class RecipeResult:
+    """Structured outcome of a single recipe lifecycle operation.
+
+    ``artifacts_owned`` lists the stable identifiers (file paths, ``file::key``
+    paths, hook ids) the operation created or now manages, so callers can hand
+    them to an :class:`~.artifact_registry.ArtifactRegistry` for later prune.
+    """
+
+    success: bool
+    state: RecipeState
+    artifacts_owned: list[str] = field(default_factory=list)
+    status: str = ""
+    error: str | None = None
+    details: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def ok(
+        cls,
+        state: RecipeState,
+        *,
+        artifacts: list[str] | None = None,
+        status: str = "",
+        details: dict[str, Any] | None = None,
+    ) -> RecipeResult:
+        return cls(
+            success=True,
+            state=state,
+            artifacts_owned=list(artifacts or []),
+            status=status,
+            details=dict(details or {}),
+        )
+
+    @classmethod
+    def fail(
+        cls,
+        error: str,
+        *,
+        state: RecipeState = RecipeState.ERROR,
+        details: dict[str, Any] | None = None,
+    ) -> RecipeResult:
+        return cls(success=False, state=state, error=error, details=dict(details or {}))
+
+
+# A cleanup hook performs provider-specific teardown that falls outside generic
+# file/key/hook management — e.g. calling a backend API to deregister a client.
+# It receives the recipe context and raises on failure.
+CleanupHook = Callable[[dict[str, Any]], None]
+
+
+class ProvisioningRecipe(ABC):
+    """Abstract lifecycle contract for an installable integration.
+
+    Subclasses implement the six lifecycle primitives. :meth:`provision` and
+    :meth:`teardown` provide a default orchestration that most recipes can reuse
+    unchanged; override them only when the default ordering does not fit.
+    """
+
+    #: Provider-specific teardown callables run during :meth:`teardown`, after
+    #: generic prune. Populate in ``__init__`` of a concrete recipe (RV01).
+    custom_cleanup_hooks: list[CleanupHook]
+
+    def __init__(self) -> None:
+        self.custom_cleanup_hooks = []
+
+    # --- lifecycle primitives ------------------------------------------------
+
+    @abstractmethod
+    def probe(self, context: dict[str, Any]) -> RecipeResult:
+        """Report current state without mutating anything.
+
+        Return a result whose ``state`` is :attr:`RecipeState.VERIFIED` when the
+        integration is already fully installed and configured (enabling an
+        idempotent skip), :attr:`RecipeState.ABSENT` otherwise.
+        """
+
+    @abstractmethod
+    def install(self, context: dict[str, Any]) -> RecipeResult:
+        """Acquire the integration (run installer, drop package, fetch binary)."""
+
+    @abstractmethod
+    def configure(self, context: dict[str, Any]) -> RecipeResult:
+        """Apply managed configuration (config keys, hook wiring, MCP entries)."""
+
+    @abstractmethod
+    def verify(self, context: dict[str, Any]) -> RecipeResult:
+        """Confirm install + configure succeeded, using probe primitives."""
+
+    @abstractmethod
+    def uninstall(self, context: dict[str, Any]) -> RecipeResult:
+        """Reverse :meth:`install` (remove binary/package/plugin)."""
+
+    @abstractmethod
+    def prune(self, context: dict[str, Any]) -> RecipeResult:
+        """Remove managed configuration/artifacts, leaving user content intact."""
+
+    # --- default orchestration ----------------------------------------------
+
+    def provision(self, context: dict[str, Any]) -> RecipeResult:
+        """Run probe -> install -> configure -> verify with idempotent skip.
+
+        If :meth:`probe` reports the integration already verified, returns early
+        without re-installing. Stops and returns the failing result on any error.
+        """
+        probed = self.probe(context)
+        if probed.success and probed.state is RecipeState.VERIFIED:
+            return RecipeResult.ok(
+                RecipeState.VERIFIED,
+                status="already provisioned",
+                details=probed.details,
+            )
+
+        owned: list[str] = []
+        for op in (self.install, self.configure):
+            result = op(context)
+            owned.extend(result.artifacts_owned)
+            if not result.success:
+                result.artifacts_owned = owned
+                return result
+
+        verified = self.verify(context)
+        verified.artifacts_owned = [*owned, *verified.artifacts_owned]
+        if not verified.success:
+            # verify failure is terminal: surface the diagnostic, do not proceed.
+            verified.state = RecipeState.ERROR
+        return verified
+
+    def teardown(self, context: dict[str, Any]) -> RecipeResult:
+        """Run prune -> uninstall -> cleanup hooks -> post-uninstall verify."""
+        pruned = self.prune(context)
+        if not pruned.success:
+            return pruned
+
+        removed = self.uninstall(context)
+        if not removed.success:
+            return removed
+
+        try:
+            self.run_cleanup_hooks(context)
+        except Exception as exc:  # noqa: BLE001 - report hook failure, do not crash
+            return RecipeResult.fail(f"cleanup hook failed: {exc}")
+
+        return self.post_uninstall_verify(context)
+
+    def post_uninstall_verify(self, context: dict[str, Any]) -> RecipeResult:
+        """Confirm teardown left no managed artifacts. Default: re-probe absent.
+
+        Override for stricter orphan detection. The default treats a probe that
+        reports :attr:`RecipeState.ABSENT` as success.
+        """
+        probed = self.probe(context)
+        if probed.success and probed.state is RecipeState.ABSENT:
+            return RecipeResult.ok(RecipeState.ABSENT, status="removed")
+        return RecipeResult.fail(
+            "integration still present after teardown",
+            details=probed.details,
+        )
+
+    def run_cleanup_hooks(self, context: dict[str, Any]) -> None:
+        """Invoke each registered cleanup hook in order. Raises on first failure."""
+        for hook in self.custom_cleanup_hooks:
+            hook(context)
+
+
+__all__ = [
+    "CleanupHook",
+    "ProvisioningRecipe",
+    "RecipeResult",
+    "RecipeState",
+]
