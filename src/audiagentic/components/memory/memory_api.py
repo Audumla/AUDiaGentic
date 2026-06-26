@@ -14,8 +14,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
-from audiagentic.foundation.components.registry import is_enabled as is_component_enabled
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.lifecycle import enable_implementation
@@ -66,17 +64,9 @@ def memory_status(project_root: Path) -> dict[str, Any]:
         }
 
     impl_state = get_implementation_state(project_root, _COMPONENT_ID, active_impl)
-    configured = bool(impl_state.enabled or impl_state.options)
-
-    # Check last projected state
-    component = get_component_state(project_root, _COMPONENT_ID)
-    impl_data = (component.get("implementations") or {}).get(active_impl, {})
-    last_projected = impl_data.get("last_projected")
-
     return {
         "active_implementation": active_impl,
-        "configured": configured,
-        "last_projected": last_projected,
+        "configured": bool(impl_state.enabled or impl_state.options),
     }
 
 
@@ -101,12 +91,13 @@ def memory_select_implementation(project_root: Path, implementation_id: str) -> 
     """Switch the active memory implementation.
 
     With implementation-cardinality exclusive, enabling one disables all others.
-    Triggers provider surface reconcile if the providers component is enabled.
+    Implementation-owned observers may use the refresh hint to reconcile
+    provider-facing recipes. Memory core does not call provider code directly.
     """
     result = enable_implementation(project_root, _COMPONENT_ID, implementation_id)
 
     if result.get("ok"):
-        _trigger_surface_reconcile(project_root)
+        result["needs_provider_recipe_refresh"] = True
 
     return result
 
@@ -142,7 +133,8 @@ def memory_set_config(
 ) -> dict[str, Any]:
     """Validate and persist config updates for an implementation.
 
-    Triggers provider surface refresh on success.
+    Returns a provider recipe refresh hint on success. Providers decide whether
+    and how to reconcile their own integrations.
     """
     desc = get_implementation(_COMPONENT_ID, implementation_id)
     if desc is None:
@@ -184,69 +176,9 @@ def memory_set_config(
     new_state = ImplementationState(enabled=impl_state.enabled, options=options)
     set_implementation_state(project_root, _COMPONENT_ID, implementation_id, new_state)
 
-    # Trigger provider surface reconcile
-    _trigger_surface_reconcile(project_root)
-
     return {
         "implementation": implementation_id,
         "config": options,
         "updated_keys": list(updates.keys()),
+        "needs_provider_recipe_refresh": True,
     }
-
-
-def _trigger_surface_reconcile(project_root: Path) -> None:
-    """Trigger provider surface reconcile to project memory config into provider files."""
-    if not is_component_enabled(COMPONENT_PROVIDERS, project_root):
-        return
-    try:
-        from audiagentic.components.providers.surfaces.manager import (
-            apply_provider_surfaces as apply_surfaces,
-        )
-        apply_surfaces(project_root)
-    except Exception:
-        logger.debug("Could not trigger surface reconcile after memory config change", exc_info=True)
-
-
-def build_memory_contributions(project_root: Path | None = None) -> list[dict[str, Any]]:
-    """Build dynamic surface contributions from active memory config.
-
-    Returns a list of contribution dicts compatible with SurfaceContribution.
-    Providers render these into their instruction/config files. Memory only
-    exports provider-agnostic content: backend identity and status.
-    """
-    if project_root is None:
-        return []
-
-    active_impl = _active_implementation_id(project_root)
-    if not active_impl:
-        return []
-
-    impl_state = get_implementation_state(project_root, _COMPONENT_ID, active_impl)
-    config = dict(impl_state.options) if impl_state.options else {}
-
-    if not config:
-        return []
-
-    desc = get_implementation(_COMPONENT_ID, active_impl)
-    backend_name = desc.display_name if desc else active_impl
-
-    base_url = config.get("base-url") or config.get("base_url", "")
-    if not base_url:
-        return []
-
-    body_lines = [
-        f"Memory is backed by {backend_name} at `{base_url}`.",
-        "Use the hindsight MCP tools for long-term memory operations:",
-        "- `hindsight_recall` — Search long-term memory",
-        "- `hindsight_reflect` — Synthesize memories into answers",
-        "- `hindsight_retain` — Store information in memory",
-    ]
-
-    return [
-        {
-            "contribution_id": f"memory/{active_impl}",
-            "owner_component": _COMPONENT_ID,
-            "title": "Memory (Hindsight)",
-            "body": "\n".join(body_lines),
-        }
-    ]
