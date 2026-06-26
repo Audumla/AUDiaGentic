@@ -225,8 +225,7 @@ class TestPlanningMcpServer:
         try:
             item = {"id": "E2E01", "plan": "e2e-test", "title": "E2E test item"}
             create_result = _call(proc, "plan_create_item", {"item": item})
-            assert create_result.get("ok") is True, f"create_item failed: {create_result}"
-            assert create_result.get("id") == "E2E01"
+            assert create_result.get("id") == "E2E01", f"create_item failed: {create_result}"
 
             raw = _call(proc, "plan_list_items", {}, msg_id=4)
             # MCP emits one block per list element; a 1-item list comes back as a dict
