@@ -26,26 +26,48 @@ mcp-servers:
     module: audiagentic.components.planning.planning_mcp
     direct-tools:
       - plan_create_item
+      - plan_list_groups
       - plan_list_items
       - plan_get_item
       - plan_set_state
       - plan_update_item
       - plan_delete_item
-    description: Plan item management — create, list, update, transition, and remove items
+      - plan_create_review
+      - plan_list_reviews
+      - plan_get_review
+      - plan_set_review_state
+      - plan_update_review
+      - plan_delete_review
+    description: Plan item management — create, list, update, transition, and remove items; create and manage reviews
     propagate: audiagentic,providers
     instructions: >
       Use plan_create_item to add a new plan item to a named plan under docs/planning/active/.
-      Use plan_list_items to inspect items; filter by state ('active'/'completed') or plan name.
+      The 'id' field is auto-generated — do NOT supply an ID. The system assigns
+      <PLAN-PREFIX><N> (e.g. CC07, LSP01) automatically.
+      Use plan_list_groups to see all plans grouped with item counts and their items.
+      Use plan_list_items to inspect individual items; filter by state ('active'/'completed') or plan name.
       Use plan_get_item to read the full content of a specific item by ID.
       Use plan_set_state(item_id, 'completed') to mark an item done — it moves to completed/.
       Use plan_update_item to revise frontmatter fields or body sections without recreating.
       Use plan_delete_item to permanently remove a cancelled or stale item.
-      Item IDs follow <PLAN-PREFIX><N> (e.g. CC07, LSP01). Plan names are kebab-case (e.g. code-cleanup).
+      Plan names are kebab-case (e.g. code-cleanup).
+
+      Reviews are linked to plan items. Use plan_create_review(review-of=<item_id>, title=<title>) to create a review.
+      Reviews have a lifecycle: created → considered → closed. Use plan_set_review_state to transition.
+      Closed reviews move to completed/. Use plan_list_reviews to find reviews; filter by state, plan, or review_of.
+      Use plan_update_review to add notes, findings, or conclusion to a review.
+      Use plan_delete_review to permanently remove a review.
     tool-descriptions:
       plan_create_item: >
-        Create a new plan item. Required: id, plan, title.
+        Create a new plan item. Required: plan, title.
         Optional: priority (P0/P1/P2/P3/HIGH/MEDIUM), complexity (simple/mid/complex),
         order, validate_first, description, steps, files, validation, effort_risk, notes.
+        ID is auto-generated — do not supply it.
+        Returns {id, title, plan, path} for the created item.
+      plan_list_groups: >
+        List plan items grouped by plan. Returns plan groups with item counts
+        (total, active, completed) and their items. state: 'active'/'pending' or 'completed' (omit for all).
+        plan: directory name like 'code-cleanup' (omit for all plans).
       plan_list_items: >
         List plan items. state: 'active'/'pending' or 'completed' (omit for all).
         plan: directory name like 'code-cleanup' (omit for all plans).
@@ -57,6 +79,23 @@ mcp-servers:
         Update frontmatter fields (priority, complexity, order, etc.) or body sections
         (title, description, steps, files, validation, effort_risk, notes) of an existing item.
       plan_delete_item: Permanently delete a plan item by ID.
+      plan_create_review: >
+        Create a new review linked to a plan item. Required: review-of (parent item ID), title.
+        Optional: notes, findings, conclusion, reviewed-by. ID is auto-generated (e.g. RV01).
+        Returns {id, title, review-of, plan, path}.
+      plan_list_reviews: >
+        List reviews. state: 'created'/'considered' for active, 'closed' for completed (omit for all).
+        plan: directory name like 'code-cleanup' (omit for all plans).
+        review_of: parent item ID to filter by (omit for all).
+      plan_get_review: Read a review by ID, returning frontmatter + parsed body sections.
+      plan_set_review_state: >
+        Transition review state. 'closed' moves to completed/. 'created'/'considered' keep in active/.
+        Returns {id, state, path}.
+      plan_update_review: >
+        Update frontmatter fields (reviewed-by, reviewed-at) or body sections
+        (title, notes, findings, conclusion) of an existing review.
+        Returns {id, path}.
+      plan_delete_review: Permanently delete a review. Returns {id}.
 
 harness-instructions:
   - section: "What you can do"
@@ -69,11 +108,18 @@ harness-instructions:
 
       ### ag-planning
       - `plan_create_item` — Create a plan item in docs/planning/active/<plan>/
+      - `plan_list_groups` — List plan items grouped by plan with counts
       - `plan_list_items` — List active or completed items (filter by plan name)
       - `plan_get_item` — Read a plan item by ID
       - `plan_set_state` — Transition state: 'completed' moves item to completed/
       - `plan_update_item` — Update fields or sections of an existing item
       - `plan_delete_item` — Permanently remove a plan item
+      - `plan_create_review` — Create a review linked to a plan item
+      - `plan_list_reviews` — List reviews (filter by state, plan, or parent item)
+      - `plan_get_review` — Read a review by ID
+      - `plan_set_review_state` — Transition review state: 'closed' moves to completed/
+      - `plan_update_review` — Update fields or sections of an existing review
+      - `plan_delete_review` — Permanently remove a review
 
 contributions:
   - id: agent-planning/process

@@ -368,4 +368,7 @@ class LspSession:
                     "refreshSupport": True,
                 },
             },
+            "general": {
+                "positionEncodings": ["utf-8", "utf-16"],
+            },
         }

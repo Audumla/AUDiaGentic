@@ -42,6 +42,10 @@ def active_lsp_implementation(project_root: Path) -> str:
 
 
 def active_language_bindings(project_root: Path) -> list[BindingDescriptor]:
+    # Ensure component descriptors are loaded so bindings are registered
+    from audiagentic.foundation.components.loader import register_all_components
+    register_all_components()
+    
     active_implementation = active_lsp_implementation(project_root)
     bindings: list[BindingDescriptor] = []
     for (implementation, feature_kind, feature), binding in get_bindings(COMPONENT_CODING_LSP).items():
