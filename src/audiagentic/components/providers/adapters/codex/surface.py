@@ -6,6 +6,7 @@ from typing import Any
 from ...surfaces.base import (
     SkillDefinition,
     apply_managed_header,
+    is_component_active,
     make_single_file_contribution_renderer,
     render_frontmatter_skill,
     render_instruction_file,
@@ -35,11 +36,13 @@ def render(
             render_frontmatter_skill(skill, root_label=path_template.format(tag=skill.tag))
         )
 
-    surfaces[project_root / "AGENTS.md"] = render_instruction_file(
-        provider_id="codex",
-        instruction_file="AGENTS.md",
-        adapter_dir=_ADAPTER_DIR,
-    )
+    if is_component_active(project_root, "agent-jobs"):
+        surfaces[project_root / "AGENTS.md"] = render_instruction_file(
+            provider_id="codex",
+            instruction_file="AGENTS.md",
+            adapter_dir=_ADAPTER_DIR,
+            display_name="Project instructions",
+        )
     return surfaces
 
 
