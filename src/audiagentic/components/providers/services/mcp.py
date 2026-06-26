@@ -1,4 +1,8 @@
-"""Provider MCP config management — add, remove, list, reload per-provider MCP server entries."""
+"""Provider MCP config management — add, remove, list, reload per-provider MCP server entries.
+
+Also provides generic MCP config helpers that wrap foundation ConfigPatcher,
+scoped to provider-specific config paths.
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,6 +10,7 @@ from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.mcp import McpServerEntry
+from audiagentic.foundation.toolchains.config_patcher import ConfigPatcher
 
 from ..descriptors.base import McpConfigSpec, ProviderDescriptor
 from ..descriptors.registry import get_descriptor
@@ -288,3 +293,48 @@ def sync_managed_provider_mcp_subset(
     return _sync_managed_entries(
         provider_id, project_root, desired_entries, managed_ids=managed_ids
     )
+
+
+def add_mcp_entry(
+    config_path: str | Path,
+    server_name: str,
+    entry: dict[str, Any],
+    *,
+    container: tuple[str, ...] = ("mcpServers",),
+) -> dict[str, Any]:
+    """Add/replace an MCP server entry using generic ConfigPatcher.
+
+    This is the provider-scoped replacement for the foundation-level
+    ConfigPatcher.add_mcp_entry which was removed to eliminate domain leakage.
+    """
+    patcher = ConfigPatcher(config_path)
+    change = patcher.set_key((*container, server_name), entry)
+    return {
+        "config_path": str(config_path),
+        "server_name": server_name,
+        "artifact_id": change.artifact_id,
+        "existed": change.existed,
+        "operation": change.operation,
+    }
+
+
+def remove_mcp_entry(
+    config_path: str | Path,
+    server_name: str,
+    *,
+    container: tuple[str, ...] = ("mcpServers",),
+) -> dict[str, Any]:
+    """Remove an MCP server entry using generic ConfigPatcher.
+
+    This is the provider-scoped replacement for the foundation-level
+    ConfigPatcher.remove_mcp_entry which was removed to eliminate domain leakage.
+    """
+    patcher = ConfigPatcher(config_path)
+    change = patcher.remove_key((*container, server_name))
+    return {
+        "config_path": str(config_path),
+        "server_name": server_name,
+        "artifact_id": change.artifact_id,
+        "existed": change.existed,
+        "operation": change.operation,
+    }

@@ -2,7 +2,7 @@
 id: PRR01
 order: 1
 plan: plan-provider-recipe-refactor
-state: pending
+state: completed
 validate-first: true
 priority: P0
 complexity: mid
@@ -45,4 +45,33 @@ Risk is mistaking generic config operations for provider recipes. Keep generic p
 
 ## Notes
 
-Current known smells: `ConfigPatcher.add_mcp_entry/remove_mcp_entry`; `ProvisioningRecipe` docstring names MCP/hooks/plugins; `memory_api._trigger_surface_reconcile`; `hindsight.yaml` contains `enabled-providers`; `memory/hindsight_recipe.py` owns a Hindsight MCP config recipe.
+Audit complete. Key violations found:
+
+1. foundation/toolchains/config_patcher.py:134-151: `add_mcp_entry` and `remove_mcp_entry` are MCP-specific helpers in a generic toolchain module. They're thin wrappers around `set_key`/`remove_key` with MCP-specific defaults.
+
+2. foundation/toolchains/recipe_contract.py:1-18: Docstring names "MCP server registration, a hook, a plugin" as examples — these are domain concepts leaking into foundation.
+
+3. foundation/toolchains/__init__.py: Exports all toolchain symbols; MCP helpers leak through.
+
+4. components/memory/memory_api.py:197-207: `_trigger_surface_reconcile` calls `apply_provider_surfaces()` — memory orchestrates provider refresh.
+
+5. components/memory/hindsight.yaml:27-29: `enabled-providers` option — memory chooses provider allowlist.
+
+6. components/memory/hindsight_recipe.py: Uses `ConfigPatcher.add_mcp_entry/remove_mcp_entry` (MCP-specific), and owns a "Hindsight MCP config recipe" which is really provider/harness behavior.
+
+Provider-side (correct ownership):
+- descriptors/base.py: `McpConfigSpec`, `LanguageServersConfigSpec`, `on_lsp_enabled`, `receive_lsp_mcp` — provider-owned native capability behavior (correct)
+- services/lsp_projection.py: Provider-owned LSP sync (correct)
+- services/mcp.py: Provider-owned MCP config management (correct)
+
+coding-lsp (correct ownership):
+- lsp_recipe.py: Language server install as StepRecipe (correct)
+- language_servers_sync.py: LSP projection to providers (correct)
+
+Resolution plan:
+- PRR03: Move MCP helpers out of foundation, into providers/services/mcp.py
+- PRR02: Define provider-owned recipe contract types
+- PRR04: Build Hindsight provider recipe matrix
+- PRR05: Migrate Hindsight integration to provider-owned recipes
+- PRR06: Align coding-lsp with provider recipe model
+- PRR07: Add regression tests and docs

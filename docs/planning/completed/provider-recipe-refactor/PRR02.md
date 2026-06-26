@@ -2,7 +2,7 @@
 id: PRR02
 order: 2
 plan: plan-provider-recipe-refactor
-state: pending
+state: completed
 validate-first: true
 priority: P0
 complexity: complex

@@ -1,13 +1,12 @@
 """Provisioning recipe contract — generic lifecycle for installable integrations.
 
-A :class:`ProvisioningRecipe` is the orchestration contract that provider/component
-code implements to install, configure, verify, and remove a host integration
-(an MCP server registration, a hook, a plugin, a language server, ...).
+A :class:`ProvisioningRecipe` is the orchestration contract that higher-level
+code implements to install, configure, verify, and remove an external host-side
+integration.
 
-Deliberately provider-agnostic: this module names no providers, no components,
-and encodes no capability semantics. Concrete recipes compose the generic
-primitives in this package — :mod:`steps`, :mod:`probes`, :mod:`config_patcher`,
-:mod:`artifact_registry` — into a capability-specific lifecycle.
+Deliberately domain-neutral: this module names no concrete integrations,
+components, or capability semantics. Concrete recipes compose the generic
+primitives in this package into a capability-specific lifecycle.
 
 Lifecycle state machine::
 
@@ -118,7 +117,7 @@ class ProvisioningRecipe(ABC):
 
     @abstractmethod
     def configure(self, context: dict[str, Any]) -> RecipeResult:
-        """Apply managed configuration (config keys, hook wiring, MCP entries)."""
+        """Apply managed configuration (config keys, hook wiring, server entries)."""
 
     @abstractmethod
     def verify(self, context: dict[str, Any]) -> RecipeResult:

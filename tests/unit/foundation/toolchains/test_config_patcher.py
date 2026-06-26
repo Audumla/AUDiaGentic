@@ -54,22 +54,24 @@ def test_remove_missing_key_is_reported_not_raised(tmp_path):
     assert load_config(cfg) == {"keep": True}
 
 
-def test_mcp_entry_add_and_remove_roundtrip(tmp_path):
+def test_set_key_as_generic_mcp_entry(tmp_path):
+    """Generic set_key can be used to add MCP server entries (provider-scoped)."""
     cfg = tmp_path / "mcp.json"
     patcher = ConfigPatcher(cfg)
 
-    patcher.add_mcp_entry("hindsight", {"command": "hindsight", "args": ["serve"]})
+    patcher.set_key(("mcpServers", "hindsight"), {"command": "hindsight", "args": ["serve"]})
     assert load_config(cfg)["mcpServers"]["hindsight"]["command"] == "hindsight"
 
-    patcher.remove_mcp_entry("hindsight")
+    patcher.remove_key(("mcpServers", "hindsight"))
     assert "mcpServers" not in load_config(cfg)
 
 
-def test_add_mcp_entry_dedups_on_name(tmp_path):
+def test_set_key_dedups_on_name(tmp_path):
+    """Generic set_key overwrites existing keys by name."""
     cfg = tmp_path / "mcp.json"
     patcher = ConfigPatcher(cfg)
-    patcher.add_mcp_entry("x", {"v": 1})
-    patcher.add_mcp_entry("x", {"v": 2})
+    patcher.set_key(("mcpServers", "x"), {"v": 1})
+    patcher.set_key(("mcpServers", "x"), {"v": 2})
     assert load_config(cfg)["mcpServers"] == {"x": {"v": 2}}
 
 
