@@ -1,0 +1,37 @@
+type: implementation
+contract-version: v1
+parent: memory
+id: hindsight
+display-name: Hindsight
+default: true
+description: >
+  Hindsight long-term memory backend. Provides recall, reflect, and retain
+  operations via the Hindsight MCP server. Config projected into provider
+  surfaces so external tools can access the same memory context.
+
+options-schema:
+  base-url:
+    type: string
+    required: true
+    description: Hindsight server base URL (e.g. https://hindsight.example.com)
+  api-key:
+    type: string
+    required: false
+    description: API key for Hindsight authentication
+  timeout-seconds:
+    type: integer
+    default: 30
+    min: 1
+    max: 120
+    description: Request timeout in seconds
+  enabled-providers:
+    type: list
+    required: false
+    description: Optional allowlist of provider IDs to project memory config for
+  transport:
+    type: enum
+    default: sse
+    values:
+      - sse
+      - stdio
+    description: MCP transport mode
