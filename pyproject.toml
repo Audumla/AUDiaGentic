@@ -30,6 +30,7 @@ test = [
     "pytest-timeout>=2.3",
     "pytest-xdist>=3.0",
     "mcp==1.27.0",
+    "pyright>=1.1",
 ]
 # Full development environment
 dev = [
@@ -39,6 +40,7 @@ dev = [
     "pytest-timeout>=2.3",
     "pytest-xdist>=3.0",
     "mcp==1.27.0",
+    "pyright>=1.1",
     "ruff",
     "mypy",
 ]
@@ -82,8 +84,8 @@ where = ["src"]
     # Embedded rig model profiles registry (machine-only, not user config)
     "runtime/rig/embedded/models.json",
     # Release-please provisioning templates
-    "components/optional/release/release_please/templates/*.json",
-    "components/optional/release/release_please/templates/*.yml",
+    "components/release/release_please/templates/*.json",
+    "components/release/release_please/templates/*.yml",
     "components/optional/providers/workflow/*.yaml",
 ]
 

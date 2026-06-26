@@ -2,9 +2,10 @@
 # Usage: make <target>
 # Requires: docker, python3, pytest
 
-.PHONY: help test test-unit test-integration test-e2e test-docker test-lsp-docker \
+.PHONY: help test test-all test-fast test-unit test-integration test-e2e \
+        test-docker test-lsp-docker test-packaging-docker \
         test-providers-docker test-providers-real-docker test-provider-real-one \
-        build-base build-test build-lsp-install-test clean-docker
+        build-base build-test build-lsp-install build-packaging clean-docker
 
 PYTHON     ?= python3
 PYTEST     ?= $(PYTHON) -m pytest
@@ -17,13 +18,16 @@ LSP_IMAGE   = audiagentic-lsp-install-test:latest
 # On Linux/Mac, cygpath is absent and the fallback pwd gives the correct POSIX path.
 DOCKER_MOUNT := $(shell cygpath -m "$(CURDIR)" 2>/dev/null || pwd)
 
-help:
+	help:
 	@echo "Targets:"
+	@echo "  test-all             ONE command: host suite (parallel) + docker if a daemon is present"
+	@echo "  test-fast            Host suite only, parallel; never touch docker"
 	@echo "  test                 Run unit + integration tests (no docker)"
 	@echo "  test-unit            Run unit tests only"
 	@echo "  test-integration     Run integration tests only"
 	@echo "  test-e2e             Run e2e tests only"
-	@echo "  test-docker          Run all docker-based tests"
+	@echo "  test-docker          Run the clean non-mutating suite in docker"
+	@echo "  test-packaging-docker Run clean-room wheel/install/server checks in docker"
 	@echo "  test-providers-docker Run provider tests in docker"
 	@echo "  test-providers-real-docker Run opt-in real provider CLI tests in docker"
 	@echo "  test-provider-real-one PROVIDER=<id>  Run one real provider CLI test in isolated docker"
@@ -31,7 +35,20 @@ help:
 	@echo "  build-base           Build audia-test-base image"
 	@echo "  build-test           Build audiagentic-test image (requires base)"
 	@echo "  build-lsp-install    Build LSP install test image (requires base)"
+	@echo "  build-packaging      Build clean-room packaging image"
 	@echo "  clean-docker         Remove all audia test images"
+
+# ── Consolidated entrypoint ──────────────────────────────────────────────────
+# tests/run_all.py is the single front door: it runs the whole host suite in
+# parallel (the no_parallel hook keeps stateful modules serial) and, when a
+# Docker daemon is reachable, builds the image set once and runs the in-container
+# suites. Cross-platform — no make dependency on Windows.
+
+test-all:
+	$(PYTHON) tests/run_all.py
+
+test-fast:
+	$(PYTHON) tests/run_all.py --fast
 
 # ── Local test targets ───────────────────────────────────────────────────────
 
@@ -60,12 +77,25 @@ build-test: build-base
 build-lsp-install: build-base
 	docker build -f tests/docker/Dockerfile.lsp-install-test -t $(LSP_IMAGE) .
 
+PACKAGING_IMAGE = audia-packaging:latest
+
+# Clean-room packaging image is intentionally NOT built FROM the toolchain base —
+# it proves the wheel is self-contained without the dev toolchain present.
+build-packaging:
+	docker build -f tests/docker/Dockerfile.packaging -t $(PACKAGING_IMAGE) .
+
 # ── Docker test run targets ──────────────────────────────────────────────────
 
-# Runs unit + integration + e2e inside the standard test image.
+# Runs the whole CLEAN, non-mutating suite inside the standard test image
+# (run_suite.sh: -m "not mutates_host" -n auto). Mutating recipe tests run in
+# their own isolated images (test-providers-*, test-lsp-docker).
 # Uses COPY-based image — rebuild with: make build-test
 test-docker: build-test
 	docker run --rm $(TEST_IMAGE)
+
+# Clean-room wheel/install/server checks (merged install + release + server-smoke).
+test-packaging-docker: build-packaging
+	docker run --rm $(PACKAGING_IMAGE)
 
 # Runs provider integration tests in Docker without real mutating provider CLI
 # installs unless explicitly opted in at invocation time.
@@ -86,7 +116,11 @@ test-provider-real-one: build-test
 test-lsp-docker: build-lsp-install
 	docker run --rm -v "$(DOCKER_MOUNT):/app" $(LSP_IMAGE)
 
+# Shell stdout capture on Linux is now covered by the clean suite image
+# (run_suite.sh runs the test_steps.py shell case inside Linux). The host-side
+# e2e wrapper invokes that same image; no dedicated shell image is needed.
+
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 
 clean-docker:
-	-docker rmi $(BASE_IMAGE) $(TEST_IMAGE) $(LSP_IMAGE) 2>/dev/null || true
+	-docker rmi $(BASE_IMAGE) $(TEST_IMAGE) $(LSP_IMAGE) $(PACKAGING_IMAGE) 2>/dev/null || true
