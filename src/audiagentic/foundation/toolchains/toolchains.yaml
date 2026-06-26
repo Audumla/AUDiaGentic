@@ -55,3 +55,7 @@ toolchains:
     privilege: true
     install: [pacman, -S, --noconfirm, "{package}"]
     remove: [pacman, -R, --noconfirm, "{package}"]
+
+  go:
+    install: [go, install, "{package}"]
+    uninstall: [go, uninstall, "{package}"]
