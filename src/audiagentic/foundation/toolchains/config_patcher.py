@@ -1,10 +1,10 @@
 """Managed mutations of structured config files (TOML/JSON/YAML).
 
 A :class:`ConfigPatcher` is bound to a single config file and performs targeted,
-reversible edits — set/remove a nested key, add/remove an MCP server entry. Every
-mutation returns an :class:`OwnedChange` recording what was touched and how to
-undo it, so an :class:`~.artifact_registry.ArtifactRegistry` can prune only the
-bits a recipe owns without disturbing user customizations.
+reversible edits — set/remove a nested key. Every mutation returns an
+:class:`OwnedChange` recording what was touched and how to undo it, so an
+:class:`~.artifact_registry.ArtifactRegistry` can prune only the bits a recipe
+owns without disturbing user customizations.
 
 Intermediate keys are auto-created on set (RV01), so patching a deep path into an
 empty or partial file just works.
@@ -128,27 +128,6 @@ class ConfigPatcher:
                 del node[container]
             else:
                 break
-
-    # --- MCP server entries --------------------------------------------------
-
-    def add_mcp_entry(
-        self,
-        server_name: str,
-        entry: dict[str, Any],
-        *,
-        container: tuple[str, ...] = ("mcpServers",),
-    ) -> OwnedChange:
-        """Add/replace an MCP server entry under ``container`` (dedup by name)."""
-        return self.set_key((*container, server_name), entry)
-
-    def remove_mcp_entry(
-        self,
-        server_name: str,
-        *,
-        container: tuple[str, ...] = ("mcpServers",),
-    ) -> OwnedChange:
-        """Remove the named MCP server entry under ``container``."""
-        return self.remove_key((*container, server_name))
 
     # --- reversal ------------------------------------------------------------
 
