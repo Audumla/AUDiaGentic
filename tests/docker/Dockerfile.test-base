@@ -7,7 +7,7 @@ CMD ["bash"]
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV PATH="/root/.local/bin:/root/.cargo/bin:/venv/bin:${PATH}"
+ENV PATH="/root/.local/bin:/root/.cargo/bin:/usr/local/go/bin:/root/go/bin:/venv/bin:${PATH}"
 
 # Python + system deps (node already installed)
 # build-essential: required for cargo compilation (rust-analyzer)
@@ -28,6 +28,9 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages --no-compile \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --default-toolchain stable --profile minimal
 
+# Go toolchain (make-ls, other Go-based LSP servers)
+RUN curl -fsSL https://go.dev/dl/go1.23.4.linux-amd64.tar.gz | tar -C /usr/local -xzf -
+
 # GitHub CLI (copilot)
 RUN (curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null) \
     && (echo "deb [signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/githubcli.list) \
@@ -46,7 +49,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Verify all toolchains
-RUN uv --version && cargo --version && gh --version && node --version && code --version
+RUN uv --version && cargo --version && go version && gh --version && node --version && code --version
 
 # Set PYTHONPYCACHEPREFIX AFTER all build steps so build-time .pyc files
 # are NOT written here (they'd be stale bytecode baked into the image).

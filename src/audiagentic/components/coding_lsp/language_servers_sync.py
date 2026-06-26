@@ -103,16 +103,19 @@ def _lsp_json_language_server_projection(project_root: Path, feature: str) -> di
     servers = resolve_active_runtime_servers(project_root).get(feature, [])
     if not servers:
         return {}
-    entries: dict[str, LanguageServerEntry] = {}
-    for server in servers:
-        sid = server.server_id or feature
-        entries[sid] = LanguageServerEntry(
+    # Key by language name (feature), not server_id. Provider adapters handle
+    # any binary-name mapping internally (e.g. opencode maps python→pyright).
+    # Keying by language also lets prune_language_servers_from_providers locate
+    # and remove the entry by language name, which is what the remover expects.
+    server = servers[0]
+    return {
+        feature: LanguageServerEntry(
             language=feature,
             command=list(server.command),
             file_extensions=list(server.file_extensions),
             settings=dict(server.settings),
         )
-    return entries
+    }
 
 
 def _agent_lsp_mcp_args_projection(project_root: Path) -> dict[str, tuple[str, McpServerEntry]]:
