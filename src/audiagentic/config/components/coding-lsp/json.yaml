@@ -1,0 +1,22 @@
+type: feature
+contract-version: v1
+parent: coding-lsp
+kind: language
+id: json
+display-name: JSON (vscode-json-language-server)
+language-id: json
+server:
+  command: [vscode-json-language-server, --stdio]
+  file-extensions: [.json, .jsonc]
+  workspace-config-files: []
+detection-markers: []
+dependencies:
+  vscode-langservers-extracted:
+    display-name: VSCode JSON Language Server
+    probe: binary:vscode-json-language-server
+    package: vscode-langservers-extracted
+    toolchain: npm
+options-schema:
+  server-settings:
+    type: object
+    default: {}

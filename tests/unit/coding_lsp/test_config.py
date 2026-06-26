@@ -131,6 +131,12 @@ def test_detect_project_languages_none(tmp_path: Path) -> None:
     assert detected == {}
 
 
+def test_detect_project_languages_make(tmp_path: Path) -> None:
+    (tmp_path / "Makefile").touch()
+    detected = detect_project_languages(tmp_path)
+    assert "make" in detected
+
+
 def test_resolve_server_for_file_python() -> None:
     servers = {
         "python": ServerConfig(
@@ -152,6 +158,18 @@ def test_resolve_server_for_file_unknown() -> None:
     }
     result = resolve_server_for_file(Path("src/foo.rs"), servers)
     assert result is None
+
+
+def test_resolve_server_for_file_makefile_basename() -> None:
+    servers = {
+        "make": ServerConfig(
+            command=["make-ls"],
+            file_extensions=["Makefile", "makefile", "GNUmakefile"],
+        )
+    }
+    result = resolve_server_for_file(Path("Makefile"), servers)
+    assert result is not None
+    assert result.command == ["make-ls"]
 
 
 def test_resolve_root_uri() -> None:
@@ -190,6 +208,7 @@ def test_makefile_does_not_trigger_cpp_detection(tmp_path: Path) -> None:
     (tmp_path / "Makefile").touch()
     detected = detect_project_languages(tmp_path)
     assert "cpp" not in detected, "Makefile alone should not trigger C++ detection"
+    assert "make" in detected, "Makefile should trigger Make detection"
 
 
 def test_cmake_triggers_cpp_detection(tmp_path: Path) -> None:

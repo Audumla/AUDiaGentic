@@ -1,0 +1,9 @@
+type: binding
+contract-version: v1
+parent: coding-lsp
+implementation: agent-lsp
+feature-kind: language
+feature: json
+uses-dependencies: [agent-lsp, vscode-langservers-extracted]
+projection:
+  writer-key: agent-lsp.mcp-args

@@ -1,0 +1,9 @@
+type: binding
+contract-version: v1
+parent: coding-lsp
+implementation: ag-lsp
+feature-kind: language
+feature: json
+uses-dependencies: [vscode-langservers-extracted]
+projection:
+  writer-key: coding-lsp.lsp-json
