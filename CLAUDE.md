@@ -44,6 +44,25 @@ Choose a prefix matching the plan name (CC → code-cleanup, LSP → lsp-mcp-enh
 - validate_first: true if validation steps must precede implementation (default true)
 - description, steps, files, validation, effort_risk, notes: body section content
 
+## Agent profile doctrine
+
+Agent profiles bind a provider to a specific model with optional execution
+parameters. They are stored in .audiagentic/config/agent-profiles.yaml.
+
+## When to use
+- A job needs a predefined provider+model configuration
+- Execution parameters (temperature, max-tokens) should be profile-driven
+- Multiple projects need different default model configurations
+
+## Resolution precedence at job launch
+1. Explicit `agent-profile-id` in job request
+2. Explicit provider-id / model-id in job request
+3. Default agent profile (marked `is-default: true`)
+
+## Naming
+Use `agent-profile-id` (NOT `profile-id`) in job requests to avoid
+collision with `workflow-profile` (lite/standard/strict stage pipelines).
+
 ## Release doctrine
 
 Use the configured release manager for versioning and publication.

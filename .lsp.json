@@ -2,11 +2,190 @@
   "version": 1,
   "servers": {
     "python": {
-      "command": ["pyright-langserver", "--stdio"],
-      "file_extensions": [".py", ".pyi"],
-      "workspace_config_files": ["pyrightconfig.json"],
+      "command": [
+        "pyright-langserver",
+        "--stdio"
+      ],
+      "file_extensions": [
+        ".py",
+        ".pyi"
+      ],
+      "workspace_config_files": [
+        "pyrightconfig.json"
+      ],
       "settings": {},
       "label": "Python (pyright)"
+    }
+  },
+  "pyright": {
+    "command": "pyright-langserver",
+    "args": [
+      "--stdio"
+    ],
+    "extensionToLanguage": {
+      ".py": "pyright",
+      ".pyi": "pyright"
+    }
+  },
+  "clangd": {
+    "command": "clangd",
+    "args": [],
+    "extensionToLanguage": {
+      ".c": "clangd",
+      ".cpp": "clangd",
+      ".cc": "clangd",
+      ".cxx": "clangd",
+      ".h": "clangd",
+      ".hpp": "clangd",
+      ".hxx": "clangd"
+    }
+  },
+  "marksman": {
+    "command": "marksman",
+    "args": [
+      "server"
+    ],
+    "extensionToLanguage": {
+      ".md": "marksman",
+      ".markdown": "marksman"
+    }
+  },
+  "ruff": {
+    "command": "ruff",
+    "args": [
+      "server",
+      "--preview"
+    ],
+    "extensionToLanguage": {
+      ".py": "ruff",
+      ".pyi": "ruff",
+      ".ipynb": "ruff"
+    }
+  },
+  "rust-analyzer": {
+    "command": "rust-analyzer",
+    "args": [],
+    "extensionToLanguage": {
+      ".rs": "rust-analyzer"
+    }
+  },
+  "typescript-language-server": {
+    "command": "typescript-language-server",
+    "args": [
+      "--stdio"
+    ],
+    "extensionToLanguage": {
+      ".ts": "typescript-language-server",
+      ".tsx": "typescript-language-server",
+      ".js": "typescript-language-server",
+      ".jsx": "typescript-language-server",
+      ".mjs": "typescript-language-server",
+      ".cjs": "typescript-language-server"
+    }
+  },
+  "cpp": {
+    "command": "clangd",
+    "args": [],
+    "extensionToLanguage": {
+      ".c": "cpp",
+      ".cpp": "cpp",
+      ".cc": "cpp",
+      ".cxx": "cpp",
+      ".h": "cpp",
+      ".hpp": "cpp",
+      ".hxx": "cpp"
+    }
+  },
+  "json": {
+    "command": "vscode-json-language-server",
+    "args": [
+      "--stdio"
+    ],
+    "extensionToLanguage": {
+      ".json": "json",
+      ".jsonc": "json"
+    }
+  },
+  "make": {
+    "command": "make-ls",
+    "args": [],
+    "extensionToLanguage": {
+      "Makefile": "make",
+      "makefile": "make",
+      "GNUmakefile": "make"
+    }
+  },
+  "markdown": {
+    "command": "marksman",
+    "args": [
+      "server"
+    ],
+    "extensionToLanguage": {
+      ".md": "markdown",
+      ".markdown": "markdown"
+    }
+  },
+  "python-ruff": {
+    "command": "ruff",
+    "args": [
+      "server",
+      "--preview"
+    ],
+    "extensionToLanguage": {
+      ".py": "python-ruff",
+      ".pyi": "python-ruff",
+      ".ipynb": "python-ruff"
+    }
+  },
+  "python": {
+    "command": "pyright-langserver",
+    "args": [
+      "--stdio"
+    ],
+    "extensionToLanguage": {
+      ".py": "python",
+      ".pyi": "python"
+    }
+  },
+  "rust": {
+    "command": "rust-analyzer",
+    "args": [],
+    "extensionToLanguage": {
+      ".rs": "rust"
+    }
+  },
+  "toml": {
+    "command": "taplo",
+    "args": [
+      "lsp",
+      "stdio"
+    ],
+    "extensionToLanguage": {
+      ".toml": "toml"
+    }
+  },
+  "typescript": {
+    "command": "typescript-language-server",
+    "args": [
+      "--stdio"
+    ],
+    "extensionToLanguage": {
+      ".ts": "typescript",
+      ".tsx": "typescript",
+      ".js": "typescript",
+      ".jsx": "typescript",
+      ".mjs": "typescript",
+      ".cjs": "typescript"
+    }
+  },
+  "yaml": {
+    "command": "yaml-language-server",
+    "args": [
+      "--stdio"
+    ],
+    "extensionToLanguage": {
+      ".yaml": "yaml",
+      ".yml": "yaml"
     }
   }
 }
