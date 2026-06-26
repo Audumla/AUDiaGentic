@@ -5,7 +5,7 @@ id: planning-local-docs
 display-name: Local Planning Docs
 default: true
 description: >
-  Home-rolled plan item management. Items are markdown files stored under
+  Hand-rolled plan item management. Items are markdown files stored under
   docs/planning/active/ (pending) and docs/planning/completed/.
   No external service required.
 
@@ -14,6 +14,16 @@ paths:
   active-dir: docs/planning/active
   completed-dir: docs/planning/completed
   template: docs/planning/TEMPLATE_ITEM.md
+
+standards:
+  - id: arch-standards
+    title: Architecture Standards
+    path: docs/ARCHITECTURE_STANDARDS.md
+    description: 'Non-negotiable rules: layering, config-over-code, error handling, logging'
+  - id: component-creation
+    title: Creating Components
+    path: docs/CREATING_A_COMPONENT.md
+    description: 'Guide for adding new Components to Audiagentic: describes the concepts of implementations, descriptors, MCP servers, features and options'
 
 files:
   - path: docs/planning

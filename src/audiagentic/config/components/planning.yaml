@@ -26,6 +26,7 @@ mcp-servers:
     module: audiagentic.components.planning.planning_mcp
     direct-tools:
       - plan_create_item
+      - plan_list_standards
       - plan_list_groups
       - plan_list_items
       - plan_get_item
@@ -41,6 +42,7 @@ mcp-servers:
     description: Plan item management — create, list, update, transition, and remove items; create and manage reviews
     propagate: audiagentic,providers
     instructions: >
+      Use plan_list_standards to discover architecture and design standards before creating plans.
       Use plan_create_item to add a new plan item to a named plan under docs/planning/active/.
       The 'id' field is auto-generated — do NOT supply an ID. The system assigns
       <PLAN-PREFIX><N> (e.g. CC07, LSP01) automatically.
@@ -51,6 +53,7 @@ mcp-servers:
       Use plan_update_item to revise frontmatter fields or body sections without recreating.
       Use plan_delete_item to permanently remove a cancelled or stale item.
       Plan names are kebab-case (e.g. code-cleanup).
+      Reference relevant standards in plan items using a Standards section.
 
       Reviews are linked to plan items. Use plan_create_review(review-of=<item_id>, title=<title>) to create a review.
       Reviews have a lifecycle: created → considered → closed. Use plan_set_review_state to transition.
@@ -58,6 +61,11 @@ mcp-servers:
       Use plan_update_review to add notes, findings, or conclusion to a review.
       Use plan_delete_review to permanently remove a review.
     tool-descriptions:
+      plan_list_standards: >
+        List the architecture and design standards for this project. Returns a list
+        of standards with id, title, path, and description. Standards are loaded from
+        docs/planning/STANDARDS_CONFIG.md. Use this to discover which standards apply
+        before creating or updating plan items.
       plan_create_item: >
         Create a new plan item. Required: plan, title.
         Optional: priority (P0/P1/P2/P3/HIGH/MEDIUM), complexity (simple/mid/complex),
@@ -107,6 +115,7 @@ harness-instructions:
       - `planning_select_implementation` — Switch the active planning implementation
 
       ### ag-planning
+      - `plan_list_standards` — List available architecture/design standards
       - `plan_create_item` — Create a plan item in docs/planning/active/<plan>/
       - `plan_list_groups` — List plan items grouped by plan with counts
       - `plan_list_items` — List active or completed items (filter by plan name)
