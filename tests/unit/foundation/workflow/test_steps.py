@@ -14,8 +14,11 @@ from audiagentic.foundation.workflow.invocation.models import WorkflowAnswer, Wo
 from audiagentic.foundation.workflow.invocation.steps import (
     ConditionalStep,
     ConfirmStep,
+    PlatformOverrides,
+    SelectStep,
     SequenceStep,
     ShellStep,
+    _platform_key,
 )
 
 # ---------------------------------------------------------------------------
@@ -315,3 +318,77 @@ class TestConditionalStep:
         step = ConditionalStep(id="cond", condition_key="flag", when_true=inner)
         result = step.run({"flag": True}, answers)
         assert result.status == "ok"
+
+
+# ---------------------------------------------------------------------------
+# PlatformOverrides on ShellStep (RV01/RV02)
+# ---------------------------------------------------------------------------
+
+
+class TestPlatformOverrides:
+    def test_resolve_returns_current_platform_command(self) -> None:
+        overrides = PlatformOverrides(
+            win=("cmd", "/c", "ver"), darwin=("sw_vers",), linux=("uname",)
+        )
+        assert overrides.resolve(_platform_key()) is not None
+
+    def test_resolve_explicit_key(self) -> None:
+        overrides = PlatformOverrides(win=("w",), linux=("l",))
+        assert overrides.resolve("win") == ("w",)
+        assert overrides.resolve("linux") == ("l",)
+        assert overrides.resolve("darwin") is None
+
+    def test_shellstep_uses_override_for_current_platform(self) -> None:
+        key = _platform_key()
+        override_cmd = _echo_cmd("from-override")
+        step = ShellStep(
+            id="sh",
+            command=("__base_should_not_run__",),
+            platform=PlatformOverrides(**{key: override_cmd}),
+        )
+        rendered = step._render_command({})
+        assert rendered == override_cmd
+
+    def test_shellstep_falls_back_to_base_when_no_override(self) -> None:
+        # Build overrides for platforms other than the current one.
+        others = {k: ("x",) for k in ("win", "darwin", "linux") if k != _platform_key()}
+        step = ShellStep(
+            id="sh", command=("base", "cmd"), platform=PlatformOverrides(**others)
+        )
+        assert step._render_command({}) == ("base", "cmd")
+
+    def test_override_still_interpolates_context(self) -> None:
+        key = _platform_key()
+        step = ShellStep(
+            id="sh",
+            command=("base",),
+            platform=PlatformOverrides(**{key: ("tool", "{arg}")}),
+        )
+        assert step._render_command({"arg": "v"}) == ("tool", "v")
+
+
+# ---------------------------------------------------------------------------
+# SequenceStep exposes prior results for conditional branching (RV02)
+# ---------------------------------------------------------------------------
+
+
+class TestSequenceStepResults:
+    def test_later_step_can_branch_on_prior_status(self) -> None:
+        recorded: dict[str, object] = {}
+
+        def _select(context: dict) -> str | None:
+            recorded["status"] = dict(context.get("step_status", {}))
+            recorded["results"] = dict(context.get("step_results", {}))
+            return "run"
+
+        probe = ShellStep(id="probe", command=_true_cmd())
+        gated = SelectStep(
+            id="gated",
+            select=_select,
+            variants={"run": ShellStep(id="inner", command=_true_cmd())},
+        )
+        seq = SequenceStep(id="seq", steps=(probe, gated))
+        result = seq.run({})
+        assert result.status == "ok"
+        assert recorded["status"].get("probe") == "ok"
+        assert "probe" in recorded["results"]
