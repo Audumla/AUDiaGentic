@@ -18,4 +18,4 @@ WORKDIR /app
 #
 # The venv is created fresh each run inside the container (ephemeral).
 COPY . /app
-CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-asyncio pytest-timeout pytest-xdist && /venv/bin/pytest tests/integration/coding_lsp/test_install_deps.py -v --tb=short"]
+CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-asyncio pytest-timeout pytest-xdist && /venv/bin/pytest tests/integration/coding_lsp/test_install_deps.py tests/integration/coding_lsp/test_auto_install_e2e.py -v --tb=short"]
