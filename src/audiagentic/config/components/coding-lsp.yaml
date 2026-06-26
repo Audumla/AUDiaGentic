@@ -61,21 +61,9 @@ mcp-servers:
       an empty response as definitive.
 
 harness-instructions:
-  - section: "What you can do"
+  - section: "LSP operating rules"
     propagate: audiagentic
     content: |
-      ### ag-lsp-mgmt
-      - `lsp_config_status` — Show configured languages and whether their server binaries are installed
-      - `lsp_list_implementations` — Show available LSP implementations and the active selection
-      - `lsp_select_implementation` — Switch the active LSP implementation
-      - `lsp_add_language` — Add a language to the project (auto-configures defaults from the language spec)
-      - `lsp_remove_language` — Remove a language from the project configuration
-      - `lsp_set_language_option` — Update a supported language feature option
-      - `lsp_reset_language_option` — Clear a supported language feature option
-      - `lsp_list_languages` — List all supported languages with their default server commands
-      - `lsp_list_missing` — List configured languages whose server binaries are not installed
-      - `lsp_install_dependencies` — Install a missing language server binary (confirm with user first)
-
       Active languages come from feature state and the active implementation's
       language bindings; .coding-lsp/lsp.json is a generated runtime cache/projection
       only, not the source of truth. Nothing is auto-detected or installed at

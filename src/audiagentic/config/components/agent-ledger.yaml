@@ -51,18 +51,7 @@ mcp-servers:
     instructions: >
       Use get_ledger_status to check installation state, fragment count, and last sync time.
     tool-descriptions:
-      get_ledger_status: Return ledger installation state, fragment count, and last sync time.
-harness-instructions:
-  - section: "What you can do"
-    content: |
-      ### ag-ledger
-      - `record_change_event` — Record a change event after implementation work
-      - `get_current_summary` — View current release summary
-      - `sync_ledger` — Merge pending fragments into the ledger
-      - `get_audit_report` — Regenerate audit and check-in docs
-
-      ### ag-ledger-mgmt
-      - `get_ledger_status` — Check ledger installation and fragment count
+       get_ledger_status: Return ledger installation state, fragment count, and last sync time.
 
 contributions:
   - id: agent-ledger/process
