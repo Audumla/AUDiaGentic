@@ -1,49 +1,92 @@
-"""In-container smoke test: build every AUDiaGentic MCP server, list tools,
-and execute read-only no-arg tools. Empty/not-installed results count as pass;
-only raised exceptions are failures. Exit non-zero if any server errors."""
+"""Smoke test every declared AUDiaGentic Python MCP server.
+
+Loads server declarations from the component registry so new MCP servers are
+covered automatically. For each server, import/build it, list tools, and run a
+small read-only smoke subset when arguments are simple and deterministic.
+
+Empty/not-installed results count as pass; only raised exceptions are failures.
+Exit non-zero if any declared server errors.
+"""
 from __future__ import annotations
 
 import asyncio
 import importlib
 import os
 import sys
+from pathlib import Path
 
 os.environ.setdefault("AUDIAGENTIC_REPO_ROOT", "/app")
 
-# (label, module, "build"|None=use .mcp, [read-only no-arg tools to execute])
-SERVERS = [
-    ("project-manage", "audiagentic.components.project.project_mcp", "build", ["list_components", "project_status"]),
-    ("session-manage", "audiagentic.components.session.session_mcp", "build", ["config", "cli_visibility"]),
-    ("ledger-write", "audiagentic.components.ledger.ledger_mcp", None, ["get_current_summary"]),
-    ("ledger-manage", "audiagentic.components.ledger.ledger_manage_mcp", None, ["get_ledger_status"]),
-    ("lsp", "audiagentic.components.coding_lsp.lsp_mcp", None, []),
-    ("lsp-manage", "audiagentic.components.coding_lsp.lsp_manage_mcp", None, ["lsp_config_status", "lsp_list_languages", "lsp_list_missing"]),
-    ("providers-manage", "audiagentic.components.providers.providers_mcp", "build", ["list_providers", "list_provider_descriptors"]),
-    ("source-control", "audiagentic.components.source_control.source_control_mcp", None, ["get_source_control_status"]),
-    ("release-manage", "audiagentic.components.release.release_mcp", None, ["get_release_status"]),
-    ("release-please", "audiagentic.components.release.release_please.release_please_mcp", None, []),
-]
+_ROOT = Path(os.environ["AUDIAGENTIC_REPO_ROOT"]).resolve()
+
+# module -> tool -> params
+SMOKE_CALLS: dict[str, dict[str, dict[str, object]]] = {
+    "audiagentic.components.project.project_mcp": {
+        "list_components": {},
+        "project_status": {},
+    },
+    "audiagentic.components.session.session_mcp": {
+        "config": {},
+        "cli_visibility": {},
+    },
+    "audiagentic.components.ledger.ledger_mcp": {
+        "get_current_summary": {},
+    },
+    "audiagentic.components.ledger.ledger_manage_mcp": {
+        "get_ledger_status": {},
+    },
+    "audiagentic.components.coding_lsp.lsp_manage_mcp": {
+        "lsp_config_status": {},
+        "lsp_list_languages": {},
+        "lsp_list_missing": {},
+    },
+    "audiagentic.components.providers.providers_mcp": {
+        "list_providers": {},
+        "list_provider_descriptors": {},
+    },
+    "audiagentic.components.source_control.source_control_mcp": {
+        "get_source_control_status": {},
+    },
+    "audiagentic.components.release.release_mcp": {
+        "get_release_status": {},
+    },
+    "audiagentic.components.agents.agents_mcp": {
+        "agent_list_profiles": {},
+    },
+}
 
 
-async def get_mcp(mod, how):
+def _declared_servers() -> list[tuple[str, str]]:
+    from audiagentic.foundation.components.loader import register_all_components
+    from audiagentic.foundation.components.registry import all_descriptors
+
+    register_all_components()
+    servers: list[tuple[str, str]] = []
+    for descriptor in all_descriptors().values():
+        for server in descriptor.mcp_servers:
+            servers.append((server.name, server.module))
+    return sorted(set(servers), key=lambda item: item[0])
+
+
+async def get_mcp(mod: str):
     m = importlib.import_module(mod)
-    return m.build_server() if how == "build" else m.mcp
+    return m.build_server() if hasattr(m, "build_server") else m.mcp
 
 
 async def main() -> int:
     failures = 0
-    for label, mod, how, calls in SERVERS:
+    for label, mod in _declared_servers():
         try:
-            mcp = await get_mcp(mod, how)
+            mcp = await get_mcp(mod)
             tools = await mcp.list_tools()
             names = [t.name for t in tools]
             print(f"[OK ] {label:<16} {len(names)} tools")
-            for c in calls:
+            for c, params in SMOKE_CALLS.get(mod, {}).items():
                 if c not in names:
                     print(f"        - {c}: SKIP (not registered)")
                     continue
                 try:
-                    await mcp.call_tool(c, {})
+                    await mcp.call_tool(c, params)
                     print(f"        - {c}: ok")
                 except Exception as e:  # noqa: BLE001
                     failures += 1

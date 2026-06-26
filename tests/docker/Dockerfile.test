@@ -1,3 +1,21 @@
+# Unified CLEAN suite image — runs the whole NON-mutating suite in one Linux
+# container.
+#
+# Deliberately a clean toolchain: NO language servers or provider CLIs are baked
+# in. The non-mutating tests (unit, most integration, e2e/cli, release,
+# lifecycle, shell-stdout) do not care that they run inside a container, so we
+# run them all here in one parallel pass instead of a hand-picked subset.
+#
+# What does NOT run here, and why:
+#   - mutates_host tests (test_install_deps, provider lifecycle/CLI, provider-lsp)
+#     exercise real MCP install RECIPES and assert install/uninstall from a clean
+#     toolchain. They MUST stay in their own isolated images / fresh containers
+#     so server state never leaks between tests and baked binaries never make an
+#     install assertion trivially pass. run_suite.sh selects `not mutates_host`.
+#   - mcp-tools-e2e CONSUMES pre-baked servers — its own image.
+#
+# Build: docker build -f tests/docker/Dockerfile.test -t audiagentic-test .
+# Run:   docker run --rm audiagentic-test
 FROM audia-test-base:latest
 
 WORKDIR /app
@@ -21,9 +39,13 @@ COPY AGENTS.md CLAUDE.md GEMINI.md ./
 RUN printf '#!/bin/sh\nexport DONT_PROMPT_WSL_INSTALL=1\nunset WSL_DISTRO_NAME WSL_INTEROP WSLENV\nexec /usr/bin/code --no-sandbox --user-data-dir /tmp/vscode-data "$@"\n' > /usr/local/bin/code \
     && chmod +x /usr/local/bin/code
 
-RUN python3 -m pip install --no-cache-dir --break-system-packages --no-compile "setuptools>=67" wheel build
-RUN python3 -m build --wheel --no-isolation --outdir /dist
-RUN python3 -m pip install --no-cache-dir --break-system-packages --no-compile /dist/*.whl pytest pytest-asyncio pytest-timeout pytest-xdist mcp==1.27.0
+# Use uv (available in base image) to avoid pip bytecache corruption in Docker layers.
+# Editable install keeps sources live for the test run; /venv/bin on PATH so
+# run_suite.sh finds `pytest` without an explicit activate step.
+ENV PATH="/venv/bin:$PATH"
+RUN uv venv /venv && \
+    uv pip install --python /venv/bin/python -q --no-compile \
+        -e '.[mcp]' pytest pytest-asyncio pytest-timeout pytest-xdist
 
-# Generic test run
-CMD ["pytest", "tests/unit/lifecycle", "tests/integration/lifecycle", "tests/e2e/lifecycle", "tests/unit/providers", "tests/integration/providers", "tests/integration/release", "tests/e2e/release", "tests/e2e/cli", "-q"]
+# Whole non-mutating suite, parallel.
+CMD ["bash", "tests/docker/run_suite.sh"]
