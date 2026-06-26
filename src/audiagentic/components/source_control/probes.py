@@ -31,13 +31,27 @@ def gh_mcp_available() -> bool:
     if any(d.exists() for d in ext_dirs):
         return True
     try:
-        r = subprocess.run(["gh", "extension", "list"], capture_output=True, timeout=5, text=True)
+        r = subprocess.run(
+            ["gh", "extension", "list"],
+            capture_output=True,
+            timeout=5,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
         if r.returncode == 0 and ext_name in r.stdout:
             return True
     except (subprocess.TimeoutExpired, OSError):
         return False
     try:
-        r = subprocess.run(["gh", "mcp", "--help"], capture_output=True, timeout=5, text=True)
+        r = subprocess.run(
+            ["gh", "mcp", "--help"],
+            capture_output=True,
+            timeout=5,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
         return r.returncode == 0 and "serve" in r.stdout
     except (subprocess.TimeoutExpired, OSError):
         return False
