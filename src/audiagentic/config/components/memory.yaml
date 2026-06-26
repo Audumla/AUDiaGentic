@@ -1,0 +1,78 @@
+type: component
+contract-version: v1
+id: memory
+display-name: Memory
+description: >
+  Persistent memory capability — back agent sessions with swappable memory
+  implementations. Configured memory is projected into provider surfaces so
+  external tools can access the same context; only one implementation is active
+  at a time.
+implementation-cardinality: exclusive
+
+mcp-servers:
+  - name: ag-memory-mgmt
+    module: audiagentic.components.memory.memory_mcp
+    direct-tools:
+      - memory_status
+      - memory_list_implementations
+      - memory_select_implementation
+      - memory_get_config
+      - memory_set_config
+    description: Memory component management — status, implementation selection, and config
+    propagate: audiagentic
+    instructions: >
+      Use memory_status to check the active implementation and configuration state.
+      Use memory_list_implementations to see all available implementations and which is active.
+      Use memory_select_implementation to switch between implementations.
+      Use memory_get_config to read the current config for the active or a specific implementation.
+      Use memory_set_config to update implementation config; triggers provider surface refresh.
+    tool-descriptions:
+      memory_status: >
+        Return memory component status: active implementation, configured state,
+        provider support summary, and last projected state if tracked.
+      memory_list_implementations: >
+        List available memory implementations with active/default flags and summary.
+      memory_select_implementation: >
+        Switch the active memory implementation. With implementation-cardinality exclusive,
+        enabling one disables all others. Triggers provider surface reconcile.
+        Returns updated status.
+      memory_get_config: >
+        Return resolved config for the active implementation, or for a specific
+        implementation_id if provided.
+      memory_set_config: >
+        Validate and persist config updates for an implementation. Triggers provider
+        surface refresh. Returns updated config and status.
+
+harness-instructions:
+  - section: "What you can do"
+    propagate: audiagentic
+    content: |
+      ### ag-memory-mgmt
+      - `memory_status` — Active implementation, configured state, provider support
+      - `memory_list_implementations` — Available implementations and active selection
+      - `memory_select_implementation` — Switch the active memory implementation
+      - `memory_get_config` — Read config for active or specific implementation
+      - `memory_set_config` — Update implementation config; triggers surface refresh
+
+contributions:
+  - id: memory/process
+    owner: memory
+    title: Memory component
+    preferred-targets:
+      - skill
+      - instruction
+    content:
+      body: |
+        Memory is backed by a swappable backend. Use the ag-memory-mgmt MCP tools
+        to check status, switch implementations, and configure the active backend.
+        - `memory_status` — Active implementation and configuration state
+        - `memory_select_implementation` — Switch memory backend
+        - `memory_get_config` / `memory_set_config` — Read and update backend config
+        - When memory is configured, the active backend's tools are available for
+          long-term memory operations (recall, reflect, retain).
+
+# v1 decision: no ag-memory activity server. Memory integration is config projection
+# only — the component persists config and projects into provider surfaces. An
+# activity server (e.g. retain/recall/reflect) would require a runtime client per
+# implementation and is deferred to a future stage once the config/surface contract
+# is stable.
