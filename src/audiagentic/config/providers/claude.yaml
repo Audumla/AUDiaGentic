@@ -1,0 +1,54 @@
+# Claude (Anthropic) — provider descriptor
+# Common case: npm install, MCP JSON config, VS Code extension, callable hooks
+
+provider_id: claude
+display_name: "Claude (Anthropic)"
+description: "Anthropic's Claude Code CLI. Agentic coding assistant with deep codebase understanding and MCP tool use."
+url: "https://claude.ai/code"
+prompt_aliases:
+  - cld
+
+cli_probe:
+  - claude
+  - "--version"
+
+cli_install:
+  toolchain: npm
+  package: "@anthropic-ai/claude-code"
+  executable: claude
+
+host_capabilities:
+  - host: vscode
+    capability_id: "anthropic.claude-code"
+    display_name: "Claude Code"
+
+permissions:
+  can_write_files: true
+  can_execute_shell: true
+  can_browse_web: true
+  can_read_env: true
+  notes: "Full project access via tool use; bash, file read/write, web fetch"
+
+agent_files:
+  - rel_path: "CLAUDE.md"
+    managed: true
+    description: "Project instructions / system prompt"
+  - rel_path: ".claude/rules/prompt-tags.md"
+    managed: true
+    description: "Canonical prompt tag rules"
+  - rel_path: ".claude/settings.json"
+    managed: false
+    description: "Claude Code user settings"
+
+instruction_file: "CLAUDE.md"
+skill_surface_path: ".claude/skills/{tag}/SKILL.md"
+
+fetch_catalog_fn: "audiagentic.components.providers.adapters.claude.descriptor:_fetch_claude_catalog"
+
+mcp_config:
+  config_path: ".mcp.json"
+  reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
+  writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
+  remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
+  format: "mcp-json"
+  refresh_mode: "file-watch"
