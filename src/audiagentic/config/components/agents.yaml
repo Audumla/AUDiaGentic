@@ -1,0 +1,93 @@
+type: component
+contract-version: v1
+id: agents
+display-name: Agent Profiles
+description: >
+  Agent profile management — bind a provider to a specific model with optional
+  execution parameters. Profiles are stored per-project and resolved at job launch.
+depends-on:
+  - project
+files:
+  - path: .audiagentic/config/agent-profiles.yaml
+    lifecycle: create-if-missing
+    description: Per-project agent profile configurations
+mcp-servers:
+  - name: ag-agents-mgmt
+    module: audiagentic.components.agents.agents_manage_mcp
+    direct-tools:
+      - agent_list_profiles
+      - agent_get_profile
+      - agent_create_profile
+      - agent_update_profile
+      - agent_delete_profile
+    description: Agent profile management — CRUD operations for provider+model bindings
+    propagate: audiagentic
+    instructions: >
+      Use agent_list_profiles to see all configured agent profiles.
+      Use agent_get_profile to inspect a specific profile by ID.
+      Use agent_create_profile to add a new profile (provider+model binding).
+      Use agent_update_profile to modify an existing profile (profile_id is immutable).
+      Use agent_delete_profile to remove a profile.
+
+  - name: ag-agents
+    module: audiagentic.components.agents.agents_mcp
+    direct-tools:
+      - agent_resolve_profile
+      - agent_resolve_default_profile
+      - agent_list_profiles
+    description: Agent profile resolution — look up profiles for job execution
+    propagate: audiagentic,providers
+    instructions: >
+      Use agent_resolve_profile to resolve a named agent profile to provider+model.
+      Use agent_resolve_default_profile to get the profile marked as default.
+      Use agent_list_profiles to enumerate all available profiles.
+    tool-descriptions:
+      agent_resolve_profile: >
+        Resolve an agent profile by ID. Returns provider_id, model_id, model_alias,
+        and params. Raises RES-AGP-001 if not found.
+      agent_resolve_default_profile: >
+        Resolve the profile marked as default. Raises RES-AGP-003 if no default exists.
+      agent_list_profiles: >
+        List all agent profiles with summary information.
+
+harness-instructions:
+  - section: "What you can do"
+    propagate: audiagentic
+    content: |
+      ### ag-agents-mgmt
+      - `agent_list_profiles` — List all agent profiles
+      - `agent_get_profile` — Get a specific profile by ID
+      - `agent_create_profile` — Create a new agent profile
+      - `agent_update_profile` — Update an existing profile (profile_id immutable)
+      - `agent_delete_profile` — Delete a profile
+
+      ### ag-agents
+      - `agent_resolve_profile` — Resolve a profile by ID to provider+model
+      - `agent_resolve_default_profile` — Resolve the default profile
+      - `agent_list_profiles` — List all profiles
+
+contributions:
+  - id: agents/profile-doctrine
+    owner: agents
+    title: Agent profile doctrine
+    preferred-targets:
+      - skill
+      - instruction
+    content:
+      body: |
+        Agent profiles bind a provider to a specific model with optional execution
+        parameters. They are stored in .audiagentic/config/agent-profiles.yaml.
+
+        ## When to use
+        - A job needs a predefined provider+model configuration
+        - Execution parameters (temperature, max-tokens) should be profile-driven
+        - Multiple projects need different default model configurations
+
+        ## Resolution precedence at job launch
+        1. Explicit `agent-profile-id` in job request
+        2. Explicit provider-id / model-id in job request
+        3. Default agent profile (marked `is-default: true`)
+
+        ## Naming
+        Use `agent-profile-id` (NOT `profile-id`) in job requests to avoid
+        collision with `workflow-profile` (lite/standard/strict stage pipelines).
