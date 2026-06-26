@@ -6,6 +6,7 @@ from typing import Any
 from ...surfaces.base import (
     SkillDefinition,
     apply_managed_header,
+    is_component_active,
     make_single_file_contribution_renderer,
     render_flat_skill,
     render_instruction_file,
@@ -38,11 +39,12 @@ def render(
             )
         )
 
-    surfaces[project_root / "GEMINI.md"] = render_instruction_file(
-        provider_id="gemini",
-        instruction_file="GEMINI.md",
-        adapter_dir=_ADAPTER_DIR,
-    )
+    if is_component_active(project_root, "agent-jobs"):
+        surfaces[project_root / "GEMINI.md"] = render_instruction_file(
+            provider_id="gemini",
+            instruction_file="GEMINI.md",
+            adapter_dir=_ADAPTER_DIR,
+        )
     return surfaces
 
 
