@@ -4,6 +4,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.output import ComponentOutputEvent, ComponentOutputSink
 from audiagentic.foundation.io import atomic_write_text
 
@@ -50,8 +51,14 @@ def build_provider_surface_blocks(
         renderer = renderers.get(current_provider_id)
         if renderer is None:
             continue
-        for block in renderer(project_root=project_root, contributions=contributions):
-            blocks.setdefault((block.path, block.block_id), block)
+        try:
+            for block in renderer(project_root=project_root, contributions=contributions):
+                blocks.setdefault((block.path, block.block_id), block)
+        except AudiaGenticError as exc:
+            if exc.code.startswith("UNS-"):
+                _emit(on_progress, f"Skipping {current_provider_id}: unsupported surface feature", level="debug")
+                continue
+            raise
     return sorted(blocks.values(), key=lambda item: (str(item.path), item.block_id))
 
 
@@ -117,11 +124,17 @@ def prune_provider_surfaces(
         renderer = renderers.get(pid)
         if renderer is None:
             continue
-        pid_active = pid in enabled_surface_providers
-        for block in renderer(project_root=project_root, contributions=contributions):
-            rendered_paths.add(block.path)
-            if pid_active:
-                active_by_path[block.path].setdefault(block.block_id, block)
+        try:
+            pid_active = pid in enabled_surface_providers
+            for block in renderer(project_root=project_root, contributions=contributions):
+                rendered_paths.add(block.path)
+                if pid_active:
+                    active_by_path[block.path].setdefault(block.block_id, block)
+        except AudiaGenticError as exc:
+            if exc.code.startswith("UNS-"):
+                _emit(on_progress, f"Skipping {pid}: unsupported surface feature", level="debug")
+                continue
+            raise
 
     candidate_paths: set[Path] = set(rendered_paths)
 

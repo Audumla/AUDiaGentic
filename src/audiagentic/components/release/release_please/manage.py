@@ -9,6 +9,7 @@ from typing import Any
 from audiagentic.foundation.io import atomic_write_text
 
 from . import utils
+from .install import TEMPLATE_PLACEHOLDERS
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,16 @@ MANAGED_NAME = "release-please.audiagentic.yml"
 LEGACY_NAME = "release-please.yml"
 LEGACY_SUFFIX = "release-please.legacy-pre-audiagentic.yml"
 CANDIDATE_NAME = "release-please.audiagentic.candidate.yml"
+
+
+def _render_baseline(branch: str = "main", python_version: str = "3.13") -> str:
+    subs = {"__BRANCH__": branch, "__PYTHON_VERSION__": python_version}
+    text = utils.render("baseline.yml", subs)
+    for placeholder in TEMPLATE_PLACEHOLDERS.get("baseline.yml", []):
+        if placeholder in text:
+            raise ValueError(f"unreplaced placeholder {placeholder} in baseline.yml")
+    return text
+
 
 _MANAGED_FILES = [
     "release-please-config.json",
@@ -28,7 +39,7 @@ def _workflow_dir(project_root: Path) -> Path:
     return project_root / ".github" / "workflows"
 
 
-def status(project_root: Path) -> dict[str, Any]:
+def status(project_root: Path, branch: str = "main", python_version: str = "3.13") -> dict[str, Any]:
     files = {rel: ("present" if (project_root / rel).exists() else "missing") for rel in _MANAGED_FILES}
     manifest_version: str | None = None
     manifest_path = project_root / ".release-please-manifest.json"
@@ -52,7 +63,7 @@ def status(project_root: Path) -> dict[str, Any]:
         "files": files,
         "current_version": manifest_version,
         "release_type": config_release_type,
-        "workflow-state": detect_workflow_state(project_root),
+        "workflow-state": detect_workflow_state(project_root, branch, python_version),
     }
 
 
@@ -62,33 +73,38 @@ def update_workflow(project_root: Path, branch: str = "main", python_version: st
         return {"updated": False, "reason": "workflow not present — run install first"}
     subs = {"__BRANCH__": branch, "__PYTHON_VERSION__": python_version}
     template = utils.render("release.yml", subs)
+    for placeholder in TEMPLATE_PLACEHOLDERS.get("release.yml", []):
+        if placeholder in template:
+            raise ValueError(f"unreplaced placeholder {placeholder} in release.yml template")
     workflow_path.write_text(template, encoding="utf-8")
     return {"updated": True, "path": str(workflow_path.relative_to(project_root))}
 
 
-def detect_workflow_state(project_root: Path) -> str:
+def detect_workflow_state(project_root: Path, branch: str = "main", python_version: str = "3.13") -> str:
     workflow_dir = _workflow_dir(project_root)
     managed = workflow_dir / MANAGED_NAME
     legacy = workflow_dir / LEGACY_NAME
-    baseline = utils.render("baseline.yml", {"__PYTHON_VERSION__": "3.13"})
+    baseline = _render_baseline(branch, python_version)
     if managed.exists():
-        return "managed-unmodified" if managed.read_text(encoding="utf-8") == baseline else "managed-modified"
+        if managed.read_text(encoding="utf-8") == baseline:
+            return "managed-unmodified"
+        return "managed-modified"
     if legacy.exists():
         return "legacy-detected"
     if workflow_dir.exists():
-        for path in workflow_dir.glob("release-please*.yml"):
-            if path.name not in {MANAGED_NAME, LEGACY_NAME, LEGACY_SUFFIX, CANDIDATE_NAME}:
+        for wf_path in workflow_dir.glob("release-please*.yml"):
+            if wf_path.name not in {MANAGED_NAME, LEGACY_NAME, LEGACY_SUFFIX, CANDIDATE_NAME}:
                 return "external-unknown"
     return "absent"
 
 
-def ensure_baseline(project_root: Path) -> dict[str, Any]:
+def ensure_baseline(project_root: Path, branch: str = "main", python_version: str = "3.13") -> dict[str, Any]:
     workflow_dir = _workflow_dir(project_root)
     managed = workflow_dir / MANAGED_NAME
     legacy = workflow_dir / LEGACY_NAME
     warnings: list[dict[str, str]] = []
-    state = detect_workflow_state(project_root)
-    baseline = utils.render("baseline.yml", {"__PYTHON_VERSION__": "3.13"})
+    state = detect_workflow_state(project_root, branch, python_version)
+    baseline = _render_baseline(branch, python_version)
 
     if state == "absent":
         atomic_write_text(managed, baseline)

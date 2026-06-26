@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.foundation.io import atomic_write_text, load_ndjson
 
 _RELEASES_DIR = ("docs", "releases")
@@ -17,6 +18,13 @@ def render_release_docs(
     """Render CHANGELOG.md, RELEASE_NOTES.md, VERSION_HISTORY.md from LEDGER.ndjson."""
     releases = project_root.joinpath(*_RELEASES_DIR)
     historical_path = releases / "LEDGER.ndjson"
+    if not historical_path.exists():
+        raise make_error(
+            prefix="VAL", component="release", number=3,
+            kind="release",
+            message="LEDGER.ndjson not found — ledger may not have been archived",
+            details={"path": str(historical_path)},
+        )
     events = load_ndjson(historical_path)
 
     if released_event_ids:
@@ -27,12 +35,23 @@ def render_release_docs(
 
     change_lines = [f"## {release_id}"]
     for event in sorted(release_events, key=lambda e: e.get("event-id", "")):
-        summary = event.get("user-summary-candidate") or event.get("technical-summary") or ""
-        change_lines.append(f"- {summary}")
+        summary = event.get("user-summary-candidate") or event.get("technical-summary")
+        if summary:
+            change_lines.append(f"- {summary}")
+        else:
+            change_lines.append("- (no summary)")
     change_block = "\n".join(change_lines) + "\n"
 
     changelog_path = releases / "CHANGELOG.md"
     existing = changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else "# Changelog\n"
+    if f"## {release_id}" in existing:
+        return {
+            "release-id": release_id,
+            "changelog": str(changelog_path),
+            "release-notes": str(releases / "RELEASE_NOTES.md"),
+            "version-history": str(releases / "VERSION_HISTORY.md"),
+            "skipped": "already rendered",
+        }
     atomic_write_text(changelog_path, existing.rstrip() + "\n\n" + change_block)
 
     release_notes_path = releases / "RELEASE_NOTES.md"

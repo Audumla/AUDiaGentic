@@ -74,7 +74,7 @@ def query_server_version(bin_dir: Path, timeout: float = 10.0) -> str | None:
     import sys as _sys
 
     from audiagentic.foundation.system.process import executable_command
-    from audiagentic.runtime.rig.embedded.process import resolve_platform_dirs
+    from audiagentic.runtime.rig.constants import resolve_platform_dirs
     try:
         server_dir, _ = resolve_platform_dirs(bin_dir)
         server_bin = server_dir / ("llama-server.exe" if _sys.platform == "win32" else "llama-server")

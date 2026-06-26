@@ -17,7 +17,20 @@ files:
 mcp-servers:
   - name: ag-providers-mgmt
     module: audiagentic.components.providers.providers_mcp
-    direct-tools: true
+    direct-tools:
+      - list_providers
+      - get_provider_status
+      - list_provider_descriptors
+      - list_provider_models
+      - refresh_provider_catalog
+      - refresh_all_catalogs
+      - install_provider
+      - uninstall_provider
+      - repair_provider
+      - apply_provider_surfaces
+      - prune_provider_surfaces
+      - reconcile_provider
+      - reconcile_all_providers
     description: Providers MCP server for provider management and introspection
     propagate: audiagentic
     instructions: >
@@ -32,20 +45,10 @@ mcp-servers:
       refresh_provider_catalog: Fetch and persist live model catalog for a provider.
       refresh_all_catalogs: Fetch and persist model catalogs for all providers that support it.
       install_provider: Install a provider CLI. For explicit install requests, call with dry_run=false unless the user specifically asks for a dry run.
-      uninstall_provider: Uninstall a provider CLI. For explicit uninstall requests, call with dry_run=false after confirmation.
+      uninstall_provider: Uninstall a provider CLI after user confirmation; do not dry-run unless requested.
       repair_provider: Repair a provider CLI by installing it if missing. For explicit repair requests, call with dry_run=false unless the user specifically asks for a dry run.
       apply_provider_surfaces: Apply managed provider surface blocks to agent files.
       prune_provider_surfaces: Remove stale managed provider surface blocks from agent files.
       reconcile_provider: Reconcile a single provider against host state and sync config or surfaces.
       reconcile_all_providers: Reconcile all registered providers against host state.
-harness-instructions:
-  - section: "What you can do"
-    content: |
-      ### ag-providers-mgmt
-      - `mcp_list_providers` — List all known providers
-      - `mcp_get_provider_status` — Check a specific provider status
-      - `mcp_list_provider_models` — List models from a provider's catalog
-      - `mcp_install_provider` — Install a provider CLI when explicitly requested; do not dry-run unless requested
-      - `mcp_uninstall_provider` — Uninstall a provider CLI after user confirmation; do not dry-run unless requested
-      - `mcp_repair_provider` — Repair a provider CLI when explicitly requested; do not dry-run unless requested
 

@@ -23,14 +23,3 @@ mcp-servers:
       set_cli_visibility: Set CLI visibility for thinking blocks and tool or MCP blocks, then request an in-session reload.
       refresh_harness_config: Regenerate mcp.json and SYSTEM.md from current component state, then request in-session reload.
       update_rig: Update llama.cpp rig binaries. Use scope='local' to update the active local/project-preferred rig and restart if needed, or scope='global' to update the shared global harness rig binaries.
-harness-instructions:
-  - section: "What you can do"
-    content: |
-       ### Session
-       - `status` — Check harness status and configuration
-       - `config` — Show harness configuration
-       - `set_auto_update` — Enable or disable auto-update
-       - `cli_visibility` — Show whether thinking/tool blocks are visible
-       - `set_cli_visibility` — Show or hide thinking/tool blocks in the CLI
-       - `refresh_harness_config` — Regenerate mcp.json/SYSTEM.md from current component state after install/uninstall
-       - `update_rig` — Update llama.cpp rig binaries for "local" or "global" scope

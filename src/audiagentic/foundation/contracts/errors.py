@@ -13,6 +13,7 @@ Prefixes (fixed, error-type classification):
     CFG - Configuration: missing config, bad setup, environment not ready.
     VER - Version: incompatible version, migration required.
     INT - Internal: unexpected state, unhandled branch, bug.
+    UNS - Unsupported: feature not implemented by this component.
 
 Kinds identify the component or functional area that raised the error.
 Kinds are structurally validated (lowercase-hyphens, 2-40 chars) so new
@@ -40,6 +41,7 @@ ERROR_CODE_PREFIXES: dict[str, str] = {
     "CFG": "Configuration: missing config, bad setup, environment not ready",
     "VER": "Version: incompatible version, migration required",
     "INT": "Internal: unexpected state, unhandled branch, bug",
+    "UNS": "Unsupported: feature not implemented by this component",
 }
 
 # Validates PREFIX-COMPONENT-NNN format.
