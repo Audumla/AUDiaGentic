@@ -29,12 +29,13 @@ def test_build_system_md_injections_uses_explicit_project_root(
     other_root.mkdir()
 
     register_all_components()
+    install_component("project", project_root)
     install_component("coding-lsp", project_root)
     monkeypatch.chdir(other_root)
 
     injections = build_system_md_injections(project_root)
 
-    assert "What you can do" in injections
+    assert "MCP tools" in injections
     assert "Available components" in injections
     assert "installed/enabled" in injections["Available components"]
     assert "`providers`" in injections["Available components"]

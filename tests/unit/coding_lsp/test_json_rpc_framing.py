@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import io
 import json
-import subprocess
+import shutil
+from typing import IO
 
 import pytest
 
@@ -19,7 +20,7 @@ class _MockLspServer:
         self.fail_after = fail_after
         self.request_count = 0
 
-    def run(self, stdin: subprocess.PIPE, stdout: subprocess.PIPE) -> None:
+    def run(self, stdin: IO[bytes], stdout: IO[bytes]) -> None:
         self._stdin = stdin
         self._stdout = stdout
         header_buf = bytearray()
@@ -137,7 +138,7 @@ def test_shutdown_sends_request_then_exit(monkeypatch) -> None:
     assert calls == [("request", "shutdown"), ("notification", "exit")]
 
 
-@pytest.mark.skip(reason="requires real pyright-langserver binary")
+@pytest.mark.skipif(shutil.which("pyright-langserver") is None, reason="pyright-langserver not on PATH")
 def test_real_pyright_lifecycle():
     bridge = LspJsonRpc()
     try:
