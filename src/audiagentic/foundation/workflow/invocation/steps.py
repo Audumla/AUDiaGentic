@@ -3,11 +3,44 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 import threading
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from .models import StepResult, WorkflowAnswer, WorkflowQuestion
+
+
+def _platform_key() -> str:
+    """Stable platform identifier used for command overrides.
+
+    Kept local (rather than importing ``foundation.toolchains.detect``) because
+    the toolchains package imports this module, and a back-import would create a
+    cycle.
+    """
+    if sys.platform.startswith("win"):
+        return "win"
+    if sys.platform == "darwin":
+        return "darwin"
+    return "linux"
+
+
+@dataclass(frozen=True)
+class PlatformOverrides:
+    """Strict per-platform command overrides for :class:`ShellStep` (RV01/RV02).
+
+    Named fields instead of a free-form dict, so recipes cannot smuggle ad-hoc
+    platform branching. :meth:`resolve` returns the command for the current
+    platform, or ``None`` to fall back to the step's default ``command``.
+    """
+
+    win: tuple[str, ...] | None = None
+    darwin: tuple[str, ...] | None = None
+    linux: tuple[str, ...] | None = None
+
+    def resolve(self, platform_key: str | None = None) -> tuple[str, ...] | None:
+        key = platform_key or _platform_key()
+        return {"win": self.win, "darwin": self.darwin, "linux": self.linux}.get(key)
 
 
 class WorkflowStep(Protocol):
@@ -64,6 +97,7 @@ class ShellStep:
     cwd: str | None = None
     env: dict[str, str] | None = None
     progress_callback: Any | None = None
+    platform: PlatformOverrides | None = None
 
     def plan(self, context: dict[str, Any]) -> StepResult:
         return StepResult(status="planned", outputs={"command": list(self._render_command(context))})
@@ -89,11 +123,13 @@ class ShellStep:
         if self.env:
             env.update(self.env)
 
+        cwd = os.path.expanduser(self.cwd) if self.cwd else None
+
         process: subprocess.Popen[str] | None = None
         try:
             process = subprocess.Popen(
                 list(command),
-                cwd=self.cwd,
+                cwd=cwd,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -143,7 +179,12 @@ class ShellStep:
         )
 
     def _render_command(self, context: dict[str, Any]) -> tuple[str, ...]:
-        return tuple(part.format(**context) for part in self.command)
+        base = self.command
+        if self.platform is not None:
+            override = self.platform.resolve()
+            if override is not None:
+                base = override
+        return tuple(part.format(**context) for part in base)
 
 
 @dataclass(frozen=True)
@@ -196,9 +237,15 @@ class SequenceStep:
         self, context: dict[str, Any], answers: dict[str, WorkflowAnswer] | None = None
     ) -> StepResult:
         outputs: dict[str, Any] = {}
+        # Expose prior step results so downstream SelectStep/ConditionalStep can
+        # branch on structured outcomes, not just exit codes (RV02). Each child
+        # sees the status + outputs of every step before it under "step_results".
+        statuses: dict[str, str] = {}
         for step in self.steps:
+            context = {**context, "step_results": dict(outputs), "step_status": dict(statuses)}
             result = step.run(context, answers)
             outputs[step.id] = result.outputs
+            statuses[step.id] = result.status
             if self.fail_fast and result.status in {"failed", "skipped", "waiting_for_input"}:
                 return StepResult(
                     status=result.status,
