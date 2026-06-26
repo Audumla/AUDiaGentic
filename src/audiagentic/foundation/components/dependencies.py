@@ -80,10 +80,15 @@ def _resolve_probe_command(spec: str) -> Callable[[], bool]:
 
 
 def _resolve_probe_custom(spec: str) -> Callable[[], bool]:
-    dotpath = spec[7:]
-    import importlib
-    module_name, fn_name = dotpath.rsplit(".", 1)
-    return getattr(importlib.import_module(module_name), fn_name)
+    """Resolve custom: probe spec using colon-separated module:dotpath.
+
+    Delegates to foundation/descriptors/resolver.resolve_ref for consistent
+    colon-based resolution across all descriptor types.
+    """
+    from audiagentic.foundation.descriptors.resolver import resolve_ref
+
+    ref = spec[7:]
+    return resolve_ref(ref)
 
 
 _PROBE_RESOLVERS: dict[str, Callable[[str], Callable[[], bool]]] = {

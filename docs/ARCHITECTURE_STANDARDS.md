@@ -9,15 +9,15 @@ CLI / composition root
 Components  -->  Runtime  -->  Foundation
 ```
 
-- **CLI / composition root** (`audiagentic/launcher.py`, `audiagentic/commands/*`) — wires the application together. May import any layer, including specific optional components. This is the only layer permitted to.
-- **Foundation** — shared primitives. May import from runtime, but must have zero imports from components or other none core code.
-- **Runtime** — lifecycle, config, harness, state. May import foundation only.
+- **CLI / composition root** (`audiagentic/launcher.py`, `audiagentic/commands/*`) — wires the app together. May import any layer, including specific optional components. The only layer permitted to.
 - **Components** — product capabilities. May import runtime and foundation.
+- **Runtime** — lifecycle, config, harness, state. May import foundation only.
+- **Foundation** — shared primitives, the bottom layer. Zero imports from runtime or components.
 
 **Rules:**
-- Foundation must never import from runtime. If a utility lives in runtime but is needed by foundation, move it to foundation.
-- Runtime must never import from a specific optional component. Use registered callbacks, events, or contribution registries.
-- The import-down prohibition applies to `foundation/` and `runtime/`, **not** to the composition root. Composition roots are exempt from layering rules by definition.
+- Foundation imports nothing from runtime or components. If foundation needs a utility that lives higher up, move it down to foundation.
+- Runtime must never import a specific optional component. Use registered callbacks, events, or contribution registries.
+- The import-down prohibition applies to `foundation/` and `runtime/` only — composition roots are exempt by definition.
 
 ## 2. Config Over Code
 
@@ -32,7 +32,7 @@ Extensibility must never require editing Python source.
 
 **Rules:**
 - Shared logic (2+ files) → extract to foundation immediately.
-- God objects (>350 lines, >3 responsibilities) → decompose if responsibilities are logically split and can be sensibly decomposed by concern. Exceptions are allowable for sensible containment of logic
+- God objects (>350 lines, >3 responsibilities) → decompose by concern, unless the logic is genuinely one cohesive unit.
 - Duplicate dataclasses (>80% field overlap) → unify to one canonical type.
 
 ## 4. Platform Independence
@@ -78,7 +78,7 @@ Extensibility must never require editing Python source.
 - Entity-referencing messages must carry `extra={"component": ..., "provider": ..., "item_id": ...}`.
 - MCP tool args must never be logged.
 
-## 11. Migration Doctrine
+## 10. Migration Doctrine
 
 **Rules:**
 - **No backward compatibility shims** — unless explicitly stated, we do not maintain backward compatibility. Migrate code as we refactor. Always.
@@ -86,7 +86,7 @@ Extensibility must never require editing Python source.
 - **Atomic migration** — each migration step must leave the system in a working state. Never pass through a broken intermediate state.
 - **Test-driven migration** — add or update tests alongside the migration. Do not defer testing.
 
-## 10. Anti-Pattern Quick Reference
+## 11. Anti-Pattern Quick Reference
 
 | Anti-pattern | Fix |
 |---|---|

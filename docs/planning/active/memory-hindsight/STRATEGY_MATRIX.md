@@ -1,5 +1,11 @@
 # Hindsight Per-Provider Strategy Matrix (HM08)
 
+> SUPERSEDED: canonical matrix is now
+> `src/audiagentic/config/components/memory/hindsight_matrix.yaml`, loaded by
+> `src/audiagentic/components/memory/hindsight/matrix.py`. Keep this file as
+> historical planning context only. Do not generate provider descriptors or
+> executable recipes from it.
+
 Authoritative mapping of every AUDiaGentic provider to its Hindsight integration
 strategy — what we **can** do and what we **cannot** (yet). This matrix is the
 planning source of truth, but entries are executable only when their source
