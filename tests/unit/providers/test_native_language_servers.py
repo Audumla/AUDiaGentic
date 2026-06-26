@@ -68,9 +68,17 @@ def test_opencode_maps_cpp_to_clangd(tmp_path: Path) -> None:
 
 
 def test_opencode_passthrough_when_key_matches(tmp_path: Path) -> None:
-    # typescript and rust already match opencode's built-in keys — no mapping.
+    # typescript maps to opencode's built-in key and legacy aliases are pruned.
     path = tmp_path / ".opencode" / "opencode.json"
     path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({
+        "lsp": {
+            "typescript-language-server": {
+                "command": ["typescript-language-server", "--stdio"],
+                "extensions": [".ts", ".tsx"],
+            }
+        }
+    }), encoding="utf-8")
     ts = LanguageServerEntry(
         language="typescript",
         command=["typescript-language-server", "--stdio"],
@@ -79,7 +87,31 @@ def test_opencode_passthrough_when_key_matches(tmp_path: Path) -> None:
     write_language_servers_opencode(path, {"typescript": ts})
     data = json.loads(path.read_text(encoding="utf-8"))
     assert "typescript" in data["lsp"]
+    assert "typescript-language-server" not in data["lsp"]
     assert read_language_servers_opencode(path)["typescript"].file_extensions == [".ts", ".tsx"]
+
+
+def test_opencode_maps_yaml_to_builtin_yaml_ls_and_prunes_legacy_alias(tmp_path: Path) -> None:
+    path = tmp_path / ".opencode" / "opencode.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({
+        "lsp": {
+            "yaml": {
+                "command": ["yaml-language-server", "--stdio"],
+                "extensions": [".yaml", ".yml"],
+            }
+        }
+    }), encoding="utf-8")
+    yaml = LanguageServerEntry(
+        language="yaml",
+        command=["yaml-language-server", "--stdio"],
+        file_extensions=[".yaml", ".yml"],
+    )
+    write_language_servers_opencode(path, {"yaml": yaml})
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert "yaml" not in data["lsp"]
+    assert "yaml-ls" in data["lsp"]
+    assert read_language_servers_opencode(path)["yaml"].command == ["yaml-language-server", "--stdio"]
 
 
 def test_qwen_roundtrip_string_command_split(tmp_path: Path) -> None:

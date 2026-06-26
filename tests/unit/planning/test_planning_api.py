@@ -35,8 +35,9 @@ def _completed_dir(root):
 def test_create_item_writes_file_in_active_dir(tmp_path):
     result = planning_api.create_item(tmp_path, _make_item())
 
-    assert result["ok"] is True
     assert result["id"] == "TST01"
+    assert result["title"] == "Test item"
+    assert result["plan"] == "test-plan"
     target = tmp_path / result["path"]
     assert target.exists()
     assert _active_dir(tmp_path) in target.parents
@@ -79,10 +80,12 @@ def test_create_item_body_contains_standard_sections(tmp_path):
         assert heading in text, f"missing section {heading!r}"
 
 
-def test_create_item_missing_id_raises(tmp_path):
-    with pytest.raises(AudiaGenticError) as exc_info:
-        planning_api.create_item(tmp_path, {"plan": "p", "title": "t"})
-    assert exc_info.value.code == "VAL-PLN-002"
+def test_create_item_auto_generates_id(tmp_path):
+    result = planning_api.create_item(tmp_path, {"plan": "p", "title": "t"})
+    assert result["id"] == "P01"
+    assert result["title"] == "t"
+    item = planning_api.get_item(tmp_path, "P01")
+    assert item["id"] == "P01"
 
 
 def test_create_item_missing_plan_raises(tmp_path):
@@ -317,3 +320,261 @@ def test_delete_item_then_list_returns_empty(tmp_path):
     planning_api.create_item(tmp_path, _make_item())
     planning_api.delete_item(tmp_path, "TST01")
     assert planning_api.list_items(tmp_path) == []
+
+
+def test_list_items_grouped_returns_groups(tmp_path):
+    planning_api.create_item(tmp_path, {"plan": "test-plan", "title": "Item 1"})
+    planning_api.create_item(tmp_path, {"plan": "test-plan", "title": "Item 2"})
+    planning_api.create_item(tmp_path, {"plan": "other-plan", "title": "Other 1"})
+    result = planning_api.list_items_grouped(tmp_path)
+    groups = {g["plan"]: g for g in result}
+    assert "plan-test-plan" in groups
+    assert "plan-other-plan" in groups
+    assert groups["plan-test-plan"]["item_count"] == 2
+    assert groups["plan-test-plan"]["active_count"] == 2
+    assert groups["plan-other-plan"]["item_count"] == 1
+
+
+def test_list_items_grouped_with_state_filter(tmp_path):
+    planning_api.create_item(tmp_path, {"plan": "test-plan", "title": "Active"})
+    planning_api.create_item(tmp_path, {"plan": "test-plan", "title": "Done"})
+    planning_api.set_state(tmp_path, "TE02", "completed")
+    result = planning_api.list_items_grouped(tmp_path, state="completed")
+    assert len(result) == 1
+    assert result[0]["plan"] == "plan-test-plan"
+    assert result[0]["completed_count"] == 1
+    assert result[0]["active_count"] == 0
+
+
+def test_next_item_id_sequential(tmp_path):
+    planning_api.create_item(tmp_path, {"plan": "test-plan", "title": "First"})
+    planning_api.create_item(tmp_path, {"plan": "test-plan", "title": "Second"})
+    planning_api.create_item(tmp_path, {"plan": "test-plan", "title": "Third"})
+    items = planning_api.list_items(tmp_path)
+    ids = sorted([i["id"] for i in items])
+    assert ids == ["TE01", "TE02", "TE03"]
+
+
+# ---------------------------------------------------------------------------
+# Reviews
+# ---------------------------------------------------------------------------
+
+def test_create_review_writes_file(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    result = planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
+    assert result["id"] == "RV01"
+    assert result["title"] == "Review 1"
+    assert result["review-of"] == "ITM01"
+    assert result["plan"] == "test-plan"
+    target = tmp_path / result["path"]
+    assert target.exists()
+
+
+def test_create_review_auto_generates_id(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "First review"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Second review"})
+    reviews = planning_api.list_reviews(tmp_path)
+    ids = sorted([r["id"] for r in reviews])
+    assert ids == ["RV01", "RV02"]
+
+
+def test_create_review_requires_parent(tmp_path):
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.create_review(tmp_path, {"title": "Orphan review"})
+    assert exc_info.value.code == "VAL-PLN-008"
+
+
+def test_create_review_parent_not_found(tmp_path):
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.create_review(tmp_path, {"review-of": "GHOST01", "title": "Review"})
+    assert exc_info.value.code == "VAL-PLN-010"
+
+
+def test_create_review_requires_title(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.create_review(tmp_path, {"review-of": "ITM01"})
+    assert exc_info.value.code == "VAL-PLN-009"
+
+
+def test_get_review_returns_sections(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_review(tmp_path, {
+        "review-of": "ITM01",
+        "title": "Review 1",
+        "notes": "Some notes",
+        "findings": "Key findings here",
+        "conclusion": "Approved",
+    })
+    review = planning_api.get_review(tmp_path, "RV01")
+    assert review["id"] == "RV01"
+    assert review["review-of"] == "ITM01"
+    assert review["notes"] == "Some notes"
+    assert review["findings"] == "Key findings here"
+    assert review["conclusion"] == "Approved"
+    assert review["state"] == "created"
+
+
+def test_list_reviews_filters_by_state(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Active review"})
+    planning_api.set_review_state(tmp_path, "RV01", "closed")
+    active = planning_api.list_reviews(tmp_path, state="created")
+    assert len(active) == 0
+    closed = planning_api.list_reviews(tmp_path, state="closed")
+    assert len(closed) == 1
+    assert closed[0]["id"] == "RV01"
+    assert closed[0]["state"] == "closed"
+
+
+def test_list_reviews_filters_by_review_of(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_item(tmp_path, {"id": "ITM02", "plan": "test-plan", "title": "Item 2"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review for Item 1"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM02", "title": "Review for Item 2"})
+    reviews = planning_api.list_reviews(tmp_path, review_of="ITM01")
+    assert len(reviews) == 1
+    assert reviews[0]["review-of"] == "ITM01"
+
+
+def test_set_review_state_moves_to_completed(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
+    result = planning_api.set_review_state(tmp_path, "RV01", "closed")
+    assert result["state"] == "closed"
+    review = planning_api.get_review(tmp_path, "RV01")
+    assert review["state"] == "closed"
+
+
+def test_update_review_changes_sections(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
+    planning_api.update_review(tmp_path, "RV01", {
+        "notes": "Updated notes",
+        "findings": "Updated findings",
+    })
+    review = planning_api.get_review(tmp_path, "RV01")
+    assert review["notes"] == "Updated notes"
+    assert review["findings"] == "Updated findings"
+
+
+def test_delete_review_removes_file(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
+    planning_api.delete_review(tmp_path, "RV01")
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.get_review(tmp_path, "RV01")
+    assert exc_info.value.code == "VAL-PLN-001"
+
+
+def test_review_id_sequential_across_states(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "First"})
+    planning_api.set_review_state(tmp_path, "RV01", "closed")
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Second"})
+    reviews = planning_api.list_reviews(tmp_path)
+    ids = sorted([r["id"] for r in reviews])
+    assert ids == ["RV01", "RV02"]
+
+
+# ---------------------------------------------------------------------------
+# Empty plan directory cleanup
+# ---------------------------------------------------------------------------
+
+def test_set_state_to_completed_cleans_up_empty_active_plan_dir(tmp_path):
+    planning_api.create_item(tmp_path, _make_item())
+    planning_api.set_state(tmp_path, "TST01", "completed")
+    active_plan_dir = _active_dir(tmp_path) / "test-plan"
+    assert not active_plan_dir.exists()
+
+
+def test_set_state_to_completed_preserves_plan_dir_with_other_items(tmp_path):
+    planning_api.create_item(tmp_path, _make_item(id="TST01"))
+    planning_api.create_item(tmp_path, _make_item(id="TST02"))
+    planning_api.set_state(tmp_path, "TST01", "completed")
+    active_plan_dir = _active_dir(tmp_path) / "test-plan"
+    assert active_plan_dir.exists()
+    assert (active_plan_dir / "TST02.md").exists()
+
+
+def test_set_state_to_completed_preserves_plan_dir_with_reviews(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
+    planning_api.set_state(tmp_path, "ITM01", "completed")
+    active_plan_dir = _active_dir(tmp_path) / "test-plan"
+    assert active_plan_dir.exists()
+    assert (active_plan_dir / "reviews" / "ITM01" / "RV01.md").exists()
+
+
+def test_set_state_from_completed_cleans_up_empty_completed_plan_dir(tmp_path):
+    planning_api.create_item(tmp_path, _make_item())
+    planning_api.set_state(tmp_path, "TST01", "completed")
+    planning_api.set_state(tmp_path, "TST01", "pending")
+    completed_plan_dir = _completed_dir(tmp_path) / "test-plan"
+    assert not completed_plan_dir.exists()
+
+
+def test_delete_item_cleans_up_empty_active_plan_dir(tmp_path):
+    planning_api.create_item(tmp_path, _make_item())
+    planning_api.delete_item(tmp_path, "TST01")
+    active_plan_dir = _active_dir(tmp_path) / "test-plan"
+    assert not active_plan_dir.exists()
+
+
+def test_delete_item_cleans_up_empty_completed_plan_dir(tmp_path):
+    planning_api.create_item(tmp_path, _make_item())
+    planning_api.set_state(tmp_path, "TST01", "completed")
+    planning_api.delete_item(tmp_path, "TST01")
+    completed_plan_dir = _completed_dir(tmp_path) / "test-plan"
+    assert not completed_plan_dir.exists()
+
+
+def test_delete_item_preserves_plan_dir_with_other_items(tmp_path):
+    planning_api.create_item(tmp_path, _make_item(id="TST01"))
+    planning_api.create_item(tmp_path, _make_item(id="TST02"))
+    planning_api.delete_item(tmp_path, "TST01")
+    active_plan_dir = _active_dir(tmp_path) / "test-plan"
+    assert active_plan_dir.exists()
+    assert (active_plan_dir / "TST02.md").exists()
+
+
+def test_delete_review_preserves_plan_dir_with_parent_item(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
+    planning_api.delete_review(tmp_path, "RV01")
+    active_plan_dir = _active_dir(tmp_path) / "test-plan"
+    assert active_plan_dir.exists()
+
+
+def test_set_review_state_moves_review_between_states(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
+    planning_api.set_review_state(tmp_path, "RV01", "closed")
+    completed_plan_dir = _completed_dir(tmp_path) / "test-plan" / "reviews" / "ITM01"
+    assert (completed_plan_dir / "RV01.md").exists()
+
+
+def test_set_review_state_moves_review_back_to_active(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
+    planning_api.set_review_state(tmp_path, "RV01", "closed")
+    planning_api.set_review_state(tmp_path, "RV01", "created")
+    active_plan_dir = _active_dir(tmp_path) / "test-plan" / "reviews" / "ITM01"
+    assert (active_plan_dir / "RV01.md").exists()
+
+
+def test_multiple_plans_cleanup_only_empty_one(tmp_path):
+    planning_api.create_item(tmp_path, _make_item(id="A01", plan="alpha"))
+    planning_api.create_item(tmp_path, _make_item(id="B01", plan="beta"))
+    planning_api.set_state(tmp_path, "A01", "completed")
+    planning_api.set_state(tmp_path, "B01", "completed")
+    planning_api.set_state(tmp_path, "A01", "pending")
+    active_alpha = _active_dir(tmp_path) / "alpha"
+    active_beta = _active_dir(tmp_path) / "beta"
+    completed_alpha = _completed_dir(tmp_path) / "alpha"
+    completed_beta = _completed_dir(tmp_path) / "beta"
+    assert active_alpha.exists()
+    assert not active_beta.exists()
+    assert not completed_alpha.exists()
+    assert completed_beta.exists()
