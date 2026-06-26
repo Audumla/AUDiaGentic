@@ -72,3 +72,71 @@ def test_rust_dependency_uses_rustup_component() -> None:
     inner = step.variants["run"]
     command = inner.command if hasattr(inner, "command") else ()
     assert command == ("rustup", "component", "add", "rust-analyzer")
+
+
+def test_markdown_language_registers_with_marksman() -> None:
+    spec = language_registry.get_language("markdown")
+    assert spec is not None
+    assert spec.id == "markdown"
+    assert spec.command == ("marksman", "server")
+    assert set(spec.file_extensions) == {".md", ".markdown"}
+
+
+def test_markdown_dependency_cfgs_includes_marksman() -> None:
+    dep_cfgs = language_registry.dependency_cfgs(["markdown"])
+    dep_ids = list(dep_cfgs.keys())
+    assert "marksman" in dep_ids
+    marksman_cfg = dep_cfgs["marksman"]
+    assert marksman_cfg["probe"] == "binary:marksman"
+
+
+def test_markdown_appears_in_all_languages() -> None:
+    catalog = language_registry.all_languages()
+    assert "markdown" in catalog
+    assert catalog["markdown"].command == ("marksman", "server")
+
+
+def test_json_language_registers_with_vscode_json_language_server() -> None:
+    spec = language_registry.get_language("json")
+    assert spec is not None
+    assert spec.command == ("vscode-json-language-server", "--stdio")
+    assert set(spec.file_extensions) == {".json", ".jsonc"}
+
+
+def test_toml_language_registers_with_taplo() -> None:
+    spec = language_registry.get_language("toml")
+    assert spec is not None
+    assert spec.command == ("taplo", "lsp", "stdio")
+    assert set(spec.file_extensions) == {".toml"}
+
+
+def test_make_language_registers_with_make_ls() -> None:
+    spec = language_registry.get_language("make")
+    assert spec is not None
+    assert spec.command == ("make-ls",)
+    assert set(spec.file_extensions) == {"Makefile", "makefile", "GNUmakefile"}
+
+
+def test_json_dependency_installs_vscode_langservers_extracted() -> None:
+    dep_cfgs = language_registry.dependency_cfgs(["json"])
+    workflow = build_dependency_workflow(dep_cfgs, workflow_id="coding-lsp", action="install")
+    step = next(s for s in workflow.steps if s.id == "vscode-langservers-extracted")
+    inner = step.variants["run"]
+    command = inner.command if hasattr(inner, "command") else ()
+    assert command == ("npm", "install", "-g", "vscode-langservers-extracted")
+
+
+def test_yaml_language_registers_with_yaml_language_server() -> None:
+    spec = language_registry.get_language("yaml")
+    assert spec is not None
+    assert spec.command == ("yaml-language-server", "--stdio")
+    assert set(spec.file_extensions) == {".yaml", ".yml"}
+
+
+def test_yaml_dependency_installs_yaml_language_server() -> None:
+    dep_cfgs = language_registry.dependency_cfgs(["yaml"])
+    workflow = build_dependency_workflow(dep_cfgs, workflow_id="coding-lsp", action="install")
+    step = next(s for s in workflow.steps if s.id == "yaml-language-server")
+    inner = step.variants["run"]
+    command = inner.command if hasattr(inner, "command") else ()
+    assert command == ("npm", "install", "-g", "yaml-language-server")

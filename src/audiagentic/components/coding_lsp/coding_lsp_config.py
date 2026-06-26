@@ -33,6 +33,20 @@ def _as_path(path: str | Path) -> Path:
     return Path(path) if isinstance(path, str) else path
 
 
+def _file_matches_patterns(file_path: Path, patterns: list[str] | tuple[str, ...]) -> bool:
+    """Match by extension ('.py') or exact basename ('Makefile')."""
+    ext = file_path.suffix.lower()
+    name = file_path.name.lower()
+    for pattern in patterns:
+        normalized = pattern.lower()
+        if normalized.startswith("."):
+            if ext == normalized:
+                return True
+        elif name == normalized:
+            return True
+    return False
+
+
 def available_language_specs() -> dict[str, dict[str, Any]]:
     """Return all supported language server specifications, keyed by language."""
     return {
@@ -181,14 +195,13 @@ def resolve_server_for_file(
     Accepts both old single-server dict and new multi-server dict shapes.
     """
     file_path = _as_path(file_path)
-    ext = file_path.suffix.lower()
     for value in servers.values():
         if isinstance(value, list):
             for cfg in value:
-                if ext in cfg.file_extensions:
+                if _file_matches_patterns(file_path, cfg.file_extensions):
                     return cfg
         else:
-            if ext in value.file_extensions:
+            if _file_matches_patterns(file_path, value.file_extensions):
                 return value
     return None
 
