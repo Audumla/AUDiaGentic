@@ -27,7 +27,7 @@ mcp-servers:
       ensure_release_baseline: Ensure the release manager baseline workflow is installed.
   - name: ag-release-please
     module: audiagentic.components.release.release_please.release_please_mcp
-    direct-tools: [install_release_please, update_release_please_workflow, finalize_release]
+    direct-tools: [install_release_please, update_release_please_workflow, finalize_release, dispatch_release_workflow, github_auth, github_auth_poll, clear_github_auth]
     propagate: providers
     description: Release-please release management tools
     instructions: >
@@ -35,21 +35,17 @@ mcp-servers:
       Use install_release_please to set up a new project.
       Use update_release_please_workflow to refresh the workflow template.
       Use finalize_release only after ledger review is complete — it archives the ledger and renders release docs.
+      Use github_auth to start GitHub OAuth (returns a user-code + URL to show the user); then call github_auth_poll with the returned device-code until authenticated. Tokens may also be supplied via the GITHUB_TOKEN env var.
+      Use dispatch_release_workflow to trigger the CI Release workflow on GitHub (auto-authenticates if needed).
+      Use clear_github_auth to remove stored credentials.
     tool-descriptions:
       install_release_please: Install release-please into the target project.
       update_release_please_workflow: Re-render the release workflow from the current template.
       finalize_release: Archive current ledger and render CHANGELOG.md, RELEASE_NOTES.md, VERSION_HISTORY.md.
-harness-instructions:
-  - section: "What you can do"
-    content: |
-      ### ag-release-mgmt
-      - `get_release_status` — Check release manager installation state
-      - `ensure_release_baseline` — Install or repair the release workflow
-
-      ### ag-release-please
-      - `install_release_please` — Install release-please
-      - `update_release_please_workflow` — Update release workflow
-      - `finalize_release` — Archive ledger and render release documents
+      dispatch_release_workflow: Trigger the Release workflow dispatch on GitHub (auto-authenticates via browser if needed).
+      github_auth: Start GitHub OAuth device flow (returns user-code + URL) or report auth status.
+      github_auth_poll: Poll once for completion of the device flow started by github_auth.
+      clear_github_auth: Remove stored GitHub token.
 
 contributions:
   - id: release/doctrine
