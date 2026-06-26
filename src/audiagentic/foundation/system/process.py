@@ -208,15 +208,49 @@ def kill_pid(pid: int) -> None:
             pass
 
 
+def _descendant_pids_posix(root: int) -> list[int]:
+    """Return all transitive child PIDs of *root* (deepest first), via ``ps``."""
+    result = subprocess.run(
+        ["ps", "-A", "-o", "pid=,ppid="],
+        capture_output=True, text=True, check=False,
+    )
+    children: dict[int, list[int]] = {}
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) != 2:
+            continue
+        try:
+            pid, ppid = int(parts[0]), int(parts[1])
+        except ValueError:
+            continue
+        children.setdefault(ppid, []).append(pid)
+
+    ordered: list[int] = []
+    stack = [root]
+    while stack:
+        current = stack.pop()
+        for child in children.get(current, ()):
+            ordered.append(child)
+            stack.append(child)
+    ordered.reverse()  # deepest descendants first
+    return ordered
+
+
 def kill_process_tree(pid: int) -> None:
-    """Force-kill *pid* and all its children (SIGKILL / taskkill /T /F)."""
+    """Force-kill *pid* and all its descendants (taskkill /T /F on Windows).
+
+    On POSIX the kernel offers no built-in tree kill, so descendants are
+    enumerated via ``ps`` and SIGKILLed deepest-first before the root — this is
+    what actually reaps orphaned MCP/LSP grandchildren, not just the host.
+    """
     if os.name == "nt":
         subprocess.run(
             ["taskkill", "/PID", str(pid), "/T", "/F"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
         )
-    else:
+        return
+    for target in (*_descendant_pids_posix(pid), pid):
         try:
-            os.kill(pid, signal.SIGKILL)
+            os.kill(target, signal.SIGKILL)
         except OSError:
             pass
