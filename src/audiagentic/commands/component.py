@@ -103,7 +103,7 @@ def _cmd_component(args: argparse.Namespace, project_root: Path) -> int:
         return 1
 
     DISPATCH = {
-        "install": ("install_component", {"remove_configs": False}),
+        "install": ("install_component", {}),
         "uninstall": ("uninstall_component", {"remove_configs": getattr(args, "remove_configs", False)}),
         "enable": ("enable_component", {}),
         "disable": ("disable_component", {}),
