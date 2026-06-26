@@ -227,7 +227,11 @@ def test_diagnostics_falls_back_to_cli_scan(monkeypatch) -> None:
     }
 
     def fake_run(cmd, **kwargs):
-        assert cmd[0] == "pyright" and "--outputjson" in cmd
+        if isinstance(cmd, str):
+            assert "pyright" in cmd and "--outputjson" in cmd
+            assert kwargs.get("shell") is True
+        else:
+            assert cmd[0] == "pyright" and "--outputjson" in cmd
         return subprocess.CompletedProcess(cmd, 1, stdout=json.dumps(report), stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -241,6 +245,33 @@ def test_diagnostics_falls_back_to_cli_scan(monkeypatch) -> None:
     assert diags[0]["severity"] == 1
     assert diags[0]["code"] == "reportUndefinedVariable"
     assert diags[0]["source"] == "pyright"
+
+
+def test_diagnostics_cli_scan_uses_shell_wrapper_on_windows(monkeypatch) -> None:
+    """Windows batch CLI path must shell-launch so `.cmd` shims resolve."""
+    import subprocess
+
+    cfg = ServerConfig(command=["pyright-langserver", "--stdio"], label="python")
+    session = LspSession(cfg, "/tmp")
+    session.bridge = MagicMock()
+    session._capabilities = {}
+
+    captured: dict[str, object] = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(cmd, 0, stdout='{"generalDiagnostics":[]}', stderr="")
+
+    monkeypatch.setattr("audiagentic.components.coding_lsp.lsp_diagnostics.os.name", "nt")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    session.diagnostics()
+
+    assert isinstance(captured["cmd"], str)
+    assert "pyright" in str(captured["cmd"])
+    assert captured["kwargs"]["shell"] is True
+    assert captured["kwargs"]["stdin"] is subprocess.DEVNULL
 
 
 def test_diagnostics_cli_missing_binary_raises(monkeypatch) -> None:
