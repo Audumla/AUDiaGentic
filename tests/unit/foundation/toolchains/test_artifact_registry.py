@@ -43,13 +43,14 @@ def test_dry_run_does_not_mutate(tmp_path):
 
 
 def test_prune_config_keys(tmp_path):
-    cfg = tmp_path / "mcp.json"
-    change = ConfigPatcher(cfg).add_mcp_entry("hindsight", {"command": "h"})
+    cfg = tmp_path / "settings.json"
+    change = ConfigPatcher(cfg).set_key(("servers", "hindsight"), {"command": "h"})
     reg = ArtifactRegistry(tmp_path)
     reg.register("r1", changes=[change])
 
     reg.prune("r1")
-    assert "mcpServers" not in load_config(cfg)
+    data = load_config(cfg)
+    assert "servers" not in data
 
 
 def test_prune_managed_blocks(tmp_path):
