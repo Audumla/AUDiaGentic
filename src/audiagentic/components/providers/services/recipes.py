@@ -1,0 +1,335 @@
+"""Provider-owned capability recipe contract.
+
+Defines the types and registry for provider-scoped recipes that manage
+capability integrations (MCP servers, hooks, plugins, language servers, etc.)
+per provider + capability + backend.
+
+These types compose generic foundation/toolchain primitives (ShellStep,
+ConfigPatcher, probes, artifact registry) into a provider-specific lifecycle.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any
+
+from audiagentic.foundation.toolchains.recipe_contract import (
+    ProvisioningRecipe,
+    RecipeResult,
+    RecipeState,
+)
+
+
+class ProviderRecipeKind(str, Enum):
+    """Strategy kinds for provider capability integrations."""
+
+    COMMAND_INSTALLER = "command_installer"
+    """Installer command (npm, uv, brew, pip, etc.)."""
+
+    MCP_CONFIG = "mcp_config"
+    """MCP server entry in harness config."""
+
+    HOOKS = "hooks"
+    """Hook scripts or event wiring."""
+
+    PLUGIN_CONFIG = "plugin_config"
+    """Plugin registration/config."""
+
+    RULES = "rules"
+    """Rules/instructions files."""
+
+    WRAPPER_CLI = "wrapper_cli"
+    """Wrapper CLI or proxy binary."""
+
+    CONTEXT_PROVIDER = "context_provider"
+    """Context provider integration."""
+
+    NATIVE_PASSTHROUGH = "native_passthrough"
+    """Native harness capability, no extra config."""
+
+    HYBRID = "hybrid"
+    """Combination of strategies."""
+
+    GUIDANCE_ONLY = "guidance_only"
+    """Documentation/action-needed only, no automation."""
+
+
+@dataclass(frozen=True)
+class ProviderRecipeResult:
+    """Provider-specific recipe operation result.
+
+    Extends the generic RecipeResult with provider-scoped fields for source
+    tracking and user-facing action guidance.
+    """
+
+    success: bool
+    state: RecipeState
+    artifacts_owned: list[str] = field(default_factory=list)
+    status: str = ""
+    error: str | None = None
+    details: dict[str, Any] = field(default_factory=dict)
+    source_url: str = ""
+    """URL to official integration docs (e.g. Hindsight provider page)."""
+    source_date: str = ""
+    """Date the source was checked (ISO format)."""
+    action_needed: str = ""
+    """User-facing guidance when automation is not possible."""
+
+    @classmethod
+    def ok(
+        cls,
+        state: RecipeState,
+        *,
+        artifacts: list[str] | None = None,
+        status: str = "",
+        details: dict[str, Any] | None = None,
+        source_url: str = "",
+        source_date: str = "",
+        action_needed: str = "",
+    ) -> ProviderRecipeResult:
+        return cls(
+            success=True,
+            state=state,
+            artifacts_owned=list(artifacts or []),
+            status=status,
+            details=dict(details or {}),
+            source_url=source_url,
+            source_date=source_date,
+            action_needed=action_needed,
+        )
+
+    @classmethod
+    def fail(
+        cls,
+        error: str,
+        *,
+        state: RecipeState = RecipeState.ERROR,
+        details: dict[str, Any] | None = None,
+        source_url: str = "",
+        action_needed: str = "",
+    ) -> ProviderRecipeResult:
+        return cls(
+            success=False,
+            state=state,
+            error=error,
+            details=dict(details or {}),
+            source_url=source_url,
+            action_needed=action_needed,
+        )
+
+
+class ProviderCapabilityRecipe(ProvisioningRecipe):
+    """Abstract provider-scoped recipe for capability integrations.
+
+    Extends the foundation ProvisioningRecipe with provider-specific metadata
+    and lifecycle support. Concrete recipes are keyed by (provider_id,
+    capability_id, backend_id) in a ProviderRecipeRegistry.
+
+    Supports lifecycle operations: probe, install, configure, verify,
+    uninstall, prune, and dry_run.
+    """
+
+    provider_id: str
+    capability_id: str
+    backend_id: str | None
+    recipe_kind: ProviderRecipeKind
+    display_name: str = ""
+    source_url: str = ""
+    source_date: str = ""
+
+    def __init__(
+        self,
+        provider_id: str,
+        capability_id: str,
+        *,
+        backend_id: str | None = None,
+        recipe_kind: ProviderRecipeKind = ProviderRecipeKind.HYBRID,
+        display_name: str = "",
+        source_url: str = "",
+        source_date: str = "",
+    ) -> None:
+        super().__init__()
+        self.provider_id = provider_id
+        self.capability_id = capability_id
+        self.backend_id = backend_id
+        self.recipe_kind = recipe_kind
+        self.display_name = display_name
+        self.source_url = source_url
+        self.source_date = source_date
+
+    def dry_run(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        """Preview what install would do without mutating anything.
+
+        Default: run probe and return the planned state. Override for
+        command-based recipes that can enumerate planned shell commands.
+        """
+        probed = self.probe(context)
+        if probed.success and probed.state is RecipeState.VERIFIED:
+            return ProviderRecipeResult.ok(
+                RecipeState.VERIFIED,
+                status="already provisioned (dry-run)",
+                source_url=self.source_url,
+                source_date=self.source_date,
+            )
+        return ProviderRecipeResult.ok(
+            RecipeState.ABSENT,
+            status="would install (dry-run)",
+            source_url=self.source_url,
+            source_date=self.source_date,
+        )
+
+    def to_result(self, base: RecipeResult) -> ProviderRecipeResult:
+        """Convert a generic RecipeResult to ProviderRecipeResult."""
+        return ProviderRecipeResult(
+            success=base.success,
+            state=base.state,
+            artifacts_owned=list(base.artifacts_owned),
+            status=base.status,
+            error=base.error,
+            details=dict(base.details),
+            source_url=self.source_url,
+            source_date=self.source_date,
+        )
+
+
+class ProviderRecipeRegistry:
+    """Registry for provider capability recipes.
+
+    Recipes are keyed by (provider_id, capability_id, backend_id).
+    Supports listing, status querying, and lifecycle dispatch.
+
+    Accepts any object with the recipe interface (provider_id, capability_id,
+    backend_id, recipe_kind, probe, install, configure, verify, uninstall, prune).
+    """
+
+    def __init__(self) -> None:
+        self._recipes: dict[tuple[str, str, str | None], Any] = {}
+
+    def register(self, recipe: Any) -> None:
+        """Register a recipe in the registry."""
+        key = (recipe.provider_id, recipe.capability_id, recipe.backend_id)
+        self._recipes[key] = recipe
+
+    def get(
+        self,
+        provider_id: str,
+        capability_id: str,
+        backend_id: str | None = None,
+    ) -> Any | None:
+        """Look up a recipe by key."""
+        return self._recipes.get((provider_id, capability_id, backend_id))
+
+    def list_for_provider(
+        self,
+        provider_id: str,
+        capability_id: str | None = None,
+    ) -> list[Any]:
+        """List all recipes for a provider, optionally filtered by capability."""
+        results = []
+        for (pid, cid, bid), recipe in self._recipes.items():
+            if pid != provider_id:
+                continue
+            if capability_id is not None and cid != capability_id:
+                continue
+            results.append(recipe)
+        return results
+
+    def list_for_capability(
+        self,
+        capability_id: str,
+    ) -> list[Any]:
+        """List all recipes for a capability across all providers."""
+        return [
+            recipe
+            for (pid, cid, bid), recipe in self._recipes.items()
+            if cid == capability_id
+        ]
+
+    def status(
+        self,
+        provider_id: str,
+        capability_id: str,
+        backend_id: str | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> ProviderRecipeResult | None:
+        """Get status for a recipe without mutating anything."""
+        recipe = self.get(provider_id, capability_id, backend_id)
+        if recipe is None:
+            return None
+        ctx = context or {}
+        return recipe.probe(ctx)
+
+    def install(
+        self,
+        provider_id: str,
+        capability_id: str,
+        backend_id: str | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> ProviderRecipeResult | None:
+        """Install a recipe (probe -> install -> configure -> verify)."""
+        recipe = self.get(provider_id, capability_id, backend_id)
+        if recipe is None:
+            return None
+        ctx = context or {}
+        result = recipe.provision(ctx)
+        return recipe.to_result(result) if hasattr(recipe, "to_result") else result
+
+    def uninstall(
+        self,
+        provider_id: str,
+        capability_id: str,
+        backend_id: str | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> ProviderRecipeResult | None:
+        """Uninstall a recipe (prune -> uninstall -> cleanup -> verify absent)."""
+        recipe = self.get(provider_id, capability_id, backend_id)
+        if recipe is None:
+            return None
+        ctx = context or {}
+        result = recipe.teardown(ctx)
+        return recipe.to_result(result) if hasattr(recipe, "to_result") else result
+
+    def dry_run(
+        self,
+        provider_id: str,
+        capability_id: str,
+        backend_id: str | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> ProviderRecipeResult | None:
+        """Preview install without mutating anything."""
+        recipe = self.get(provider_id, capability_id, backend_id)
+        if recipe is None:
+            return None
+        ctx = context or {}
+        if hasattr(recipe, "dry_run"):
+            return recipe.dry_run(ctx)
+        return ProviderRecipeResult.ok(
+            RecipeState.ABSENT,
+            status="would install (dry-run)",
+            source_url=getattr(recipe, "source_url", ""),
+            source_date=getattr(recipe, "source_date", ""),
+        )
+
+    def repair(
+        self,
+        provider_id: str,
+        capability_id: str,
+        backend_id: str | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> ProviderRecipeResult | None:
+        """Repair: prune stale artifacts, then reinstall."""
+        recipe = self.get(provider_id, capability_id, backend_id)
+        if recipe is None:
+            return None
+        ctx = context or {}
+        recipe.prune(ctx)
+        result = recipe.provision(ctx)
+        return recipe.to_result(result) if hasattr(recipe, "to_result") else result
+
+
+__all__ = [
+    "ProviderCapabilityRecipe",
+    "ProviderRecipeKind",
+    "ProviderRecipeRegistry",
+    "ProviderRecipeResult",
+]

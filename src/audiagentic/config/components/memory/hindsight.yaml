@@ -6,8 +6,9 @@ display-name: Hindsight
 default: true
 description: >
   Hindsight long-term memory backend. Provides recall, reflect, and retain
-  operations via the Hindsight MCP server. Config projected into provider
-  surfaces so external tools can access the same memory context.
+  operations via the Hindsight MCP server. Memory core stores backend connection
+  config; Hindsight-specific harness setup is contained in the Hindsight
+  implementation package and uses generic provider seams.
 
 options-schema:
   base-url:
@@ -18,20 +19,21 @@ options-schema:
     type: string
     required: false
     description: API key for Hindsight authentication
+  bank-id:
+    type: string
+    required: false
+    description: Hindsight bank identifier (X-Bank-Id header)
   timeout-seconds:
     type: integer
     default: 30
     min: 1
     max: 120
     description: Request timeout in seconds
-  enabled-providers:
-    type: list
-    required: false
-    description: Optional allowlist of provider IDs to project memory config for
   transport:
     type: enum
-    default: sse
+    default: http
     values:
+      - http
       - sse
       - stdio
     description: MCP transport mode
