@@ -1,6 +1,7 @@
 from .artifact_registry import ArtifactRegistry, PruneReport
 from .config_patcher import ConfigPatcher, OwnedChange
 from .config_reader import UNSET, dump_config, load_config, read_config_value
+from .detect import detect_pkg_manager, platform_key, tool_available, uv_available  # noqa: F401
 from .loader import build_step, has_action, raw_step
 from .managed_block import (
     BlockChange,
@@ -34,8 +35,10 @@ __all__ = [
     "CompositeHealthCheck",
     "ConfigKeyCheck",
     "ConfigPatcher",
+    "detect_pkg_manager",
     "FileExistsCheck",
     "OwnedChange",
+    "platform_key",
     "Probe",
     "ProbeResult",
     "ProvisioningRecipe",
@@ -43,6 +46,8 @@ __all__ = [
     "RecipeResult",
     "RecipeState",
     "StepRecipe",
+    "tool_available",
+    "uv_available",
     "apply_managed_block",
     "block_artifact_id",
     "build_step",

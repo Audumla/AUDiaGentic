@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-from audiagentic.components.memory.hindsight_recipe import (
-    HindsightBackend,
+from audiagentic.components.memory.hindsight.mcp_recipe import (
     HindsightMcpRecipe,
     HindsightTarget,
     build_hindsight_entry,
 )
+from audiagentic.components.memory.hindsight_export import HindsightBackendConfig
 from audiagentic.foundation.toolchains.artifact_registry import ArtifactRegistry
 from audiagentic.foundation.toolchains.config_reader import load_config
 from audiagentic.foundation.toolchains.recipe_contract import RecipeState
 
 
 def _backend(**kw):
-    return HindsightBackend(base_url="https://hs.example.com", **kw)
+    return HindsightBackendConfig(base_url="https://hs.example.com", **kw)
 
 
 def test_sse_entry_shape():
@@ -89,7 +89,7 @@ def test_switching_backend_url_updates_entry(tmp_path):
     cfg = tmp_path / "mcp.json"
     HindsightMcpRecipe(_backend(), HindsightTarget(cfg)).provision({})
     HindsightMcpRecipe(
-        HindsightBackend(base_url="https://new.example.com"), HindsightTarget(cfg)
+        HindsightBackendConfig(base_url="https://new.example.com"), HindsightTarget(cfg)
     ).provision({})
     assert load_config(cfg)["mcpServers"]["hindsight"]["url"] == "https://new.example.com"
 

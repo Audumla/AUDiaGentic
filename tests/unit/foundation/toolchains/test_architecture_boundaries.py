@@ -348,6 +348,32 @@ class TestProviderRecipeTests:
         assert result.success is False
         assert "refusing to execute" in (result.error or "")
 
+    def test_shell_compound_hindsight_command_refuses_execution(self):
+        """Verified source still needs structured command modeling before execution."""
+        from audiagentic.components.memory.hindsight.matrix import HindsightRecipeRow
+        from audiagentic.components.memory.hindsight.recipes import HooksInstallerRecipe
+        from audiagentic.components.memory.hindsight_export import HindsightBackendConfig
+        from audiagentic.components.providers.services.recipes import ProviderRecipeKind
+
+        row = HindsightRecipeRow(
+            provider_id="test",
+            display_name="Test",
+            integration_type="hooks",
+            recipe_kind=ProviderRecipeKind.HOOKS,
+            install_command="curl -fsSL https://example.invalid/install | bash",
+            source_status="verified",
+            source_url="https://example.invalid/docs",
+            source_date="2026-06-26",
+        )
+        recipe = HooksInstallerRecipe(
+            row,
+            HindsightBackendConfig(base_url="https://hindsight.example.com"),
+        )
+
+        result = recipe.install({})
+        assert result.success is False
+        assert "structured shell-step support" in (result.error or "")
+
     def test_no_hindsight_modules_in_providers_services(self):
         """Providers expose generic recipe seams only; no Hindsight-specific modules."""
         services_dir = WORKSPACE_ROOT / "src" / "audiagentic" / "components" / "providers" / "services"
