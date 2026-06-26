@@ -263,7 +263,7 @@ This is easy to get wrong, so treat it as a hard rule:
 In practice:
 
 - **Allowed in a non-provider component:** generic capability state, implementation
-  selection, provider-agnostic config, provider-agnostic projection payloads, and
+  selection, provider-agnostic config/export data, neutral refresh hints, and
   MCP/activity tools that any provider may call.
 - **Not allowed in a non-provider component:** hard-coded provider IDs, provider
   instruction/config file paths, provider-specific syntax branches, or logic that
@@ -284,10 +284,22 @@ Ownership rule:
   which providers support the capability, what files they write, what syntax they
   need, and how generic capability data is rendered into provider surfaces.
 
+Controlled exceptions:
+
+- If a non-provider component must notify providers, return or emit a neutral
+  capability-change hint only (for example, `needs_provider_recipe_refresh`).
+- The providers component must own the observer/reconcile code that consumes that
+  hint.
+- Any unavoidable cross-component adapter must live in one small boundary module
+  with architecture tests proving the dependency direction and blocking direct
+  imports from the capability component into provider services.
+
 If a backend has provider-specific integration docs (for example, a memory backend
-with different setup instructions per provider), those docs should inform
-`components/providers/` adapter code or provider-owned projection registries — not
-the backend component's core package.
+with different setup instructions per provider), keep that knowledge in one
+implementation-owned containment package such as
+`components/<component>/<implementation>/`. Do not embed backend-specific modules
+in provider core. Provider code should expose generic seams (descriptor lookup,
+recipe/result contracts, config writers), not backend names.
 
 ---
 

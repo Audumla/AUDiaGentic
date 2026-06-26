@@ -10,7 +10,7 @@ Components  -->  Runtime  -->  Foundation
 ```
 
 - **CLI / composition root** (`audiagentic/launcher.py`, `audiagentic/commands/*`) — wires the application together. May import any layer, including specific optional components. This is the only layer permitted to.
-- **Foundation** — shared primitives. Zero imports from runtime or components.
+- **Foundation** — shared primitives. May import from runtime, but must have zero imports from components or other none core code.
 - **Runtime** — lifecycle, config, harness, state. May import foundation only.
 - **Components** — product capabilities. May import runtime and foundation.
 
@@ -77,6 +77,14 @@ Extensibility must never require editing Python source.
 - Log levels: `debug` (trace), `info` (notable ops), `warning` (non-fatal — always `exc_info=True`), `error` (failures — always `exc_info=True`).
 - Entity-referencing messages must carry `extra={"component": ..., "provider": ..., "item_id": ...}`.
 - MCP tool args must never be logged.
+
+## 11. Migration Doctrine
+
+**Rules:**
+- **No backward compatibility shims** — unless explicitly stated, we do not maintain backward compatibility. Migrate code as we refactor. Always.
+- **No legacy code left behind** — do not create shim functions, deprecation warnings, or parallel paths. Remove legacy code in the same change that introduces the replacement.
+- **Atomic migration** — each migration step must leave the system in a working state. Never pass through a broken intermediate state.
+- **Test-driven migration** — add or update tests alongside the migration. Do not defer testing.
 
 ## 10. Anti-Pattern Quick Reference
 
