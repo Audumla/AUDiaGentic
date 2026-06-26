@@ -3,26 +3,13 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import sys
 import threading
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from audiagentic.runtime.system.platform import platform_key as _platform_key
+
 from .models import StepResult, WorkflowAnswer, WorkflowQuestion
-
-
-def _platform_key() -> str:
-    """Stable platform identifier used for command overrides.
-
-    Kept local (rather than importing ``foundation.toolchains.detect``) because
-    the toolchains package imports this module, and a back-import would create a
-    cycle.
-    """
-    if sys.platform.startswith("win"):
-        return "win"
-    if sys.platform == "darwin":
-        return "darwin"
-    return "linux"
 
 
 @dataclass(frozen=True)

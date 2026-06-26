@@ -5,6 +5,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from audiagentic.runtime.system.platform import platform_key
+
 
 def tool_available(name: str) -> bool:
     """Return True if the named executable is on PATH."""
@@ -52,12 +54,3 @@ def detect_pkg_manager() -> str | None:
         if tool_available(pm):
             return pm
     return None
-
-
-def platform_key() -> str:
-    """Return a stable platform identifier for use in PlatformRecipe fallback keys."""
-    if sys.platform.startswith("win"):
-        return "win"
-    if sys.platform == "darwin":
-        return "darwin"
-    return "linux"

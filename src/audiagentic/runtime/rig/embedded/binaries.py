@@ -23,6 +23,7 @@ from audiagentic.runtime.rig.constants import (
     platform_dir_name,
 )
 from audiagentic.runtime.rig.errors import make_rig_binary_error
+from audiagentic.runtime.system.platform import platform_key
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +166,7 @@ def _flatten_extracted_archive(dest_dir: Path, inner_exe: str) -> None:
 def _kill_running_server(target_dir: Path) -> None:
     """Kill any running llama-server that may have the binary locked."""
     import subprocess
-    if sys.platform == "win32":
+    if platform_key() == "win":
         subprocess.run(
             ["taskkill", "/F", "/IM", "llama-server.exe"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
@@ -180,7 +181,7 @@ def _kill_running_server(target_dir: Path) -> None:
 def update_binaries(runtime_dir: Path | None = None, target_bin_dir: Path | None = None) -> None:
     """Download and install llama-server binaries for the current platform."""
 
-    plat = sys.platform
+    plat = platform_key()
     if plat not in PLATFORM_PATTERNS:
         raise make_rig_binary_error(
             "CFG",
