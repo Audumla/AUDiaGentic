@@ -15,30 +15,17 @@ logger = logging.getLogger(__name__)
 
 
 def _sync_provider_mcp(project_root: Path, on_progress: ComponentOutputSink | None = None) -> None:
-    """Sync all component MCP servers to provider configs — adds missing, removes stale."""
+    """Sync all component MCP servers to provider configs — adds missing, removes stale.
+
+    Delegates to sync_all_provider_mcp_servers, which iterates every installed +
+    enabled component and projects its managed MCP entries to all MCP-capable
+    providers (active or not).
+    """
     from audiagentic.components.providers.services.lifecycle import _emit
     try:
-        from audiagentic.foundation.components.loader import register_all_components
-        from audiagentic.foundation.components.registry import (
-            all_descriptors as all_component_descriptors,
-        )
-        from audiagentic.foundation.components.registry import (
-            is_enabled,
-            is_installed,
-        )
-        from audiagentic.runtime.lifecycle.component_mcp import (
-            sync_component_mcp_to_provider_configs,
-        )
+        from audiagentic.runtime.lifecycle.component_mcp import sync_all_provider_mcp_servers
 
-        register_all_components()
-        for component_id, descriptor in all_component_descriptors().items():
-            if not descriptor.mcp_servers and not descriptor.external_mcp_servers:
-                continue
-            if not descriptor.core and not is_installed(component_id, project_root):
-                continue
-            if not descriptor.core and not is_enabled(component_id, project_root):
-                continue
-            sync_component_mcp_to_provider_configs(component_id, project_root)
+        sync_all_provider_mcp_servers(project_root)
         _emit(on_progress, "MCP server configs synced")
     except Exception:  # noqa: BLE001
         _emit(on_progress, "MCP server config sync failed (non-fatal)", level="warning")
