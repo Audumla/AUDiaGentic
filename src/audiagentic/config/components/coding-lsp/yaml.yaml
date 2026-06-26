@@ -1,0 +1,22 @@
+type: feature
+contract-version: v1
+parent: coding-lsp
+kind: language
+id: yaml
+display-name: YAML (yaml-language-server)
+language-id: yaml
+server:
+  command: [yaml-language-server, --stdio]
+  file-extensions: [.yaml, .yml]
+  workspace-config-files: [.yamllint, .yaml-language-server.yml, .yaml-language-server.yaml]
+detection-markers: []
+dependencies:
+  yaml-language-server:
+    display-name: YAML Language Server
+    probe: binary:yaml-language-server
+    package: yaml-language-server
+    toolchain: npm
+options-schema:
+  server-settings:
+    type: object
+    default: {}
