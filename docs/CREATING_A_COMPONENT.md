@@ -166,6 +166,46 @@ Each entry in `files:` is a `ComponentFile` with a `lifecycle` mode:
 ## 6. MCP servers
 
 A component exposes its tools to agents via MCP servers. Two declaration shapes:
+`mcp-servers:` (Python module) and `external-mcp-servers:` (external CLI). But more
+importantly, most components ship **two servers with different roles** — keep them
+distinct.
+
+### 6.1 Management server vs activity server
+
+A typical component declares two MCP servers:
+
+| Role | Naming | `propagate` | Audience | Purpose |
+|---|---|---|---|---|
+| **Management** | `<comp>-mgmt` | `audiagentic` | The AUDiaGentic agent driven by the `audiagentic` CLI — **only** | Configure, inspect, and control the component: status, list/select implementation, add/remove features, install dependencies, set options. |
+| **Activity** | `<comp>` | `audiagentic,providers` (or `providers`) | The AUDiaGentic agent **and** the downstream provider harnesses | The capability itself — the tools that do the actual work the component exists to provide. |
+
+The split is fundamental:
+
+- The **management server** is an *operator console*. It changes how the component is
+  configured for a project. It must never be handed to providers — a provider doing
+  real work has no business switching the planning backend or installing a language
+  server. Hence `propagate: audiagentic` (CLI-side only).
+- The **activity server** is the *product*. It is what gets loaded into providers so
+  they can actually use the capability while doing their work — creating plan items,
+  recording ledger events, navigating code. Hence `propagate` includes `providers`.
+
+Examples from the codebase:
+
+- `ag-planning-mgmt` (status, `planning_select_implementation`) — `audiagentic` only.
+  `ag-planning` (`plan_create_item`, `plan_set_state`, …) — `audiagentic,providers`.
+- `ag-ledger-mgmt` vs `ag-ledger`; `ag-lsp-mgmt` vs `ag-lsp`; `ag-sc-mgmt`,
+  `ag-release-mgmt`, `ag-project-mgmt`, etc.
+
+`propagate` is the knob; the naming convention (`-mgmt` suffix) is how you signal the
+role. They are not always 1:1 with audience — e.g. `ag-lsp` (activity) is
+`propagate: audiagentic` because providers self-provide LSP and should not receive the
+AUDiaGentic bridge. The rule of thumb: **management → `audiagentic`; activity →
+include `providers` unless the provider already has that capability natively.**
+
+A component may also declare only one server (pure activity, e.g. `git`/`github`) or
+add a management server later once it grows configurable state.
+
+### 6.2 Declaration shapes
 
 `mcp-servers:` — backed by a Python module in your component package:
 
@@ -213,6 +253,42 @@ For tools backed by an external CLI (not a Python module), use
 `external-mcp-servers:` with `command`, `requires` (PATH tools that gate inclusion),
 and an optional `probe` command to verify usability.
 
+### 6.3 Ownership boundary: provider-consumable vs provider-specific
+
+This is easy to get wrong, so treat it as a hard rule:
+
+- A component may expose a capability that is **consumable by providers**.
+- That does **not** mean the component may encode **provider-specific rendering**.
+
+In practice:
+
+- **Allowed in a non-provider component:** generic capability state, implementation
+  selection, provider-agnostic config, provider-agnostic projection payloads, and
+  MCP/activity tools that any provider may call.
+- **Not allowed in a non-provider component:** hard-coded provider IDs, provider
+  instruction/config file paths, provider-specific syntax branches, or logic that
+  rewrites downstream provider surfaces directly.
+
+Examples of what must stay out of `components/<id>/` unless `<id>` is `providers`:
+
+- `if provider_id == "claude": ...`
+- mappings like `{ "codex": "AGENTS.md", "copilot": ".github/copilot-instructions.md" }`
+- component-owned code that writes `CLAUDE.md`, `AGENTS.md`, provider JSON/YAML, or
+  other provider adapter outputs directly
+
+Ownership rule:
+
+- **Capability components** own the upstream truth: selected implementation,
+  validated options, generic runtime state, and any provider-agnostic export data.
+- **The providers component and provider adapters** own the downstream truth:
+  which providers support the capability, what files they write, what syntax they
+  need, and how generic capability data is rendered into provider surfaces.
+
+If a backend has provider-specific integration docs (for example, a memory backend
+with different setup instructions per provider), those docs should inform
+`components/providers/` adapter code or provider-owned projection registries — not
+the backend component's core package.
+
 ---
 
 ## 7. Harness instructions and contributions
@@ -220,8 +296,11 @@ and an optional `probe` command to verify usability.
 Two ways to inject guidance for the agent:
 
 - **`harness-instructions:`** — markdown sections merged into the harness prompt.
-  Each has a `section` (grouping header), `content`, and `propagate`. Use for the
-  "What you can do" tool catalog and operating rules.
+  Each has a `section` (grouping header), `content`, and `propagate`. The "What you
+  can do" tool catalog is **auto-generated** from `mcp-servers[].direct-tools` and
+  `tool-descriptions` at load time — do NOT hand-write a tool catalog. Use
+  `harness-instructions:` for operating rules, context, and doctrine that cannot be
+  derived from MCP declarations (e.g. install gating, feature explanations).
 
 - **`contributions:`** — reusable doctrine blocks with `preferred-targets`
   (e.g. `skill`, `instruction`). The surface system routes them into the right
@@ -230,7 +309,9 @@ Two ways to inject guidance for the agent:
   doctrine") that should appear as a skill or in CLAUDE.md.
 
 Both support `propagate` with the same `audiagentic` / `providers` semantics as MCP
-servers.
+servers. `propagate: providers` only controls where guidance or tools are surfaced;
+it does **not** transfer ownership of provider-specific rendering into the component
+that declared them.
 
 ---
 
@@ -239,6 +320,16 @@ servers.
 This is the swappable-backend tier. Reach for it when the component has either
 (a) interchangeable backends, or (b) per-item optional sub-capabilities. If neither
 applies, skip this section entirely.
+
+Before modeling implementations, answer one boundary question explicitly:
+
+- Does this component own only the generic backend contract?
+- Or does it also own provider adaptation?
+
+Unless the component itself is `providers`, the answer should almost always be:
+**generic backend contract only**. Implementations may describe generic capabilities
+and export provider-agnostic facts, but provider compatibility matrices, provider
+file paths, and provider-specific render decisions belong in provider-owned code.
 
 All three descriptor types are parsed by
 [foundation/features/loader.py](../src/audiagentic/foundation/features/loader.py)
@@ -430,8 +521,9 @@ To add a new component `my-thing`:
 3. **MCP server.** Add `my_thing_mcp.py` using `mcp_server(__name__)` and
    `run_mcp_server(...)`; declare it under `mcp-servers:` with `direct-tools`,
    `propagate`, and `instructions` (§6).
-4. **Harness guidance.** Add `harness-instructions:` (tool catalog) and any
-   `contributions:` doctrine blocks (§7).
+4. **Harness guidance.** The tool catalog is auto-generated from `mcp-servers[].direct-tools`
+    — do NOT hand-write it. Add `harness-instructions:` for operating rules and context
+    only, plus any `contributions:` doctrine blocks (§7).
 5. **(Optional) Feature tier.** If the component has swappable backends or
    per-item capabilities: set `feature-kinds` and `implementation-cardinality` on
    the component, then add `implementation`, `feature`, and `binding` YAML files
