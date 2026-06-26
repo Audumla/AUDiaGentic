@@ -147,8 +147,10 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
             + "\n"
         )
 
-    completed = subprocess.run(command, cwd=ctx.agent_work, env=env, check=False)
+    from audiagentic.foundation.system.supervised_process import supervised_run
+
+    returncode = supervised_run(command, cwd=ctx.agent_work, env=env)
 
     with log_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps({"event": "agent_run_finished", "returncode": int(completed.returncode)}) + "\n")
-    return int(completed.returncode)
+        handle.write(json.dumps({"event": "agent_run_finished", "returncode": int(returncode)}) + "\n")
+    return int(returncode)
