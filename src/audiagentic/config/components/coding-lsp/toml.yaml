@@ -1,0 +1,24 @@
+type: feature
+contract-version: v1
+parent: coding-lsp
+kind: language
+id: toml
+display-name: TOML (taplo)
+language-id: toml
+server:
+  command: [taplo, lsp, stdio]
+  file-extensions: [.toml]
+  workspace-config-files: [taplo.toml, .taplo.toml]
+detection-markers: []
+dependencies:
+  taplo:
+    display-name: Taplo (TOML LSP)
+    probe: binary:taplo
+    platform-fallback:
+      win: [cargo, install, --locked, --features, lsp, taplo-cli]
+      darwin: [cargo, install, --locked, --features, lsp, taplo-cli]
+      linux: [cargo, install, --locked, --features, lsp, taplo-cli]
+options-schema:
+  server-settings:
+    type: object
+    default: {}

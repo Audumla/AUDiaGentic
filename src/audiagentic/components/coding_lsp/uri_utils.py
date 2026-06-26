@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 from urllib.request import url2pathname
 
-from .lsp_constants import EXTENSION_TO_LANGUAGE
+from .lsp_constants import EXTENSION_TO_LANGUAGE, FILE_BASENAME_TO_LANGUAGE
 
 
 def path_to_uri(path: Path) -> str:
@@ -51,5 +51,8 @@ def canonical_uri(uri: str) -> str:
 
 def path_to_language_id(path: str) -> str:
     """Infer LSP language ID from file extension."""
-    ext = Path(path).suffix.lower().lstrip(".")
-    return EXTENSION_TO_LANGUAGE.get(ext, "plaintext")
+    p = Path(path)
+    ext = p.suffix.lower().lstrip(".")
+    if ext:
+        return EXTENSION_TO_LANGUAGE.get(ext, "plaintext")
+    return FILE_BASENAME_TO_LANGUAGE.get(p.name.lower(), "plaintext")

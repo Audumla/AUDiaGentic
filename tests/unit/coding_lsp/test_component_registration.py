@@ -57,6 +57,10 @@ def test_coding_lsp_registers_nested_implementation_and_language_features() -> N
     python = feature_registry.get_feature("coding-lsp", "language", "python")
     assert python is not None
     assert python.dependencies["pyright"]["probe"] == "binary:pyright-langserver"
+    assert feature_registry.get_feature("coding-lsp", "language", "json") is not None
+    assert feature_registry.get_feature("coding-lsp", "language", "toml") is not None
+    assert feature_registry.get_feature("coding-lsp", "language", "make") is not None
+    assert feature_registry.get_feature("coding-lsp", "language", "yaml") is not None
 
 
 def test_coding_lsp_registers_ag_lsp_language_bindings() -> None:
@@ -69,14 +73,31 @@ def test_coding_lsp_registers_ag_lsp_language_bindings() -> None:
         if key[0] == "ag-lsp" and key[1] == "language"
     } == {
         ("ag-lsp", "language", "cpp"),
+        ("ag-lsp", "language", "json"),
+        ("ag-lsp", "language", "markdown"),
+        ("ag-lsp", "language", "make"),
         ("ag-lsp", "language", "python"),
         ("ag-lsp", "language", "python-ruff"),
         ("ag-lsp", "language", "rust"),
+        ("ag-lsp", "language", "toml"),
         ("ag-lsp", "language", "typescript"),
+        ("ag-lsp", "language", "yaml"),
     }
     assert bindings[("ag-lsp", "language", "python")].uses_dependencies == ("pyright",)
     assert bindings[("ag-lsp", "language", "python")].projection_writer_key == "coding-lsp.lsp-json"
     assert bindings[("ag-lsp", "language", "python-ruff")].uses_dependencies == ("ruff",)
     assert bindings[("ag-lsp", "language", "python-ruff")].projection_writer_key == "coding-lsp.lsp-json"
+    assert bindings[("ag-lsp", "language", "markdown")].uses_dependencies == ("marksman",)
+    assert bindings[("ag-lsp", "language", "markdown")].projection_writer_key == "coding-lsp.lsp-json"
+    assert bindings[("ag-lsp", "language", "json")].uses_dependencies == ("vscode-langservers-extracted",)
+    assert bindings[("ag-lsp", "language", "toml")].uses_dependencies == ("taplo",)
+    assert bindings[("ag-lsp", "language", "make")].uses_dependencies == ("make-ls",)
+    assert bindings[("ag-lsp", "language", "yaml")].uses_dependencies == ("yaml-language-server",)
     assert bindings[("agent-lsp", "language", "python")].uses_dependencies == ("agent-lsp", "pyright")
     assert bindings[("agent-lsp", "language", "python")].projection_writer_key == "agent-lsp.mcp-args"
+    assert bindings[("agent-lsp", "language", "markdown")].uses_dependencies == ("agent-lsp", "marksman")
+    assert bindings[("agent-lsp", "language", "markdown")].projection_writer_key == "agent-lsp.mcp-args"
+    assert bindings[("agent-lsp", "language", "json")].uses_dependencies == ("agent-lsp", "vscode-langservers-extracted")
+    assert bindings[("agent-lsp", "language", "toml")].uses_dependencies == ("agent-lsp", "taplo")
+    assert bindings[("agent-lsp", "language", "make")].uses_dependencies == ("agent-lsp", "make-ls")
+    assert bindings[("agent-lsp", "language", "yaml")].uses_dependencies == ("agent-lsp", "yaml-language-server")

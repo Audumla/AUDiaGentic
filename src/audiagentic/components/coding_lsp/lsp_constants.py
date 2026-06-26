@@ -98,10 +98,18 @@ EXTENSION_TO_LANGUAGE: dict[str, str] = {
     "py": "python", "pyi": "python",
     "ts": "typescript", "tsx": "typescriptreact",
     "js": "javascript", "jsx": "javascriptreact",
+    "json": "json", "jsonc": "json",
+    "toml": "toml",
+    "yaml": "yaml", "yml": "yaml",
     "rs": "rust",
     "c": "c", "h": "c",
     "cpp": "cpp", "cxx": "cpp", "cc": "cpp",
     "hpp": "cpp", "hxx": "cpp", "hh": "cpp",
+}
+
+FILE_BASENAME_TO_LANGUAGE: dict[str, str] = {
+    "makefile": "make",
+    "gnumakefile": "make",
 }
 
 # ── pyright --outputjson severity strings → LSP DiagnosticSeverity ints ────
