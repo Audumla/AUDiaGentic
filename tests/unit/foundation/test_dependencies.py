@@ -58,6 +58,28 @@ def test_command_probe_reports_success(monkeypatch) -> None:
     assert probes["thing"]() is True
 
 
+def test_command_probe_uses_utf8_replace(monkeypatch) -> None:
+    seen: dict[str, object] = {}
+
+    class _Result:
+        returncode = 0
+
+    def _fake_run(*args, **kwargs):
+        seen.update(kwargs)
+        return _Result()
+
+    monkeypatch.setattr(
+        "audiagentic.foundation.components.dependencies.subprocess.run",
+        _fake_run,
+    )
+
+    probes = build_dependency_probes({"thing": {"probe": "command:tool --version"}})
+
+    assert probes["thing"]() is True
+    assert seen["encoding"] == "utf-8"
+    assert seen["errors"] == "replace"
+
+
 # ---------------------------------------------------------------------------
 # SelectStep — core dispatch primitive
 # ---------------------------------------------------------------------------
