@@ -2,12 +2,12 @@
 
 Some integrations register by appending a block of text to a line-oriented file
 (a shell rc, a hooks section, an instruction file) rather than setting a
-structured config key. To make those blocks reliably identifiable for prune
-(RV04), each is wrapped in sentinel markers keyed by a stable ``block_id``::
+structured config key. To make those blocks reliably identifiable for prune,
+each is wrapped in sentinel markers keyed by a stable ``block_id``::
 
-    # >>> audiagentic:codex-hindsight-hook >>>
+    # >>> audiagentic:managed-block-id >>>
     ...managed content...
-    # <<< audiagentic:codex-hindsight-hook <<<
+    # <<< audiagentic:managed-block-id <<<
 
 Re-applying replaces the existing block in place; removing strips exactly the
 marked region and nothing else.

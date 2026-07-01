@@ -53,7 +53,9 @@ def load_ndjson(path: Path) -> list[dict[str, Any]]:
     entries = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.strip():
-            entries.append(json.loads(line))
+            obj = json.loads(line)
+            if isinstance(obj, dict):
+                entries.append(obj)
     return entries
 
 
