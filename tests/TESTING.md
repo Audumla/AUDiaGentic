@@ -390,13 +390,15 @@ The historical per-scenario image sprawl is collapsed only where safe (see
 | `audia-packaging`                  | `Dockerfile.packaging`              | Clean-room wheel: install + server-smoke + release e2e     |
 | `audia-provider-cli-test`          | `Dockerfile.provider-cli-test`      | Provider CLI provisioning recipe (isolated)                |
 | `audia-provider-cli-comprehensive` | `Dockerfile.provider-cli-comprehensive` | Provider CLI comprehensive recipe (isolated)          |
-| `audiagentic-provider-lifecycle-e2e` | `Dockerfile.provider-lifecycle-e2e` | Provider full lifecycle recipe (isolated)               |
+| `audiagentic-provider-lifecycle-e2e` | `Dockerfile.provider-lifecycle-e2e` | Provider full lifecycle + Hindsight recipe (isolated)   |
 | `audia-provider-lsp-e2e`           | `Dockerfile.provider-lsp-e2e`       | Provider LSP install recipe (isolated)                     |
 | `audia-mcp-tools-e2e`              | `Dockerfile.mcp-tools-e2e`          | LSP MCP tools — *consumes* pre-baked servers (isolated)    |
 | `audiagentic-lsp-install-test`     | `Dockerfile.lsp-install-test`       | Clean LSP install recipe; slow rust compile (~15 min)      |
 
 The former `install-test`, `release-test` and `server-smoke` images merged into
-`audia-packaging`; `shell-stdout-test` folded into the clean suite image.
+`audia-packaging`; `shell-stdout-test` folded into the clean suite image; the
+old standalone Hindsight provider image folded into
+`audiagentic-provider-lifecycle-e2e`.
 
 ### Build once, run many
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from audiagentic.components.providers.adapters.pi import descriptor as pi_desc
+from audiagentic.components.providers.adapters.pi import hooks as pi_desc
 from audiagentic.components.providers.descriptors.base import (
     McpConfigSpec,
     ProviderDescriptor,

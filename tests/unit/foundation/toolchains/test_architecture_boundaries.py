@@ -29,7 +29,7 @@ def _get_imports(filepath: Path) -> list[str]:
         source = f.read()
     try:
         tree = ast.parse(source, filename=str(filepath))
-    except SyntaxError:
+    except (SyntaxError, SystemError, RecursionError):
         return []
 
     imports = []
@@ -348,8 +348,10 @@ class TestProviderRecipeTests:
         assert result.success is False
         assert "refusing to execute" in (result.error or "")
 
-    def test_shell_compound_hindsight_command_refuses_execution(self):
-        """Verified source still needs structured command modeling before execution."""
+    def test_shell_pipe_hindsight_command_runs_via_shell(self, monkeypatch):
+        """Pipe-based installer commands run through a shell for published curl|bash flows."""
+        import subprocess
+
         from audiagentic.components.memory.hindsight.matrix import HindsightRecipeRow
         from audiagentic.components.memory.hindsight.recipes import HooksInstallerRecipe
         from audiagentic.components.memory.hindsight_export import HindsightBackendConfig
@@ -370,9 +372,45 @@ class TestProviderRecipeTests:
             HindsightBackendConfig(base_url="https://hindsight.example.com"),
         )
 
+        def fake_run(command, **kwargs):
+            assert command == "curl -fsSL https://example.invalid/install | bash"
+            assert kwargs["shell"] is True
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
         result = recipe.install({})
-        assert result.success is False
-        assert "structured shell-step support" in (result.error or "")
+        assert result.success is True
+
+    def test_plugin_config_recipe_skips_manual_instruction_commands(self, tmp_path):
+        """manage_config_writes rows should not try to shell-exec prose install instructions."""
+        from audiagentic.components.memory.hindsight.matrix import HindsightRecipeRow
+        from audiagentic.components.memory.hindsight.mcp_recipe import HindsightTarget
+        from audiagentic.components.memory.hindsight.recipes import PluginConfigRecipe
+        from audiagentic.components.memory.hindsight_export import HindsightBackendConfig
+        from audiagentic.components.providers.services.recipes import ProviderRecipeKind
+
+        row = HindsightRecipeRow(
+            provider_id="test",
+            display_name="Test",
+            integration_type="plugin",
+            recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG,
+            install_command='Add "@vectorize-io/opencode-hindsight" to plugin array in opencode.json',
+            uninstall_command="Remove plugin from opencode.json plugin array",
+            source_status="verified",
+            source_url="https://example.invalid/docs",
+            source_date="2026-06-29",
+            audia_action="manage_config_writes",
+        )
+        recipe = PluginConfigRecipe(
+            row,
+            HindsightBackendConfig(base_url="https://hindsight.example.com"),
+            HindsightTarget(tmp_path / "opencode.json"),
+        )
+
+        installed = recipe.install({})
+        removed = recipe.uninstall({})
+        assert installed.success is True
+        assert removed.success is True
 
     def test_no_hindsight_modules_in_providers_services(self):
         """Providers expose generic recipe seams only; no Hindsight-specific modules."""
