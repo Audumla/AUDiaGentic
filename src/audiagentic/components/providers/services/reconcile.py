@@ -28,6 +28,7 @@ def _sync_provider_mcp(project_root: Path, on_progress: ComponentOutputSink | No
         sync_all_provider_mcp_servers(project_root)
         _emit(on_progress, "MCP server configs synced")
     except Exception:  # noqa: BLE001
+        logger.warning("MCP server config sync failed", exc_info=True)
         _emit(on_progress, "MCP server config sync failed (non-fatal)", level="warning")
 
 
@@ -55,6 +56,7 @@ def _sync_vscode_extensions(project_root: Path, on_progress: ComponentOutputSink
         write_extensions_json(project_root, tuple(all_extensions))
         _emit(on_progress, "VS Code extensions.json synced")
     except Exception:  # noqa: BLE001
+        logger.warning("VS Code extensions.json sync failed", exc_info=True)
         _emit(on_progress, "VS Code extensions.json sync failed (non-fatal)", level="warning")
 
 

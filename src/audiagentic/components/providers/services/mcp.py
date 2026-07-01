@@ -32,7 +32,10 @@ def _descriptor(provider_id: str) -> ProviderDescriptor:
 def _resolve_mcp_path(spec: McpConfigSpec, project_root: Path) -> Path:
     if callable(spec.config_path):
         return spec.config_path(project_root)
-    return project_root / spec.config_path
+    p = Path(spec.config_path).expanduser()
+    if p.is_absolute():
+        return p
+    return project_root / p
 
 
 def add_provider_mcp_server(
@@ -222,14 +225,6 @@ def _sync_managed_entries(
                 "managed_id": managed_id,
                 "desired_name": desired_name,
                 "reason": "name already owned by another managed entry",
-            })
-            continue
-
-        if desired_name in current and old_name is None and owners_by_name.get(desired_name) is None:
-            collisions.append({
-                "managed_id": managed_id,
-                "desired_name": desired_name,
-                "reason": "name already used by external entry",
             })
             continue
 

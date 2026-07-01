@@ -16,6 +16,7 @@ from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
+from audiagentic.foundation.features.config_status import implementation_config_status
 from audiagentic.foundation.features.lifecycle import enable_implementation
 from audiagentic.foundation.features.registry import get_implementation, get_implementations
 from audiagentic.foundation.features.state import (
@@ -63,11 +64,18 @@ def memory_status(project_root: Path) -> dict[str, Any]:
             "warning": "No memory implementation available",
         }
 
-    impl_state = get_implementation_state(project_root, _COMPONENT_ID, active_impl)
-    return {
+    status = implementation_config_status(project_root, _COMPONENT_ID, active_impl)
+    result: dict[str, Any] = {
         "active_implementation": active_impl,
-        "configured": bool(impl_state.enabled or impl_state.options),
+        "enabled": status.enabled,
+        "configured": status.configured,
     }
+    if status.missing_required:
+        result["missing_required"] = [
+            {"option": m.key, "description": m.description}
+            for m in status.missing_required
+        ]
+    return result
 
 
 def memory_list_implementations(project_root: Path) -> dict[str, Any]:

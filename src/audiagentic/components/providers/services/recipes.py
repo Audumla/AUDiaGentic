@@ -271,8 +271,41 @@ class ProviderRecipeRegistry:
         if recipe is None:
             return None
         ctx = context or {}
-        result = recipe.provision(ctx)
-        return recipe.to_result(result) if hasattr(recipe, "to_result") else result
+        if hasattr(recipe, "provision"):
+            result = recipe.provision(ctx)
+            return recipe.to_result(result) if hasattr(recipe, "to_result") else result
+
+        probed = recipe.probe(ctx)
+        if probed.success and probed.state is RecipeState.VERIFIED:
+            return probed
+        owned: list[str] = []
+        for op in (recipe.install, recipe.configure):
+            result = op(ctx)
+            owned.extend(result.artifacts_owned)
+            if not result.success:
+                return ProviderRecipeResult(
+                    success=result.success,
+                    state=result.state,
+                    artifacts_owned=owned,
+                    status=result.status,
+                    error=result.error,
+                    details=dict(result.details),
+                    source_url=result.source_url,
+                    source_date=result.source_date,
+                    action_needed=result.action_needed,
+                )
+        verified = recipe.verify(ctx)
+        return ProviderRecipeResult(
+            success=verified.success,
+            state=verified.state,
+            artifacts_owned=[*owned, *verified.artifacts_owned],
+            status=verified.status,
+            error=verified.error,
+            details=dict(verified.details),
+            source_url=verified.source_url,
+            source_date=verified.source_date,
+            action_needed=verified.action_needed,
+        )
 
     def uninstall(
         self,
@@ -286,8 +319,18 @@ class ProviderRecipeRegistry:
         if recipe is None:
             return None
         ctx = context or {}
-        result = recipe.teardown(ctx)
-        return recipe.to_result(result) if hasattr(recipe, "to_result") else result
+        if hasattr(recipe, "teardown"):
+            result = recipe.teardown(ctx)
+            return recipe.to_result(result) if hasattr(recipe, "to_result") else result
+
+        for op in (recipe.prune, recipe.uninstall):
+            result = op(ctx)
+            if not result.success:
+                return result
+        probed = recipe.probe(ctx)
+        if probed.success and probed.state is RecipeState.ABSENT:
+            return ProviderRecipeResult.ok(RecipeState.ABSENT, status="removed")
+        return ProviderRecipeResult.fail("integration still present after teardown")
 
     def dry_run(
         self,
@@ -322,9 +365,10 @@ class ProviderRecipeRegistry:
         if recipe is None:
             return None
         ctx = context or {}
-        recipe.prune(ctx)
-        result = recipe.provision(ctx)
-        return recipe.to_result(result) if hasattr(recipe, "to_result") else result
+        pruned = recipe.prune(ctx)
+        if not pruned.success:
+            return pruned
+        return self.install(provider_id, capability_id, backend_id, ctx)
 
 
 __all__ = [
