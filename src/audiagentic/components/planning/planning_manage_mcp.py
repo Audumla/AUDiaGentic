@@ -7,7 +7,6 @@ from typing import Any
 
 from audiagentic.foundation.features.lifecycle import enable_implementation
 from audiagentic.foundation.features.registry import get_implementations
-from audiagentic.foundation.features.state import get_component_state
 from audiagentic.foundation.mcp.component_server import (
     log_tool_call,
     mcp_server,
@@ -23,39 +22,20 @@ _COMPONENT_ID = "agent-planning"
 
 def _active_implementation(project_root: Path) -> str:
     """Return the enabled implementation ID, or the first registered default."""
-    component = get_component_state(project_root, _COMPONENT_ID)
-    implementations = component.get("implementations") or {}
-    if isinstance(implementations, dict):
-        for impl_id, state in implementations.items():
-            if isinstance(state, dict) and state.get("enabled"):
-                return impl_id
-    # Fall back to descriptor-defined default, then first sorted
-    impls = get_implementations(_COMPONENT_ID)
-    for impl_id in sorted(impls):
-        if impls[impl_id].raw.get("default"):
-            return impl_id
-    return next(iter(sorted(impls)), "local-docs")
+    from audiagentic.components.planning.planning_api import active_implementation_id
+    return active_implementation_id(project_root)
 
 
 @mcp.tool()
 @log_tool_call
 def planning_status() -> dict[str, Any]:
-    """Return planning component status: active implementation and item counts."""
-    from audiagentic.components.planning.planning_api import list_items
-    root = project_root_from_env()
-    active_items = list_items(root, state="active")
-    completed_items = list_items(root, state="completed")
-    return {
-        "implementation": _active_implementation(root),
-        "pending_items": len(active_items),
-        "completed_items": len(completed_items),
-    }
+    from audiagentic.components.planning.planning_api import planning_status as _status
+    return _status(project_root_from_env())
 
 
 @mcp.tool()
 @log_tool_call
 def planning_list_implementations() -> dict[str, Any]:
-    """List available planning implementations and the currently active one."""
     root = project_root_from_env()
     impls = get_implementations(_COMPONENT_ID)
     return {
@@ -73,10 +53,6 @@ def planning_list_implementations() -> dict[str, Any]:
 @mcp.tool()
 @log_tool_call
 def planning_select_implementation(implementation: str) -> dict[str, Any]:
-    """Switch the active planning implementation.
-
-    With implementation-cardinality exclusive, enabling one disables all others.
-    """
     root = project_root_from_env()
     return enable_implementation(root, _COMPONENT_ID, implementation)
 
