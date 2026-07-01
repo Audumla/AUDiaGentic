@@ -34,6 +34,8 @@ class OptionSchema:
     minimum: int | float | None = None
     maximum: int | float | None = None
     allow_unknown: bool = False
+    required: bool = False
+    description: str = ""
 
 
 @dataclass(frozen=True, kw_only=True)
