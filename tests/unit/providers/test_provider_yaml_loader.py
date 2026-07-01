@@ -43,7 +43,7 @@ class TestProviderYamlLoader:
         assert descriptor.cli_install is not None
         assert descriptor.cli_install.executable == "claude"
         assert descriptor.mcp_config is not None
-        assert descriptor.mcp_config.config_path == ".mcp.json"
+        assert descriptor.mcp_config.config_path == "~/.claude/mcp.json"
         assert descriptor.mcp_config.reader is read_mcp_json
         assert descriptor.mcp_config.writer is write_mcp_json
         assert descriptor.mcp_config.remover is remove_mcp_json
@@ -121,6 +121,7 @@ class TestProviderYamlLoader:
         descriptor = load_provider_descriptor(pi_path)
         from audiagentic.foundation.workflow.invocation.steps import CallableStep
 
+        assert descriptor.cli_install is not None
         assert isinstance(descriptor.cli_install.install, CallableStep)
         assert isinstance(descriptor.cli_install.uninstall, CallableStep)
 
@@ -162,7 +163,10 @@ class TestLoadProvidersFromDirectory:
     def test_load_all_providers(self) -> None:
         """Load all providers from config directory."""
         providers = load_providers_from_directory(get_providers_config_dir())
-        assert "claude" in providers
-        assert "pi" in providers
+        expected = {"aider", "claude", "cline", "codex", "continue", "copilot",
+                     "gemini", "goose", "local-openai", "opencode", "openhands",
+                     "pi", "plandex", "qwen", "roo"}
+        loaded = set(providers)
+        assert expected == loaded, f"Missing: {expected - loaded}, Extra: {loaded - expected}"
         for descriptor in providers.values():
             assert isinstance(descriptor, ProviderDescriptor)

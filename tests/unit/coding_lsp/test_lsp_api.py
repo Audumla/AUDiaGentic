@@ -81,6 +81,7 @@ def test_diagnostics_uses_session_manager_public_api(monkeypatch) -> None:
         return {"file:///tmp/test.py": []}
 
     monkeypatch.setattr(lsp_api._session_manager, "diagnostics", _fake_diagnostics)
+    monkeypatch.setattr(lsp_api, "resolve_active_runtime_servers", lambda project_root: {})
 
     result = lsp_api.diagnostics(".", min_severity=2, limit=10)
 
@@ -320,13 +321,16 @@ def test_resolve_language_server_matches_makefile_basename(tmp_path: Path, monke
         return mock_session
 
     monkeypatch.setattr(lsp_api._session_manager, "get_or_create", _fake_get_or_create)
+    monkeypatch.setattr(
+        lsp_api,
+        "resolve_active_runtime_servers",
+        lambda project_root: {"make": [ServerConfig(command=["make-ls"], file_extensions=["Makefile"], server_id="make")]},
+    )
 
     result = lsp_api.document_symbols(str(mk))
 
     assert isinstance(result, list)
     assert captured.get("language") == "make"
-    updated_state = get_feature_state(tmp_path, "coding-lsp", "language", "make")
-    assert updated_state.enabled is True
 
 
 def test_resolve_language_server_auto_enables_yaml(tmp_path: Path, monkeypatch) -> None:

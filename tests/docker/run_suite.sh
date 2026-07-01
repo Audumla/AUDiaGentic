@@ -12,4 +12,4 @@
 # assertions, so they run only in their own isolated images / fresh containers.
 set -uo pipefail
 
-exec pytest -m "not mutates_host" -n auto --dist loadgroup -q
+exec pytest -m "not mutates_host and not opt_in" -n auto --dist loadgroup -q

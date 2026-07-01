@@ -263,7 +263,10 @@ def test_diagnostics_cli_scan_uses_shell_wrapper_on_windows(monkeypatch) -> None
         captured["kwargs"] = kwargs
         return subprocess.CompletedProcess(cmd, 0, stdout='{"generalDiagnostics":[]}', stderr="")
 
-    monkeypatch.setattr("audiagentic.components.coding_lsp.lsp_diagnostics.os.name", "nt")
+    monkeypatch.setattr(
+        "audiagentic.components.coding_lsp.lsp_diagnostics._use_shell_for_batch_cli",
+        lambda: True,
+    )
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     session.diagnostics()
