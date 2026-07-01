@@ -79,7 +79,7 @@ class RecipeResult:
         return cls(success=False, state=state, error=error, details=dict(details or {}))
 
 
-# A cleanup hook performs provider-specific teardown that falls outside generic
+# A cleanup hook performs integration-specific teardown that falls outside generic
 # file/key/hook management — e.g. calling a backend API to deregister a client.
 # It receives the recipe context and raises on failure.
 CleanupHook = Callable[[dict[str, Any]], None]
