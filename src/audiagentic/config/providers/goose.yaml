@@ -1,0 +1,55 @@
+# Goose (Block) — provider descriptor
+# Explicit shell steps for install/uninstall, custom YAML MCP format
+
+provider_id: goose
+display_name: "Goose (Block)"
+description: "Open-source AI agent by Block. Extensible toolkit of MCP extensions for dev workflows."
+url: "https://block.github.io/goose"
+
+cli_probe:
+  - goose
+  - "--version"
+
+cli_install:
+  package_manager: script
+  package_name: "https://github.com/block/goose/releases/download/stable/download_cli.sh"
+  executable: goose
+  install:
+    type: shell
+    id: install
+    command:
+      - bash
+      - "-lc"
+      - "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash"
+  uninstall:
+    type: shell
+    id: uninstall
+    command:
+      - bash
+      - "-lc"
+      - "rm -f \"$HOME/.local/bin/goose\""
+
+host_capabilities: []
+
+permissions:
+  can_write_files: true
+  can_execute_shell: true
+  can_browse_web: true
+  can_read_env: true
+  notes: "On-machine agent with MCP/tool orchestration and local/Ollama provider support"
+
+agent_files:
+  - rel_path: ".goose/config.yaml"
+    managed: false
+    description: "Goose project configuration"
+  - rel_path: "AGENTS.md"
+    managed: false
+    description: "Shared project instructions"
+
+mcp_config:
+  config_path: ".goose/config.yaml"
+  reader: "audiagentic.components.providers.adapters.goose.mcp_format:read_goose_yaml"
+  writer: "audiagentic.components.providers.adapters.goose.mcp_format:write_goose_yaml"
+  remover: "audiagentic.components.providers.adapters.goose.mcp_format:remove_goose_yaml"
+  format: "goose-yaml"
+  refresh_mode: "restart-required"
