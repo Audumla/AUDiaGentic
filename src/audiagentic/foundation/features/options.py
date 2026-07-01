@@ -25,6 +25,8 @@ def option_schema_from_mapping(data: dict[str, Any]) -> OptionSchema:
         minimum=data.get("min"),
         maximum=data.get("max"),
         allow_unknown=bool(data.get("allow-unknown", False)),
+        required=bool(data.get("required", False)),
+        description=str(data.get("description", "")),
     )
 
 
