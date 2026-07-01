@@ -222,10 +222,77 @@ def _resolve_mcp_server_name(module_name: str) -> str:
     return module_name
 
 
+class _AutoDescFastMCP(FastMCP):  # type: ignore[misc,valid-type]
+    """FastMCP subclass that auto-injects YAML tool descriptions.
+
+    When a tool is registered via ``@mcp.tool()`` without an explicit
+    description, this class resolves the module → server declaration lookup
+    and pulls the description from ``tool_descriptions`` in config.
+    Falls back to *none* (not the docstring) when no YAML description exists.
+    """
+
+    def __init__(self, module_name: str, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._module_name = module_name
+        # Cache resolved declaration to avoid repeated registry lookups.
+        self._decl: Any = None
+
+    def _get_decl(self) -> Any:
+        if self._decl is None:
+            try:
+                from audiagentic.foundation.components.loader import register_all_components
+                from audiagentic.foundation.components.registry import all_descriptors
+
+                register_all_components()
+                server_name = _resolve_mcp_server_name(self._module_name)
+                if server_name is None:
+                    self._decl = None
+                    return None
+                for descriptor in all_descriptors().values():
+                    for srv in descriptor.mcp_servers:
+                        if srv.name == server_name:
+                            self._decl = srv
+                            return srv
+            except Exception:
+                logger.warning(
+                    "Failed to resolve tool-description decl for %s",
+                    self._module_name,
+                    exc_info=True,
+                )
+            self._decl = None
+        return self._decl
+
+    def tool(self, *args: Any, **kwargs: Any) -> Callable[[Any], Any]:
+        # Detect when @mcp.tool() is used without a description argument.
+        has_desc = False
+        if args and isinstance(args[0], str):
+            has_desc = True  # positional description arg
+        elif "description" in kwargs:
+            has_desc = True
+
+        if not has_desc:
+            decl = self._get_decl()
+            if decl is not None:
+                # Return a custom decorator that resolves the function name at decoration time.
+                def _custom_decorator(func: Any) -> Any:
+                    desc = tool_description(decl, func.__name__)
+                    if desc:
+                        kwargs["description"] = desc
+                    return super(_AutoDescFastMCP, self).tool(*args, **kwargs)(func)  # type: ignore[misc]
+
+                return _custom_decorator  # type: ignore[return-value]
+
+        return super().tool(*args, **kwargs)
+
+
 def mcp_server(module_name: str, instructions: str = "") -> FastMCP:
-    """Create a FastMCP instance whose name is resolved from component config."""
+    """Create a FastMCP instance whose name is resolved from component config.
+
+    Tools registered via ``@mcp.tool()`` (no explicit description) automatically
+    pick up their description from the server's ``tool-descriptions`` YAML block.
+    """
     name = _resolve_mcp_server_name(module_name)
-    return FastMCP(name, instructions=instructions)
+    return _AutoDescFastMCP(module_name, name, instructions=instructions)  # type: ignore[return-value]
 
 
 def run_mcp_server(server: FastMCP, bootstrap_name: str) -> None:
