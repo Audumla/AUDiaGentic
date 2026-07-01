@@ -69,6 +69,23 @@ def test_status_unknown_component(tmp_path):
     _cli("component", "status", "no-such-component", project=tmp_path, expect_rc=1)
 
 
+def test_status_surfaces_component_detail_and_config_guidance(tmp_path):
+    """A component with a status hook reports config completeness + next steps.
+
+    memory declares a status hook; its hindsight backend requires `base-url`.
+    A fresh install must report configured=false and name the missing option so
+    the CLI can guide the user — no bespoke per-component wiring involved.
+    """
+    _cli("component", "install", "memory", project=tmp_path)
+
+    status = _cli("component", "status", "memory", project=tmp_path)
+    detail = status["detail"]
+    assert detail["configured"] is False
+    missing = {m["option"]: m["description"] for m in detail["missing_required"]}
+    assert "base-url" in missing
+    assert missing["base-url"], "missing option must carry its description for CLI guidance"
+
+
 # ── install → status → disable → enable → uninstall ──────────────────────────
 
 LIFECYCLE_COMPONENTS = [

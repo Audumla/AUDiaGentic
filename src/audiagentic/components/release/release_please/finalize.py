@@ -31,7 +31,7 @@ def render_release_docs(
         id_set = set(released_event_ids)
         release_events = [e for e in events if e.get("event-id") in id_set]
     else:
-        release_events = [e for e in events if e.get("release-id") == release_id]
+        release_events = [e for e in events if e.get("release-id") == release_id or not e.get("release-id")]
 
     change_lines = [f"## {release_id}"]
     for event in sorted(release_events, key=lambda e: e.get("event-id", "")):

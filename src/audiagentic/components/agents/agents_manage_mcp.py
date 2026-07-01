@@ -13,7 +13,6 @@ mcp = mcp_server(__name__)
 @mcp.tool()
 @log_tool_call
 def agent_list_profiles() -> list:
-    """List all agent profiles with summary information."""
     from audiagentic.components.agents.agents_api import list_profiles
     return list_profiles(project_root_from_env())
 
@@ -21,7 +20,6 @@ def agent_list_profiles() -> list:
 @mcp.tool()
 @log_tool_call
 def agent_get_profile(profile_id: str) -> dict:
-    """Get a specific agent profile by ID."""
     from audiagentic.components.agents.agents_api import get_profile
     return get_profile(project_root_from_env(), profile_id)
 
@@ -29,11 +27,6 @@ def agent_get_profile(profile_id: str) -> dict:
 @mcp.tool()
 @log_tool_call
 def agent_create_profile(profile: dict) -> dict:
-    """Create a new agent profile.
-
-    Required: profile_id, provider_id, model_id.
-    Optional: model_alias, params, is_default, description.
-    """
     from audiagentic.components.agents.agents_api import create_profile
     return create_profile(project_root_from_env(), profile)
 
@@ -41,7 +34,6 @@ def agent_create_profile(profile: dict) -> dict:
 @mcp.tool()
 @log_tool_call
 def agent_update_profile(profile_id: str, updates: dict) -> dict:
-    """Update an existing agent profile. profile_id is immutable."""
     from audiagentic.components.agents.agents_api import update_profile
     return update_profile(project_root_from_env(), profile_id, updates)
 
@@ -49,7 +41,6 @@ def agent_update_profile(profile_id: str, updates: dict) -> dict:
 @mcp.tool()
 @log_tool_call
 def agent_delete_profile(profile_id: str) -> dict:
-    """Delete an agent profile by ID."""
     from audiagentic.components.agents.agents_api import delete_profile
     return delete_profile(project_root_from_env(), profile_id)
 

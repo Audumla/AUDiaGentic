@@ -14,28 +14,18 @@ mcp = mcp_server(__name__)
 @mcp.tool()
 @log_tool_call
 def agent_resolve_profile(profile_id: str) -> dict:
-    """Resolve an agent profile by ID.
-
-    Returns provider_id, model_id, model_alias, and params.
-    Raises RES-AGP-001 if not found.
-    """
     return agents_api.resolve_profile(project_root_from_env(), profile_id)
 
 
 @mcp.tool()
 @log_tool_call
 def agent_resolve_default_profile() -> dict:
-    """Resolve the agent profile marked as default.
-
-    Raises RES-AGP-003 if no default profile exists.
-    """
     return agents_api.resolve_default_profile(project_root_from_env())
 
 
 @mcp.tool()
 @log_tool_call
 def agent_list_profiles() -> list:
-    """List all agent profiles with summary information."""
     return agents_api.list_profiles(project_root_from_env())
 
 

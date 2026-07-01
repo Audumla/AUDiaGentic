@@ -343,6 +343,8 @@ class LspJsonRpc:
     def __del__(self) -> None:
         if self._process is not None and self._process.poll() is None:
             try:
-                self._process.terminate()
+                terminate = getattr(self._process, "terminate", None)
+                if callable(terminate):
+                    terminate()
             except OSError:
                 pass

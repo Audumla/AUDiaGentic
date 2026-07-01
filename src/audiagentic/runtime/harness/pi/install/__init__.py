@@ -156,7 +156,7 @@ def refresh_materialized_agent_config(target: Path, project_root: Path | None = 
 
 def mcp_config_path(project_root: Path | None = None) -> Path:
     from audiagentic.runtime.harness.pi.mcp_format import pi_mcp_path
-    return pi_mcp_path()
+    return pi_mcp_path(project_root)
 
 
 def read_mcp_config(path: Path) -> dict:

@@ -197,7 +197,10 @@ def materialize_agent_config(
         json.dumps(_build_models_config(harness_cfg, model_id, model_profile), indent=2) + "\n",
         encoding="utf-8",
     )
-    (agent_dir / "mcp.json").write_text(
+    from audiagentic.runtime.harness.pi.mcp_format import pi_mcp_path
+    mcp_path = pi_mcp_path(_resolve_project_root(project_root))
+    mcp_path.parent.mkdir(parents=True, exist_ok=True)
+    mcp_path.write_text(
         json.dumps(_build_mcp_config(harness_cfg, project_root=project_root), indent=2) + "\n",
         encoding="utf-8",
     )
