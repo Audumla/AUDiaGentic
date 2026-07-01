@@ -48,12 +48,28 @@ class HindsightBackendConfig:
         return result
 
 
+def _resolve_base_url(config: dict) -> str:
+    """Resolve the backend base URL from config options.
+
+    Standard path: compose ``{scheme}://{host}:{port}`` from the host (required),
+    port (default 8888), and scheme (default http) options. Legacy configs that
+    stored a full ``base-url`` are still honored as a read-time fallback so
+    existing setups keep working without reconfiguration.
+    """
+    host = config.get("host", "")
+    if host:
+        scheme = config.get("scheme", "http")
+        port = config.get("port", 8888)
+        return f"{scheme}://{host}:{port}"
+    return config.get("base-url") or config.get("base_url", "")
+
+
 def build_hindsight_backend(project_root: Path) -> HindsightBackendConfig | None:
     """Build HindsightBackendConfig from active memory implementation state.
 
     Reads the active implementation via _active_implementation_id, constructs
-    the backend config from its options. Returns None when base-url is empty
-    or unset.
+    the backend config from its options. Returns None when the host (or a legacy
+    base-url) is unset.
 
     This is the canonical entry point for Hindsight implementation recipes to
     obtain backend config.
@@ -70,7 +86,7 @@ def build_hindsight_backend(project_root: Path) -> HindsightBackendConfig | None
         return None
 
     config = dict(impl_state.options)
-    base_url = config.get("base-url") or config.get("base_url", "")
+    base_url = _resolve_base_url(config)
     if not base_url:
         return None
 

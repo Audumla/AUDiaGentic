@@ -1,31 +1,19 @@
 """Launch helpers for component MCP servers."""
 from __future__ import annotations
 
-import os
 import sys
-from pathlib import Path
 
 
 def mcp_interpreter() -> str:
     """Return the interpreter that should launch component MCP servers.
 
-    Prefers the windowless ``pythonw.exe`` sibling of the running interpreter on
-    Windows so each stdio server starts without allocating a console — no
-    ``conhost.exe`` and no flashing console window per server (stdio pipes are
-    inherited regardless of subsystem, so the MCP transport is unaffected).
-    Falls back to ``sys.executable`` when pythonw is absent (every POSIX case,
-    and unusual Windows layouts).
-
-    Using the interpreter directly also drops the ``audiagentic.exe``
-    console-script stub from the process chain (stub -> venv python -> base
-    python becomes venv pythonw -> base python).
+    Returns ``sys.executable`` (python.exe on Windows, python3/python on POSIX).
+    stdio-based MCP transports require a live stdout — pythonw.exe suppresses
+    all output including stdout, which silently breaks MCP connectivity when the
+    host (e.g. Claude Code) spawns servers via stdio. The minor UX cost of a
+    transient console window on Windows is not worth breaking the transport.
     """
-    exe = Path(sys.executable)
-    if os.name == "nt":
-        windowless = exe.with_name("pythonw.exe")
-        if windowless.exists():
-            return str(windowless)
-    return str(exe)
+    return str(sys.executable)
 
 
 def component_mcp_launch(

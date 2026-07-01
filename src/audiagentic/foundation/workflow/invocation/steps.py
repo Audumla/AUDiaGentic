@@ -97,12 +97,17 @@ class ShellStep:
 
         command = self._render_command(context)
         manager = command[0]
-        if shutil.which(manager) is None:
+        resolved = shutil.which(manager)
+        if resolved is None:
             return StepResult(
                 status="failed",
                 outputs={"command": list(command)},
                 reason=f"{manager} is not available on PATH",
             )
+        # Use the fully resolved path so Windows executes npm/.cmd/.bat shims:
+        # bare Popen(["claude", ...]) fails with WinError 2 because it does not
+        # apply PATHEXT, but shutil.which() does. No-op on POSIX.
+        command = (resolved, *command[1:])
 
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
@@ -121,6 +126,10 @@ class ShellStep:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                # Force UTF-8 decoding: the platform default (cp1252 on Windows)
+                # crashes the reader thread on non-cp1252 installer output.
+                encoding="utf-8",
+                errors="replace",
                 bufsize=1,
                 env=env,
             )

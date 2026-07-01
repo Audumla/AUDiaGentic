@@ -19,8 +19,17 @@ def read_opencode_mcp(path: Path) -> dict[str, McpServerEntry]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return {}
-    return {
-        name: McpServerEntry(
+    result: dict[str, McpServerEntry] = {}
+    for name, cfg in data.get("mcp", {}).items():
+        if cfg.get("type") == "remote":
+            result[name] = McpServerEntry(
+                name=name,
+                url=cfg.get("url"),
+                headers=dict(cfg.get("headers", {})),
+                transport="http",
+            )
+            continue
+        result[name] = McpServerEntry(
             name=name,
             command=cfg.get("command", [""])[0] if isinstance(cfg.get("command"), list) else cfg.get("command", ""),
             args=(
@@ -30,9 +39,7 @@ def read_opencode_mcp(path: Path) -> dict[str, McpServerEntry]:
             ),
             env=dict(cfg.get("environment", {})),
         )
-        for name, cfg in data.get("mcp", {}).items()
-        if cfg.get("type") != "remote"
-    }
+    return result
 
 
 def write_opencode_mcp(path: Path, entries: dict[str, McpServerEntry]) -> None:
@@ -45,10 +52,15 @@ def write_opencode_mcp(path: Path, entries: dict[str, McpServerEntry]) -> None:
             pass
     servers: dict[str, Any] = existing.get("mcp", {})
     for name, entry in entries.items():
-        cmd = [entry.command] + list(entry.args)
-        cfg: dict[str, Any] = {"type": "local", "command": cmd}
-        if entry.env:
-            cfg["environment"] = dict(entry.env)
+        if entry.is_remote:
+            cfg = {"type": "remote", "url": entry.url}
+            if entry.headers:
+                cfg["headers"] = dict(entry.headers)
+        else:
+            cmd = [entry.command] + list(entry.args)
+            cfg = {"type": "local", "command": cmd}
+            if entry.env:
+                cfg["environment"] = dict(entry.env)
         servers[name] = cfg
     existing["mcp"] = servers
     path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")

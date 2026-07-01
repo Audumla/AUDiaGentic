@@ -17,12 +17,12 @@ import yaml
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.loader import load_feature_from_yaml
-from audiagentic.paths import SRC_ROOT
 
 from .base import ActionDescriptor, ActionFile, ActionInstruction, ActionPrompt
 from .registry import register
 
-_CONFIG_ROOT = SRC_ROOT / "audiagentic" / "config"
+_PACKAGE_DIR = Path(__file__).resolve().parents[3]
+_CONFIG_ROOT = _PACKAGE_DIR / "config"
 
 
 def _tag_loader_error(path: Path, code: str, message: str, **details: Any) -> AudiaGenticError:

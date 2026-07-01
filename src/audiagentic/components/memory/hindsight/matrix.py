@@ -43,6 +43,7 @@ class HindsightRecipeRow:
     source_url: str = ""
     source_date: str = ""
     notes: str = ""
+    plugin_url_config_path: str = ""
 
 
 _RECIPE_KIND_MAP = {
@@ -90,6 +91,7 @@ def _load_matrix() -> list[HindsightRecipeRow]:
             source_url=entry.get("source_url", ""),
             source_date=entry.get("source_date", ""),
             notes=entry.get("notes", ""),
+            plugin_url_config_path=entry.get("plugin_url_config_path", ""),
         ))
     return rows
 
