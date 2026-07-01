@@ -10,14 +10,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import TypeVar
+from typing import Generic, TypeVar
 
 from .loader import DescriptorSpec, iter_descriptor_files, load_descriptor
 
 T = TypeVar("T")
 
 
-class DescriptorRegistry:
+class DescriptorRegistry(Generic[T]):
     """Generic registry for typed descriptors.
 
     Maps string IDs to descriptor instances. Supports YAML-based loading
@@ -69,7 +69,7 @@ class DescriptorRegistry:
             descriptor = load_descriptor(path, spec)
             desc_id = descriptor.get(id_field) if isinstance(descriptor, dict) else getattr(descriptor, id_field, None)
             if desc_id:
-                self.register(desc_id, descriptor)
+                self.register(desc_id, descriptor)  # type: ignore[arg-type]
 
     def alias_map(
         self,

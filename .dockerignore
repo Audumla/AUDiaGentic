@@ -5,6 +5,7 @@
 !pyproject.toml
 !release-please-config.json
 !README.md
+!.gitignore
 !AGENTS.md
 !CLAUDE.md
 !GEMINI.md
@@ -19,6 +20,9 @@
 !src/**
 !tests/
 !tests/**
+tests/**/__pycache__
+tests/**/__pycache__/**
+tests/unit/runtime/Qwen3.5-0.8B-UD-Q5_K_XL.gguf
 
 !docs/
 !docs/examples/
