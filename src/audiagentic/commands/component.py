@@ -52,6 +52,7 @@ def _cmd_component_list(_args: Any, project_root: Path) -> int:
 
 
 def _cmd_component_status(args: Any, project_root: Path) -> int:
+    from audiagentic.foundation.components.hooks import get_component_status
     from audiagentic.foundation.components.loader import register_all_components
     from audiagentic.foundation.components.registry import (
         get_descriptor,
@@ -63,16 +64,22 @@ def _cmd_component_status(args: Any, project_root: Path) -> int:
 
     component_id: str = args.component_id
 
-    if get_descriptor(component_id) is None:
+    descriptor = get_descriptor(component_id)
+    if descriptor is None:
         print_json({"ok": False, "error": f"unknown component: {component_id}"})
         return 1
 
     installed = is_installed(component_id, project_root)
-    result = {
+    result: dict[str, Any] = {
         "component_id": component_id,
         "installed": installed,
         "enabled": is_enabled(component_id, project_root) if installed else None,
     }
+    # Surface the component's own status (configuration completeness, next steps)
+    # when it declares a status hook. Generic — the CLI never branches on id.
+    detail = get_component_status(descriptor, project_root)
+    if detail is not None:
+        result["detail"] = detail
     print_json(result)
     return 0
 
