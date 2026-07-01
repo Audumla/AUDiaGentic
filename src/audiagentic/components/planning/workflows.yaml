@@ -1,0 +1,30 @@
+# Planning state workflows. Loaded by planning_api.py via the shared
+# foundation.workflow.transitions primitives. Item and review state sets and
+# their legal transitions are defined here, not hardcoded in Python. The host
+# still owns folder placement (active/ vs completed/) and input aliases.
+kinds:
+  item:
+    default-workflow: standard
+    workflows:
+      standard:
+        initial: pending
+        values: [pending, completed]
+        transitions:
+          pending: [completed]
+          completed: [pending]
+        state-sets:
+          terminal: [completed]
+          active: [pending]
+  review:
+    default-workflow: standard
+    workflows:
+      standard:
+        initial: created
+        values: [created, considered, closed]
+        transitions:
+          created: [considered, closed]
+          considered: [created, closed]
+          closed: [created, considered]
+        state-sets:
+          terminal: [closed]
+          active: [created, considered]
