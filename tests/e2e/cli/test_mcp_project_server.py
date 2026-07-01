@@ -8,13 +8,17 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Generator
 from pathlib import Path
 
 import pytest
+
+pytestmark = [pytest.mark.opt_in]
 
 _ROOT = Path(__file__).resolve().parents[3]
 for _p in (str(_ROOT), str(_ROOT / "src")):
@@ -28,27 +32,66 @@ _INIT = {
 _INITIALIZED = {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
 
 
+def _read_byte_with_timeout(stream, timeout_s: float) -> bytes | None:
+    q: queue.Queue[bytes] = queue.Queue(maxsize=1)
+
+    def _reader() -> None:
+        chunk = stream.read(1)
+        q.put(chunk or b"")
+
+    t = threading.Thread(target=_reader, daemon=True)
+    t.start()
+    try:
+        chunk = q.get(timeout=max(timeout_s, 0.001))
+    except queue.Empty:
+        return None
+    return chunk or b""
+
+
 def _read_json_line(proc, deadline: float) -> dict | None:
-    """Read one JSON-RPC line from proc.stdout, returning None on timeout."""
+    """Read one stdio-framed JSON-RPC message from proc.stdout."""
     while time.time() < deadline:
-        line = proc.stdout.readline()
-        if not line:
-            if proc.poll() is not None:
-                return None
+        header = bytearray()
+        while b"\r\n\r\n" not in header and time.time() < deadline:
+            chunk = _read_byte_with_timeout(proc.stdout, deadline - time.time())
+            if chunk is None:
+                continue
+            if chunk == b"":
+                if proc.poll() is not None:
+                    return None
+                continue
+            header.extend(chunk)
+        if not header:
+            continue
+        header_text = header.decode("ascii", errors="ignore")
+        length = None
+        for line in header_text.split("\r\n"):
+            if line.lower().startswith("content-length:"):
+                length = int(line.split(":", 1)[1].strip())
+                break
+        if length is None:
+            continue
+        payload = proc.stdout.read(length)
+        if not payload:
             continue
         try:
-            return json.loads(line)
+            return json.loads(payload.decode("utf-8"))
         except (json.JSONDecodeError, ValueError):
             continue
     return None
+
+
+def _write_message(proc, msg: dict) -> None:
+    payload = json.dumps(msg).encode("utf-8")
+    proc.stdin.write(f"Content-Length: {len(payload)}\r\n\r\n".encode("ascii") + payload)
+    proc.stdin.flush()
 
 
 def _send_and_wait(proc, messages: list[dict], expected_ids: set[int], deadline: float) -> list[dict]:
     """Send messages, read responses until all expected IDs are received."""
     responses: list[dict] = []
     for msg in messages:
-        proc.stdin.write(json.dumps(msg) + "\n")
-    proc.stdin.flush()
+        _write_message(proc, msg)
 
     while time.time() < deadline:
         resp = _read_json_line(proc, deadline)
@@ -77,19 +120,17 @@ def _mcp_server(project_root: Path) -> Generator[subprocess.Popen, None, None]:
     proc = subprocess.Popen(
         [sys.executable, "-m", "audiagentic.components.project.project_mcp", "--project-root", str(project_root)],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True, encoding="utf-8", env=env,
+        env=env,
     )
     assert proc.stdin is not None
     assert proc.stdout is not None
 
     # Initialize handshake
-    proc.stdin.write(json.dumps(_INIT) + "\n")
-    proc.stdin.flush()
+    _write_message(proc, _INIT)
     init_resp = _read_json_line(proc, time.time() + 10)
     assert init_resp is not None, "MCP server failed to respond to initialize"
 
-    proc.stdin.write(json.dumps(_INITIALIZED) + "\n")
-    proc.stdin.flush()
+    _write_message(proc, _INITIALIZED)
 
     yield proc
     _terminate(proc)

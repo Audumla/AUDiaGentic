@@ -36,12 +36,6 @@ def lsp_select_implementation(root: str = ".", implementation: str = "") -> dict
 @mcp.tool()
 @log_tool_call
 async def lsp_add_language(root: str = ".", language: str = "") -> dict[str, Any]:
-    """Enable a language and install its server binaries in one step.
-
-    Name only the language (e.g. "python"); dependency ids and binaries are
-    resolved and installed automatically. Atomic: if the install fails, the
-    language is not left enabled.
-    """
     resolved = root if root != "." else str(project_root_from_env())
     return await lsp_config_api.enable_language(resolved, language)
 

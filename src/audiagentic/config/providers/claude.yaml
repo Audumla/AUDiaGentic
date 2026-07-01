@@ -43,10 +43,10 @@ agent_files:
 instruction_file: "CLAUDE.md"
 skill_surface_path: ".claude/skills/{tag}/SKILL.md"
 
-fetch_catalog_fn: "audiagentic.components.providers.adapters.claude.descriptor:_fetch_claude_catalog"
+fetch_catalog_fn: "audiagentic.components.providers.adapters.claude.catalog:_fetch_claude_catalog"
 
 mcp_config:
-  config_path: ".mcp.json"
+  config_path: "~/.claude/mcp.json"
   reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
   writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
   remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"

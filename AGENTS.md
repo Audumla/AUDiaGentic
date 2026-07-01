@@ -61,6 +61,16 @@ parameters. They are stored in .audiagentic/config/agent-profiles.yaml.
 Use `agent-profile-id` (NOT `profile-id`) in job requests to avoid
 collision with `workflow-profile` (lite/standard/strict stage pipelines).
 
+## Memory component
+
+Memory is backed by a swappable backend. Use the ag-memory-mgmt MCP tools
+to check status, switch implementations, and configure the active backend.
+- `memory_status` — Active implementation and configuration state
+- `memory_select_implementation` — Switch memory backend
+- `memory_get_config` / `memory_set_config` — Read and update backend config
+- When memory is configured, the active backend's tools are available for
+  long-term memory operations (recall, reflect, retain).
+
 ## Release doctrine
 
 Use the configured release manager for versioning and publication.

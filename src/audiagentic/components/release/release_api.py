@@ -27,6 +27,9 @@ from audiagentic.components.release.github_auth import (
 from audiagentic.components.release.github_auth import (
     start_device_flow as _start_device_flow,
 )
+from audiagentic.components.release.local_release import (
+    build_release_artifacts as _build_release_artifacts,
+)
 from audiagentic.components.release.release_please import install as _rp_install
 from audiagentic.components.release.release_please import manage as _rp_manage
 from audiagentic.components.release.release_please.finalize import render_release_docs
@@ -206,3 +209,30 @@ def clear_github_auth() -> dict[str, Any]:
     """Remove stored GitHub token."""
     _clear_token()
     return {"cleared": True}
+
+
+def build_release_artifacts(
+    release_id: str = "rel_0003",
+    tag: bool = True,
+    pypi: bool = False,
+    github_release: bool = False,
+    interactive: bool = True,
+) -> dict[str, Any]:
+    """Build release artifacts locally without GitHub CI/CD.
+
+    Performs the full release pipeline: ledger archival, doc rendering,
+    wheel/sdist build, and optional tagging/publishing.
+
+    This is an alternative to dispatch_release_workflow for environments
+    where GitHub CI/CD is not available or desired.
+    """
+    from audiagentic.foundation.mcp.component_server import project_root_from_env
+
+    return _build_release_artifacts(
+        project_root=project_root_from_env(),
+        release_id=release_id,
+        tag=tag,
+        pypi=pypi,
+        github_release=github_release,
+        interactive=interactive,
+    )

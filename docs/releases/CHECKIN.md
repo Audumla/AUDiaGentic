@@ -1,23 +1,29 @@
 # Check-In Summary
 
-Total changes: 19
+Total changes: 25
 
-- Fixed GitHub authentication for release dispatch: device-flow OAuth now works as a non-blocking start/poll pair over MCP, with GITHUB_TOKEN environment-variable support as an immediate alternative.
-- LSP tools now auto-install missing language servers from their YAML recipes when a file is opened
-- Added Agent Profiles component: manage provider+model bindings per-project, resolve profiles at job launch, with MCP tools for CRUD and resolution. Agent jobs now support agent-profile-id directive with automatic provider enablement checks.
-- Fixed stale MCP and language-server processes piling up after the agent host exits or is killed — child processes are now reliably terminated with their parent on all platforms.
-- MCP servers now launch without flashing console windows and with fewer background processes each, and every provider config — even ones you're not currently using — is kept in sync.
-- Tests now run from one command (`make test-all` / `tests/run_all.py`): the full non-Docker suite executes in parallel, and Docker suites run automatically when a daemon is present. Docker images were consolidated where safe (faster, parallel CI), while the recipe install/uninstall tests stay isolated so they keep genuinely testing dependency installation.
-- Running `python tests/run_all.py` on Windows now delegates everything to Docker when a daemon is present - no duplicate test passes. If no Docker daemon, falls back to the Windows-safe non-mutating suite.
-- Unified the test suite so a single command (`python tests/run_all.py`) runs everything — when Docker is present it handles all phases; without Docker it runs the parallel host suite. Fixed 9 failures found by the first full consolidated run, covering provider descriptor metadata, LSP config key naming, Docker assertion format, and two Docker image build failures.
-- Fixed ag-lsp workspace diagnostics on Windows by launching batch diagnostic CLIs through a Windows-safe wrapper, preventing WinError 2.
-- Made ag-lsp skip broken or missing language servers instead of failing the whole request.
-- Expanded test coverage so every declared Python MCP server is smoke-tested automatically, and added a small host-side smoke phase to catch local Windows PATH/CLI breakage that Docker cannot see.
-- Fixed the broken coding-lsp status hook and hardened CLI probe decoding so MCP smoke no longer throws Unicode decode crashes.
-- Added JSON, TOML, and Makefile language support to coding-lsp, including proper Makefile basename matching and unit coverage.
-- Docker test infrastructure now includes Go toolchain and validates make-ls auto-install in a blank container environment.
-- Makefile LSP dependency now uses the structured go toolchain pattern instead of platform-specific fallback commands.
-- Added memory component — persistent memory for agent sessions with swappable backends. Hindsight is the default implementation. Memory config projects into provider surfaces with per-provider integration modes.
-- Fixed memory component architecture — removed provider-specific logic. Memory now contributes generic content through the existing surface contribution system; providers handle rendering.
-- Added a reusable provisioning-recipe foundation so provider integrations (memory/Hindsight, LSP) can install, configure, verify, and cleanly uninstall host tooling through shared, safe primitives.
-- Memory (Hindsight) and LSP now have full install/verify/uninstall recipes on the shared provisioning model, plus a verified harness integration matrix mapping each supported tool to its install strategy.
+- PRR08 complete: Provider recipe lifecycle tests added, foundation/toolchains cleaned of component-specific language, architecture boundary gates all pass, memory/provider separation verified.
+- Hindsight memory plan complete (HM01-HM09): Backend config export, remote MCP entry support, strategy contract, TOML writer for openhands, orchestration wiring, boundary gates clean.
+- Audit fixes: Matrix provider IDs, TOML writer dispatch for openhands, blocked-row gate, composite MCP+rules recipe, plan state corrections.
+- Slimmed MCP tooling config so each component owns its own tool definitions and the agent system prompt no longer carries a duplicated, cross-component tool catalog — reducing context with no loss of tool discoverability (tools are advertised directly over MCP).
+- Refactored the Hindsight provider-integration recipes to reuse shared provider-recipe code, cutting ~200 lines of duplicated boilerplate with no behavior change.
+- Job and planning state transitions are now defined in per-component workflow config files and validated through shared workflow logic, replacing hardcoded transition tables.
+- Configuring a memory backend now automatically installs Hindsight into all enabled providers (and removes it when unconfigured), with per-provider tests validating each provider's files are written and reverted correctly. Also fixed two provisioning bugs that wrote to the wrong location and broke MCP-config providers.
+- Hindsight provider installs now run for real when the memory backend is configured — multi-step installer commands execute through the existing toolchain step machinery (pointed at your external server), and providers without a native installer get an MCP config instead.
+- Fixed Hindsight MCP provider entries to point at the server's /mcp endpoint instead of the bare base URL, so providers actually connect (verified against a live server).
+- Added a Docker test that provisions Hindsight for each provider and validates the files written — including running cline's real installer in isolation — with explicit, reasoned skips for providers that can't be tested yet.
+- Fixed Hindsight provider provisioning bugs and merged its Docker e2e coverage into the main provider lifecycle image.
+- Updated Hindsight e2e coverage so no individual providers are skipped; each provider is now tested for success or expected failure.
+- Adjusted Hindsight provider e2e so the Claude case installs the real Claude CLI before testing integration.
+- Tightened Hindsight provider e2e tests to validate exact MCP config shape, managed rule blocks, and installer artifacts instead of generic URL substring checks.
+- Fixed the remaining Docker-exposed Hindsight provider install bugs and got the full provider Hindsight lifecycle test passing in Docker.
+- Stabilized provider LSP regression coverage by fixing Windows test pollution, restoring OpenHands TOML writer dependency in the LSP Docker harness, and updating e2e expectations to match current Codex and Qwen target state.
+- Cleaned and sped up the default regression path, making the main clean Docker suite and provider lifecycle/LSP suites pass again, while narrowing the remaining full-run failures to MCP subprocess harnesses and one provider-cli-comprehensive image build issue.
+- Memory (and any configurable component) now reports what configuration it still needs. Running component status on memory shows configured=false with the specific missing option (base-url) and its description, instead of a silent unconfigured state.
+- Planning now reports the same standardized configuration status as memory (active implementation, enabled, configured) through component status, using one shared derivation rather than a bespoke per-component rule.
+- Configuring memory now only needs a host (port defaults to 8888), reports a clear per-provider integration summary, cleanly skips providers with no Hindsight integration, removes stale integration from disabled providers, and no longer crashes on Windows installer output. Reversal (teardown/prune) is available for every provider.
+- Stabilized install and packaging regressions so wheel-based component, MCP, and provider validation now exercise real behavior instead of failing on source-tree assumptions.
+- Memory's enabled state now genuinely controls provider integration: disabling uninstalls Hindsight from every provider while keeping your configuration, and re-enabling reinstalls it across providers. Configured and enabled are independent — a configured backend can be switched off and back on without reconfiguring.
+- Hindsight now installs and cleanly uninstalls for Claude (and other CLI-driven providers) on Windows. Fixed a crash on installer output with special characters, a Windows path-resolution failure that prevented installers from running at all, and a gap where disabling did not actually remove the Claude plugin.
+- Added optional live per-provider tests that validate Hindsight install and teardown against the actual provider CLIs on the developer's machine, in an isolated home so they never modify the real environment. These catch platform-specific install failures and incomplete teardowns that the Docker-only tests miss.
+- Fix Claude Code MCP connectivity on Windows: servers were silently broken because pythonw.exe suppresses stdout (now uses python.exe), AUDiaGentic MCP servers now write to ~/.claude/mcp.json (globally available across all projects), and the Hindsight plugin now correctly writes its backend URL to ~/.hindsight/claude-code.json with a Windows repair for the bash→python.exe launcher issue.

@@ -104,13 +104,6 @@ def build_server() -> FastMCP:
     @mcp.tool()
     @log_tool_call
     def get_option_provenance(component_id: str | None = None) -> dict[str, Any]:
-        """Return option provenance for all features and implementations.
-
-        Shows which layer provided each option value. Source values:
-        'schema-default', 'component-state', 'feature-state', 'implementation-state'.
-
-        If component_id is provided, only returns provenance for that component.
-        """
         try:
             return project_api.get_option_provenance(project_root_from_env(), component_id)
         except Exception as exc:

@@ -25,7 +25,7 @@ def test_provider_component_mcp_projection_uses_audiagentic_mcp(monkeypatch, tmp
             ),
         ),
     )
-    provider = type("Provider", (), {"provider_id": "fake", "mcp_config": object(), "receive_lsp_mcp": True})()
+    provider = type("Provider", (), {"provider_id": "fake", "mcp_config": object()})()
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(mcp_projection, "get_descriptor", lambda component_id: descriptor)
@@ -46,6 +46,45 @@ def test_provider_component_mcp_projection_uses_audiagentic_mcp(monkeypatch, tmp
     assert entry.command == mcp_interpreter()
     assert entry.args == ("-m", "audiagentic.launcher", "mcp", "audiagentic.components.sample.sample_mcp", "--flag")
     assert entry.env == {}
+
+
+def test_provider_mcp_projection_not_gated_by_receive_lsp_mcp(monkeypatch, tmp_path: Path) -> None:
+    """receive_lsp_mcp is an LSP-only opt-out and must not gate component MCP projection."""
+    descriptor = ComponentDescriptor(
+        component_id="sample",
+        display_name="Sample",
+        description="",
+        detection_marker=".sample",
+        mcp_servers=(
+            McpServerDeclaration(
+                name="ag-sample",
+                module="audiagentic.components.sample.sample_mcp",
+                managed_id="sample/ag-sample",
+                propagate="providers",
+            ),
+        ),
+    )
+    # Provider with receive_lsp_mcp=False — must still receive component MCP servers.
+    provider = type("Provider", (), {"provider_id": "fake", "mcp_config": object(), "receive_lsp_mcp": False})()
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(mcp_projection, "get_descriptor", lambda component_id: descriptor)
+    monkeypatch.setattr(mcp_projection, "all_descriptors", lambda: {"fake": provider})
+
+    def _fake_sync(*, provider_id, project_root, desired_entries, managed_ids):
+        captured["provider_id"] = provider_id
+        captured["desired_entries"] = desired_entries
+        return {"ok": True}
+
+    monkeypatch.setattr(mcp_projection, "sync_managed_provider_mcp_subset", _fake_sync)
+
+    mcp_projection.sync_component_mcp_to_providers("sample", tmp_path)
+
+    assert captured.get("provider_id") == "fake", (
+        "receive_lsp_mcp=False must not prevent component MCP projection to a provider. "
+        "receive_lsp_mcp only gates the LSP-specific ag-lsp server (lsp_projection.py)."
+    )
+    assert "sample/ag-sample" in captured["desired_entries"]
 
 
 def test_harness_mcp_collector_uses_audiagentic_mcp(monkeypatch, tmp_path: Path) -> None:

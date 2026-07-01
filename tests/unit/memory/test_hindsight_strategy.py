@@ -31,9 +31,9 @@ class TestResolverPrecedence:
         assert row.recipe_kind == ProviderRecipeKind.MCP_CONFIG
 
     def test_guidance_provider_resolves_to_guidance(self):
-        row = resolve_hindsight_strategy("windsurf")
+        row = resolve_hindsight_strategy("local-openai")
         assert row is not None
-        assert row.recipe_kind in (ProviderRecipeKind.HYBRID, ProviderRecipeKind.GUIDANCE_ONLY)
+        assert row.recipe_kind == ProviderRecipeKind.GUIDANCE_ONLY
 
     def test_unknown_provider_returns_none(self):
         row = resolve_hindsight_strategy("nonexistent_provider")

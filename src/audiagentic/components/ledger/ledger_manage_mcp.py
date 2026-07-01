@@ -14,7 +14,6 @@ mcp = mcp_server(__name__)
 @mcp.tool()
 @log_tool_call
 def get_ledger_status() -> dict:
-    """Return ledger installation state, fragment count, and last sync time."""
     return ledger_api.get_status(project_root_from_env())
 
 
