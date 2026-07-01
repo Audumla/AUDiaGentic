@@ -13,6 +13,7 @@ from audiagentic.components.memory.hindsight.recipes import (
 )
 from audiagentic.components.memory.hindsight_export import HindsightBackendConfig
 from audiagentic.components.providers.services.recipes import ProviderRecipeKind
+from audiagentic.foundation.mcp import McpServerEntry
 from audiagentic.foundation.toolchains.artifact_registry import ArtifactRegistry
 from audiagentic.foundation.toolchains.config_reader import load_config
 from audiagentic.foundation.toolchains.recipe_contract import RecipeState
@@ -25,7 +26,7 @@ def _backend(**kw):
 def test_sse_entry_shape():
     entry = build_hindsight_entry(_backend(transport="sse", api_key="k"))
     assert entry["type"] == "sse"
-    assert entry["url"] == "https://hs.example.com"
+    assert entry["url"] == "https://hs.example.com/mcp"
     assert entry["headers"]["Authorization"] == "Bearer k"
 
 
@@ -44,7 +45,7 @@ def test_provision_writes_mcp_entry(tmp_path):
     assert result.success
     assert result.state is RecipeState.VERIFIED
     data = load_config(cfg)
-    assert data["mcpServers"]["hindsight"]["url"] == "https://hs.example.com"
+    assert data["mcpServers"]["hindsight"]["url"] == "https://hs.example.com/mcp"
 
 
 def test_provision_idempotent(tmp_path):
@@ -98,7 +99,7 @@ def test_switching_backend_url_updates_entry(tmp_path):
     HindsightMcpRecipe(
         HindsightBackendConfig(base_url="https://new.example.com"), HindsightTarget(cfg)
     ).provision({})
-    assert load_config(cfg)["mcpServers"]["hindsight"]["url"] == "https://new.example.com"
+    assert load_config(cfg)["mcpServers"]["hindsight"]["url"] == "https://new.example.com/mcp"
 
 
 def test_entry_builder_override(tmp_path):
@@ -112,6 +113,46 @@ def test_entry_builder_override(tmp_path):
     assert load_config(cfg)["mcpServers"]["hindsight"] == {
         "custom": "https://hs.example.com"
     }
+
+
+def test_provider_writer_callbacks_use_mcp_entries_and_prune(tmp_path):
+    cfg = tmp_path / "provider.toml"
+    store: dict[str, McpServerEntry] = {}
+
+    def reader(path):
+        return dict(store)
+
+    def writer(path, entries):
+        store.clear()
+        store.update(entries)
+        path.write_text("provider-owned format\n", encoding="utf-8")
+
+    def remover(path, name):
+        return store.pop(name, None) is not None
+
+    recipe = HindsightMcpRecipe(
+        _backend(api_key="k"),
+        HindsightTarget(
+            cfg,
+            writer_fn=writer,
+            reader_fn=reader,
+            remover_fn=remover,
+        ),
+        registry=ArtifactRegistry(tmp_path),
+    )
+
+    result = recipe.provision({})
+    assert result.success
+    assert store["hindsight"] == McpServerEntry(
+        name="hindsight",
+        url="https://hs.example.com/mcp",
+        headers={"Authorization": "Bearer k"},
+        transport="http",
+    )
+
+    removed = recipe.teardown({})
+    assert removed.success
+    assert "hindsight" not in store
 
 
 def test_rules_only_recipe_writes_and_removes_rule_block(tmp_path):
@@ -166,3 +207,30 @@ def test_hindsight_orchestration_entrypoints_run_selected_provider(tmp_path, mon
     torn_down = teardown_hindsight(tmp_path, backend=_backend(), provider_ids=["test"])
     assert torn_down["test"].success
     assert "audiagentic:hindsight-memory" not in rule_file.read_text(encoding="utf-8")
+
+
+def test_apply_hindsight_mcp_provider_writes_inside_project_root(tmp_path, monkeypatch):
+    """Regression: MCP-config provisioning must (a) succeed through the adapter
+    path (inner RecipeResult re-stamped, not assumed ProviderRecipeResult) and
+    (b) write inside project_root, never relative to the current directory."""
+    import audiagentic.components.providers  # noqa: F401  (register descriptors)
+    from audiagentic.components.memory.hindsight.recipes import apply_hindsight
+
+    # Run from an unrelated cwd to prove paths anchor to project_root, not cwd.
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    monkeypatch.chdir(other)
+
+    project = tmp_path / "project"
+    project.mkdir()
+
+    # gemini is a verified MCP-config provider writing .gemini/settings.json.
+    results = apply_hindsight(project, backend=_backend(api_key="k"), provider_ids=["gemini"])
+
+    res = results["gemini"]
+    assert res.success, res.error           # Bug A: adapter path must not raise
+    settings = project / ".gemini" / "settings.json"
+    assert settings.exists()                 # Bug B: written under project_root
+    assert "hindsight" in settings.read_text(encoding="utf-8")
+    # Nothing leaked into the working directory.
+    assert not (other / ".gemini").exists()

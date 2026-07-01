@@ -102,11 +102,17 @@ def test_ag_lsp_not_written_when_opencode_disabled(tmp_path: Path) -> None:
     assert not opencode_cfg_path.exists(), "opencode.json should not exist when opencode is disabled"
 
 
-def test_claude_and_opencode_both_receive_ag_lsp(tmp_path: Path) -> None:
+def test_claude_and_opencode_both_receive_ag_lsp(tmp_path: Path, monkeypatch) -> None:
     """Both claude and opencode should receive ag-lsp when both are enabled."""
     from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
     from audiagentic.foundation.features.base import ImplementationState
     from audiagentic.foundation.features.state import set_implementation_state
+
+    # Redirect ~ expansion so claude's ~/.claude/mcp.json lands in tmp_path.
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
 
     # Enable both providers
     set_implementation_state(
@@ -144,8 +150,8 @@ def test_claude_and_opencode_both_receive_ag_lsp(tmp_path: Path) -> None:
     data = json.loads(opencode_cfg_path.read_text(encoding="utf-8"))
     assert "ag-lsp" in data.get("mcp", {})
 
-    # Verify claude (uses mcpServers key, not mcp)
-    claude_cfg_path = tmp_path / ".mcp.json"
+    # Verify claude (uses mcpServers key, writes to ~/.claude/mcp.json)
+    claude_cfg_path = home / ".claude" / "mcp.json"
     assert claude_cfg_path.exists()
     data = json.loads(claude_cfg_path.read_text(encoding="utf-8"))
     servers = data.get("mcpServers", {})

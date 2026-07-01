@@ -24,6 +24,6 @@ COPY . /app
 
 # Install project + test deps
 RUN uv venv /venv && \
-    uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-timeout pytest-xdist pytest-asyncio
+    uv pip install --python /venv/bin/python -q --no-compile '.[mcp]' pytest pytest-timeout pytest-xdist pytest-asyncio
 
 CMD ["/venv/bin/pytest", "tests/integration/coding_lsp/test_mcp_tools_e2e.py", "-v", "--tb=short", "--timeout=120"]

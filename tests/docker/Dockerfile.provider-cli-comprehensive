@@ -4,12 +4,14 @@ WORKDIR /app
 ENV AUDIAGENTIC_DOCKER_TESTS=1
 ENV AUDIAGENTIC_REAL_PROVIDER_CLI_TESTS=1
 ENV PYTHONPATH="/app/src"
+ENV PATH="/venv/bin:$PATH"
 
 COPY pyproject.toml README.md ./
 COPY src ./src
 COPY tests ./tests
 COPY docs/examples ./docs/examples
 
-RUN python3 -m pip install --no-cache-dir --break-system-packages pytest pytest-asyncio mcp==1.27.0 pyyaml rapidfuzz
+RUN uv venv /venv && \
+    uv pip install --python /venv/bin/python -q --no-compile -e '.[test]'
 
-CMD ["pytest", "tests/integration/providers/test_provider_cli_comprehensive.py", "-v", "-x"]
+CMD ["/venv/bin/pytest", "tests/integration/providers/test_provider_cli_comprehensive.py", "-v", "-x"]
