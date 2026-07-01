@@ -8,7 +8,6 @@ providers component exposes only generic recipe interfaces.
 from __future__ import annotations
 
 import shlex
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +37,8 @@ from audiagentic.foundation.toolchains.managed_block import (
     remove_managed_block,
 )
 from audiagentic.foundation.toolchains.probes import CommandProbe
+from audiagentic.foundation.workflow.invocation.models import StepResult
+from audiagentic.foundation.workflow.invocation.steps import SequenceStep, ShellStep
 
 _SHELL_METACHARS = ("|", "&&", ";", ">", "<")
 RULE_TEXT = """Use Hindsight memory when prior project context may help.
@@ -57,7 +58,114 @@ def _command_parts(command: str) -> list[str]:
     return shlex.split(command)
 
 
-class HooksInstallerRecipe:
+def _step_detail(result: StepResult) -> str:
+    """Extract a human-readable failure detail from a SequenceStep result."""
+    if result.reason:
+        return result.reason
+    outputs = result.outputs if isinstance(result.outputs, dict) else {}
+    for value in outputs.values():
+        if isinstance(value, dict) and value.get("returncode") not in (0, None):
+            return (value.get("stdout") or "").strip() or "command failed"
+    return "command failed"
+
+
+def _run_command(
+    command: str,
+    backend: HindsightBackendConfig,
+    *,
+    timeout: int = 300,
+) -> tuple[bool, str]:
+    """Run an installer/uninstaller command via the toolchain step machinery.
+
+    The matrix joins multiple steps with ``&&`` (e.g.
+    ``pip install hindsight-X && hindsight-X install --api-url URL``). Each
+    ``&&`` segment becomes a :class:`ShellStep` (argv) and they run in order via
+    a :class:`SequenceStep`, after placeholder substitution (URL/TOKEN/KEY/ID).
+
+    Commands containing ``|`` (e.g. ``curl … | bash``) cannot be split into
+    argv and are run via the system shell instead. Returns ``(ok, detail)``.
+    """
+    import subprocess
+
+    rendered = _parameterize_command(command, backend)
+
+    if "|" in rendered:
+        result = subprocess.run(
+            rendered,
+            shell=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
+        if result.returncode == 0:
+            return True, ""
+        return False, (result.stderr or result.stdout or "command failed").strip()
+
+    segments = [seg.strip() for seg in rendered.split("&&") if seg.strip()]
+    if not segments:
+        return False, "empty command"
+
+    steps: list[ShellStep] = []
+    for index, segment in enumerate(segments):
+        if any(tok in segment for tok in (";", ">", "<")):
+            return False, f"unsupported shell syntax: {segment!r}"
+        steps.append(ShellStep(id=f"step{index}", command=tuple(shlex.split(segment)), timeout=timeout))
+
+    result = SequenceStep(id="install", steps=tuple(steps)).run({})
+    if result.status == "ok":
+        return True, ""
+    return False, _step_detail(result)
+
+
+class _RowRecipe:
+    """Common provider metadata + result re-stamping for Hindsight recipes.
+
+    Carries the per-provider identity (provider_id, capability, recipe kind,
+    source provenance) drawn from a matrix row, and provides ``_stamp`` to
+    overlay that provenance onto a delegated inner-recipe result.
+    """
+
+    capability_id = "hindsight"
+    backend_id: str | None = None
+
+    def __init__(
+        self,
+        row: HindsightRecipeRow,
+        *,
+        recipe_kind: ProviderRecipeKind | None = None,
+    ) -> None:
+        self.provider_id = row.provider_id
+        self.recipe_kind = recipe_kind if recipe_kind is not None else row.recipe_kind
+        self.display_name = row.display_name
+        self.source_url = row.source_url
+        self.source_date = row.source_date
+        self._row = row
+
+    def _stamp(self, result: Any) -> ProviderRecipeResult:
+        """Re-stamp any recipe result with this provider's provenance.
+
+        Accepts both the foundation ``RecipeResult`` (returned by inner MCP
+        recipes) and ``ProviderRecipeResult``; reads fields by duck-typing. A
+        result that already carries its own ``action_needed`` (e.g. a
+        notes-preferred message) keeps it; otherwise the row's default action
+        guidance is applied.
+        """
+        return ProviderRecipeResult(
+            success=result.success,
+            state=result.state,
+            artifacts_owned=list(result.artifacts_owned),
+            status=result.status,
+            error=getattr(result, "error", None),
+            details=dict(getattr(result, "details", {}) or {}),
+            source_url=self.source_url,
+            source_date=self.source_date,
+            action_needed=getattr(result, "action_needed", "") or self._row.audia_action,
+        )
+
+
+class HooksInstallerRecipe(_RowRecipe):
     """Command-installer recipe: runs official hook installer CLI.
 
     For providers like Codex, Cline that use hook scripts installed via CLI.
@@ -68,161 +176,91 @@ class HooksInstallerRecipe:
         row: HindsightRecipeRow,
         backend: HindsightBackendConfig,
     ) -> None:
-        self.provider_id = row.provider_id
-        self.capability_id = "hindsight"
-        self.backend_id = None
-        self.recipe_kind = row.recipe_kind
-        self.display_name = row.display_name
-        self.source_url = row.source_url
-        self.source_date = row.source_date
-        self._row = row
+        super().__init__(row)
         self._backend = backend
 
     def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
         if self._row.source_status != "verified":
-            return ProviderRecipeResult.ok(
+            return self._stamp(ProviderRecipeResult.ok(
                 RecipeState.ABSENT,
                 status=f"source {self._row.source_status}; installer blocked",
-                source_url=self.source_url,
-                source_date=self.source_date,
                 action_needed=self._row.notes or self._row.audia_action,
-            )
+            ))
         if not self._row.status_command:
-            return ProviderRecipeResult.ok(
-                RecipeState.ABSENT,
-                status="no status probe available",
-                source_url=self.source_url,
-                source_date=self.source_date,
-                action_needed=self._row.audia_action,
-            )
+            return self._stamp(ProviderRecipeResult.ok(
+                RecipeState.ABSENT, status="no status probe available",
+            ))
         try:
             cmd = _parameterize_command(self._row.status_command, self._backend)
-            parts = _command_parts(cmd)
-            probe = CommandProbe(tuple(parts), expect_exit=0, timeout=15)
+            probe = CommandProbe(tuple(_command_parts(cmd)), expect_exit=0, timeout=15)
             result = probe.check()
             state = RecipeState.VERIFIED if result.passed else RecipeState.ABSENT
-            return ProviderRecipeResult.ok(
-                state,
-                status=result.detail,
-                source_url=self.source_url,
-                source_date=self.source_date,
-                action_needed=self._row.audia_action,
-            )
+            return self._stamp(ProviderRecipeResult.ok(state, status=result.detail))
         except Exception as exc:
-            return ProviderRecipeResult.fail(
-                str(exc),
-                source_url=self.source_url,
-                action_needed=self._row.audia_action,
-            )
+            return self._stamp(ProviderRecipeResult.fail(str(exc)))
 
     def install(self, context: dict[str, Any]) -> ProviderRecipeResult:
         if self._row.source_status != "verified":
-            return ProviderRecipeResult.fail(
+            return self._stamp(ProviderRecipeResult.fail(
                 f"installer source {self._row.source_status}; refusing to execute",
-                source_url=self.source_url,
                 action_needed=self._row.notes or self._row.audia_action,
-            )
+            ))
         if not self._row.install_command:
-            return ProviderRecipeResult.fail(
+            return self._stamp(ProviderRecipeResult.fail(
                 "no install command for this provider",
-                source_url=self.source_url,
-                action_needed=self._row.audia_action,
-            )
-        try:
-            cmd = _parameterize_command(self._row.install_command, self._backend)
-            parts = _command_parts(cmd)
-            proc = subprocess.run(
-                parts, capture_output=True, text=True, timeout=60, check=False
-            )
-            if proc.returncode == 0:
-                return ProviderRecipeResult.ok(
-                    RecipeState.INSTALLING,
-                    status="installer command succeeded",
-                    source_url=self.source_url,
-                    source_date=self.source_date,
-                )
-            return ProviderRecipeResult.fail(
-                f"installer failed: {proc.stderr.strip()}",
-                source_url=self.source_url,
-                action_needed=self._row.audia_action,
-            )
-        except Exception as exc:
-            return ProviderRecipeResult.fail(
-                str(exc),
-                source_url=self.source_url,
-                action_needed=self._row.audia_action,
-            )
+            ))
+        ok, detail = _run_command(self._row.install_command, self._backend)
+        if ok:
+            return self._stamp(ProviderRecipeResult.ok(
+                RecipeState.INSTALLING, status="installer command succeeded",
+            ))
+        return self._stamp(ProviderRecipeResult.fail(f"installer failed: {detail}"))
 
     def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return ProviderRecipeResult.ok(
+        return self._stamp(ProviderRecipeResult.ok(
             RecipeState.CONFIGURING,
             status="hooks installed via CLI; no config write needed",
-            source_url=self.source_url,
-            source_date=self.source_date,
-        )
+        ))
 
     def verify(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        if not self._row.status_command:
+            return self._stamp(ProviderRecipeResult.ok(
+                RecipeState.VERIFIED,
+                status="installer completed; no status probe available",
+            ))
         return self.probe(context)
 
     def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
         if self._row.source_status != "verified":
-            return ProviderRecipeResult.ok(
+            return self._stamp(ProviderRecipeResult.ok(
                 RecipeState.ABSENT,
                 status=f"source {self._row.source_status}; no installer was executed",
-                source_url=self.source_url,
-                source_date=self.source_date,
                 action_needed=self._row.notes or self._row.audia_action,
-            )
+            ))
         if not self._row.uninstall_command:
-            return ProviderRecipeResult.fail(
+            return self._stamp(ProviderRecipeResult.fail(
                 "no uninstall command for this provider",
-                source_url=self.source_url,
-                action_needed=self._row.audia_action,
-            )
-        try:
-            cmd = _parameterize_command(self._row.uninstall_command, self._backend)
-            parts = _command_parts(cmd)
-            proc = subprocess.run(
-                parts, capture_output=True, text=True, timeout=60, check=False
-            )
-            if proc.returncode == 0:
-                return ProviderRecipeResult.ok(
-                    RecipeState.ABSENT,
-                    status="uninstaller command succeeded",
-                    source_url=self.source_url,
-                    source_date=self.source_date,
-                )
-            return ProviderRecipeResult.fail(
-                f"uninstaller failed: {proc.stderr.strip()}",
-                source_url=self.source_url,
-                action_needed=self._row.audia_action,
-            )
-        except Exception as exc:
-            return ProviderRecipeResult.fail(
-                str(exc),
-                source_url=self.source_url,
-                action_needed=self._row.audia_action,
-            )
+            ))
+        ok, detail = _run_command(self._row.uninstall_command, self._backend)
+        if ok:
+            return self._stamp(ProviderRecipeResult.ok(
+                RecipeState.ABSENT, status="uninstaller command succeeded",
+            ))
+        return self._stamp(ProviderRecipeResult.fail(f"uninstaller failed: {detail}"))
 
     def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return ProviderRecipeResult.ok(
-            RecipeState.ABSENT,
-            status="hooks managed by CLI; no config to prune",
-            source_url=self.source_url,
-            source_date=self.source_date,
-        )
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.ABSENT, status="hooks managed by CLI; no config to prune",
+        ))
 
     def dry_run(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return ProviderRecipeResult.ok(
+        return self._stamp(ProviderRecipeResult.ok(
             RecipeState.ABSENT,
             status=f"would run: {self._row.install_command} (dry-run)",
-            source_url=self.source_url,
-            source_date=self.source_date,
-            action_needed=self._row.audia_action,
-        )
+        ))
 
 
-class PluginConfigRecipe:
+class PluginConfigRecipe(_RowRecipe):
     """Plugin-config recipe: writes plugin registration to provider config.
 
     For providers like OpenCode, Claude that use plugin arrays or marketplace.
@@ -234,192 +272,269 @@ class PluginConfigRecipe:
         backend: HindsightBackendConfig,
         target: HindsightTarget | None = None,
     ) -> None:
-        self.provider_id = row.provider_id
-        self.capability_id = "hindsight"
-        self.backend_id = None
-        self.recipe_kind = row.recipe_kind
-        self.display_name = row.display_name
-        self.source_url = row.source_url
-        self.source_date = row.source_date
-        self._row = row
+        super().__init__(row)
         self._backend = backend
         self._target = target
-        self._inner = None
-        if target:
-            self._inner = HindsightMcpRecipe(backend, target)
+        self._inner = HindsightMcpRecipe(backend, target) if target else None
 
     def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
         if self._inner:
-            result = self._inner.probe(context)
-            return ProviderRecipeResult(
-                success=result.success,
-                state=result.state,
-                artifacts_owned=list(result.artifacts_owned),
-                status=result.status,
-                source_url=self.source_url,
-                source_date=self.source_date,
-                action_needed=self._row.audia_action,
-            )
-        return ProviderRecipeResult.ok(
-            RecipeState.ABSENT,
-            status="plugin config managed by CLI",
-            source_url=self.source_url,
-            source_date=self.source_date,
-            action_needed=self._row.audia_action,
-        )
+            return self._stamp(self._inner.probe(context))
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.ABSENT, status="plugin config managed by CLI",
+        ))
+
+    def _should_run_plugin_command(self) -> bool:
+        return self._row.audia_action == "call_official_installer"
 
     def install(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        if self._row.install_command:
+        if self._row.install_command and self._should_run_plugin_command():
             if self._row.source_status != "verified":
-                return ProviderRecipeResult.fail(
+                return self._stamp(ProviderRecipeResult.fail(
                     f"plugin installer source {self._row.source_status}; refusing to execute",
-                    source_url=self.source_url,
                     action_needed=self._row.notes or self._row.audia_action,
-                )
-            try:
-                cmd = _parameterize_command(self._row.install_command, self._backend)
-                parts = _command_parts(cmd)
-                proc = subprocess.run(
-                    parts, capture_output=True, text=True, timeout=60, check=False
-                )
-                if proc.returncode != 0:
-                    return ProviderRecipeResult.fail(
-                        f"plugin install failed: {proc.stderr.strip()}",
-                        source_url=self.source_url,
-                        action_needed=self._row.audia_action,
-                    )
-            except Exception as exc:
-                return ProviderRecipeResult.fail(
-                    str(exc),
-                    source_url=self.source_url,
-                    action_needed=self._row.audia_action,
-                )
-        return ProviderRecipeResult.ok(
-            RecipeState.INSTALLING,
-            status="plugin installed",
-            source_url=self.source_url,
-            source_date=self.source_date,
-        )
+                ))
+            ok, detail = _run_command(self._row.install_command, self._backend)
+            if not ok:
+                return self._stamp(ProviderRecipeResult.fail(
+                    f"plugin install failed: {detail}",
+                ))
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.INSTALLING, status="plugin installed",
+        ))
 
     def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
         if self._inner:
-            result = self._inner.configure(context)
-            return ProviderRecipeResult(
-                success=result.success,
-                state=result.state,
-                artifacts_owned=list(result.artifacts_owned),
-                status=result.status,
-                source_url=self.source_url,
-                source_date=self.source_date,
-                action_needed=self._row.audia_action,
-            )
-        return ProviderRecipeResult.ok(
-            RecipeState.CONFIGURING,
-            status="plugin config applied",
-            source_url=self.source_url,
-            source_date=self.source_date,
-        )
+            return self._stamp(self._inner.configure(context))
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.CONFIGURING, status="plugin config applied",
+        ))
 
     def verify(self, context: dict[str, Any]) -> ProviderRecipeResult:
         if self._inner:
-            result = self._inner.verify(context)
-            return ProviderRecipeResult(
-                success=result.success,
-                state=result.state,
-                artifacts_owned=list(result.artifacts_owned),
-                status=result.status,
-                error=result.error,
-                source_url=self.source_url,
-                source_date=self.source_date,
-                action_needed=self._row.audia_action,
-            )
-        return ProviderRecipeResult.ok(
-            RecipeState.VERIFIED,
-            status="plugin verified",
-            source_url=self.source_url,
-            source_date=self.source_date,
-        )
+            return self._stamp(self._inner.verify(context))
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.VERIFIED, status="plugin verified",
+        ))
 
     def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        if self._row.uninstall_command:
+        if self._row.uninstall_command and self._should_run_plugin_command():
             if self._row.source_status != "verified":
-                return ProviderRecipeResult.ok(
+                return self._stamp(ProviderRecipeResult.ok(
                     RecipeState.ABSENT,
                     status=f"source {self._row.source_status}; no plugin installer was executed",
-                    source_url=self.source_url,
-                    source_date=self.source_date,
                     action_needed=self._row.notes or self._row.audia_action,
-                )
-            try:
-                cmd = _parameterize_command(self._row.uninstall_command, self._backend)
-                parts = _command_parts(cmd)
-                proc = subprocess.run(
-                    parts, capture_output=True, text=True, timeout=60, check=False
-                )
-                if proc.returncode != 0:
-                    return ProviderRecipeResult.fail(
-                        f"plugin uninstall failed: {proc.stderr.strip()}",
-                        source_url=self.source_url,
-                        action_needed=self._row.audia_action,
-                    )
-            except Exception as exc:
-                return ProviderRecipeResult.fail(
-                    str(exc),
-                    source_url=self.source_url,
-                    action_needed=self._row.audia_action,
-                )
-        return ProviderRecipeResult.ok(
-            RecipeState.ABSENT,
-            status="plugin uninstalled",
-            source_url=self.source_url,
-            source_date=self.source_date,
-        )
+                ))
+            ok, detail = _run_command(self._row.uninstall_command, self._backend)
+            if not ok:
+                return self._stamp(ProviderRecipeResult.fail(
+                    f"plugin uninstall failed: {detail}",
+                ))
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.ABSENT, status="plugin uninstalled",
+        ))
 
     def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
         if self._inner:
-            result = self._inner.prune(context)
-            return ProviderRecipeResult(
-                success=result.success,
-                state=result.state,
-                artifacts_owned=list(result.artifacts_owned),
-                status=result.status,
-                error=result.error,
-                source_url=self.source_url,
-                source_date=self.source_date,
-                action_needed=self._row.audia_action,
-            )
-        return ProviderRecipeResult.ok(
-            RecipeState.ABSENT,
-            status="nothing to prune",
-            source_url=self.source_url,
-            source_date=self.source_date,
-        )
+            return self._stamp(self._inner.prune(context))
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.ABSENT, status="nothing to prune",
+        ))
 
     def dry_run(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return ProviderRecipeResult.ok(
-            RecipeState.ABSENT,
-            status="would install plugin (dry-run)",
-            source_url=self.source_url,
-            source_date=self.source_date,
-            action_needed=self._row.audia_action,
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.ABSENT, status="would install plugin (dry-run)",
+        ))
+
+
+def _repair_windows_plugin_mcp(_backend: HindsightBackendConfig) -> tuple[bool, str]:
+    """On Windows, patch the installed hindsight plugin's .mcp.json to use python.exe.
+
+    The official plugin ships a bash launcher (run_mcp.sh) that fails when Git Bash
+    is absent. This function locates the plugin cache .mcp.json and rewrites the
+    hindsight server entry to invoke mcp_server.py via the plugin venv's python.exe.
+    Idempotent — if already using python.exe the file is left untouched.
+    """
+    import glob
+    import json
+    import os
+
+    home = Path.home()
+    cache_pattern = str(
+        home / ".claude" / "plugins" / "cache" / "hindsight" / "hindsight-memory" / "*" / ".mcp.json"
+    )
+    mcp_files = glob.glob(cache_pattern)
+    if not mcp_files:
+        return False, "hindsight plugin not installed (no .mcp.json in cache)"
+
+    appdata = os.environ.get("APPDATA", "")
+    if not appdata:
+        return False, "APPDATA not set; cannot locate plugin data dir"
+    data_dir = Path(appdata) / "Claude" / "plugins" / "data" / "hindsight-memory"
+    venv_python = data_dir / "venv" / "Scripts" / "python.exe"
+    if not venv_python.exists():
+        return False, f"plugin venv not found at {venv_python}; run 'claude plugin install hindsight-memory' first"
+
+    repaired: list[str] = []
+    for mcp_path_str in mcp_files:
+        mcp_path = Path(mcp_path_str)
+        try:
+            content = json.loads(mcp_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        servers = content.get("mcpServers", {})
+        server = servers.get("hindsight", {})
+        cmd = str(server.get("command", ""))
+        if "python" in cmd.lower() and "bash" not in cmd.lower():
+            continue  # already patched
+        plugin_dir = mcp_path.parent
+        mcp_script = plugin_dir / "scripts" / "mcp_server.py"
+        if not mcp_script.exists():
+            continue
+        servers["hindsight"] = {
+            "command": str(venv_python),
+            "args": [str(mcp_script)],
+            "env": {
+                "CLAUDE_PLUGIN_ROOT": str(plugin_dir),
+                "CLAUDE_PLUGIN_DATA": str(data_dir),
+            },
+        }
+        content["mcpServers"] = servers
+        mcp_path.write_text(json.dumps(content, indent=2), encoding="utf-8")
+        repaired.append(str(mcp_path))
+
+    if repaired:
+        return True, f"patched {'; '.join(repaired)}"
+    return True, "already patched"
+
+
+class _ClaudePluginUrlRecipe(_RowRecipe):
+    """Plugin-url recipe for Claude Code: writes hindsight API URL to plugin config.
+
+    The Claude Code hindsight plugin reads its server URL from
+    ~/.hindsight/claude-code.json as {"hindsightApiUrl": "<url>"} — a separate
+    file from the MCP JSON format used by AUDiaGentic's own servers. The URL
+    must come from HindsightBackendConfig, never hardcoded.
+
+    On Windows, configure also patches the plugin's auto-generated .mcp.json
+    to use python.exe instead of bash (the plugin ships a bash launcher that
+    fails when Git Bash is absent).
+    """
+
+    def __init__(
+        self,
+        row: HindsightRecipeRow,
+        backend: HindsightBackendConfig,
+        url_config_path: str | Path,
+    ) -> None:
+        super().__init__(row)
+        self._backend = backend
+        self._url_config_path = Path(url_config_path).expanduser()
+
+    def _current_url(self) -> str | None:
+        try:
+            import json
+            data = json.loads(self._url_config_path.read_text(encoding="utf-8"))
+            return data.get("hindsightApiUrl")
+        except (OSError, ValueError):
+            return None
+
+    def _should_run_plugin_command(self) -> bool:
+        return self._row.audia_action == "call_official_installer"
+
+    def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        if self._current_url() == self._backend.base_url:
+            return self._stamp(ProviderRecipeResult.ok(
+                RecipeState.VERIFIED,
+                artifacts=[str(self._url_config_path)],
+                status="plugin URL config correct",
+            ))
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.ABSENT, status="plugin URL config absent or stale",
+        ))
+
+    def install(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        if self._row.install_command and self._should_run_plugin_command():
+            if self._row.source_status != "verified":
+                return self._stamp(ProviderRecipeResult.fail(
+                    f"plugin installer source {self._row.source_status}; refusing to execute",
+                    action_needed=self._row.notes or self._row.audia_action,
+                ))
+            ok, detail = _run_command(self._row.install_command, self._backend)
+            if not ok:
+                return self._stamp(ProviderRecipeResult.fail(f"plugin install failed: {detail}"))
+        return self._stamp(ProviderRecipeResult.ok(RecipeState.INSTALLING, status="plugin installed"))
+
+    def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        import json
+        import os
+        self._url_config_path.parent.mkdir(parents=True, exist_ok=True)
+        self._url_config_path.write_text(
+            json.dumps({"hindsightApiUrl": self._backend.base_url}, indent=2),
+            encoding="utf-8",
         )
+        artifacts = [str(self._url_config_path)]
+        if os.name == "nt":
+            ok, detail = _repair_windows_plugin_mcp(self._backend)
+            if ok and "patched" in detail:
+                artifacts.append(detail)
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.CONFIGURING, artifacts=artifacts, status="plugin URL config written",
+        ))
+
+    def verify(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        probed = self.probe(context)
+        if probed.success and probed.state is RecipeState.VERIFIED:
+            return probed
+        return self._stamp(ProviderRecipeResult.fail("plugin URL config not verified after configure"))
+
+    def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        if self._row.uninstall_command and self._should_run_plugin_command():
+            if self._row.source_status != "verified":
+                return self._stamp(ProviderRecipeResult.ok(
+                    RecipeState.ABSENT,
+                    status=f"source {self._row.source_status}; no plugin installer was executed",
+                    action_needed=self._row.notes or self._row.audia_action,
+                ))
+            ok, detail = _run_command(self._row.uninstall_command, self._backend)
+            if not ok:
+                return self._stamp(ProviderRecipeResult.fail(f"plugin uninstall failed: {detail}"))
+        return self._stamp(ProviderRecipeResult.ok(RecipeState.ABSENT, status="plugin uninstalled"))
+
+    def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        self._url_config_path.unlink(missing_ok=True)
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.ABSENT, status="plugin URL config removed",
+        ))
+
+    def dry_run(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.ABSENT, status=f"would write {self._url_config_path} (dry-run)",
+        ))
 
 
-class GuidanceOnlyRecipe:
+class GuidanceOnlyRecipe(_RowRecipe):
     """Guidance-only recipe: no automation, action-needed guidance only.
 
     For providers with no official Hindsight integration yet.
     """
 
     def __init__(self, row: HindsightRecipeRow) -> None:
-        self.provider_id = row.provider_id
-        self.capability_id = "hindsight"
-        self.backend_id = None
-        self.recipe_kind = ProviderRecipeKind.GUIDANCE_ONLY
-        self.display_name = row.display_name
-        self.source_url = row.source_url
-        self.source_date = row.source_date
-        self._row = row
+        super().__init__(row, recipe_kind=ProviderRecipeKind.GUIDANCE_ONLY)
+
+    def provision(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        """Provisioning a guidance-only provider is a clean no-op, not a failure.
+
+        There is no automated integration to run, so reconciliation reports a
+        successful skip with optional manual-setup guidance rather than an error.
+        """
+        return ProviderRecipeResult.ok(
+            RecipeState.ABSENT,
+            status="skipped: no automated Hindsight integration for this provider",
+            source_url=self.source_url,
+            source_date=self.source_date,
+            action_needed=self._row.notes or "manual setup optional",
+        )
 
     def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
         return ProviderRecipeResult.ok(
@@ -463,7 +578,7 @@ class GuidanceOnlyRecipe:
         return self.probe(context)
 
 
-class RulesOnlyRecipe:
+class RulesOnlyRecipe(_RowRecipe):
     """Rule-block recipe for providers with instructions but no native installer."""
 
     def __init__(
@@ -473,14 +588,7 @@ class RulesOnlyRecipe:
         *,
         project_root: Path | None = None,
     ) -> None:
-        self.provider_id = row.provider_id
-        self.capability_id = "hindsight"
-        self.backend_id = None
-        self.recipe_kind = ProviderRecipeKind.RULES
-        self.display_name = row.display_name
-        self.source_url = row.source_url
-        self.source_date = row.source_date
-        self._row = row
+        super().__init__(row, recipe_kind=ProviderRecipeKind.RULES)
         self._project_root = Path(project_root) if project_root else None
         self._rule_path = _absolute_project_path(rule_path, self._project_root)
         self.recipe_id = f"hindsight:{self.provider_id}:rules"
@@ -647,15 +755,56 @@ def _platform_supported(row: HindsightRecipeRow) -> bool:
     return False
 
 
+_INSTALLER_KINDS = (
+    ProviderRecipeKind.HOOKS,
+    ProviderRecipeKind.WRAPPER_CLI,
+    ProviderRecipeKind.PLUGIN_CONFIG,
+)
+
+
+def _external_fallback_row(
+    row: HindsightRecipeRow, provider_id: str, reason: str
+) -> HindsightRecipeRow:
+    """Downgrade an installer-style row so the provider points at the external
+    Hindsight server without a local install: MCP config when the provider
+    supports MCP, otherwise a rules-only block.
+    """
+    descriptor = get_descriptor(provider_id)
+    if descriptor and descriptor.mcp_config:
+        return HindsightRecipeRow(
+            provider_id=provider_id,
+            display_name=row.display_name,
+            integration_type="fallback-mcp",
+            recipe_kind=ProviderRecipeKind.MCP_CONFIG,
+            source_url=row.source_url,
+            source_date=row.source_date,
+            source_status="unconfirmed",
+            audia_action="manage_config_writes",
+            notes=reason,
+        )
+    return HindsightRecipeRow(
+        provider_id=provider_id,
+        display_name=row.display_name,
+        integration_type="rules-only",
+        recipe_kind=ProviderRecipeKind.GUIDANCE_ONLY,
+        source_url=row.source_url,
+        source_date=row.source_date,
+        source_status="unconfirmed",
+        audia_action="action_needed",
+        notes=reason,
+    )
+
+
 def resolve_hindsight_strategy(
     provider_id: str,
     project_root: Path | None = None,
 ) -> HindsightRecipeRow | None:
     """Resolve the best Hindsight strategy for a provider.
 
-    Precedence: verified native/launch-wrapper > mcp-config > fallback-mcp > rules-only.
-    Platform gate drops unsupported strategies and falls back.
-    Source gate blocks unverified native/launch-wrapper commands (enforced by builder).
+    Precedence: verified native/installer > mcp-config > fallback-mcp > rules-only.
+    Platform gate drops unsupported installer strategies and falls back to
+    pointing at the external server via MCP/rules. Source gate is enforced by
+    the builder.
     """
     rows = [row for row in HINDSIGHT_RECIPE_MATRIX if row.provider_id == provider_id]
     if not rows:
@@ -663,38 +812,11 @@ def resolve_hindsight_strategy(
 
     row = rows[0]  # one row per provider
 
-    # Platform gate: if native strategy is platform-gated, fall back
-    if not _platform_supported(row):
-        if row.recipe_kind in (ProviderRecipeKind.HOOKS, ProviderRecipeKind.WRAPPER_CLI,
-                                ProviderRecipeKind.PLUGIN_CONFIG):
-            # Check if provider has MCP config support for fallback
-            descriptor = get_descriptor(provider_id)
-            if descriptor and descriptor.mcp_config:
-                return HindsightRecipeRow(
-                    provider_id=provider_id,
-                    display_name=row.display_name,
-                    integration_type="fallback-mcp",
-                    recipe_kind=ProviderRecipeKind.MCP_CONFIG,
-                    source_url=row.source_url,
-                    source_date=row.source_date,
-                    source_status="unconfirmed",
-                    audia_action="manage_config_writes",
-                    notes=(f"platform-gated native ({', '.join(row.platform_constraints)}); "
-                           "fallback to MCP config"),
-                )
-            # No MCP fallback available → rules-only
-            return HindsightRecipeRow(
-                provider_id=provider_id,
-                display_name=row.display_name,
-                integration_type="rules-only",
-                recipe_kind=ProviderRecipeKind.GUIDANCE_ONLY,
-                source_url=row.source_url,
-                source_date=row.source_date,
-                source_status="unconfirmed",
-                audia_action="action_needed",
-                notes=(f"platform-gated ({', '.join(row.platform_constraints)}); "
-                       "rules-only fallback"),
-            )
+    if row.recipe_kind in _INSTALLER_KINDS and not _platform_supported(row):
+        return _external_fallback_row(
+            row, provider_id,
+            f"platform-gated ({', '.join(row.platform_constraints)}); external fallback",
+        )
 
     return row
 
@@ -722,14 +844,35 @@ def build_hindsight_recipe(
     if row.recipe_kind == ProviderRecipeKind.PLUGIN_CONFIG:
         if row.source_status != "verified" and row.install_command:
             return GuidanceOnlyRecipe(row)
+        if row.plugin_url_config_path:
+            return _ClaudePluginUrlRecipe(row, backend, row.plugin_url_config_path)
         if harness_path:
-            target = HindsightTarget(config_path=harness_path)
+            descriptor = get_descriptor(provider_id)
+            spec = descriptor.mcp_config if descriptor else None
+            target = HindsightTarget(
+                config_path=harness_path,
+                writer_fn=spec.writer if spec else None,
+                reader_fn=spec.reader if spec else None,
+                remover_fn=spec.remover if spec else None,
+            )
             return PluginConfigRecipe(row, backend, target)
         return GuidanceOnlyRecipe(row)
 
     if row.recipe_kind in (ProviderRecipeKind.MCP_CONFIG, ProviderRecipeKind.HYBRID):
+        # Source gate: blocked/unverified rows should not execute MCP recipes
+        if row.source_status == "blocked":
+            return GuidanceOnlyRecipe(row)
+
         if harness_path:
-            target = HindsightTarget(config_path=harness_path)
+            descriptor = get_descriptor(provider_id)
+            spec = descriptor.mcp_config if descriptor else None
+
+            target = HindsightTarget(
+                config_path=harness_path,
+                writer_fn=spec.writer if spec else None,
+                reader_fn=spec.reader if spec else None,
+                remover_fn=spec.remover if spec else None,
+            )
             registry = ArtifactRegistry(project_root) if project_root else None
             inner = HindsightMcpRecipe(
                 backend,
@@ -737,6 +880,11 @@ def build_hindsight_recipe(
                 registry=registry,
                 recipe_id=f"hindsight:{provider_id}:mcp",
             )
+
+            # HYBRID: composite MCP config + rule block when both paths exist
+            if row.recipe_kind == ProviderRecipeKind.HYBRID and rule_path:
+                rules = RulesOnlyRecipe(row, rule_path, project_root=project_root)
+                return _CompositeRecipe(row, inner, rules)
             return _McpConfigAdapter(row, inner)
         if rule_path:
             return RulesOnlyRecipe(row, rule_path, project_root=project_root)
@@ -751,7 +899,11 @@ def build_hindsight_recipe(
 
 
 def _resolve_harness_config_path(provider_id: str, project_root: Path | None = None) -> str | None:
-    """Resolve the real harness config path for a provider from its descriptor."""
+    """Resolve the real harness config path for a provider from its descriptor.
+
+    The path is anchored to ``project_root`` so provisioning writes inside the
+    target project, never relative to the current working directory.
+    """
     descriptor = get_descriptor(provider_id)
     if descriptor is None:
         return None
@@ -759,14 +911,14 @@ def _resolve_harness_config_path(provider_id: str, project_root: Path | None = N
     if spec is None:
         return None
     config_path = spec.config_path
-    if callable(config_path):
-        resolved = config_path(project_root)
-        return str(resolved)
-    return str(config_path)
+    resolved = config_path(project_root) if callable(config_path) else config_path
+    if resolved is None:
+        return None
+    return str(_absolute_project_path(resolved, Path(project_root) if project_root else None))
 
 
 def _absolute_project_path(path: str | Path, project_root: Path | None = None) -> Path:
-    target = Path(path)
+    target = Path(path).expanduser()
     if target.is_absolute() or project_root is None:
         return target
     return Path(project_root) / target
@@ -875,12 +1027,11 @@ def _run_teardown(recipe: Any, context: dict[str, Any]) -> ProviderRecipeResult:
             source_url=getattr(recipe, "source_url", ""),
             source_date=getattr(recipe, "source_date", ""),
         )
+    row = getattr(recipe, "_row", None)
     return ProviderRecipeResult.fail(
         "integration still present after teardown",
         source_url=getattr(recipe, "source_url", ""),
-        action_needed=getattr(recipe, "_row", None).audia_action
-        if getattr(recipe, "_row", None)
-        else "",
+        action_needed=row.audia_action if row else "",
     )
 
 
@@ -932,104 +1083,181 @@ def teardown_hindsight(
     return results
 
 
-class _McpConfigAdapter:
-    """Thin adapter that wraps HindsightMcpRecipe with provider metadata."""
+def prune_hindsight(
+    project_root: Path,
+    *,
+    backend: HindsightBackendConfig | None = None,
+    provider_ids: list[str] | None = None,
+    context: dict[str, Any] | None = None,
+) -> dict[str, ProviderRecipeResult]:
+    """Remove only Hindsight *config* artifacts (MCP entries, rule blocks).
+
+    Unlike :func:`teardown_hindsight`, this runs each recipe's ``prune`` only —
+    never a command-based uninstaller. It is safe and idempotent, used to clear
+    stale config from providers that are no longer enabled without executing
+    destructive package uninstalls that may never have installed anything.
+    """
+    registry = ProviderRecipeRegistry()
+    recipes = register_hindsight_recipes(
+        registry,
+        backend=backend,
+        project_root=project_root,
+    )
+    selected = set(provider_ids) if provider_ids is not None else None
+    ctx = context or {}
+    results: dict[str, ProviderRecipeResult] = {}
+    for recipe in recipes:
+        if selected is not None and recipe.provider_id not in selected:
+            continue
+        results[recipe.provider_id] = recipe.prune(ctx)
+    return results
+
+
+class _McpConfigAdapter(_RowRecipe):
+    """Thin adapter that wraps HindsightMcpRecipe with provider metadata.
+
+    Every lifecycle call delegates to the inner recipe and re-stamps the
+    result with this provider's provenance via ``_stamp``.
+    """
 
     def __init__(
         self,
         row: HindsightRecipeRow,
         inner: HindsightMcpRecipe,
     ) -> None:
-        self.provider_id = row.provider_id
-        self.capability_id = "hindsight"
-        self.backend_id = None
-        self.recipe_kind = row.recipe_kind
-        self.display_name = row.display_name
-        self.source_url = row.source_url
-        self.source_date = row.source_date
+        super().__init__(row)
         self._inner = inner
-        self._row = row
 
     def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        return self._stamp(self._inner.probe(context))
+
+    def install(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        return self._stamp(self._inner.install(context))
+
+    def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        return self._stamp(self._inner.configure(context))
+
+    def verify(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        return self._stamp(self._inner.verify(context))
+
+    def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        return self._stamp(self._inner.uninstall(context))
+
+    def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        return self._stamp(self._inner.prune(context))
+
+    def dry_run(self, context: dict[str, Any]) -> ProviderRecipeResult:
         result = self._inner.probe(context)
+        verified = result.success and result.state is RecipeState.VERIFIED
+        state = RecipeState.VERIFIED if verified else RecipeState.ABSENT
+        return self._stamp(ProviderRecipeResult.ok(
+            state,
+            status="already provisioned (dry-run)" if verified else "would install (dry-run)",
+        ))
+
+    def to_result(self, base) -> ProviderRecipeResult:
+        return self._stamp(base)
+
+
+class _CompositeRecipe(_RowRecipe):
+    """Wraps an MCP config recipe and a rules recipe, executing both in sequence."""
+
+    def __init__(
+        self,
+        row: HindsightRecipeRow,
+        mcp_inner: HindsightMcpRecipe,
+        rules_inner: RulesOnlyRecipe,
+    ) -> None:
+        super().__init__(row)
+        self._mcp = mcp_inner
+        self._rules = rules_inner
+
+    def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        mcp_result = self._mcp.probe(context)
+        rules_result = self._rules.probe(context)
+        state = (
+            RecipeState.VERIFIED
+            if mcp_result.state is RecipeState.VERIFIED and rules_result.state is RecipeState.VERIFIED
+            else RecipeState.ABSENT
+        )
         return ProviderRecipeResult(
-            success=result.success,
-            state=result.state,
-            artifacts_owned=list(result.artifacts_owned),
-            status=result.status,
+            success=mcp_result.success and rules_result.success,
+            state=state,
+            artifacts_owned=list(mcp_result.artifacts_owned) + list(rules_result.artifacts_owned),
+            status=f"mcp: {mcp_result.status}; rules: {rules_result.status}",
             source_url=self.source_url,
             source_date=self.source_date,
             action_needed=self._row.audia_action,
         )
 
     def install(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        result = self._inner.install(context)
+        mcp_result = self._mcp.install(context)
+        rules_result = self._rules.install(context)
         return ProviderRecipeResult(
-            success=result.success,
-            state=result.state,
-            artifacts_owned=list(result.artifacts_owned),
-            status=result.status,
+            success=mcp_result.success and rules_result.success,
+            state=RecipeState.INSTALLING,
+            status="external backend + rules",
             source_url=self.source_url,
             source_date=self.source_date,
             action_needed=self._row.audia_action,
         )
 
     def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        result = self._inner.configure(context)
+        mcp_result = self._mcp.configure(context)
+        rules_result = self._rules.configure(context)
         return ProviderRecipeResult(
-            success=result.success,
-            state=result.state,
-            artifacts_owned=list(result.artifacts_owned),
-            status=result.status,
+            success=mcp_result.success and rules_result.success,
+            state=RecipeState.CONFIGURING,
+            artifacts_owned=list(mcp_result.artifacts_owned) + list(rules_result.artifacts_owned),
+            status=f"mcp: {mcp_result.status}; rules: {rules_result.status}",
             source_url=self.source_url,
             source_date=self.source_date,
             action_needed=self._row.audia_action,
         )
 
     def verify(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        result = self._inner.verify(context)
+        mcp_result = self._mcp.verify(context)
+        rules_result = self._rules.verify(context)
         return ProviderRecipeResult(
-            success=result.success,
-            state=result.state,
-            artifacts_owned=list(result.artifacts_owned),
-            status=result.status,
-            error=result.error,
+            success=mcp_result.success and rules_result.success,
+            state=RecipeState.VERIFIED if (mcp_result.success and rules_result.success) else RecipeState.ABSENT,
+            artifacts_owned=list(mcp_result.artifacts_owned) + list(rules_result.artifacts_owned),
+            status=f"mcp: {mcp_result.status}; rules: {rules_result.status}",
+            error=mcp_result.error or rules_result.error,
             source_url=self.source_url,
             source_date=self.source_date,
             action_needed=self._row.audia_action,
         )
 
     def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        result = self._inner.uninstall(context)
+        mcp_result = self._mcp.uninstall(context)
+        rules_result = self._rules.uninstall(context)
         return ProviderRecipeResult(
-            success=result.success,
-            state=result.state,
-            artifacts_owned=list(result.artifacts_owned),
-            status=result.status,
+            success=mcp_result.success and rules_result.success,
+            state=RecipeState.ABSENT,
+            status="external backend + rules",
             source_url=self.source_url,
             source_date=self.source_date,
             action_needed=self._row.audia_action,
         )
 
     def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        result = self._inner.prune(context)
+        mcp_result = self._mcp.prune(context)
+        rules_result = self._rules.prune(context)
         return ProviderRecipeResult(
-            success=result.success,
-            state=result.state,
-            artifacts_owned=list(result.artifacts_owned),
-            status=result.status,
-            error=result.error,
+            success=mcp_result.success and rules_result.success,
+            state=RecipeState.ABSENT,
+            status=f"mcp: {mcp_result.status}; rules: {rules_result.status}",
+            error=mcp_result.error or rules_result.error,
             source_url=self.source_url,
             source_date=self.source_date,
             action_needed=self._row.audia_action,
         )
 
     def dry_run(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        result = self._inner.probe(context)
-        state = RecipeState.VERIFIED if (result.success and result.state is RecipeState.VERIFIED) else RecipeState.ABSENT
         return ProviderRecipeResult.ok(
-            state,
-            status="already provisioned (dry-run)" if state is RecipeState.VERIFIED else "would install (dry-run)",
+            RecipeState.VERIFIED,
+            status="would configure mcp + rules (dry-run)",
             source_url=self.source_url,
             source_date=self.source_date,
             action_needed=self._row.audia_action,

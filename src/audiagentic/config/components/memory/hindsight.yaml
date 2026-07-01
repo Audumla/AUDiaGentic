@@ -11,10 +11,23 @@ description: >
   implementation package and uses generic provider seams.
 
 options-schema:
-  base-url:
+  host:
     type: string
     required: true
-    description: Hindsight server base URL (e.g. https://hindsight.example.com)
+    description: Hindsight server host or IP (e.g. 10.10.100.10 or hindsight.example.com)
+  port:
+    type: integer
+    default: 8888
+    min: 1
+    max: 65535
+    description: Hindsight server port (defaults to 8888)
+  scheme:
+    type: enum
+    default: http
+    values:
+      - http
+      - https
+    description: URL scheme (defaults to http)
   api-key:
     type: string
     required: false
