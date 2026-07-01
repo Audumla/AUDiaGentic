@@ -15,6 +15,7 @@ from typing import Any
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error_factory
 
 from .interfaces import ItemView, WorkflowContext
+from .transitions import is_known_state, transition_allowed
 from .util import extract_ref_ids
 
 logger = logging.getLogger(__name__)
@@ -42,9 +43,9 @@ class StateMachine:
         wf = self.ctx.config.workflow_for(item.kind, wf_name)
         old = data.get("state", self.ctx.config.initial_state(item.kind, wf_name))
 
-        if new_state not in wf["values"]:
+        if not is_known_state(wf, new_state):
             raise _state_error(1, f"unknown state {new_state} for workflow", state=new_state)
-        if new_state not in wf["transitions"].get(old, []):
+        if not transition_allowed(wf, old, new_state):
             raise _state_error(2, f"invalid transition {old} -> {new_state}", old_state=old, new_state=new_state)
 
         data["state"] = new_state

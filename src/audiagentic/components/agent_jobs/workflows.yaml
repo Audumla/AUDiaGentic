@@ -1,0 +1,20 @@
+# Agent-jobs state workflow. Loaded by state_machine.py via the shared
+# foundation.workflow.transitions primitives. The job lifecycle and its legal
+# transitions are defined here — not hardcoded in Python.
+kinds:
+  job:
+    default-workflow: standard
+    workflows:
+      standard:
+        initial: created
+        values: [created, ready, running, awaiting-approval, completed, failed, cancelled]
+        transitions:
+          created: [ready]
+          ready: [running, cancelled]
+          running: [awaiting-approval, completed, failed, cancelled]
+          awaiting-approval: [running, cancelled]
+          completed: []
+          failed: []
+          cancelled: []
+        state-sets:
+          terminal: [completed, failed, cancelled]

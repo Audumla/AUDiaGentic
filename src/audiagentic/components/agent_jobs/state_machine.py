@@ -1,4 +1,9 @@
-"""Job state machine."""
+"""Job state machine.
+
+The job lifecycle (states + legal transitions) is defined in ``workflows.yaml``
+and validated through the shared ``foundation.workflow`` transition primitives.
+This module owns only job-specific concerns: persistence and error reporting.
+"""
 from __future__ import annotations
 
 import logging
@@ -7,36 +12,35 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-
-logger = logging.getLogger(__name__)
 from audiagentic.foundation.time import now_iso_z
+from audiagentic.foundation.workflow import (
+    is_known_state,
+    load_workflow,
+    states_in_set,
+    transition_allowed,
+)
 from audiagentic.runtime.state import jobs_store as store
 
-LEGAL_TRANSITIONS = {
-    "created": {"ready"},
-    "ready": {"running", "cancelled"},
-    "running": {"awaiting-approval", "completed", "failed", "cancelled"},
-    "awaiting-approval": {"running", "cancelled"},
-    "completed": set(),
-    "failed": set(),
-    "cancelled": set(),
+logger = logging.getLogger(__name__)
+
+_JOB_WORKFLOW = load_workflow(Path(__file__).with_name("workflows.yaml"), "job")
+
+# Public, config-derived views of the job lifecycle.
+LEGAL_TRANSITIONS: dict[str, set[str]] = {
+    state: set(targets) for state, targets in (_JOB_WORKFLOW.get("transitions") or {}).items()
 }
-
-TERMINAL_STATES = {"completed", "failed", "cancelled"}
-
-
+TERMINAL_STATES: set[str] = set(states_in_set(_JOB_WORKFLOW, "terminal"))
 
 
 def ensure_transition(current_state: str, new_state: str) -> None:
-    allowed = LEGAL_TRANSITIONS.get(current_state)
-    if allowed is None:
+    if not is_known_state(_JOB_WORKFLOW, current_state):
         raise AudiaGenticError(
             code="VAL-STATE-001",
             kind="agent-jobs",
             message="unknown job state",
             details={"state": current_state},
         )
-    if new_state not in allowed:
+    if not transition_allowed(_JOB_WORKFLOW, current_state, new_state):
         raise AudiaGenticError(
             code="CON-STATE-001",
             kind="agent-jobs",
