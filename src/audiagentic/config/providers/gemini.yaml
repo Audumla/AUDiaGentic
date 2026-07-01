@@ -1,0 +1,46 @@
+# Gemini (Google) — provider descriptor
+# Toolchain-based install (npm), MCP JSON config, VS Code extension
+
+provider_id: gemini
+display_name: "Gemini (Google)"
+description: "Google's Gemini CLI. Agentic coding assistant with large context window and Google tool integrations."
+url: "https://github.com/google-gemini/gemini-cli"
+prompt_aliases:
+  - gm
+
+cli_probe:
+  - gemini
+  - "--version"
+
+cli_install:
+  toolchain: npm
+  package: "@google/gemini-cli"
+  executable: gemini
+
+host_capabilities:
+  - host: vscode
+    capability_id: "google.gemini-cli-vscode-ide-companion"
+    display_name: "Gemini CLI Companion"
+
+permissions:
+  can_write_files: true
+  can_execute_shell: true
+  can_browse_web: true
+  can_read_env: true
+  notes: "CLI agent with tool use; Google account auth required"
+
+instruction_file: "GEMINI.md"
+skill_surface_path: ".gemini/commands/{tag}.md"
+
+agent_files:
+  - rel_path: "GEMINI.md"
+    managed: false
+    description: "Gemini project instructions"
+
+mcp_config:
+  config_path: ".gemini/settings.json"
+  reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
+  writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
+  remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
+  format: "mcp-json"
+  refresh_mode: "restart-required"

@@ -1,0 +1,42 @@
+# OpenHands — provider descriptor
+# Toolchain-based install (uv), custom probe, no MCP config
+
+provider_id: openhands
+display_name: "OpenHands"
+description: "Open-source autonomous AI agent (formerly OpenDevin). Runs tasks in sandboxed Docker containers with full shell, browser, and file access."
+url: "https://www.all-hands.dev"
+
+cli_probe:
+  - openhands
+  - "--version"
+
+cli_install:
+  toolchain: uv
+  package: openhands
+  executable: openhands
+  extra:
+    - "--python"
+    - "3.12"
+  probe_fn: "audiagentic.components.providers.adapters.openhands.hooks:_openhands_probe"
+
+host_capabilities: []
+
+permissions:
+  can_write_files: true
+  can_execute_shell: true
+  can_browse_web: true
+  can_read_env: true
+  notes: "Autonomous development agent; best treated as sandboxed/isolated provider"
+
+agent_files:
+  - rel_path: ".openhands/settings.json"
+    managed: false
+    description: "OpenHands settings"
+
+mcp_config:
+  config_path: ".openhands/config.toml"
+  reader: "audiagentic.components.providers.adapters.openhands.toml_format:read_mcp_toml"
+  writer: "audiagentic.components.providers.adapters.openhands.toml_format:write_mcp_toml"
+  remover: "audiagentic.components.providers.adapters.openhands.toml_format:remove_mcp_toml"
+  format: "mcp-toml"
+  refresh_mode: "restart-required"

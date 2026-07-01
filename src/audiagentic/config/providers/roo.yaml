@@ -1,0 +1,46 @@
+# Roo Code — provider descriptor
+# Toolchain-based install (vscode), custom probe, MCP JSON config, VS Code extension
+
+provider_id: roo
+display_name: "Roo Code"
+description: "VS Code extension for AI-assisted coding with multi-model support and custom modes."
+url: "https://roocode.com"
+access_mode: env
+
+cli_probe:
+  - code
+  - "--list-extensions"
+
+cli_install:
+  toolchain: vscode
+  package: "RooVeterinaryInc.roo-cline"
+  executable: code
+  probe_fn: "audiagentic.components.providers.adapters.roo.hooks:_roo_probe"
+
+host_capabilities:
+  - host: vscode
+    capability_id: "RooVeterinaryInc.roo-cline"
+    display_name: "Roo Code"
+
+permissions:
+  can_write_files: true
+  can_execute_shell: true
+  can_browse_web: true
+  can_read_env: true
+  notes: "VS Code agent with mode support and local model/provider flexibility"
+
+agent_files:
+  - rel_path: ".roo/rules/audiagentic.md"
+    managed: true
+    description: "AUDiaGentic rules for Roo"
+  - rel_path: ".rooignore"
+    managed: false
+    description: "Roo ignore file"
+
+mcp_config:
+  config_path: ".mcp.json"
+  reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
+  writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
+  remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
+  format: "mcp-json"
+  refresh_mode: "restart-required"
