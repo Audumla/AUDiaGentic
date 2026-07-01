@@ -4,10 +4,11 @@ WORKDIR /app
 ENV AUDIAGENTIC_DOCKER_TESTS=1
 ENV AUDIAGENTIC_REAL_PROVIDER_CLI_TESTS=1
 ENV PYTHONPATH="/app/src"
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 # Source is baked in (COPY), not bind-mounted: a -v $PWD:/app mount of the host
 # filesystem deadlocks on Windows Docker Desktop. .dockerignore curates the context.
 # Build: docker build -f tests/docker/Dockerfile.provider-lifecycle-e2e -t audiagentic-provider-lifecycle-e2e .
 # Run:   docker run --rm audiagentic-provider-lifecycle-e2e
 COPY . /app
-CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-timeout pytest-xdist pytest-asyncio && /venv/bin/pytest tests/integration/providers/test_provider_full_lifecycle.py -v --tb=short --timeout=300"]
+CMD ["bash", "-c", "export PATH=/root/.local/bin:$PATH && uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-timeout pytest-xdist pytest-asyncio tomli-w && /venv/bin/pytest tests/integration/providers/test_provider_full_lifecycle.py tests/integration/providers/test_provider_hindsight_e2e.py -v --tb=short --timeout=300"]

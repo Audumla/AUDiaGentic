@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from audiagentic.components.coding_lsp import coding_lsp_bootstrap, language_registry
@@ -17,7 +18,13 @@ def test_install_commands_for_clangd_uses_platform_variant() -> None:
     commands = build_dependency_install_commands(
         language_registry.dependency_cfgs(), ["clangd"], workflow_id="coding-lsp"
     )
-    assert commands["clangd"] == [["winget", "install", "--id", "LLVM.LLVM", "-e", "--accept-source-agreements", "--accept-package-agreements"]]
+    if os.name == "nt":
+        assert commands["clangd"] == [[
+            "winget", "install", "--id", "LLVM.LLVM", "-e",
+            "--accept-source-agreements", "--accept-package-agreements",
+        ]]
+    else:
+        assert commands["clangd"] == [["apt-get", "update", "-q"], ["apt-get", "install", "-y", "clangd"]]
 
 
 def test_status_payload_uses_workflow_derived_install_commands(tmp_path: Path, monkeypatch) -> None:

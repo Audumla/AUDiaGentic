@@ -13,9 +13,12 @@ ENV PATH="/root/.local/bin:/root/.cargo/bin:/usr/local/go/bin:/root/go/bin:/venv
 # build-essential: required for cargo compilation (rust-analyzer)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 python3-pip python3-venv python3-dev \
-        git ca-certificates curl gpg gnupg wget libgomp1 \
+        git ca-certificates curl gpg gnupg wget libgomp1 bash \
         build-essential \
     && rm -rf /var/lib/apt/lists/*
+
+RUN ln -sf /usr/bin/pip3 /usr/local/bin/pip \
+    && ln -sf /usr/bin/python3 /usr/local/bin/python
 
 # uv (pyright, openhands, aider)
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh

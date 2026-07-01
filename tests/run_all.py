@@ -28,6 +28,7 @@ Usage
     python tests/run_all.py --docker      # require docker; fail if no daemon
     python tests/run_all.py --lsp-install # also run the slow (~15 min) clean-room
                                           # LSP install image (rust-analyzer compile)
+    python tests/run_all.py --host-docker-tests  # also run host daemon-driven docker tests
     python tests/run_all.py -k expr ...   # extra args are forwarded to the host pytest
 
 Exit code is non-zero if any executed phase fails.
@@ -114,7 +115,7 @@ def host_phase(extra: list[str]) -> int:
     cmd = [
         sys.executable, "-m", "pytest",
         "-n", "auto", "--dist", "loadgroup",
-        "-m", "not docker",  # exclude host-side tests that shell out to a daemon
+        "-m", "not docker and not opt_in",  # exclude daemon-driven and explicit opt-in tests
         *extra,
     ]
     return run(cmd)
@@ -154,7 +155,7 @@ def build_and_run(img: Img, failures: list[str]) -> None:
         failures.append(img.tag)
 
 
-def docker_phase(include_lsp_install: bool) -> int:
+def docker_phase(include_lsp_install: bool, *, include_host_docker_tests: bool) -> int:
     """Build the image set once and run the in-container suites.
 
     Mutating recipe images run in their own fresh containers so install/uninstall
@@ -178,11 +179,15 @@ def docker_phase(include_lsp_install: bool) -> int:
         print(_c("\nSkipping slow clean-room LSP install image "
                  "(rust-analyzer compile ~15 min) - pass --lsp-install to include it.", "33"))
 
-    # Host-side tests that drive a daemon themselves (mark.docker). Images they
-    # reference now exist, so they no longer auto-skip.
-    banner("DOCKER: host-side daemon tests (mark.docker)")
-    if run([sys.executable, "-m", "pytest", "-m", "docker", "-p", "no:cacheprovider"]) != 0:
-        failures.append("host-docker-tests")
+    if include_host_docker_tests:
+        # Host-side tests that drive a daemon themselves (mark.docker). Keep
+        # opt-in: they are slower and validate the host/daemon boundary rather
+        # than the main in-container regression path.
+        banner("DOCKER: host-side daemon tests (mark.docker)")
+        if run([sys.executable, "-m", "pytest", "-m", "docker", "-p", "no:cacheprovider"]) != 0:
+            failures.append("host-docker-tests")
+    else:
+        print(_c("\nSkipping host-side daemon tests (mark.docker) - pass --host-docker-tests to include them.", "33"))
 
     if failures:
         print(_c(f"\nDocker phase failures: {', '.join(failures)}", "1;31"))
@@ -199,6 +204,8 @@ def main(argv: list[str] | None = None) -> int:
                        help="require a Docker daemon; fail if unavailable")
     parser.add_argument("--lsp-install", action="store_true",
                         help="also run the slow clean-room LSP install image (~15 min)")
+    parser.add_argument("--host-docker-tests", action="store_true",
+                        help="also run host daemon-driven docker tests (mark.docker)")
     args, extra = parser.parse_known_args(argv)
 
     if args.fast:
@@ -215,7 +222,10 @@ def main(argv: list[str] | None = None) -> int:
         # can never see, like broken Windows PATH shims for local MCP/LSP CLIs.
         print(_c("Docker daemon detected - running host-sensitive smokes plus full container suite.", "36"))
         host_rc = host_sensitive_smoke_phase()
-        docker_rc = docker_phase(include_lsp_install=args.lsp_install)
+        docker_rc = docker_phase(
+            include_lsp_install=args.lsp_install,
+            include_host_docker_tests=args.host_docker_tests,
+        )
         return 1 if host_rc or docker_rc else 0
 
     # No Docker daemon. Fall back to the host for what it can run (non-mutating).

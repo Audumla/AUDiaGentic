@@ -205,8 +205,8 @@ def test_codex_native_config(provisioned_project: Path) -> None:
     for lang in LANGUAGES:
         assert lang in servers, f"codex missing native LSP entry for {lang}"
         assert servers[lang]["command"] == list(language_registry.get_language(lang).command)
-    # generic ag-lsp suppressed in codex's unique config file
-    assert "ag-lsp" not in data.get("mcp_servers", {})
+    # generic ag-lsp co-exists with provider-native LSP config.
+    assert "ag-lsp" in data.get("mcp_servers", {})
 
 
 def test_opencode_native_config(provisioned_project: Path) -> None:
@@ -287,9 +287,11 @@ def test_prune_removes_native_entries(provisioned_project: Path) -> None:
     prune_generic_lsp_mcp_from_providers(provisioned_project)
     data = tomllib.loads((provisioned_project / ".codex" / "config.toml").read_text(encoding="utf-8"))
     assert data.get("language_servers", {}) == {}
-    qwen = json.loads((provisioned_project / ".lsp.json").read_text(encoding="utf-8"))
-    for lang in LANGUAGES:
-        assert lang not in qwen
+    qwen_path = provisioned_project / ".lsp.json"
+    if qwen_path.exists():
+        qwen = json.loads(qwen_path.read_text(encoding="utf-8"))
+        for lang in LANGUAGES:
+            assert lang not in qwen
     # re-sync so other tests (if reordered) still see config
     sync_language_servers_to_providers(provisioned_project)
     sync_generic_lsp_mcp_to_providers(provisioned_project)

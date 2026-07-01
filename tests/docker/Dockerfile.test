@@ -23,10 +23,12 @@ ENV AUDIAGENTIC_DOCKER_TESTS=1
 ENV AUDIAGENTIC_REPO_ROOT=/app
 
 COPY pyproject.toml README.md release-please-config.json ./
+COPY .gitignore ./
 COPY src ./src
 COPY tests ./tests
 COPY docs/examples ./docs/examples
 COPY .audiagentic/config ./.audiagentic/config
+COPY .audiagentic/runtime ./.audiagentic/runtime
 COPY .audiagentic/skills ./.audiagentic/skills
 COPY .claude/skills ./.claude/skills
 COPY .gemini ./.gemini

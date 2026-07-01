@@ -211,16 +211,16 @@ class TestCodexTomlFormat:
 
 
 class TestAddProviderMcpServer:
-    def test_adds_entry_to_mcp_json(self, tmp_path: Path) -> None:
+    def test_adds_entry_to_mcp_json(self, tmp_path: Path, claude_home: Path) -> None:
         result = add_provider_mcp_server("claude", "my-srv", "uvx", tmp_path, args=("my-tool",))
         assert result["ok"] is True
-        mcp = tmp_path / ".mcp.json"
+        mcp = claude_home / ".claude" / "mcp.json"
         assert mcp.exists()
         data = json.loads(mcp.read_text())
         assert "my-srv" in data["mcpServers"]
         assert data["mcpServers"]["my-srv"]["command"] == "uvx"
 
-    def test_file_watch_provider_reports_auto_refreshed(self, tmp_path: Path) -> None:
+    def test_file_watch_provider_reports_auto_refreshed(self, tmp_path: Path, claude_home: Path) -> None:
         result = add_provider_mcp_server("claude", "srv", "cmd", tmp_path)
         assert result["auto_refreshed"] is True
         assert result["method"] == "file-watch"
@@ -230,15 +230,15 @@ class TestAddProviderMcpServer:
         assert result["ok"] is False
         assert "no mcp_config" in result["error"]
 
-    def test_adds_env_when_provided(self, tmp_path: Path) -> None:
+    def test_adds_env_when_provided(self, tmp_path: Path, claude_home: Path) -> None:
         add_provider_mcp_server("claude", "srv", "cmd", tmp_path, env={"KEY": "val"})
-        data = json.loads((tmp_path / ".mcp.json").read_text())
+        data = json.loads((claude_home / ".claude" / "mcp.json").read_text())
         assert data["mcpServers"]["srv"]["env"] == {"KEY": "val"}
 
-    def test_updates_existing_entry(self, tmp_path: Path) -> None:
+    def test_updates_existing_entry(self, tmp_path: Path, claude_home: Path) -> None:
         add_provider_mcp_server("claude", "srv", "old-cmd", tmp_path)
         add_provider_mcp_server("claude", "srv", "new-cmd", tmp_path)
-        data = json.loads((tmp_path / ".mcp.json").read_text())
+        data = json.loads((claude_home / ".claude" / "mcp.json").read_text())
         assert data["mcpServers"]["srv"]["command"] == "new-cmd"
 
     def test_adds_entry_to_codex_toml(self, tmp_path: Path) -> None:
@@ -252,12 +252,12 @@ class TestAddProviderMcpServer:
 
 
 class TestRemoveProviderMcpServer:
-    def test_removes_existing_entry(self, tmp_path: Path) -> None:
+    def test_removes_existing_entry(self, tmp_path: Path, claude_home: Path) -> None:
         add_provider_mcp_server("claude", "srv", "cmd", tmp_path)
         result = remove_provider_mcp_server("claude", "srv", tmp_path)
         assert result["ok"] is True
         assert result["removed"] is True
-        data = json.loads((tmp_path / ".mcp.json").read_text())
+        data = json.loads((claude_home / ".claude" / "mcp.json").read_text())
         assert "srv" not in data["mcpServers"]
 
     def test_remove_missing_entry_ok_not_removed(self, tmp_path: Path) -> None:
@@ -271,7 +271,7 @@ class TestRemoveProviderMcpServer:
 
 
 class TestListProviderMcpServers:
-    def test_lists_entries(self, tmp_path: Path) -> None:
+    def test_lists_entries(self, tmp_path: Path, claude_home: Path) -> None:
         add_provider_mcp_server("claude", "srv-a", "cmd-a", tmp_path)
         add_provider_mcp_server("claude", "srv-b", "cmd-b", tmp_path)
         result = list_provider_mcp_servers("claude", tmp_path)
@@ -280,7 +280,7 @@ class TestListProviderMcpServers:
         assert "srv-a" in names
         assert "srv-b" in names
 
-    def test_empty_when_no_config_file(self, tmp_path: Path) -> None:
+    def test_empty_when_no_config_file(self, tmp_path: Path, claude_home: Path) -> None:
         result = list_provider_mcp_servers("claude", tmp_path)
         assert result["ok"] is True
         assert result["servers"] == []
@@ -319,8 +319,9 @@ class TestReloadProviderMcp:
 
 
 class TestSyncManagedProviderMcp:
-    def test_preserves_external_entries(self, tmp_path: Path) -> None:
-        path = tmp_path / ".mcp.json"
+    def test_preserves_external_entries(self, tmp_path: Path, claude_home: Path) -> None:
+        path = claude_home / ".claude" / "mcp.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({
             "mcpServers": {
                 "external-server": {"command": "node", "args": ["custom.js"]},
@@ -339,7 +340,7 @@ class TestSyncManagedProviderMcp:
         assert "external-server" in data["mcpServers"]
         assert "ag-project-mgmt" in data["mcpServers"]
 
-    def test_renames_owned_entry_by_managed_id(self, tmp_path: Path) -> None:
+    def test_renames_owned_entry_by_managed_id(self, tmp_path: Path, claude_home: Path) -> None:
         old_entry = McpServerEntry(name="ag-project-mgmt", command="python", args=("-m", "old"))
         sync_managed_provider_mcp(
             "claude",
@@ -355,15 +356,23 @@ class TestSyncManagedProviderMcp:
         )
 
         assert result["ok"] is True
-        data = json.loads((tmp_path / ".mcp.json").read_text())
+        data = json.loads((claude_home / ".claude" / "mcp.json").read_text())
         assert "ag-project" in data["mcpServers"]
         assert "ag-project-mgmt" not in data["mcpServers"]
 
-    def test_collision_with_external_name_is_reported(self, tmp_path: Path) -> None:
-        path = tmp_path / ".mcp.json"
+    def test_adopts_unregistered_entry_with_matching_name(self, tmp_path: Path, claude_home: Path) -> None:
+        """AUDiaGentic takes ownership of any entry whose name matches a managed server.
+
+        An entry present in the config file but not in the managed registry was
+        written by an older code path. The managed sync must adopt it (overwrite
+        with the correct entry and record ownership) rather than skip it.
+        This prevents orphaned entries from blocking future syncs.
+        """
+        path = claude_home / ".claude" / "mcp.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({
             "mcpServers": {
-                "ag-project-mgmt": {"command": "node", "args": ["external.js"]},
+                "ag-project-mgmt": {"command": "old", "args": ["legacy.js"]},
             }
         }))
 
@@ -374,14 +383,14 @@ class TestSyncManagedProviderMcp:
             {"project.ag-project-mgmt": ("ag-project-mgmt", entry)},
         )
 
-        assert result["ok"] is False
-        assert result["collisions"]
+        assert result["ok"] is True
+        assert not result["collisions"]
         data = json.loads(path.read_text())
-        assert data["mcpServers"]["ag-project-mgmt"]["command"] == "node"
+        assert data["mcpServers"]["ag-project-mgmt"]["command"] == "python"
 
 
 class TestSyncManagedProviderMcpSubset:
-    def test_prunes_only_targeted_managed_entries(self, tmp_path: Path) -> None:
+    def test_prunes_only_targeted_managed_entries(self, tmp_path: Path, claude_home: Path) -> None:
         sync_managed_provider_mcp(
             "claude",
             tmp_path,
@@ -405,11 +414,11 @@ class TestSyncManagedProviderMcpSubset:
         )
 
         assert result["ok"] is True
-        data = json.loads((tmp_path / ".mcp.json").read_text())
+        data = json.loads((claude_home / ".claude" / "mcp.json").read_text())
         assert "ag-ledger" in data["mcpServers"]
         assert "ag-lsp" not in data["mcpServers"]
 
-    def test_updates_only_targeted_subset(self, tmp_path: Path) -> None:
+    def test_updates_only_targeted_subset(self, tmp_path: Path, claude_home: Path) -> None:
         ledger = McpServerEntry(name="ag-ledger", command="python", args=("-m", "ledger"))
         lsp = McpServerEntry(name="ag-lsp", command="python", args=("-m", "old.lsp"))
         sync_managed_provider_mcp(
@@ -430,7 +439,7 @@ class TestSyncManagedProviderMcpSubset:
         )
 
         assert result["ok"] is True
-        data = json.loads((tmp_path / ".mcp.json").read_text())
+        data = json.loads((claude_home / ".claude" / "mcp.json").read_text())
         assert "ag-ledger" in data["mcpServers"]
         assert "ag-lsp" not in data["mcpServers"]
         assert "ag-lsp2" in data["mcpServers"]
@@ -473,9 +482,43 @@ class TestMcpConfigSpecOnDescriptors:
 
     def test_providers_without_mcp_config(self) -> None:
         from audiagentic.components.providers.descriptors.registry import get_descriptor
-        for pid in ("aider", "plandex", "openhands", "local-openai"):
+        for pid in ("aider", "plandex", "local-openai"):
             desc = get_descriptor(pid)
             assert desc.mcp_config is None, f"{pid} should have no mcp_config"
+
+
+class TestOpenhandsMcpConfig:
+    def test_openhands_has_toml_mcp_config(self) -> None:
+        from audiagentic.components.providers.descriptors.registry import get_descriptor
+
+        desc = get_descriptor("openhands")
+        assert desc.mcp_config is not None
+        assert desc.mcp_config.config_path == ".openhands/config.toml"
+        assert desc.mcp_config.format == "mcp-toml"
+        assert desc.mcp_config.refresh_mode == "restart-required"
+
+
+class TestOpenhandsTomlRoundtrip:
+    def test_toml_remote_entry_roundtrip(self, tmp_path: Path) -> None:
+        from audiagentic.components.providers.adapters.openhands.toml_format import (
+            read_mcp_toml,
+            write_mcp_toml,
+        )
+        from audiagentic.foundation.mcp import McpServerEntry
+
+        cfg = tmp_path / "config.toml"
+        write_mcp_toml(cfg, {
+            "hindsight": McpServerEntry(
+                name="hindsight",
+                url="http://host:8888/mcp",
+                headers={"Authorization": "Bearer k"},
+                transport="http",
+            ),
+        })
+
+        result = read_mcp_toml(cfg)
+        assert result["hindsight"].is_remote is True
+        assert result["hindsight"].url == "http://host:8888/mcp"
 
     def test_goose_and_continue_have_restart_required(self) -> None:
         from audiagentic.components.providers.descriptors.registry import get_descriptor

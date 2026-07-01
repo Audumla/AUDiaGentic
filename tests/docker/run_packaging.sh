@@ -36,7 +36,7 @@ python3 /app/tests/docker/_server_smoke.py
 rc=$((rc | $?))
 
 echo "::: check 3 — release CLI e2e against wheel-installed package :::"
-pytest tests/e2e/cli -q
+pytest tests/e2e/cli -q -m "not opt_in"
 rc=$((rc | $?))
 
 exit $rc
