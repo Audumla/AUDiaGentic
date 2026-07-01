@@ -99,7 +99,7 @@ def test_run_cli_executes_cmd_shim_that_bare_list_cannot(tmp_path, monkeypatch) 
 
 def test_opencode_probe_delegates_to_shared_helper(monkeypatch) -> None:
     """Regression: opencode probe routes through probe_cli_version, not a bare run."""
-    from audiagentic.components.providers.adapters.opencode import descriptor as oc
+    from audiagentic.components.providers.adapters.opencode import catalog as oc
 
     seen: dict[str, object] = {}
 
@@ -108,7 +108,7 @@ def test_opencode_probe_delegates_to_shared_helper(monkeypatch) -> None:
         seen["command"] = command
         return {"available": True}
 
-    monkeypatch.setattr(oc, "probe_cli_version", fake)
+    monkeypatch.setattr("audiagentic.components.providers.adapters.probe.probe_cli_version", fake)
     result = oc._opencode_probe(None)
     assert result["available"] is True
     assert seen["name"] == "opencode"

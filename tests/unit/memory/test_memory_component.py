@@ -60,7 +60,10 @@ class TestDescriptorLoading:
         impl = get_implementation("memory", "hindsight")
         assert impl is not None
         schema = impl.options_schema
-        assert "base-url" in schema
+        assert "host" in schema
+        assert schema["host"].required is True
+        assert "port" in schema
+        assert schema["port"].default == 8888
         assert "timeout-seconds" in schema
         assert schema["timeout-seconds"].default == 30
 
@@ -139,39 +142,60 @@ class TestConfigValidation:
         from audiagentic.components.memory.memory_api import memory_set_config
 
         result = memory_set_config(project_root, "hindsight", {
-            "base-url": "https://hindsight.example.com",
+            "host": "10.10.100.10",
         })
         assert result["implementation"] == "hindsight"
-        assert result["config"]["base-url"] == "https://hindsight.example.com"
-        assert "base-url" in result["updated_keys"]
+        assert result["config"]["host"] == "10.10.100.10"
+        assert "host" in result["updated_keys"]
 
 
 class TestMemoryStatus:
     """Test memory_status output contract — memory-owned facts only."""
 
     def test_status_with_no_config(self, project_root: Path) -> None:
-        """Status returns configured=False when no options are set."""
+        """Status returns configured=False and surfaces the missing required option."""
         from audiagentic.components.memory.memory_api import memory_status
 
         result = memory_status(project_root)
         assert result["active_implementation"] == "hindsight"
         assert result["configured"] is False
+        # Schema-driven guidance: the required host is reported as missing.
+        missing = {m["option"]: m["description"] for m in result["missing_required"]}
+        assert "host" in missing
+        assert missing["host"], "missing option should carry its description for CLI guidance"
         # No provider-specific fields
         assert "provider_support" not in result
         assert "unsupported_providers" not in result
 
+    def test_status_only_optional_option_still_unconfigured(self, project_root: Path) -> None:
+        """Setting only an optional option must NOT flip configured to true.
+
+        Regression guard against the old `enabled or options` heuristic, which
+        treated any non-empty options as configured regardless of required fields.
+        """
+        from audiagentic.components.memory.memory_api import (
+            memory_set_config,
+            memory_status,
+        )
+
+        memory_set_config(project_root, "hindsight", {"timeout-seconds": 15})
+        result = memory_status(project_root)
+        assert result["configured"] is False
+        assert "host" in [m["option"] for m in result["missing_required"]]
+
     def test_status_with_config(self, project_root: Path) -> None:
-        """Status returns configured=True when options are set."""
+        """Status returns configured=True when the required option is set."""
         from audiagentic.components.memory.memory_api import (
             memory_set_config,
             memory_status,
         )
 
         memory_set_config(project_root, "hindsight", {
-            "base-url": "https://hindsight.example.com",
+            "host": "10.10.100.10",
         })
         result = memory_status(project_root)
         assert result["configured"] is True
+        assert "missing_required" not in result
 
 
 class TestBoundaryExports:
@@ -188,7 +212,7 @@ class TestBoundaryExports:
         from audiagentic.components.memory.memory_api import memory_set_config
 
         result = memory_set_config(project_root, "hindsight", {
-            "base-url": "https://hindsight.example.com",
+            "host": "10.10.100.10",
         })
         assert result["needs_provider_recipe_refresh"] is True
 
@@ -200,8 +224,56 @@ class TestIdempotentApply:
         """Setting the same config twice yields no extra drift."""
         from audiagentic.components.memory.memory_api import memory_set_config
 
-        updates = {"base-url": "https://hindsight.example.com"}
+        updates = {"host": "10.10.100.10"}
         result1 = memory_set_config(project_root, "hindsight", updates)
         result2 = memory_set_config(project_root, "hindsight", updates)
 
         assert result1["config"] == result2["config"]
+
+
+class TestBackendUrlComposition:
+    """Backend base_url is composed from host/port/scheme with sensible defaults."""
+
+    def test_host_only_uses_default_port_and_scheme(self, project_root: Path) -> None:
+        from audiagentic.components.memory.hindsight_export import build_hindsight_backend
+        from audiagentic.components.memory.memory_api import memory_set_config
+
+        memory_set_config(project_root, "hindsight", {"host": "10.10.100.10"})
+        backend = build_hindsight_backend(project_root)
+        assert backend is not None
+        assert backend.base_url == "http://10.10.100.10:8888"
+        assert backend.mcp_url == "http://10.10.100.10:8888/mcp"
+
+    def test_custom_port_and_scheme_override_defaults(self, project_root: Path) -> None:
+        from audiagentic.components.memory.hindsight_export import build_hindsight_backend
+        from audiagentic.components.memory.memory_api import memory_set_config
+
+        memory_set_config(
+            project_root, "hindsight",
+            {"host": "hindsight.example.com", "port": 443, "scheme": "https"},
+        )
+        backend = build_hindsight_backend(project_root)
+        assert backend is not None
+        assert backend.base_url == "https://hindsight.example.com:443"
+
+    def test_legacy_base_url_option_is_honored(self, project_root: Path) -> None:
+        """Existing configs that stored a full base-url keep working (read-time fallback)."""
+        from audiagentic.components.memory.hindsight_export import build_hindsight_backend
+        from audiagentic.foundation.features.base import ImplementationState
+        from audiagentic.foundation.features.state import set_implementation_state
+
+        # Persist a legacy option directly (schema no longer advertises base-url).
+        set_implementation_state(
+            project_root, "memory", "hindsight",
+            ImplementationState(enabled=True, options={"base-url": "http://10.10.100.10:8888"}),
+        )
+        backend = build_hindsight_backend(project_root)
+        assert backend is not None
+        assert backend.base_url == "http://10.10.100.10:8888"
+
+    def test_no_host_and_no_base_url_yields_no_backend(self, project_root: Path) -> None:
+        from audiagentic.components.memory.hindsight_export import build_hindsight_backend
+        from audiagentic.components.memory.memory_api import memory_set_config
+
+        memory_set_config(project_root, "hindsight", {"timeout-seconds": 15})
+        assert build_hindsight_backend(project_root) is None

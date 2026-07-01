@@ -14,14 +14,12 @@ mcp = mcp_server(__name__)
 @mcp.tool()
 @log_tool_call
 def get_release_status() -> dict:
-    """Return release installation status and active manager state."""
     return release_api.get_status(project_root_from_env())
 
 
 @mcp.tool()
 @log_tool_call
 def ensure_release_baseline() -> dict:
-    """Ensure the release manager baseline workflow is installed."""
     return release_api.ensure_baseline(project_root_from_env())
 
 

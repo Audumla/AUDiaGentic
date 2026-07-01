@@ -164,11 +164,12 @@ def test_mgmt_mcp_propagates_to_audiagentic_only() -> None:
     assert "providers" not in mgmt.propagate
 
 
-def test_planning_mcp_propagates_to_providers() -> None:
+def test_planning_mcp_propagates_to_providers_only() -> None:
+    """ag-planning is an operational server — providers only, never the harness."""
     desc = all_descriptors()["agent-planning"]
     planning = next(ms for ms in desc.mcp_servers if ms.name == _PLANNING_SERVER)
     assert "providers" in planning.propagate
-    assert "audiagentic" in planning.propagate
+    assert "audiagentic" not in planning.propagate
 
 
 # ---------------------------------------------------------------------------

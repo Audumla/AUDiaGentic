@@ -12,10 +12,16 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
+
+import pytest
+
+pytestmark = [pytest.mark.opt_in]
 
 _ROOT = Path(__file__).resolve().parents[3]
 for _p in (str(_ROOT), str(_ROOT / "src")):
@@ -39,19 +45,60 @@ _INITIALIZED = {"jsonrpc": "2.0", "method": "notifications/initialized", "params
 # JSON-RPC helpers
 # ---------------------------------------------------------------------------
 
+def _read_byte_with_timeout(stream, timeout_s: float) -> bytes | None:
+    q: queue.Queue[bytes] = queue.Queue(maxsize=1)
+
+    def _reader() -> None:
+        chunk = stream.read(1)
+        q.put(chunk or b"")
+
+    t = threading.Thread(target=_reader, daemon=True)
+    t.start()
+    try:
+        chunk = q.get(timeout=max(timeout_s, 0.001))
+    except queue.Empty:
+        return None
+    return chunk or b""
+
+
 def _read_json_line(proc: subprocess.Popen, deadline: float) -> dict | None:
     assert proc.stdout is not None
     while time.time() < deadline:
-        line = proc.stdout.readline()
-        if not line:
-            if proc.poll() is not None:
-                return None
+        header = bytearray()
+        while b"\r\n\r\n" not in header and time.time() < deadline:
+            chunk = _read_byte_with_timeout(proc.stdout, deadline - time.time())
+            if chunk is None:
+                continue
+            if chunk == b"":
+                if proc.poll() is not None:
+                    return None
+                continue
+            header.extend(chunk)
+        if not header:
+            continue
+        header_text = header.decode("ascii", errors="ignore")
+        length = None
+        for line in header_text.split("\r\n"):
+            if line.lower().startswith("content-length:"):
+                length = int(line.split(":", 1)[1].strip())
+                break
+        if length is None:
+            continue
+        payload = proc.stdout.read(length)
+        if not payload:
             continue
         try:
-            return json.loads(line)
+            return json.loads(payload.decode("utf-8"))
         except (json.JSONDecodeError, ValueError):
             continue
     return None
+
+
+def _write_message(proc: subprocess.Popen, msg: dict) -> None:
+    assert proc.stdin is not None
+    payload = json.dumps(msg).encode("utf-8")
+    proc.stdin.write(f"Content-Length: {len(payload)}\r\n\r\n".encode("ascii") + payload)
+    proc.stdin.flush()
 
 
 def _send_and_wait(
@@ -62,8 +109,7 @@ def _send_and_wait(
 ) -> list[dict]:
     assert proc.stdin is not None
     for msg in messages:
-        proc.stdin.write(json.dumps(msg) + "\n")
-    proc.stdin.flush()
+        _write_message(proc, msg)
 
     responses: list[dict] = []
     while time.time() < deadline:
@@ -93,16 +139,14 @@ def _start_server(module: str, project_root: Path) -> subprocess.Popen:
     proc = subprocess.Popen(
         [sys.executable, "-m", module],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True, encoding="utf-8", env=env,
+        env=env,
     )
     assert proc.stdin is not None
     assert proc.stdout is not None
-    proc.stdin.write(json.dumps(_INIT) + "\n")
-    proc.stdin.flush()
+    _write_message(proc, _INIT)
     init_resp = _read_json_line(proc, time.time() + 10)
     assert init_resp is not None, f"MCP server {module} did not respond to initialize"
-    proc.stdin.write(json.dumps(_INITIALIZED) + "\n")
-    proc.stdin.flush()
+    _write_message(proc, _INITIALIZED)
     return proc
 
 
@@ -270,14 +314,14 @@ class TestPlanningMcpServer:
 # ---------------------------------------------------------------------------
 
 class TestPlanningHarnessMcpCollection:
-    """Verify collect_mcp_servers — the source of harness mcp.json — includes planning servers.
+    """Verify collect_mcp_servers — the source of harness mcp.json — contains only mgmt servers.
 
-    These tests exercise the full collection path (not a subprocess call) and
-    cover what both ag-planning-mgmt and ag-planning would look like in the
-    generated mcp.json without requiring a real harness installation.
+    Architecture rule: the harness MCP config must only contain management servers
+    (propagate: audiagentic). Operational servers (propagate: providers) go to
+    provider configs only, never to the harness. This class enforces that separation.
     """
 
-    def test_collect_mcp_includes_both_planning_servers_when_installed(self, tmp_path: Path) -> None:
+    def test_collect_mcp_includes_mgmt_server_when_installed(self, tmp_path: Path) -> None:
         from audiagentic.foundation.components.loader import register_all_components
         from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
         from audiagentic.runtime.lifecycle.components import install_component
@@ -290,9 +334,20 @@ class TestPlanningHarnessMcpCollection:
             f"ag-planning-mgmt missing from harness mcp collection after install. "
             f"Present: {set(servers)}"
         )
-        assert "ag-planning" in servers, (
-            f"ag-planning missing from harness mcp collection after install. "
-            f"Present: {set(servers)}"
+
+    def test_collect_mcp_excludes_operational_server_from_harness(self, tmp_path: Path) -> None:
+        """ag-planning has propagate: providers — must never appear in the harness config."""
+        from audiagentic.foundation.components.loader import register_all_components
+        from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
+        from audiagentic.runtime.lifecycle.components import install_component
+
+        register_all_components()
+        install_component("agent-planning", tmp_path)
+
+        servers = collect_mcp_servers(tmp_path)
+        assert "ag-planning" not in servers, (
+            "ag-planning is an operational server (propagate: providers) and must not "
+            "appear in the harness mcp collection. Only ag-planning-mgmt belongs here."
         )
 
     def test_collect_mcp_excludes_planning_servers_when_not_installed(self, tmp_path: Path) -> None:
@@ -325,7 +380,7 @@ class TestPlanningHarnessMcpCollection:
             "ag-planning should not be collected when agent-planning is disabled"
         )
 
-    def test_planning_servers_have_correct_entry_structure(self, tmp_path: Path) -> None:
+    def test_planning_mgmt_server_has_correct_entry_structure(self, tmp_path: Path) -> None:
         from audiagentic.foundation.components.loader import register_all_components
         from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
         from audiagentic.runtime.lifecycle.components import install_component
@@ -334,13 +389,12 @@ class TestPlanningHarnessMcpCollection:
         install_component("agent-planning", tmp_path)
 
         servers = collect_mcp_servers(tmp_path)
-        for name in ("ag-planning-mgmt", "ag-planning"):
-            entry = servers[name]
-            assert entry.command, f"{name}: command is empty"
-            assert entry.args, f"{name}: args is empty"
+        entry = servers["ag-planning-mgmt"]
+        assert entry.command, "ag-planning-mgmt: command is empty"
+        assert entry.args, "ag-planning-mgmt: args is empty"
 
-    def test_pi_mcp_dict_includes_planning_servers_when_installed(self, tmp_path: Path) -> None:
-        """Full pi mcp.json build path: collect → build_pi_mcp_dict → verify keys."""
+    def test_pi_mcp_dict_includes_mgmt_server_only_when_installed(self, tmp_path: Path) -> None:
+        """Full pi mcp.json build: collect → build_pi_mcp_dict → only mgmt server present."""
         from audiagentic.foundation.components.loader import register_all_components
         from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
         from audiagentic.runtime.harness.pi.mcp_format import build_pi_mcp_dict
@@ -356,6 +410,7 @@ class TestPlanningHarnessMcpCollection:
         assert "ag-planning-mgmt" in servers, (
             f"ag-planning-mgmt missing from pi mcp dict. Present: {set(servers)}"
         )
-        assert "ag-planning" in servers, (
-            f"ag-planning missing from pi mcp dict. Present: {set(servers)}"
+        assert "ag-planning" not in servers, (
+            "ag-planning is an operational server (propagate: providers) and must not "
+            "appear in the pi harness mcp.json. Only ag-planning-mgmt belongs here."
         )

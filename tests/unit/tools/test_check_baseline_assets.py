@@ -13,6 +13,7 @@ def test_check_baseline_assets_managed_headers() -> None:
         str(REPO_ROOT / "src"),
         env.get("PYTHONPATH", ""),
     ])
+    env["AUDIAGENTIC_REPO_ROOT"] = str(REPO_ROOT)
     completed = subprocess.run(
         [
             sys.executable,

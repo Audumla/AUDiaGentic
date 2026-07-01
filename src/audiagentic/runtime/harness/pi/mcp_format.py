@@ -31,9 +31,10 @@ _PI_SETTINGS_DISABLED: dict[str, Any] = {
 }
 
 
-def pi_mcp_path() -> Path:
-    from audiagentic.runtime.home import global_harness_runtime
-    return global_harness_runtime() / "agent" / "mcp.json"
+def pi_mcp_path(project_root: Path | None = None) -> Path:
+    if project_root is None:
+        project_root = Path.cwd()
+    return project_root / ".audiagentic" / "mcp.json"
 
 
 def _entry_to_pi_cfg(entry: McpServerEntry) -> dict[str, Any]:

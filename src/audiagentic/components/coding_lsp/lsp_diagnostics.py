@@ -18,6 +18,11 @@ from .lsp_constants import BATCH_DIAGNOSTIC_CLIS, CLI_SEVERITY
 logger = logging.getLogger(__name__)
 
 
+def _use_shell_for_batch_cli() -> bool:
+    """True when batch CLI should launch through shell for platform shims."""
+    return os.name == "nt"
+
+
 def _run_batch_cli(
     command: list[str], *, cwd: Path, timeout: float,
 ) -> subprocess.CompletedProcess[str]:
@@ -35,7 +40,7 @@ def _run_batch_cli(
         "stdin": subprocess.DEVNULL,
         "check": False,
     }
-    if os.name == "nt":
+    if _use_shell_for_batch_cli():
         return subprocess.run(
             subprocess.list2cmdline(command),
             shell=True,

@@ -61,9 +61,10 @@ def build_agent_command(ctx: AgentContext, *, smoke: bool) -> list[str]:
             command.extend(["--extension", str(ext)])
 
     if ctx.enable_mcp:
+        from audiagentic.runtime.harness.pi.mcp_format import pi_mcp_path
         command.extend([
             "--extension", str(ctx.agent_runtime / "cli" / "node_modules" / "pi-mcp-adapter"),
-            "--mcp-config", str(ctx.agent_dir / "mcp.json"),
+            "--mcp-config", str(pi_mcp_path(ctx.project_root)),
         ])
 
     return command
