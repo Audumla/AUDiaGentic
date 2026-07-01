@@ -1,0 +1,31 @@
+# Local OpenAI Bridge — provider descriptor
+# No CLI, no MCP, no LSP — REST endpoint only
+
+provider_id: local-openai
+display_name: "Local OpenAI Bridge"
+description: "Generic OpenAI-compatible REST endpoint. Points to any locally hosted model server (llama.cpp, Ollama, vLLM, etc.). Requires api-base-url and model-id in config."
+url: "https://platform.openai.com/docs/api-reference"
+prompt_aliases:
+  - lo
+access_mode: none
+
+cli_probe: null
+
+host_capabilities: []
+
+permissions:
+  can_write_files: false
+  can_execute_shell: false
+  can_browse_web: false
+  can_read_env: false
+  notes: "OpenAI-compatible REST endpoint; chat completions only. No MCP, LSP, skill surfaces, file writing, or shell execution."
+
+agent_files: []
+
+skill_surface_path: null
+instruction_file: null
+mcp_config: null
+language_servers_config: null
+receive_lsp_mcp: false
+
+fetch_catalog_fn: "audiagentic.components.providers.adapters.local_openai.catalog:_fetch_catalog"

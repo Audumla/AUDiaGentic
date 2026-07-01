@@ -1,0 +1,44 @@
+# Continue — provider descriptor
+# Toolchain-based install (npm), custom probe, JSON MCP config, VS Code extension
+
+provider_id: continue
+display_name: "Continue"
+description: "Open-source AI code assistant for VS Code and JetBrains. Chat, autocomplete, and edit with any model."
+url: "https://continue.dev"
+prompt_aliases:
+  - ctr
+
+cli_probe:
+  - cn
+  - "--version"
+
+cli_install:
+  toolchain: npm
+  package: "@continuedev/cli"
+  executable: cn
+  probe_fn: "audiagentic.components.providers.adapters.continue_.hooks:_continue_probe"
+
+host_capabilities:
+  - host: vscode
+    capability_id: "Continue.continue"
+    display_name: "Continue"
+
+permissions:
+  can_write_files: true
+  can_execute_shell: false
+  can_browse_web: false
+  can_read_env: false
+  notes: "VS Code extension; multi-model backend, primarily completion and chat"
+
+agent_files:
+  - rel_path: ".continue/config.json"
+    managed: false
+    description: "Continue configuration"
+
+mcp_config:
+  config_path: ".continue/config.json"
+  reader: "audiagentic.components.providers.adapters.continue_.mcp_format:read_continue_json"
+  writer: "audiagentic.components.providers.adapters.continue_.mcp_format:write_continue_json"
+  remover: "audiagentic.components.providers.adapters.continue_.mcp_format:remove_continue_json"
+  format: "continue-json"
+  refresh_mode: "restart-required"

@@ -1,0 +1,40 @@
+# Aider — provider descriptor
+# Toolchain-based install (uv), no MCP config
+
+provider_id: aider
+display_name: "Aider"
+description: "AI pair programming in your terminal. Edit code directly in your git repo via chat."
+url: "https://aider.chat"
+
+cli_probe:
+  - aider
+  - "--version"
+
+cli_install:
+  toolchain: uv
+  package: "aider-chat@latest"
+  executable: aider
+  extra:
+    - "--force"
+    - "--python"
+    - "python3.12"
+    - "--with"
+    - "pip"
+  uninstall_package: "aider-chat"
+
+host_capabilities: []
+
+permissions:
+  can_write_files: true
+  can_execute_shell: true
+  can_browse_web: true
+  can_read_env: true
+  notes: "Terminal pair-programming agent; local model capable via OpenAI-compatible backends"
+
+agent_files:
+  - rel_path: "AGENTS.md"
+    managed: false
+    description: "Shared project instructions"
+  - rel_path: ".aider.conf.yml"
+    managed: false
+    description: "Aider project configuration"

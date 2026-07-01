@@ -1,0 +1,52 @@
+# GitHub Copilot — provider descriptor
+# Toolchain-based install (npm), custom probe, MCP JSON config, VS Code extensions
+
+provider_id: copilot
+display_name: "GitHub Copilot"
+description: "GitHub's AI coding assistant. Inline completions, chat, and multi-file edits across VS Code and JetBrains."
+url: "https://github.com/features/copilot"
+prompt_aliases:
+  - cp
+
+cli_probe:
+  - copilot
+  - "--version"
+
+cli_install:
+  toolchain: npm
+  package: "@github/copilot"
+  executable: copilot
+  probe_fn: "audiagentic.components.providers.adapters.copilot.hooks:_copilot_probe"
+
+host_capabilities:
+  - host: vscode
+    capability_id: "GitHub.copilot"
+    display_name: "GitHub Copilot"
+  - host: vscode
+    capability_id: "GitHub.copilot-chat"
+    display_name: "GitHub Copilot Chat"
+
+permissions:
+  can_write_files: false
+  can_execute_shell: false
+  can_browse_web: false
+  can_read_env: false
+  notes: "Completion and chat only; no autonomous tool use in standard mode"
+
+instruction_file: "COPILOT.md"
+
+agent_files:
+  - rel_path: "COPILOT.md"
+    managed: true
+    description: "Copilot project instructions"
+  - rel_path: ".github/copilot-instructions.md"
+    managed: false
+    description: "GitHub Copilot repo instructions"
+
+mcp_config:
+  config_path: ".mcp.json"
+  reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
+  writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
+  remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
+  format: "mcp-json"
+  refresh_mode: "restart-required"
