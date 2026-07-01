@@ -23,12 +23,20 @@ def read_continue_json(path: Path) -> dict[str, McpServerEntry]:
         name = server.get("name", "")
         if not name:
             continue
-        result[name] = McpServerEntry(
-            name=name,
-            command=server.get("command", ""),
-            args=tuple(server.get("args", [])),
-            env=dict(server.get("env", {})),
-        )
+        if "url" in server:
+            result[name] = McpServerEntry(
+                name=name,
+                url=server["url"],
+                headers=dict(server.get("headers", {})),
+                transport=server.get("type"),
+            )
+        else:
+            result[name] = McpServerEntry(
+                name=name,
+                command=server.get("command", ""),
+                args=tuple(server.get("args", [])),
+                env=dict(server.get("env", {})),
+            )
     return result
 
 
@@ -43,13 +51,22 @@ def write_continue_json(path: Path, entries: dict[str, McpServerEntry]) -> None:
     servers: list[dict[str, Any]] = list(existing.get("mcpServers", []))
     by_name = {s.get("name"): i for i, s in enumerate(servers)}
     for name, entry in entries.items():
-        server_entry: dict[str, Any] = {
-            "name": entry.name,
-            "command": entry.command,
-            "args": list(entry.args),
-        }
-        if entry.env:
-            server_entry["env"] = dict(entry.env)
+        if entry.is_remote:
+            server_entry = {
+                "name": entry.name,
+                "type": entry.transport or "http",
+                "url": entry.url,
+            }
+            if entry.headers:
+                server_entry["headers"] = dict(entry.headers)
+        else:
+            server_entry = {
+                "name": entry.name,
+                "command": entry.command,
+                "args": list(entry.args),
+            }
+            if entry.env:
+                server_entry["env"] = dict(entry.env)
         if name in by_name:
             servers[by_name[name]] = server_entry
         else:

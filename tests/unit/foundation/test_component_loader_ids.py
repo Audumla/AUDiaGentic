@@ -88,7 +88,9 @@ def test_explicit_marker_file_not_duplicated(tmp_path: Path) -> None:
     assert len(marker_files) == 1
 
 
-def test_derived_harness_instructions_from_mcp_servers(tmp_path: Path) -> None:
+def test_no_derived_tool_catalog_without_explicit_harness_instructions(tmp_path: Path) -> None:
+    """Per-tool definitions are component-owned and advertised over MCP; the
+    loader never derives a consolidated tool catalog into the system prompt."""
     path = tmp_path / "with-tools.yaml"
     _write_component(path, """type: component
 contract-version: v1
@@ -103,46 +105,25 @@ mcp-servers:
 """)
 
     desc = register_from_yaml(path)
-    assert len(desc.harness_instructions) == 1
-    hi = desc.harness_instructions[0]
-    assert hi.section == "MCP tools"
-    assert "ag-tools" in hi.content
-    assert "do_thing" in hi.content
-    assert "list_thing" in hi.content
-    assert "Does a thing" in hi.content
+    assert desc.harness_instructions == ()
 
 
-def test_derived_harness_instructions_skips_non_list_direct_tools(tmp_path: Path) -> None:
-    path = tmp_path / "true-direct-tools.yaml"
+def test_explicit_harness_instructions_are_preserved(tmp_path: Path) -> None:
+    """Components inject doctrine only by supplying an explicit section."""
+    path = tmp_path / "explicit.yaml"
     _write_component(path, """type: component
 contract-version: v1
-id: true-tools
-mcp-servers:
-  - name: ag-true
-    module: test.mod
-    direct-tools: true
-""")
-
-    desc = register_from_yaml(path)
-    assert len(desc.harness_instructions) == 0
-
-
-def test_no_drift_when_derived_matches_mcp(tmp_path: Path) -> None:
-    path = tmp_path / "no-drift.yaml"
-    _write_component(path, """type: component
-contract-version: v1
-id: no-drift
+id: explicit-comp
 mcp-servers:
   - name: ag-srv
     module: test.mod
-    direct-tools: [tool_a, tool_b]
-    tool-descriptions:
-      tool_a: Desc A.
-      tool_b: Desc B.
+    direct-tools: [tool_a]
+harness-instructions:
+  - section: "Available components"
+    content: |
+      Doctrine that lands in a real template section.
 """)
 
     desc = register_from_yaml(path)
-    from audiagentic.runtime.harness.system_prompt import check_harness_instruction_drift
-
-    warnings = check_harness_instruction_drift(desc)
-    assert warnings == []
+    assert len(desc.harness_instructions) == 1
+    assert desc.harness_instructions[0].section == "Available components"

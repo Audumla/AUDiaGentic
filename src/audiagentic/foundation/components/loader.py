@@ -143,28 +143,11 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
             for hi in raw_harness_instructions
         )
     else:
-        # Derive harness instructions from MCP server declarations
-        from audiagentic.runtime.harness.system_prompt import (
-            derive_harness_instructions as _derive_harness_instructions,
-        )
-
-        provisional = ComponentDescriptor(
-            type=data["type"],
-            component_id=component_id,
-            display_name=data.get("display-name", component_id),
-            description=data.get("description", ""),
-            detection_marker=data.get("detection-marker", ""),
-            aliases=tuple(data.get("aliases") or []),
-            files=(),
-            depends_on=tuple(data.get("depends-on") or []),
-            yaml_path=path,
-            scope=data.get("scope", SCOPE_PROJECT),
-            mcp_servers=mcp_servers,
-            external_mcp_servers=(),
-            harness_instructions=(),
-            core=bool(data.get("core", False)),
-        )
-        harness_instructions = _derive_harness_instructions(provisional)
+        # No derived tool catalog. Per-tool definitions are component-owned and
+        # advertised over MCP via `tool-descriptions`; the system prompt does not
+        # carry a consolidated catalog. Components inject doctrine only by
+        # supplying an explicit `harness-instructions` section.
+        harness_instructions = ()
 
     # Core flag is determined solely by the YAML descriptor's core field
     is_core = bool(data.get("core", False))
@@ -276,15 +259,6 @@ def _validate_loaded_descriptors(descriptors: list[ComponentDescriptor]) -> None
                     component=descriptor.component_id,
                     dependency=dep,
                 )
-
-    # Check for drift between MCP server declarations and harness instructions
-    from audiagentic.runtime.harness.system_prompt import (
-        check_harness_instruction_drift,
-    )
-
-    for descriptor in descriptors:
-        for warning in check_harness_instruction_drift(descriptor):
-            logger.warning(warning)
 
     # Validate contribution config references resolve to existing files
     from audiagentic.components.providers.surfaces.base import (

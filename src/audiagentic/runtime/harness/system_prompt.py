@@ -1,17 +1,16 @@
 """Harness-generic system prompt injection from installed components.
 
-Scans component descriptors for harness_instructions and builds section
-injections that any harness can apply to its system prompt template.
+Builds the `Available components` registry overview and applies any
+component-supplied `harness-instructions` doctrine sections that match a
+template header. Per-tool definitions are component-owned and advertised over
+MCP via `tool-descriptions`; the system prompt carries no consolidated tool
+catalog.
 """
 from __future__ import annotations
 
 import logging
 from pathlib import Path
 
-from audiagentic.foundation.components.base import (
-    ComponentDescriptor,
-    HarnessInstruction,
-)
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import (
     all_descriptors,
@@ -20,91 +19,6 @@ from audiagentic.foundation.components.registry import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def derive_harness_instructions(descriptor: ComponentDescriptor) -> tuple[HarnessInstruction, ...]:
-    """Derive harness instructions from MCP server declarations.
-
-    Reads `direct-tools` and `tool-descriptions` from MCP server declarations
-    and generates a harness instruction section. Components can still provide
-    custom harness instructions, but the default is derived.
-
-    Returns an empty tuple if the component has no MCP servers with direct tools.
-    """
-    if not descriptor.mcp_servers:
-        return ()
-
-    section = "MCP tools"
-    all_lines: list[str] = []
-
-    for server in descriptor.mcp_servers:
-        if not server.direct_tools or not isinstance(server.direct_tools, list):
-            continue
-
-        all_lines.append(f"### {server.name}")
-        if server.description:
-            all_lines.append(f"{server.description}")
-            all_lines.append("")
-
-        all_lines.append("Available tools:")
-        for tool in server.direct_tools:
-            desc = server.tool_descriptions.get(tool, "")
-            if desc:
-                all_lines.append(f"- `{tool}`: {desc}")
-            else:
-                all_lines.append(f"- `{tool}`")
-        all_lines.append("")
-
-    if not all_lines:
-        return ()
-
-    content = "\n".join(all_lines)
-    propagate = descriptor.mcp_servers[0].propagate if descriptor.mcp_servers else "audiagentic"
-
-    return (HarnessInstruction(
-        section=section,
-        content=content,
-        description=f"Derived harness instructions for {descriptor.component_id}",
-        propagate=propagate,
-    ),)
-
-
-def check_harness_instruction_drift(descriptor: ComponentDescriptor) -> list[str]:
-    """Check for drift between MCP instructions and harness instructions.
-
-    Returns a list of warnings if MCP server declarations and harness instructions
-    describe different tool sets. Empty list if no drift detected.
-    """
-    warnings = []
-
-    # Build set of tools from MCP declarations
-    mcp_tools = set()
-    for server in descriptor.mcp_servers:
-        if isinstance(server.direct_tools, list):
-            mcp_tools.update(server.direct_tools)
-
-    # Build set of tools from harness instructions
-    harness_tools = set()
-    for instruction in descriptor.harness_instructions:
-        # Extract tool references from instruction content
-        import re  # noqa: PLC0415
-        for match in re.finditer(r"`(\w+)`", instruction.content):
-            harness_tools.add(match.group(1))
-
-    # Check for drift
-    if mcp_tools and harness_tools:
-        only_in_mcp = mcp_tools - harness_tools
-        only_in_harness = harness_tools - mcp_tools
-        if only_in_mcp:
-            warnings.append(
-                f"Component {descriptor.component_id}: tools in MCP but not harness: {sorted(only_in_mcp)}"
-            )
-        if only_in_harness:
-            warnings.append(
-                f"Component {descriptor.component_id}: tools in harness but not MCP: {sorted(only_in_harness)}"
-            )
-
-    return warnings
 
 
 def _build_available_components_md(project_root: Path) -> str:

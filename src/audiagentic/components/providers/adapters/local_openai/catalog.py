@@ -1,13 +1,9 @@
+"""Local OpenAI catalog functions."""
 from __future__ import annotations
 
+import json
 import urllib.request
 from typing import Any
-
-from ...descriptors.base import (
-    ProviderDescriptor,
-    ProviderPermissions,
-)
-from ...descriptors.registry import register
 
 
 def _fetch_catalog(provider_cfg: dict[str, Any]) -> list[dict[str, Any]]:
@@ -37,7 +33,7 @@ def _fetch_catalog(provider_cfg: dict[str, Any]) -> list[dict[str, Any]]:
             if resp.status != 200:
                 return []
             data = resp.read().decode("utf-8", errors="replace")
-            payload = __import__("json").loads(data)
+            payload = json.loads(data)
     except Exception:
         return []
 
@@ -61,29 +57,3 @@ def _fetch_catalog(provider_cfg: dict[str, Any]) -> list[dict[str, Any]]:
         })
 
     return result
-
-
-register(ProviderDescriptor(
-    provider_id="local-openai",
-    prompt_aliases=("lo",),
-    display_name="Local OpenAI Bridge",
-    description="Generic OpenAI-compatible REST endpoint. Points to any locally hosted model server (llama.cpp, Ollama, vLLM, etc.). Requires api-base-url and model-id in config.",
-    url="https://platform.openai.com/docs/api-reference",
-    access_mode="none",
-    cli_probe=None,
-    host_capabilities=(),
-    permissions=ProviderPermissions(
-        can_write_files=False,
-        can_execute_shell=False,
-        can_browse_web=False,
-        can_read_env=False,
-        notes="OpenAI-compatible REST endpoint; chat completions only. No MCP, LSP, skill surfaces, file writing, or shell execution.",
-    ),
-    agent_files=(),
-    skill_surface_path=None,
-    instruction_file=None,
-    mcp_config=None,
-    language_servers_config=None,
-    receive_lsp_mcp=False,
-    fetch_catalog_fn=_fetch_catalog,
-))
