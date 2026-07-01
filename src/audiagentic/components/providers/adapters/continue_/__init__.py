@@ -1,3 +1,2 @@
-from . import adapter, descriptor
 
-__all__ = ["descriptor", "adapter"]
+from . import adapter, mcp_format

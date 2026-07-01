@@ -90,23 +90,6 @@ external-mcp-servers:
     instructions: >
       Use github MCP tools for GitHub API operations: pull requests, issues,
       releases, workflow dispatch, and code search.
-harness-instructions:
-  - section: "Source control operating rules"
-    propagate: audiagentic
-    content: |
-      When installing the source-control component: check missing-dependencies, ASK the user
-      which to install, then call install_dependencies. The harness config and mcp.json are
-      refreshed automatically after install — no manual refresh step is needed.
-
-  - section: "Official MCP servers"
-    propagate: audiagentic
-    content: |
-      **git** (`mcp-server-git` via uvx)
-      - Git operations: status, diff, log, commit, branch, stage
-
-      **github** (`gh mcp serve` via GitHub CLI)
-      - GitHub operations: pull requests, issues, releases, workflow dispatch, code search
-
 lifecycle-hook: audiagentic.components.source_control.source_control_bootstrap.on_component_lifecycle
 status-hook: audiagentic.components.source_control.source_control_bootstrap.status_payload
 

@@ -1,15 +1,45 @@
 # components/providers/descriptors/
 
-Provider descriptor model and registry.
+Provider descriptor model, registry, and YAML loader.
 
 ## Intent
 
-Define uniform metadata contract for every provider adapter.
+Define uniform metadata contract for every provider adapter. Provider descriptors
+are declared in YAML under `config/providers/*.yaml` and loaded via the shared
+`foundation/descriptors` mechanism.
 
-## Capabilities
+## Files
 
-- Model provider identity, access mode, install recipes, MCP config shape, and surface hooks.
-- Register descriptors from adapter packages into a shared registry.
-- Give higher-level services one stable abstraction for provider discovery.
+- `base.py` — `ProviderDescriptor` dataclass and nested types (permissions, agent files, etc.)
+- `registry.py` — Public registry API: `register`, `get_descriptor`, `all_descriptors`,
+  `canonical_provider_ids`, `provider_alias_map`, `interrogate`. Composes
+  `DescriptorRegistry[ProviderDescriptor]` internally.
+- `loader.py` — YAML loader: `load_provider_descriptor`, `load_providers_from_directory`,
+  `PROVIDER_SPEC` field specification. Uses the generic `foundation/descriptors` mechanism.
+- `feature_mapping.py` — Derives implementation-scoped features from provider descriptors.
 
-If you need to add a new provider, start by understanding `base.py` and `registry.py`, then inspect one existing adapter package.
+## YAML descriptor authoring
+
+Provider descriptors live in `config/providers/<provider_id>.yaml`. Each file is
+loaded by `loader.py` which resolves dotpath references using the colon convention
+(`module:attr`). The `PROVIDER_SPEC` declares the field map.
+
+### Dotpath convention
+
+Callable references use colon syntax: `audiagentic.components.providers.adapters.claude.catalog:_fetch_claude_catalog`
+
+The single canonical resolver is `foundation/descriptors/resolver.py:resolve_ref()`.
+
+### Adding a new provider
+
+1. Create `config/providers/<id>.yaml` with the required fields (`provider_id`, `display_name`).
+2. If the provider needs custom hooks (probe, catalog fetch, LSP), create
+   `adapters/<id>/hooks.py` or `adapters/<id>/catalog.py` with top-level functions.
+3. Reference hooks via colon dotpath in the YAML file.
+4. The adapter package is auto-discovered via `pkgutil.iter_modules()` — no manual registration needed.
+
+## Architecture notes
+
+- Foundation registries (`foundation/components/`, `foundation/features/`) are out of scope.
+- Provider registry composes `DescriptorRegistry[T]` (PD08 D2).
+- Hindsight-specific provider matrices remain in `config/components/memory/hindsight_matrix.yaml`.

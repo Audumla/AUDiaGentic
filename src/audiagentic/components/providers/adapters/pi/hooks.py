@@ -1,23 +1,8 @@
+"""Pi hooks: install, uninstall, probe, LSP."""
 from __future__ import annotations
 
 import json
 import subprocess
-
-from audiagentic.foundation.mcp.json_format import (
-    read_mcp_json,
-    remove_mcp_json,
-    write_mcp_json,
-)
-from audiagentic.foundation.workflow.invocation.steps import CallableStep
-
-from ...descriptors.base import (
-    AgentFile,
-    CliInstallRecipe,
-    McpConfigSpec,
-    ProviderDescriptor,
-    ProviderPermissions,
-)
-from ...descriptors.registry import register
 
 
 def _pi_install(project_root=None):
@@ -43,18 +28,7 @@ def _pi_uninstall(project_root=None):
 
 
 def _pi_ensure_lens(project_root=None):
-    """Install the pi-lens LSP extension into the pi harness (best-effort).
-
-    pi-lens auto-discovers language servers from PATH, so the language server
-    binaries installed by coding-lsp plus this extension are all pi needs — no
-    per-language config. Idempotent: re-running `pi install` for an already-present
-    extension is safe.
-
-    This is a network npm fetch, so it runs from the explicit LSP dependency
-    install (`lsp_install_dependencies`), where slowness is expected and streamed
-    — never on the enable event, which must stay responsive. The subprocess is
-    bounded by a timeout so it cannot hang indefinitely.
-    """
+    """Install the pi-lens LSP extension into the pi harness (best-effort)."""
     from audiagentic.runtime.harness.pi.runner.context import resolve_agent_bin
     from audiagentic.runtime.home import global_harness_runtime
     pi_bin = resolve_agent_bin(global_harness_runtime())
@@ -113,39 +87,3 @@ def _pi_probe(descriptor):
         "stdout": f"pi {version}".strip(),
         "stderr": "",
     }
-register(ProviderDescriptor(
-    provider_id="pi",
-    display_name="Pi Coding Agent",
-    description="Lightweight local coding agent TUI by Earendil Works. Supports MCP tool use via the pi-mcp-adapter extension.",
-    url="https://www.earendilworks.com/pi",
-    access_mode="none",
-    cli_probe=None,
-    cli_install=CliInstallRecipe(
-        package_manager="pi-harness",
-        package_name="audiagentic-pi-harness",
-        executable="pi",
-        install=CallableStep(id="install", fn=_pi_install),
-        uninstall=CallableStep(id="uninstall", fn=_pi_uninstall),
-        probe_fn=_pi_probe,
-    ),
-    host_capabilities=(),
-    permissions=ProviderPermissions(
-        can_write_files=True,
-        can_execute_shell=True,
-        can_browse_web=False,
-        can_read_env=True,
-        notes="TUI coding agent; MCP tool use available when pi-mcp-adapter is installed",
-    ),
-    agent_files=(
-        AgentFile(".pi", managed=False, description="Pi agent runtime directory"),
-    ),
-    mcp_config=McpConfigSpec(
-        config_path=".mcp.json",
-        reader=read_mcp_json,
-        writer=write_mcp_json,
-        remover=remove_mcp_json,
-        format="mcp-json",
-        refresh_mode="restart-required",
-    ),
-    on_lsp_enabled=_pi_ensure_lens,
-))

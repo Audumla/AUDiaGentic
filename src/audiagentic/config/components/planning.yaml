@@ -7,6 +7,7 @@ description: >
   Implementations may back this with local markdown files, a hosted issue tracker,
   or any other planning store; only one is active at a time.
 implementation-cardinality: exclusive
+status-hook: audiagentic.components.planning.planning_api.planning_status
 
 mcp-servers:
   - name: ag-planning-mgmt
@@ -18,9 +19,7 @@ mcp-servers:
     description: Planning component management — status and implementation selection
     propagate: audiagentic
     instructions: >
-      Use planning_status to check the active implementation and current item counts.
-      Use planning_list_implementations to see all available implementations and which is active.
-      Use planning_select_implementation to switch between implementations.
+      Inspect or switch the active planning implementation and check current item counts.
 
   - name: ag-planning
     module: audiagentic.components.planning.planning_mcp
@@ -40,26 +39,13 @@ mcp-servers:
       - plan_update_review
       - plan_delete_review
     description: Plan item management — create, list, update, transition, and remove items; create and manage reviews
-    propagate: audiagentic,providers
+    propagate: providers
     instructions: >
-      Use plan_list_standards to discover architecture and design standards before creating plans.
-      Use plan_create_item to add a new plan item to a named plan under docs/planning/active/.
-      The 'id' field is auto-generated — do NOT supply an ID. The system assigns
-      <PLAN-PREFIX><N> (e.g. CC07, LSP01) automatically.
-      Use plan_list_groups to see all plans grouped with item counts and their items.
-      Use plan_list_items to inspect individual items; filter by state ('active'/'completed') or plan name.
-      Use plan_get_item to read the full content of a specific item by ID.
-      Use plan_set_state(item_id, 'completed') to mark an item done — it moves to completed/.
-      Use plan_update_item to revise frontmatter fields or body sections without recreating.
-      Use plan_delete_item to permanently remove a cancelled or stale item.
-      Plan names are kebab-case (e.g. code-cleanup).
-      Reference relevant standards in plan items using a Standards section.
-
-      Reviews are linked to plan items. Use plan_create_review(review-of=<item_id>, title=<title>) to create a review.
-      Reviews have a lifecycle: created → considered → closed. Use plan_set_review_state to transition.
-      Closed reviews move to completed/. Use plan_list_reviews to find reviews; filter by state, plan, or review_of.
-      Use plan_update_review to add notes, findings, or conclusion to a review.
-      Use plan_delete_review to permanently remove a review.
+      Discover standards with plan_list_standards before creating items, and reference
+      them in a Standards section. Plan names are kebab-case (e.g. code-cleanup); item
+      IDs are auto-generated (<PLAN-PREFIX><N>, e.g. CC07) — never supply one. Reviews
+      link to a plan item and move through created → considered → closed; completed
+      items and closed reviews move to completed/.
     tool-descriptions:
       plan_list_standards: >
         List the architecture and design standards for this project. Returns a list
@@ -104,31 +90,6 @@ mcp-servers:
         (title, notes, findings, conclusion) of an existing review.
         Returns {id, path}.
       plan_delete_review: Permanently delete a review. Returns {id}.
-
-harness-instructions:
-  - section: "What you can do"
-    propagate: audiagentic
-    content: |
-      ### ag-planning-mgmt
-      - `planning_status` — Active implementation and pending/completed item counts
-      - `planning_list_implementations` — Available implementations and active selection
-      - `planning_select_implementation` — Switch the active planning implementation
-
-      ### ag-planning
-      - `plan_list_standards` — List available architecture/design standards
-      - `plan_create_item` — Create a plan item in docs/planning/active/<plan>/
-      - `plan_list_groups` — List plan items grouped by plan with counts
-      - `plan_list_items` — List active or completed items (filter by plan name)
-      - `plan_get_item` — Read a plan item by ID
-      - `plan_set_state` — Transition state: 'completed' moves item to completed/
-      - `plan_update_item` — Update fields or sections of an existing item
-      - `plan_delete_item` — Permanently remove a plan item
-      - `plan_create_review` — Create a review linked to a plan item
-      - `plan_list_reviews` — List reviews (filter by state, plan, or parent item)
-      - `plan_get_review` — Read a review by ID
-      - `plan_set_review_state` — Transition review state: 'closed' moves to completed/
-      - `plan_update_review` — Update fields or sections of an existing review
-      - `plan_delete_review` — Permanently remove a review
 
 contributions:
   - id: agent-planning/process

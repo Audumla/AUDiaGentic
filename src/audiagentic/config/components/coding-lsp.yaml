@@ -60,19 +60,6 @@ mcp-servers:
       or missing server binary; verify with lsp_capabilities(file) before treating
       an empty response as definitive.
 
-harness-instructions:
-  - section: "LSP operating rules"
-    propagate: audiagentic
-    content: |
-      Active languages come from feature state and the active implementation's
-      language bindings; .coding-lsp/lsp.json is a generated runtime cache/projection
-      only, not the source of truth. Nothing is auto-detected or installed at
-      component install time. lsp_add_language enables a language feature (server
-      defaults from the language spec); installing its server binary is a separate,
-      explicit step via lsp_install_dependencies — scoped to enabled languages only.
-      Do not suggest installing a language server unless the project uses that
-      language or the user explicitly requests it.
-
 # No instruction-file contribution for LSP tools: the ag-lsp / ag-lsp-mgmt MCP
 # servers expose their tools and descriptions to the agent directly over the MCP
 # protocol, and only to providers that actually receive those servers. A markdown
