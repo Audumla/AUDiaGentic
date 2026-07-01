@@ -1,0 +1,34 @@
+# Plandex — provider descriptor
+# Toolchain-based install (brew), no MCP config
+
+provider_id: plandex
+display_name: "Plandex"
+description: "Open-source AI coding agent for large, complex tasks. Manages long-running plans across many files with version control and sandboxed changes."
+url: "https://plandex.ai"
+
+cli_probe:
+  - plandex
+  - "--version"
+
+cli_install:
+  toolchain: brew
+  package: "plandex-ai/tap/plandex"
+  executable: plandex
+  uninstall_package: plandex
+
+host_capabilities: []
+
+permissions:
+  can_write_files: true
+  can_execute_shell: true
+  can_browse_web: false
+  can_read_env: true
+  notes: "Plan-and-apply agent; sandboxes changes until user approves; supports OpenAI-compatible backends"
+
+agent_files:
+  - rel_path: ".plandex/"
+    managed: false
+    description: "Plandex plans and context directory"
+  - rel_path: "AGENTS.md"
+    managed: false
+    description: "Shared project instructions"

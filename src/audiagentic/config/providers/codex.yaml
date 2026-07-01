@@ -1,0 +1,53 @@
+# Codex (OpenAI) — provider descriptor
+# Toolchain-based install (npm), TOML MCP/LSP config, VS Code extension
+
+provider_id: codex
+display_name: "Codex (OpenAI)"
+description: "OpenAI's CLI coding agent. Runs tasks autonomously in a sandboxed environment."
+url: "https://github.com/openai/codex"
+prompt_aliases:
+  - cx
+
+cli_probe:
+  - codex
+  - "--version"
+
+cli_install:
+  toolchain: npm
+  package: "@openai/codex"
+  executable: codex
+
+host_capabilities:
+  - host: vscode
+    capability_id: "openai.chatgpt"
+    display_name: "ChatGPT / OpenAI"
+
+permissions:
+  can_write_files: true
+  can_execute_shell: true
+  can_browse_web: false
+  can_read_env: true
+  notes: "CLI agent; full-auto mode supported, sandboxed shell execution"
+
+instruction_file: "AGENTS.md"
+skill_surface_path: ".agents/skills/{tag}/SKILL.md"
+
+agent_files:
+  - rel_path: "AGENTS.md"
+    managed: false
+    description: "Codex project instructions"
+
+mcp_config:
+  config_path: ".codex/config.toml"
+  reader: "audiagentic.components.providers.adapters.codex.mcp_format:read_codex_toml"
+  writer: "audiagentic.components.providers.adapters.codex.mcp_format:write_codex_toml"
+  remover: "audiagentic.components.providers.adapters.codex.mcp_format:remove_codex_toml"
+  format: "codex-toml"
+  refresh_mode: "restart-required"
+
+language_servers_config:
+  config_path: ".codex/config.toml"
+  reader: "audiagentic.components.providers.adapters.codex.language_servers:read_language_servers_codex"
+  writer: "audiagentic.components.providers.adapters.codex.language_servers:write_language_servers_codex"
+  remover: "audiagentic.components.providers.adapters.codex.language_servers:remove_language_servers_codex"
+  format: "codex-toml"
