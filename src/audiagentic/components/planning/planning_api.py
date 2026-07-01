@@ -14,13 +14,89 @@ import yaml
 
 from audiagentic.components.planning import planning_paths
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.workflow import (
+    is_known_state,
+    load_workflow,
+    transition_allowed,
+)
 
 logger = logging.getLogger(__name__)
+
+_COMPONENT_ID = "agent-planning"
 
 _VALID_STATES = {"pending", "completed"}
 # 'not_done' is accepted as a legacy alias for 'pending'
 _ACTIVE_STATES = {"pending", "not_done"}
 _COMPLETED_STATES = {"completed"}
+
+_WORKFLOWS_PATH = Path(__file__).with_name("workflows.yaml")
+
+
+def active_implementation_id(project_root: Path) -> str:
+    """Return the enabled implementation ID, or the descriptor-defined default."""
+    from audiagentic.foundation.features.registry import get_implementations
+    from audiagentic.foundation.features.state import get_component_state
+
+    component = get_component_state(project_root, _COMPONENT_ID)
+    implementations = component.get("implementations") or {}
+    if isinstance(implementations, dict):
+        for impl_id, state in implementations.items():
+            if isinstance(state, dict) and state.get("enabled"):
+                return impl_id
+    impls = get_implementations(_COMPONENT_ID)
+    for impl_id in sorted(impls):
+        if impls[impl_id].raw.get("default"):
+            return impl_id
+    return next(iter(sorted(impls)), "")
+
+
+def planning_status(project_root: Path) -> dict[str, Any]:
+    """Return planning status: active implementation, item counts, config completeness.
+
+    Configuration completeness is derived generically from the active
+    implementation's options-schema via the shared features helper.
+    """
+    from audiagentic.foundation.features.config_status import implementation_config_status
+
+    active = active_implementation_id(project_root)
+    result: dict[str, Any] = {
+        "implementation": active,
+        "pending_items": len(list_items(project_root, state="active")),
+        "completed_items": len(list_items(project_root, state="completed")),
+    }
+    if active:
+        status = implementation_config_status(project_root, _COMPONENT_ID, active)
+        result["enabled"] = status.enabled
+        result["configured"] = status.configured
+        if status.missing_required:
+            result["missing_required"] = [
+                {"option": m.key, "description": m.description}
+                for m in status.missing_required
+            ]
+    return result
+
+
+def _check_transition(kind: str, old: str, new: str) -> None:
+    """Validate an ``old -> new`` state transition for a planning kind.
+
+    States and legal transitions are defined in workflows.yaml; the shared
+    foundation primitives enforce them. Same-state writes are treated as no-ops.
+    """
+    workflow = load_workflow(_WORKFLOWS_PATH, kind)
+    if not is_known_state(workflow, new):
+        raise AudiaGenticError(
+            code="VAL-PLN-006",
+            kind="validation",
+            message=f"invalid {kind} state: {new!r}",
+            details={"valid": list(workflow.get("values", []))},
+        )
+    if old != new and not transition_allowed(workflow, old, new):
+        raise AudiaGenticError(
+            code="VAL-PLN-014",
+            kind="validation",
+            message=f"illegal {kind} transition: {old} -> {new}",
+            details={"from": old, "to": new},
+        )
 
 _SECTION_HEADING: dict[str, str] = {
     "description": "Description",
@@ -298,8 +374,9 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
     text = path.read_text(encoding="utf-8")
     fm, body = _parse_frontmatter(text)
 
-    # Normalise the stored state to the canonical name
+    # Normalise the stored state to the canonical name and validate the move
     canonical_state = "pending" if new_state in _ACTIVE_STATES else "completed"
+    _check_transition("item", fm.get("state", "pending"), canonical_state)
     fm["state"] = canonical_state
 
     target = target_dir / path.parent.name / path.name
@@ -397,9 +474,7 @@ def delete_item(project_root: Path, item_id: str) -> dict[str, Any]:
 
 # Reviews are items stored in active/<plan>/reviews/<parent-id>/RV01.md
 # They use the same structure as regular items but with review-of frontmatter
-# and their own state machine: created → considered → closed
-
-_REVIEW_STATES = {"created", "considered", "closed"}
+# and their own workflow (created → considered → closed), defined in workflows.yaml.
 
 
 def _next_review_id(project_root: Path, plan_slug: str, parent_id: str) -> str:
@@ -560,14 +635,6 @@ def set_review_state(project_root: Path, review_id: str, new_state: str) -> dict
     'created'/'considered' keep it in active/.
     Returns {id, state, path}
     """
-    if new_state not in _REVIEW_STATES:
-        raise AudiaGenticError(
-            code="VAL-PLN-012",
-            kind="validation",
-            message=f"invalid review state: {new_state!r}",
-            details={"valid": sorted(_REVIEW_STATES)},
-        )
-
     path = _require_item(project_root, review_id)
     text = path.read_text(encoding="utf-8")
     fm, body = _parse_frontmatter(text)
@@ -578,6 +645,7 @@ def set_review_state(project_root: Path, review_id: str, new_state: str) -> dict
             kind="validation",
             message=f"not a review: {review_id!r}",
         )
+    _check_transition("review", fm.get("state", "created"), new_state)
 
     plan_slug = path.parent.parent.parent.name
     parent_id = path.parent.name
