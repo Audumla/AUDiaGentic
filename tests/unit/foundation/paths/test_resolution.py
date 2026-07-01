@@ -104,5 +104,6 @@ def test_resolve_required_file_reports_candidates(tmp_path: Path) -> None:
         raise AssertionError("expected AudiaGenticError")
 
     assert "Model not found. Checked:" in message
-    assert "provisioning\\rig\\embedded\\missing.gguf" in message
-    assert "global\\rig\\missing.gguf" in message
+    normalized = message.replace("\\", "/")
+    assert "project/provisioning/rig/embedded/missing.gguf" in normalized
+    assert "global/rig/missing.gguf" in normalized

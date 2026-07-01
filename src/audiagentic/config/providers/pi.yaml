@@ -16,12 +16,12 @@ cli_install:
   install:
     type: callable
     id: install
-    fn: "audiagentic.components.providers.adapters.pi.descriptor:_pi_install"
+    fn: "audiagentic.components.providers.adapters.pi.hooks:_pi_install"
   uninstall:
     type: callable
     id: uninstall
-    fn: "audiagentic.components.providers.adapters.pi.descriptor:_pi_uninstall"
-  probe_fn: "audiagentic.components.providers.adapters.pi.descriptor:_pi_probe"
+    fn: "audiagentic.components.providers.adapters.pi.hooks:_pi_uninstall"
+  probe_fn: "audiagentic.components.providers.adapters.pi.hooks:_pi_probe"
 
 host_capabilities: []
 
@@ -45,4 +45,4 @@ mcp_config:
   format: "mcp-json"
   refresh_mode: "restart-required"
 
-on_lsp_enabled: "audiagentic.components.providers.adapters.pi.descriptor:_pi_ensure_lens"
+on_lsp_enabled: "audiagentic.components.providers.adapters.pi.hooks:_pi_ensure_lens"

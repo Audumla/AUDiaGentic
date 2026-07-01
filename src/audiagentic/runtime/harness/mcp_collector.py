@@ -17,7 +17,10 @@ from audiagentic.foundation.components.registry import (
     is_installed,
 )
 from audiagentic.foundation.mcp import McpServerEntry
-from audiagentic.foundation.mcp.launch import component_mcp_launch
+from audiagentic.foundation.mcp.component_builder import (
+    entry_from_external_declaration,
+    entry_from_mcp_declaration,
+)
 
 
 def collect_mcp_servers(project_root: Path | None = None) -> dict[str, McpServerEntry]:
@@ -41,28 +44,18 @@ def collect_mcp_servers(project_root: Path | None = None) -> dict[str, McpServer
             continue
 
         for decl in descriptor.mcp_servers:
-            command, subcommand, args = component_mcp_launch(
-                decl.module,
-                extra_args=tuple(decl.args),
-            )
-            servers[decl.name] = McpServerEntry(
-                name=decl.name,
-                command=command,
-                args=(subcommand, *args),
-                env={},
-            )
+            if "audiagentic" not in decl.propagate:
+                continue
+            servers[decl.name] = entry_from_mcp_declaration(decl)
 
         probe_cache = get_external_probe_results(cid, project_root)
         for ext in descriptor.external_mcp_servers:
+            if "audiagentic" not in ext.propagate:
+                continue
             if any(shutil.which(r) is None for r in ext.requires):
                 continue
             if ext.probe and probe_cache.get(ext.name) is False:
                 continue
-            servers[ext.name] = McpServerEntry(
-                name=ext.name,
-                command=ext.command,
-                args=tuple(ext.args),
-                env=dict(ext.env),
-            )
+            servers[ext.name] = entry_from_external_declaration(ext)
 
     return servers
