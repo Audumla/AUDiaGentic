@@ -1,3 +1,2 @@
-from . import descriptor, surface
 
-__all__ = ["descriptor", "surface"]
+from . import adapter, language_servers, surface

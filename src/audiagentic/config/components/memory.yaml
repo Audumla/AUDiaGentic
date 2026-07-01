@@ -8,6 +8,8 @@ description: >
   provider integration is contained in the active implementation package. Only
   one implementation is active at a time.
 implementation-cardinality: exclusive
+status-hook: audiagentic.components.memory.memory_api.memory_status
+lifecycle-observer: audiagentic.components.memory.memory_observer
 
 mcp-servers:
   - name: ag-memory-mgmt
@@ -21,12 +23,9 @@ mcp-servers:
     description: Memory component management — status, implementation selection, and config
     propagate: audiagentic
     instructions: >
-      Use memory_status to check the active implementation and configuration state.
-      Use memory_list_implementations to see all available implementations and which is active.
-      Use memory_select_implementation to switch between implementations.
-      Use memory_get_config to read the current config for the active or a specific implementation.
-      Use memory_set_config to update implementation config; providers may use
-      the returned refresh hint to reconcile implementation-owned provider recipes.
+      Inspect, switch, and configure the active memory implementation. Implementations
+      are exclusive (selecting one disables the others); config changes return a
+      provider recipe refresh hint that providers may act on.
     tool-descriptions:
       memory_status: >
         Return memory component status: active implementation and configured state.
@@ -42,17 +41,6 @@ mcp-servers:
       memory_set_config: >
         Validate and persist config updates for an implementation. Returns updated
         config, status, and a neutral provider recipe refresh hint.
-
-harness-instructions:
-  - section: "What you can do"
-    propagate: audiagentic
-    content: |
-      ### ag-memory-mgmt
-      - `memory_status` — Active implementation and configured state
-      - `memory_list_implementations` — Available implementations and active selection
-      - `memory_select_implementation` — Switch the active memory implementation
-      - `memory_get_config` — Read config for active or specific implementation
-      - `memory_set_config` — Update implementation config; returns provider recipe refresh hint
 
 contributions:
   - id: memory/process

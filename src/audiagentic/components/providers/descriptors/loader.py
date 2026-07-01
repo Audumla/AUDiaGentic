@@ -88,13 +88,18 @@ def _build_cli_install(data: dict[str, Any]) -> CliInstallRecipe:
         package = data["package"]
         executable = data["executable"]
         extra = data.get("extra", [])
+        uninstall_package = data.get("uninstall_package", package)
+
+        from audiagentic.foundation.toolchains.loader import has_action
+
+        un_action = "uninstall" if has_action(toolchain, "uninstall") else "remove"
 
         return CliInstallRecipe(
             package_manager=toolchain,
             package_name=package,
             executable=executable,
             install=build_toolchain_step(toolchain, "install", package, extra),
-            uninstall=build_toolchain_step(toolchain, "uninstall", package, extra),
+            uninstall=build_toolchain_step(toolchain, un_action, uninstall_package),
             probe_fn=resolve_ref(data["probe_fn"]) if "probe_fn" in data else None,
         )
     else:

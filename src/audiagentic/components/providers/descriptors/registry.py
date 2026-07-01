@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
+from audiagentic.foundation.descriptors.registry import DescriptorRegistry
 from audiagentic.foundation.features.base import ImplementationDescriptor
 from audiagentic.foundation.features.registry import register as register_feature_descriptor
 
@@ -13,7 +14,7 @@ from ..services.host_capabilities import vscode_extension_statuses
 from .base import ProviderDescriptor
 from .feature_mapping import impl_features_for
 
-_registry: dict[str, ProviderDescriptor] = {}
+_registry: DescriptorRegistry[ProviderDescriptor] = DescriptorRegistry()
 
 
 def _register_feature_implementation(descriptor: ProviderDescriptor) -> None:
@@ -33,12 +34,12 @@ def _register_feature_implementation(descriptor: ProviderDescriptor) -> None:
 
 
 def _sync_feature_implementations() -> None:
-    for descriptor in _registry.values():
+    for descriptor in _registry.all().values():
         _register_feature_implementation(descriptor)
 
 
 def register(descriptor: ProviderDescriptor) -> None:
-    _registry[descriptor.provider_id] = descriptor
+    _registry.register(descriptor.provider_id, descriptor)
     _register_feature_implementation(descriptor)
 
 
@@ -49,22 +50,17 @@ def get_descriptor(provider_id: str) -> ProviderDescriptor | None:
 
 def all_descriptors() -> dict[str, ProviderDescriptor]:
     _sync_feature_implementations()
-    return dict(_registry)
+    return _registry.all()
 
 
 def canonical_provider_ids() -> tuple[str, ...]:
     """Return all registered provider ids. Owned by the providers component."""
-    return tuple(all_descriptors())
+    return _registry.ids()
 
 
 def provider_alias_map() -> dict[str, str]:
     """Return prompt/provider aliases contributed by provider descriptors."""
-    aliases: dict[str, str] = {}
-    for provider_id, descriptor in all_descriptors().items():
-        aliases[provider_id] = provider_id
-        for alias in descriptor.prompt_aliases:
-            aliases[alias] = provider_id
-    return aliases
+    return _registry.alias_map(aliases_field="prompt_aliases")
 
 
 def _probe_cli(command: list[str]) -> dict[str, Any]:
