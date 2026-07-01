@@ -55,6 +55,11 @@ def _cmd_install(target: Path, project_root: Path) -> int:
     return rc
 
 
+def _dispatch_install(args: argparse.Namespace, project_root: Path) -> int:
+    target = Path(args.target).resolve() if args.target else global_harness_runtime()
+    return _cmd_install(target, project_root)
+
+
 def _cmd_update(args: argparse.Namespace, project_root: Path) -> int:
     del args, project_root
     from audiagentic.runtime.update.prompt import run_update_now
@@ -208,7 +213,7 @@ def _cmd_refresh(args: argparse.Namespace, project_root: Path) -> int:
 
 
 _COMMAND_HANDLERS: dict[str, Callable] = {
-    "install": _cmd_install,
+    "install": _dispatch_install,
     "component": _cmd_component,
     "update": _cmd_update,
     "mcp": _cmd_mcp,

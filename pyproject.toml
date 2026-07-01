@@ -21,6 +21,7 @@ dependencies = [
 # MCP server support for the planning tool surface
 mcp = [
     "mcp==1.27.0",
+    "tomli-w>=1.0",
 ]
 # Test dependencies
 test = [
@@ -30,6 +31,7 @@ test = [
     "pytest-timeout>=2.3",
     "pytest-xdist>=3.0",
     "mcp==1.27.0",
+    "tomli-w>=1.0",
     "pyright>=1.1",
 ]
 # Full development environment
@@ -40,6 +42,7 @@ dev = [
     "pytest-timeout>=2.3",
     "pytest-xdist>=3.0",
     "mcp==1.27.0",
+    "tomli-w>=1.0",
     "pyright>=1.1",
     "ruff",
     "mypy",
@@ -60,6 +63,7 @@ where = ["src"]
     # Component descriptors and embedded markdown assets
     "config/components/**/*.yaml",
     "config/components/**/*.md",
+    "config/components/**/*.yml",
     # Package-default configs
     "config/provisioning/harness/*.yaml",
     "config/provisioning/rig/*.yaml",
@@ -87,6 +91,9 @@ where = ["src"]
     "components/release/release_please/templates/*.json",
     "components/release/release_please/templates/*.yml",
     "components/optional/providers/workflow/*.yaml",
+    # Component-local state workflow definitions (states + transitions)
+    "components/agent_jobs/*.yaml",
+    "components/planning/*.yaml",
 ]
 
 [tool.pytest.ini_options]

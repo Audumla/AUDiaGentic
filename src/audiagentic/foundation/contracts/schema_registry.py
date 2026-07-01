@@ -8,9 +8,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from audiagentic.paths import SRC_ROOT
-
-AUDIAGENTIC_ROOT = SRC_ROOT / "audiagentic"
+AUDIAGENTIC_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_DIR = AUDIAGENTIC_ROOT / "foundation" / "contracts" / "schemas"
 
 
