@@ -9,10 +9,12 @@ implementation-cardinality: exclusive
 feature-kinds:
   - language
 
-# Language facts (server command, file extensions, detection markers, and
-# language LSP server dependencies) live in feature files under
-# config/components/coding-lsp/<language>.yaml. This component owns
-# orchestration only — enabling, installing, and propagating LSP capability.
+# Language facts live in nested descriptors under:
+# - config/components/coding-lsp/features/
+# - config/components/coding-lsp/implementations/
+# - config/components/coding-lsp/bindings/
+# This component owns orchestration only — enabling, installing, and
+# propagating LSP capability.
 
 files:
   - path: .coding-lsp/logs

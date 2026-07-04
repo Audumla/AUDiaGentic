@@ -30,6 +30,29 @@ def option_schema_from_mapping(data: dict[str, Any]) -> OptionSchema:
     )
 
 
+def option_schema_to_dict(schema: OptionSchema) -> dict[str, Any]:
+    """Serialize an OptionSchema for MCP/API responses.
+
+    Generic across every implementation-backed component so a consumer can
+    discover an implementation's settable keys (type, default, description,
+    required, allowed values) without any component-specific tooling.
+    """
+    result: dict[str, Any] = {
+        "type": schema.option_type,
+        "required": schema.required,
+        "description": schema.description,
+    }
+    if schema.default is not None:
+        result["default"] = schema.default
+    if schema.values:
+        result["values"] = list(schema.values)
+    if schema.minimum is not None:
+        result["minimum"] = schema.minimum
+    if schema.maximum is not None:
+        result["maximum"] = schema.maximum
+    return result
+
+
 def load_option_schema(raw: Any) -> dict[str, OptionSchema]:
     if raw is None:
         return {}

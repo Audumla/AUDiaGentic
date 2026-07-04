@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from audiagentic.components.coding_lsp.language_servers import LanguageServerEntry
+from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.foundation.mcp import McpServerEntry
 
 from ..descriptors.registry import all_descriptors
@@ -181,37 +183,65 @@ def prune_generic_lsp_mcp_from_provider_configs(
     return {"ok": True, "pruned": pruned, "skipped": skipped, "details": results}
 
 
+def _handle_sync_language_servers(payload: dict) -> dict[str, Any]:
+    return sync_language_servers_to_provider_configs(
+        payload["project_root"],
+        dict(payload.get("servers") or {}),
+    )
+
+
+def _handle_sync_generic_mcp(payload: dict) -> dict[str, Any]:
+    return sync_generic_lsp_mcp_to_provider_configs(
+        payload["project_root"],
+        dict(payload.get("desired_entries") or {}),
+        set(payload.get("managed_ids") or ()),
+    )
+
+
+def _handle_provision_support(payload: dict) -> dict[str, Any]:
+    return provision_provider_lsp_support(payload["project_root"])
+
+
+def _handle_prune_language_servers(payload: dict) -> dict[str, Any]:
+    return prune_language_servers_from_provider_configs(
+        payload["project_root"],
+        list(payload.get("languages") or []),
+    )
+
+
+def _handle_prune_generic_mcp(payload: dict) -> dict[str, Any]:
+    return prune_generic_lsp_mcp_from_provider_configs(
+        payload["project_root"],
+        set(payload.get("managed_ids") or ()),
+    )
+
+
+_ACTION_HANDLERS: dict[str, Callable[[dict], dict[str, Any]]] = {
+    "sync-language-servers": _handle_sync_language_servers,
+    "sync-generic-mcp": _handle_sync_generic_mcp,
+    "provision-support": _handle_provision_support,
+    "prune-language-servers": _handle_prune_language_servers,
+    "prune-generic-mcp": _handle_prune_generic_mcp,
+}
+
+
 def handle_lsp_provider_projection(event_type: str, payload: dict, metadata: dict) -> None:
     project_root = payload.get("project_root")
     action = payload.get("action")
     if not isinstance(project_root, Path) or not isinstance(action, str):
         return
 
-    if action == "sync-language-servers":
-        result = sync_language_servers_to_provider_configs(
-            project_root,
-            dict(payload.get("servers") or {}),
+    handler = _ACTION_HANDLERS.get(action)
+    if handler is None:
+        raise make_error(
+            prefix="VAL",
+            component="LSPPRJ",
+            number=1,
+            kind="providers",
+            message=f"unknown LSP provider projection action: {action}",
         )
-    elif action == "sync-generic-mcp":
-        result = sync_generic_lsp_mcp_to_provider_configs(
-            project_root,
-            dict(payload.get("desired_entries") or {}),
-            set(payload.get("managed_ids") or ()),
-        )
-    elif action == "provision-support":
-        result = provision_provider_lsp_support(project_root)
-    elif action == "prune-language-servers":
-        result = prune_language_servers_from_provider_configs(
-            project_root,
-            list(payload.get("languages") or []),
-        )
-    elif action == "prune-generic-mcp":
-        result = prune_generic_lsp_mcp_from_provider_configs(
-            project_root,
-            set(payload.get("managed_ids") or ()),
-        )
-    else:
-        result = {"ok": False, "error": f"unknown LSP provider projection action: {action}"}
+
+    result = handler(payload)
 
     result_slot = payload.get("result")
     if isinstance(result_slot, dict):

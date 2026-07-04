@@ -153,7 +153,7 @@ def materialize_agent_config(
     project_root: Path | None = None,
 ) -> None:
     """Write all agent config files. Called at install and refresh time."""
-    pi_cfg = _c.load_pi_config(project_root=project_root)
+    pi_cfg = _c.load_ag_config(project_root=project_root)
 
     agent_dir = target / "agent"
     agent_dir.mkdir(parents=True, exist_ok=True)

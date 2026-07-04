@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.runtime.lifecycle.detector import detect_installed_state
+from audiagentic.foundation.lifecycle.detector import detect_installed_state
 
 
 def test_detect_none(tmp_path: Path) -> None:

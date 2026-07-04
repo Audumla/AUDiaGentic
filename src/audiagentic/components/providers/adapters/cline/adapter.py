@@ -7,16 +7,13 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.providers.adapters.base_runner import default_build_prompt, finalize_run
 from audiagentic.components.providers.adapters.cli import require_executable
 from audiagentic.components.providers.protocols.streaming.base_extractor import (
     BaseEventExtractor,
 )
 from audiagentic.components.providers.protocols.streaming.completion import (
-    NormalizationMethod,
     ResultSource,
-    build_synthetic_fallback,
-    normalize_provider_result,
-    persist_completion,
     try_extract_json_from_stdout,
 )
 from audiagentic.components.providers.protocols.streaming.provider_streaming import (
@@ -64,20 +61,6 @@ class ClineEventExtractor(BaseEventExtractor):
         self._emit_event(event_kind, message_text, message)
 
 
-def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> str:
-    prompt_body = packet_ctx.get("prompt-body")
-    prompt = (
-        "AUDiaGentic Cline provider execution request. "
-        f"job={packet_ctx.get('job-id')} "
-        f"packet={packet_ctx.get('packet-id')} "
-        f"provider={packet_ctx.get('provider-id', 'cline')} "
-        f"model={provider_cfg.get('default-model')} "
-        f"workflow={packet_ctx.get('workflow-profile')}. "
-        "Return a concise execution summary or the blocking reason if execution is impossible."
-    )
-    if prompt_body:
-        prompt += f" Prompt body: {str(prompt_body).strip()}"
-    return prompt.strip()
 
 
 def _parse_cline_completion(
@@ -129,7 +112,7 @@ def _parse_cline_completion(
 
 def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, Any]:
     executable = require_executable("cline", "cline")
-    prompt = _build_prompt(packet_ctx, provider_cfg)
+    prompt = default_build_prompt(packet_ctx, provider_cfg, provider_id="cline", title="Cline")
     default_model = provider_cfg.get("default-model")
     timeout_seconds = provider_cfg.get("timeout-seconds", 60)
     working_root = packet_ctx.get("working-root")
@@ -192,46 +175,16 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
             },
         )
 
-    if parsed_data and result_source != ResultSource.STDOUT_TEXT:
-        completion = normalize_provider_result(
-            provider_id="cline",
-            job_id=packet_ctx.get("job-id"),
-            prompt_id=packet_ctx.get("prompt-id"),
-            surface=packet_ctx.get("surface"),
-            stage=packet_ctx.get("workflow-profile"),
-            stdout=stdout_text,
-            stderr=stderr_text,
-            returncode=completed.returncode,
-            result_source=result_source,
-            normalization_method=NormalizationMethod.PROVIDER_NATIVE_JSON,
-            subject=parsed_data,
-        )
-    else:
-        completion = build_synthetic_fallback(
-            provider_id="cline",
-            job_id=packet_ctx.get("job-id"),
-            stdout=stdout_text,
-            stderr=stderr_text,
-            returncode=completed.returncode,
-        )
-
-    working_root_path = Path(working_root) if working_root else None
-    if working_root_path and packet_ctx.get("job-id"):
-        try:
-            persist_completion(working_root_path, packet_ctx.get("job-id"), completion)
-        except AudiaGenticError:
-            logger.warning("Failed to persist completion", exc_info=True)
-
-    return {
-        "provider-id": packet_ctx.get("provider-id", "cline"),
-        "status": "ok",
-        "execution-mode": provider_cfg.get("access-mode", "cli"),
-        "model": default_model,
-        "task-id": task_id,
-        "output": output_text or stdout_text,
-        "stdout": stdout_text,
-        "stderr": stderr_text,
-        "returncode": completed.returncode,
-        "command": command,
-        "completion": completion.to_dict(),
-    }
+    return finalize_run(
+        provider_id="cline",
+        packet_ctx=packet_ctx,
+        provider_cfg=provider_cfg,
+        command=command,
+        stdout_text=stdout_text,
+        stderr_text=stderr_text,
+        returncode=completed.returncode,
+        parsed_data=parsed_data,
+        result_source=result_source,
+        output_text=output_text or stdout_text,
+        extra_result={"task-id": task_id},
+    )

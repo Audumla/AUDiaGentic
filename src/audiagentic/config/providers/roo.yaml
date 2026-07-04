@@ -44,3 +44,8 @@ mcp_config:
   remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
   format: "mcp-json"
   refresh_mode: "restart-required"
+
+execution:
+  mode: unsupported
+  error-code: CON-ROO-001
+  message: "Roo Code is a VS Code extension provider and has no CLI execution adapter"

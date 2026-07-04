@@ -18,12 +18,12 @@ from audiagentic.components.agent_jobs.approvals import (
     request_approval,
     request_job_approval,
 )
+from audiagentic.components.agent_jobs.jobs_store import read_job_record, write_job_record
 from audiagentic.components.agent_jobs.records import build_job_record
 from audiagentic.components.agent_jobs.reviews import (
     build_review_bundle,
     persist_review_bundle,
 )
-from audiagentic.runtime.state.jobs_store import read_job_record, write_job_record
 
 
 def test_job_approval_expiration_moves_job_to_cancelled(tmp_path: Path) -> None:

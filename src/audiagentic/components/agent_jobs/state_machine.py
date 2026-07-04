@@ -11,6 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.agent_jobs import jobs_store as store
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.workflow import (
@@ -19,7 +20,6 @@ from audiagentic.foundation.workflow import (
     states_in_set,
     transition_allowed,
 )
-from audiagentic.runtime.state import jobs_store as store
 
 logger = logging.getLogger(__name__)
 

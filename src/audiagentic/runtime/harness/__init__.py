@@ -15,6 +15,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from audiagentic.foundation.capabilities import register_capability
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 
 
@@ -58,7 +59,7 @@ def default_config_path() -> Path:
 
 def get_harness_type(project_root: Path | None = None) -> str:
     """Return the configured harness type for the given project root."""
-    from audiagentic.runtime.config import load_layered_config
+    from audiagentic.foundation.config import load_layered_config
     cfg = load_layered_config(
         pkg_default_path=default_config_path(),
         project_root=project_root,
@@ -203,3 +204,13 @@ def load_pi_config(project_root: Path | None = None) -> dict:
     """Load Pi-specific harness config (pi.yaml). Only used by Pi-aware callers."""
     from .pi.install.constants import load_pi_config as _load
     return _load(project_root=project_root)
+
+
+# Register harness capabilities at module import time.
+# Placed at EOF so the registered functions are already defined.
+register_capability(  # noqa: E402
+    "harness.runtime-sync", build_runtime_sync,
+)
+register_capability(  # noqa: E402
+    "harness.config-refresh", refresh_harness_config_if_installed,
+)

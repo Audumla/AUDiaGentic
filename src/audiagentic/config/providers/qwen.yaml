@@ -48,3 +48,20 @@ language_servers_config:
   writer: "audiagentic.components.providers.adapters.qwen.language_servers:write_language_servers_qwen"
   remover: "audiagentic.components.providers.adapters.qwen.language_servers:remove_language_servers_qwen"
   format: "qwen-lsp-json"
+
+surfaces:
+  renderer: flat-skill
+  contribution-file: "QWEN.md"
+
+execution:
+  mode: cli
+  executable: qwen
+  aliases: [qwen]
+  prompt-title: Qwen
+  error-code: EXT-QWEN-001
+  extractor-name: qwen-plaintext
+  args-template: ["{approval-flags}", "{model-flags}", "{prompt}"]
+  model-flag: "-m"
+  approval-mode-flags:
+    yolo: ["--yolo"]
+    auto-edit: ["--approval-mode", "auto-edit"]

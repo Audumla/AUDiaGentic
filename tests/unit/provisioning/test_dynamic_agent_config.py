@@ -8,6 +8,7 @@ from audiagentic import launcher
 from audiagentic.components.session.session_visibility import set_cli_visibility
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
+from audiagentic.foundation.lifecycle.components import install_component
 from audiagentic.runtime.harness.pi.install import request_runtime_reload
 from audiagentic.runtime.harness.pi.install.config import (
     _build_settings_config,
@@ -16,7 +17,6 @@ from audiagentic.runtime.harness.pi.install.config import (
 from audiagentic.runtime.harness.system_prompt import (
     build_system_prompt_injections as build_system_md_injections,
 )
-from audiagentic.runtime.lifecycle.components import install_component
 
 
 def test_build_system_md_injections_uses_explicit_project_root(
@@ -150,7 +150,7 @@ def test_component_install_refreshes_materialized_agent_config(
     reload_calls: list[tuple[Path, str, str | None]] = []
 
     monkeypatch.setattr(
-        "audiagentic.runtime.home.global_harness_runtime",
+        "audiagentic.foundation.home.global_harness_runtime",
         lambda: harness_root,
     )
     monkeypatch.setattr(
@@ -226,7 +226,7 @@ def test_set_cli_visibility_updates_project_config_and_requests_reload(
     reload_calls: list[tuple[Path, str]] = []
 
     monkeypatch.setattr(
-        "audiagentic.runtime.home.global_harness_runtime",
+        "audiagentic.foundation.home.global_harness_runtime",
         lambda: harness_root,
     )
     monkeypatch.setattr(

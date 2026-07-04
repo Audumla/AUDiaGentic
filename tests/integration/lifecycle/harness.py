@@ -10,7 +10,7 @@ from tests.helpers import sandbox as sandbox_helper
 from audiagentic.foundation.components.base import MODE_CREATE_IF_MISSING, MODE_REQUIRED_MANAGED
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import all_descriptors, is_enabled, is_installed
-from audiagentic.runtime.lifecycle.components import (
+from audiagentic.foundation.lifecycle.components import (
     disable_component,
     enable_component,
     install_component,

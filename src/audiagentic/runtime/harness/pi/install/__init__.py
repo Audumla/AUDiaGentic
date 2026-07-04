@@ -184,7 +184,7 @@ def refresh_harness_config_if_installed(
 
     Returns True if harness was present and config was refreshed.
     """
-    from audiagentic.runtime.home import global_harness_runtime
+    from audiagentic.foundation.home import global_harness_runtime
     harness_runtime = global_harness_runtime()
     if not (harness_runtime / "cli" / "node_modules" / ".bin").exists():
         return False

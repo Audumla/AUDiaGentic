@@ -48,10 +48,13 @@ def list_provider_descriptors() -> list[dict[str, Any]]:
                 }
                 for capability in descriptor.host_capabilities
             ],
-            "vscode_extensions": [
-                {"extension_id": extension.capability_id, "display_name": extension.display_name}
-                for extension in descriptor.vscode_extensions
-            ],
+            "host_extensions": {
+                host: [
+                    {"extension_id": e.capability_id, "display_name": e.display_name}
+                    for e in descriptor.host_extensions(host)
+                ]
+                for host in sorted({c.host for c in descriptor.host_capabilities})
+            },
             "permissions": {
                 "can_write_files": descriptor.permissions.can_write_files,
                 "can_execute_shell": descriptor.permissions.can_execute_shell,

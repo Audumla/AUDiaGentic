@@ -1,11 +1,80 @@
-"""Generic frontmatter builder.
+"""Generic frontmatter handling for markdown documents.
 
-Assembles frontmatter dicts from config defaults and provided values.
+Module-level functions parse and render ``---`` YAML frontmatter and
+``## Heading`` sections of markdown documents; the FrontmatterBuilder class
+assembles frontmatter dicts from config defaults and provided values.
 """
 
 from __future__ import annotations
 
+import re
+from typing import Any
+
+import yaml
+
 from .interfaces import WorkflowConfig
+
+_TITLE_RE = re.compile(r"^# (.+)$", re.MULTILINE)
+_SECTION_RE = re.compile(r"^## (.+)$", re.MULTILINE)
+
+
+def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
+    """Split a markdown document into (frontmatter dict, body).
+
+    Returns ``({}, text)`` unchanged when no ``---`` frontmatter block leads
+    the document.
+    """
+    if not text.startswith("---"):
+        return {}, text
+    end = text.find("\n---", 3)
+    if end == -1:
+        return {}, text
+    fm: dict[str, Any] = yaml.safe_load(text[3:end].strip()) or {}
+    body = text[end + 4:].lstrip("\n")
+    return fm, body
+
+
+def render_frontmatter(fm: dict[str, Any], body: str) -> str:
+    """Render a frontmatter dict and body back into a markdown document."""
+    fm_str = yaml.dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False).rstrip()
+    return f"---\n{fm_str}\n---\n\n{body}"
+
+
+def parse_title(body: str) -> str | None:
+    """Return the first ``# Title`` heading of a markdown body, if present."""
+    match = _TITLE_RE.match(body)
+    return match.group(1).strip() if match else None
+
+
+def parse_sections(body: str, heading_to_field: dict[str, str]) -> dict[str, str]:
+    """Extract ``## Heading`` sections into a field->content dict.
+
+    ``heading_to_field`` maps document headings to result keys; unknown
+    headings are skipped. The ``# Title`` heading, when present, is returned
+    under ``title``.
+    """
+    result: dict[str, str] = {}
+    title = parse_title(body)
+    if title is not None:
+        result["title"] = title
+    headings = list(_SECTION_RE.finditer(body))
+    for i, match in enumerate(headings):
+        field = heading_to_field.get(match.group(1).strip())
+        if field is None:
+            continue
+        start = match.end()
+        end = headings[i + 1].start() if i + 1 < len(headings) else len(body)
+        result[field] = body[start:end].strip()
+    return result
+
+
+def build_sectioned_body(title: str, sections: dict[str, str], field_to_heading: dict[str, str]) -> str:
+    """Render a title plus ordered ``## Heading`` sections into a markdown body."""
+    parts = [f"# {title}"]
+    for key, heading in field_to_heading.items():
+        content = sections.get(key, "")
+        parts.append(f"\n## {heading}\n\n{content}")
+    return "\n".join(parts) + "\n"
 
 
 class FrontmatterBuilder:

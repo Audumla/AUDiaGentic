@@ -6,6 +6,8 @@ from typing import Any
 
 import tomllib
 
+from audiagentic.foundation.contracts.errors import make_error
+
 try:
     import tomli_w
 except ImportError:
@@ -46,7 +48,13 @@ def read_mcp_toml(path: Path) -> dict[str, McpServerEntry]:
 def write_mcp_toml(path: Path, entries: dict[str, McpServerEntry]) -> None:
     """Write MCP server entries to a TOML file's [mcp_servers] section."""
     if tomli_w is None:
-        raise RuntimeError("tomli_w required; pip install tomli-w")
+        raise make_error(
+            prefix="RES",
+            component="OHAND",
+            number=1,
+            kind="providers",
+            message="tomli_w required; pip install tomli-w",
+        )
     path.parent.mkdir(parents=True, exist_ok=True)
     existing: dict[str, Any] = {}
     if path.exists():
@@ -73,7 +81,13 @@ def write_mcp_toml(path: Path, entries: dict[str, McpServerEntry]) -> None:
 def remove_mcp_toml(path: Path, name: str) -> bool:
     """Remove an MCP server entry by name from a TOML file."""
     if tomli_w is None:
-        raise RuntimeError("tomli_w required; pip install tomli-w")
+        raise make_error(
+            prefix="RES",
+            component="OHAND",
+            number=1,
+            kind="providers",
+            message="tomli_w required; pip install tomli-w",
+        )
     if not path.exists():
         return False
     try:

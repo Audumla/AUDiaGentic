@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.foundation.io import atomic_write_text
 
 from . import utils
@@ -24,7 +25,11 @@ def _render_baseline(branch: str = "main", python_version: str = "3.13") -> str:
     text = utils.render("baseline.yml", subs)
     for placeholder in TEMPLATE_PLACEHOLDERS.get("baseline.yml", []):
         if placeholder in text:
-            raise ValueError(f"unreplaced placeholder {placeholder} in baseline.yml")
+            raise make_error(
+                prefix="VAL", component="RELP", number=1, kind="release",
+                message=f"unreplaced placeholder {placeholder} in baseline.yml",
+                details={"placeholder": placeholder},
+            )
     return text
 
 
@@ -75,7 +80,11 @@ def update_workflow(project_root: Path, branch: str = "main", python_version: st
     template = utils.render("release.yml", subs)
     for placeholder in TEMPLATE_PLACEHOLDERS.get("release.yml", []):
         if placeholder in template:
-            raise ValueError(f"unreplaced placeholder {placeholder} in release.yml template")
+            raise make_error(
+                prefix="VAL", component="RELP", number=2, kind="release",
+                message=f"unreplaced placeholder {placeholder} in release.yml template",
+                details={"placeholder": placeholder},
+            )
     workflow_path.write_text(template, encoding="utf-8")
     return {"updated": True, "path": str(workflow_path.relative_to(project_root))}
 
@@ -106,6 +115,7 @@ def ensure_baseline(project_root: Path, branch: str = "main", python_version: st
     state = detect_workflow_state(project_root, branch, python_version)
     baseline = _render_baseline(branch, python_version)
 
+    # CLOSED: states are exhaustive outcomes of one detector (install/unmodified/modified/etc.)
     if state == "absent":
         atomic_write_text(managed, baseline)
     elif state == "legacy-detected":

@@ -188,14 +188,31 @@ def test_build_extractor_stream_sinks_with_event_sink(tmp_path) -> None:
     ("audiagentic.components.providers.adapters.claude.adapter", "ClaudeEventExtractor", "claude-stream-json"),
     ("audiagentic.components.providers.adapters.cline.adapter", "ClineEventExtractor", "cline-ndjson"),
     ("audiagentic.components.providers.adapters.codex.adapter", "CodexEventExtractor", "codex-milestone"),
-    ("audiagentic.components.providers.adapters.copilot.adapter", "CopilotEventExtractor", "copilot-plaintext"),
     ("audiagentic.components.providers.adapters.gemini.adapter", "GeminiEventExtractor", "gemini-plaintext"),
     ("audiagentic.components.providers.adapters.opencode.adapter", "OpencodeEventExtractor", "opencode-ndjson"),
-    ("audiagentic.components.providers.adapters.qwen.adapter", "QwenEventExtractor", "qwen-plaintext"),
 ])
 def test_adapter_extractor_name(adapter_path, cls_name, expected_name) -> None:
     import importlib
     mod = importlib.import_module(adapter_path)
     cls = getattr(mod, cls_name)
+    assert cls.extractor_name == expected_name
+    assert issubclass(cls, BaseEventExtractor)
+
+
+@pytest.mark.parametrize("provider_id,expected_name", [
+    ("qwen", "qwen-plaintext"),
+    ("copilot", "copilot-plaintext"),
+])
+def test_yaml_driven_extractor_names(provider_id, expected_name) -> None:
+    """Providers migrated to the YAML execution block keep their extractor names."""
+    import audiagentic.components.providers  # noqa: F401  (register descriptors)
+    from audiagentic.components.providers.adapters.base_runner import (
+        make_plaintext_extractor,
+    )
+    from audiagentic.components.providers.descriptors.registry import all_descriptors
+
+    execution = all_descriptors()[provider_id].execution
+    assert execution["extractor-name"] == expected_name
+    cls = make_plaintext_extractor(execution["extractor-name"])
     assert cls.extractor_name == expected_name
     assert issubclass(cls, BaseEventExtractor)

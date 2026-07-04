@@ -31,11 +31,11 @@ from audiagentic.foundation.components.base import (
     ComponentFile,
 )
 from audiagentic.foundation.components.registry import register
-from audiagentic.paths import SRC_ROOT as SRC
-from audiagentic.runtime.lifecycle.components import (
+from audiagentic.foundation.lifecycle.components import (
     get_owned_files,
     uninstall_component,
 )
+from audiagentic.paths import SRC_ROOT as SRC
 
 pytestmark = pytest.mark.dev
 
@@ -338,5 +338,5 @@ def test_foundation_components_base_has_no_runtime_imports() -> None:
 
 def test_mode_constants_are_same_object_in_baseline_sync() -> None:
     from audiagentic.foundation.components.base import MODE_CREATE_IF_MISSING as FC
-    from audiagentic.runtime.lifecycle.baseline_sync import MODE_CREATE_IF_MISSING as BS
+    from audiagentic.foundation.lifecycle.baseline_sync import MODE_CREATE_IF_MISSING as BS
     assert FC == BS, "MODE_* constants must be identical between foundation and baseline_sync"

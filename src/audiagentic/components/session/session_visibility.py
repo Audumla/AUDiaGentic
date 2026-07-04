@@ -7,8 +7,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.config import load_layered_config
 from audiagentic.foundation.contracts.errors import make_error
-from audiagentic.runtime.config import load_layered_config, load_yaml_file, save_yaml_file
+from audiagentic.foundation.io import load_yaml_file, save_yaml_file
 
 
 class Scope(str, Enum):
@@ -22,7 +23,7 @@ def _project_config_path(project_root: Path) -> Path:
 
 
 def _global_config_path() -> Path:
-    from audiagentic.runtime.home import audiagentic_home
+    from audiagentic.foundation.home import audiagentic_home
     return audiagentic_home() / "config" / "harness" / "ag.yaml"
 
 
@@ -106,12 +107,12 @@ def set_cli_visibility(
 
     save_yaml_file(path, current, sort_keys=False)
 
+    from audiagentic.foundation.home import global_harness_runtime
     from audiagentic.runtime.harness import (
         build_runtime_sync,
         refresh_materialized_agent_config,
         request_runtime_reload,
     )
-    from audiagentic.runtime.home import global_harness_runtime
 
     refresh_materialized_agent_config(global_harness_runtime(), project_root=project_root)
     request_runtime_reload(project_root, reason="session-ui-visibility-updated")

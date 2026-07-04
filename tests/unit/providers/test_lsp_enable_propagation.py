@@ -26,7 +26,7 @@ class TestEnableCodingLspAddsLspMcpToProviders:
 
     ag-lsp-mgmt is NOT projected — it is for the AG CLI only.
     Only the generic-mcp projection from the active implementation descriptor
-    (ag-lsp or agent-lsp) is projected into providers.
+    (ag-lsp or blackwell-agent-lsp) is projected into providers.
     """
 
     def test_sync_generic_lsp_projects_only_ag_lsp_not_mgmt(self, tmp_path: Path) -> None:

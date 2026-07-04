@@ -6,9 +6,16 @@ Run with: pytest tests/integration/runtime/test_ai_tester_integration.py -v
 """
 from __future__ import annotations
 
+import os
 import pathlib
 
 import pytest
+
+if os.environ.get("AUDIAGENTIC_LIVE_RIG_TESTS") != "1":
+    pytest.skip(
+        "live embedded rig tests are opt-in; set AUDIAGENTIC_LIVE_RIG_TESTS=1",
+        allow_module_level=True,
+    )
 
 _test_model = pathlib.Path(__file__).parent.parent.parent / "unit" / "runtime" / "Qwen3.5-0.8B-UD-Q5_K_XL.gguf"
 

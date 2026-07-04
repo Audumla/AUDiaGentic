@@ -38,3 +38,8 @@ agent_files:
   - rel_path: ".aider.conf.yml"
     managed: false
     description: "Aider project configuration"
+
+execution:
+  mode: stub
+  aliases: [aider]
+  message: "Aider adapter is registered; execution bridge not wired yet."

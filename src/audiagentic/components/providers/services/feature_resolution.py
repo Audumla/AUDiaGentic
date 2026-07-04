@@ -20,13 +20,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
 from audiagentic.foundation.features.state import get_implementation_feature_enabled_explicit
 
 from ..descriptors.base import ProviderDescriptor
 from ..descriptors.feature_mapping import impl_features_for
 from ..descriptors.registry import all_descriptors
 from .provider_config import resolve_provider_enabled
+
+_COMPONENT_ID = "providers"
 
 
 @dataclass(frozen=True)
@@ -45,7 +46,7 @@ class ResolvedProviderFeature:
 
 def _feature_active(project_root: Path, provider_id: str, kind: str, feature_id: str) -> bool:
     explicit = get_implementation_feature_enabled_explicit(
-        project_root, COMPONENT_PROVIDERS, provider_id, kind, feature_id
+        project_root, _COMPONENT_ID, provider_id, kind, feature_id
     )
     # Default active when the provider is enabled; only an explicit False disables.
     return explicit is not False

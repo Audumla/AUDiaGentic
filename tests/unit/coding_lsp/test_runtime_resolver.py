@@ -40,19 +40,19 @@ def _register_language_bindings() -> None:
     feature_registry.register(
         BindingDescriptor(
             parent="coding-lsp",
-            implementation="agent-lsp",
+            implementation="blackwell-agent-lsp",
             feature_kind="language",
             feature="python",
-            projection_writer_key="agent-lsp.mcp-args",
+            projection_writer_key="blackwell-agent-lsp.mcp-args",
         )
     )
     feature_registry.register(
         BindingDescriptor(
             parent="coding-lsp",
-            implementation="agent-lsp",
+            implementation="blackwell-agent-lsp",
             feature_kind="language",
             feature="rust",
-            projection_writer_key="agent-lsp.mcp-args",
+            projection_writer_key="blackwell-agent-lsp.mcp-args",
         )
     )
 
@@ -85,7 +85,7 @@ def test_resolve_active_runtime_servers_filters_by_active_implementation_binding
     set_implementation_state(
         tmp_path,
         "coding-lsp",
-        "agent-lsp",
+        "blackwell-agent-lsp",
         ImplementationState(enabled=True),
     )
     set_feature_state(

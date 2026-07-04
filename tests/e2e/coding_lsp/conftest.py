@@ -32,6 +32,7 @@ def _docker_project_root() -> str:
 
 PROJECT_ROOT = _docker_project_root()
 LSP_IMAGE = "audiagentic-lsp-install-test:latest"
+DOCKER_EXE = shutil.which("docker")
 
 
 def _docker_image_exists(image: str) -> bool:
@@ -47,7 +48,7 @@ def _docker_image_exists(image: str) -> bool:
 
 
 requires_docker = pytest.mark.skipif(
-    shutil.which("docker") is None,
+    DOCKER_EXE is None,
     reason="docker not on PATH",
 )
 

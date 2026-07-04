@@ -6,6 +6,7 @@ from audiagentic.foundation.mcp.component_server import (
     log_tool_call,
     mcp_server,
     project_root_from_env,
+    run_mcp_server,
 )
 
 mcp = mcp_server(__name__)
@@ -30,9 +31,7 @@ def agent_list_profiles() -> list:
 
 
 def main() -> None:
-    from audiagentic.foundation.logging import bootstrap
-    bootstrap("agents")
-    mcp.run()
+    run_mcp_server(mcp, "agents")
 
 
 if __name__ == "__main__":

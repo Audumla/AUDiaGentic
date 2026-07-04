@@ -11,7 +11,7 @@ from typing import Any
 import yaml
 
 from audiagentic.cli_io import print_json
-from audiagentic.foundation.components.ids import ALL_COMPONENT_IDS
+from audiagentic.foundation.components.ids import CORE_COMPONENT_IDS, get_optional_component_ids
 from audiagentic.foundation.contracts.canonical_ids import (
     validate_ids,
     validate_schema_files,
@@ -100,7 +100,10 @@ def scan_paths(
             if allowed_provider_ids is not None:
                 for issue in validate_ids(providers, allowed_provider_ids):
                     findings.append({"path": str(file_path), "issue": issue})
-            for issue in validate_ids(components, ALL_COMPONENT_IDS):
+            # Descriptor-derived (requires registry population; falls back to
+            # core-only during early bootstrap, so validation stays permissive).
+            known_component_ids = CORE_COMPONENT_IDS | get_optional_component_ids()
+            for issue in validate_ids(components, known_component_ids):
                 findings.append({"path": str(file_path), "issue": issue})
     schema_findings = validate_schema_files(SCHEMA_DIR)
     for issue in schema_findings:

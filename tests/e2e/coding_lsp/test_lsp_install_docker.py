@@ -23,6 +23,7 @@ import subprocess
 
 import pytest
 from tests.e2e.coding_lsp.conftest import (
+    DOCKER_EXE,
     LSP_IMAGE,
     PROJECT_ROOT,
     requires_docker,
@@ -39,7 +40,7 @@ def test_lsp_full_install_uninstall_cycle() -> None:
     """Full LSP lifecycle: install all 4 servers, uninstall fast servers, reinstall pyright."""
     result = subprocess.run(
         [
-            "docker", "run", "--rm",
+            DOCKER_EXE, "run", "--rm",
             "-v", f"{PROJECT_ROOT}:/app",
             LSP_IMAGE,
         ],
@@ -64,7 +65,7 @@ def test_lsp_install_image_has_required_toolchains() -> None:
     """The LSP test image has all required toolchains (npm, uv, cargo, apt-get)."""
     for tool in ("npm", "uv", "cargo", "apt-get"):
         result = subprocess.run(
-            ["docker", "run", "--rm", LSP_IMAGE, "bash", "-c", f"which {tool}"],
+            [DOCKER_EXE, "run", "--rm", LSP_IMAGE, "bash", "-c", f"which {tool}"],
             capture_output=True,
             text=True,
             timeout=30,

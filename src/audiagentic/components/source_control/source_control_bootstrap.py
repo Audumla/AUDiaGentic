@@ -10,9 +10,11 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.source_control.probes import gh_mcp_available
-from audiagentic.foundation.components import is_installed
-from audiagentic.foundation.components.ids import COMPONENT_AGENT_LEDGER, COMPONENT_SOURCE_CONTROL
+from audiagentic.foundation.components import is_enabled, is_installed
+from audiagentic.foundation.components.hooks import ComponentStatusPayload
 from audiagentic.foundation.toolchains.detect import tool_available
+
+_COMPONENT_ID = "source-control"
 
 SOURCE_CONTROL_DEPENDENCY_IDS = ["git", "gh", "gh-mcp", "uv"]
 
@@ -45,7 +47,8 @@ def _post_commit_hook_body() -> str:
 
 
 def ledger_integration_enabled(project_root: Path) -> bool:
-    return is_installed(COMPONENT_AGENT_LEDGER, project_root)
+    # Cross-component reference: probing the optional ledger integration.
+    return is_installed("agent-ledger", project_root)
 
 
 EVENT_INSTALLED = "lifecycle.component.installed"
@@ -58,7 +61,7 @@ def on_component_lifecycle(event_type: str, payload: dict, metadata: dict) -> No
     if not isinstance(project_root, Path):
         return
 
-    if component_id != COMPONENT_SOURCE_CONTROL:
+    if component_id != _COMPONENT_ID:
         return
 
     if event_type == EVENT_INSTALLED:
@@ -116,14 +119,20 @@ def _remove_post_commit_hook(project_root: Path) -> bool:
     return True
 
 
-def status_payload(project_root: Path | None = None) -> dict[str, Any]:
+def status_payload(project_root: Path | None = None) -> ComponentStatusPayload:
     from audiagentic.foundation.components.registry import get_external_probe_results
     probe_cache = get_external_probe_results("source-control", project_root) if project_root else {}
-    return {
-        "ledger-integration-enabled": bool(project_root and ledger_integration_enabled(project_root)),
-        "mcp-servers": {
+    return ComponentStatusPayload(
+        enabled=bool(project_root and is_enabled(_COMPONENT_ID, project_root)),
+        configured=True,
+        active_implementation=None,
+        missing_required=[],
+        details={
+            "ledger_integration_enabled": bool(project_root and ledger_integration_enabled(project_root)),
+            "mcp_servers": {
             name: ("available" if probe_cache.get(name, True) else "unavailable")
             for name in ("git", "github")
+            },
+            "hint": "Use ag-sc-mgmt.get_source_control_status for full dependency checks.",
         },
-        "hint": "Use ag-sc-mgmt.get_source_control_status for full dependency checks.",
-    }
+    )

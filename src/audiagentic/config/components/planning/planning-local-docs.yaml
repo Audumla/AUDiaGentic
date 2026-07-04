@@ -18,11 +18,11 @@ paths:
 standards:
   - id: arch-standards
     title: Architecture Standards
-    path: docs/ARCHITECTURE_STANDARDS.md
+    path: docs/standards/ARCHITECTURE_STANDARDS.md
     description: 'Non-negotiable rules: layering, config-over-code, error handling, logging'
   - id: component-creation
     title: Creating Components
-    path: docs/CREATING_A_COMPONENT.md
+    path: docs/standards/CREATING_A_COMPONENT.md
     description: 'Guide for adding new Components to Audiagentic: describes the concepts of implementations, descriptors, MCP servers, features and options'
 
 files:
@@ -33,3 +33,4 @@ files:
   - path: .audiagentic/skills/ag-planning/skill.md
     lifecycle: required-managed
     description: ag-planning skill source
+

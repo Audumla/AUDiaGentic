@@ -79,9 +79,9 @@ class TestImplementationSelection:
 
     def test_default_implementation_is_hindsight(self, project_root: Path) -> None:
         """When no implementation is enabled, the default (hindsight) is returned."""
-        from audiagentic.components.memory.memory_api import _active_implementation_id
+        from audiagentic.foundation.features.registry import resolve_active_implementation
 
-        active = _active_implementation_id(project_root)
+        active = resolve_active_implementation(project_root, "memory")
         assert active == "hindsight"
 
     def test_enable_implementation_persists(self, project_root: Path) -> None:
@@ -121,6 +121,21 @@ class TestConfigValidation:
         assert result["implementation"] == "hindsight"
         assert result["config"].get("timeout-seconds") == 30
 
+    def test_get_config_exposes_option_schema(self, project_root: Path) -> None:
+        """Schema lets callers discover implementation-specific keys generically,
+        so the memory MCP surface needs no implementation-specific tools."""
+        from audiagentic.components.memory.memory_api import memory_get_config
+        from audiagentic.foundation.features.lifecycle import enable_implementation
+
+        enable_implementation(project_root, "memory", "hindsight")
+
+        result = memory_get_config(project_root, "hindsight")
+        assert "bank-id" in result["schema"]
+        assert "api-key" in result["schema"]
+        assert result["schema"]["bank-id"]["type"] == "string"
+        assert "description" in result["schema"]["bank-id"]
+        assert result["is_default"] is True
+
     def test_set_config_validates_type(self, project_root: Path) -> None:
         """Setting a config value with wrong type raises validation error."""
         from audiagentic.components.memory.memory_api import memory_set_config
@@ -156,7 +171,7 @@ class TestMemoryStatus:
         """Status returns configured=False and surfaces the missing required option."""
         from audiagentic.components.memory.memory_api import memory_status
 
-        result = memory_status(project_root)
+        result = memory_status(project_root).to_dict()
         assert result["active_implementation"] == "hindsight"
         assert result["configured"] is False
         # Schema-driven guidance: the required host is reported as missing.
@@ -179,7 +194,7 @@ class TestMemoryStatus:
         )
 
         memory_set_config(project_root, "hindsight", {"timeout-seconds": 15})
-        result = memory_status(project_root)
+        result = memory_status(project_root).to_dict()
         assert result["configured"] is False
         assert "host" in [m["option"] for m in result["missing_required"]]
 
@@ -193,9 +208,18 @@ class TestMemoryStatus:
         memory_set_config(project_root, "hindsight", {
             "host": "10.10.100.10",
         })
-        result = memory_status(project_root)
+        result = memory_status(project_root).to_dict()
         assert result["configured"] is True
-        assert "missing_required" not in result
+        assert result["missing_required"] == []
+
+    def test_status_reports_whether_active_implementation_is_the_default(self, project_root: Path) -> None:
+        """details.implementation.is_default distinguishes 'active because selected'
+        from 'active because it's the only/default implementation and nothing was
+        explicitly enabled' — this was previously invisible outside list_implementations."""
+        from audiagentic.components.memory.memory_api import memory_status
+
+        result = memory_status(project_root).to_dict()
+        assert result["details"]["implementation"]["is_default"] is True
 
 
 class TestBoundaryExports:
@@ -235,7 +259,7 @@ class TestBackendUrlComposition:
     """Backend base_url is composed from host/port/scheme with sensible defaults."""
 
     def test_host_only_uses_default_port_and_scheme(self, project_root: Path) -> None:
-        from audiagentic.components.memory.hindsight_export import build_hindsight_backend
+        from audiagentic.components.memory.hindsight.export import build_hindsight_backend
         from audiagentic.components.memory.memory_api import memory_set_config
 
         memory_set_config(project_root, "hindsight", {"host": "10.10.100.10"})
@@ -245,7 +269,7 @@ class TestBackendUrlComposition:
         assert backend.mcp_url == "http://10.10.100.10:8888/mcp"
 
     def test_custom_port_and_scheme_override_defaults(self, project_root: Path) -> None:
-        from audiagentic.components.memory.hindsight_export import build_hindsight_backend
+        from audiagentic.components.memory.hindsight.export import build_hindsight_backend
         from audiagentic.components.memory.memory_api import memory_set_config
 
         memory_set_config(
@@ -258,7 +282,7 @@ class TestBackendUrlComposition:
 
     def test_legacy_base_url_option_is_honored(self, project_root: Path) -> None:
         """Existing configs that stored a full base-url keep working (read-time fallback)."""
-        from audiagentic.components.memory.hindsight_export import build_hindsight_backend
+        from audiagentic.components.memory.hindsight.export import build_hindsight_backend
         from audiagentic.foundation.features.base import ImplementationState
         from audiagentic.foundation.features.state import set_implementation_state
 
@@ -272,7 +296,7 @@ class TestBackendUrlComposition:
         assert backend.base_url == "http://10.10.100.10:8888"
 
     def test_no_host_and_no_base_url_yields_no_backend(self, project_root: Path) -> None:
-        from audiagentic.components.memory.hindsight_export import build_hindsight_backend
+        from audiagentic.components.memory.hindsight.export import build_hindsight_backend
         from audiagentic.components.memory.memory_api import memory_set_config
 
         memory_set_config(project_root, "hindsight", {"timeout-seconds": 15})

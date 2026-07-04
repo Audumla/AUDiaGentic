@@ -28,22 +28,24 @@ def test_plan_create_item_delegates_to_api():
 
 
 def test_plan_list_items_delegates_to_api():
+    page = {"items": [], "total": 0, "returned": 0, "offset": 0, "limit": 50, "has_more": False}
     with _patch_root(), patch(
-        "audiagentic.components.planning.planning_api.list_items",
-        return_value=[],
+        "audiagentic.components.planning.planning_api.list_items_page",
+        return_value=page,
     ) as mock:
         result = planning_mcp.plan_list_items(state="active", plan="my-plan")
-    assert result == []
-    mock.assert_called_once_with(_ROOT, "active", "my-plan")
+    assert result == page
+    mock.assert_called_once_with(_ROOT, "active", "my-plan", None, 50, 0)
 
 
 def test_plan_list_items_defaults_none_filters():
+    page = {"items": [], "total": 0, "returned": 0, "offset": 0, "limit": 50, "has_more": False}
     with _patch_root(), patch(
-        "audiagentic.components.planning.planning_api.list_items",
-        return_value=[],
+        "audiagentic.components.planning.planning_api.list_items_page",
+        return_value=page,
     ) as mock:
         planning_mcp.plan_list_items()
-    mock.assert_called_once_with(_ROOT, None, None)
+    mock.assert_called_once_with(_ROOT, None, None, None, 50, 0)
 
 
 def test_plan_get_item_delegates_to_api():
