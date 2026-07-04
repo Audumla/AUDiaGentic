@@ -11,14 +11,14 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.memory.hindsight.export import (
+    HindsightBackendConfig,
+    build_hindsight_backend,
+)
 from audiagentic.components.memory.hindsight.recipes import (
     apply_hindsight,
     prune_hindsight,
     teardown_hindsight,
-)
-from audiagentic.components.memory.hindsight_export import (
-    HindsightBackendConfig,
-    build_hindsight_backend,
 )
 
 # Teardown locates/removes artifacts by server name, not by backend values, but
@@ -65,16 +65,50 @@ def reconcile_hindsight(
             )
 
     enabled_set = set(ids)
+    providers: dict[str, Any] = {}
+    for pid, res in results.items():
+        entry: dict[str, Any] = {
+            "success": res.success,
+            "state": res.state.value,
+            "role": "applied" if (action == "applied" and pid in enabled_set) else (
+                "uninstalled" if action == "torn-down" else "pruned-stale"
+            ),
+        }
+        if not res.success:
+            entry["error"] = res.error or res.status or "unknown failure"
+        providers[pid] = entry
     return {
         "action": action,
-        "providers": {
-            pid: {
-                "success": res.success,
-                "state": res.state.value,
-                "role": "applied" if (action == "applied" and pid in enabled_set) else (
-                    "uninstalled" if action == "torn-down" else "pruned-stale"
-                ),
-            }
-            for pid, res in results.items()
-        },
+        "providers": providers,
     }
+
+
+def build_hindsight_status_report(project_root: Path | str) -> dict[str, Any]:
+    """Build per-provider Hindsight status report for MCP/API exposure.
+
+    Returns ``{"configured": True, "providers": {id: status}}`` when a backend
+    exists, or ``{"configured": False, "providers": {}}`` otherwise. Provider
+    knowledge is contained here — memory core delegates to this entry point
+    without importing providers/services directly.
+    """
+    root = Path(project_root)
+    backend = build_hindsight_backend(root)
+    if backend is None:
+        return {"providers": {}, "configured": False}
+
+    from audiagentic.components.memory.hindsight.recipes import (
+        build_hindsight_status,
+        register_hindsight_recipes,
+    )
+    from audiagentic.components.providers.descriptors.registry import all_descriptors
+    from audiagentic.components.providers.services.recipes import ProviderRecipeRegistry
+
+    registry = ProviderRecipeRegistry()
+    register_hindsight_recipes(registry, backend=backend, project_root=root)
+
+    providers: dict[str, Any] = {}
+    for provider_id in all_descriptors():
+        status = build_hindsight_status(registry, provider_id, {"project_root": root})
+        providers[provider_id] = status["hindsight"]
+
+    return {"providers": providers, "configured": True}

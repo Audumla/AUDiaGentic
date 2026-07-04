@@ -2,18 +2,66 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event import get_bus
 
 from .registry import all_descriptors
 
 LifecycleHook = Callable[[str, dict[str, Any], dict[str, Any]], None]
+StatusHook = Callable[[Path], "ComponentStatusPayload | None"]
 
 _INITIALIZED = False
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ComponentStatusPayload:
+    enabled: bool
+    configured: bool
+    active_implementation: str | None = None
+    missing_required: list[dict[str, str]] = field(default_factory=list)
+    details: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.enabled, bool):
+            raise _status_error("enabled must be bool", field="enabled")
+        if not isinstance(self.configured, bool):
+            raise _status_error("configured must be bool", field="configured")
+        if self.active_implementation is not None and not isinstance(self.active_implementation, str):
+            raise _status_error("active_implementation must be str or None", field="active_implementation")
+        if not isinstance(self.missing_required, list):
+            raise _status_error("missing_required must be a list", field="missing_required")
+        for item in self.missing_required:
+            if not isinstance(item, dict) or not isinstance(item.get("option"), str) or not isinstance(item.get("description"), str):
+                raise _status_error(
+                    "missing_required entries must include string option and description",
+                    field="missing_required",
+                )
+        if not isinstance(self.details, dict):
+            raise _status_error("details must be dict", field="details")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "enabled": self.enabled,
+            "configured": self.configured,
+            "active_implementation": self.active_implementation,
+            "missing_required": list(self.missing_required),
+            "details": dict(self.details),
+        }
+
+
+def _status_error(message: str, **details: Any) -> AudiaGenticError:
+    return AudiaGenticError(
+        code="VAL-COMP-001",
+        kind="components",
+        message=message,
+        details=details or None,
+    )
 
 
 @cache
@@ -52,20 +100,42 @@ def invoke_hook(
 
 
 def get_component_status(descriptor: Any, project_root: Path) -> dict[str, Any] | None:
-    """Invoke a component's status_hook and return its payload, or None if absent."""
+    """Invoke a component's status_hook and return the serialized status payload."""
     hook_path = getattr(descriptor, "status_hook", None)
     if not hook_path:
         return None
-    result = invoke_hook(
-        hook_path,
-        project_root,
-        failure_label=f"status_hook[{descriptor.component_id}]",
-    )
+    fn = _resolve_hook(hook_path)
+    if fn is None:
+        logger.warning("status_hook[%s]: could not resolve '%s'", descriptor.component_id, hook_path)
+        return None
+    try:
+        result = fn(project_root)
+    except AudiaGenticError:
+        logger.error("status_hook[%s] raised AudiaGenticError", descriptor.component_id, exc_info=True)
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.error("status_hook[%s] '%s' raised: %s", descriptor.component_id, hook_path, exc, exc_info=True)
+        raise AudiaGenticError(
+            code="INT-COMP-002",
+            kind="components",
+            message="component status hook failed",
+            details={"component_id": descriptor.component_id, "hook": hook_path},
+        ) from exc
     if result is None:
         return None
-    if isinstance(result, dict):
-        return result
-    return {"status-hook-error": "hook did not return a dict"}
+    if isinstance(result, ComponentStatusPayload):
+        return result.to_dict()
+    logger.error(
+        "status_hook[%s] returned invalid payload type: %s",
+        descriptor.component_id,
+        type(result).__name__,
+    )
+    raise _status_error(
+        "status hook must return ComponentStatusPayload or None",
+        component_id=descriptor.component_id,
+        hook=hook_path,
+        returned_type=type(result).__name__,
+    )
 
 
 def _dispatch_component_lifecycle(event_type: str, payload: dict, metadata: dict) -> None:

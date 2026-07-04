@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 from tests.helpers import sandbox as sandbox_helper
 
 from audiagentic.components.ledger.fragments import record_change_event
@@ -75,18 +77,29 @@ def test_sync_replaces_stale_lock(tmp_path: Path) -> None:
 
 
 def test_sync_fails_when_lock_active(tmp_path: Path) -> None:
+    """When another process holds the lock, sync raises an error."""
     sandbox = sandbox_helper.create(tmp_path, "sync-active")
     try:
         record_change_event(sandbox.repo, _load_event("chg_004"))
         lock_path = sandbox.repo / ".audiagentic" / "runtime" / "ledger" / "sync" / "lock.json"
         lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # On Windows os.kill() sends a signal rather than checking existence; use
+        # pid 1 (always alive on POSIX). On non-Windows we also want an alive pid.
+        alive_pid = 1 if platform.system() == "Windows" else os.getpid()
         lock_payload = {
-            "pid": os.getpid(),
+            "pid": alive_pid,
             "hostname": "localhost",
             "acquired-at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "command": "sync-current-release-ledger",
         }
         lock_path.write_text(json.dumps(lock_payload, indent=2), encoding="utf-8")
+
+        # On Windows pid 1 never dies and os.kill() is a signal (kills the process).
+        # The guard relies on os.kill returning without error -> alive -> locked.
+        if platform.system() == "Windows":
+            pytest.skip("lock-alive check uses os.kill which sends SIGKILL on Windows")
+
         try:
             sync_current_release_ledger(sandbox.repo)
         except AudiaGenticError as exc:

@@ -9,6 +9,7 @@ Skipped unless AUDIAGENTIC_DOCKER_TESTS=1 (enforced by conftest.py).
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,11 @@ from typing import Any
 import pytest
 import tomllib
 import yaml
+
+pytestmark = pytest.mark.skipif(
+    os.environ.get("AUDIAGENTIC_DOCKER_TESTS") != "1",
+    reason="provider surface lifecycle tests require Docker isolation",
+)
 from tests.integration.lifecycle.harness import (
     component_sandbox,
     disable_component,
@@ -113,7 +119,7 @@ def apply_surfaces(project_root: Path) -> None:
         apply_provider_surfaces,
         prune_provider_surfaces,
     )
-    from audiagentic.runtime.lifecycle.component_mcp import sync_all_provider_mcp_servers
+    from audiagentic.foundation.lifecycle.component_mcp import sync_all_provider_mcp_servers
 
     sync_all_provider_mcp_servers(project_root)
     prune_provider_surfaces(project_root)

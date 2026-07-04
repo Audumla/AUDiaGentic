@@ -35,7 +35,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _parse_frontmatter(block: str) -> dict[str, str]:
+def _parse_frontmatter_block(block: str) -> dict[str, str]:
     data: dict[str, str] = {}
     for raw_line in block.splitlines():
         line = raw_line.strip()
@@ -72,7 +72,7 @@ def _skill_definition_from_content(tag_id: str, content: str) -> SkillDefinition
             details={"tag_id": tag_id},
         )
     _, frontmatter, body = content.split("---", 2)
-    meta = _parse_frontmatter(frontmatter)
+    meta = _parse_frontmatter_block(frontmatter)
     body_lines = [line.rstrip() for line in body.strip().splitlines()]
     title = next((line[2:].strip() for line in body_lines if line.startswith("# ")), f"{tag_id} skill")
     return SkillDefinition(

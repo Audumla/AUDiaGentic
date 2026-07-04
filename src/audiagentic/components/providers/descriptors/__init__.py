@@ -11,7 +11,6 @@ from .base import (
     HostCapability,
     ProviderDescriptor,
     ProviderPermissions,
-    VsCodeExtension,
 )
 from .registry import all_descriptors, get_descriptor, interrogate, provider_alias_map, register
 
@@ -20,7 +19,6 @@ __all__ = [
     "HostCapability",
     "ProviderDescriptor",
     "ProviderPermissions",
-    "VsCodeExtension",
     "register",
     "get_descriptor",
     "all_descriptors",

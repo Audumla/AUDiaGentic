@@ -108,6 +108,9 @@ class _SafeTimedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
                 try:
                     self.stream.close()
                 except Exception:
+                    # Inline getLogger is intentional here: this module IS the
+                    # logging infrastructure — a module-level logger created at
+                    # import time can recurse into handler setup during rollover.
                     logging.getLogger(__name__).debug(
                         "failed to close stream during rollover", exc_info=True
                     )

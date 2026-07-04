@@ -35,6 +35,31 @@ def lsp_select_implementation(root: str = ".", implementation: str = "") -> dict
 
 @mcp.tool()
 @log_tool_call
+def lsp_get_config(root: str = ".", implementation_id: str | None = None) -> dict[str, Any]:
+    """Return resolved config plus the settable-option schema for an LSP implementation.
+
+    The ``schema`` field describes every option the implementation accepts
+    (type, description, required, default, allowed values) — e.g. ag-lsp's
+    ``mutation-enabled``. Use it to discover what can be set, then pass any
+    of those keys to ``lsp_set_config``.
+    """
+    resolved = root if root != "." else str(project_root_from_env())
+    return lsp_config_api.get_config(resolved, implementation_id)
+
+
+@mcp.tool()
+@log_tool_call
+def lsp_set_config(root: str = ".", implementation_id: str = "", updates: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Validate and persist config updates for an LSP implementation.
+
+    See ``lsp_get_config`` for the option schema an implementation accepts.
+    """
+    resolved = root if root != "." else str(project_root_from_env())
+    return lsp_config_api.set_config(resolved, implementation_id, updates or {})
+
+
+@mcp.tool()
+@log_tool_call
 async def lsp_add_language(root: str = ".", language: str = "") -> dict[str, Any]:
     resolved = root if root != "." else str(project_root_from_env())
     return await lsp_config_api.enable_language(resolved, language)

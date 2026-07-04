@@ -16,10 +16,11 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
 from audiagentic.foundation.features.base import FEATURE_SCOPE_IMPLEMENTATION, FeatureDescriptor
 
 from .base import ProviderDescriptor
+
+_COMPONENT_ID = "providers"
 
 # Feature kinds emitted for provider capabilities. Defined as constants so callers
 # (resolver, projection, tests) reference them symbolically, never as string literals.
@@ -71,7 +72,7 @@ def impl_features_for(descriptor: ProviderDescriptor) -> list[FeatureDescriptor]
         for feature_id in capability.feature_ids(descriptor):
             features.append(
                 FeatureDescriptor(
-                    parent=COMPONENT_PROVIDERS,
+                    parent=_COMPONENT_ID,
                     kind=capability.kind,
                     feature_id=feature_id,
                     scope=FEATURE_SCOPE_IMPLEMENTATION,

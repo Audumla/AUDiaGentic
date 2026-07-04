@@ -7,7 +7,7 @@ from audiagentic.components.agents import agents_api
 from audiagentic.components.agents.agents_paths import agent_profiles_path
 from audiagentic.components.agents.models import AgentProfilesStore, profile_from_dict
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.runtime.config import load_yaml_file
+from audiagentic.foundation.io import load_yaml_file
 
 
 def _make_profile(**kwargs) -> dict:

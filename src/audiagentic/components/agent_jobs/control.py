@@ -12,7 +12,7 @@ Key functions:
 Dependency injection:
 - Functions accept optional `store` parameter for test isolation
 - Defaults to global jobs_store for backward compatibility
-- Use `from audiagentic.runtime.state import jobs_store` for explicit injection
+- Use `from audiagentic.components.agent_jobs import jobs_store` for explicit injection
 """
 
 from __future__ import annotations
@@ -25,6 +25,11 @@ import types
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.agent_jobs import jobs_store as _default_store
+from audiagentic.components.agent_jobs.paths import (
+    job_control_events_path,
+    job_control_path,
+)
 from audiagentic.components.agent_jobs.state_machine import (
     TERMINAL_STATES,
     transition_and_persist,
@@ -32,11 +37,6 @@ from audiagentic.components.agent_jobs.state_machine import (
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_json, atomic_write_ndjson
 from audiagentic.foundation.time import now_iso_z
-from audiagentic.runtime.state import jobs_store as _default_store
-from audiagentic.runtime.state.paths import (
-    job_control_events_path,
-    job_control_path,
-)
 
 JobStoreInterface = types.ModuleType
 

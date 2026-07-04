@@ -12,7 +12,7 @@ DEFAULT_API_KEY = "dummy"
 
 
 def load_opencode_config(project_root: Path | None = None) -> dict:
-    from audiagentic.runtime.config import load_layered_config
+    from audiagentic.foundation.config import load_layered_config
     return load_layered_config(
         pkg_default_path=_OPENCODE_CONFIG,
         project_root=project_root,

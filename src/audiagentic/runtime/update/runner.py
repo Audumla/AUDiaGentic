@@ -136,8 +136,8 @@ def install_version(version: str) -> dict:
 
     print_message("  Refreshing harness config...")
     try:
+        from audiagentic.foundation.home import global_harness_runtime
         from audiagentic.runtime.harness import install_to
-        from audiagentic.runtime.home import global_harness_runtime
         install_to(global_harness_runtime())
     except Exception as exc:
         logger.warning("Harness config refresh failed during update", exc_info=True)

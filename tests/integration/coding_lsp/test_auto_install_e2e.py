@@ -23,7 +23,7 @@ import pytest
 from audiagentic.components.coding_lsp import lsp_api, lsp_config_api
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.features.state import get_feature_state
-from audiagentic.runtime.lifecycle.components import enable_component, install_component
+from audiagentic.foundation.lifecycle.components import enable_component, install_component
 
 pytestmark = [pytest.mark.mutates_host, pytest.mark.slow]
 

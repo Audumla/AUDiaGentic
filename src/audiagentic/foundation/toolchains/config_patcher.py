@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import make_error
+
 from .config_reader import UNSET, dump_config, load_config
 
 
@@ -54,7 +56,10 @@ class ConfigPatcher:
     def set_key(self, key_path: tuple[str, ...], value: Any) -> OwnedChange:
         """Set ``value`` at ``key_path``, creating intermediate tables as needed."""
         if not key_path:
-            raise ValueError("key_path must be non-empty")
+            raise make_error(
+                prefix="VAL", component="PATCH", number=1, kind="toolchains",
+                message="key_path must be non-empty",
+            )
         data = load_config(self.path)
         node = data
         for segment in key_path[:-1]:
@@ -80,7 +85,10 @@ class ConfigPatcher:
     def remove_key(self, key_path: tuple[str, ...]) -> OwnedChange:
         """Remove the key at ``key_path``. No-op (still reported) if absent."""
         if not key_path:
-            raise ValueError("key_path must be non-empty")
+            raise make_error(
+                prefix="VAL", component="PATCH", number=1, kind="toolchains",
+                message="key_path must be non-empty",
+            )
         data = load_config(self.path)
         node: Any = data
         parents: list[dict[str, Any]] = []
@@ -142,6 +150,8 @@ class ConfigPatcher:
             if change.existed and change.prior_value is not UNSET:
                 self.set_key(change.key_path, change.prior_value)
         else:  # pragma: no cover - guarded by construction
+            # Internal invariant: OwnedChange.operation is only ever set by this
+            # class, so an unknown value is a programming error, not user input.
             raise ValueError(f"unknown operation: {change.operation!r}")
 
 

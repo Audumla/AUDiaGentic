@@ -36,9 +36,22 @@ def test_status_payload_uses_workflow_derived_install_commands(tmp_path: Path, m
     )
 
     payload = coding_lsp_bootstrap.status_payload(tmp_path)
+    data = payload.to_dict()
 
-    assert payload["missing-dependencies"] == ["pyright"]
-    assert payload["dependency-install-offer"] == "Install Pyright (Python LSP): uv tool install pyright"
+    assert data["configured"] is False
+    assert data["missing_required"] == []
+    assert data["details"]["missing_dependencies"] == ["pyright"]
+    assert data["details"]["dependency_install_offer"] == "Install Pyright (Python LSP): uv tool install pyright"
+
+
+def test_status_payload_returns_contract_when_nothing_missing(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(coding_lsp_bootstrap, "_active_dependency_ids", lambda project_root: [])
+
+    payload = coding_lsp_bootstrap.status_payload(tmp_path).to_dict()
+
+    assert payload["configured"] is True
+    assert payload["missing_required"] == []
+    assert payload["details"] == {}
 
 
 def test_status_hook_alias_matches_status_payload(tmp_path: Path, monkeypatch) -> None:

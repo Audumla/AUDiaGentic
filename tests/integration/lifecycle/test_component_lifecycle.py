@@ -163,6 +163,22 @@ def test_full_lifecycle_roundtrip(component_id: str, tmp_path: Path) -> None:
         assert not is_installed(component_id, sb.repo)
 
 
+def test_install_surfaces_missing_dependencies_as_next_step(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from audiagentic.components.coding_lsp import coding_lsp_bootstrap
+
+    with component_sandbox(tmp_path, "install-missing-deps-coding-lsp") as sb:
+        install_with_deps("coding-lsp", sb.repo)
+
+        monkeypatch.setattr(coding_lsp_bootstrap, "_active_dependency_ids", lambda project_root: ["clangd"])
+        monkeypatch.setattr(coding_lsp_bootstrap, "detect_missing", lambda probes, ids: ["clangd"])
+        result = install_component("coding-lsp", sb.repo)
+
+        details = result["component_status"]["details"]
+        assert details.get("missing_dependencies") == ["clangd"]
+        assert "next-step" in result
+        assert "clangd" in result["next-step"]
+
+
 def test_project_component_selector_matches_registry_contract() -> None:
     selected = set(project_component_ids())
     expected = {

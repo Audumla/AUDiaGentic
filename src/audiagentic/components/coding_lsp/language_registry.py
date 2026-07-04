@@ -16,11 +16,12 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Any
 
-from audiagentic.foundation.components.ids import COMPONENT_CODING_LSP
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.foundation.features.base import FeatureDescriptor, OptionSchema
 from audiagentic.foundation.features.options import load_option_schema
 from audiagentic.foundation.toolchains.detect import tool_available
+
+_COMPONENT_ID = "coding-lsp"
 
 _REGISTRY: dict[str, LanguageSpec] = {}
 _LOADED = False
@@ -144,7 +145,7 @@ def _load_from_feature_registry() -> bool:
     from audiagentic.foundation.features.registry import get_features
 
     loaded = False
-    for descriptor in get_features(COMPONENT_CODING_LSP, "language").values():
+    for descriptor in get_features(_COMPONENT_ID, "language").values():
         if not isinstance(descriptor.raw, dict) or not _is_language_feature(descriptor.raw):
             continue
         spec = language_spec_from_feature(descriptor)
@@ -158,7 +159,7 @@ def _ensure_feature_catalog_loaded() -> None:
     from audiagentic.foundation.components.loader import register_all_components
     from audiagentic.foundation.features.registry import get_features
 
-    if get_features(COMPONENT_CODING_LSP, "language"):
+    if get_features(_COMPONENT_ID, "language"):
         return
     register_all_components()
 

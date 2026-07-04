@@ -15,7 +15,6 @@ from audiagentic.components.providers.services.feature_resolution import (
     resolve_active_provider_features,
 )
 from audiagentic.components.providers.services.provider_config import set_provider_enabled
-from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
 from audiagentic.foundation.features.base import FeatureState
 from audiagentic.foundation.features.state import set_implementation_feature_state
 
@@ -49,7 +48,7 @@ def test_per_capability_disable_drops_only_that_capability(tmp_path: Path) -> No
     set_provider_enabled(tmp_path, _PROVIDER, enabled=True)
     # Explicitly disable just the MCP capability of an otherwise-enabled provider.
     set_implementation_feature_state(
-        tmp_path, COMPONENT_PROVIDERS, _PROVIDER, "mcp", "mcp", FeatureState(enabled=False)
+        tmp_path, "providers", _PROVIDER, "mcp", "mcp", FeatureState(enabled=False)
     )
 
     kinds = _active_kinds(tmp_path, _PROVIDER)
@@ -67,6 +66,6 @@ def test_enabled_provider_ids_independent_of_capability_overrides(tmp_path: Path
         feature_id = "mcp" if kind == "mcp" else kind  # surface uses path ids; keep simple kinds
         if kind in {"mcp", "skills", "lsp-support"}:
             set_implementation_feature_state(
-                tmp_path, COMPONENT_PROVIDERS, _PROVIDER, kind, feature_id, FeatureState(enabled=False)
+                tmp_path, "providers", _PROVIDER, kind, feature_id, FeatureState(enabled=False)
             )
     assert _PROVIDER in enabled_provider_ids(tmp_path)

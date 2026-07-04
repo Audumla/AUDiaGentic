@@ -13,9 +13,9 @@ for path in (str(ROOT), str(SRC)):
 
 from tests.helpers import sandbox as sandbox_helper
 
+from audiagentic.components.agent_jobs.jobs_store import write_job_record
 from audiagentic.components.agent_jobs.records import build_job_record
 from audiagentic.launcher import main
-from audiagentic.runtime.state.jobs_store import write_job_record
 
 
 def test_session_input_cli_records_input_artifacts(tmp_path: Path) -> None:

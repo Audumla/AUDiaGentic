@@ -6,7 +6,7 @@ import pytest
 
 from audiagentic.foundation.components.base import ComponentDescriptor
 from audiagentic.foundation.components.loader import (
-    _validate_loaded_descriptors,
+    _validate_descriptors_data,
     register_from_yaml,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -36,12 +36,12 @@ def test_component_descriptor_requires_id(tmp_path: Path) -> None:
 
 def test_loaded_components_reject_duplicate_ids() -> None:
     with pytest.raises(AudiaGenticError, match="duplicate component ids"):
-        _validate_loaded_descriptors([_descriptor("one"), _descriptor("one")])
+        _validate_descriptors_data([_descriptor("one"), _descriptor("one")])
 
 
 def test_loaded_components_reject_unknown_dependency() -> None:
     with pytest.raises(AudiaGenticError, match="depends on unknown component"):
-        _validate_loaded_descriptors([_descriptor("one", depends_on=("missing",))])
+        _validate_descriptors_data([_descriptor("one", depends_on=("missing",))])
 
 
 def test_default_detection_marker_project_scope(tmp_path: Path) -> None:

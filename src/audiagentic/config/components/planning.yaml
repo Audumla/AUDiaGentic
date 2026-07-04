@@ -45,12 +45,15 @@ mcp-servers:
       them in a Standards section. Plan names are kebab-case (e.g. code-cleanup); item
       IDs are auto-generated (<PLAN-PREFIX><N>, e.g. CC07) — never supply one. Reviews
       link to a plan item and move through created → considered → closed; completed
-      items and closed reviews move to completed/.
+      items and closed reviews move to completed/. Always update state after acting:
+      close reviews after their findings are incorporated or explicitly rejected, mark
+      items completed only when validation is done, and delete stale/superseded items
+      rather than leaving them pending.
     tool-descriptions:
       plan_list_standards: >
         List the architecture and design standards for this project. Returns a list
         of standards with id, title, path, and description. Standards are loaded from
-        docs/planning/STANDARDS_CONFIG.md. Use this to discover which standards apply
+        the active planning implementation descriptor. Use this to discover which standards apply
         before creating or updating plan items.
       plan_create_item: >
         Create a new plan item. Required: plan, title.
@@ -67,8 +70,13 @@ mcp-servers:
         plan: directory name like 'code-cleanup' (omit for all plans).
       plan_get_item: Read a plan item by ID, returning frontmatter and all body sections.
       plan_set_state: >
-        Transition item state. 'pending' keeps it in active/; 'completed' moves it to completed/.
-        Also accepts 'not_done' as a legacy alias for 'pending'.
+        Transition item state. Use after every implementation or planning cleanup.
+        'pending' keeps an unfinished item in active/; 'completed' moves it to
+        completed/ only when required work and validation are actually done.
+        Do not mark an item completed merely because its reviews were incorporated;
+        keep it pending if implementation remains. Delete stale/superseded items
+        with plan_delete_item instead of leaving inactive work pending. Also accepts
+        'not_done' as a legacy alias for 'pending'.
       plan_update_item: >
         Update frontmatter fields (priority, complexity, order, etc.) or body sections
         (title, description, steps, files, validation, effort_risk, notes) of an existing item.
@@ -83,7 +91,10 @@ mcp-servers:
         review_of: parent item ID to filter by (omit for all).
       plan_get_review: Read a review by ID, returning frontmatter + parsed body sections.
       plan_set_review_state: >
-        Transition review state. 'closed' moves to completed/. 'created'/'considered' keep in active/.
+        Transition review state. Use immediately after review findings are handled.
+        'closed' moves to completed/ when findings have been incorporated into the
+        parent plan, rejected with rationale, or confirmed no-action. 'created' and
+        'considered' keep a review active while findings still need triage.
         Returns {id, state, path}.
       plan_update_review: >
         Update frontmatter fields (reviewed-by, reviewed-at) or body sections
@@ -110,17 +121,22 @@ contributions:
         ## Item lifecycle
         1. Create items with plan_create_item — lands in docs/planning/active/<plan>/
         2. Revise content with plan_update_item as work progresses
-        3. Mark done with plan_set_state(item_id, 'completed') — moves to completed/
-        4. Remove stale or cancelled items with plan_delete_item
+        3. After review triage, close handled reviews with plan_set_review_state(review_id, 'closed')
+        4. Mark done with plan_set_state(item_id, 'completed') only when implementation and validation are done
+        5. Keep unfinished work pending; remove stale/superseded/cancelled items with plan_delete_item
 
         ## Item ID convention
         Combine a short uppercase plan prefix with a sequence number: CC07, LSP01, ML01.
         Choose a prefix matching the plan name (CC → code-cleanup, LSP → lsp-mcp-enhancement).
 
         ## Required fields for plan_create_item
-        - id: unique item ID (e.g. "CC20")
         - plan: plan directory name (e.g. "code-cleanup")
         - title: short descriptive title
+
+        ## State discipline
+        - Do not leave incorporated reviews in created/considered; close them.
+        - Do not mark a parent item completed just because reviews were handled.
+        - If an active item is superseded, delete it or replace it with the canonical item.
 
         ## Optional fields
         - priority: P0 (critical) / P1 / P2 / P3 / HIGH / MEDIUM (default P2)

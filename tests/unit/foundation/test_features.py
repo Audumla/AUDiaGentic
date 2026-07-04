@@ -31,8 +31,8 @@ def _write(path: Path, text: str) -> Path:
 
 
 @pytest.fixture(autouse=True)
-def _clear_registry() -> None:
-    registry.clear()
+def _clear_registry(isolated_features_registry) -> None:
+    """Each test runs against an empty registry; prior state is restored after."""
 
 
 def test_load_feature_descriptor_from_yaml(tmp_path: Path) -> None:

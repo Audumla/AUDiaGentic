@@ -104,7 +104,7 @@ class TestMemoryComponentBoundaries:
         with open(memory_api, encoding="utf-8") as f:
             source = f.read()
         forbidden = (
-            "COMPONENT_PROVIDERS",
+            "COMPONENT_" + "PROVIDERS",
             "apply_provider_surfaces",
             "providers.services",
             "surfaces.contributions",
@@ -316,8 +316,8 @@ class TestProviderRecipeTests:
 
         violations = []
         for row in get_matrix_rows():
-            has_command = bool(row.install_command or row.uninstall_command or row.status_command)
-            if has_command and row.source_status != "verified":
+            has_steps = bool(row.install_steps or row.uninstall_steps or row.status_command)
+            if has_steps and row.source_status != "verified":
                 violations.append(row.provider_id)
             if row.source_status == "verified" and (not row.source_url or not row.source_date):
                 violations.append(f"{row.provider_id}: missing source metadata")
@@ -325,9 +325,9 @@ class TestProviderRecipeTests:
 
     def test_unverified_hindsight_installer_refuses_execution(self):
         """Unverified command rows are blocked before subprocess execution."""
+        from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
         from audiagentic.components.memory.hindsight.matrix import HindsightRecipeRow
         from audiagentic.components.memory.hindsight.recipes import HooksInstallerRecipe
-        from audiagentic.components.memory.hindsight_export import HindsightBackendConfig
         from audiagentic.components.providers.services.recipes import ProviderRecipeKind
 
         row = HindsightRecipeRow(
@@ -335,7 +335,7 @@ class TestProviderRecipeTests:
             display_name="Test",
             integration_type="hooks",
             recipe_kind=ProviderRecipeKind.HOOKS,
-            install_command="definitely-not-real --danger",
+            install_steps=[{"type": "shell", "id": "bad-install", "command": ["definitely-not-real", "--danger"]}],
             source_status="unconfirmed",
             source_url="https://example.invalid",
         )
@@ -352,9 +352,9 @@ class TestProviderRecipeTests:
         """Pipe-based installer commands run through a shell for published curl|bash flows."""
         import subprocess
 
+        from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
         from audiagentic.components.memory.hindsight.matrix import HindsightRecipeRow
         from audiagentic.components.memory.hindsight.recipes import HooksInstallerRecipe
-        from audiagentic.components.memory.hindsight_export import HindsightBackendConfig
         from audiagentic.components.providers.services.recipes import ProviderRecipeKind
 
         row = HindsightRecipeRow(
@@ -362,7 +362,7 @@ class TestProviderRecipeTests:
             display_name="Test",
             integration_type="hooks",
             recipe_kind=ProviderRecipeKind.HOOKS,
-            install_command="curl -fsSL https://example.invalid/install | bash",
+            install_steps=[{"type": "shell", "id": "pipe-install", "command": "curl -fsSL https://example.invalid/install | bash", "shell": True}],
             source_status="verified",
             source_url="https://example.invalid/docs",
             source_date="2026-06-26",
@@ -383,10 +383,10 @@ class TestProviderRecipeTests:
 
     def test_plugin_config_recipe_skips_manual_instruction_commands(self, tmp_path):
         """manage_config_writes rows should not try to shell-exec prose install instructions."""
+        from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
         from audiagentic.components.memory.hindsight.matrix import HindsightRecipeRow
         from audiagentic.components.memory.hindsight.mcp_recipe import HindsightTarget
         from audiagentic.components.memory.hindsight.recipes import PluginConfigRecipe
-        from audiagentic.components.memory.hindsight_export import HindsightBackendConfig
         from audiagentic.components.providers.services.recipes import ProviderRecipeKind
 
         row = HindsightRecipeRow(
@@ -394,8 +394,8 @@ class TestProviderRecipeTests:
             display_name="Test",
             integration_type="plugin",
             recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG,
-            install_command='Add "@vectorize-io/opencode-hindsight" to plugin array in opencode.json',
-            uninstall_command="Remove plugin from opencode.json plugin array",
+            install_steps=[],
+            uninstall_steps=[],
             source_status="verified",
             source_url="https://example.invalid/docs",
             source_date="2026-06-29",

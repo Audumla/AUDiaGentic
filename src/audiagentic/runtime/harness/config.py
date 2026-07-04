@@ -24,7 +24,7 @@ def _harness_config_error(code_number: int, message: str, **details: object) -> 
 
 
 def load_harness_config(project_root: Path | None = None) -> dict:
-    from audiagentic.runtime.config import load_layered_config
+    from audiagentic.foundation.config import load_layered_config
     from audiagentic.runtime.harness.paths import _HARNESS_CONFIG
     return load_layered_config(
         pkg_default_path=_HARNESS_CONFIG,

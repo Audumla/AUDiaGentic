@@ -50,3 +50,16 @@ mcp_config:
   remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
   format: "mcp-json"
   refresh_mode: "restart-required"
+
+surfaces:
+  renderer: flat-skill
+  contribution-file: "COPILOT.md"
+
+execution:
+  mode: cli
+  executable: copilot
+  aliases: [gh]
+  prompt-title: Copilot
+  error-code: EXT-COPIL-001
+  extractor-name: copilot-plaintext
+  args-template: ["copilot", "suggest", "-t", "shell", "{prompt}"]

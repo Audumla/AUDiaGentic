@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from audiagentic.components.memory.hindsight.matrix import HindsightRecipeRow
+import audiagentic.components.providers  # noqa: F401  (register provider descriptors)
+from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
+from audiagentic.components.memory.hindsight.matrix import (
+    HindsightRecipeRow,
+    get_matrix_rows,
+)
 from audiagentic.components.memory.hindsight.mcp_recipe import (
     HindsightMcpRecipe,
     HindsightTarget,
@@ -9,9 +14,9 @@ from audiagentic.components.memory.hindsight.mcp_recipe import (
 from audiagentic.components.memory.hindsight.recipes import (
     RulesOnlyRecipe,
     apply_hindsight,
+    build_hindsight_recipe,
     teardown_hindsight,
 )
-from audiagentic.components.memory.hindsight_export import HindsightBackendConfig
 from audiagentic.components.providers.services.recipes import ProviderRecipeKind
 from audiagentic.foundation.mcp import McpServerEntry
 from audiagentic.foundation.toolchains.artifact_registry import ArtifactRegistry
@@ -116,6 +121,8 @@ def test_entry_builder_override(tmp_path):
 
 
 def test_provider_writer_callbacks_use_mcp_entries_and_prune(tmp_path):
+    """Test that custom writer_fn receives McpServerEntry objects, and probe/prune
+    use the callback path correctly."""
     cfg = tmp_path / "provider.toml"
     store: dict[str, McpServerEntry] = {}
 
@@ -141,8 +148,10 @@ def test_provider_writer_callbacks_use_mcp_entries_and_prune(tmp_path):
         registry=ArtifactRegistry(tmp_path),
     )
 
-    result = recipe.provision({})
-    assert result.success
+    # Verify configure uses writer_fn with McpServerEntry
+    configured = recipe.configure({})
+    assert configured.success
+    assert "hindsight" in store
     assert store["hindsight"] == McpServerEntry(
         name="hindsight",
         url="https://hs.example.com/mcp",
@@ -150,8 +159,14 @@ def test_provider_writer_callbacks_use_mcp_entries_and_prune(tmp_path):
         transport="http",
     )
 
-    removed = recipe.teardown({})
-    assert removed.success
+    # Verify probe uses reader_fn and detects entry
+    probed = recipe.probe({})
+    assert probed.success
+    assert probed.state is RecipeState.VERIFIED
+
+    # Verify teardown/prune uses remover_fn
+    pruned = recipe.prune({})
+    assert pruned.success
     assert "hindsight" not in store
 
 
@@ -209,11 +224,82 @@ def test_hindsight_orchestration_entrypoints_run_selected_provider(tmp_path, mon
     assert "audiagentic:hindsight-memory" not in rule_file.read_text(encoding="utf-8")
 
 
+def test_verified_matrix_step_definitions_build_provision_steps(tmp_path):
+    backend = _backend(api_key="sk-test", bank_id="bank")
+    automated_kinds = {
+        ProviderRecipeKind.HOOKS,
+        ProviderRecipeKind.WRAPPER_CLI,
+        ProviderRecipeKind.PLUGIN_CONFIG,
+        ProviderRecipeKind.MCP_CONFIG,
+        ProviderRecipeKind.HYBRID,
+    }
+
+    for row in get_matrix_rows():
+        if row.source_status != "verified" or row.recipe_kind not in automated_kinds:
+            continue
+        recipe = build_hindsight_recipe(row, backend, row.provider_id, tmp_path)
+        provision_steps = getattr(recipe, "provision_steps", None)
+        if not callable(provision_steps):
+            continue
+
+        steps = provision_steps()
+
+        if row.install_steps or row.configure_steps:
+            assert steps, f"{row.provider_id} has step defs but recipe returned no ProvisionSteps"
+
+
+def test_mcp_config_adapter_provision_writes_config_via_step_path(tmp_path):
+    row = HindsightRecipeRow(
+        provider_id="gemini",
+        display_name="Gemini",
+        integration_type="mcp",
+        recipe_kind=ProviderRecipeKind.MCP_CONFIG,
+        source_status="verified",
+        audia_action="manage_config_writes",
+        source_url="https://example.invalid/gemini",
+        source_date="2026-07-01",
+    )
+    recipe = build_hindsight_recipe(row, _backend(api_key="k"), "gemini", tmp_path)
+
+    result = recipe.provision({})
+
+    assert result.success, result.error
+    settings = tmp_path / ".gemini" / "settings.json"
+    assert "hindsight" in settings.read_text(encoding="utf-8")
+
+
+def test_hybrid_recipe_provision_steps_include_installer_and_mcp_and_rules(tmp_path):
+    row = HindsightRecipeRow(
+        provider_id="copilot",
+        display_name="GitHub Copilot",
+        integration_type="mcp+rules",
+        recipe_kind=ProviderRecipeKind.HYBRID,
+        source_status="verified",
+        audia_action="call_official_installer",
+        source_url="https://example.invalid/copilot",
+        source_date="2026-07-01",
+        install_steps=[
+            {
+                "type": "shell",
+                "id": "copilot-init",
+                "command": ["hindsight-copilot", "init", "--api-token={TOKEN}", "--bank-id={ID}"],
+            }
+        ],
+    )
+    recipe = build_hindsight_recipe(row, _backend(api_key="k", bank_id="bank"), "copilot", tmp_path)
+
+    steps = recipe.provision_steps()
+    ids = [step.id for step in steps]
+
+    assert "copilot-init" in ids
+    assert any("mcp" in step_id or "config" in step_id for step_id in ids)
+    assert any("rule" in step_id for step_id in ids)
+
+
 def test_apply_hindsight_mcp_provider_writes_inside_project_root(tmp_path, monkeypatch):
     """Regression: MCP-config provisioning must (a) succeed through the adapter
     path (inner RecipeResult re-stamped, not assumed ProviderRecipeResult) and
     (b) write inside project_root, never relative to the current directory."""
-    import audiagentic.components.providers  # noqa: F401  (register descriptors)
     from audiagentic.components.memory.hindsight.recipes import apply_hindsight
 
     # Run from an unrelated cwd to prove paths anchor to project_root, not cwd.
@@ -234,3 +320,95 @@ def test_apply_hindsight_mcp_provider_writes_inside_project_root(tmp_path, monke
     assert "hindsight" in settings.read_text(encoding="utf-8")
     # Nothing leaked into the working directory.
     assert not (other / ".gemini").exists()
+
+
+class TestBuildHindsightStatus:
+    """HM15: status output includes source freshness, artifacts, and provenance."""
+
+    def test_status_includes_source_date_and_source_status(self, tmp_path):
+        from audiagentic.components.memory.hindsight.recipes import (
+            build_hindsight_recipe,
+            build_hindsight_status,
+        )
+        from audiagentic.components.providers.services.recipes import ProviderRecipeRegistry
+
+        registry = ProviderRecipeRegistry()
+        row = HindsightRecipeRow(
+            provider_id="gemini",
+            display_name="Gemini",
+            integration_type="mcp",
+            recipe_kind=ProviderRecipeKind.MCP_CONFIG,
+            source_status="verified",
+            audia_action="manage_config_writes",
+            source_url="https://example.invalid/gemini",
+            source_date="2026-07-01",
+        )
+        recipe = build_hindsight_recipe(row, _backend(api_key="k"), "gemini", tmp_path)
+        registry.register(recipe)
+
+        # Provision so probe returns VERIFIED
+        recipe.provision({})
+
+        status = build_hindsight_status(registry, "gemini")
+        assert status["provider_id"] == "gemini"
+        hs = status["hindsight"]
+        assert hs["status"] == "active"
+        recs = hs["recipes"]
+        assert len(recs) >= 1
+
+        entry = recs[0]
+        # All HM15 fields present
+        assert "kind" in entry
+        assert "state" in entry
+        assert "status" in entry
+        assert "action_needed" in entry
+        assert "source_url" in entry
+        assert "source_date" in entry
+        assert "source_status" in entry
+        assert "artifacts_owned" in entry
+        # Provenance fields populated from matrix row
+        assert entry["source_date"] == "2026-07-01"
+        assert entry["source_status"] == "verified"
+        assert entry["state"] == "verified"
+
+    def test_status_for_unknown_provider(self, tmp_path):
+        from audiagentic.components.memory.hindsight.recipes import (
+            build_hindsight_status,
+        )
+        from audiagentic.components.providers.services.recipes import ProviderRecipeRegistry
+
+        registry = ProviderRecipeRegistry()
+        status = build_hindsight_status(registry, "no-such-provider")
+        assert status["provider_id"] == "no-such-provider"
+        assert status["hindsight"]["status"] == "not_registered"
+
+    def test_status_artifacts_owned_present_in_result(self, tmp_path):
+        """artifacts_owned field is populated by provision (not probe/status)."""
+        from audiagentic.components.memory.hindsight.recipes import build_hindsight_recipe
+
+        row = HindsightRecipeRow(
+            provider_id="gemini",
+            display_name="Gemini",
+            integration_type="mcp",
+            recipe_kind=ProviderRecipeKind.MCP_CONFIG,
+            source_status="verified",
+            audia_action="manage_config_writes",
+        )
+        recipe = build_hindsight_recipe(row, _backend(api_key="k"), "gemini", tmp_path)
+
+        result = recipe.provision({})
+        assert result.success
+        # Provision returns artifact IDs; status/probe reads state only.
+        assert len(result.artifacts_owned) >= 1
+
+
+class TestMemoryStatusProviderAgnostic:
+    """memory_status must never leak per-provider Hindsight detail."""
+
+    def test_memory_status_no_provider_detail(self, tmp_path):
+        from audiagentic.components.memory.memory_api import memory_status
+
+        result = memory_status(tmp_path)
+        payload = str(result).lower()
+        for kw in ("gemini", "copilot", "claude"):
+            assert kw not in payload, f"memory_status must not mention '{kw}'"

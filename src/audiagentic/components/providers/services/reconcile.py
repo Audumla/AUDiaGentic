@@ -23,7 +23,7 @@ def _sync_provider_mcp(project_root: Path, on_progress: ComponentOutputSink | No
     """
     from audiagentic.components.providers.services.lifecycle import _emit
     try:
-        from audiagentic.runtime.lifecycle.component_mcp import sync_all_provider_mcp_servers
+        from audiagentic.foundation.lifecycle.component_mcp import sync_all_provider_mcp_servers
 
         sync_all_provider_mcp_servers(project_root)
         _emit(on_progress, "MCP server configs synced")
@@ -32,32 +32,30 @@ def _sync_provider_mcp(project_root: Path, on_progress: ComponentOutputSink | No
         _emit(on_progress, "MCP server config sync failed (non-fatal)", level="warning")
 
 
-def _sync_vscode_extensions(project_root: Path, on_progress: ComponentOutputSink | None = None) -> None:
-    """Sync VS Code extensions.json from provider host capabilities.
-
-    Generates .vscode/extensions.json with recommendations from all enabled
-    providers that declare VS Code extensions.
-    """
-    from audiagentic.components.providers.services.host_capabilities import is_vscode_project
+def _sync_host_extensions(project_root: Path, on_progress: ComponentOutputSink | None = None) -> None:
+    """Sync each detected host's extensions manifest from provider host capabilities."""
+    from audiagentic.components.providers.services.host_adapter import all_host_adapters
     from audiagentic.components.providers.services.lifecycle import _emit
     try:
-        if not is_vscode_project(project_root):
-            return
+        for host_id, adapter in all_host_adapters().items():
+            if not adapter.detect_workspace(project_root):
+                continue
 
-        all_extensions = []
-        for provider_id, descriptor in all_descriptors().items():
-            if descriptor.vscode_extensions:
-                all_extensions.extend(descriptor.vscode_extensions)
+            all_extensions = []
+            for _provider_id, descriptor in all_descriptors().items():
+                all_extensions.extend(descriptor.host_extensions(host_id))
 
-        if not all_extensions:
-            return
+            if not all_extensions:
+                continue
 
-        from audiagentic.components.providers.surfaces.extensions_json import write_extensions_json
-        write_extensions_json(project_root, tuple(all_extensions))
-        _emit(on_progress, "VS Code extensions.json synced")
+            from audiagentic.components.providers.surfaces.extensions_json import (
+                write_extensions_json,
+            )
+            write_extensions_json(project_root, tuple(all_extensions), host_id=host_id)
+            _emit(on_progress, f"{adapter.display_name or host_id} extensions manifest synced")
     except Exception:  # noqa: BLE001
-        logger.warning("VS Code extensions.json sync failed", exc_info=True)
-        _emit(on_progress, "VS Code extensions.json sync failed (non-fatal)", level="warning")
+        logger.warning("Host extensions manifest sync failed", exc_info=True)
+        _emit(on_progress, "Host extensions manifest sync failed (non-fatal)", level="warning")
 
 
 def reconcile_provider(
@@ -107,7 +105,7 @@ def reconcile_provider(
         _seed_provider_config(project_root, provider_id, descriptor, enabled=True)
         surfaces_result = apply_provider_surfaces(project_root, provider_id=provider_id, on_progress=on_progress)
         _sync_provider_mcp(project_root, on_progress)
-        _sync_vscode_extensions(project_root, on_progress)
+        _sync_host_extensions(project_root, on_progress)
         action_taken = "enabled"
         if fetch_catalog and descriptor.fetch_catalog_fn is not None:
             try:
@@ -128,7 +126,7 @@ def reconcile_provider(
     else:
         _emit(on_progress, f"{provider_id} already in sync ({('enabled' if currently_enabled else 'disabled')})")
         _sync_provider_mcp(project_root, on_progress)
-        _sync_vscode_extensions(project_root, on_progress)
+        _sync_host_extensions(project_root, on_progress)
         action_taken = "ok"
 
     now_enabled = cli_available and action_taken in ("enabled", "ok")

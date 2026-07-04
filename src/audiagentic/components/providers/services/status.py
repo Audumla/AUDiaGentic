@@ -81,14 +81,18 @@ def _provider_entry(
     cli_probe = descriptor.cli_probe if descriptor and descriptor.cli_probe else None
     entry["cli-check"] = _probe_provider_cli(descriptor) if descriptor and include_probes else None
 
+    from .host_adapter import all_host_adapters
+
     interrogation = _interrogate(provider_id, project_root) if include_probes else {
         "provider_id": provider_id,
         "display_name": descriptor.display_name if descriptor else provider_id,
         "registered": descriptor is not None,
         "cli": None,
         "host_capabilities": [],
-        "vscode_project": (project_root / ".vscode").exists(),
-        "vscode_extensions": [],
+        "hosts": {
+            host_id: {"workspace": adapter.detect_workspace(project_root)}
+            for host_id, adapter in all_host_adapters().items()
+        },
         "permissions": {
             "can_write_files": descriptor.permissions.can_write_files if descriptor else False,
             "can_execute_shell": descriptor.permissions.can_execute_shell if descriptor else False,
@@ -100,29 +104,38 @@ def _provider_entry(
     }
     entry["interrogation"] = interrogation
     host_capabilities = interrogation.get("host_capabilities", [])
-    vscode_extensions = interrogation.get("vscode_extensions", [])
-    vscode_applicable = bool(interrogation.get("vscode_project") and vscode_extensions)
-    vscode_installed = (
-        True if vscode_applicable and all(e.get("installed") is True for e in vscode_extensions)
-        else False if vscode_applicable and any(e.get("installed") is False for e in vscode_extensions)
-        else None
-    )
+    hosts: dict[str, dict[str, Any]] = interrogation.get("hosts", {})
+
+    host_extensions: dict[str, dict[str, Any]] = {}
+    for host_id, host_info in hosts.items():
+        extensions = [e for e in host_capabilities if e.get("host") == host_id]
+        workspace = bool(host_info.get("workspace"))
+        applicable = bool(workspace and extensions)
+        installed = (
+            True if applicable and all(e.get("installed") is True for e in extensions)
+            else False if applicable and any(e.get("installed") is False for e in extensions)
+            else None
+        )
+        host_extensions[host_id] = {
+            "workspace": workspace,
+            "applicable": applicable,
+            "installed": installed,
+            "extensions": extensions,
+        }
+
     entry["installation"] = {
         "cli": {
             "applicable": cli_probe is not None,
             "installed": entry["cli-check"].get("available") if entry["cli-check"] else None,
             "probe": entry["cli-check"],
         },
-        "vscode-extension": {
-            "project": bool(interrogation.get("vscode_project")),
-            "applicable": vscode_applicable,
-            "installed": vscode_installed,
-            "extensions": vscode_extensions,
-        },
+        "host-extensions": host_extensions,
         "host-capabilities": host_capabilities,
     }
     entry["cli-installed"] = entry["installation"]["cli"]["installed"]
-    entry["vscode-extension-installed"] = vscode_installed
+    entry["host-extension-installed"] = {
+        host_id: info["installed"] for host_id, info in host_extensions.items()
+    }
 
     if entry["catalog-present"]:
         try:

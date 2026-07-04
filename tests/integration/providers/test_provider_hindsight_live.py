@@ -31,6 +31,7 @@ from pathlib import Path
 import pytest
 
 import audiagentic.components.providers  # noqa: F401  (register provider descriptors)
+from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
 from audiagentic.components.memory.hindsight.matrix import (
     HINDSIGHT_RECIPE_MATRIX,
     get_rows_for_provider,
@@ -39,7 +40,6 @@ from audiagentic.components.memory.hindsight.recipes import (
     apply_hindsight,
     teardown_hindsight,
 )
-from audiagentic.components.memory.hindsight_export import HindsightBackendConfig
 from audiagentic.components.providers.descriptors.registry import get_descriptor
 
 pytestmark = [

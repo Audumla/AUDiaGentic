@@ -43,7 +43,9 @@ def test_observer_maps_events_to_actions(
     expect_apply: bool,
 ) -> None:
     root = Path("/tmp/project")
-    observer._on_component_lifecycle(event_type, {"project_root": root}, {})
+    observer._on_component_lifecycle(
+        event_type, {"component_id": "agent-jobs", "project_root": root}, {}
+    )
 
     assert (len(recorded["prune"]) == 1) is expect_prune
     assert (len(recorded["apply"]) == 1) is expect_apply
@@ -55,7 +57,9 @@ def test_observer_maps_events_to_actions(
 
 def test_observer_ignores_non_path_project_root(recorded: dict[str, list]) -> None:
     observer._on_component_lifecycle(
-        "lifecycle.component.disabled", {"project_root": "/tmp/project"}, {}
+        "lifecycle.component.disabled",
+        {"component_id": "agent-jobs", "project_root": "/tmp/project"},
+        {},
     )
     assert recorded["prune"] == []
     assert recorded["apply"] == []

@@ -6,8 +6,8 @@ import subprocess
 
 
 def _pi_install(project_root=None):
+    from audiagentic.foundation.home import global_harness_runtime
     from audiagentic.runtime.harness.pi.install import install_to
-    from audiagentic.runtime.home import global_harness_runtime
     try:
         rc = install_to(global_harness_runtime(), project_root=project_root)
     except SystemExit as exc:
@@ -18,8 +18,8 @@ def _pi_install(project_root=None):
 
 
 def _pi_uninstall(project_root=None):
+    from audiagentic.foundation.home import global_harness_runtime
     from audiagentic.runtime.harness.pi.install import uninstall_from
-    from audiagentic.runtime.home import global_harness_runtime
     try:
         rc = uninstall_from(global_harness_runtime())
     except Exception as exc:  # noqa: BLE001
@@ -29,8 +29,8 @@ def _pi_uninstall(project_root=None):
 
 def _pi_ensure_lens(project_root=None):
     """Install the pi-lens LSP extension into the pi harness (best-effort)."""
+    from audiagentic.foundation.home import global_harness_runtime
     from audiagentic.runtime.harness.pi.runner.context import resolve_agent_bin
-    from audiagentic.runtime.home import global_harness_runtime
     pi_bin = resolve_agent_bin(global_harness_runtime())
     if not pi_bin.exists():
         return {"ok": False, "skipped": "pi harness not installed"}
@@ -55,8 +55,8 @@ def _pi_ensure_lens(project_root=None):
 
 
 def _pi_probe(descriptor):
+    from audiagentic.foundation.home import global_harness_runtime
     from audiagentic.runtime.harness.pi.runner import resolve_agent_bin
-    from audiagentic.runtime.home import global_harness_runtime
     harness_runtime = global_harness_runtime()
     executable = resolve_agent_bin(harness_runtime)
     command = ["audiagentic", "pi-harness", "metadata"]

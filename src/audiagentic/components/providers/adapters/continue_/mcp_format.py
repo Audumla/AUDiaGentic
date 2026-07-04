@@ -1,6 +1,8 @@
 """Continue config.json MCP server format handlers.
 
 Format: {"mcpServers": [{"name": ..., "command": ..., "args": [...]}]}
+Also accepts the map form used by some Continue configs:
+{"mcpServers": {"name": {"command": ..., "args": [...]}}}
 """
 from __future__ import annotations
 
@@ -11,6 +13,18 @@ from typing import Any
 from audiagentic.foundation.mcp import McpServerEntry
 
 
+def _server_items(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, dict):
+        items = []
+        for name, server in value.items():
+            if isinstance(server, dict):
+                items.append({"name": name, **server})
+        return items
+    if isinstance(value, list):
+        return [server for server in value if isinstance(server, dict)]
+    return []
+
+
 def read_continue_json(path: Path) -> dict[str, McpServerEntry]:
     if not path.exists():
         return {}
@@ -19,7 +33,7 @@ def read_continue_json(path: Path) -> dict[str, McpServerEntry]:
     except (json.JSONDecodeError, OSError):
         return {}
     result = {}
-    for server in data.get("mcpServers", []):
+    for server in _server_items(data.get("mcpServers", [])):
         name = server.get("name", "")
         if not name:
             continue
@@ -48,7 +62,7 @@ def write_continue_json(path: Path, entries: dict[str, McpServerEntry]) -> None:
             existing = json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             pass
-    servers: list[dict[str, Any]] = list(existing.get("mcpServers", []))
+    servers = _server_items(existing.get("mcpServers", []))
     by_name = {s.get("name"): i for i, s in enumerate(servers)}
     for name, entry in entries.items():
         if entry.is_remote:
@@ -82,7 +96,7 @@ def remove_continue_json(path: Path, name: str) -> bool:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return False
-    servers = data.get("mcpServers", [])
+    servers = _server_items(data.get("mcpServers", []))
     new_servers = [s for s in servers if s.get("name") != name]
     if len(new_servers) == len(servers):
         return False

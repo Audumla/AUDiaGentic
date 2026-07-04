@@ -1,0 +1,82 @@
+[mcp_servers.ag-ledger]
+command = "H:\\development\\projects\\AUDia\\AUDiaGentic\\.venv\\Scripts\\python.exe"
+args = [
+    "-m",
+    "audiagentic.launcher",
+    "mcp",
+    "audiagentic.components.ledger.ledger_mcp",
+]
+
+[mcp_servers.ag-ledger.env]
+AUDIAGENTIC_REPO_ROOT = "H:\\development\\projects\\AUDia\\AUDiaGentic"
+
+[mcp_servers.ag-agents]
+command = "H:\\development\\projects\\AUDia\\AUDiaGentic\\.venv\\Scripts\\python.exe"
+args = [
+    "-m",
+    "audiagentic.launcher",
+    "mcp",
+    "audiagentic.components.agents.agents_mcp",
+]
+
+[mcp_servers.ag-agents.env]
+AUDIAGENTIC_REPO_ROOT = "H:\\development\\projects\\AUDia\\AUDiaGentic"
+
+[mcp_servers.ag-planning]
+command = "H:\\development\\projects\\AUDia\\AUDiaGentic\\.venv\\Scripts\\python.exe"
+args = [
+    "-m",
+    "audiagentic.launcher",
+    "mcp",
+    "audiagentic.components.planning.planning_mcp",
+]
+
+[mcp_servers.ag-planning.env]
+AUDIAGENTIC_REPO_ROOT = "H:\\development\\projects\\AUDia\\AUDiaGentic"
+
+[mcp_servers.ag-release-please]
+command = "H:\\development\\projects\\AUDia\\AUDiaGentic\\.venv\\Scripts\\python.exe"
+args = [
+    "-m",
+    "audiagentic.launcher",
+    "mcp",
+    "audiagentic.components.release.release_please.release_please_mcp",
+]
+
+[mcp_servers.ag-release-please.env]
+AUDIAGENTIC_REPO_ROOT = "H:\\development\\projects\\AUDia\\AUDiaGentic"
+
+[mcp_servers.git]
+command = "uvx"
+args = [
+    "mcp-server-git",
+    "--repository",
+    ".",
+]
+
+[mcp_servers.github]
+command = "gh"
+args = [
+    "mcp",
+    "serve",
+]
+
+[mcp_servers.github.env]
+GITHUB_TOKEN = "${GITHUB_TOKEN}"
+
+[mcp_servers.ag-lsp]
+command = "H:\\development\\projects\\AUDia\\AUDiaGentic\\.venv\\Scripts\\python.exe"
+args = [
+    "-m",
+    "audiagentic.launcher",
+    "mcp",
+    "audiagentic.components.coding_lsp.lsp_mcp",
+]
+
+[mcp_servers.hindsight]
+type = "http"
+url = "http://10.10.100.10:8888/mcp"
+
+[mcp_servers.hindsight.headers]
+Authorization = "Bearer NONE"
+X-Bank-Id = "audiagentic"

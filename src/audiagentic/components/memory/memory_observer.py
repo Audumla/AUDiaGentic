@@ -13,8 +13,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.event import get_bus
-from audiagentic.runtime.lifecycle.provider_recipes import (
+from audiagentic.foundation.event import subscribe_component_lifecycle
+from audiagentic.foundation.lifecycle.provider_recipes import (
     refresh_provider_recipes,
     register_provider_recipe_reconciler,
 )
@@ -49,18 +49,22 @@ def _reconcile(
     )
 
 
-def _on_memory_lifecycle(event_type: str, payload: dict, metadata: dict) -> None:
-    """Re-run provider reconciliation when the memory component is enabled/disabled.
+def _on_memory_event(project_root: Path, payload: dict, metadata: dict) -> None:
+    """Re-run provider reconciliation on memory lifecycle/config changes.
 
-    Enabling reinstalls the integration across providers; disabling uninstalls it
-    from all of them. Config persistence means an off→on cycle restores it.
+    The observer is the guaranteed consumer that invokes Hindsight
+    reconciliation — management tools may also reconcile synchronously for UX
+    but are not required for correctness.
     """
-    project_root = payload.get("project_root")
-    component_id = payload.get("component_id")
-    if not isinstance(project_root, Path) or component_id != _CAPABILITY_ID:
-        return
     refresh_provider_recipes(project_root)
 
 
 register_provider_recipe_reconciler(_CAPABILITY_ID, _reconcile)
-get_bus().subscribe("lifecycle.component.*", _on_memory_lifecycle)
+subscribe_component_lifecycle(
+    _CAPABILITY_ID,
+    on_installed=_on_memory_event,
+    on_enabled=_on_memory_event,
+    on_disabled=_on_memory_event,
+    on_uninstalled=_on_memory_event,
+    on_config_changed=_on_memory_event,
+)

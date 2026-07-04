@@ -58,7 +58,7 @@ def _read_json_line(proc: subprocess.Popen, deadline: float) -> dict | None:
     assert proc.stdout is not None
     while time.time() < deadline:
         header = bytearray()
-        while b"\r\n\r\n" not in header and time.time() < deadline:
+        while b"\r\n\r\n" not in header and b"\n" not in header and time.time() < deadline:
             chunk = _read_byte_with_timeout(proc.stdout, deadline - time.time())
             if chunk is None:
                 continue
@@ -69,6 +69,12 @@ def _read_json_line(proc: subprocess.Popen, deadline: float) -> dict | None:
             header.extend(chunk)
         if not header:
             continue
+        if b"\r\n\r\n" not in header:
+            try:
+                return json.loads(bytes(header).decode("utf-8"))
+            except (json.JSONDecodeError, ValueError):
+                continue
+
         header_text = header.decode("ascii", errors="ignore")
         length = None
         for line in header_text.split("\r\n"):
@@ -89,8 +95,7 @@ def _read_json_line(proc: subprocess.Popen, deadline: float) -> dict | None:
 
 def _write_message(proc: subprocess.Popen, msg: dict) -> None:
     assert proc.stdin is not None
-    payload = json.dumps(msg).encode("utf-8")
-    proc.stdin.write(f"Content-Length: {len(payload)}\r\n\r\n".encode("ascii") + payload)
+    proc.stdin.write((json.dumps(msg) + "\n").encode("utf-8"))
     proc.stdin.flush()
 
 
@@ -294,7 +299,7 @@ def test_update_rig_works_directly(tmp_path: Path) -> None:
     import io
 
     from audiagentic.foundation.contracts.output import ComponentOutputEvent
-    from audiagentic.runtime.home import global_harness_runtime
+    from audiagentic.foundation.home import global_harness_runtime
     from audiagentic.runtime.rig.embedded.binaries import update_binaries as _update
 
     os.environ["AUDIAGENTIC_HOME"] = str(tmp_path / ".audiagentic")

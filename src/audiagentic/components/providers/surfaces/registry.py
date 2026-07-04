@@ -21,6 +21,14 @@ def register_renderer(provider_id: str, renderer: ProviderSurfaceRenderer) -> No
     _renderer_registry[provider_id] = renderer
 
 
+def renderer_registered(provider_id: str) -> bool:
+    return provider_id in _renderer_registry
+
+
+def contribution_renderer_registered(provider_id: str) -> bool:
+    return provider_id in _contribution_renderer_registry
+
+
 def load_renderer_registry() -> dict[str, ProviderSurfaceRenderer]:
     _ensure_provider_modules_registered()
     return dict(_renderer_registry)

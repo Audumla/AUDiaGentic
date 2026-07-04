@@ -14,7 +14,7 @@ from tests.helpers import sandbox as sandbox_helper
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import read_schema
-from audiagentic.runtime.lifecycle.fresh_install import apply_fresh_install
+from audiagentic.foundation.lifecycle.fresh_install import apply_fresh_install
 
 
 def _load_yaml(path: Path) -> dict:

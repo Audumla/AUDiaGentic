@@ -42,3 +42,6 @@ mcp_config:
   remover: "audiagentic.components.providers.adapters.continue_.mcp_format:remove_continue_json"
   format: "continue-json"
   refresh_mode: "restart-required"
+
+execution:
+  mode: ok-stub

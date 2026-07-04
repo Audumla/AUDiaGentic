@@ -49,8 +49,8 @@ def test_lsp_select_implementation_delegates_to_api() -> None:
         "audiagentic.components.coding_lsp.lsp_config_api.select_implementation",
         return_value={"ok": True},
     ) as mock:
-        assert lsp_manage_mcp.lsp_select_implementation("root", "agent-lsp") == {"ok": True}
-        mock.assert_called_once_with("root", "agent-lsp")
+        assert lsp_manage_mcp.lsp_select_implementation("root", "blackwell-agent-lsp") == {"ok": True}
+        mock.assert_called_once_with("root", "blackwell-agent-lsp")
 
 
 def test_lsp_set_language_option_delegates_to_api() -> None:

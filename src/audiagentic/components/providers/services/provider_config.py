@@ -4,7 +4,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 from audiagentic.foundation.features.base import ImplementationState
@@ -12,7 +11,9 @@ from audiagentic.foundation.features.state import (
     get_implementation_state,
     set_implementation_state,
 )
-from audiagentic.runtime.config import load_yaml_file, save_yaml_file
+from audiagentic.foundation.io import load_yaml_file, save_yaml_file
+
+_COMPONENT_ID = "providers"
 
 
 def validate_provider_config(payload: dict[str, Any]) -> list[str]:
@@ -61,7 +62,7 @@ def is_provider_enabled(project_root: Path, provider_id: str) -> bool:
     `providers.yaml` holds only rich runtime config; whether a provider is enabled
     lives in `features.yaml` under the provider's implementation state.
     """
-    return get_implementation_state(project_root, COMPONENT_PROVIDERS, provider_id).enabled
+    return get_implementation_state(project_root, _COMPONENT_ID, provider_id).enabled
 
 
 # Back-compat-free alias kept for call sites that read enablement during resolution.
@@ -119,12 +120,12 @@ def set_provider_enabled(project_root: Path, provider_id: str, *, enabled: bool)
     )
 
     fn = enable_implementation if enabled else disable_implementation
-    if fn(project_root, COMPONENT_PROVIDERS, provider_id).get("ok"):
+    if fn(project_root, _COMPONENT_ID, provider_id).get("ok"):
         return
-    state = get_implementation_state(project_root, COMPONENT_PROVIDERS, provider_id)
+    state = get_implementation_state(project_root, _COMPONENT_ID, provider_id)
     set_implementation_state(
         project_root,
-        COMPONENT_PROVIDERS,
+        _COMPONENT_ID,
         provider_id,
         ImplementationState(enabled=enabled, options=state.options),
     )

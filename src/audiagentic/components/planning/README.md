@@ -37,6 +37,18 @@ docs/planning/plans/
   TEMPLATE_ITEM.md
 ```
 
+Reviews live alongside plan items:
+
+```
+docs/planning/
+  active/<plan>/reviews/<ITEM-ID>/RV##.md
+  completed/<plan>/reviews/<ITEM-ID>/RV##.md
+```
+
+New reviews may be created for either pending or completed items. A newly
+created review always starts in `active/` with review state `created`; moving
+the review itself to `closed` archives it under `completed/`.
+
 Each item has YAML frontmatter (`id`, `order`, `plan`, `state`, `priority`, `complexity`)
 and standard markdown sections: Description, Steps, Files, Validation, Effort & Risk, Notes.
 
@@ -48,6 +60,18 @@ and standard markdown sections: Description, Steps, Files, Validation, Effort & 
 | `completed` | `completed/` | Work finished |
 
 `not_done` is accepted as a read alias for `pending` (legacy items).
+
+## Review lifecycle
+
+| Review state | Folder | Meaning |
+|---|---|---|
+| `created` | `active/` | New finding or feedback to consider |
+| `considered` | `active/` | Triaged / incorporated but still open |
+| `closed` | `completed/` | Review handled and archived |
+
+Reviews may target completed items as well as pending ones. This is useful for
+post-implementation audits, regressions found after completion, and code review
+feedback against already-landed work.
 
 ## Implementations
 

@@ -13,8 +13,8 @@ CoreServiceBoundary = pytest.importorskip(
 ).CoreServiceBoundary
 from tests.helpers import sandbox as sandbox_helper
 
+from audiagentic.components.agent_jobs.jobs_store import job_record_path
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.runtime.state.jobs_store import job_record_path
 
 
 def test_service_boundary_runs_job_in_process(tmp_path: Path) -> None:

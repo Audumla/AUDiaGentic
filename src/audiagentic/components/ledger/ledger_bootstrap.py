@@ -8,12 +8,15 @@ from audiagentic.components.ledger.audit import generate_audit_and_checkin
 from audiagentic.components.ledger.current_summary import regenerate_current_release
 from audiagentic.components.ledger.sync import sync_current_release_ledger
 from audiagentic.foundation.components.ids import COMPONENT_PROJECT
+from audiagentic.foundation.io import load_yaml_file, save_yaml_file
+from audiagentic.foundation.lifecycle.baseline_sync import (
+    ensure_project_layout,
+    sync_managed_baseline,
+)
+from audiagentic.foundation.lifecycle.components import DEFAULT_VERSION
+from audiagentic.foundation.lifecycle.detector import detect_installed_state
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.paths import REPO_ROOT
-from audiagentic.runtime.config import load_yaml_file, save_yaml_file
-from audiagentic.runtime.lifecycle.baseline_sync import ensure_project_layout, sync_managed_baseline
-from audiagentic.runtime.lifecycle.components import DEFAULT_VERSION
-from audiagentic.runtime.lifecycle.detector import detect_installed_state
 
 
 def bootstrap_ledger(project_root: Path) -> dict[str, Any]:

@@ -15,7 +15,7 @@ from audiagentic.runtime.rig.http import probe_models_endpoint
 # ---------------------------------------------------------------------------
 
 def _rig_runtime_dir() -> Path:
-    from audiagentic.runtime.home import global_harness_runtime
+    from audiagentic.foundation.home import global_harness_runtime
     return global_harness_runtime() / "rig"
 
 

@@ -16,8 +16,7 @@ from audiagentic.components.agents.models import (
     profile_to_dict,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import atomic_write_text
-from audiagentic.runtime.config import load_yaml_file, save_yaml_file
+from audiagentic.foundation.io import atomic_write_text, load_yaml_file, save_yaml_file
 
 logger = logging.getLogger(__name__)
 
@@ -233,3 +232,35 @@ def resolve_default_profile(project_root: Path) -> dict[str, Any]:
         "model_alias": default.model_alias,
         "params": dict(default.params),
     }
+
+
+def agent_status(project_root: Path) -> ComponentStatusPayload:
+    """Component status-hook: profile count/default plus gateway overview.
+
+    agents has no swappable-implementation concept (no options-schema per
+    CREATING_A_COMPONENT.md §6/§11), so ``active_implementation`` is always
+    None. ``configured`` reflects whether a default profile exists — without
+    one, submitting a gateway request without an explicit agent-profile-id
+    raises RES-AGP-003, so "profiles technically exist but the default
+    gateway path is unusable" must not report as configured=True (RV37
+    finding: overstated readiness).
+    """
+    from audiagentic.components.agents import agents_gateway_api
+    from audiagentic.foundation.components import is_enabled
+    from audiagentic.foundation.components.hooks import ComponentStatusPayload
+
+    store = load_profiles(project_root)
+    profiles = store.to_dicts()
+    default_id = next((p["profile_id"] for p in profiles if p.get("is_default")), None)
+
+    return ComponentStatusPayload(
+        enabled=is_enabled("agents", project_root),
+        configured=default_id is not None,
+        active_implementation=None,
+        missing_required=[],
+        details={
+            "profile_count": len(profiles),
+            "default_profile_id": default_id,
+            "gateway": agents_gateway_api.gateway_overview(project_root),
+        },
+    )

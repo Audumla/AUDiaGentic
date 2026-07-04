@@ -1,9 +1,0 @@
-type: binding
-contract-version: v1
-parent: coding-lsp
-implementation: agent-lsp
-feature-kind: language
-feature: yaml
-uses-dependencies: [agent-lsp, yaml-language-server]
-projection:
-  writer-key: agent-lsp.mcp-args

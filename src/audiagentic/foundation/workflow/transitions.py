@@ -26,21 +26,31 @@ from typing import Any
 
 import yaml
 
+from audiagentic.foundation.contracts.errors import make_error
+
 
 def load_workflow(path: str | Path, kind: str, name: str | None = None) -> dict[str, Any]:
     """Load a single workflow definition (values/transitions/state-sets/initial).
 
-    Raises KeyError if the kind or named workflow is not present.
+    Raises VAL-WKFL-001/002 if the kind or named workflow is not present.
     """
     data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     spec = (data.get("kinds") or {}).get(kind)
     if spec is None:
-        raise KeyError(f"workflow kind not defined: {kind}")
+        raise make_error(
+            prefix="VAL", component="WKFL", number=1, kind="workflow",
+            message=f"workflow kind not defined: {kind}",
+            details={"workflow-kind": kind},
+        )
     workflows = spec.get("workflows") or {}
     wf_name = name or spec.get("default-workflow") or next(iter(workflows), None)
     workflow = workflows.get(wf_name) if wf_name else None
     if workflow is None:
-        raise KeyError(f"workflow not defined: {kind}/{wf_name}")
+        raise make_error(
+            prefix="VAL", component="WKFL", number=2, kind="workflow",
+            message=f"workflow not defined: {kind}/{wf_name}",
+            details={"workflow-kind": kind, "workflow": wf_name},
+        )
     return workflow
 
 

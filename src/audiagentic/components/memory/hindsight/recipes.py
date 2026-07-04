@@ -7,10 +7,33 @@ providers component exposes only generic recipe interfaces.
 """
 from __future__ import annotations
 
+import logging
 import shlex
+from collections.abc import Callable
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
+logger = logging.getLogger(__name__)
+
+
+class HindsightStatusState(str, Enum):
+    """Aggregate status for a provider's Hindsight integration.
+
+    Distinct from RecipeState (per-recipe lifecycle state). This value summarizes
+    whether the provider's Hindsight recipe set is active, inactive, or absent
+    from the registry — useful for CLI/dashboard consumers that need a single
+    machine-readable token rather than per-recipe details.
+    """
+
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    NOT_REGISTERED = "not_registered"
+
+from audiagentic.components.memory.hindsight.export import (
+    HindsightBackendConfig,
+    build_hindsight_backend,
+)
 from audiagentic.components.memory.hindsight.matrix import (
     HINDSIGHT_RECIPE_MATRIX,
     HindsightRecipeRow,
@@ -19,17 +42,15 @@ from audiagentic.components.memory.hindsight.mcp_recipe import (
     HindsightMcpRecipe,
     HindsightTarget,
 )
-from audiagentic.components.memory.hindsight_export import (
-    HindsightBackendConfig,
-    build_hindsight_backend,
-)
 from audiagentic.components.providers.descriptors.registry import get_descriptor
 from audiagentic.components.providers.services.recipes import (
+    ProviderCapabilityRecipe,
     ProviderRecipeKind,
     ProviderRecipeRegistry,
     ProviderRecipeResult,
     RecipeState,
 )
+from audiagentic.foundation.descriptors import resolve_ref
 from audiagentic.foundation.toolchains.artifact_registry import ArtifactRegistry
 from audiagentic.foundation.toolchains.managed_block import (
     apply_managed_block,
@@ -37,8 +58,12 @@ from audiagentic.foundation.toolchains.managed_block import (
     remove_managed_block,
 )
 from audiagentic.foundation.toolchains.probes import CommandProbe
-from audiagentic.foundation.workflow.invocation.models import StepResult
-from audiagentic.foundation.workflow.invocation.steps import SequenceStep, ShellStep
+from audiagentic.foundation.toolchains.provision_steps import (
+    CompensatingSequence,
+    ManagedBlockStep,
+    ProvisionStep,
+    provision_step_from_dict,
+)
 
 _SHELL_METACHARS = ("|", "&&", ";", ">", "<")
 RULE_TEXT = """Use Hindsight memory when prior project context may help.
@@ -50,81 +75,29 @@ _RULE_BLOCK_ID = "hindsight-memory"
 
 
 def _command_parts(command: str) -> list[str]:
-    """Return argv for a simple command, refusing shell compound syntax."""
+    """Return argv for a simple command, refusing shell compound syntax.
+
+    Raises AudiaGenticError with code REC-ML-001 if the command contains
+    shell compound operators. Callers should catch and log externally.
+    """
     if any(token in command for token in _SHELL_METACHARS):
-        raise ValueError(
-            "shell compound command requires structured shell-step support"
+        from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+        raise AudiaGenticError(
+            code="REC-ML-001",
+            kind="validation",
+            message=(
+                f"shell compound command requires structured shell-step support: {command!r}"
+            ),
         )
     return shlex.split(command)
 
 
-def _step_detail(result: StepResult) -> str:
-    """Extract a human-readable failure detail from a SequenceStep result."""
-    if result.reason:
-        return result.reason
-    outputs = result.outputs if isinstance(result.outputs, dict) else {}
-    for value in outputs.values():
-        if isinstance(value, dict) and value.get("returncode") not in (0, None):
-            return (value.get("stdout") or "").strip() or "command failed"
-    return "command failed"
-
-
-def _run_command(
-    command: str,
-    backend: HindsightBackendConfig,
-    *,
-    timeout: int = 300,
-) -> tuple[bool, str]:
-    """Run an installer/uninstaller command via the toolchain step machinery.
-
-    The matrix joins multiple steps with ``&&`` (e.g.
-    ``pip install hindsight-X && hindsight-X install --api-url URL``). Each
-    ``&&`` segment becomes a :class:`ShellStep` (argv) and they run in order via
-    a :class:`SequenceStep`, after placeholder substitution (URL/TOKEN/KEY/ID).
-
-    Commands containing ``|`` (e.g. ``curl … | bash``) cannot be split into
-    argv and are run via the system shell instead. Returns ``(ok, detail)``.
-    """
-    import subprocess
-
-    rendered = _parameterize_command(command, backend)
-
-    if "|" in rendered:
-        result = subprocess.run(
-            rendered,
-            shell=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
-        )
-        if result.returncode == 0:
-            return True, ""
-        return False, (result.stderr or result.stdout or "command failed").strip()
-
-    segments = [seg.strip() for seg in rendered.split("&&") if seg.strip()]
-    if not segments:
-        return False, "empty command"
-
-    steps: list[ShellStep] = []
-    for index, segment in enumerate(segments):
-        if any(tok in segment for tok in (";", ">", "<")):
-            return False, f"unsupported shell syntax: {segment!r}"
-        steps.append(ShellStep(id=f"step{index}", command=tuple(shlex.split(segment)), timeout=timeout))
-
-    result = SequenceStep(id="install", steps=tuple(steps)).run({})
-    if result.status == "ok":
-        return True, ""
-    return False, _step_detail(result)
-
-
-class _RowRecipe:
+class _RowRecipe(ProviderCapabilityRecipe):
     """Common provider metadata + result re-stamping for Hindsight recipes.
 
-    Carries the per-provider identity (provider_id, capability, recipe kind,
-    source provenance) drawn from a matrix row, and provides ``_stamp`` to
-    overlay that provenance onto a delegated inner-recipe result.
+    Extends ProviderCapabilityRecipe with Hindsight-specific provenance and
+    action-guidance overlay drawn from a matrix row.
     """
 
     capability_id = "hindsight"
@@ -136,22 +109,18 @@ class _RowRecipe:
         *,
         recipe_kind: ProviderRecipeKind | None = None,
     ) -> None:
-        self.provider_id = row.provider_id
-        self.recipe_kind = recipe_kind if recipe_kind is not None else row.recipe_kind
-        self.display_name = row.display_name
-        self.source_url = row.source_url
-        self.source_date = row.source_date
+        super().__init__(
+            provider_id=row.provider_id,
+            capability_id="hindsight",
+            recipe_kind=recipe_kind if recipe_kind is not None else row.recipe_kind,
+            display_name=row.display_name,
+            source_url=row.source_url,
+            source_date=row.source_date,
+        )
         self._row = row
 
     def _stamp(self, result: Any) -> ProviderRecipeResult:
-        """Re-stamp any recipe result with this provider's provenance.
-
-        Accepts both the foundation ``RecipeResult`` (returned by inner MCP
-        recipes) and ``ProviderRecipeResult``; reads fields by duck-typing. A
-        result that already carries its own ``action_needed`` (e.g. a
-        notes-preferred message) keeps it; otherwise the row's default action
-        guidance is applied.
-        """
+        """Re-stamp any recipe result with this provider's provenance."""
         return ProviderRecipeResult(
             success=result.success,
             state=result.state,
@@ -163,6 +132,61 @@ class _RowRecipe:
             source_date=self.source_date,
             action_needed=getattr(result, "action_needed", "") or self._row.audia_action,
         )
+
+    def to_result(self, base: RecipeResult) -> ProviderRecipeResult:  # type: ignore[override]
+        """Convert generic result with Hindsight provenance overlay."""
+        return self._stamp(base)
+
+    def provision(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        """Hindsight-specific provision: probe → install → configure → verify."""
+        probed = self.probe(context)
+        if probed.success and probed.state is RecipeState.VERIFIED:
+            return self._stamp(ProviderRecipeResult.ok(
+                RecipeState.VERIFIED, status="already provisioned",
+            ))
+
+        owned: list[str] = []
+        for op in (self.install, self.configure):
+            result = op(context)
+            owned.extend(result.artifacts_owned)
+            if not result.success:
+                return self._stamp(ProviderRecipeResult.fail(
+                    result.error or "provision failed",
+                    state=result.state,
+                    details={"artifacts_owned": owned},
+                ))
+
+        verified = self.verify(context)
+        all_owned = [*owned, *verified.artifacts_owned]
+        if not verified.success:
+            return self._stamp(ProviderRecipeResult.fail(
+                verified.error or "verify failed",
+                state=RecipeState.ERROR,
+                details={"artifacts_owned": all_owned},
+            ))
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.VERIFIED, artifacts=all_owned, status="provisioned",
+        ))
+
+    def teardown(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        """Hindsight-specific teardown: prune → uninstall → verify absent."""
+        pruned = self.prune(context)
+        if not pruned.success:
+            return pruned
+
+        removed = self.uninstall(context)
+        if not removed.success:
+            return removed
+
+        probed = self.probe(context)
+        if probed.success and probed.state is RecipeState.ABSENT:
+            return self._stamp(ProviderRecipeResult.ok(
+                RecipeState.ABSENT, status="removed",
+            ))
+        return self._stamp(ProviderRecipeResult.fail(
+            "integration still present after teardown",
+            action_needed=self._row.audia_action,
+        ))
 
 
 class HooksInstallerRecipe(_RowRecipe):
@@ -197,6 +221,12 @@ class HooksInstallerRecipe(_RowRecipe):
             state = RecipeState.VERIFIED if result.passed else RecipeState.ABSENT
             return self._stamp(ProviderRecipeResult.ok(state, status=result.detail))
         except Exception as exc:
+            logger.error(
+                "probe failed for provider %s: %s",
+                self.provider_id,
+                exc,
+                exc_info=True,
+            )
             return self._stamp(ProviderRecipeResult.fail(str(exc)))
 
     def install(self, context: dict[str, Any]) -> ProviderRecipeResult:
@@ -205,16 +235,20 @@ class HooksInstallerRecipe(_RowRecipe):
                 f"installer source {self._row.source_status}; refusing to execute",
                 action_needed=self._row.notes or self._row.audia_action,
             ))
-        if not self._row.install_command:
+        if not self._row.install_steps:
             return self._stamp(ProviderRecipeResult.fail(
-                "no install command for this provider",
+                "no install steps for this provider",
             ))
-        ok, detail = _run_command(self._row.install_command, self._backend)
-        if ok:
+        params = _hindsight_params(self._backend)
+        steps = _steps_from_defs(self._row.install_steps, params)
+        seq_result = CompensatingSequence(steps).run(context)
+        if seq_result.status == "ok":
             return self._stamp(ProviderRecipeResult.ok(
-                RecipeState.INSTALLING, status="installer command succeeded",
+                RecipeState.INSTALLING, status="installer succeeded",
             ))
-        return self._stamp(ProviderRecipeResult.fail(f"installer failed: {detail}"))
+        return self._stamp(ProviderRecipeResult.fail(
+            f"installer failed: {seq_result.reason or 'unknown'}",
+        ))
 
     def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
         return self._stamp(ProviderRecipeResult.ok(
@@ -237,26 +271,42 @@ class HooksInstallerRecipe(_RowRecipe):
                 status=f"source {self._row.source_status}; no installer was executed",
                 action_needed=self._row.notes or self._row.audia_action,
             ))
-        if not self._row.uninstall_command:
+        if not self._row.uninstall_steps:
             return self._stamp(ProviderRecipeResult.fail(
-                "no uninstall command for this provider",
+                "no uninstall steps for this provider",
             ))
-        ok, detail = _run_command(self._row.uninstall_command, self._backend)
-        if ok:
+        params = _hindsight_params(self._backend)
+        steps = _steps_from_defs(self._row.uninstall_steps, params)
+        seq_result = CompensatingSequence(steps).run(context)
+        if seq_result.status == "ok":
             return self._stamp(ProviderRecipeResult.ok(
-                RecipeState.ABSENT, status="uninstaller command succeeded",
+                RecipeState.ABSENT, status="uninstaller succeeded",
             ))
-        return self._stamp(ProviderRecipeResult.fail(f"uninstaller failed: {detail}"))
+        return self._stamp(ProviderRecipeResult.fail(
+            f"uninstaller failed: {seq_result.reason or 'unknown'}",
+        ))
 
     def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
         return self._stamp(ProviderRecipeResult.ok(
             RecipeState.ABSENT, status="hooks managed by CLI; no config to prune",
         ))
 
+    def provision_steps(self) -> list[ProvisionStep]:
+        params = _hindsight_params(self._backend)
+        return _steps_from_defs(
+            self._row.install_steps, params,
+            recipe_id=f"hindsight-{self.provider_id}",
+        )
+
     def dry_run(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        if self._row.install_steps:
+            step_info = ", ".join(s.get("id", str(i)) for i, s in enumerate(self._row.install_steps))
+            return self._stamp(ProviderRecipeResult.ok(
+                RecipeState.ABSENT,
+                status=f"would run install steps [{step_info}] (dry-run)",
+            ))
         return self._stamp(ProviderRecipeResult.ok(
-            RecipeState.ABSENT,
-            status=f"would run: {self._row.install_command} (dry-run)",
+            RecipeState.ABSENT, status="no install steps (dry-run)",
         ))
 
 
@@ -288,16 +338,18 @@ class PluginConfigRecipe(_RowRecipe):
         return self._row.audia_action == "call_official_installer"
 
     def install(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        if self._row.install_command and self._should_run_plugin_command():
+        if self._row.install_steps and self._should_run_plugin_command():
             if self._row.source_status != "verified":
                 return self._stamp(ProviderRecipeResult.fail(
                     f"plugin installer source {self._row.source_status}; refusing to execute",
                     action_needed=self._row.notes or self._row.audia_action,
                 ))
-            ok, detail = _run_command(self._row.install_command, self._backend)
-            if not ok:
+            params = _hindsight_params(self._backend)
+            steps = _steps_from_defs(self._row.install_steps, params)
+            seq_result = CompensatingSequence(steps).run(context)
+            if seq_result.status != "ok":
                 return self._stamp(ProviderRecipeResult.fail(
-                    f"plugin install failed: {detail}",
+                    f"plugin install failed: {seq_result.reason or 'unknown'}",
                 ))
         return self._stamp(ProviderRecipeResult.ok(
             RecipeState.INSTALLING, status="plugin installed",
@@ -318,17 +370,19 @@ class PluginConfigRecipe(_RowRecipe):
         ))
 
     def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        if self._row.uninstall_command and self._should_run_plugin_command():
+        if self._row.uninstall_steps and self._should_run_plugin_command():
             if self._row.source_status != "verified":
                 return self._stamp(ProviderRecipeResult.ok(
                     RecipeState.ABSENT,
                     status=f"source {self._row.source_status}; no plugin installer was executed",
                     action_needed=self._row.notes or self._row.audia_action,
                 ))
-            ok, detail = _run_command(self._row.uninstall_command, self._backend)
-            if not ok:
+            params = _hindsight_params(self._backend)
+            steps = _steps_from_defs(self._row.uninstall_steps, params)
+            seq_result = CompensatingSequence(steps).run(context)
+            if seq_result.status != "ok":
                 return self._stamp(ProviderRecipeResult.fail(
-                    f"plugin uninstall failed: {detail}",
+                    f"plugin uninstall failed: {seq_result.reason or 'unknown'}",
                 ))
         return self._stamp(ProviderRecipeResult.ok(
             RecipeState.ABSENT, status="plugin uninstalled",
@@ -341,39 +395,76 @@ class PluginConfigRecipe(_RowRecipe):
             RecipeState.ABSENT, status="nothing to prune",
         ))
 
+    def provision_steps(self) -> list[ProvisionStep]:
+        params = _hindsight_params(self._backend)
+        if self._target and self._target.config_path:
+            params["CONFIG_PATH"] = str(self._target.config_path)
+        steps: list[ProvisionStep] = []
+        if self._row.install_steps and self._should_run_plugin_command():
+            steps.extend(_steps_from_defs(
+                self._row.install_steps, params,
+                recipe_id=f"hindsight-{self.provider_id}",
+            ))
+        if self._row.configure_steps:
+            steps.extend(_steps_from_defs(
+                self._row.configure_steps, params,
+                recipe_id=f"hindsight-{self.provider_id}",
+            ))
+        return steps
+
     def dry_run(self, context: dict[str, Any]) -> ProviderRecipeResult:
         return self._stamp(ProviderRecipeResult.ok(
             RecipeState.ABSENT, status="would install plugin (dry-run)",
         ))
 
 
-def _repair_windows_plugin_mcp(_backend: HindsightBackendConfig) -> tuple[bool, str]:
+def _repair_windows_plugin_mcp(
+    backend: HindsightBackendConfig,
+    row: HindsightRecipeRow | None = None,
+) -> tuple[bool, str]:
     """On Windows, patch the installed hindsight plugin's .mcp.json to use python.exe.
 
-    The official plugin ships a bash launcher (run_mcp.sh) that fails when Git Bash
-    is absent. This function locates the plugin cache .mcp.json and rewrites the
-    hindsight server entry to invoke mcp_server.py via the plugin venv's python.exe.
-    Idempotent — if already using python.exe the file is left untouched.
+    Uses YAML-driven repair metadata from the matrix row when available. Empty
+    fields short-circuit as no-ops: if no cache pattern is configured, the
+    function returns without attempting repair. The official plugin ships a
+    bash launcher (run_mcp.sh) that fails when Git Bash is absent. Idempotent.
     """
     import glob
     import json
     import os
 
-    home = Path.home()
-    cache_pattern = str(
-        home / ".claude" / "plugins" / "cache" / "hindsight" / "hindsight-memory" / "*" / ".mcp.json"
-    )
-    mcp_files = glob.glob(cache_pattern)
-    if not mcp_files:
-        return False, "hindsight plugin not installed (no .mcp.json in cache)"
+    # Empty metadata = no-op
+    cache_pattern_str = getattr(row, "plugin_repair_cache_pattern", "") if row else ""
+    if not cache_pattern_str:
+        return False, "no plugin repair metadata configured"
 
-    appdata = os.environ.get("APPDATA", "")
-    if not appdata:
-        return False, "APPDATA not set; cannot locate plugin data dir"
-    data_dir = Path(appdata) / "Claude" / "plugins" / "data" / "hindsight-memory"
-    venv_python = data_dir / "venv" / "Scripts" / "python.exe"
-    if not venv_python.exists():
-        return False, f"plugin venv not found at {venv_python}; run 'claude plugin install hindsight-memory' first"
+    expanded_pattern = Path(cache_pattern_str).expanduser()
+    data_dir_str = getattr(row, "plugin_repair_data_dir", "") if row else ""
+    venv_python_rel = getattr(row, "plugin_repair_venv_python", "") if row else ""
+    server_script_rel = getattr(row, "plugin_repair_server_script", "") if row else ""
+
+    mcp_files = glob.glob(str(expanded_pattern))
+    if not mcp_files:
+        return False, f"no .mcp.json found matching {expanded_pattern}"
+
+    # Resolve data directory from environment variable or fallback
+    if data_dir_str:
+        raw_data = Path(data_dir_str)
+        appdata = os.environ.get("APPDATA", "")
+        if "${APPDATA}" in data_dir_str and not appdata:
+            return False, "APPDATA not set; cannot resolve plugin data dir"
+        data_dir = raw_data.expanduser()
+        if "${APPDATA}" in data_dir_str:
+            data_dir = Path(appdata) / str(raw_data).split("/Claude/")[1]
+    else:
+        return False, "plugin_repair_data_dir not configured"
+
+    venv_python = data_dir / venv_python_rel if venv_python_rel else None
+    if venv_python and not venv_python.exists():
+        return False, (
+            f"plugin venv not found at {venv_python}; "
+            "run plugin installer first"
+        )
 
     repaired: list[str] = []
     for mcp_path_str in mcp_files:
@@ -388,11 +479,13 @@ def _repair_windows_plugin_mcp(_backend: HindsightBackendConfig) -> tuple[bool, 
         if "python" in cmd.lower() and "bash" not in cmd.lower():
             continue  # already patched
         plugin_dir = mcp_path.parent
-        mcp_script = plugin_dir / "scripts" / "mcp_server.py"
+        mcp_script = (
+            plugin_dir / server_script_rel if server_script_rel else plugin_dir / "scripts/mcp_server.py"
+        )
         if not mcp_script.exists():
             continue
         servers["hindsight"] = {
-            "command": str(venv_python),
+            "command": str(venv_python) if venv_python else "",
             "args": [str(mcp_script)],
             "env": {
                 "CLAUDE_PLUGIN_ROOT": str(plugin_dir),
@@ -408,17 +501,40 @@ def _repair_windows_plugin_mcp(_backend: HindsightBackendConfig) -> tuple[bool, 
     return True, "already patched"
 
 
-class _ClaudePluginUrlRecipe(_RowRecipe):
-    """Plugin-url recipe for Claude Code: writes hindsight API URL to plugin config.
+def _build_plugin_url_config(backend: HindsightBackendConfig) -> dict[str, Any]:
+    """Build the plugin URL config dict from backend, omitting unset optional fields.
 
-    The Claude Code hindsight plugin reads its server URL from
-    ~/.hindsight/claude-code.json as {"hindsightApiUrl": "<url>"} — a separate
-    file from the MCP JSON format used by AUDiaGentic's own servers. The URL
-    must come from HindsightBackendConfig, never hardcoded.
+    This dict is written to provider-specific config files (e.g.
+    ~/.hindsight/claude-code.json, ~/.hindsight/opencode.json) so the provider's
+    Hindsight plugin reads the correct server URL, token, and bank. Fields are
+    only included when the backend has a value — the plugin's own defaults apply
+    for absent keys, and empty strings are not written.
+    """
+    config: dict[str, Any] = {"hindsightApiUrl": backend.base_url}
+    if backend.api_key:
+        config["hindsightApiToken"] = backend.api_key
+    if backend.bank_id:
+        config["bankId"] = backend.bank_id
+    return config
 
-    On Windows, configure also patches the plugin's auto-generated .mcp.json
-    to use python.exe instead of bash (the plugin ships a bash launcher that
-    fails when Git Bash is absent).
+
+class _PluginUrlConfigRecipe(_RowRecipe):
+    """Writes hindsight connection config to a provider-specific JSON file.
+
+    Used by providers whose Hindsight plugin reads a ~/.hindsight/<provider>.json
+    file for URL, token, and bank settings (e.g. Claude's claude-code.json,
+    OpenCode's opencode.json). The file is written in code so optional fields
+    (token, bankId) are included only when set — YAML template substitution cannot
+    handle optional JSON keys cleanly.
+
+    On Windows, configure also patches the Claude plugin's auto-generated .mcp.json
+    to use python.exe instead of bash (the plugin ships a bash launcher that fails
+    when Git Bash is absent). This repair is a no-op for non-Claude providers.
+
+    ``harness_config_path`` is set when the provider's configure_steps use
+    {CONFIG_PATH} to refer to the harness config file (e.g. opencode.json for the
+    plugin array). It is separate from ``url_config_path`` (the hindsight settings
+    file). Falls back to url_config_path when not provided.
     """
 
     def __init__(
@@ -426,24 +542,49 @@ class _ClaudePluginUrlRecipe(_RowRecipe):
         row: HindsightRecipeRow,
         backend: HindsightBackendConfig,
         url_config_path: str | Path,
+        harness_config_path: str | Path | None = None,
     ) -> None:
         super().__init__(row)
         self._backend = backend
         self._url_config_path = Path(url_config_path).expanduser()
+        self._harness_config_path = Path(harness_config_path) if harness_config_path else None
 
-    def _current_url(self) -> str | None:
+    def _expected_config(self) -> dict[str, Any]:
+        return _build_plugin_url_config(self._backend)
+
+    def _current_config(self) -> dict[str, Any]:
         try:
             import json
-            data = json.loads(self._url_config_path.read_text(encoding="utf-8"))
-            return data.get("hindsightApiUrl")
+            return json.loads(self._url_config_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            return None
+            return {}
+
+    def provision_steps(self) -> list[ProvisionStep]:
+        params = _hindsight_params(self._backend)
+        # configure_steps use {CONFIG_PATH} for the harness config (plugin array etc.),
+        # not the url config file. Fall back to url_config_path when no harness path.
+        config_path_for_steps = self._harness_config_path or self._url_config_path
+        params["CONFIG_PATH"] = str(config_path_for_steps)
+        steps: list[ProvisionStep] = []
+        if self._row.install_steps and self._should_run_plugin_command():
+            steps.extend(_steps_from_defs(
+                self._row.install_steps, params,
+                recipe_id=f"hindsight-{self.provider_id}",
+            ))
+        if self._row.configure_steps:
+            steps.extend(_steps_from_defs(
+                self._row.configure_steps, params,
+                recipe_id=f"hindsight-{self.provider_id}",
+            ))
+        return steps
 
     def _should_run_plugin_command(self) -> bool:
         return self._row.audia_action == "call_official_installer"
 
     def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        if self._current_url() == self._backend.base_url:
+        current = self._current_config()
+        expected = self._expected_config()
+        if all(current.get(k) == v for k, v in expected.items()):
             return self._stamp(ProviderRecipeResult.ok(
                 RecipeState.VERIFIED,
                 artifacts=[str(self._url_config_path)],
@@ -454,28 +595,45 @@ class _ClaudePluginUrlRecipe(_RowRecipe):
         ))
 
     def install(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        if self._row.install_command and self._should_run_plugin_command():
+        if self._row.install_steps and self._should_run_plugin_command():
             if self._row.source_status != "verified":
                 return self._stamp(ProviderRecipeResult.fail(
                     f"plugin installer source {self._row.source_status}; refusing to execute",
                     action_needed=self._row.notes or self._row.audia_action,
                 ))
-            ok, detail = _run_command(self._row.install_command, self._backend)
-            if not ok:
-                return self._stamp(ProviderRecipeResult.fail(f"plugin install failed: {detail}"))
+            params = _hindsight_params(self._backend)
+            steps = _steps_from_defs(self._row.install_steps, params)
+            seq_result = CompensatingSequence(steps).run(context)
+            if seq_result.status != "ok":
+                return self._stamp(ProviderRecipeResult.fail(
+                    f"plugin install failed: {seq_result.reason or 'unknown'}",
+                ))
         return self._stamp(ProviderRecipeResult.ok(RecipeState.INSTALLING, status="plugin installed"))
 
     def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
         import json
         import os
+        if self._row.configure_steps:
+            params = _hindsight_params(self._backend)
+            config_path_for_steps = self._harness_config_path or self._url_config_path
+            params["CONFIG_PATH"] = str(config_path_for_steps)
+            steps = _steps_from_defs(
+                self._row.configure_steps, params,
+                recipe_id=f"hindsight-{self.provider_id}",
+            )
+            seq_result = CompensatingSequence(steps).run(context)
+            if seq_result.status != "ok":
+                return self._stamp(ProviderRecipeResult.fail(
+                    f"plugin configure failed: {seq_result.reason or 'unknown'}",
+                ))
         self._url_config_path.parent.mkdir(parents=True, exist_ok=True)
         self._url_config_path.write_text(
-            json.dumps({"hindsightApiUrl": self._backend.base_url}, indent=2),
+            json.dumps(self._expected_config(), indent=2),
             encoding="utf-8",
         )
         artifacts = [str(self._url_config_path)]
         if os.name == "nt":
-            ok, detail = _repair_windows_plugin_mcp(self._backend)
+            ok, detail = _repair_windows_plugin_mcp(self._backend, self._row)
             if ok and "patched" in detail:
                 artifacts.append(detail)
         return self._stamp(ProviderRecipeResult.ok(
@@ -489,16 +647,20 @@ class _ClaudePluginUrlRecipe(_RowRecipe):
         return self._stamp(ProviderRecipeResult.fail("plugin URL config not verified after configure"))
 
     def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        if self._row.uninstall_command and self._should_run_plugin_command():
+        if self._row.uninstall_steps and self._should_run_plugin_command():
             if self._row.source_status != "verified":
                 return self._stamp(ProviderRecipeResult.ok(
                     RecipeState.ABSENT,
                     status=f"source {self._row.source_status}; no plugin installer was executed",
                     action_needed=self._row.notes or self._row.audia_action,
                 ))
-            ok, detail = _run_command(self._row.uninstall_command, self._backend)
-            if not ok:
-                return self._stamp(ProviderRecipeResult.fail(f"plugin uninstall failed: {detail}"))
+            params = _hindsight_params(self._backend)
+            steps = _steps_from_defs(self._row.uninstall_steps, params)
+            seq_result = CompensatingSequence(steps).run(context)
+            if seq_result.status != "ok":
+                return self._stamp(ProviderRecipeResult.fail(
+                    f"plugin uninstall failed: {seq_result.reason or 'unknown'}",
+                ))
         return self._stamp(ProviderRecipeResult.ok(RecipeState.ABSENT, status="plugin uninstalled"))
 
     def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
@@ -510,6 +672,87 @@ class _ClaudePluginUrlRecipe(_RowRecipe):
     def dry_run(self, context: dict[str, Any]) -> ProviderRecipeResult:
         return self._stamp(ProviderRecipeResult.ok(
             RecipeState.ABSENT, status=f"would write {self._url_config_path} (dry-run)",
+        ))
+
+
+class _PluginArrayRecipe(_RowRecipe):
+    """Upserts one named entry into a provider's declarative plugin-array config.
+
+    For providers (e.g. OpenCode) that auto-install packages listed in a config
+    array on startup rather than exposing an install command. All provider
+    knowledge — config path, package name, and the reader/writer/remover that
+    know the array's on-disk shape — comes from the matrix row; this class
+    contains none.
+    """
+
+    def __init__(
+        self,
+        row: HindsightRecipeRow,
+        backend: HindsightBackendConfig,
+        config_path: str | Path,
+    ) -> None:
+        super().__init__(row)
+        self._backend = backend
+        self._path = Path(config_path).expanduser()
+        self._package = row.plugin_array_package
+        self._reader = resolve_ref(row.plugin_array_reader) if row.plugin_array_reader else None
+        self._writer = resolve_ref(row.plugin_array_writer) if row.plugin_array_writer else None
+        self._remover = resolve_ref(row.plugin_array_remover) if row.plugin_array_remover else None
+
+    def _expected_options(self) -> dict[str, Any]:
+        return _build_plugin_url_config(self._backend)
+
+    def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        if not self._reader:
+            return self._stamp(ProviderRecipeResult.ok(
+                RecipeState.ABSENT, status="no reader configured for plugin array",
+            ))
+        current = self._reader(self._path, self._package)
+        if current is not None and current == self._expected_options():
+            return self._stamp(ProviderRecipeResult.ok(
+                RecipeState.VERIFIED, artifacts=[str(self._path)], status="plugin entry present",
+            ))
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.ABSENT, status="plugin entry absent or stale",
+        ))
+
+    def install(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.INSTALLING, status="plugin auto-installs from config array; no install step",
+        ))
+
+    def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        if not self._writer:
+            return self._stamp(ProviderRecipeResult.fail("no writer configured for plugin array"))
+        self._writer(self._path, self._package, self._expected_options())
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.CONFIGURING, artifacts=[str(self._path)], status="plugin array entry written",
+        ))
+
+    def verify(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        probed = self.probe(context)
+        if probed.success and probed.state is RecipeState.VERIFIED:
+            return probed
+        return self._stamp(ProviderRecipeResult.fail("plugin array entry not verified after configure"))
+
+    def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.ABSENT, status="plugin managed via config array; nothing to uninstall",
+        ))
+
+    def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        if self._remover:
+            self._remover(self._path, self._package)
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.ABSENT, status="plugin array entry removed",
+        ))
+
+    def dry_run(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        probed = self.probe(context)
+        if probed.state is RecipeState.VERIFIED:
+            return probed
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.ABSENT, status=f"would write {self._package} to {self._path} (dry-run)",
         ))
 
 
@@ -681,6 +924,23 @@ class RulesOnlyRecipe(_RowRecipe):
             source_date=self.source_date,
         )
 
+    def provision_steps(self) -> list[ProvisionStep]:
+        if self._row.configure_steps:
+            params = {"URL": "", "MCP_URL": "", "TOKEN": "", "KEY": "", "ID": ""}
+            return _steps_from_defs(
+                self._row.configure_steps, params,
+                recipe_id=self.recipe_id,
+            )
+        return [
+            ManagedBlockStep(
+                id="write-rule-block",
+                path=str(self._rule_path),
+                block_id=_RULE_BLOCK_ID,
+                content=RULE_TEXT,
+                recipe_id=self.recipe_id,
+            )
+        ]
+
     def dry_run(self, context: dict[str, Any]) -> ProviderRecipeResult:
         probed = self.probe(context)
         if probed.state is RecipeState.VERIFIED:
@@ -707,52 +967,92 @@ def _parameterize_command(
     command: str,
     backend: HindsightBackendConfig,
 ) -> str:
-    """Replace placeholder tokens in install/uninstall/status commands with backend values.
+    """Replace brace-delimited placeholder tokens with backend values.
 
-    Supported placeholders:
-      URL    → backend.base_url
-      TOKEN  → backend.api_key
-      KEY    → backend.api_key
-      ID     → backend.bank_id
+    Uses the same parameter mapping as _hindsight_params for consistency:
+    URL, MCP_URL, TOKEN, KEY, ID.  Empty optional fields produce no replacement,
+    so "{TOKEN}" remains literal when the backend has no api_key — callers that
+    rely on those placeholders should check configuration first.
     """
     if not command:
         return command
-    replacements = [
-        ("URL", backend.base_url),
-    ]
-    if backend.api_key:
-        replacements.extend([
-            ("TOKEN", backend.api_key),
-            ("KEY", backend.api_key),
-        ])
-    if backend.bank_id:
-        replacements.append(("ID", backend.bank_id))
-    for placeholder, value in replacements:
-        command = command.replace(placeholder, value)
+    params = _hindsight_params(backend)
+    for key, value in params.items():
+        command = command.replace(f"{{{key}}}", value)
     return command
+
+
+def _hindsight_params(backend: HindsightBackendConfig) -> dict[str, str]:
+    """Build params dict from backend config for ProvisionStep placeholder substitution.
+
+    Supported keys: URL, MCP_URL, TOKEN, KEY, ID.
+    All keys are always present; optional fields (TOKEN, KEY, ID) default to ""
+    so YAML steps can reference them without raising on unknown placeholders.
+    ShellProvisionStep filters out --flag= args with empty values at run time.
+    """
+    return {
+        "URL": backend.base_url,
+        "MCP_URL": backend.mcp_url or "",
+        "TOKEN": backend.api_key or "",
+        "KEY": backend.api_key or "",
+        "ID": backend.bank_id or "",
+    }
+
+
+def _steps_from_defs(
+    step_defs: list[dict[str, Any]],
+    params: dict[str, str],
+    *,
+    recipe_id: str | None = None,
+    registry: ArtifactRegistry | None = None,
+) -> list[ProvisionStep]:
+    """Build ProvisionStep instances from YAML step definitions."""
+    steps: list[ProvisionStep] = []
+    for i, defn in enumerate(step_defs):
+        step_data = dict(defn)
+        if "id" not in step_data:
+            step_data["id"] = f"step-{i}"
+        steps.append(
+            provision_step_from_dict(
+                step_data,
+                params,
+                registry=registry,
+                recipe_id=recipe_id,
+            )
+        )
+    return steps
+
+
+def _normalize_platform(key: str) -> str:
+    """Normalize a platform key to canonical form.
+
+    Accepts aliases ('macos', 'darwin') → 'darwin', 'linux' → 'linux',
+    ('win', 'windows', 'win32') → 'win'. Returns the lowercased key if no
+    mapping applies, so an unknown constraint simply won't match any platform.
+    """
+    normalized = key.lower().strip()
+    if normalized in ("macos", "darwin"):
+        return "darwin"
+    if normalized in ("linux",):
+        return "linux"
+    if normalized in ("win", "windows", "win32"):
+        return "win"
+    return normalized
 
 
 def _platform_supported(row: HindsightRecipeRow) -> bool:
     """Check if the current platform is in the row's platform constraints.
 
-    Uses the canonical platform_key() from foundation.toolchains.
+    Constraints must be canonical keys: 'darwin', 'linux', or 'win'.
+    Empty constraint list means supported on all platforms.
     """
+    from audiagentic.foundation.toolchains import platform_key
+
     if not row.platform_constraints:
         return True
-    from audiagentic.foundation.toolchains import platform_key
     current = platform_key()
-    for constraint in row.platform_constraints:
-        constraint_lower = constraint.lower()
-        if "macos" in constraint_lower or "darwin" in constraint_lower:
-            if current == "darwin":
-                return True
-        elif "linux" in constraint_lower:
-            if current == "linux":
-                return True
-        elif "win" in constraint_lower:
-            if current == "win":
-                return True
-    return False
+    allowed = {_normalize_platform(c) for c in row.platform_constraints}
+    return current in allowed
 
 
 _INSTALLER_KINDS = (
@@ -821,6 +1121,113 @@ def resolve_hindsight_strategy(
     return row
 
 
+def _build_hooks_recipe(
+    row: HindsightRecipeRow,
+    backend: HindsightBackendConfig,
+) -> Any:
+    """Build HooksInstallerRecipe with source gate."""
+    if row.source_status != "verified":
+        return GuidanceOnlyRecipe(row)
+    return HooksInstallerRecipe(row, backend)
+
+
+def _build_plugin_url_config_recipe(
+    row: HindsightRecipeRow,
+    backend: HindsightBackendConfig,
+    url_config_path: str | Path,
+    harness_config_path: str | Path | None = None,
+) -> Any:
+    """Build Plugin URL config recipe with optional Windows repair."""
+    return _PluginUrlConfigRecipe(
+        row, backend, url_config_path,
+        harness_config_path=harness_config_path,
+    )
+
+
+def _build_plugin_config_recipe(
+    row: HindsightRecipeRow,
+    backend: HindsightBackendConfig,
+    provider_id: str,
+    project_root: Path | None,
+) -> Any:
+    """Build plugin config recipe from metadata.
+
+    Prefers plugin_array > url_config_path > generic MCP target fallback.
+    Source gate applies only when install_steps are present and unverified.
+    """
+    harness_path = _resolve_harness_config_path(provider_id, project_root)
+    if row.source_status != "verified" and row.install_steps:
+        return GuidanceOnlyRecipe(row)
+    if row.plugin_array_package and harness_path:
+        return _PluginArrayRecipe(row, backend, harness_path)
+    if row.plugin_url_config_path:
+        return _build_plugin_url_config_recipe(
+            row, backend, row.plugin_url_config_path,
+            harness_path or row.plugin_url_config_path,
+        )
+    if harness_path:
+        descriptor = get_descriptor(provider_id)
+        spec = descriptor.mcp_config if descriptor else None
+        target = HindsightTarget(
+            config_path=harness_path,
+            writer_fn=spec.writer if spec else None,
+            reader_fn=spec.reader if spec else None,
+            remover_fn=spec.remover if spec else None,
+        )
+        return PluginConfigRecipe(row, backend, target)
+    return GuidanceOnlyRecipe(row)
+
+
+def _build_mcp_config_recipe(
+    row: HindsightRecipeRow,
+    backend: HindsightBackendConfig,
+    provider_id: str,
+    project_root: Path | None,
+) -> Any:
+    """Build MCP-config recipe.
+
+    Blocked source status returns guidance-only. Otherwise dispatches to
+    _build_mcp_recipe for inner composition (MCP + rules).
+    """
+    if row.source_status == "blocked":
+        return GuidanceOnlyRecipe(row)
+    harness_path = _resolve_harness_config_path(provider_id, project_root)
+    rule_path = _resolve_rule_path(provider_id, project_root)
+    return _build_mcp_recipe(
+        row, backend, provider_id, project_root, harness_path, rule_path,
+    )
+
+
+def _build_guidance_only_recipe(
+    row: HindsightRecipeRow,
+    backend: HindsightBackendConfig,
+    provider_id: str,
+    project_root: Path | None,
+) -> Any:
+    """Build guidance-only recipe with rules fallback."""
+    rule_path = _resolve_rule_path(provider_id, project_root)
+    if rule_path:
+        return RulesOnlyRecipe(row, rule_path, project_root=project_root)
+    return GuidanceOnlyRecipe(row)
+
+
+# Factory registry keyed by ProviderRecipeKind.
+# Each entry is a callable that accepts (row, backend, provider_id, project_root)
+# and returns a recipe instance.
+_RecipeFactory = Callable[
+    [HindsightRecipeRow, HindsightBackendConfig, str, Path | None], Any
+]
+
+_RECIPE_FACTORIES: dict[ProviderRecipeKind, _RecipeFactory] = {
+    ProviderRecipeKind.HOOKS: lambda r, b, p, pr: _build_hooks_recipe(r, b),
+    ProviderRecipeKind.WRAPPER_CLI: lambda r, b, p, pr: _build_hooks_recipe(r, b),
+    ProviderRecipeKind.PLUGIN_CONFIG: _build_plugin_config_recipe,
+    ProviderRecipeKind.MCP_CONFIG: _build_mcp_config_recipe,
+    ProviderRecipeKind.HYBRID: _build_mcp_config_recipe,
+    ProviderRecipeKind.GUIDANCE_ONLY: _build_guidance_only_recipe,
+}
+
+
 def build_hindsight_recipe(
     row: HindsightRecipeRow,
     backend: HindsightBackendConfig,
@@ -829,72 +1236,52 @@ def build_hindsight_recipe(
 ) -> Any:
     """Build a recipe object for a resolved Hindsight strategy row.
 
-    Source gate: refuses to build executable recipes for native-installer/
-    launch-wrapper when source_status is not 'verified'.
+    Dispatches through _RECIPE_FACTORIES keyed by ProviderRecipeKind.
+    Unknown kinds fall back to GuidanceOnlyRecipe (intentional default).
     """
-    harness_path = _resolve_harness_config_path(provider_id, project_root)
-    rule_path = _resolve_rule_path(provider_id, project_root)
+    factory = _RECIPE_FACTORIES.get(row.recipe_kind)
+    if factory is not None:
+        return factory(row, backend, provider_id, project_root)
+    return GuidanceOnlyRecipe(row)
 
-    # Source gate for native/launch-wrapper
-    if row.recipe_kind in (ProviderRecipeKind.HOOKS, ProviderRecipeKind.WRAPPER_CLI):
-        if row.source_status != "verified":
-            return GuidanceOnlyRecipe(row)
-        return HooksInstallerRecipe(row, backend)
 
-    if row.recipe_kind == ProviderRecipeKind.PLUGIN_CONFIG:
-        if row.source_status != "verified" and row.install_command:
-            return GuidanceOnlyRecipe(row)
-        if row.plugin_url_config_path:
-            return _ClaudePluginUrlRecipe(row, backend, row.plugin_url_config_path)
-        if harness_path:
-            descriptor = get_descriptor(provider_id)
-            spec = descriptor.mcp_config if descriptor else None
-            target = HindsightTarget(
-                config_path=harness_path,
-                writer_fn=spec.writer if spec else None,
-                reader_fn=spec.reader if spec else None,
-                remover_fn=spec.remover if spec else None,
-            )
-            return PluginConfigRecipe(row, backend, target)
-        return GuidanceOnlyRecipe(row)
+def _build_mcp_recipe(
+    row: HindsightRecipeRow,
+    backend: HindsightBackendConfig,
+    provider_id: str,
+    project_root: Path | None,
+    harness_path: str | None,
+    rule_path: Path | None,
+) -> Any:
+    """Build MCP-config recipe for MCP_CONFIG or HYBRID kind.
 
-    if row.recipe_kind in (ProviderRecipeKind.MCP_CONFIG, ProviderRecipeKind.HYBRID):
-        # Source gate: blocked/unverified rows should not execute MCP recipes
-        if row.source_status == "blocked":
-            return GuidanceOnlyRecipe(row)
+    When HYBRID and rule_path exists, wraps in _CompositeRecipe with rules layer.
+    Falls back to rules-only or guidance when paths are unavailable.
+    """
+    if harness_path:
+        descriptor = get_descriptor(provider_id)
+        spec = descriptor.mcp_config if descriptor else None
 
-        if harness_path:
-            descriptor = get_descriptor(provider_id)
-            spec = descriptor.mcp_config if descriptor else None
+        target = HindsightTarget(
+            config_path=harness_path,
+            writer_fn=spec.writer if spec else None,
+            reader_fn=spec.reader if spec else None,
+            remover_fn=spec.remover if spec else None,
+        )
+        registry = ArtifactRegistry(project_root) if project_root else None
+        inner = HindsightMcpRecipe(
+            backend,
+            target,
+            registry=registry,
+            recipe_id=f"hindsight:{provider_id}:mcp",
+        )
 
-            target = HindsightTarget(
-                config_path=harness_path,
-                writer_fn=spec.writer if spec else None,
-                reader_fn=spec.reader if spec else None,
-                remover_fn=spec.remover if spec else None,
-            )
-            registry = ArtifactRegistry(project_root) if project_root else None
-            inner = HindsightMcpRecipe(
-                backend,
-                target,
-                registry=registry,
-                recipe_id=f"hindsight:{provider_id}:mcp",
-            )
-
-            # HYBRID: composite MCP config + rule block when both paths exist
-            if row.recipe_kind == ProviderRecipeKind.HYBRID and rule_path:
-                rules = RulesOnlyRecipe(row, rule_path, project_root=project_root)
-                return _CompositeRecipe(row, inner, rules)
-            return _McpConfigAdapter(row, inner)
-        if rule_path:
-            return RulesOnlyRecipe(row, rule_path, project_root=project_root)
-        return GuidanceOnlyRecipe(row)
-
-    if row.recipe_kind == ProviderRecipeKind.GUIDANCE_ONLY:
-        if rule_path:
-            return RulesOnlyRecipe(row, rule_path, project_root=project_root)
-        return GuidanceOnlyRecipe(row)
-
+        if row.recipe_kind == ProviderRecipeKind.HYBRID and rule_path:
+            rules = RulesOnlyRecipe(row, rule_path, project_root=project_root)
+            return _CompositeRecipe(row, inner, rules)
+        return _McpConfigAdapter(row, inner)
+    if rule_path:
+        return RulesOnlyRecipe(row, rule_path, project_root=project_root)
     return GuidanceOnlyRecipe(row)
 
 
@@ -972,67 +1359,50 @@ def register_hindsight_recipes(
     return registered
 
 
-def _run_provision(recipe: Any, context: dict[str, Any]) -> ProviderRecipeResult:
-    if hasattr(recipe, "provision"):
-        result = recipe.provision(context)
-        return recipe.to_result(result) if hasattr(recipe, "to_result") else result
+def _reconcile(
+    project_root: Path,
+    operation: str,
+    *,
+    backend: HindsightBackendConfig | None = None,
+    provider_ids: list[str] | None = None,
+    context: dict[str, Any] | None = None,
+) -> dict[str, ProviderRecipeResult]:
+    """Central registry setup + dispatch for apply/teardown/prune operations.
 
-    owned: list[str] = []
-    probed = recipe.probe(context)
-    if probed.success and probed.state is RecipeState.VERIFIED:
-        return probed
-    for operation in (recipe.install, recipe.configure):
-        result = operation(context)
-        owned.extend(result.artifacts_owned)
-        if not result.success:
-            return ProviderRecipeResult(
-                success=result.success,
-                state=result.state,
-                artifacts_owned=owned,
-                status=result.status,
-                error=result.error,
-                details=dict(result.details),
-                source_url=result.source_url,
-                source_date=result.source_date,
-                action_needed=result.action_needed,
+    ``operation`` is one of: 'install', 'uninstall', 'prune'.
+    For install/uninstall the registry lifecycle (probe → ops → verify) runs via
+    ``_RowRecipe.provision/teardown``.  For prune only the prune primitive runs
+    to avoid executing command-based uninstallers on stale config.
+    """
+    registry = ProviderRecipeRegistry()
+    recipes = register_hindsight_recipes(
+        registry,
+        backend=backend,
+        project_root=project_root,
+    )
+    selected = set(provider_ids) if provider_ids is not None else None
+    ctx = context or {}
+    results: dict[str, ProviderRecipeResult] = {}
+    for recipe in recipes:
+        if selected is not None and recipe.provider_id not in selected:
+            continue
+        if operation == "prune":
+            results[recipe.provider_id] = recipe.prune(ctx)
+        elif operation == "uninstall":
+            result = registry.uninstall(
+                recipe.provider_id, recipe.capability_id, recipe.backend_id, ctx
             )
-    verified = recipe.verify(context)
-    return ProviderRecipeResult(
-        success=verified.success,
-        state=verified.state,
-        artifacts_owned=[*owned, *verified.artifacts_owned],
-        status=verified.status,
-        error=verified.error,
-        details=dict(verified.details),
-        source_url=verified.source_url,
-        source_date=verified.source_date,
-        action_needed=verified.action_needed,
-    )
-
-
-def _run_teardown(recipe: Any, context: dict[str, Any]) -> ProviderRecipeResult:
-    if hasattr(recipe, "teardown"):
-        result = recipe.teardown(context)
-        return recipe.to_result(result) if hasattr(recipe, "to_result") else result
-
-    for operation in (recipe.prune, recipe.uninstall):
-        result = operation(context)
-        if not result.success:
-            return result
-    probed = recipe.probe(context)
-    if probed.success and probed.state is RecipeState.ABSENT:
-        return ProviderRecipeResult.ok(
-            RecipeState.ABSENT,
-            status="removed",
-            source_url=getattr(recipe, "source_url", ""),
-            source_date=getattr(recipe, "source_date", ""),
-        )
-    row = getattr(recipe, "_row", None)
-    return ProviderRecipeResult.fail(
-        "integration still present after teardown",
-        source_url=getattr(recipe, "source_url", ""),
-        action_needed=row.audia_action if row else "",
-    )
+            results[recipe.provider_id] = result if result else ProviderRecipeResult.ok(
+                RecipeState.ABSENT, status="nothing to uninstall",
+            )
+        else:  # install
+            result = registry.install(
+                recipe.provider_id, recipe.capability_id, recipe.backend_id, ctx
+            )
+            results[recipe.provider_id] = result if result else ProviderRecipeResult.ok(
+                RecipeState.ABSENT, status="nothing to install",
+            )
+    return results
 
 
 def apply_hindsight(
@@ -1043,20 +1413,10 @@ def apply_hindsight(
     context: dict[str, Any] | None = None,
 ) -> dict[str, ProviderRecipeResult]:
     """Provision Hindsight recipes from the contained memory implementation."""
-    registry = ProviderRecipeRegistry()
-    recipes = register_hindsight_recipes(
-        registry,
-        backend=backend,
-        project_root=project_root,
+    return _reconcile(
+        project_root, "install",
+        backend=backend, provider_ids=provider_ids, context=context,
     )
-    selected = set(provider_ids) if provider_ids is not None else None
-    ctx = context or {}
-    results: dict[str, ProviderRecipeResult] = {}
-    for recipe in recipes:
-        if selected is not None and recipe.provider_id not in selected:
-            continue
-        results[recipe.provider_id] = _run_provision(recipe, ctx)
-    return results
 
 
 def teardown_hindsight(
@@ -1067,20 +1427,10 @@ def teardown_hindsight(
     context: dict[str, Any] | None = None,
 ) -> dict[str, ProviderRecipeResult]:
     """Remove Hindsight artifacts managed by the contained memory implementation."""
-    registry = ProviderRecipeRegistry()
-    recipes = register_hindsight_recipes(
-        registry,
-        backend=backend,
-        project_root=project_root,
+    return _reconcile(
+        project_root, "uninstall",
+        backend=backend, provider_ids=provider_ids, context=context,
     )
-    selected = set(provider_ids) if provider_ids is not None else None
-    ctx = context or {}
-    results: dict[str, ProviderRecipeResult] = {}
-    for recipe in recipes:
-        if selected is not None and recipe.provider_id not in selected:
-            continue
-        results[recipe.provider_id] = _run_teardown(recipe, ctx)
-    return results
 
 
 def prune_hindsight(
@@ -1097,20 +1447,10 @@ def prune_hindsight(
     stale config from providers that are no longer enabled without executing
     destructive package uninstalls that may never have installed anything.
     """
-    registry = ProviderRecipeRegistry()
-    recipes = register_hindsight_recipes(
-        registry,
-        backend=backend,
-        project_root=project_root,
+    return _reconcile(
+        project_root, "prune",
+        backend=backend, provider_ids=provider_ids, context=context,
     )
-    selected = set(provider_ids) if provider_ids is not None else None
-    ctx = context or {}
-    results: dict[str, ProviderRecipeResult] = {}
-    for recipe in recipes:
-        if selected is not None and recipe.provider_id not in selected:
-            continue
-        results[recipe.provider_id] = recipe.prune(ctx)
-    return results
 
 
 class _McpConfigAdapter(_RowRecipe):
@@ -1127,6 +1467,30 @@ class _McpConfigAdapter(_RowRecipe):
     ) -> None:
         super().__init__(row)
         self._inner = inner
+
+    def provision_steps(self) -> list[ProvisionStep]:
+        params = _hindsight_params(self._inner.backend)
+        steps: list[ProvisionStep] = []
+        # Row-level install/uninstall steps from matrix (e.g. pip install + init)
+        if self._row.install_steps:
+            steps.extend(_steps_from_defs(
+                self._row.install_steps, params,
+                recipe_id=f"hindsight-{self.provider_id}",
+            ))
+        # Row-level configure steps (e.g. config-set for plugin arrays)
+        if self._row.configure_steps:
+            steps.extend(_steps_from_defs(
+                self._row.configure_steps, params,
+                recipe_id=f"hindsight-{self.provider_id}",
+            ))
+        # Inner MCP config steps (only for JSON-based configs without callbacks)
+        inner_fn = getattr(self._inner, "provision_steps", None)
+        if callable(inner_fn):
+            steps.extend(inner_fn())  # type: ignore[misc]
+        return steps
+
+    def provision(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        return self._stamp(self._inner.provision(context))
 
     def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
         return self._stamp(self._inner.probe(context))
@@ -1171,6 +1535,49 @@ class _CompositeRecipe(_RowRecipe):
         super().__init__(row)
         self._mcp = mcp_inner
         self._rules = rules_inner
+
+    def provision_steps(self) -> list[ProvisionStep]:
+        backend = self._mcp.backend
+        params = _hindsight_params(backend)
+        steps: list[ProvisionStep] = []
+        # Row-level install steps first (e.g. CLI installer)
+        if self._row.install_steps:
+            steps.extend(_steps_from_defs(
+                self._row.install_steps, params,
+                recipe_id=f"hindsight-{self.provider_id}",
+            ))
+        # MCP config steps - use inner HindsightMcpRecipe provision_steps
+        mcp_fn = getattr(self._mcp, "provision_steps", None)
+        if callable(mcp_fn):
+            steps.extend(mcp_fn())  # type: ignore[misc]
+        # Rule block steps
+        rules_fn = getattr(self._rules, "provision_steps", None)
+        if callable(rules_fn):
+            steps.extend(rules_fn())  # type: ignore[misc]
+        return steps
+
+    def provision(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        owned: list[str] = []
+        for op in (self.install, self.configure):
+            result = op(context)
+            owned.extend(result.artifacts_owned)
+            if not result.success:
+                return self._stamp(ProviderRecipeResult.fail(
+                    f"provision failed: {result.error}",
+                    details={**result.details, "artifacts_owned": owned},
+                ))
+        verified = self.verify(context)
+        all_owned = [*owned, *verified.artifacts_owned]
+        if not verified.success:
+            return self._stamp(ProviderRecipeResult.fail(
+                f"verify failed: {verified.error}",
+                details={**verified.details, "artifacts_owned": all_owned},
+            ))
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.VERIFIED,
+            artifacts=all_owned,
+            status="hybrid provisioned",
+        ))
 
     def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
         mcp_result = self._mcp.probe(context)
@@ -1288,7 +1695,7 @@ def build_hindsight_status(
         return {
             "provider_id": provider_id,
             "hindsight": {
-                "status": "not_registered",
+                "status": HindsightStatusState.NOT_REGISTERED.value,
                 "action_needed": "no Hindsight recipe for this provider",
             },
         }
@@ -1302,20 +1709,26 @@ def build_hindsight_status(
             context,
         )
         if status is not None:
+            row = getattr(recipe, "_row", None)
+            source_status = getattr(row, "source_status", "") or "unconfirmed"
             results.append({
                 "provider_id": recipe.provider_id,
                 "capability_id": recipe.capability_id,
                 "kind": recipe.recipe_kind.value,
                 "state": status.state.value,
                 "status": status.status,
-                "action_needed": status.action_needed,
-                "source_url": status.source_url,
+                "action_needed": getattr(status, "action_needed", ""),
+                "source_url": getattr(status, "source_url", ""),
+                "source_date": getattr(status, "source_date", ""),
+                "source_status": source_status,
+                "artifacts_owned": list(getattr(status, "artifacts_owned", [])),
             })
 
+    is_active = any(r["state"] == RecipeState.VERIFIED.value for r in results)
     return {
         "provider_id": provider_id,
         "hindsight": {
-            "status": "active" if any(r["state"] == "verified" for r in results) else "inactive",
+            "status": HindsightStatusState.ACTIVE.value if is_active else HindsightStatusState.INACTIVE.value,
             "recipes": results,
         },
     }
@@ -1324,6 +1737,7 @@ def build_hindsight_status(
 __all__ = [
     "GuidanceOnlyRecipe",
     "HooksInstallerRecipe",
+    "HindsightStatusState",
     "PluginConfigRecipe",
     "RULE_TEXT",
     "RulesOnlyRecipe",

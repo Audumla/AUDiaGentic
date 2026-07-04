@@ -93,8 +93,10 @@ def test_revert_set_restores_prior(tmp_path):
 
 
 def test_empty_key_path_rejected(tmp_path):
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
     patcher = ConfigPatcher(tmp_path / "x.json")
-    with pytest.raises(ValueError):
+    with pytest.raises(AudiaGenticError, match="VAL-PATCH-001"):
         patcher.set_key((), 1)
 
 

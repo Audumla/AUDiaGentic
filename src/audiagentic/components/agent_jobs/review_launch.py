@@ -156,8 +156,8 @@ def _build_and_persist_review(
 ) -> dict[str, Any]:
     """Build the review report/bundle (with fallback) and persist them."""
     # Imported lazily to avoid a module import cycle with prompt_launch.
+    from audiagentic.components.agent_jobs import jobs_store as store
     from audiagentic.components.agent_jobs.prompt_launch import prompt_launch_path
-    from audiagentic.runtime.state import jobs_store as store
 
     report = report_payload or build_review_report(
         review_id=review_id,
