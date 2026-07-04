@@ -21,10 +21,9 @@ from audiagentic.foundation.mcp import McpServerEntry
 
 def _enable_opencode(project_root: Path) -> None:
     """Enable opencode provider in feature state so it appears in enabled_provider_ids()."""
-    from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
     set_implementation_state(
         project_root,
-        COMPONENT_PROVIDERS,
+        "providers",
         "opencode",
         ImplementationState(enabled=True),
     )
@@ -104,7 +103,6 @@ def test_ag_lsp_not_written_when_opencode_disabled(tmp_path: Path) -> None:
 
 def test_claude_and_opencode_both_receive_ag_lsp(tmp_path: Path, monkeypatch) -> None:
     """Both claude and opencode should receive ag-lsp when both are enabled."""
-    from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
     from audiagentic.foundation.features.base import ImplementationState
     from audiagentic.foundation.features.state import set_implementation_state
 
@@ -116,10 +114,10 @@ def test_claude_and_opencode_both_receive_ag_lsp(tmp_path: Path, monkeypatch) ->
 
     # Enable both providers
     set_implementation_state(
-        tmp_path, COMPONENT_PROVIDERS, "opencode", ImplementationState(enabled=True)
+        tmp_path, "providers", "opencode", ImplementationState(enabled=True)
     )
     set_implementation_state(
-        tmp_path, COMPONENT_PROVIDERS, "claude", ImplementationState(enabled=True)
+        tmp_path, "providers", "claude", ImplementationState(enabled=True)
     )
 
     ag_lsp_entry = {

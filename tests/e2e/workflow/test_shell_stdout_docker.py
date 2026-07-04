@@ -21,7 +21,7 @@ from __future__ import annotations
 import subprocess
 
 import pytest
-from tests.e2e.coding_lsp.conftest import requires_docker
+from tests.e2e.coding_lsp.conftest import DOCKER_EXE, requires_docker
 
 SUITE_IMAGE = "audiagentic-test:latest"
 SHELL_TEST = (
@@ -33,7 +33,7 @@ SHELL_TEST = (
 def _image_exists() -> bool:
     try:
         result = subprocess.run(
-            ["docker", "image", "inspect", SUITE_IMAGE],
+            [DOCKER_EXE, "image", "inspect", SUITE_IMAGE],
             capture_output=True,
             timeout=10,
         )
@@ -49,7 +49,7 @@ def _image_exists() -> bool:
 def test_shell_stdout_captured_in_docker() -> None:
     """Shell step stdout capture test runs inside Linux Docker container."""
     result = subprocess.run(
-        ["docker", "run", "--rm", SUITE_IMAGE, "pytest", SHELL_TEST, "-q"],
+        [DOCKER_EXE, "run", "--rm", SUITE_IMAGE, "pytest", SHELL_TEST, "-q"],
         capture_output=True,
         text=True,
         timeout=60,

@@ -10,16 +10,13 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.providers.adapters.base_runner import finalize_run
 from audiagentic.components.providers.adapters.cli import require_executable
 from audiagentic.components.providers.protocols.streaming.base_extractor import (
     BaseEventExtractor,
 )
 from audiagentic.components.providers.protocols.streaming.completion import (
-    NormalizationMethod,
     ResultSource,
-    build_synthetic_fallback,
-    normalize_provider_result,
-    persist_completion,
     try_extract_json_from_stdout,
 )
 from audiagentic.components.providers.protocols.streaming.provider_streaming import (
@@ -214,45 +211,15 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
         last_message, stdout_text, stderr_text, completed.returncode
     )
 
-    if parsed_data and result_source != ResultSource.STDOUT_TEXT:
-        completion = normalize_provider_result(
-            provider_id="codex",
-            job_id=packet_ctx.get("job-id"),
-            prompt_id=packet_ctx.get("prompt-id"),
-            surface=packet_ctx.get("surface"),
-            stage=packet_ctx.get("workflow-profile"),
-            stdout=stdout_text,
-            stderr=stderr_text,
-            returncode=completed.returncode,
-            result_source=result_source,
-            normalization_method=NormalizationMethod.PROVIDER_NATIVE_JSON,
-            subject=parsed_data,
-        )
-    else:
-        completion = build_synthetic_fallback(
-            provider_id="codex",
-            job_id=packet_ctx.get("job-id"),
-            stdout=stdout_text,
-            stderr=stderr_text,
-            returncode=completed.returncode,
-        )
-
-    working_root_path = Path(working_root) if working_root else None
-    if working_root_path and packet_ctx.get("job-id"):
-        try:
-            persist_completion(working_root_path, packet_ctx.get("job-id"), completion)
-        except AudiaGenticError:
-            logger.warning("Failed to persist completion", exc_info=True)
-
-    return {
-        "provider-id": packet_ctx.get("provider-id", "codex"),
-        "status": "ok",
-        "execution-mode": provider_cfg.get("access-mode", "cli"),
-        "model": default_model,
-        "output": output_text,
-        "stdout": stdout_text,
-        "stderr": stderr_text,
-        "returncode": completed.returncode,
-        "command": command,
-        "completion": completion.to_dict(),
-    }
+    return finalize_run(
+        provider_id="codex",
+        packet_ctx=packet_ctx,
+        provider_cfg=provider_cfg,
+        command=command,
+        stdout_text=stdout_text,
+        stderr_text=stderr_text,
+        returncode=completed.returncode,
+        parsed_data=parsed_data,
+        result_source=result_source,
+        output_text=output_text,
+    )

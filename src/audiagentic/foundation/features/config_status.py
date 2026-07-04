@@ -77,6 +77,60 @@ class ImplementationConfigStatus:
     effective_options: dict[str, Any] = field(default_factory=dict)
 
 
+def implementation_status_payload(
+    project_root: Path,
+    component_id: str,
+    *,
+    extra_details: dict[str, Any] | None = None,
+):
+    """Build the standard ComponentStatusPayload for an implementation-backed component.
+
+    Encapsulates the shared status-hook pattern: component enablement, active
+    implementation resolution, config completeness, the ``missing_required``
+    mapping, and ``details.implementation`` = {enabled, is_default}.
+    ``extra_details`` is merged into ``details`` for component-specific facts.
+    When the component has no resolvable implementation the payload reports
+    configured=False with ``active_implementation=None``.
+    """
+    from audiagentic.foundation.components import is_enabled
+    from audiagentic.foundation.components.hooks import ComponentStatusPayload
+
+    from .registry import (
+        get_implementation,
+        is_default_implementation,
+        resolve_active_implementation,
+    )
+
+    component_enabled = is_enabled(component_id, project_root)
+    details: dict[str, Any] = dict(extra_details or {})
+    active = resolve_active_implementation(project_root, component_id) or ""
+    if not active:
+        return ComponentStatusPayload(
+            enabled=component_enabled,
+            configured=False,
+            active_implementation=None,
+            missing_required=[],
+            details=details,
+        )
+
+    status = implementation_config_status(project_root, component_id, active)
+    desc = get_implementation(component_id, active)
+    details["implementation"] = {
+        "enabled": status.enabled,
+        "is_default": bool(desc and is_default_implementation(desc)),
+    }
+    return ComponentStatusPayload(
+        enabled=component_enabled,
+        configured=status.configured,
+        active_implementation=active,
+        missing_required=[
+            {"option": m.key, "description": m.description}
+            for m in status.missing_required
+        ],
+        details=details,
+    )
+
+
 def implementation_config_status(
     project_root: Path,
     parent: str,

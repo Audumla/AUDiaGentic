@@ -44,7 +44,7 @@ def test_ensure_lens_skips_when_harness_absent(tmp_path: Path, monkeypatch) -> N
         "audiagentic.runtime.harness.pi.runner.context.resolve_agent_bin",
         lambda runtime: missing,
     )
-    monkeypatch.setattr("audiagentic.runtime.home.global_harness_runtime", lambda: tmp_path)
+    monkeypatch.setattr("audiagentic.foundation.home.global_harness_runtime", lambda: tmp_path)
 
     def _boom(*a, **k):
         raise AssertionError("subprocess must not run when pi bin is absent")
@@ -65,7 +65,7 @@ def test_ensure_lens_starts_background_install_when_harness_present(tmp_path: Pa
         "audiagentic.runtime.harness.pi.runner.context.resolve_agent_bin",
         lambda runtime: pi_bin,
     )
-    monkeypatch.setattr("audiagentic.runtime.home.global_harness_runtime", lambda: tmp_path)
+    monkeypatch.setattr("audiagentic.foundation.home.global_harness_runtime", lambda: tmp_path)
 
     captured: dict[str, object] = {}
 
@@ -95,7 +95,7 @@ def test_install_pi_lens_runs_install_command(tmp_path: Path, monkeypatch) -> No
         "audiagentic.runtime.harness.pi.runner.context.resolve_agent_bin",
         lambda runtime: pi_bin,
     )
-    monkeypatch.setattr("audiagentic.runtime.home.global_harness_runtime", lambda: tmp_path)
+    monkeypatch.setattr("audiagentic.foundation.home.global_harness_runtime", lambda: tmp_path)
 
     pi_desc._pi_ensure_lens(tmp_path)
 
@@ -141,7 +141,7 @@ def test_generic_mcp_route_excludes_self_lsp_provider(tmp_path: Path, monkeypatc
     lsp_projection.sync_generic_lsp_mcp_to_provider_configs(
         tmp_path,
         {"coding-lsp/ag-lsp": ("ag-lsp", object())},
-        {"coding-lsp/ag-lsp", "coding-lsp/agent-lsp"},
+        {"coding-lsp/ag-lsp", "coding-lsp/blackwell-agent-lsp"},
     )
     assert "selflsp" not in seen              # excluded — receive_lsp_mcp=False
     assert "plain" in seen and seen["plain"]  # plain provider still gets ag-lsp

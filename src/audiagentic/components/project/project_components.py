@@ -8,20 +8,23 @@ from typing import Any
 from audiagentic.foundation.components import all_descriptors, is_enabled, is_installed
 from audiagentic.foundation.components.hooks import get_component_status
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.runtime.harness import refresh_harness_config_if_installed
-from audiagentic.runtime.lifecycle.components import (
+from audiagentic.foundation.lifecycle.components import (
     disable_component as _lifecycle_disable_component,
 )
-from audiagentic.runtime.lifecycle.components import (
+from audiagentic.foundation.lifecycle.components import (
     enable_component as _lifecycle_enable_component,
 )
-from audiagentic.runtime.lifecycle.components import (
+from audiagentic.foundation.lifecycle.components import (
     install_component as _lifecycle_install_component,
 )
-from audiagentic.runtime.lifecycle.components import (
+from audiagentic.foundation.lifecycle.components import (
     uninstall_component as _lifecycle_uninstall_component,
 )
-from audiagentic.runtime.lifecycle.detector import detect_installed_state, get_project_version_info
+from audiagentic.foundation.lifecycle.detector import (
+    detect_installed_state,
+    get_project_version_info,
+)
+from audiagentic.runtime.harness import refresh_harness_config_if_installed
 
 
 def project_status(project_root: Path) -> dict[str, Any]:
@@ -31,7 +34,7 @@ def project_status(project_root: Path) -> dict[str, Any]:
         if not is_installed(component_id, project_root):
             continue
         payload = get_component_status(descriptor, project_root)
-        if payload:
+        if payload is not None:
             component_details[component_id] = payload
     return {
         "project_root": str(project_root),
@@ -99,7 +102,7 @@ def component_row(descriptor, project_root: Path) -> dict[str, Any]:
     }
     if installed:
         payload = get_component_status(descriptor, project_root)
-        if payload:
+        if payload is not None:
             row["component_status"] = payload
     return row
 

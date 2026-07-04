@@ -7,13 +7,13 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.agent_jobs import jobs_store as store
 from audiagentic.components.agent_jobs.reviews import read_review_bundle
 from audiagentic.components.agent_jobs.state_machine import transition_and_persist
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.time import now_iso_z
-from audiagentic.runtime.state import jobs_store as store
 
 logger = logging.getLogger(__name__)
 

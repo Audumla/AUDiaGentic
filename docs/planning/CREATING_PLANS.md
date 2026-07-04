@@ -56,8 +56,12 @@ can quickly find the rules that matter.
 
 1. Create items with `plan_create_item` — lands in `docs/planning/active/<plan>/`
 2. Revise content with `plan_update_item` as work progresses
-3. Mark done with `plan_set_state(item_id, 'completed')` — moves to `completed/`
-4. Remove stale or cancelled items with `plan_delete_item`
+3. Close handled reviews with `plan_set_review_state(review_id, 'closed')`
+4. Mark done with `plan_set_state(item_id, 'completed')` only when implementation and validation are done
+5. Remove stale, superseded, or cancelled items with `plan_delete_item`
+
+Do not mark a parent item completed just because its reviews were incorporated.
+Keep unfinished work pending. Do not leave handled reviews in `created` or `considered`.
 
 ---
 
@@ -86,6 +90,10 @@ Each plan item supports these sections:
 
 Reviews are linked to plan items for quality gates. Use `plan_create_review` to create one.
 Reviews have a lifecycle: `created` → `considered` → `closed`.
+The parent item may be pending in `active/` or completed in `completed/`.
+Use reviews on completed or already-implemented items when you need to capture
+post-implementation findings, audits, regressions, or code review feedback
+without reopening history or cloning the original item.
 
 ---
 

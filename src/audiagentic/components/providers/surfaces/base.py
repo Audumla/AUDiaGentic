@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, Protocol
+
+logger = logging.getLogger(__name__)
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -131,8 +134,7 @@ def parse_contribution_descriptor(raw: dict[str, Any], default_owner: str) -> Co
             for target in raw_targets:
                 if isinstance(target, str) and target:
                     if target not in KNOWN_SURFACE_TYPES:
-                        import logging  # noqa: PLC0415
-                        logging.getLogger(__name__).warning(
+                        logger.warning(
                             "Contribution %r: unknown preferred-target %r (known: %s)",
                             contribution_id,
                             target,
@@ -361,6 +363,56 @@ def render_flat_skill(skill: SkillDefinition, *, provider_name: str, launch_exam
 
 def resolve_tag_path(project_root: Path, template: str, tag: str) -> Path:
     return project_root / template.format(tag=tag)
+
+
+def make_standard_surface_renderer(
+    provider_id: str,
+    *,
+    style: str = "flat-skill",
+    instruction_file: str | None = None,
+    adapter_dir: Path | None = None,
+    launch_example_template: str = "@{tag}-{provider_id}",
+) -> ProviderSurfaceRenderer:
+    """Factory for descriptor-driven surface renderers (AR03).
+
+    ``flat-skill`` reproduces the renderer previously copy-pasted per adapter:
+    one flat skill file per tag (path template from config) plus the managed
+    instruction file when agent-jobs is active. ``none`` renders no skill
+    surfaces (for providers whose contributions target a shared file only).
+    """
+    def render(
+        *,
+        project_root: Path,
+        syntax: dict[str, Any],
+        skills: list[SkillDefinition],
+        config: dict[str, Any],
+    ) -> dict[Path, str]:
+        del syntax
+        surfaces: dict[Path, str] = {}
+        if style == "none":
+            return surfaces
+        path_template = str(config["path"])
+        for skill in skills:
+            path = resolve_tag_path(project_root, path_template, skill.tag)
+            surfaces[path] = apply_managed_header(
+                render_flat_skill(
+                    skill,
+                    provider_name=provider_id,
+                    launch_example=launch_example_template.format(
+                        tag=skill.tag, provider_id=provider_id
+                    ),
+                )
+            )
+
+        if instruction_file and adapter_dir is not None and is_component_active(project_root, "agent-jobs"):
+            surfaces[project_root / instruction_file] = render_instruction_file(
+                provider_id=provider_id,
+                instruction_file=instruction_file,
+                adapter_dir=adapter_dir,
+            )
+        return surfaces
+
+    return render
 
 
 def make_single_file_contribution_renderer(

@@ -5,8 +5,6 @@ from typing import Any
 
 import yaml
 
-from audiagentic.foundation.components.ids import COMPONENT_AGENT_JOBS
-
 from .base import SurfaceContribution, parse_contribution_descriptor
 
 
@@ -149,13 +147,13 @@ def build_summary_contributions(project_root: Path | None = None) -> list[Surfac
     return [
         SurfaceContribution(
             contribution_id="agent-jobs/overview",
-            owner_component=COMPONENT_AGENT_JOBS,
+            owner_component="agent-jobs",  # cross-component: prompt-tags contributions are owned by agent-jobs
             title="AUDiaGentic agent instructions",
             body=_OVERVIEW_BODY,
         ),
         SurfaceContribution(
             contribution_id="agent-jobs/canonical-rule",
-            owner_component=COMPONENT_AGENT_JOBS,
+            owner_component="agent-jobs",  # cross-component: prompt-tags contributions are owned by agent-jobs
             title="Canonical workflow tags",
             body=_build_canonical_tags_body(tags),
         ),

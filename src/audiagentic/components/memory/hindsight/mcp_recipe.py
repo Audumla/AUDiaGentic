@@ -6,21 +6,28 @@ provider target data; memory core only exports backend config.
 """
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.memory.hindsight_export import HindsightBackendConfig
+from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
 from audiagentic.foundation.mcp import McpServerEntry
 from audiagentic.foundation.toolchains.artifact_registry import ArtifactRegistry
 from audiagentic.foundation.toolchains.config_patcher import ConfigPatcher
 from audiagentic.foundation.toolchains.probes import ConfigKeyCheck
+from audiagentic.foundation.toolchains.provision_steps import (
+    ConfigSetStep,
+    ProvisionStep,
+)
 from audiagentic.foundation.toolchains.recipe_contract import (
     ProvisioningRecipe,
     RecipeResult,
     RecipeState,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -31,15 +38,12 @@ class HindsightTarget:
     the MCP-servers table within it (e.g. ``("mcpServers",)`` for most JSON
     configs, ``("servers",)`` for VS Code, ``("mcp_servers",)`` for some TOML).
 
-    When provider-specific format callbacks are available (writer_fn, reader_fn,
-    remover_fn from McpConfigSpec), they override the default ConfigPatcher-based
-    operations. This is required for non-JSON formats such as TOML.
+    Provider-specific format callbacks (writer_fn, reader_fn, remover_fn from
+    McpConfigSpec) override default ConfigPatcher for non-JSON formats.
     """
 
     config_path: str | Path
     container: tuple[str, ...] = ("mcpServers",)
-    # Provider-specific format callbacks from McpConfigSpec.
-    # When set, override ConfigPatcher for configure/prune/probe.
     writer_fn: Any = None  # fmt: skip
     reader_fn: Any = None  # fmt: skip
     remover_fn: Any = None  # fmt: skip
@@ -56,13 +60,39 @@ def build_hindsight_entry(backend: HindsightBackendConfig) -> dict[str, Any]:
         entry: dict[str, Any] = {"command": "hindsight-mcp", "args": args}
         if backend.api_key:
             entry["env"] = {"HINDSIGHT_API_KEY": backend.api_key}
+        if backend.bank_id:
+            entry.setdefault("env", {})["HINDSIGHT_BANK_ID"] = backend.bank_id
         return entry
     # sse / http transports point at the MCP endpoint (base URL + /mcp); the
     # bare base URL is the API root and does not speak MCP.
     entry = {"type": backend.transport, "url": backend.mcp_url}
-    if backend.api_key:
-        entry["headers"] = {"Authorization": f"Bearer {backend.api_key}"}
+    headers = backend.headers()  # includes Authorization and X-Bank-Id when set
+    if headers:
+        entry["headers"] = headers
     return entry
+
+
+def build_hindsight_mcp_entry(backend: HindsightBackendConfig) -> McpServerEntry:
+    """Build McpServerEntry directly from HindsightBackendConfig."""
+    if backend.transport == "stdio":
+        env = {}
+        if backend.api_key:
+            env["HINDSIGHT_API_KEY"] = backend.api_key
+        if backend.bank_id:
+            env["HINDSIGHT_BANK_ID"] = backend.bank_id
+        return McpServerEntry(
+            name=backend.server_name,
+            command="hindsight-mcp",
+            args=("--base-url", backend.base_url),
+            env=env,
+        )
+    headers = backend.headers()
+    return McpServerEntry(
+        name=backend.server_name,
+        url=backend.mcp_url,
+        headers=headers if headers else {},
+        transport=backend.transport,
+    )
 
 
 class HindsightMcpRecipe(ProvisioningRecipe):
@@ -88,24 +118,26 @@ class HindsightMcpRecipe(ProvisioningRecipe):
     def _key_path(self) -> tuple[str, ...]:
         return (*self.target.container, self.backend.server_name)
 
+    def provision_steps(self) -> list[ProvisionStep]:
+        """Return ProvisionSteps for JSON-based MCP config.
+
+        ConfigSetStep uses ConfigPatcher for standard JSON writes; custom
+        writer_fn/reader_fn callbacks are used during configure/probe for
+        verification against the provider's native format.
+        """
+        return [
+            ConfigSetStep(
+                id=f"mcp-config-{self.backend.server_name}",
+                path=str(self.target.config_path),
+                key_path=self._key_path,
+                value=self._desired_entry(),
+                registry=self.registry,
+                recipe_id=self.recipe_id,
+            )
+        ]
+
     def _desired_entry(self) -> dict[str, Any]:
         return self._entry_builder(self.backend)
-
-    def _desired_mcp_entry(self) -> McpServerEntry:
-        entry = self._desired_entry()
-        if "url" in entry:
-            return McpServerEntry(
-                name=self.backend.server_name,
-                url=entry["url"],
-                headers=dict(entry.get("headers", {})),
-                transport=entry.get("type"),
-            )
-        return McpServerEntry(
-            name=self.backend.server_name,
-            command=entry.get("command", ""),
-            args=tuple(entry.get("args", ())),
-            env=dict(entry.get("env", {})),
-        )
 
     def _present_check(self) -> ConfigKeyCheck:
         return ConfigKeyCheck(
@@ -116,8 +148,10 @@ class HindsightMcpRecipe(ProvisioningRecipe):
         if self.target.reader_fn is not None:
             try:
                 entries = self.target.reader_fn(Path(self.target.config_path))
-                present = entries.get(self.backend.server_name) == self._desired_mcp_entry()
+                desired = build_hindsight_mcp_entry(self.backend)
+                present = entries.get(self.backend.server_name) == desired
             except Exception:
+                logger.warning("probe reader failed for %s", self.target.config_path, exc_info=True)
                 present = False
             return RecipeResult.ok(
                 RecipeState.VERIFIED if present else RecipeState.ABSENT,
@@ -135,8 +169,13 @@ class HindsightMcpRecipe(ProvisioningRecipe):
     def configure(self, context: dict[str, Any]) -> RecipeResult:
         entry = self._desired_entry()
         if self.target.writer_fn is not None:
-            existing = self.target.reader_fn(Path(self.target.config_path)) if self.target.reader_fn else {}
-            existing[self.backend.server_name] = self._desired_mcp_entry()
+            existing = {}
+            if self.target.reader_fn:
+                try:
+                    existing = self.target.reader_fn(Path(self.target.config_path))
+                except Exception:
+                    logger.warning("reader failed for %s", self.target.config_path, exc_info=True)
+            existing[self.backend.server_name] = build_hindsight_mcp_entry(self.backend)
             self.target.writer_fn(Path(self.target.config_path), existing)
             return RecipeResult.ok(
                 RecipeState.CONFIGURING,
@@ -174,6 +213,10 @@ class HindsightMcpRecipe(ProvisioningRecipe):
     def prune(self, context: dict[str, Any]) -> RecipeResult:
         if self.target.remover_fn is not None:
             removed = self.target.remover_fn(Path(self.target.config_path), self.backend.server_name)
+            if self.registry is not None:
+                report = self.registry.prune(self.recipe_id)
+                if not report.ok:
+                    return RecipeResult.fail("; ".join(report.errors))
             return RecipeResult.ok(
                 RecipeState.ABSENT,
                 status="entry removed" if removed else "entry already absent",
@@ -201,4 +244,5 @@ __all__ = [
     "HindsightMcpRecipe",
     "HindsightTarget",
     "build_hindsight_entry",
+    "build_hindsight_mcp_entry",
 ]

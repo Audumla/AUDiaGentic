@@ -128,7 +128,7 @@ async def update_embedded_rig() -> dict[str, Any]:
 
 
 async def update_global_embedded_rig() -> dict[str, Any]:
-    from audiagentic.runtime.home import global_harness_runtime
+    from audiagentic.foundation.home import global_harness_runtime
 
     def _work(sink):
         return _update_global_embedded_rig_impl(global_harness_runtime(), sink=sink)

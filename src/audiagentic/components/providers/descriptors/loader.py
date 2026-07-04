@@ -162,6 +162,8 @@ PROVIDER_SPEC.add("mcp_config", yaml_key="mcp_config", kind="nested", builder=_b
 PROVIDER_SPEC.add("language_servers_config", yaml_key="language_servers_config", kind="nested", builder=_build_language_servers_config, default=None)
 PROVIDER_SPEC.add("on_lsp_enabled", yaml_key="on_lsp_enabled", kind="ref", default=None)
 PROVIDER_SPEC.add("receive_lsp_mcp", yaml_key="receive_lsp_mcp", kind="data", default=True)
+PROVIDER_SPEC.add("surfaces", yaml_key="surfaces", kind="data", default=None)
+PROVIDER_SPEC.add("execution", yaml_key="execution", kind="data", default=None)
 
 
 def provider_factory(data: dict[str, Any]) -> ProviderDescriptor:

@@ -41,7 +41,7 @@ from audiagentic.components.providers.adapters.opencode.language_servers import 
 from audiagentic.components.providers.descriptors.registry import all_descriptors
 from audiagentic.foundation.components.dependencies import build_dependency_workflow
 from audiagentic.foundation.components.loader import register_all_components
-from audiagentic.runtime.lifecycle.components import enable_component, install_component
+from audiagentic.foundation.lifecycle.components import enable_component, install_component
 
 pytestmark = [
     pytest.mark.mutates_host,

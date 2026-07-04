@@ -1,4 +1,4 @@
-"""Planning MCP server — tools for managing plan items in docs/planning/plans/."""
+"""Planning MCP server — tools for managing plan items in docs/planning/."""
 from __future__ import annotations
 
 from audiagentic.components.planning import planning_api
@@ -25,8 +25,24 @@ def plan_list_groups(state: str | None = None, plan: str | None = None) -> list:
 
 @mcp.tool()
 @log_tool_call
-def plan_list_items(state: str | None = None, plan: str | None = None) -> list:
-    return planning_api.list_items(project_root_from_env(), state, plan)
+def plan_list_items(
+    state: str | None = None,
+    plan: str | None = None,
+    id_prefix: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """List plan items, bounded and paginated.
+
+    state defaults to 'active' (open work only) — pass state='completed' or
+    state='all' to see closed items. plan accepts glob wildcards (e.g.
+    'code-*'). id_prefix filters by item-ID prefix (e.g. 'CC'). Returns
+    {items, total, returned, offset, limit, has_more}; page through results
+    with offset when has_more is true.
+    """
+    return planning_api.list_items_page(
+        project_root_from_env(), state, plan, id_prefix, limit, offset
+    )
 
 
 @mcp.tool()
@@ -75,8 +91,21 @@ def plan_list_reviews(
     state: str | None = None,
     plan: str | None = None,
     review_of: str | None = None,
-) -> list:
-    return planning_api.list_reviews(project_root_from_env(), state, plan, review_of)
+    id_prefix: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """List reviews, bounded and paginated.
+
+    state defaults to 'open' (created/considered — not yet closed) — pass
+    state='closed' or state='all' to see closed reviews. plan accepts glob
+    wildcards (e.g. 'code-*'). id_prefix filters by review-ID prefix (e.g.
+    'RV'). Returns {items, total, returned, offset, limit, has_more}; page
+    through results with offset when has_more is true.
+    """
+    return planning_api.list_reviews_page(
+        project_root_from_env(), state, plan, review_of, id_prefix, limit, offset
+    )
 
 
 @mcp.tool()

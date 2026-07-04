@@ -22,12 +22,12 @@ def _write(path: Path, text: str) -> Path:
     return path
 
 
-def setup_function() -> None:
-    registry.clear()
+import pytest
 
 
-def teardown_function() -> None:
-    registry.clear()
+@pytest.fixture(autouse=True)
+def _isolated_registry(isolated_features_registry):
+    """Each test runs against an empty registry; prior state is restored after."""
 
 
 _MCP_FEATURE = """

@@ -42,6 +42,15 @@ Choose a prefix matching the plan name (CC → code-cleanup, LSP → lsp-mcp-enh
 - validate_first: true if validation steps must precede implementation (default true)
 - description, steps, files, validation, effort_risk, notes: body section content
 
+## Review lifecycle
+
+Reviews track the assessment of plan items and their findings.
+
+1. Create with plan_create_review — state: 'created'
+2. Update findings with plan_update_review as item content evolves
+3. Close when findings incorporated with plan_set_review_state(id, 'closed') — moves to completed/
+4. **RE-OPEN ON UPDATE:** if a closed review is updated (findings revised, additional assessment added), transition it back to 'considered' immediately — a silent update to a closed review is invisible and defeats the audit trail.
+
 ## Agent profile doctrine
 
 Agent profiles bind a provider to a specific model with optional execution
@@ -60,16 +69,6 @@ parameters. They are stored in .audiagentic/config/agent-profiles.yaml.
 ## Naming
 Use `agent-profile-id` (NOT `profile-id`) in job requests to avoid
 collision with `workflow-profile` (lite/standard/strict stage pipelines).
-
-## Memory component
-
-Memory is backed by a swappable backend. Use the ag-memory-mgmt MCP tools
-to check status, switch implementations, and configure the active backend.
-- `memory_status` — Active implementation and configuration state
-- `memory_select_implementation` — Switch memory backend
-- `memory_get_config` / `memory_set_config` — Read and update backend config
-- When memory is configured, the active backend's tools are available for
-  long-term memory operations (recall, reflect, retain).
 
 ## Release doctrine
 

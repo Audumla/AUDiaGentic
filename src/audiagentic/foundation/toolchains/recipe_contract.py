@@ -22,7 +22,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, TypeVar
 
 
 class RecipeState(str, Enum):
@@ -85,12 +85,18 @@ class RecipeResult:
 CleanupHook = Callable[[dict[str, Any]], None]
 
 
+_ResultT = TypeVar("_ResultT", bound="RecipeResult")
+
+
 class ProvisioningRecipe(ABC):
     """Abstract lifecycle contract for an installable integration.
 
     Subclasses implement the six lifecycle primitives. :meth:`provision` and
     :meth:`teardown` provide a default orchestration that most recipes can reuse
     unchanged; override them only when the default ordering does not fit.
+
+    The return type of lifecycle methods is covariant: subclasses may narrow
+    ``RecipeResult`` to a richer result (e.g. ``ProviderRecipeResult``).
     """
 
     #: Provider-specific teardown callables run during :meth:`teardown`, after
@@ -138,6 +144,10 @@ class ProvisioningRecipe(ABC):
 
         If :meth:`probe` reports the integration already verified, returns early
         without re-installing. Stops and returns the failing result on any error.
+
+        When the recipe exposes ``provision_steps()`` (TO12), execution delegates
+        to :class:`~.provision_steps.CompensatingSequence` for structured rollback
+        instead of the primitive-call path.
         """
         probed = self.probe(context)
         if probed.success and probed.state is RecipeState.VERIFIED:
@@ -147,6 +157,25 @@ class ProvisioningRecipe(ABC):
                 details=probed.details,
             )
 
+        # TO12: structured step path with rollback
+        provision_steps_fn = getattr(self, "provision_steps", None)
+        steps = provision_steps_fn() if callable(provision_steps_fn) else None  # type: ignore[operator]
+        if steps:
+            from .provision_steps import CompensatingSequence
+
+            seq_result = CompensatingSequence(steps).run(context)  # type: ignore[arg-type]
+            if seq_result.status != "ok":
+                return RecipeResult.fail(
+                    seq_result.reason or "provision sequence failed",
+                    details={"steps": seq_result.outputs.get("steps", [])},
+                )
+            verified = self.verify(context)
+            verified.artifacts_owned = list(verified.artifacts_owned)
+            if not verified.success:
+                verified.state = RecipeState.ERROR
+            return verified
+
+        # Legacy primitive-call path
         owned: list[str] = []
         for op in (self.install, self.configure):
             result = op(context)

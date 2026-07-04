@@ -13,7 +13,6 @@ from audiagentic.components.coding_lsp.runtime_resolver import (
     active_lsp_implementation,
     resolve_active_runtime_servers,
 )
-from audiagentic.foundation.components.ids import COMPONENT_CODING_LSP
 from audiagentic.foundation.features.registry import (
     get_binding_writer,
     get_bindings,
@@ -25,10 +24,12 @@ from audiagentic.foundation.io import _ensure_dict
 from audiagentic.foundation.mcp import McpServerEntry
 from audiagentic.foundation.mcp.launch import component_mcp_launch
 
+_COMPONENT_ID = "coding-lsp"
+
 logger = logging.getLogger(__name__)
 
 
-def _agent_lsp_args(project_root: Path) -> tuple[str, ...]:
+def _runtime_server_args(project_root: Path) -> tuple[str, ...]:
     args: list[str] = []
     for language, servers in resolve_active_runtime_servers(project_root).items():
         for server in servers:
@@ -39,7 +40,7 @@ def _agent_lsp_args(project_root: Path) -> tuple[str, ...]:
 
 
 def _generic_mcp_projection_spec(implementation: str) -> dict[str, Any]:
-    descriptor = get_implementation(COMPONENT_CODING_LSP, implementation)
+    descriptor = get_implementation(_COMPONENT_ID, implementation)
     if descriptor is None:
         return {}
     projection = descriptor.raw.get("projection") or {}
@@ -51,7 +52,7 @@ def _generic_mcp_projection_spec(implementation: str) -> dict[str, Any]:
 
 def _generic_mcp_managed_ids() -> set[str]:
     ids: set[str] = set()
-    for descriptor in get_implementations(COMPONENT_CODING_LSP).values():
+    for descriptor in get_implementations(_COMPONENT_ID).values():
         projection = descriptor.raw.get("projection") or {}
         if not isinstance(projection, dict):
             continue
@@ -80,7 +81,7 @@ def _generic_mcp_projection(project_root: Path, implementation: str) -> dict[str
         args = (subcommand, *launch_args)
         env = {}
     else:
-        # Runtime-bridged server (e.g. agent-lsp): explicit command + runtime args.
+        # Runtime-bridged server (e.g. Blackwell agent-lsp): explicit command + runtime args.
         command = spec.get("command")
         if not isinstance(command, str) or not command:
             return {}
@@ -88,7 +89,7 @@ def _generic_mcp_projection(project_root: Path, implementation: str) -> dict[str
         raw_args = spec.get("args", ())
         args = tuple(str(a) for a in raw_args) if isinstance(raw_args, list) else ()
         if spec.get("args-from-runtime-servers") is True:
-            args = (*args, *_agent_lsp_args(project_root))
+            args = (*args, *_runtime_server_args(project_root))
         env = {}
 
     return {
@@ -118,9 +119,9 @@ def _lsp_json_language_server_projection(project_root: Path, feature: str) -> di
     }
 
 
-def _agent_lsp_mcp_args_projection(project_root: Path) -> dict[str, tuple[str, McpServerEntry]]:
-    """Writer for agent-lsp.mcp-args bindings: produce MCP args from runtime servers."""
-    implementation = "agent-lsp"
+def _blackwell_agent_lsp_mcp_args_projection(project_root: Path) -> dict[str, tuple[str, McpServerEntry]]:
+    """Writer for blackwell-agent-lsp.mcp-args bindings: produce MCP args from runtime servers."""
+    implementation = "blackwell-agent-lsp"
     spec = _generic_mcp_projection_spec(implementation)
     managed_id = spec.get("managed-id")
     name = spec.get("name")
@@ -133,7 +134,7 @@ def _agent_lsp_mcp_args_projection(project_root: Path) -> dict[str, tuple[str, M
     cmd = command
     args = ()
     if spec.get("args-from-runtime-servers") is True:
-        args = _agent_lsp_args(project_root)
+        args = _runtime_server_args(project_root)
     env = {}
 
     return {
@@ -146,15 +147,15 @@ def _agent_lsp_mcp_args_projection(project_root: Path) -> dict[str, tuple[str, M
 
 def _register_builtin_binding_writers() -> None:
     register_binding_writer(
-        COMPONENT_CODING_LSP,
+        _COMPONENT_ID,
         "coding-lsp.lsp-json",
         _lsp_json_language_server_projection,
         projection_kind="language-server",
     )
     register_binding_writer(
-        COMPONENT_CODING_LSP,
-        "agent-lsp.mcp-args",
-        _agent_lsp_mcp_args_projection,
+        _COMPONENT_ID,
+        "blackwell-agent-lsp.mcp-args",
+        _blackwell_agent_lsp_mcp_args_projection,
         projection_kind="generic-mcp",
     )
 
@@ -169,13 +170,13 @@ def _generic_lsp_projection_for_active_implementation(
     active_implementation = active_lsp_implementation(project_root)
     seen_writer_keys: set[str] = set()
     desired: dict[str, tuple[str, McpServerEntry]] = {}
-    for (implementation, _feature_kind, _feature), binding in get_bindings(COMPONENT_CODING_LSP).items():
+    for (implementation, _feature_kind, _feature), binding in get_bindings(_COMPONENT_ID).items():
         if implementation != active_implementation:
             continue
         writer_key = binding.projection_writer_key
         if not writer_key or writer_key in seen_writer_keys:
             continue
-        writer = get_binding_writer(COMPONENT_CODING_LSP, writer_key, projection_kind="generic-mcp")
+        writer = get_binding_writer(_COMPONENT_ID, writer_key, projection_kind="generic-mcp")
         desired.update(
             writer(project_root) if writer is not None else _generic_mcp_projection(project_root, implementation)
         )
@@ -202,7 +203,7 @@ def sync_language_servers_to_providers(project_root: Path) -> dict[str, Any]:
         configured: dict[str, LanguageServerEntry] = {}
         for binding in active_language_bindings(project_root):
             writer = get_binding_writer(
-                COMPONENT_CODING_LSP,
+                _COMPONENT_ID,
                 binding.projection_writer_key,
                 projection_kind="language-server",
             )

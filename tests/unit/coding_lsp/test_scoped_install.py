@@ -109,9 +109,9 @@ def test_install_accepts_active_implementation_dependency(tmp_path: Path) -> Non
     feature_registry.register(
         ImplementationDescriptor(
             parent="coding-lsp",
-            implementation_id="agent-lsp",
+            implementation_id="blackwell-agent-lsp",
             dependencies={
-                "agent-lsp": {
+                "blackwell-agent-lsp": {
                     "probe": "binary:agent-lsp",
                     "toolchain": "npm",
                     "package": "@blackwell-systems/agent-lsp",
@@ -119,10 +119,10 @@ def test_install_accepts_active_implementation_dependency(tmp_path: Path) -> Non
             },
         )
     )
-    set_implementation_state(tmp_path, "coding-lsp", "agent-lsp", ImplementationState(enabled=True))
+    set_implementation_state(tmp_path, "coding-lsp", "blackwell-agent-lsp", ImplementationState(enabled=True))
 
     result = asyncio.run(
-        lsp_config_api.install_lsp_dependencies(["agent-lsp"], root=str(tmp_path))
+        lsp_config_api.install_lsp_dependencies(["blackwell-agent-lsp"], root=str(tmp_path))
     )
 
     assert result["status"] == "ok"

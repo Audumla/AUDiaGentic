@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from audiagentic.foundation.contracts.errors import make_error
+
 from .config_reader import UNSET, read_config_value
 
 
@@ -135,7 +137,11 @@ class CompositeHealthCheck:
 
     def check(self, context: dict[str, Any] | None = None) -> ProbeResult:
         if self.mode not in {"and", "or", "atleast"}:
-            raise ValueError(f"mode must be 'and', 'or', or 'atleast', got {self.mode!r}")
+            raise make_error(
+                prefix="VAL", component="PROBE", number=1, kind="toolchains",
+                message=f"mode must be 'and', 'or', or 'atleast', got {self.mode!r}",
+                details={"mode": self.mode},
+            )
         results: list[ProbeResult] = []
         passed = 0
         for probe in self.checks:

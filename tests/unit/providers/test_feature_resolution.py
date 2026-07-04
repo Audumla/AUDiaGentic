@@ -6,7 +6,6 @@ from audiagentic.components.providers.services.feature_resolution import (
     resolve_active_provider_features,
 )
 from audiagentic.components.providers.services.provider_config import set_provider_enabled
-from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
 from audiagentic.foundation.features.base import FeatureState
 from audiagentic.foundation.features.state import set_implementation_feature_state
 
@@ -42,7 +41,7 @@ def test_disabled_provider_contributes_nothing(tmp_path: Path) -> None:
 def test_explicitly_disabled_feature_excluded_siblings_remain(tmp_path: Path) -> None:
     set_provider_enabled(tmp_path, "claude", enabled=True)
     set_implementation_feature_state(
-        tmp_path, COMPONENT_PROVIDERS, "claude", "mcp", "mcp", FeatureState(enabled=False)
+        tmp_path, "providers", "claude", "mcp", "mcp", FeatureState(enabled=False)
     )
 
     kinds = _kinds_for(resolve_active_provider_features(tmp_path), "claude")

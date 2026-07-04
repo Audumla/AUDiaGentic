@@ -5,14 +5,15 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
 from audiagentic.foundation.descriptors.registry import DescriptorRegistry
 from audiagentic.foundation.features.base import ImplementationDescriptor
 from audiagentic.foundation.features.registry import register as register_feature_descriptor
 
-from ..services.host_capabilities import vscode_extension_statuses
+from ..services.host_capabilities import host_extension_statuses
 from .base import ProviderDescriptor
 from .feature_mapping import impl_features_for
+
+_COMPONENT_ID = "providers"
 
 _registry: DescriptorRegistry[ProviderDescriptor] = DescriptorRegistry()
 
@@ -20,7 +21,7 @@ _registry: DescriptorRegistry[ProviderDescriptor] = DescriptorRegistry()
 def _register_feature_implementation(descriptor: ProviderDescriptor) -> None:
     register_feature_descriptor(
         ImplementationDescriptor(
-            parent=COMPONENT_PROVIDERS,
+            parent=_COMPONENT_ID,
             implementation_id=descriptor.provider_id,
             display_name=descriptor.display_name,
             description=descriptor.description,
@@ -109,11 +110,10 @@ def interrogate(provider_id: str, project_root: Path) -> dict[str, Any]:
     if descriptor is None:
         return {"provider_id": provider_id, "registered": False}
 
-    is_vscode_project, vscode_extensions = vscode_extension_statuses(
+    hosts, host_capabilities = host_extension_statuses(
         project_root,
-        descriptor.vscode_extensions,
+        descriptor.host_capabilities,
     )
-    host_capabilities = list(vscode_extensions)
 
     cli_probe = descriptor.cli_probe
     if descriptor.cli_install and descriptor.cli_install.package_manager == "vscode":
@@ -125,8 +125,7 @@ def interrogate(provider_id: str, project_root: Path) -> dict[str, Any]:
         "registered": True,
         "cli": _probe_cli(cli_probe) if cli_probe else None,
         "host_capabilities": host_capabilities,
-        "vscode_project": is_vscode_project,
-        "vscode_extensions": vscode_extensions,
+        "hosts": {host_id: {"workspace": workspace} for host_id, workspace in hosts.items()},
         "permissions": {
             "can_write_files": descriptor.permissions.can_write_files,
             "can_execute_shell": descriptor.permissions.can_execute_shell,

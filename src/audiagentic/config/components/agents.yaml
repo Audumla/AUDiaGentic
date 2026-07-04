@@ -7,10 +7,16 @@ description: >
   execution parameters. Profiles are stored per-project and resolved at job launch.
 depends-on:
   - project
+lifecycle-observer: audiagentic.components.agents.agents_gateway_events
+status-hook: audiagentic.components.agents.agents_api.agent_status
 files:
   - path: .audiagentic/config/agent-profiles.yaml
     lifecycle: create-if-missing
     description: Per-project agent profile configurations
+  - path: .audiagentic/runtime/agent-llm-gateway
+    lifecycle: runtime-only
+    recursive: true
+    description: Agent LLM Gateway request/result records
 mcp-servers:
   - name: ag-agents-mgmt
     module: audiagentic.components.agents.agents_manage_mcp
@@ -44,6 +50,58 @@ mcp-servers:
         Resolve the profile marked as default. Raises RES-AGP-003 if no default exists.
       agent_list_profiles: >
         List all agent profiles with summary information.
+
+  - name: ag-agents-gateway
+    module: audiagentic.components.agents.agents_gateway_mcp
+    direct-tools:
+      - agent_llm_submit
+      - agent_llm_status
+      - agent_llm_wait
+      - agent_llm_cancel
+      - agent_llm_run
+      - agent_llm_list_requests
+      - agent_llm_gateway_overview
+    description: Agent LLM Gateway — async submit/status/wait/cancel/run and observability (list/overview) for provider execution through an agent profile
+    propagate: audiagentic
+    instructions: >
+      Async path: agent_llm_submit returns request-id immediately; poll agent_llm_status
+      or block later with agent_llm_wait. Blocking path: agent_llm_run submits and waits
+      for a terminal result or timeout in one call — use for short one-shot work only.
+      Cancellation is best-effort: agent_llm_cancel on a queued request removes it before
+      it ever runs; on a running request it only records intent (cancel-requested) —
+      the request may still complete normally, and the persisted state reflects what
+      actually happened, not the cancel intent. Not propagated to providers — a provider
+      surface must never be able to invoke the gateway that dispatches back into providers.
+      For most agent profiles, "output" is provider CLI/session execution output, not a
+      raw chat completion — only API-style providers (e.g. local-openai) return a direct
+      completion. Use agent_llm_gateway_overview or agent_llm_list_requests to see what's
+      happening without already knowing a request-id.
+    tool-descriptions:
+      agent_llm_submit: >
+        Submit an async request. agent-profile-id defaults to the default profile.
+        fallback-profile-ids defaults from the profile's params.fallback-profile-ids
+        if not given explicitly. Returns {request-id, state: "queued", ...}.
+      agent_llm_status: >
+        Return the current persisted record for request-id (state, output, completion,
+        usage, error, attempts). Raises RES-AGW-001 if not found.
+      agent_llm_wait: >
+        Block until request-id reaches a terminal state (completed/failed/cancelled/
+        rejected) or timeout-seconds elapses (capped at 300s server-side). Returns the
+        record either way — check "state" to distinguish a real result from a timeout
+        (state will still be "running"/"queued").
+      agent_llm_cancel: >
+        Cancel a queued request, or best-effort mark a running one. See instructions
+        for the best-effort semantics.
+      agent_llm_run: >
+        Submit and block in one call (submit_llm_request with mode=blocking). Same
+        300s server-side timeout cap as agent_llm_wait.
+      agent_llm_list_requests: >
+        List persisted requests, most recent first. Optional state filter
+        (queued/running/completed/failed/cancelled/rejected) and limit. Reads from
+        disk, so this works even for requests from an earlier process.
+      agent_llm_gateway_overview: >
+        Operator summary: persisted request counts by state, the 5 most recent
+        failures (redacted error only), and in-process per-profile queue depths.
 
 contributions:
   - id: agents/profile-doctrine

@@ -72,6 +72,8 @@ class ProviderCliWorkflowContext:
     def _find(self, item_id: str) -> ItemView:
         item = self.lookup(item_id)
         if item is None:
+            # KeyError is the store-adapter contract: the workflow state machine
+            # catches it (e.g. is_terminal) — do not convert to AudiaGenticError.
             raise KeyError(item_id)
         return item
 
@@ -137,6 +139,7 @@ def _build_step(
     if recipe is None:
         return None
 
+    # CLOSED: install/uninstall are the complete verb set of this CLI command
     if action == "install":
         install_recipe = recipe.install
     elif action == "uninstall":

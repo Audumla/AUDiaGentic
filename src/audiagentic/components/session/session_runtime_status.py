@@ -7,15 +7,15 @@ import logging
 import os
 from typing import Any
 
+from audiagentic.foundation.config import load_layered_config
 from audiagentic.foundation.contracts.errors import make_error
-from audiagentic.runtime.config import load_layered_config
 
 logger = logging.getLogger(__name__)
 
 
 def versions() -> dict[str, Any]:
+    from audiagentic.foundation.home import global_harness_runtime
     from audiagentic.runtime.harness import query_rig_server_version, version_info
-    from audiagentic.runtime.home import global_harness_runtime
 
     version_payload = version_info()
     payload: dict[str, Any] = {
@@ -32,12 +32,12 @@ def versions() -> dict[str, Any]:
 
 
 def model_info() -> dict[str, Any]:
+    from audiagentic.foundation.home import global_harness_runtime
     from audiagentic.runtime.harness import (
         default_config_path,
         load_active_profile,
         query_rig_server_version,
     )
-    from audiagentic.runtime.home import global_harness_runtime
 
     requested = os.environ.get("AUDIAGENTIC_AG_MODEL")
     if not requested:
@@ -73,8 +73,8 @@ def model_info() -> dict[str, Any]:
 
 
 def harness_config() -> dict[str, Any]:
+    from audiagentic.foundation.home import global_harness_runtime
     from audiagentic.runtime.harness import default_config_path
-    from audiagentic.runtime.home import global_harness_runtime
 
     harness = global_harness_runtime()
     cfg_path = default_config_path()

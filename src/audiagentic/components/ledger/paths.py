@@ -10,8 +10,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.io import load_yaml_file
-
 logger = logging.getLogger(__name__)
 
 # Component config path
@@ -35,25 +33,16 @@ _DEFAULT_PATHS = {
 
 def _load_paths(project_root: Path) -> dict[str, str]:
     """Load path constants from component config, falling back to defaults."""
-    config_path = project_root / _COMPONENT_CONFIG
-    if config_path.exists():
-        try:
-            config = load_yaml_file(config_path)
-            paths = config.get("paths", {})
-            if paths:
-                return paths
-        except Exception:
-            pass
-    return dict(_DEFAULT_PATHS)
+    from audiagentic.foundation.paths import load_component_paths
+
+    return load_component_paths(project_root, "agent-ledger", _DEFAULT_PATHS)
 
 
 def _resolve(project_root: Path, key: str) -> Path:
     """Resolve a named path constant relative to project root."""
-    paths = _load_paths(project_root)
-    value = paths.get(key, _DEFAULT_PATHS.get(key, ""))
-    if not value:
-        raise ValueError(f"Path constant '{key}' is not defined in component config")
-    return project_root / value
+    from audiagentic.foundation.paths import resolve_component_path
+
+    return resolve_component_path(project_root, "agent-ledger", key, _DEFAULT_PATHS)
 
 
 def ledger_sync_dir(project_root: Path) -> Path:

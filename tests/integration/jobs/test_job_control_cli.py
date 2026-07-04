@@ -13,9 +13,9 @@ for path in (str(ROOT), str(SRC)):
 
 from tests.helpers import sandbox as sandbox_helper
 
+from audiagentic.components.agent_jobs.jobs_store import read_job_record, write_job_record
 from audiagentic.components.agent_jobs.records import build_job_record
 from audiagentic.launcher import main
-from audiagentic.runtime.state.jobs_store import read_job_record, write_job_record
 
 
 def test_job_control_cli_cancels_ready_job(tmp_path: Path) -> None:

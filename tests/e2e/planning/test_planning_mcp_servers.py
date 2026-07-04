@@ -65,7 +65,7 @@ def _read_json_line(proc: subprocess.Popen, deadline: float) -> dict | None:
     assert proc.stdout is not None
     while time.time() < deadline:
         header = bytearray()
-        while b"\r\n\r\n" not in header and time.time() < deadline:
+        while b"\r\n\r\n" not in header and b"\n" not in header and time.time() < deadline:
             chunk = _read_byte_with_timeout(proc.stdout, deadline - time.time())
             if chunk is None:
                 continue
@@ -76,6 +76,12 @@ def _read_json_line(proc: subprocess.Popen, deadline: float) -> dict | None:
             header.extend(chunk)
         if not header:
             continue
+        if b"\r\n\r\n" not in header:
+            try:
+                return json.loads(bytes(header).decode("utf-8"))
+            except (json.JSONDecodeError, ValueError):
+                continue
+
         header_text = header.decode("ascii", errors="ignore")
         length = None
         for line in header_text.split("\r\n"):
@@ -96,8 +102,7 @@ def _read_json_line(proc: subprocess.Popen, deadline: float) -> dict | None:
 
 def _write_message(proc: subprocess.Popen, msg: dict) -> None:
     assert proc.stdin is not None
-    payload = json.dumps(msg).encode("utf-8")
-    proc.stdin.write(f"Content-Length: {len(payload)}\r\n\r\n".encode("ascii") + payload)
+    proc.stdin.write((json.dumps(msg) + "\n").encode("utf-8"))
     proc.stdin.flush()
 
 
@@ -258,9 +263,8 @@ class TestPlanningMcpServer:
         proc = _start_server("audiagentic.components.planning.planning_mcp", tmp_path)
         try:
             result = _call(proc, "plan_list_items", {})
-            assert result == [] or (isinstance(result, dict) and result.get("items") == []), (
-                f"Expected empty list, got: {result}"
-            )
+            assert result.get("items") == [], f"Expected empty page, got: {result}"
+            assert result.get("total") == 0
         finally:
             _terminate(proc)
 
@@ -272,10 +276,8 @@ class TestPlanningMcpServer:
             assert create_result.get("id") == "E2E01", f"create_item failed: {create_result}"
 
             raw = _call(proc, "plan_list_items", {}, msg_id=4)
-            # MCP emits one block per list element; a 1-item list comes back as a dict
-            items = [raw] if isinstance(raw, dict) else (raw or [])
-            ids = [i["id"] for i in items]
-            assert "E2E01" in ids, f"E2E01 not in list after create: {items}"
+            ids = [i["id"] for i in raw.get("items", [])]
+            assert "E2E01" in ids, f"E2E01 not in list after create: {raw}"
         finally:
             _terminate(proc)
 
@@ -288,9 +290,8 @@ class TestPlanningMcpServer:
             assert result.get("state") == "completed"
 
             raw = _call(proc, "plan_list_items", {"state": "completed"}, msg_id=5)
-            completed = [raw] if isinstance(raw, dict) else (raw or [])
-            ids = [i["id"] for i in completed]
-            assert "E2E02" in ids, f"E2E02 not in completed list: {completed}"
+            ids = [i["id"] for i in raw.get("items", [])]
+            assert "E2E02" in ids, f"E2E02 not in completed list: {raw}"
         finally:
             _terminate(proc)
 
@@ -302,9 +303,8 @@ class TestPlanningMcpServer:
             assert del_result.get("ok") is True
 
             raw = _call(proc, "plan_list_items", {}, msg_id=5)
-            items = [raw] if isinstance(raw, dict) else (raw or [])
-            ids = [i["id"] for i in items]
-            assert "E2E03" not in ids, f"E2E03 still present after delete: {items}"
+            ids = [i["id"] for i in raw.get("items", [])]
+            assert "E2E03" not in ids, f"E2E03 still present after delete: {raw}"
         finally:
             _terminate(proc)
 
@@ -323,8 +323,8 @@ class TestPlanningHarnessMcpCollection:
 
     def test_collect_mcp_includes_mgmt_server_when_installed(self, tmp_path: Path) -> None:
         from audiagentic.foundation.components.loader import register_all_components
+        from audiagentic.foundation.lifecycle.components import install_component
         from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
-        from audiagentic.runtime.lifecycle.components import install_component
 
         register_all_components()
         install_component("agent-planning", tmp_path)
@@ -338,8 +338,8 @@ class TestPlanningHarnessMcpCollection:
     def test_collect_mcp_excludes_operational_server_from_harness(self, tmp_path: Path) -> None:
         """ag-planning has propagate: providers — must never appear in the harness config."""
         from audiagentic.foundation.components.loader import register_all_components
+        from audiagentic.foundation.lifecycle.components import install_component
         from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
-        from audiagentic.runtime.lifecycle.components import install_component
 
         register_all_components()
         install_component("agent-planning", tmp_path)
@@ -365,8 +365,8 @@ class TestPlanningHarnessMcpCollection:
 
     def test_collect_mcp_excludes_planning_servers_when_disabled(self, tmp_path: Path) -> None:
         from audiagentic.foundation.components.loader import register_all_components
+        from audiagentic.foundation.lifecycle.components import disable_component, install_component
         from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
-        from audiagentic.runtime.lifecycle.components import disable_component, install_component
 
         register_all_components()
         install_component("agent-planning", tmp_path)
@@ -382,8 +382,8 @@ class TestPlanningHarnessMcpCollection:
 
     def test_planning_mgmt_server_has_correct_entry_structure(self, tmp_path: Path) -> None:
         from audiagentic.foundation.components.loader import register_all_components
+        from audiagentic.foundation.lifecycle.components import install_component
         from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
-        from audiagentic.runtime.lifecycle.components import install_component
 
         register_all_components()
         install_component("agent-planning", tmp_path)
@@ -396,9 +396,9 @@ class TestPlanningHarnessMcpCollection:
     def test_pi_mcp_dict_includes_mgmt_server_only_when_installed(self, tmp_path: Path) -> None:
         """Full pi mcp.json build: collect → build_pi_mcp_dict → only mgmt server present."""
         from audiagentic.foundation.components.loader import register_all_components
+        from audiagentic.foundation.lifecycle.components import install_component
         from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
         from audiagentic.runtime.harness.pi.mcp_format import build_pi_mcp_dict
-        from audiagentic.runtime.lifecycle.components import install_component
 
         register_all_components()
         install_component("agent-planning", tmp_path)

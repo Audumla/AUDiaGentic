@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.features.lifecycle import enable_implementation
-from audiagentic.foundation.features.registry import get_implementations
+from audiagentic.foundation.features.registry import get_implementations, is_default_implementation
 from audiagentic.foundation.mcp.component_server import (
     log_tool_call,
     mcp_server,
@@ -30,7 +30,7 @@ def _active_implementation(project_root: Path) -> str:
 @log_tool_call
 def planning_status() -> dict[str, Any]:
     from audiagentic.components.planning.planning_api import planning_status as _status
-    return _status(project_root_from_env())
+    return _status(project_root_from_env()).to_dict()
 
 
 @mcp.tool()
@@ -44,6 +44,7 @@ def planning_list_implementations() -> dict[str, Any]:
             impl_id: {
                 "display_name": desc.display_name,
                 "description": desc.description,
+                "is_default": is_default_implementation(desc),
             }
             for impl_id, desc in impls.items()
         },
@@ -55,6 +56,32 @@ def planning_list_implementations() -> dict[str, Any]:
 def planning_select_implementation(implementation: str) -> dict[str, Any]:
     root = project_root_from_env()
     return enable_implementation(root, _COMPONENT_ID, implementation)
+
+
+@mcp.tool()
+@log_tool_call
+def planning_get_config(implementation_id: str | None = None) -> dict[str, Any]:
+    """Return resolved config plus the settable-option schema for an implementation.
+
+    The ``schema`` field describes every option the implementation accepts
+    (type, description, required, default, allowed values) — use it to
+    discover what can be set, then pass any of those keys to
+    ``planning_set_config``. Planning has no implementation-specific tools;
+    all configuration goes through this generic get/set pair.
+    """
+    from audiagentic.components.planning.planning_api import planning_get_config as _get_config
+    return _get_config(project_root_from_env(), implementation_id)
+
+
+@mcp.tool()
+@log_tool_call
+def planning_set_config(implementation_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+    """Validate and persist config updates for a planning implementation.
+
+    See ``planning_get_config`` for the option schema an implementation accepts.
+    """
+    from audiagentic.components.planning.planning_api import planning_set_config as _set_config
+    return _set_config(project_root_from_env(), implementation_id, updates)
 
 
 def main() -> None:

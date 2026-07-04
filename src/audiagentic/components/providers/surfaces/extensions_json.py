@@ -1,8 +1,9 @@
-"""VS Code extensions.json generation.
+"""Editor-host extensions manifest generation.
 
-Generates .vscode/extensions.json during reconcile/install/uninstall.
-Derived from enabled providers' host_capabilities with host == 'vscode'.
-Reads package.json from installed extensions for version/metadata.
+Generates the host's extensions manifest (declared in hosts.yaml)
+during reconcile/install/uninstall, derived from enabled providers'
+host_capabilities. Paths resolve through the host adapter — no editor
+path literals here.
 """
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.providers.descriptors.base import HostCapability
+from audiagentic.components.providers.services.host_adapter import get_host_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +21,12 @@ logger = logging.getLogger(__name__)
 _UNMANAGED_KEY = "unmanaged-recommendations"
 
 
-def _read_extension_metadata(ext_id: str) -> dict[str, Any] | None:
-    """Read package.json from installed VS Code extension for version/metadata.
+def _read_extension_metadata(ext_id: str, *, host_id: str = "vscode") -> dict[str, Any] | None:
+    """Read package.json from an installed host extension for version/metadata.
 
     Returns None if the extension is not installed or package.json cannot be read.
     """
-    ext_dir = Path.home() / ".vscode" / "extensions"
+    ext_dir = get_host_adapter(host_id).extension_dir()
     if not ext_dir.exists():
         return None
 
@@ -76,9 +78,9 @@ def build_recommendations(
     }
 
 
-def _load_extensions_json(project_root: Path) -> dict[str, Any]:
-    """Load existing extensions.json if present."""
-    ext_path = project_root / ".vscode" / "extensions.json"
+def _load_extensions_json(project_root: Path, *, host_id: str = "vscode") -> dict[str, Any]:
+    """Load the host's existing extensions manifest if present."""
+    ext_path = get_host_adapter(host_id).extensions_manifest_path(project_root)
     if not ext_path.exists():
         return {}
     try:
@@ -91,13 +93,15 @@ def _load_extensions_json(project_root: Path) -> dict[str, Any]:
 def write_extensions_json(
     project_root: Path,
     extensions: tuple[HostCapability, ...],
+    *,
+    host_id: str = "vscode",
 ) -> Path:
-    """Write .vscode/extensions.json with managed recommendations.
+    """Write the host's extensions manifest with managed recommendations.
 
     Preserves user-authored unmanaged recommendations.
     Returns the path to the written file.
     """
-    ext_path = project_root / ".vscode" / "extensions.json"
+    ext_path = get_host_adapter(host_id).extensions_manifest_path(project_root)
     ext_path.parent.mkdir(parents=True, exist_ok=True)
 
     data = build_recommendations(extensions, project_root=project_root)
@@ -119,12 +123,14 @@ def write_extensions_json(
 def prune_extensions_json(
     project_root: Path,
     active_extensions: tuple[HostCapability, ...],
+    *,
+    host_id: str = "vscode",
 ) -> None:
     """Remove stale managed recommendations from extensions.json.
 
     Keeps user-preserved unmanaged recommendations.
     """
-    ext_path = project_root / ".vscode" / "extensions.json"
+    ext_path = get_host_adapter(host_id).extensions_manifest_path(project_root)
     if not ext_path.exists():
         return
 

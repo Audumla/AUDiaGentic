@@ -53,3 +53,12 @@ mcp_config:
   remover: "audiagentic.components.providers.adapters.goose.mcp_format:remove_goose_yaml"
   format: "goose-yaml"
   refresh_mode: "restart-required"
+
+surfaces:
+  renderer: none
+  contribution-file: "AGENTS.md"
+
+execution:
+  mode: stub
+  aliases: [goose]
+  message: "Goose adapter is registered; execution bridge not wired yet."

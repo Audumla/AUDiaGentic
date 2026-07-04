@@ -32,3 +32,12 @@ agent_files:
   - rel_path: "AGENTS.md"
     managed: false
     description: "Shared project instructions"
+
+surfaces:
+  renderer: none
+  contribution-file: "AGENTS.md"
+
+execution:
+  mode: stub
+  aliases: [plandex, pdx]
+  message: "Plandex adapter is registered; execution bridge not wired yet."

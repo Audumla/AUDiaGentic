@@ -26,7 +26,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
         print_error(f"Project root does not exist: {project_root}")
         return 1
 
-    from audiagentic.runtime.home import global_harness_runtime
+    from audiagentic.foundation.home import global_harness_runtime
 
     harness_runtime = global_harness_runtime()
 

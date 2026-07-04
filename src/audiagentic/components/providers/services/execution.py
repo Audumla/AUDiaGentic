@@ -26,10 +26,24 @@ def _adapter_module_path(provider_id: str) -> str | None:
         return None
 
 
+def _descriptor_runner(provider_id: str) -> ProviderRunner | None:
+    """Build a runner from the provider descriptor's execution: block (AR12)."""
+    from audiagentic.components.providers.adapters.base_runner import (
+        make_runner_from_execution,
+    )
+    from audiagentic.components.providers.descriptors.registry import all_descriptors
+
+    descriptor = all_descriptors().get(provider_id)
+    execution = getattr(descriptor, "execution", None) if descriptor else None
+    if not execution:
+        return None
+    return make_runner_from_execution(provider_id, execution)
+
+
 def _load_runner(provider_id: str) -> ProviderRunner | None:
     module_path = _adapter_module_path(provider_id)
     if module_path is None:
-        return None
+        return _descriptor_runner(provider_id)
     module = import_module(module_path)
     runner = getattr(module, "run", None)
     if runner is None:

@@ -201,7 +201,9 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
                 continue
             descriptors.append(register_from_yaml(path))
 
-        for path in sorted(target.resolve().glob("*/*.yaml")):
+        for path in sorted(target.resolve().glob("**/*.yaml")):
+            if path.parent == target.resolve():
+                continue
             data = load_yaml_file(path)
             if data.get("type") in feature_descriptor_types:
                 from audiagentic.foundation.features.loader import (
@@ -210,14 +212,21 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
 
                 register_feature_from_yaml(path)
 
-    _validate_loaded_descriptors(descriptors)
+    # Validate data-driven constraints (duplicates, deps) before observers import.
+    _validate_descriptors_data(descriptors)
 
+    # Import lifecycle observers so they self-register capability contributions
+    # (e.g. surface-validator for loader.py Seam A).  This must run before
+    # consumers resolve get_capability during this bootstrap phase.
     for descriptor in descriptors:
         if descriptor.lifecycle_observer:
             try:
                 __import__(descriptor.lifecycle_observer)
             except Exception:
                 logger.warning("Failed to import lifecycle observer for %s", descriptor.component_id, exc_info=True)
+
+    # Validate contribution configs — needs capability registry from observers.
+    _validate_descriptors_contributions(descriptors)
     initialize_lifecycle_hook_dispatch()
 
     from audiagentic.foundation.contracts.error_resolutions import (
@@ -229,8 +238,8 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
     return descriptors
 
 
-def _validate_loaded_descriptors(descriptors: list[ComponentDescriptor]) -> None:
-    """Post-load validation for component dependency references.
+def _validate_descriptors_data(descriptors: list[ComponentDescriptor]) -> None:
+    """Validate data-driven constraints (duplicates, depends-on references).
 
     Runs after ALL descriptors are loaded so depends-on references can be
     checked against the full set rather than an incrementally built partial set.
@@ -260,10 +269,18 @@ def _validate_loaded_descriptors(descriptors: list[ComponentDescriptor]) -> None
                     dependency=dep,
                 )
 
-    # Validate contribution config references resolve to existing files
-    from audiagentic.components.providers.surfaces.base import (
-        validate_config_reference,
-    )
+
+def _validate_descriptors_contributions(descriptors: list[ComponentDescriptor]) -> None:
+    """Validate contribution config references via capability registry.
+
+    Runs after lifecycle-observer import so the providers.surface-validator
+    capability is registered.  No-ops gracefully when providers absent.
+    """
+    from audiagentic.foundation.capabilities import get_capability
+
+    validate_ref = get_capability("providers.surface-validator")
+    if validate_ref is None:
+        return
 
     for descriptor in descriptors:
         if not descriptor.yaml_path or not descriptor.yaml_path.exists():
@@ -275,6 +292,6 @@ def _validate_loaded_descriptors(descriptors: list[ComponentDescriptor]) -> None
                 continue
             config_ref = raw.get("config")
             if isinstance(config_ref, str):
-                warning = validate_config_reference(config_ref, descriptor.component_id)
+                warning = validate_ref(config_ref, descriptor.component_id)
                 if warning:
                     logger.warning(warning)

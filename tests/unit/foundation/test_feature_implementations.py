@@ -18,24 +18,24 @@ def _write(path: Path, text: str) -> Path:
     return path
 
 
-def setup_function() -> None:
-    registry.clear()
+import pytest
 
 
-def teardown_function() -> None:
-    registry.clear()
+@pytest.fixture(autouse=True)
+def _isolated_registry(isolated_features_registry):
+    """Each test runs against an empty registry; prior state is restored after."""
 
 
 def test_load_implementation_descriptor_from_yaml(tmp_path: Path) -> None:
     path = _write(
-        tmp_path / "agent-lsp.yaml",
+        tmp_path / "blackwell-agent-lsp.yaml",
         """
 type: implementation
 parent: coding-lsp
-id: agent-lsp
+id: blackwell-agent-lsp
 display-name: Agent LSP
 dependencies:
-  agent-lsp:
+  blackwell-agent-lsp:
     probe: binary:agent-lsp
 options-schema:
   warm-runtime:
@@ -47,18 +47,18 @@ options-schema:
     descriptor = register_from_yaml(path)
 
     assert descriptor.parent == "coding-lsp"
-    assert descriptor.implementation_id == "agent-lsp"
-    assert descriptor.dependencies["agent-lsp"]["probe"] == "binary:agent-lsp"
-    assert registry.get_implementation("coding-lsp", "agent-lsp") == descriptor
+    assert descriptor.implementation_id == "blackwell-agent-lsp"
+    assert descriptor.dependencies["blackwell-agent-lsp"]["probe"] == "binary:agent-lsp"
+    assert registry.get_implementation("coding-lsp", "blackwell-agent-lsp") == descriptor
 
 
 def test_load_binding_descriptor_from_yaml(tmp_path: Path) -> None:
     path = _write(
-        tmp_path / "agent-lsp.python.yaml",
+        tmp_path / "blackwell-agent-lsp.python.yaml",
         """
 type: binding
 parent: coding-lsp
-implementation: agent-lsp
+implementation: blackwell-agent-lsp
 feature-kind: language
 feature: python
 uses-dependencies:
@@ -76,21 +76,21 @@ options-schema:
     descriptor = register_from_yaml(path)
 
     assert descriptor.parent == "coding-lsp"
-    assert descriptor.implementation == "agent-lsp"
+    assert descriptor.implementation == "blackwell-agent-lsp"
     assert descriptor.feature_kind == "language"
     assert descriptor.feature == "python"
     assert descriptor.uses_dependencies == ("feature.language.python.pyright",)
     assert descriptor.projection_writer_key == "agent-lsp.python"
-    assert registry.get_binding("coding-lsp", "agent-lsp", "language", "python") == descriptor
+    assert registry.get_binding("coding-lsp", "blackwell-agent-lsp", "language", "python") == descriptor
 
 
 def test_binding_descriptor_requires_feature_kind(tmp_path: Path) -> None:
     path = _write(
-        tmp_path / "agent-lsp.python.yaml",
+        tmp_path / "blackwell-agent-lsp.python.yaml",
         """
 type: binding
 parent: coding-lsp
-implementation: agent-lsp
+implementation: blackwell-agent-lsp
 feature: python
 """.strip(),
     )
@@ -109,10 +109,10 @@ def test_binding_writer_registry_resolves_by_parent_and_key() -> None:
     def _writer(project_root: Path) -> dict[str, object]:
         return {"root": project_root}
 
-    registry.register_binding_writer("coding-lsp", "agent-lsp.mcp-args", _writer)
+    registry.register_binding_writer("coding-lsp", "blackwell-agent-lsp.mcp-args", _writer)
 
-    assert registry.get_binding_writer("coding-lsp", "agent-lsp.mcp-args") is _writer
-    assert registry.get_binding_writer("other", "agent-lsp.mcp-args") is None
+    assert registry.get_binding_writer("coding-lsp", "blackwell-agent-lsp.mcp-args") is _writer
+    assert registry.get_binding_writer("other", "blackwell-agent-lsp.mcp-args") is None
 
 
 def test_binding_writer_registry_separates_projection_kind() -> None:
@@ -156,19 +156,19 @@ implementation-cardinality: exclusive
 """.strip(),
     )
     _write(
-        tmp_path / "agent-lsp.yaml",
+        tmp_path / "blackwell-agent-lsp.yaml",
         """
 type: implementation
 parent: coding-lsp
-id: agent-lsp
+id: blackwell-agent-lsp
 """.strip(),
     )
     _write(
-        tmp_path / "agent-lsp.python.yaml",
+        tmp_path / "blackwell-agent-lsp.python.yaml",
         """
 type: binding
 parent: coding-lsp
-implementation: agent-lsp
+implementation: blackwell-agent-lsp
 feature-kind: language
 feature: python
 """.strip(),
@@ -178,8 +178,8 @@ feature: python
 
     assert [descriptor.component_id for descriptor in descriptors] == ["coding-lsp"]
     assert get_descriptor("coding-lsp").implementation_cardinality == "exclusive"
-    assert registry.get_implementation("coding-lsp", "agent-lsp") is not None
-    assert registry.get_binding("coding-lsp", "agent-lsp", "language", "python") is not None
+    assert registry.get_implementation("coding-lsp", "blackwell-agent-lsp") is not None
+    assert registry.get_binding("coding-lsp", "blackwell-agent-lsp", "language", "python") is not None
 
 
 def test_exclusive_implementation_enable_disables_previous_active(tmp_path: Path) -> None:
@@ -199,11 +199,11 @@ implementation-cardinality: exclusive
     register_from_yaml(_write(tmp_path / "ag-lsp.yaml", "type: implementation\nparent: coding-lsp\nid: ag-lsp\n"))
     agent = register_from_yaml(
         _write(
-            tmp_path / "agent-lsp.yaml",
+            tmp_path / "blackwell-agent-lsp.yaml",
             """
 type: implementation
 parent: coding-lsp
-id: agent-lsp
+id: blackwell-agent-lsp
 options-schema:
   warm-runtime:
     type: bool
@@ -213,10 +213,10 @@ options-schema:
     )
 
     assert enable_implementation(tmp_path, "coding-lsp", "ag-lsp")["ok"] is True
-    assert enable_implementation(tmp_path, "coding-lsp", "agent-lsp")["ok"] is True
+    assert enable_implementation(tmp_path, "coding-lsp", "blackwell-agent-lsp")["ok"] is True
 
     assert get_implementation_state(tmp_path, "coding-lsp", "ag-lsp").enabled is False
-    assert get_implementation_state(tmp_path, "coding-lsp", "agent-lsp").enabled is True
+    assert get_implementation_state(tmp_path, "coding-lsp", "blackwell-agent-lsp").enabled is True
     assert resolve_implementation(tmp_path, agent).effective_options == {"warm-runtime": True}
 
 

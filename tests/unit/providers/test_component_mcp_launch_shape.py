@@ -10,6 +10,7 @@ from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
 
 
 def test_provider_component_mcp_projection_uses_audiagentic_mcp(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("AUDIAGENTIC_REPO_ROOT", raising=False)
     descriptor = ComponentDescriptor(
         component_id="sample",
         display_name="Sample",
@@ -46,6 +47,20 @@ def test_provider_component_mcp_projection_uses_audiagentic_mcp(monkeypatch, tmp
     assert entry.command == mcp_interpreter()
     assert entry.args == ("-m", "audiagentic.launcher", "mcp", "audiagentic.components.sample.sample_mcp", "--flag")
     assert entry.env == {}
+
+
+def test_mcp_entry_propagates_repo_root_override(monkeypatch) -> None:
+    """AUDIAGENTIC_REPO_ROOT is forwarded into MCP server env when set."""
+    from audiagentic.foundation.mcp.component_builder import entry_from_mcp_declaration
+
+    monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", "X:\\somewhere\\repo")
+    entry = entry_from_mcp_declaration(
+        McpServerDeclaration(
+            name="ag-sample",
+            module="audiagentic.components.sample.sample_mcp",
+        )
+    )
+    assert entry.env == {"AUDIAGENTIC_REPO_ROOT": "X:\\somewhere\\repo"}
 
 
 def test_provider_mcp_projection_not_gated_by_receive_lsp_mcp(monkeypatch, tmp_path: Path) -> None:
@@ -88,6 +103,7 @@ def test_provider_mcp_projection_not_gated_by_receive_lsp_mcp(monkeypatch, tmp_p
 
 
 def test_harness_mcp_collector_uses_audiagentic_mcp(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("AUDIAGENTIC_REPO_ROOT", raising=False)
     descriptor = ComponentDescriptor(
         component_id="sample",
         display_name="Sample",

@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
 from audiagentic.foundation.components.registry import is_enabled, is_installed
 from audiagentic.foundation.features.registry import all_features, all_implementations
 from audiagentic.foundation.features.resolver import resolve_feature, resolve_implementation
@@ -58,7 +57,7 @@ def runtime_sync_contract() -> dict[str, Any]:
             "reload_required": "Reload Pi runtime after request completes.",
             "restart_required": "Prompt for full Pi session restart.",
         },
-        "example": build_runtime_sync(reason="component-installed", component_id=COMPONENT_PROVIDERS),
+        "example": build_runtime_sync(reason="component-installed", component_id="providers")  # cross-component example payload,
     }
 
 

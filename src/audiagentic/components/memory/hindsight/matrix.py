@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 
@@ -27,8 +27,9 @@ class HindsightRecipeRow:
     display_name: str
     integration_type: str
     recipe_kind: ProviderRecipeKind
-    install_command: str = ""
-    uninstall_command: str = ""
+    install_steps: list[dict[str, Any]] = field(default_factory=list)
+    uninstall_steps: list[dict[str, Any]] = field(default_factory=list)
+    configure_steps: list[dict[str, Any]] = field(default_factory=list)
     status_command: str = ""
     config_artifacts: list[str] = field(default_factory=list)
     platform_constraints: list[str] = field(default_factory=list)
@@ -44,20 +45,15 @@ class HindsightRecipeRow:
     source_date: str = ""
     notes: str = ""
     plugin_url_config_path: str = ""
-
-
-_RECIPE_KIND_MAP = {
-    "hooks": ProviderRecipeKind.HOOKS,
-    "plugin_config": ProviderRecipeKind.PLUGIN_CONFIG,
-    "mcp_config": ProviderRecipeKind.MCP_CONFIG,
-    "wrapper_cli": ProviderRecipeKind.WRAPPER_CLI,
-    "hybrid": ProviderRecipeKind.HYBRID,
-    "guidance_only": ProviderRecipeKind.GUIDANCE_ONLY,
-    "command_installer": ProviderRecipeKind.COMMAND_INSTALLER,
-    "rules": ProviderRecipeKind.RULES,
-    "context_provider": ProviderRecipeKind.CONTEXT_PROVIDER,
-    "native_passthrough": ProviderRecipeKind.NATIVE_PASSTHROUGH,
-}
+    plugin_array_package: str = ""
+    plugin_array_reader: str = ""
+    plugin_array_writer: str = ""
+    plugin_array_remover: str = ""
+    # Plugin repair metadata (Windows-specific): empty values are no-ops
+    plugin_repair_cache_pattern: str = ""
+    plugin_repair_data_dir: str = ""
+    plugin_repair_venv_python: str = ""
+    plugin_repair_server_script: str = ""
 
 
 def _load_matrix() -> list[HindsightRecipeRow]:
@@ -74,14 +70,18 @@ def _load_matrix() -> list[HindsightRecipeRow]:
     rows: list[HindsightRecipeRow] = []
     for entry in data["matrix"]:
         kind_str = entry.get("recipe_kind", "guidance_only")
-        recipe_kind = _RECIPE_KIND_MAP.get(kind_str, ProviderRecipeKind.GUIDANCE_ONLY)
+        try:
+            recipe_kind = ProviderRecipeKind(kind_str)
+        except ValueError:
+            recipe_kind = ProviderRecipeKind.GUIDANCE_ONLY
         rows.append(HindsightRecipeRow(
             provider_id=entry.get("provider_id", ""),
             display_name=entry.get("display_name", ""),
             integration_type=entry.get("integration_type", ""),
             recipe_kind=recipe_kind,
-            install_command=entry.get("install_command", ""),
-            uninstall_command=entry.get("uninstall_command", ""),
+            install_steps=entry.get("install_steps", []),
+            uninstall_steps=entry.get("uninstall_steps", []),
+            configure_steps=entry.get("configure_steps", []),
             status_command=entry.get("status_command", ""),
             config_artifacts=entry.get("config_artifacts", []),
             platform_constraints=entry.get("platform_constraints", []),
@@ -92,6 +92,14 @@ def _load_matrix() -> list[HindsightRecipeRow]:
             source_date=entry.get("source_date", ""),
             notes=entry.get("notes", ""),
             plugin_url_config_path=entry.get("plugin_url_config_path", ""),
+            plugin_array_package=entry.get("plugin_array_package", ""),
+            plugin_array_reader=entry.get("plugin_array_reader", ""),
+            plugin_array_writer=entry.get("plugin_array_writer", ""),
+            plugin_array_remover=entry.get("plugin_array_remover", ""),
+            plugin_repair_cache_pattern=entry.get("plugin_repair_cache_pattern", ""),
+            plugin_repair_data_dir=entry.get("plugin_repair_data_dir", ""),
+            plugin_repair_venv_python=entry.get("plugin_repair_venv_python", ""),
+            plugin_repair_server_script=entry.get("plugin_repair_server_script", ""),
         ))
     return rows
 

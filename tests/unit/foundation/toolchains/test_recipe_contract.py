@@ -5,6 +5,7 @@ from audiagentic.foundation.toolchains.recipe_contract import (
     RecipeResult,
     RecipeState,
 )
+from audiagentic.foundation.workflow.invocation.models import StepResult
 
 
 class _Recipe(ProvisioningRecipe):
@@ -44,6 +45,35 @@ class _Recipe(ProvisioningRecipe):
         return self._step("prune", RecipeState.ABSENT, "cfg::key")
 
 
+class _ProvisionStep:
+    def __init__(self, step_id: str, status: str = "ok") -> None:
+        self.id = step_id
+        self.status = status
+        self.run_called = False
+        self.revert_called = False
+
+    def run(self, context):
+        self.run_called = True
+        return StepResult(status=self.status, reason=f"{self.id} failed" if self.status == "failed" else None)
+
+    def revert(self, context):
+        self.revert_called = True
+        return StepResult(status="ok")
+
+    def dry_run(self, context):
+        return StepResult(status="planned")
+
+
+class _StructuredRecipe(_Recipe):
+    def __init__(self, *, steps, already_present=False):
+        super().__init__(already_present=already_present)
+        self._steps = steps
+
+    def provision_steps(self):
+        self.calls.append("provision_steps")
+        return self._steps
+
+
 def test_provision_runs_full_lifecycle():
     r = _Recipe()
     result = r.provision({})
@@ -74,6 +104,41 @@ def test_provision_collects_partial_artifacts_on_failure():
     result = r.provision({})
     assert not result.success
     assert "bin" in result.artifacts_owned  # install's artifact retained for cleanup
+
+
+def test_structured_provision_uses_steps_then_verify():
+    step = _ProvisionStep("install")
+    r = _StructuredRecipe(steps=[step])
+
+    result = r.provision({})
+
+    assert result.success
+    assert step.run_called
+    assert r.calls == ["probe", "provision_steps", "verify"]
+
+
+def test_structured_provision_short_circuits_when_present():
+    step = _ProvisionStep("install")
+    r = _StructuredRecipe(steps=[step], already_present=True)
+
+    result = r.provision({})
+
+    assert result.success
+    assert not step.run_called
+    assert r.calls == ["probe"]
+
+
+def test_structured_provision_failure_rolls_back_and_skips_verify():
+    ok = _ProvisionStep("ok")
+    fail = _ProvisionStep("fail", status="failed")
+    r = _StructuredRecipe(steps=[ok, fail])
+
+    result = r.provision({})
+
+    assert not result.success
+    assert ok.revert_called
+    assert r.calls == ["probe", "provision_steps"]
+    assert "steps" in result.details
 
 
 def test_custom_cleanup_hooks_run_on_teardown():

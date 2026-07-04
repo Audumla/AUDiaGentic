@@ -28,7 +28,6 @@ from audiagentic.foundation.components.dependencies import (
     build_dependency_workflow,
     detect_missing,
 )
-from audiagentic.foundation.components.ids import COMPONENT_CODING_LSP
 from audiagentic.foundation.features.base import FeatureState
 from audiagentic.foundation.features.lifecycle import enable_implementation
 from audiagentic.foundation.features.options import validate_option
@@ -40,6 +39,8 @@ from audiagentic.foundation.features.state import (
 from audiagentic.foundation.workflow.invocation.steps import SequenceStep
 
 from .lsp_api import _sync_to_providers, resolve_project_root
+
+_COMPONENT_ID = "coding-lsp"
 
 
 def _lsp_probes() -> dict[str, Any]:
@@ -68,7 +69,7 @@ def active_implementation_dependency_cfgs(project_root: Path | None) -> dict[str
     if project_root is None:
         return {}
     implementation_id = active_lsp_implementation(resolve_project_root(project_root))
-    descriptor = get_implementation(COMPONENT_CODING_LSP, implementation_id)
+    descriptor = get_implementation(_COMPONENT_ID, implementation_id)
     return dict(descriptor.dependencies) if descriptor else {}
 
 
@@ -87,10 +88,10 @@ def active_dependency_ids(project_root: Path | None) -> list[str]:
 
 
 def _set_language_feature_enabled(project_root: Path, language: str, enabled: bool) -> None:
-    state = get_feature_state(project_root, COMPONENT_CODING_LSP, "language", language)
+    state = get_feature_state(project_root, _COMPONENT_ID, "language", language)
     set_feature_state(
         project_root,
-        COMPONENT_CODING_LSP,
+        _COMPONENT_ID,
         "language",
         language,
         FeatureState(enabled=enabled, options=state.options),
@@ -145,12 +146,12 @@ def set_language_option(root: str, language: str, key: str, value: Any) -> dict[
         validate_option(key, value, schema)
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
-    state = get_feature_state(project_root, COMPONENT_CODING_LSP, "language", language)
+    state = get_feature_state(project_root, _COMPONENT_ID, "language", language)
     options = dict(state.options)
     options[key] = value
     set_feature_state(
         project_root,
-        COMPONENT_CODING_LSP,
+        _COMPONENT_ID,
         "language",
         language,
         FeatureState(enabled=state.enabled, options=options),
@@ -167,13 +168,13 @@ def reset_language_option(root: str, language: str, key: str) -> dict[str, Any]:
         return {"ok": False, "error": f"Unknown language: {language}"}
     if key not in spec.options_schema:
         return {"ok": False, "error": f"unknown option: {key}"}
-    state = get_feature_state(project_root, COMPONENT_CODING_LSP, "language", language)
+    state = get_feature_state(project_root, _COMPONENT_ID, "language", language)
     options = dict(state.options)
     removed = key in options
     options.pop(key, None)
     set_feature_state(
         project_root,
-        COMPONENT_CODING_LSP,
+        _COMPONENT_ID,
         "language",
         language,
         FeatureState(enabled=state.enabled, options=options),
@@ -203,7 +204,7 @@ def config_status(root: str = ".") -> dict[str, Any]:
         lang_spec = language_registry.get_language(lang)
         dep_ids = (lang_spec.dependency.id,) if (lang_spec and lang_spec.dependency) else ()
         binary_ok = all(dep_id not in missing_deps for dep_id in dep_ids)
-        feature_state = get_feature_state(project_root, COMPONENT_CODING_LSP, "language", lang)
+        feature_state = get_feature_state(project_root, _COMPONENT_ID, "language", lang)
         language_status[lang] = {
             "configured": True,
             "feature_enabled": feature_state.enabled,
@@ -235,14 +236,17 @@ def config_status(root: str = ".") -> dict[str, Any]:
 
 
 def list_implementations(root: str = ".") -> dict[str, Any]:
+    from audiagentic.foundation.features.registry import is_default_implementation
+
     project_root = resolve_project_root(root)
-    implementations = get_implementations(COMPONENT_CODING_LSP)
+    implementations = get_implementations(_COMPONENT_ID)
     return {
         "active": active_lsp_implementation(project_root),
         "implementations": {
             implementation_id: {
                 "display_name": descriptor.display_name,
                 "description": descriptor.description,
+                "is_default": is_default_implementation(descriptor),
             }
             for implementation_id, descriptor in implementations.items()
         },
@@ -251,11 +255,93 @@ def list_implementations(root: str = ".") -> dict[str, Any]:
 
 def select_implementation(root: str, implementation: str) -> dict[str, Any]:
     project_root = resolve_project_root(root)
-    result = enable_implementation(project_root, COMPONENT_CODING_LSP, implementation)
+    result = enable_implementation(project_root, _COMPONENT_ID, implementation)
     if not result.get("ok"):
         return result
     _sync_to_providers(project_root)
     return result
+
+
+def get_config(root: str = ".", implementation_id: str | None = None) -> dict[str, Any]:
+    """Return resolved config and settable-option schema for an LSP implementation.
+
+    ``schema`` lets a caller discover every option this implementation accepts
+    (type, description, required, default, allowed values) generically, then
+    set any of them via ``set_config`` — e.g. ag-lsp's ``mutation-enabled``.
+    """
+    from audiagentic.foundation.features.options import option_schema_to_dict
+    from audiagentic.foundation.features.registry import is_default_implementation
+    from audiagentic.foundation.features.state import get_implementation_state
+
+    project_root = resolve_project_root(root)
+    target_impl = implementation_id or active_lsp_implementation(project_root)
+    if not target_impl:
+        return {"implementation": None, "config": {}, "schema": {}, "error": "No active implementation"}
+
+    desc = get_implementation(_COMPONENT_ID, target_impl)
+    impl_state = get_implementation_state(project_root, _COMPONENT_ID, target_impl)
+
+    config = dict(impl_state.options) if impl_state.options else {}
+    schema: dict[str, Any] = {}
+
+    if desc and desc.options_schema:
+        for key, opt_schema in desc.options_schema.items():
+            if key not in config and opt_schema.default is not None:
+                config[key] = opt_schema.default
+            schema[key] = option_schema_to_dict(opt_schema)
+
+    return {
+        "implementation": target_impl,
+        "config": config,
+        "schema": schema,
+        "enabled": impl_state.enabled,
+        "is_default": bool(desc and is_default_implementation(desc)),
+    }
+
+
+def set_config(root: str, implementation_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+    """Validate and persist config updates for an LSP implementation."""
+    from audiagentic.foundation.features.base import ImplementationState
+    from audiagentic.foundation.features.state import (
+        get_implementation_state,
+        set_implementation_state,
+    )
+
+    project_root = resolve_project_root(root)
+    desc = get_implementation(_COMPONENT_ID, implementation_id)
+    if desc is None:
+        return {"ok": False, "error": f"unknown LSP implementation: {implementation_id}"}
+
+    if desc.options_schema:
+        for key, value in updates.items():
+            schema = desc.options_schema.get(key)
+            if schema is None:
+                if not any(s.allow_unknown for s in desc.options_schema.values()):
+                    return {
+                        "ok": False,
+                        "error": f"unknown option: {key!r} for implementation {implementation_id!r}",
+                        "valid_options": list(desc.options_schema.keys()),
+                    }
+            else:
+                from audiagentic.foundation.contracts.errors import AudiaGenticError
+                try:
+                    validate_option(key, value, schema)
+                except (AudiaGenticError, ValueError) as exc:
+                    return {"ok": False, "error": f"invalid value for option {key!r}: {exc}"}
+
+    impl_state = get_implementation_state(project_root, _COMPONENT_ID, implementation_id)
+    options = dict(impl_state.options)
+    options.update(updates)
+
+    new_state = ImplementationState(enabled=impl_state.enabled, options=options)
+    set_implementation_state(project_root, _COMPONENT_ID, implementation_id, new_state)
+
+    return {
+        "ok": True,
+        "implementation": implementation_id,
+        "config": options,
+        "updated_keys": list(updates.keys()),
+    }
 
 
 def add_language(root: str, language: str) -> dict[str, Any]:
@@ -288,7 +374,7 @@ async def enable_language(root: str, language: str) -> dict[str, Any]:
     language is not rolled back on install failure.
     """
     project_root = resolve_project_root(root)
-    already_configured = get_feature_state(project_root, COMPONENT_CODING_LSP, "language", language).enabled
+    already_configured = get_feature_state(project_root, _COMPONENT_ID, "language", language).enabled
 
     added = add_language(str(project_root), language)
     if not added.get("ok"):
@@ -317,7 +403,7 @@ def remove_language(root: str, language: str) -> dict[str, Any]:
     from audiagentic.components.coding_lsp.lsp_api import _session_manager
 
     project_root = resolve_project_root(root)
-    state = get_feature_state(project_root, COMPONENT_CODING_LSP, "language", language)
+    state = get_feature_state(project_root, _COMPONENT_ID, "language", language)
     if not state.enabled:
         return {"ok": False, "error": f"Language not configured: {language}"}
     # Disable in feature state; lsp.json is then regenerated as a pure cache.
@@ -352,10 +438,10 @@ async def install_lsp_dependencies(
 ) -> dict[str, Any]:
     """Install language-server binaries — scoped to configured languages.
 
-    The workflow is built only from dependencies of enabled language features,
-    so a server for a non-enabled language can never be installed. Empty `names`
-    installs the configured-but-missing set; explicit `names` must belong to
-    configured languages or are rejected.
+    The workflow is built from the active implementation plus enabled language
+    feature dependencies, so a server for a non-enabled language can never be
+    installed. Empty `names` installs the configured-but-missing set; explicit
+    `names` must belong to configured dependencies or are rejected.
     """
     project_root = resolve_project_root(root)
     configured = active_dependency_ids(project_root)

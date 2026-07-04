@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from audiagentic.runtime.config import load_yaml_file
+from audiagentic.foundation.io import load_yaml_file
 from audiagentic.runtime.rig.errors import make_rig_config_error_cfg
 
 _embedded_config_error = make_rig_config_error_cfg

@@ -1,0 +1,8 @@
+type: binding
+contract-version: v1
+parent: coding-lsp
+implementation: blackwell-agent-lsp
+feature-kind: language
+feature: python
+projection:
+  writer-key: blackwell-agent-lsp.mcp-args
