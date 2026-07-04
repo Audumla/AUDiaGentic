@@ -172,6 +172,62 @@ def test_list_items_no_filter_returns_all(tmp_path):
     assert ids == {"D01", "D02"}
 
 
+def test_list_items_id_prefix_filter(tmp_path):
+    planning_api.create_item(tmp_path, _make_item(id="CC01"))
+    planning_api.create_item(tmp_path, _make_item(id="CC02"))
+    planning_api.create_item(tmp_path, _make_item(id="ML01"))
+
+    items = planning_api.list_items(tmp_path, id_prefix="cc")
+    ids = {i["id"] for i in items}
+    assert ids == {"CC01", "CC02"}
+
+
+def test_list_items_plan_wildcard_filter(tmp_path):
+    planning_api.create_item(tmp_path, _make_item(id="E01", plan="code-cleanup"))
+    planning_api.create_item(tmp_path, _make_item(id="E02", plan="code-review"))
+    planning_api.create_item(tmp_path, _make_item(id="E03", plan="memory-hindsight"))
+
+    items = planning_api.list_items(tmp_path, plan="code-*")
+    ids = {i["id"] for i in items}
+    assert ids == {"E01", "E02"}
+
+
+def test_list_items_page_defaults_to_active_state(tmp_path):
+    planning_api.create_item(tmp_path, _make_item(id="F01"))
+    planning_api.create_item(tmp_path, _make_item(id="F02"))
+    planning_api.set_state(tmp_path, "F01", "completed")
+
+    page = planning_api.list_items_page(tmp_path)
+    ids = {i["id"] for i in page["items"]}
+    assert ids == {"F02"}
+    assert page["total"] == 1
+
+
+def test_list_items_page_state_all_includes_completed(tmp_path):
+    planning_api.create_item(tmp_path, _make_item(id="G01"))
+    planning_api.create_item(tmp_path, _make_item(id="G02"))
+    planning_api.set_state(tmp_path, "G01", "completed")
+
+    page = planning_api.list_items_page(tmp_path, state="all")
+    ids = {i["id"] for i in page["items"]}
+    assert ids == {"G01", "G02"}
+    assert page["total"] == 2
+
+
+def test_list_items_page_paginates_with_limit_and_offset(tmp_path):
+    for i in range(1, 6):
+        planning_api.create_item(tmp_path, _make_item(id=f"H0{i}"))
+
+    page1 = planning_api.list_items_page(tmp_path, limit=2, offset=0)
+    assert page1["returned"] == 2
+    assert page1["total"] == 5
+    assert page1["has_more"] is True
+
+    page3 = planning_api.list_items_page(tmp_path, limit=2, offset=4)
+    assert page3["returned"] == 1
+    assert page3["has_more"] is False
+
+
 # ---------------------------------------------------------------------------
 # get_item
 # ---------------------------------------------------------------------------
@@ -355,6 +411,98 @@ def test_next_item_id_sequential(tmp_path):
     assert ids == ["TE01", "TE02", "TE03"]
 
 
+def test_next_item_id_uses_established_plan_prefix(tmp_path):
+    # 'code-cleanup' slices to 'CO', but the plan already uses 'CC' (e.g. an
+    # initials-based prefix chosen when the plan was created). The generator
+    # must follow the existing convention, not recompute a fresh guess.
+    planning_api.create_item(tmp_path, {"id": "CC01", "plan": "code-cleanup", "title": "First"})
+    result = planning_api.create_item(tmp_path, {"plan": "code-cleanup", "title": "Second"})
+    assert result["id"] == "CC02"
+
+
+def test_next_item_id_uses_established_prefix_from_completed_items(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "CC01", "plan": "code-cleanup", "title": "First"})
+    planning_api.set_state(tmp_path, "CC01", "completed")
+    result = planning_api.create_item(tmp_path, {"plan": "code-cleanup", "title": "Second"})
+    assert result["id"] == "CC02"
+
+
+def test_next_item_id_fallback_collision_raises(tmp_path):
+    # Both slugs slice to the same 2-letter guess ('co'); the first plan claims
+    # it via auto-generation, so the second plan must not silently alias it.
+    planning_api.create_item(tmp_path, {"plan": "code-cleanup", "title": "First"})
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.create_item(tmp_path, {"plan": "config-leanness", "title": "First"})
+    assert exc_info.value.code == "VAL-PLN-012"
+
+
+# ---------------------------------------------------------------------------
+# Config get/set (CC24) — planning-local-docs has no options-schema, so these
+# register a synthetic implementation to exercise schema discovery/validation
+# generically, same as any future implementation-backed planning backend would.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def registered_test_implementation():
+    from audiagentic.foundation.features.base import ImplementationDescriptor, OptionSchema
+    from audiagentic.foundation.features.registry import clear as clear_features
+    from audiagentic.foundation.features.registry import register
+
+    clear_features()
+    register(ImplementationDescriptor(
+        parent="agent-planning",
+        implementation_id="test-tracker",
+        display_name="Test Tracker",
+        options_schema={
+            "api-token": OptionSchema(option_type="string", required=True, description="API token"),
+            "timeout-seconds": OptionSchema(option_type="integer", default=30, description="Request timeout"),
+        },
+        raw={},
+    ))
+    yield "test-tracker"
+    clear_features()
+
+
+def test_planning_get_config_exposes_option_schema(tmp_path, registered_test_implementation):
+    result = planning_api.planning_get_config(tmp_path, registered_test_implementation)
+    assert result["implementation"] == "test-tracker"
+    assert "api-token" in result["schema"]
+    assert result["schema"]["api-token"]["required"] is True
+    assert result["config"].get("timeout-seconds") == 30
+    assert result["is_default"] is False
+
+
+def test_planning_set_config_validates_unknown_option(tmp_path, registered_test_implementation):
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.planning_set_config(tmp_path, registered_test_implementation, {"bogus": "x"})
+    assert exc_info.value.code == "VAL-PLN-016"
+
+
+def test_planning_set_config_validates_type(tmp_path, registered_test_implementation):
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.planning_set_config(
+            tmp_path, registered_test_implementation, {"timeout-seconds": "not-an-int"}
+        )
+    assert exc_info.value.code == "VAL-PLN-017"
+
+
+def test_planning_set_config_persists(tmp_path, registered_test_implementation):
+    result = planning_api.planning_set_config(
+        tmp_path, registered_test_implementation, {"api-token": "secret"}
+    )
+    assert result["config"]["api-token"] == "secret"
+    assert result["updated_keys"] == ["api-token"]
+
+    fetched = planning_api.planning_get_config(tmp_path, registered_test_implementation)
+    assert fetched["config"]["api-token"] == "secret"
+
+
+def test_planning_set_config_unknown_implementation_raises(tmp_path):
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.planning_set_config(tmp_path, "no-such-implementation", {"x": 1})
+    assert exc_info.value.code == "VAL-PLN-015"
+
+
 # ---------------------------------------------------------------------------
 # Reviews
 # ---------------------------------------------------------------------------
@@ -368,6 +516,90 @@ def test_create_review_writes_file(tmp_path):
     assert result["plan"] == "test-plan"
     target = tmp_path / result["path"]
     assert target.exists()
+
+
+# ---------------------------------------------------------------------------
+# Item/review tool cross-contamination guards
+#
+# _find_item locates files by <id>.md alone, regardless of whether the id
+# belongs to a plan item or a review — item-scoped and review-scoped
+# functions previously had no check that the file they found was actually
+# their kind. update_item in particular would silently rewrite a review
+# using the item's section template (description/steps/files/validation/
+# effort_risk/standards/notes), discarding the review's findings/conclusion
+# and dropping any updates keyed by findings/conclusion (neither key matches
+# an item section) with no error at all — real, silent data loss.
+# ---------------------------------------------------------------------------
+
+def _make_review(tmp_path, item_id="ITM01", review_id="RV01", **overrides):
+    planning_api.create_item(tmp_path, {"id": item_id, "plan": "test-plan", "title": "Item 1"})
+    review = {"id": review_id, "review-of": item_id, "title": "A review", "findings": "the original findings", **overrides}
+    return planning_api.create_review(tmp_path, review)
+
+
+def test_update_item_rejects_review_id(tmp_path):
+    _make_review(tmp_path)
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.update_item(tmp_path, "RV01", {"notes": "clobbered"})
+    assert exc_info.value.code == "VAL-PLN-020"
+    # the review's original content must be completely untouched
+    review = planning_api.get_review(tmp_path, "RV01")
+    assert review["findings"] == "the original findings"
+
+
+def test_get_item_rejects_review_id(tmp_path):
+    _make_review(tmp_path)
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.get_item(tmp_path, "RV01")
+    assert exc_info.value.code == "VAL-PLN-018"
+
+
+def test_delete_item_rejects_review_id(tmp_path):
+    _make_review(tmp_path)
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.delete_item(tmp_path, "RV01")
+    assert exc_info.value.code == "VAL-PLN-021"
+    # must still exist — delete_item must not have removed it
+    assert planning_api.get_review(tmp_path, "RV01")["id"] == "RV01"
+
+
+def test_set_state_rejects_review_id(tmp_path):
+    _make_review(tmp_path)
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.set_state(tmp_path, "RV01", "completed")
+    assert exc_info.value.code == "VAL-PLN-019"
+
+
+def test_update_review_rejects_item_id(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.update_review(tmp_path, "ITM01", {"conclusion": "clobbered"})
+    assert exc_info.value.code == "VAL-PLN-023"
+    # the item's original content must be completely untouched
+    item = planning_api.get_item(tmp_path, "ITM01")
+    assert item["title"] == "Item 1"
+
+
+def test_get_review_rejects_item_id(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.get_review(tmp_path, "ITM01")
+    assert exc_info.value.code == "VAL-PLN-022"
+
+
+def test_delete_review_rejects_item_id(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.delete_review(tmp_path, "ITM01")
+    assert exc_info.value.code == "VAL-PLN-024"
+    assert planning_api.get_item(tmp_path, "ITM01")["id"] == "ITM01"
+
+
+def test_set_review_state_rejects_item_id(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.set_review_state(tmp_path, "ITM01", "closed")
+    assert exc_info.value.code == "VAL-PLN-013"
 
 
 def test_create_review_auto_generates_id(tmp_path):
@@ -438,6 +670,40 @@ def test_list_reviews_filters_by_review_of(tmp_path):
     assert reviews[0]["review-of"] == "ITM01"
 
 
+def test_list_reviews_id_prefix_filter(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
+    planning_api.create_review(tmp_path, {"id": "OTHER01", "review-of": "ITM01", "title": "Odd id"})
+
+    reviews = planning_api.list_reviews(tmp_path, id_prefix="rv")
+    ids = {r["id"] for r in reviews}
+    assert ids == {"RV01"}
+
+
+def test_list_reviews_page_defaults_to_open_state(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Open review"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Closed review"})
+    planning_api.set_review_state(tmp_path, "RV02", "closed")
+
+    page = planning_api.list_reviews_page(tmp_path)
+    ids = {r["id"] for r in page["items"]}
+    assert ids == {"RV01"}
+    assert page["total"] == 1
+
+
+def test_list_reviews_page_state_all_includes_closed(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Open review"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Closed review"})
+    planning_api.set_review_state(tmp_path, "RV02", "closed")
+
+    page = planning_api.list_reviews_page(tmp_path, state="all")
+    ids = {r["id"] for r in page["items"]}
+    assert ids == {"RV01", "RV02"}
+    assert page["total"] == 2
+
+
 def test_set_review_state_moves_to_completed(tmp_path):
     planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
     planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
@@ -476,6 +742,17 @@ def test_review_id_sequential_across_states(tmp_path):
     reviews = planning_api.list_reviews(tmp_path)
     ids = sorted([r["id"] for r in reviews])
     assert ids == ["RV01", "RV02"]
+
+
+def test_review_id_is_globally_unique_across_plans(tmp_path):
+    # Review IDs are checked for uniqueness globally, so numbering must be global:
+    # a second plan's first review must not restart at RV01 and collide.
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "plan-a", "title": "Item A"})
+    planning_api.create_item(tmp_path, {"id": "ITM02", "plan": "plan-b", "title": "Item B"})
+    first = planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "For A"})
+    second = planning_api.create_review(tmp_path, {"review-of": "ITM02", "title": "For B"})
+    assert first["id"] == "RV01"
+    assert second["id"] == "RV02"
 
 
 # ---------------------------------------------------------------------------
@@ -545,6 +822,7 @@ def test_delete_review_preserves_plan_dir_with_parent_item(tmp_path):
     planning_api.delete_review(tmp_path, "RV01")
     active_plan_dir = _active_dir(tmp_path) / "test-plan"
     assert active_plan_dir.exists()
+    assert not (active_plan_dir / "reviews").exists()
 
 
 def test_set_review_state_moves_review_between_states(tmp_path):
@@ -553,6 +831,18 @@ def test_set_review_state_moves_review_between_states(tmp_path):
     planning_api.set_review_state(tmp_path, "RV01", "closed")
     completed_plan_dir = _completed_dir(tmp_path) / "test-plan" / "reviews" / "ITM01"
     assert (completed_plan_dir / "RV01.md").exists()
+    assert not (_active_dir(tmp_path) / "test-plan" / "reviews").exists()
+
+
+def test_set_review_state_to_closed_cleans_up_empty_active_plan_dir(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
+    planning_api.set_state(tmp_path, "ITM01", "completed")
+    planning_api.set_review_state(tmp_path, "RV01", "closed")
+
+    assert not (_active_dir(tmp_path) / "test-plan").exists()
+    assert (_completed_dir(tmp_path) / "test-plan" / "ITM01.md").exists()
+    assert (_completed_dir(tmp_path) / "test-plan" / "reviews" / "ITM01" / "RV01.md").exists()
 
 
 def test_set_review_state_moves_review_back_to_active(tmp_path):

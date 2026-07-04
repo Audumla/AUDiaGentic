@@ -49,8 +49,8 @@ def launch_rig_if_needed(
     if not model_profile.get("model_file"):
         return f"http://127.0.0.1:{rig_port}/v1", model, None, False
 
+    from audiagentic.foundation.home import global_harness_runtime
     from audiagentic.foundation.system.process import StartupLock
-    from audiagentic.runtime.home import global_harness_runtime
     from audiagentic.runtime.rig.registry import (
         ensure_rig_state,
         reap_orphan_rigs,

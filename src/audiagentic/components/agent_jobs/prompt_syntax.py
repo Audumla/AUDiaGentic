@@ -6,7 +6,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from audiagentic.runtime.config import load_yaml_file
+from audiagentic.foundation.io import load_yaml_file
 
 logger = logging.getLogger(__name__)
 

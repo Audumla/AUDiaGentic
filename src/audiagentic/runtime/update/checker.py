@@ -29,7 +29,7 @@ def current_version() -> str:
 
 
 def _cache_path() -> Path:
-    from audiagentic.runtime.home import audiagentic_home
+    from audiagentic.foundation.home import audiagentic_home
     return audiagentic_home() / "update-check.json"
 
 

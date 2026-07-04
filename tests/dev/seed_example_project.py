@@ -6,8 +6,11 @@ import json
 import sys
 from pathlib import Path
 
+from audiagentic.foundation.lifecycle.baseline_sync import (
+    ensure_project_layout,
+    sync_managed_baseline,
+)
 from audiagentic.paths import REPO_ROOT
-from audiagentic.runtime.lifecycle.baseline_sync import ensure_project_layout, sync_managed_baseline
 
 
 def seed_example_project(target: Path, overwrite: bool = False) -> None:

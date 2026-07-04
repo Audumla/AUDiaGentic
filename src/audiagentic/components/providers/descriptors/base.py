@@ -49,11 +49,6 @@ class HostCapability:
     display_name: str
 
 
-def VsCodeExtension(extension_id: str, display_name: str) -> HostCapability:
-    """Compatibility constructor for VS Code extension host capabilities."""
-    return HostCapability("vscode", extension_id, display_name)
-
-
 @dataclass(frozen=True)
 class AgentFile:
     """A project file owned or written by a provider surface."""
@@ -155,13 +150,26 @@ class ProviderDescriptor:
     # regardless of whether it has its own LSP implementation. Set to False to
     # opt-out of receiving the ag-lsp MCP.
     receive_lsp_mcp: bool = True
+    # Declarative execution pipeline (AR12). When present and no hand-written
+    # adapter.py exists, adapters/base_runner.py builds the runner from this
+    # block (mode: cli | stub | ok-stub | unsupported; see base_runner docstring
+    # for the full schema). Custom adapter modules always win.
+    execution: dict[str, Any] | None = None
+    # Declarative surface rendering (AR03). When present, a standard renderer is
+    # registered for this provider from the descriptor alone — no surface.py.
+    # Keys: renderer ("flat-skill" renders per-skill files + the instruction
+    # file; "none" renders no skill surfaces), contribution-file (single-file
+    # contribution target, e.g. "GEMINI.md" or "AGENTS.md"),
+    # launch-example-template (default "@{tag}-{provider_id}").
+    # Adapters with custom rendering keep a surface.py, which wins over this.
+    surfaces: dict[str, Any] | None = None
 
-    @property
-    def vscode_extensions(self) -> tuple[HostCapability, ...]:
+    def host_extensions(self, host_id: str) -> tuple[HostCapability, ...]:
+        """Capabilities declared for one editor host."""
         return tuple(
             capability
             for capability in self.host_capabilities
-            if capability.host == "vscode"
+            if capability.host == host_id
         )
 
     @property

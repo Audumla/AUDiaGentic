@@ -35,7 +35,7 @@ def _project_audiagentic_root() -> Path | None:
 
 
 def runtime_bin_dir() -> Path:
-    from audiagentic.runtime.home import global_harness_runtime
+    from audiagentic.foundation.home import global_harness_runtime
 
     path_map = build_layered_path_map(
         user_global_root=global_harness_runtime(),
@@ -131,7 +131,7 @@ def resolve_model(bin_dir: Path, server_dir: Path, override: str | None) -> tupl
 
 
 def _layered_model_candidates(override: str, *, project_root: Path | None) -> list[Path]:
-    from audiagentic.runtime.home import global_harness_runtime
+    from audiagentic.foundation.home import global_harness_runtime
 
     candidates: list[Path] = []
     path_map = build_layered_path_map(

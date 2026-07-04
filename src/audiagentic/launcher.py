@@ -29,10 +29,10 @@ from audiagentic.commands.launch import _cmd_launch
 from audiagentic.commands.provider_prompt import _try_provider_prompt
 from audiagentic.foundation.components.ids import COMPONENT_SESSION
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.home import global_harness_runtime
 from audiagentic.runtime.harness import (
     install_to,
 )
-from audiagentic.runtime.home import global_harness_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ def _cmd_install(target: Path, project_root: Path) -> int:
         # Auto-install harness components
         try:
             from audiagentic.foundation.components.loader import register_all_components
-            from audiagentic.runtime.lifecycle.components import install_component
+            from audiagentic.foundation.lifecycle.components import install_component
             register_all_components()
             install_component(COMPONENT_SESSION, project_root)
         except Exception:
@@ -138,7 +138,7 @@ def _cmd_job_control(args: argparse.Namespace, project_root: Path) -> int:
         print_error("agent_jobs component not available")
         return 1
 
-    from audiagentic.runtime.state.jobs_store import read_job_record
+    from audiagentic.components.agent_jobs.jobs_store import read_job_record
 
     control_root = Path(args.project_root).resolve() if args.project_root else project_root
     job = read_job_record(control_root, args.job_id)
@@ -155,7 +155,9 @@ def _cmd_job_control(args: argparse.Namespace, project_root: Path) -> int:
 
 
 def _cmd_session_input(args: argparse.Namespace, project_root: Path) -> int:
-    from audiagentic.runtime.state.session_input_store import build_and_persist_session_input
+    from audiagentic.components.agent_jobs.session_input_store import (
+        build_and_persist_session_input,
+    )
 
     input_root = Path(args.project_root).resolve() if args.project_root else project_root
     record = build_and_persist_session_input(

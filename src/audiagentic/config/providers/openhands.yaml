@@ -40,3 +40,12 @@ mcp_config:
   remover: "audiagentic.components.providers.adapters.openhands.toml_format:remove_mcp_toml"
   format: "mcp-toml"
   refresh_mode: "restart-required"
+
+surfaces:
+  renderer: none
+  contribution-file: "AGENTS.md"
+
+execution:
+  mode: stub
+  aliases: [openhands]
+  message: "OpenHands adapter is registered; sandbox execution bridge not wired yet."

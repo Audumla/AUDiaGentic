@@ -1,4 +1,5 @@
-"""Continue provider adapter."""
+"""Continue provider adapter compatibility seam."""
+
 from __future__ import annotations
 
 from audiagentic.components.providers.adapters._stubs import make_ok_stub

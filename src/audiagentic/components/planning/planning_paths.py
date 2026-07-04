@@ -7,10 +7,7 @@ registry is fully populated (e.g. during early bootstrap or tests).
 """
 from __future__ import annotations
 
-import logging
 from pathlib import Path
-
-logger = logging.getLogger(__name__)
 
 _COMPONENT_ID = "agent-planning"
 
@@ -22,45 +19,10 @@ _DEFAULT_PATHS: dict[str, str] = {
 }
 
 
-def _active_implementation_id(project_root: Path) -> str:
-    try:
-        from audiagentic.foundation.features.registry import get_implementations
-        from audiagentic.foundation.features.state import get_component_state
-        component = get_component_state(project_root, _COMPONENT_ID)
-        impls_state = component.get("implementations") or {}
-        for impl_id, state in impls_state.items():
-            if isinstance(state, dict) and state.get("enabled"):
-                return impl_id
-        all_impls = get_implementations(_COMPONENT_ID)
-        for impl_id in sorted(all_impls):
-            if all_impls[impl_id].raw.get("default"):
-                return impl_id
-        return next(iter(sorted(all_impls)), "planning-local-docs")
-    except Exception:
-        logger.debug("Could not resolve active planning implementation", exc_info=True)
-        return "planning-local-docs"
-
-
-def _load_paths(project_root: Path) -> dict[str, str]:
-    try:
-        from audiagentic.foundation.features.registry import get_implementation
-        impl_id = _active_implementation_id(project_root)
-        desc = get_implementation(_COMPONENT_ID, impl_id)
-        if desc is not None:
-            paths = desc.raw.get("paths")
-            if paths:
-                return paths
-    except Exception:
-        logger.debug("Could not load implementation paths from registry", exc_info=True)
-    return dict(_DEFAULT_PATHS)
-
-
 def _resolve(project_root: Path, key: str) -> Path:
-    paths = _load_paths(project_root)
-    value = paths.get(key) or _DEFAULT_PATHS.get(key, "")
-    if not value:
-        raise ValueError(f"Path key '{key}' not defined in planning implementation config")
-    return project_root / value
+    from audiagentic.foundation.paths import resolve_component_path
+
+    return resolve_component_path(project_root, _COMPONENT_ID, key, _DEFAULT_PATHS)
 
 
 def plans_root(project_root: Path) -> Path:

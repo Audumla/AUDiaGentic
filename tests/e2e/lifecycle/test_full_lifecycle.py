@@ -10,10 +10,10 @@ for _p in (str(_ROOT), str(_ROOT / "src")):
 
 from tests.helpers import sandbox as sandbox_helper
 
-from audiagentic.runtime.lifecycle.baseline_sync import sync_managed_baseline
-from audiagentic.runtime.lifecycle.detector import detect_installed_state
-from audiagentic.runtime.lifecycle.fresh_install import apply_fresh_install
-from audiagentic.runtime.lifecycle.uninstall import apply_uninstall
+from audiagentic.foundation.lifecycle.baseline_sync import sync_managed_baseline
+from audiagentic.foundation.lifecycle.detector import detect_installed_state
+from audiagentic.foundation.lifecycle.fresh_install import apply_fresh_install
+from audiagentic.foundation.lifecycle.uninstall import apply_uninstall
 
 
 def test_install_detect_uninstall_roundtrip(tmp_path) -> None:

@@ -13,10 +13,10 @@ from pathlib import Path
 import pytest
 
 import audiagentic.components.providers  # noqa: F401  (register descriptors)
+from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
 from audiagentic.components.memory.hindsight.matrix import HINDSIGHT_RECIPE_MATRIX
 from audiagentic.components.memory.hindsight.mcp_recipe import build_hindsight_entry
 from audiagentic.components.memory.hindsight.recipes import apply_hindsight
-from audiagentic.components.memory.hindsight_export import HindsightBackendConfig
 from audiagentic.components.providers.descriptors.registry import get_descriptor
 from audiagentic.components.providers.services.lifecycle import (
     install_provider_cli,

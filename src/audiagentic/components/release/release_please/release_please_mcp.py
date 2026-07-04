@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 from audiagentic.components.release import release_api
+from audiagentic.foundation.lifecycle.components import DEFAULT_VERSION
 from audiagentic.foundation.mcp.component_server import (
     log_tool_call,
     mcp_server,
     project_root_from_env,
 )
-from audiagentic.runtime.lifecycle.components import DEFAULT_VERSION
 
 mcp = mcp_server(__name__)
 

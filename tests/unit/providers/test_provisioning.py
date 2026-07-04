@@ -11,7 +11,6 @@ from audiagentic.components.providers.services.lifecycle import (
     reconcile_provider,
     uninstall_provider_cli,
 )
-from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
 from audiagentic.foundation.features.registry import get_implementation
 
 
@@ -32,9 +31,9 @@ def test_registry_includes_local_llm_harness_providers() -> None:
 def test_provider_descriptors_register_feature_implementations() -> None:
     providers = all_descriptors()
 
-    assert get_implementation(COMPONENT_PROVIDERS, "codex") is not None
-    assert get_implementation(COMPONENT_PROVIDERS, "claude") is not None
-    assert get_implementation(COMPONENT_PROVIDERS, "codex").display_name == providers["codex"].display_name
+    assert get_implementation("providers", "codex") is not None
+    assert get_implementation("providers", "claude") is not None
+    assert get_implementation("providers", "codex").display_name == providers["codex"].display_name
 
 
 def test_provider_cli_uninstall_uses_descriptor_recipe() -> None:

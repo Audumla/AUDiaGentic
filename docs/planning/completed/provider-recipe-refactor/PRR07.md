@@ -30,7 +30,7 @@ Lock the architecture into docs and tests so future components do not put provid
 
 ## Files
 
-docs/CREATING_A_COMPONENT.md
+docs/standards/CREATING_A_COMPONENT.md
 src/audiagentic/components/providers/adapters/README.md
 src/audiagentic/foundation/toolchains/README.md
 tests/unit/foundation/toolchains/
@@ -54,3 +54,4 @@ Risk is docs lagging implementation. Make docs part of acceptance, not cleanup.
 ## Notes
 
 This closes the loop from the original failure: plan and docs must prevent the same architecture error.
+

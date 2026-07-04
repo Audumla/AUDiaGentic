@@ -1,7 +1,7 @@
 """Tests for Hindsight backend config export (HM01)."""
 from __future__ import annotations
 
-from audiagentic.components.memory.hindsight_export import (
+from audiagentic.components.memory.hindsight.export import (
     HindsightBackendConfig,
 )
 
@@ -60,6 +60,6 @@ def test_no_provider_leak():
 
 def test_no_legacy_backend_accessor():
     """No deprecated backend accessor shim remains."""
-    import audiagentic.components.memory.hindsight_export as export
+    import audiagentic.components.memory.hindsight.export as export
 
     assert not hasattr(export, "get_active_backend_config")

@@ -119,7 +119,7 @@ def start_embedded_rig(
     health_timeout: float = 60.0,
     on_progress: Callable[[str], None] | None = None,
 ) -> LaunchResult:
-    from audiagentic.runtime.home import global_harness_runtime
+    from audiagentic.foundation.home import global_harness_runtime
 
     log_dir = global_harness_runtime() / "logs" / "rig"
     log_dir.mkdir(parents=True, exist_ok=True)

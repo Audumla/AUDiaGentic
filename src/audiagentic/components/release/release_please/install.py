@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 from audiagentic.foundation.contracts.errors import make_error
-from audiagentic.runtime.lifecycle.components import DEFAULT_VERSION
+from audiagentic.foundation.lifecycle.components import DEFAULT_VERSION
 
 from . import utils
 

@@ -67,12 +67,12 @@ def _register_lsp_descriptors() -> None:
     feature_registry.register(
         ImplementationDescriptor(
             parent="coding-lsp",
-            implementation_id="agent-lsp",
+            implementation_id="blackwell-agent-lsp",
             raw={
                 "projection": {
                     "generic-mcp": {
-                        "managed-id": "coding-lsp/agent-lsp",
-                        "name": "agent-lsp",
+                        "managed-id": "coding-lsp/blackwell-agent-lsp",
+                        "name": "blackwell-agent-lsp",
                         "command": "agent-lsp",
                         "args-from-runtime-servers": True,
                     }
@@ -92,10 +92,10 @@ def _register_lsp_descriptors() -> None:
     feature_registry.register(
         BindingDescriptor(
             parent="coding-lsp",
-            implementation="agent-lsp",
+            implementation="blackwell-agent-lsp",
             feature_kind="language",
             feature="python",
-            projection_writer_key="agent-lsp.mcp-args",
+            projection_writer_key="blackwell-agent-lsp.mcp-args",
         )
     )
 
@@ -112,7 +112,7 @@ def test_sync_generic_lsp_routes_by_provider_capability(tmp_path: Path, monkeypa
 
     def _fake_sync(*, provider_id, project_root, desired_entries, managed_ids):
         captured[provider_id] = desired_entries
-        assert managed_ids == {"coding-lsp/ag-lsp", "coding-lsp/agent-lsp"}
+        assert managed_ids == {"coding-lsp/ag-lsp", "coding-lsp/blackwell-agent-lsp"}
         return {"ok": True}
 
     monkeypatch.setattr(
@@ -129,7 +129,7 @@ def test_sync_generic_lsp_routes_by_provider_capability(tmp_path: Path, monkeypa
     result = lsp_projection.sync_generic_lsp_mcp_to_provider_configs(
         tmp_path,
         {"coding-lsp/ag-lsp": ("ag-lsp", McpServerEntry(name="ag-lsp", command="python"))},
-        {"coding-lsp/ag-lsp", "coding-lsp/agent-lsp"},
+        {"coding-lsp/ag-lsp", "coding-lsp/blackwell-agent-lsp"},
     )
 
     assert result["ok"] is True
@@ -141,12 +141,12 @@ def test_sync_generic_lsp_routes_by_provider_capability(tmp_path: Path, monkeypa
     assert captured["claude"]["coding-lsp/ag-lsp"][0] == "ag-lsp"
 
 
-def test_sync_generic_lsp_projects_agent_lsp_when_active(tmp_path: Path, monkeypatch) -> None:
+def test_sync_generic_lsp_projects_blackwell_agent_lsp_when_active(tmp_path: Path, monkeypatch) -> None:
     _register_lsp_descriptors()
     set_implementation_state(
         tmp_path,
         "coding-lsp",
-        "agent-lsp",
+        "blackwell-agent-lsp",
         ImplementationState(enabled=True),
     )
     _enable(tmp_path, "claude")
@@ -162,16 +162,16 @@ def test_sync_generic_lsp_projects_agent_lsp_when_active(tmp_path: Path, monkeyp
     result = sync_generic_lsp_mcp_to_providers(tmp_path)
 
     assert result["ok"] is True
-    assert list(published["desired_entries"]) == ["coding-lsp/agent-lsp"]
+    assert list(published["desired_entries"]) == ["coding-lsp/blackwell-agent-lsp"]
 
 
-def test_sync_generic_lsp_projects_agent_lsp_args(tmp_path: Path, monkeypatch) -> None:
+def test_sync_generic_lsp_projects_blackwell_agent_lsp_args(tmp_path: Path, monkeypatch) -> None:
     _register_lsp_descriptors()
     set_feature_state(tmp_path, "coding-lsp", "language", "python", FeatureState(enabled=True))
     set_implementation_state(
         tmp_path,
         "coding-lsp",
-        "agent-lsp",
+        "blackwell-agent-lsp",
         ImplementationState(enabled=True),
     )
     _enable(tmp_path, "claude")
@@ -187,8 +187,8 @@ def test_sync_generic_lsp_projects_agent_lsp_args(tmp_path: Path, monkeypatch) -
     result = sync_generic_lsp_mcp_to_providers(tmp_path)
 
     assert result["ok"] is True
-    name, entry = published["desired_entries"]["coding-lsp/agent-lsp"]
-    assert name == "agent-lsp"
+    name, entry = published["desired_entries"]["coding-lsp/blackwell-agent-lsp"]
+    assert name == "blackwell-agent-lsp"
     assert entry.command == "agent-lsp"
     assert entry.args == ("python:pyright-langserver,--stdio",)
 
@@ -218,11 +218,11 @@ def test_prune_generic_lsp_only_targets_component_owned_entry(tmp_path: Path, mo
 
     result = lsp_projection.prune_generic_lsp_mcp_from_provider_configs(
         tmp_path,
-        {"coding-lsp/ag-lsp", "coding-lsp/agent-lsp"},
+        {"coding-lsp/ag-lsp", "coding-lsp/blackwell-agent-lsp"},
     )
 
     assert result["ok"] is True
     assert captured == {
-        "codex": {"coding-lsp/ag-lsp", "coding-lsp/agent-lsp"},
-        "claude": {"coding-lsp/ag-lsp", "coding-lsp/agent-lsp"},
+        "codex": {"coding-lsp/ag-lsp", "coding-lsp/blackwell-agent-lsp"},
+        "claude": {"coding-lsp/ag-lsp", "coding-lsp/blackwell-agent-lsp"},
     }

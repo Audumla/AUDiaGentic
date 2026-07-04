@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from audiagentic.runtime.state.session_input_store import build_session_input_record
+from audiagentic.components.agent_jobs.session_input_store import build_session_input_record
 
 
 def test_build_session_input_record_includes_core_fields() -> None:

@@ -31,8 +31,22 @@ from .event_config import (
 from .event_exceptions import CycleDetectedError, EventBusError, PersistenceError, SubscriberError
 from .event_log import StructuredLog, now_iso
 from .event_store import FileEventStore
+from .lifecycle_observer import (
+    COMPONENT_CONFIG_CHANGED,
+    COMPONENT_DISABLED,
+    COMPONENT_ENABLED,
+    COMPONENT_INSTALLED,
+    COMPONENT_UNINSTALLED,
+    subscribe_component_lifecycle,
+)
 
 __all__ = [
+    "COMPONENT_CONFIG_CHANGED",
+    "COMPONENT_DISABLED",
+    "COMPONENT_ENABLED",
+    "COMPONENT_INSTALLED",
+    "COMPONENT_UNINSTALLED",
+    "subscribe_component_lifecycle",
     "EventBus",
     "EventBusProtocol",
     "EventBusError",

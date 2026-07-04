@@ -1,15 +1,13 @@
-"""Guardrail: no raw component ID string literals outside the ids module.
+"""Guardrail: component ID string literals live only where the doctrine allows.
 
-Scans all Python source files and fails if any known component ID appears as a
-bare string literal in a file that is not explicitly allowed to contain them.
+Post-AR16 doctrine: YAML descriptors are the canonical source for optional
+component IDs. In Python, a component ID literal may appear only in:
+  - foundation/components/ids.py            (core IDs — no YAML descriptor)
+  - the owning component's own package      (self-ID ``_COMPONENT_ID`` pattern)
+  - explicitly allowlisted cross-component references (each with a comment)
 
-Allowed files:
-  - foundation/components/ids.py          (the source of truth)
-  - YAML/config files                     (not scanned here — separate concern)
-  - this test file itself
-
-If a new raw component ID string must appear in a test fixture, add it to the
-FIXTURE_ALLOW_LIST below with a comment explaining why.
+If a new cross-component reference must appear, add it to _CROSS_REF_ALLOW
+with a justification.
 """
 
 from __future__ import annotations
@@ -19,23 +17,50 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.foundation.components.ids import ALL_COMPONENT_IDS
-
 # Files that are explicitly allowed to contain raw component ID literals.
 _SRC = Path(__file__).resolve().parents[4] / "src" / "audiagentic"
 _ALLOWED = {
     _SRC / "foundation" / "components" / "ids.py",
 }
 
-# Regex: matches a bare string literal containing a component ID.
-# Matches both single and double quoted forms, e.g. "project" or 'agent-ledger'.
+# Component ID -> owning package directory (self-ID literals allowed there).
+_OWNING_DIR = {
+    "project": _SRC / "components" / "project",
+    "session": _SRC / "components" / "session",
+    "agent-jobs": _SRC / "components" / "agent_jobs",
+    "agent-ledger": _SRC / "components" / "ledger",
+    "providers": _SRC / "components" / "providers",
+    "release": _SRC / "components" / "release",
+    "source-control": _SRC / "components" / "source_control",
+    "coding-lsp": _SRC / "components" / "coding_lsp",
+}
+
+# (file, component_id) cross-component references allowed with justification.
+_CROSS_REF_ALLOW = {
+    # providers renders agent-jobs' prompt-tags contributions on its behalf
+    (_SRC / "components" / "providers" / "surfaces" / "contributions.py", "agent-jobs"),
+    # source-control probes whether the optional ledger integration is installed
+    (_SRC / "components" / "source_control" / "source_control_bootstrap.py", "agent-ledger"),
+    # project's dry-run payload uses providers as the example component
+    (_SRC / "components" / "project" / "project_api.py", "providers"),
+}
+
 _LITERAL_RE = re.compile(r"""(?<![#\w])["']({ids})["']""".format(
-    ids="|".join(re.escape(cid) for cid in sorted(ALL_COMPONENT_IDS, key=len, reverse=True))
+    ids="|".join(re.escape(cid) for cid in sorted(_OWNING_DIR, key=len, reverse=True))
 ))
 
 
+def _allowed(path: Path, cid: str) -> bool:
+    if path in _ALLOWED:
+        return True
+    owner = _OWNING_DIR.get(cid)
+    if owner is not None and owner in path.parents:
+        return True
+    return (path, cid) in _CROSS_REF_ALLOW
+
+
 def _scan_file(path: Path) -> list[tuple[int, str]]:
-    """Return (line_number, matched_string) for every raw component ID literal."""
+    """Return (line_number, component_id) for every disallowed literal."""
     hits: list[tuple[int, str]] = []
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -46,7 +71,9 @@ def _scan_file(path: Path) -> list[tuple[int, str]]:
         if stripped.startswith("#"):
             continue
         for m in _LITERAL_RE.finditer(line):
-            hits.append((lineno, m.group(0)))
+            cid = m.group(1)
+            if not _allowed(path, cid):
+                hits.append((lineno, cid))
     return hits
 
 
@@ -55,21 +82,20 @@ def _python_sources() -> list[Path]:
         p for p in _SRC.rglob("*.py")
         if ".claude" not in p.parts
         and "__pycache__" not in p.parts
-        and p not in _ALLOWED
     ]
 
 
-def test_no_raw_component_ids_in_source() -> None:
+def test_no_raw_component_ids_outside_allowed_locations() -> None:
     violations: list[str] = []
     for path in sorted(_python_sources()):
-        hits = _scan_file(path)
-        for lineno, literal in hits:
+        for lineno, cid in _scan_file(path):
             rel = path.relative_to(_SRC.parent.parent)
-            violations.append(f"{rel}:{lineno}  {literal}")
+            violations.append(f"{rel}:{lineno}  {cid!r}")
 
     if violations:
         report = "\n  ".join(violations)
         pytest.fail(
-            f"Raw component ID string literals found in source code.\n"
-            f"Import from foundation.components.ids instead:\n\n  {report}"
+            f"Component ID literals found outside allowed locations.\n"
+            f"Use the descriptor registry, the owning component's _COMPONENT_ID, "
+            f"or add a justified _CROSS_REF_ALLOW entry:\n\n  {report}"
         )

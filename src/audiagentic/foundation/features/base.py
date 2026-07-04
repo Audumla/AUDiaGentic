@@ -20,6 +20,8 @@ class DescriptorType(str, Enum):
         try:
             return cls(value)
         except ValueError:
+            # Internal contract: features/loader.py catches this ValueError and
+            # wraps it in the canonical VAL-FDESC-012 error at the boundary.
             raise ValueError(
                 f"Unknown descriptor type '{value}'. "
                 f"Supported: feature, implementation, binding"
@@ -57,7 +59,7 @@ class LabeledDescriptor(ConfigurableDescriptor):
     presentation and declared dependency set — features and implementations.
 
     Bindings are excluded on purpose: they are derived, carry no presentation,
-    and *reference* dependencies (`uses_dependencies`) rather than declaring them.
+    and may reference only implementation/feature pair-specific dependency extras.
     """
     display_name: str = ""
     description: str = ""

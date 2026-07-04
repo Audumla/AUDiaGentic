@@ -51,9 +51,9 @@ def test_coding_lsp_registers_nested_implementation_and_language_features() -> N
     register_all_components([_config_dir()])
 
     assert feature_registry.get_implementation("coding-lsp", "ag-lsp") is not None
-    agent_lsp = feature_registry.get_implementation("coding-lsp", "agent-lsp")
-    assert agent_lsp is not None
-    assert agent_lsp.dependencies["agent-lsp"]["probe"] == "binary:agent-lsp"
+    blackwell_agent_lsp = feature_registry.get_implementation("coding-lsp", "blackwell-agent-lsp")
+    assert blackwell_agent_lsp is not None
+    assert blackwell_agent_lsp.dependencies["blackwell-agent-lsp"]["probe"] == "binary:agent-lsp"
     python = feature_registry.get_feature("coding-lsp", "language", "python")
     assert python is not None
     assert python.dependencies["pyright"]["probe"] == "binary:pyright-langserver"
@@ -61,6 +61,17 @@ def test_coding_lsp_registers_nested_implementation_and_language_features() -> N
     assert feature_registry.get_feature("coding-lsp", "language", "toml") is not None
     assert feature_registry.get_feature("coding-lsp", "language", "make") is not None
     assert feature_registry.get_feature("coding-lsp", "language", "yaml") is not None
+
+
+def test_coding_lsp_descriptor_files_are_grouped_by_role() -> None:
+    config_dir = _config_dir() / "coding-lsp"
+
+    assert (config_dir / "implementations" / "ag-lsp.yaml").exists()
+    assert (config_dir / "implementations" / "blackwell-agent-lsp.yaml").exists()
+    assert (config_dir / "features" / "python.yaml").exists()
+    assert (config_dir / "features" / "yaml-language.yaml").exists()
+    assert (config_dir / "bindings" / "ag-lsp" / "python.yaml").exists()
+    assert (config_dir / "bindings" / "blackwell-agent-lsp" / "python.yaml").exists()
 
 
 def test_coding_lsp_registers_ag_lsp_language_bindings() -> None:
@@ -83,21 +94,21 @@ def test_coding_lsp_registers_ag_lsp_language_bindings() -> None:
         ("ag-lsp", "language", "typescript"),
         ("ag-lsp", "language", "yaml"),
     }
-    assert bindings[("ag-lsp", "language", "python")].uses_dependencies == ("pyright",)
+    assert bindings[("ag-lsp", "language", "python")].uses_dependencies == ()
     assert bindings[("ag-lsp", "language", "python")].projection_writer_key == "coding-lsp.lsp-json"
-    assert bindings[("ag-lsp", "language", "python-ruff")].uses_dependencies == ("ruff",)
+    assert bindings[("ag-lsp", "language", "python-ruff")].uses_dependencies == ()
     assert bindings[("ag-lsp", "language", "python-ruff")].projection_writer_key == "coding-lsp.lsp-json"
-    assert bindings[("ag-lsp", "language", "markdown")].uses_dependencies == ("marksman",)
+    assert bindings[("ag-lsp", "language", "markdown")].uses_dependencies == ()
     assert bindings[("ag-lsp", "language", "markdown")].projection_writer_key == "coding-lsp.lsp-json"
-    assert bindings[("ag-lsp", "language", "json")].uses_dependencies == ("vscode-langservers-extracted",)
-    assert bindings[("ag-lsp", "language", "toml")].uses_dependencies == ("taplo",)
-    assert bindings[("ag-lsp", "language", "make")].uses_dependencies == ("make-ls",)
-    assert bindings[("ag-lsp", "language", "yaml")].uses_dependencies == ("yaml-language-server",)
-    assert bindings[("agent-lsp", "language", "python")].uses_dependencies == ("agent-lsp", "pyright")
-    assert bindings[("agent-lsp", "language", "python")].projection_writer_key == "agent-lsp.mcp-args"
-    assert bindings[("agent-lsp", "language", "markdown")].uses_dependencies == ("agent-lsp", "marksman")
-    assert bindings[("agent-lsp", "language", "markdown")].projection_writer_key == "agent-lsp.mcp-args"
-    assert bindings[("agent-lsp", "language", "json")].uses_dependencies == ("agent-lsp", "vscode-langservers-extracted")
-    assert bindings[("agent-lsp", "language", "toml")].uses_dependencies == ("agent-lsp", "taplo")
-    assert bindings[("agent-lsp", "language", "make")].uses_dependencies == ("agent-lsp", "make-ls")
-    assert bindings[("agent-lsp", "language", "yaml")].uses_dependencies == ("agent-lsp", "yaml-language-server")
+    assert bindings[("ag-lsp", "language", "json")].uses_dependencies == ()
+    assert bindings[("ag-lsp", "language", "toml")].uses_dependencies == ()
+    assert bindings[("ag-lsp", "language", "make")].uses_dependencies == ()
+    assert bindings[("ag-lsp", "language", "yaml")].uses_dependencies == ()
+    assert bindings[("blackwell-agent-lsp", "language", "python")].uses_dependencies == ()
+    assert bindings[("blackwell-agent-lsp", "language", "python")].projection_writer_key == "blackwell-agent-lsp.mcp-args"
+    assert bindings[("blackwell-agent-lsp", "language", "markdown")].uses_dependencies == ()
+    assert bindings[("blackwell-agent-lsp", "language", "markdown")].projection_writer_key == "blackwell-agent-lsp.mcp-args"
+    assert bindings[("blackwell-agent-lsp", "language", "json")].uses_dependencies == ()
+    assert bindings[("blackwell-agent-lsp", "language", "toml")].uses_dependencies == ()
+    assert bindings[("blackwell-agent-lsp", "language", "make")].uses_dependencies == ()
+    assert bindings[("blackwell-agent-lsp", "language", "yaml")].uses_dependencies == ()

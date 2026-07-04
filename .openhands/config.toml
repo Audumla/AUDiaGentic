@@ -1,0 +1,82 @@
+[mcp_servers.ag-ledger]
+command = "C:\\example-dev-root\\audiagentic\\.venv\\Scripts\\python.exe"
+args = [
+    "-m",
+    "audiagentic.launcher",
+    "mcp",
+    "audiagentic.components.ledger.ledger_mcp",
+]
+
+[mcp_servers.ag-ledger.env]
+AUDIAGENTIC_REPO_ROOT = "C:\\example-dev-root\\audiagentic"
+
+[mcp_servers.ag-agents]
+command = "C:\\example-dev-root\\audiagentic\\.venv\\Scripts\\python.exe"
+args = [
+    "-m",
+    "audiagentic.launcher",
+    "mcp",
+    "audiagentic.components.agents.agents_mcp",
+]
+
+[mcp_servers.ag-agents.env]
+AUDIAGENTIC_REPO_ROOT = "C:\\example-dev-root\\audiagentic"
+
+[mcp_servers.ag-planning]
+command = "C:\\example-dev-root\\audiagentic\\.venv\\Scripts\\python.exe"
+args = [
+    "-m",
+    "audiagentic.launcher",
+    "mcp",
+    "audiagentic.components.planning.planning_mcp",
+]
+
+[mcp_servers.ag-planning.env]
+AUDIAGENTIC_REPO_ROOT = "C:\\example-dev-root\\audiagentic"
+
+[mcp_servers.ag-release-please]
+command = "C:\\example-dev-root\\audiagentic\\.venv\\Scripts\\python.exe"
+args = [
+    "-m",
+    "audiagentic.launcher",
+    "mcp",
+    "audiagentic.components.release.release_please.release_please_mcp",
+]
+
+[mcp_servers.ag-release-please.env]
+AUDIAGENTIC_REPO_ROOT = "C:\\example-dev-root\\audiagentic"
+
+[mcp_servers.git]
+command = "uvx"
+args = [
+    "mcp-server-git",
+    "--repository",
+    ".",
+]
+
+[mcp_servers.github]
+command = "gh"
+args = [
+    "mcp",
+    "serve",
+]
+
+[mcp_servers.github.env]
+GITHUB_TOKEN = "${GITHUB_TOKEN}"
+
+[mcp_servers.ag-lsp]
+command = "C:\\example-dev-root\\audiagentic\\.venv\\Scripts\\python.exe"
+args = [
+    "-m",
+    "audiagentic.launcher",
+    "mcp",
+    "audiagentic.components.coding_lsp.lsp_mcp",
+]
+
+[mcp_servers.hindsight]
+type = "http"
+url = "http://192.0.2.123:8888/mcp"
+
+[mcp_servers.hindsight.headers]
+Authorization = "Bearer NONE"
+X-Bank-Id = "audiagentic"

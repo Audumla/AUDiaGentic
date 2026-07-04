@@ -5,6 +5,7 @@ from audiagentic.foundation.mcp.component_server import (
     log_tool_call,
     mcp_server,
     project_root_from_env,
+    run_mcp_server,
 )
 
 mcp = mcp_server(__name__)
@@ -46,9 +47,7 @@ def agent_delete_profile(profile_id: str) -> dict:
 
 
 def main() -> None:
-    from audiagentic.foundation.logging import bootstrap
-    bootstrap("agents-manage")
-    mcp.run()
+    run_mcp_server(mcp, "agents-manage")
 
 
 if __name__ == "__main__":

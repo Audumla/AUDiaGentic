@@ -11,7 +11,6 @@ from audiagentic.components.providers.descriptors.feature_mapping import (
     KIND_SURFACE,
     impl_features_for,
 )
-from audiagentic.foundation.components.ids import COMPONENT_PROVIDERS
 from audiagentic.foundation.features import registry as feature_registry
 from audiagentic.foundation.features.base import FEATURE_SCOPE_IMPLEMENTATION
 
@@ -53,7 +52,7 @@ def test_derived_features_are_implementation_scoped_to_the_provider() -> None:
     feature = skills[0]
     assert feature.scope == FEATURE_SCOPE_IMPLEMENTATION
     assert feature.implementation == "acme"
-    assert feature.parent == COMPONENT_PROVIDERS
+    assert feature.parent == "providers"
 
 
 def test_real_providers_register_expected_impl_features() -> None:
@@ -66,12 +65,12 @@ def test_real_providers_register_expected_impl_features() -> None:
     descriptor_registry.all_descriptors()
 
     # claude declares MCP, skills, and surface files.
-    assert feature_registry.get_implementation_feature(COMPONENT_PROVIDERS, "claude", KIND_MCP, KIND_MCP) is not None
-    assert feature_registry.get_implementation_feature(COMPONENT_PROVIDERS, "claude", KIND_SKILLS, KIND_SKILLS) is not None
-    assert "CLAUDE.md" in feature_registry.get_implementation_features(COMPONENT_PROVIDERS, "claude", KIND_SURFACE)
+    assert feature_registry.get_implementation_feature("providers", "claude", KIND_MCP, KIND_MCP) is not None
+    assert feature_registry.get_implementation_feature("providers", "claude", KIND_SKILLS, KIND_SKILLS) is not None
+    assert "CLAUDE.md" in feature_registry.get_implementation_features("providers", "claude", KIND_SURFACE)
     # codex declares language-server support; aider declares none of mcp/skills.
-    assert feature_registry.get_implementation_features(COMPONENT_PROVIDERS, "codex", "lsp-support")
-    assert feature_registry.get_implementation_feature(COMPONENT_PROVIDERS, "aider", KIND_MCP, KIND_MCP) is None
+    assert feature_registry.get_implementation_features("providers", "codex", "lsp-support")
+    assert feature_registry.get_implementation_feature("providers", "aider", KIND_MCP, KIND_MCP) is None
 
 
 def test_same_kind_across_providers_does_not_collide_in_registry() -> None:
@@ -82,7 +81,7 @@ def test_same_kind_across_providers_does_not_collide_in_registry() -> None:
     for feature in impl_features_for(_provider("prov-b", mcp_config=_fake_mcp_spec())):
         feature_registry.register(feature)
 
-    a = feature_registry.get_implementation_feature(COMPONENT_PROVIDERS, "prov-a", KIND_MCP, KIND_MCP)
-    b = feature_registry.get_implementation_feature(COMPONENT_PROVIDERS, "prov-b", KIND_MCP, KIND_MCP)
+    a = feature_registry.get_implementation_feature("providers", "prov-a", KIND_MCP, KIND_MCP)
+    b = feature_registry.get_implementation_feature("providers", "prov-b", KIND_MCP, KIND_MCP)
     assert a is not None and a.implementation == "prov-a"
     assert b is not None and b.implementation == "prov-b"

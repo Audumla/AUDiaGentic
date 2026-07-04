@@ -11,8 +11,9 @@
 #   recipe_kind        one of: hooks, plugin_config, mcp_config, wrapper_cli,
 #                      hybrid, guidance_only, command_installer, rules,
 #                      context_provider, native_passthrough
-#   install_command    official install command (empty if unknown)
-#   uninstall_command  official uninstall command (empty if unknown)
+#   install_steps      list of ProvisionStep definitions (type, id, command, ...)
+#   uninstall_steps    list of ProvisionStep definitions
+#   configure_steps    list of ProvisionStep definitions
 #   status_command     command to check integration status (empty if unknown)
 #   config_artifacts   list of config files/artifacts created
 #   platform_constraints: list of supported platforms (macOS, Linux, Windows)
@@ -23,22 +24,34 @@
 #   source_url         official documentation URL
 #   source_date        date source was checked (ISO format)
 #   notes              additional context or blockers
+#
+# Step types: shell, config-set, managed-block, write-file
+# Shell steps with pipes use "shell: true" and a full command string.
+# &&-chained commands are split into separate shell step entries.
 
 matrix:
   - provider_id: codex
     display_name: Codex
     integration_type: hooks
     recipe_kind: hooks
-    install_command: curl -fsSL https://hindsight.vectorize.io/get-codex | bash -s -- --mode local
-    uninstall_command: curl -fsSL https://hindsight.vectorize.io/get-codex | bash -s -- --uninstall
+    install_steps:
+      - type: shell
+        id: codex-install
+        command: curl -fsSL https://hindsight.vectorize.io/get-codex | bash -s -- --mode local
+        shell: true
+    uninstall_steps:
+      - type: shell
+        id: codex-uninstall
+        command: curl -fsSL https://hindsight.vectorize.io/get-codex | bash -s -- --uninstall
+        shell: true
     status_command: ""
     config_artifacts:
       - ~/.hindsight/codex.json
       - ~/.hindsight/codex/settings.json
     platform_constraints:
-      - macOS
-      - Linux
-      - Windows
+      - darwin
+      - linux
+      - win
     scope: global
     audia_action: call_official_installer
     source_url: https://hindsight.vectorize.io/sdks/integrations/codex
@@ -53,23 +66,49 @@ matrix:
     display_name: Claude Code
     integration_type: plugin
     recipe_kind: plugin_config
-    install_command: claude plugin marketplace add vectorize-io/hindsight && claude plugin install hindsight-memory
-    uninstall_command: claude plugin uninstall hindsight-memory
+    install_steps:
+      - type: shell
+        id: claude-marketplace
+        command:
+          - claude
+          - plugin
+          - marketplace
+          - add
+          - vectorize-io/hindsight
+      - type: shell
+        id: claude-install-plugin
+        command:
+          - claude
+          - plugin
+          - install
+          - hindsight-memory
+    uninstall_steps:
+      - type: shell
+        id: claude-uninstall
+        command:
+          - claude
+          - plugin
+          - uninstall
+          - hindsight-memory
     status_command: ""
     config_artifacts:
       - ~/.hindsight/claude-code.json
       - ${CLAUDE_PLUGIN_DATA}/venv
       - ~/.hindsight/profiles/claude-code.log
     platform_constraints:
-      - macOS
-      - Linux
-      - Windows
+      - darwin
+      - linux
+      - win
     scope: global
     audia_action: call_official_installer
     source_url: https://hindsight.vectorize.io/sdks/integrations/claude-code
     source_date: "2026-06-26"
     source_status: verified
     plugin_url_config_path: "~/.hindsight/claude-code.json"
+    plugin_repair_cache_pattern: "~/.claude/plugins/cache/hindsight/hindsight-memory/*/.mcp.json"
+    plugin_repair_data_dir: "${APPDATA}/Claude/plugins/data/hindsight-memory"
+    plugin_repair_venv_python: "venv/Scripts/python.exe"
+    plugin_repair_server_script: "scripts/mcp_server.py"
     notes: >-
       Plugin combines lifecycle hooks (session_start.py, recall.py, retain.py,
       session_end.py) + MCP server (mcp_server.py with agent_knowledge_* tools)
@@ -79,15 +118,34 @@ matrix:
     display_name: Cline
     integration_type: hooks
     recipe_kind: hooks
-    install_command: pip install hindsight-cline && hindsight-cline install --api-url URL --api-token KEY
-    uninstall_command: hindsight-cline uninstall
+    install_steps:
+      - type: shell
+        id: cline-pip-install
+        command:
+          - pip
+          - install
+          - hindsight-cline
+      - type: shell
+        id: cline-init
+        command:
+          - hindsight-cline
+          - install
+          - "--api-url={URL}"
+          - "--api-token={KEY}"
+          - "--bank-id={ID}"
+    uninstall_steps:
+      - type: shell
+        id: cline-uninstall
+        command:
+          - hindsight-cline
+          - uninstall
     status_command: ""
     config_artifacts:
       - ~/.hindsight/cline.json
       - settings.json
     platform_constraints:
-      - macOS
-      - Linux
+      - darwin
+      - linux
     scope: both
     audia_action: call_official_installer
     source_url: https://hindsight.vectorize.io/sdks/integrations/cline
@@ -102,8 +160,26 @@ matrix:
     display_name: GitHub Copilot
     integration_type: mcp+rules
     recipe_kind: hybrid
-    install_command: pip install hindsight-copilot && hindsight-copilot init --api-token TOKEN --bank-id ID
-    uninstall_command: hindsight-copilot uninstall
+    install_steps:
+      - type: shell
+        id: copilot-pip-install
+        command:
+          - pip
+          - install
+          - hindsight-copilot
+      - type: shell
+        id: copilot-init
+        command:
+          - hindsight-copilot
+          - init
+          - "--api-token={TOKEN}"
+          - "--bank-id={ID}"
+    uninstall_steps:
+      - type: shell
+        id: copilot-uninstall
+        command:
+          - hindsight-copilot
+          - uninstall
     status_command: hindsight-copilot status
     config_artifacts:
       - ./.vscode/mcp.json
@@ -126,11 +202,14 @@ matrix:
     display_name: OpenCode
     integration_type: plugin
     recipe_kind: plugin_config
-    install_command: Add "@vectorize-io/opencode-hindsight" to plugin array in opencode.json
-    uninstall_command: Remove plugin from opencode.json plugin array
+    install_steps: []
+    uninstall_steps: []
+    plugin_array_package: "@vectorize-io/opencode-hindsight"
+    plugin_array_reader: "audiagentic.components.providers.adapters.opencode.plugin_array:read_opencode_plugin"
+    plugin_array_writer: "audiagentic.components.providers.adapters.opencode.plugin_array:write_opencode_plugin"
+    plugin_array_remover: "audiagentic.components.providers.adapters.opencode.plugin_array:remove_opencode_plugin"
     status_command: ""
     config_artifacts:
-      - ~/.hindsight/opencode.json
       - opencode.json (plugin array entry)
     platform_constraints:
       - macOS
@@ -139,21 +218,38 @@ matrix:
     scope: both
     audia_action: manage_config_writes
     source_url: https://hindsight.vectorize.io/sdks/integrations/opencode
-    source_date: "2026-06-26"
+    source_date: "2026-07-01"
     source_status: verified
     notes: >-
-      Plugin registers custom tools (hindsight_retain, hindsight_recall,
-      hindsight_reflect), hooks on session.created, session.idle, and
-      compaction events. Env vars unreliable on Windows for plugin runtime.
-      Project-local (opencode.json) or global (~/.config/opencode/opencode.json).
+      OpenCode auto-installs plugins in the "plugin" array on startup — no npm install required.
+      HINDSIGHT_API_URL and HINDSIGHT_API_TOKEN env vars can be set externally; config file
+      provides persistent defaults. Env vars unreliable on Windows for plugin runtime.
 
   - provider_id: openhands
     display_name: OpenHands
     integration_type: mcp+rules
     recipe_kind: mcp_config
-    install_command: ""
-    uninstall_command: ""
-    status_command: ""
+    install_steps:
+      - type: shell
+        id: openhands-pip-install
+        command:
+          - pip
+          - install
+          - hindsight-openhands
+      - type: shell
+        id: openhands-init
+        command:
+          - hindsight-openhands
+          - init
+          - "--api-token={TOKEN}"
+          - "--bank-id={ID}"
+    uninstall_steps:
+      - type: shell
+        id: openhands-uninstall
+        command:
+          - hindsight-openhands
+          - uninstall
+    status_command: hindsight-openhands status
     config_artifacts:
       - ./config.toml (MCP server entry under [mcp])
       - ./AGENTS.md (recall/retain rule)
@@ -162,21 +258,34 @@ matrix:
       - Linux
       - Windows
     scope: project-local
-    audia_action: action_needed
+    audia_action: call_official_installer
     source_url: https://hindsight.vectorize.io/sdks/integrations/openhands
-    source_date: "2026-06-26"
+    source_date: "2026-07-01"
     source_status: verified
     notes: >-
       Official integration confirmed. TOML writer now available in openhands adapter.
       MCP config + rule block strategy via generic McpConfigSpec seam.
-      fallback may still write AGENTS.md via the memory/hindsight implementation.
 
   - provider_id: roo
     display_name: Roo Code
     integration_type: mcp+rules
     recipe_kind: hybrid
-    install_command: pip install hindsight-roo-code && hindsight-roo-code install --api-url URL --api-token KEY
-    uninstall_command: ""
+    install_steps:
+      - type: shell
+        id: roo-pip-install
+        command:
+          - pip
+          - install
+          - hindsight-roo-code
+      - type: shell
+        id: roo-init
+        command:
+          - hindsight-roo-code
+          - install
+          - "--api-url={URL}"
+          - "--api-token={KEY}"
+          - "--bank-id={ID}"
+    uninstall_steps: []
     status_command: ""
     config_artifacts:
       - .roo/mcp.json
@@ -198,8 +307,14 @@ matrix:
     display_name: Continue
     integration_type: context+mcp+rules
     recipe_kind: hybrid
-    install_command: ""
-    uninstall_command: ""
+    install_steps:
+      - type: shell
+        id: continue-pip-install
+        command:
+          - pip
+          - install
+          - hindsight-continue
+    uninstall_steps: []
     status_command: ""
     config_artifacts:
       - config.yaml (HTTP context provider entry for Continue)
@@ -208,21 +323,34 @@ matrix:
       - Linux
       - Windows
     scope: project-local
-    audia_action: manage_config_writes
+    audia_action: call_official_installer
     source_url: https://hindsight.vectorize.io/sdks/integrations/continue
-    source_date: "2026-06-26"
+    source_date: "2026-07-01"
     source_status: verified
     notes: >-
-      HTTP context provider (adapter server on 127.0.0.1:8123 implementing
-      Continue's context provider contract) + optional MCP server + rules for
-      automatic recall/retain in agent mode.
+      pip install hindsight-continue then run adapter server (hindsight-continue).
+      Register in Continue's config.yaml as HTTP context provider on 127.0.0.1:8123.
+      MCP + rules optional for automatic recall/retain in agent mode.
 
   - provider_id: aider
     display_name: Aider
     integration_type: wrapper
     recipe_kind: wrapper_cli
-    install_command: pip install hindsight-aider aider-chat
-    uninstall_command: pip uninstall hindsight-aider
+    install_steps:
+      - type: shell
+        id: aider-pip-install
+        command:
+          - pip
+          - install
+          - hindsight-aider
+          - aider-chat
+    uninstall_steps:
+      - type: shell
+        id: aider-uninstall
+        command:
+          - pip
+          - uninstall
+          - hindsight-aider
     status_command: ""
     config_artifacts:
       - .aider.hindsight-memory.md (recalled memory file, passed via --read)
@@ -244,8 +372,21 @@ matrix:
     display_name: Gemini (Spark)
     integration_type: mcp
     recipe_kind: mcp_config
-    install_command: ""
-    uninstall_command: ""
+    install_steps: []
+    uninstall_steps: []
+    configure_steps:
+      - type: write-file
+        id: gemini-mcp-config
+        path: "~/.gemini/antigravity/mcp_config.json"
+        content: |
+          {
+            "mcpServers": {
+              "hindsight": {
+                "type": "http",
+                "url": "{MCP_URL}"
+              }
+            }
+          }
     status_command: ""
     config_artifacts:
       - antigravity.yaml (hosted agent manifest)
@@ -257,7 +398,7 @@ matrix:
     scope: global
     audia_action: manage_config_writes
     source_url: https://hindsight.vectorize.io/sdks/integrations/gemini-spark
-    source_date: "2026-06-26"
+    source_date: "2026-07-01"
     source_status: verified
     notes: >-
       Cloud-based agent; Spark's built-in MCP support via OAuth 2.1.
@@ -268,8 +409,8 @@ matrix:
     display_name: Goose
     integration_type: none
     recipe_kind: guidance_only
-    install_command: ""
-    uninstall_command: ""
+    install_steps: []
+    uninstall_steps: []
     status_command: ""
     config_artifacts: []
     platform_constraints:
@@ -289,8 +430,8 @@ matrix:
     display_name: Local OpenAI
     integration_type: none
     recipe_kind: guidance_only
-    install_command: ""
-    uninstall_command: ""
+    install_steps: []
+    uninstall_steps: []
     status_command: ""
     config_artifacts: []
     platform_constraints:
@@ -310,8 +451,8 @@ matrix:
     display_name: Pi
     integration_type: none
     recipe_kind: guidance_only
-    install_command: ""
-    uninstall_command: ""
+    install_steps: []
+    uninstall_steps: []
     status_command: ""
     config_artifacts: []
     platform_constraints:
@@ -331,8 +472,8 @@ matrix:
     display_name: Plandex
     integration_type: none
     recipe_kind: guidance_only
-    install_command: ""
-    uninstall_command: ""
+    install_steps: []
+    uninstall_steps: []
     status_command: ""
     config_artifacts: []
     platform_constraints:
@@ -352,8 +493,8 @@ matrix:
     display_name: Qwen Code
     integration_type: none
     recipe_kind: guidance_only
-    install_command: ""
-    uninstall_command: ""
+    install_steps: []
+    uninstall_steps: []
     status_command: ""
     config_artifacts: []
     platform_constraints:

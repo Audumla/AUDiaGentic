@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.runtime.lifecycle.baseline_sync import sync_managed_baseline
+from audiagentic.foundation.lifecycle.baseline_sync import sync_managed_baseline
 
 
 def test_sync_managed_baseline_copies_managed_assets_and_excludes_runtime(tmp_path: Path) -> None:

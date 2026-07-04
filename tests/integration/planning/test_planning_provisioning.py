@@ -85,7 +85,7 @@ def apply_surfaces(project_root: Path) -> None:
         apply_provider_surfaces,
         prune_provider_surfaces,
     )
-    from audiagentic.runtime.lifecycle.component_mcp import sync_all_provider_mcp_servers
+    from audiagentic.foundation.lifecycle.component_mcp import sync_all_provider_mcp_servers
 
     sync_all_provider_mcp_servers(project_root)
     prune_provider_surfaces(project_root)
@@ -336,7 +336,7 @@ def test_uninstall_removes_planning_contribution_from_surfaces(tmp_path: Path) -
 
 def test_install_sync_action_is_reload_required(tmp_path: Path) -> None:
     """agent-planning has MCP servers — install must signal reload_required."""
-    from audiagentic.runtime.lifecycle.components import install_component
+    from audiagentic.foundation.lifecycle.components import install_component
 
     with component_sandbox(tmp_path, "plan-sync") as sb:
         install_with_deps("project", sb.repo)

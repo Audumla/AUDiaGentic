@@ -33,11 +33,12 @@ from audiagentic.components.release.local_release import (
 from audiagentic.components.release.release_please import install as _rp_install
 from audiagentic.components.release.release_please import manage as _rp_manage
 from audiagentic.components.release.release_please.finalize import render_release_docs
-from audiagentic.foundation.components.ids import COMPONENT_RELEASE
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event import DeliveryMode, get_bus
-from audiagentic.runtime.lifecycle.components import DEFAULT_VERSION
+from audiagentic.foundation.lifecycle.components import DEFAULT_VERSION
 from audiagentic.runtime.update import GITHUB_REPO
+
+_COMPONENT_ID = "release"
 
 _RELEASE_WORKFLOW_ID = "release.yml"
 
@@ -82,7 +83,7 @@ def finalize(project_root: Path, release_id: str) -> dict[str, Any]:
             "result": archive_result,
         },
         metadata={
-            "source_component": COMPONENT_RELEASE,
+            "source_component": _COMPONENT_ID,
             "subject": {"kind": "release", "id": release_id},
         },
         mode=DeliveryMode.SYNC,

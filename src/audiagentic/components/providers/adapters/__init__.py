@@ -25,6 +25,52 @@ def _discover_adapter_packages() -> dict[str, ModuleType]:
     return modules
 
 
+def _register_standard_surfaces(descriptor) -> None:
+    """Register descriptor-driven surface renderers (AR03).
+
+    Providers whose descriptor carries a ``surfaces:`` block get the standard
+    renderer/contribution renderer with zero Python. Adapters with a custom
+    surface.py registered themselves during package import and win.
+    """
+    from pathlib import Path
+
+    from ..surfaces.base import (
+        make_single_file_contribution_renderer,
+        make_standard_surface_renderer,
+    )
+    from ..surfaces.registry import (
+        contribution_renderer_registered,
+        register_contribution_renderer,
+        register_renderer,
+        renderer_registered,
+    )
+
+    surfaces = descriptor.surfaces or {}
+    if not surfaces:
+        return
+    provider_id = descriptor.provider_id
+    if not renderer_registered(provider_id):
+        adapter_dir = Path(__file__).parent / provider_id.replace("-", "_")
+        register_renderer(
+            provider_id,
+            make_standard_surface_renderer(
+                provider_id,
+                style=surfaces.get("renderer", "none"),
+                instruction_file=descriptor.instruction_file,
+                adapter_dir=adapter_dir,
+                launch_example_template=surfaces.get(
+                    "launch-example-template", "@{tag}-{provider_id}"
+                ),
+            ),
+        )
+    contribution_file = surfaces.get("contribution-file")
+    if contribution_file and not contribution_renderer_registered(provider_id):
+        register_contribution_renderer(
+            provider_id,
+            make_single_file_contribution_renderer(contribution_file),
+        )
+
+
 def load_providers() -> None:
     """Load all provider descriptors from YAML and register them.
 
@@ -38,9 +84,10 @@ def load_providers() -> None:
     config_dir = get_providers_config_dir()
     providers = load_providers_from_directory(config_dir)
 
-    # Register each provider descriptor
+    # Register each provider descriptor + any descriptor-driven surfaces
     for descriptor in providers.values():
         register(descriptor)
+        _register_standard_surfaces(descriptor)
 
 
 # Load providers on import (preserves existing behavior)

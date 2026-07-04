@@ -19,7 +19,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
-from audiagentic.runtime.state import jobs_store as store
+from audiagentic.components.agent_jobs import jobs_store as store
 
 StageExecutor = Callable[
     [dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any] | None],

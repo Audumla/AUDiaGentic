@@ -47,7 +47,7 @@ from audiagentic.components.providers.surfaces.manager import (
     prune_provider_surfaces,
 )
 from audiagentic.foundation.components.loader import register_all_components
-from audiagentic.runtime.lifecycle.components import (
+from audiagentic.foundation.lifecycle.components import (
     enable_component,
     install_component,
 )

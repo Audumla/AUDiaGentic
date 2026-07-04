@@ -29,7 +29,7 @@ from audiagentic.foundation.features.state import (
     set_feature_state,
     set_implementation_state,
 )
-from audiagentic.runtime.lifecycle.components import enable_component, install_component
+from audiagentic.foundation.lifecycle.components import enable_component, install_component
 
 pytestmark = [
     pytest.mark.slow,
