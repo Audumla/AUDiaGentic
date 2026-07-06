@@ -26,6 +26,12 @@ _logger = logging.getLogger(__name__)
 
 
 def clear() -> None:
+    """Clear all feature registry state.
+
+    Note: Feature registration is constrained to one component profile per process
+    (CP05). This function is used by test fixtures and profile cache reset to
+    allow re-registration under a different profile after explicit cache clearing.
+    """
     _features.clear()
     _impl_features.clear()
     _implementations.clear()

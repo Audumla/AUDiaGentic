@@ -5,7 +5,10 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.contracts.errors import make_error_factory
+from audiagentic.foundation.contracts.errors import (
+    AudiaGenticError,
+    make_error_factory,
+)
 from audiagentic.foundation.io import load_yaml_file
 
 _component_error: Any = make_error_factory("VAL", "COMP", "components")
@@ -28,6 +31,50 @@ logger = logging.getLogger(__name__)
 _PACKAGE_DIR = Path(__file__).resolve().parents[2]  # audiagentic/
 _COMPONENTS_CONFIG_DIR = _PACKAGE_DIR / "config" / "components"
 _ALL_COMPONENT_CONFIG_DIRS = [_COMPONENTS_CONFIG_DIR]
+
+_registration_cache: dict[frozenset[str], list[ComponentDescriptor]] = {}
+
+# CP05: Track which profile was active on first registration to prevent mid-process switches.
+_active_profile_on_first_register: str | None = None
+
+
+def _reset_registration_cache() -> None:
+    """Invalidate the register_all_components cache guard and reset profile tracking.
+
+    Called by test fixtures that clear registry state, and by profile switching code (CP05).
+    Without this, a fixture that clears the underlying registries would have the cache
+    short-circuit and leave them empty on subsequent lazy bootstrap calls.
+    Also resets _active_profile_on_first_register so tests can re-register with a
+    different profile after explicit cache clearing.
+    """
+    _registration_cache.clear()
+    global _active_profile_on_first_register
+    _active_profile_on_first_register = None
+
+
+def _get_component_config_dirs() -> list[Path]:
+    """Resolve component config directories from override sources.
+
+    Delegates to the shared resolver in foundation/paths/names.py
+    (AUDIAGENTIC_COMPONENT_CONFIG_DIRS env var, then package defaults) so
+    descriptor discovery and error-resolution loading share one source.
+    """
+    from audiagentic.foundation.paths.names import get_component_config_dirs
+
+    return get_component_config_dirs()
+
+
+def _build_files_tuple(raw_files: list[dict]) -> tuple[ComponentFile, ...]:
+    """Build ComponentFile tuple from raw YAML file entries."""
+    return tuple(
+        ComponentFile(
+            rel_path=f["path"],
+            lifecycle=f["lifecycle"],
+            recursive=bool(f.get("recursive", False)),
+            description=f.get("description", ""),
+        )
+        for f in (raw_files or [])
+    )
 
 
 def component_yaml_path(component_id: str) -> Path:
@@ -64,15 +111,7 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
     component_id = data.get("id")
     if not isinstance(component_id, str) or not component_id:
         raise _component_error(2, f"{path.name}: missing or empty id", path=str(path), field="id")
-    files = tuple(
-        ComponentFile(
-            rel_path=f["path"],
-            lifecycle=f["lifecycle"],
-            recursive=bool(f.get("recursive", False)),
-            description=f.get("description", ""),
-        )
-        for f in (data.get("files") or [])
-    )
+    files = _build_files_tuple(data.get("files") or [])
 
     # Default detection-marker from id when not explicitly declared
     raw_scope = data.get("scope", SCOPE_PROJECT)
@@ -91,15 +130,7 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
             "description": "Installation marker",
         }
         data.setdefault("files", []).insert(0, marker_file)
-        files = tuple(
-            ComponentFile(
-                rel_path=f["path"],
-                lifecycle=f["lifecycle"],
-                recursive=bool(f.get("recursive", False)),
-                description=f.get("description", ""),
-            )
-            for f in data["files"]
-        )
+        files = _build_files_tuple(data["files"])
     mcp_servers = tuple(
         McpServerDeclaration(
             name=ms["name"],
@@ -173,23 +204,78 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
         status_hook=data.get("status-hook") or None,
         implementation_cardinality=data.get("implementation-cardinality") or None,
     )
-    register(descriptor)
+    register(descriptor, replace=True)
     return descriptor
 
 
 def register_all_components(config_dirs: list[Path] | None = None) -> list[ComponentDescriptor]:
     """Load and register every *.yaml file across all component config dirs.
 
-    Defaults to config/components/ (top-level YAMLs only).
-    Idempotent — re-registering an already-known component id is a no-op overwrite.
+    Defaults to the resolved override directories or config/components/ (top-level YAMLs only).
+    Idempotent and internally cached on unchanged inputs.
 
     After loading descriptors, imports any declared lifecycle-observer modules so
     they self-register their event bus subscriptions.
+
+    Profile-aware layering: when a component profile is active, the profile's
+    component config directory is added alongside base directories with the
+    profile layer scanned last so its descriptors overwrite base ones (last wins).
+    One profile per process; switching profiles mid-process raises an error (CP05).
     """
-    targets = config_dirs or _ALL_COMPONENT_CONFIG_DIRS
+    global _active_profile_on_first_register
+
+    # CP05: Guard against cross-profile pollution
+    from audiagentic.foundation.paths.names import get_active_profile
+
+    current_profile = get_active_profile()
+
+    if _active_profile_on_first_register is None:
+        _active_profile_on_first_register = current_profile
+    elif _active_profile_on_first_register != current_profile:
+        raise AudiaGenticError(
+            code="VAL-COMP-010",
+            kind="components",
+            message=(
+                f"Cannot switch component profile mid-process: "
+                f"first registration used {_active_profile_on_first_register!r}, "
+                f"now requested {current_profile!r}. "
+                f"One profile per process; restart to switch."
+            ),
+        )
+
+    targets = config_dirs or _get_component_config_dirs()
+
+    # CP04: Layer base + profile config dirs
+    # When profile is active, add both profile dir AND base dirs.
+    # Profile dir scanned last so its descriptors overwrite base ones (last wins).
+    if current_profile and not config_dirs:
+        from audiagentic.foundation.paths.names import (
+            resolve_profile_component_config_dir,
+        )
+        from audiagentic.paths import find_project_root
+
+        # Profiles are project-scoped (.audiagentic/<profile>/components/), so
+        # they need the real project root — walk up from cwd to the marker
+        # directory, matching how the rest of the app locates the project.
+        # Known limitation: launching with --project X from outside X resolves
+        # the profile against cwd's project, not X (tracked on CP03 reviews).
+        project_root = find_project_root() or Path.cwd()
+        profile_dir = resolve_profile_component_config_dir(
+            project_root.resolve(), current_profile
+        )
+        targets = list(targets) + [profile_dir]
+
+    cache_key = frozenset(str(p.resolve()) for p in targets)
+
+    if cache_key in _registration_cache:
+        return _registration_cache[cache_key]
     descriptors = []
+    # CP04: Track source layer (config dir) for each descriptor to distinguish
+    # same-layer vs cross-layer duplicates.
+    descriptor_layers: list[tuple[ComponentDescriptor, str]] = []
     feature_descriptor_types = {"feature", "implementation", "binding"}
     for target in targets:
+        resolved_target = str(target.resolve())
         for path in sorted(target.resolve().glob("*.yaml")):
             data = load_yaml_file(path)
             if data.get("type") in feature_descriptor_types:
@@ -199,7 +285,9 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
 
                 register_feature_from_yaml(path)
                 continue
-            descriptors.append(register_from_yaml(path))
+            desc = register_from_yaml(path)
+            descriptors.append(desc)
+            descriptor_layers.append((desc, resolved_target))
 
         for path in sorted(target.resolve().glob("**/*.yaml")):
             if path.parent == target.resolve():
@@ -213,11 +301,9 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
                 register_feature_from_yaml(path)
 
     # Validate data-driven constraints (duplicates, deps) before observers import.
-    _validate_descriptors_data(descriptors)
+    _validate_descriptors_data(descriptor_layers)
 
-    # Import lifecycle observers so they self-register capability contributions
-    # (e.g. surface-validator for loader.py Seam A).  This must run before
-    # consumers resolve get_capability during this bootstrap phase.
+    # Import lifecycle observers so they self-register their event bus subscriptions.
     for descriptor in descriptors:
         if descriptor.lifecycle_observer:
             try:
@@ -225,7 +311,6 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
             except Exception:
                 logger.warning("Failed to import lifecycle observer for %s", descriptor.component_id, exc_info=True)
 
-    # Validate contribution configs — needs capability registry from observers.
     _validate_descriptors_contributions(descriptors)
     initialize_lifecycle_hook_dispatch()
 
@@ -235,26 +320,42 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
 
     load_all_error_resolutions(targets)
 
+    _registration_cache[cache_key] = descriptors
     return descriptors
 
 
-def _validate_descriptors_data(descriptors: list[ComponentDescriptor]) -> None:
+def _validate_descriptors_data(
+    descriptor_layers: list[tuple[ComponentDescriptor, str]],
+) -> None:
     """Validate data-driven constraints (duplicates, depends-on references).
 
     Runs after ALL descriptors are loaded so depends-on references can be
     checked against the full set rather than an incrementally built partial set.
+
+    Cross-layer duplicate handling (CP04): only raises hard errors for same-layer
+    duplicate IDs. Cross-layer duplicates (e.g., profile overriding base) use
+    "last wins" semantics — the later layer's descriptor overwrites the earlier one
+    via the registry, so validation allows them silently.
     """
-    seen: set[str] = set()
-    duplicates: set[str] = set()
-    for descriptor in descriptors:
-        if descriptor.component_id in seen:
-            duplicates.add(descriptor.component_id)
-        seen.add(descriptor.component_id)
-    if duplicates:
+    # Track (component_id -> source_layer) for same-layer duplicate detection
+    seen: dict[str, str] = {}
+    same_layer_duplicates: set[str] = set()
+    descriptors = [desc for desc, _ in descriptor_layers]
+
+    for descriptor, layer in descriptor_layers:
+        cid = descriptor.component_id
+        if cid in seen:
+            if seen[cid] == layer:
+                # Same-layer duplicate — hard error
+                same_layer_duplicates.add(cid)
+            # else: cross-layer duplicate — allowed (last wins via registry overwrite)
+        seen[cid] = layer
+
+    if same_layer_duplicates:
         raise _component_error(
             3,
-            f"duplicate component ids loaded: {', '.join(sorted(duplicates))}",
-            duplicate_ids=sorted(duplicates),
+            f"duplicate component ids loaded: {', '.join(sorted(same_layer_duplicates))}",
+            duplicate_ids=sorted(same_layer_duplicates),
         )
 
     loaded_ids = {d.component_id for d in descriptors}
@@ -270,18 +371,33 @@ def _validate_descriptors_data(descriptors: list[ComponentDescriptor]) -> None:
                 )
 
 
-def _validate_descriptors_contributions(descriptors: list[ComponentDescriptor]) -> None:
-    """Validate contribution config references via capability registry.
+def _validate_config_reference(config_path: str, component_id: str) -> str | None:
+    """Validate that a config reference resolves to an existing file.
 
-    Runs after lifecycle-observer import so the providers.surface-validator
-    capability is registered.  No-ops gracefully when providers absent.
+    Returns None if valid, or a warning message if the file does not exist.
+    Config references are relative to the package config directory.
     """
-    from audiagentic.foundation.capabilities import get_capability
+    # Config references are relative to the package config dir (parent of components/)
+    from audiagentic.foundation.paths.names import get_package_config_dir
 
-    validate_ref = get_capability("providers.surface-validator")
-    if validate_ref is None:
-        return
+    config_base = get_package_config_dir()
+    candidate = config_base / config_path
+    if not candidate.exists():
+        return (
+            f"Component {component_id!r}: config reference {config_path!r} "
+            f"does not exist (resolved to {candidate})"
+        )
+    return None
 
+
+def _validate_descriptors_contributions(descriptors: list[ComponentDescriptor]) -> None:
+    """Validate contribution config references.
+
+    Runs after descriptors are loaded. Config-reference validation now runs
+    for every component's descriptor regardless of whether the providers
+    component is installed (previous capability-gated path silently skipped
+    validation when providers was absent).
+    """
     for descriptor in descriptors:
         if not descriptor.yaml_path or not descriptor.yaml_path.exists():
             continue
@@ -292,6 +408,6 @@ def _validate_descriptors_contributions(descriptors: list[ComponentDescriptor]) 
                 continue
             config_ref = raw.get("config")
             if isinstance(config_ref, str):
-                warning = validate_ref(config_ref, descriptor.component_id)
+                warning = _validate_config_reference(config_ref, descriptor.component_id)
                 if warning:
                     logger.warning(warning)

@@ -14,12 +14,16 @@ Runtime (orchestration)  --bootstraps/wires via seams-->  foundation capabilitie
 - **Components** — product capabilities. May import foundation and runtime.
 - **Foundation** — the capability layer, not a "bottom" layer. Provides shared capabilities (errors, events, IO, toolchains, workflow, MCP plumbing, component lifecycle — `foundation/lifecycle`) to components and the CLI. A capability may read the runtime environment to adapt its behavior (e.g. platform-dependent tool selection).
 - **Runtime environment** (`runtime/system`) — read-only facts about the live execution context: platform, process identity, live paths. Importable from any layer, including foundation.
-- **Runtime orchestration** (`runtime/harness`, `runtime/rig`, `runtime/update`, `runtime/build`) — bootstrap, lifecycle transitions, durable state. Acts as a quasi-composition root: calling foundation capabilities while bootstrapping is expected and normal. After startup, runtime should have limited need to call foundation capabilities directly — prefer events, callbacks, and registries. This is guidance, not a hard rule; the bootstrap boundary is inherently fuzzy.
+- **Runtime orchestration** (`runtime/harness`, `runtime/rig`, `runtime/update`, `runtime/build`) — bootstrap, lifecycle transitions, durable state. Acts as a quasi-composition root: calling foundation capabilities while bootstrapping is expected and normal. After startup, runtime should have limited need to call foundation capabilities directly — prefer events and contribution registries. This is guidance, not a hard rule; the bootstrap boundary is inherently fuzzy.
 
 **Rules:**
 - Foundation must never import runtime orchestration or components. It may import the runtime environment namespace (`runtime/system`) freely — that is the sanctioned "capability reads environment" seam.
 - Environment modules (`runtime/system`) hold read-only facts only: no orchestration logic, no imports from foundation, components, or the rest of runtime.
-- Runtime must never import a specific optional component. Use registered callbacks, events, or contribution registries.
+- Runtime must never import a specific optional component. Use events or contribution registries.
+
+  _Rationale: every real and planned use of the registered-callback pattern (`get_capability`/`register_capability`) was found to be a misapplication — either a fire-and-forget reaction better served by the event bus, logic needing no indirection at all, or composition-root code exempt from import rules that could check the component registry and import directly._
+
+- **Domain-neutral naming:** foundation module names, function names, event-type strings, and contribution-registry keys must be domain-neutral. A name referencing one specific component's vocabulary is a layering violation even when it produces zero forbidden imports.
 - Composition roots are exempt from import-direction rules by definition.
 
 ## 2. Config Over Code
@@ -29,7 +33,7 @@ Extensibility must never require editing Python source.
 **Rules:**
 - Lists of entities (components, providers, tools, states, policies, capabilities) must be declared in YAML/JSON — never hardcoded in Python.
 - `if/elif` chains that branch on entity names (component ID, provider name, action tag, file path) are prohibited. Use a registry of `(key, handler)` pairs or a config-driven lookup table.
-- Adding a new capability = dropping a config file or registering a callback. No Python edits.
+- Adding a new capability = dropping a config file or contributing to a registry. No Python edits.
 
 ## 3. Logic Containment
 
@@ -100,10 +104,13 @@ Extensibility must never require editing Python source.
 
 ## 11. Lazy Initialization
 
+**Principle:** Lazy loading is an implementation detail that must be invisible to callers. A consumer requests a value or capability and receives it; whether that value was pre-populated or materialized on demand is not its concern.
+
 **Rules:**
-- Prefer lazy, on-first-access loading over eager centralized bootstrap for config-driven registries and shared state. A module that needs a registry populated may call its loader defensively from wherever it needs the data — this is the intended pattern, not duplication to be cleaned up.
-- A loader function called this way must be safe **and cheap** to call repeatedly: idempotent (re-registering unchanged state is a no-op) *and* internally cached/short-circuited on unchanged inputs. "Idempotent" alone (safe but re-does the work every time) is not sufficient once a function has more than a couple of call sites.
-- If repeated calls turn out to be expensive, fix the cost inside the loader (cache/short-circuit keyed on its inputs) — do not "fix" it by centralizing or reducing the number of call sites. Scattered lazy self-bootstrap is not an anti-pattern here.
+- Prefer lazy, on-first-access loading over eager centralized bootstrap for config-driven registries, heavy dependencies, and shared state.
+- **Transparency is mandatory.** The public API surface must not expose loader functions, priming methods, or load-state queries. A caller accesses the registry, property, or capability directly — laziness is handled internally.
+- The lazy-load guard lives inside the accessor, not at every call site. A property getter, module-level function, or descriptor performs the on-demand population and returns the ready value. Callers never invoke a separate "ensure loaded" step.
+- The internal loader must be **idempotent and cheap** on repeated invocation: re-entry is a cached no-op. If accumulation makes it expensive, fix the cost inside the guard (short-circuit on completion flag) — do not push awareness of the load state outward to callers.
 - When building a registry that needs on-first-access population, prefer composing the shared registry utility's built-in lazy-loader support over hand-rolling a module-level `_loaded`/`_ensure_loaded()` guard.
 
 ## 12. Anti-Pattern Quick Reference
@@ -114,7 +121,7 @@ Extensibility must never require editing Python source.
 | `if x == "a": ... elif x == "b":` on entity names | `(key, handler)` registry |
 | `foundation/` imports `components/` or runtime orchestration (anything outside `runtime/system`) | Invert via capability registry/events, or move the fact into `runtime/system` |
 | Orchestration logic or upward imports inside `runtime/system` | Environment modules hold read-only facts only |
-| `runtime/` imports optional component internals | Events, callbacks, contribution registry |
+| `runtime/` imports optional component internals | Events, contribution registry |
 | Manual `FastMCP(...)` construction | `mcp_server(__name__)` |
 | `raise ValueError("...")` at public boundary | `AudiaGenticError(code=..., ...)` |
 | `except Exception: pass` | Log `exc_info=True`, wrap, or safe default |
@@ -123,5 +130,8 @@ Extensibility must never require editing Python source.
 | Raw stdout/stderr in error details | Redact or summarize |
 | `__all__ = ["aider", "claude", ...]` | `pkgutil.iter_modules()` discovery |
 | Hardcoded editor CLI/paths | Pluggable host adapter |
-| Loader function called from many sites re-does full work every call | Cache/short-circuit inside the loader on unchanged inputs, not fewer call sites |
+| Call site must invoke a loader or check load state before using a value | Hide laziness inside the accessor; caller gets the value directly |
+| Internal loader re-does full work on every call | Cache/short-circuit inside the guard (idempotent no-op after first completion) |
 | Hand-rolled `_loaded`/`_ensure_loaded()` guard per registry | Shared registry utility's built-in lazy-loader |
+| Single-slot registered-callback/capability lookup for a direct import | Convert to an event; or in composition-root, check component registry and import directly |
+| Component-domain vocabulary in foundation module/event/registry-key name | Rename to domain-neutral concept, or move logic into owning component |

@@ -34,14 +34,18 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
         flags=re.IGNORECASE,
     )
     if reconcile_all_match or reconcile_one_match:
-        try:
-            from audiagentic.components.providers.services.lifecycle import (
-                reconcile_all_providers,
-                reconcile_provider,
-            )
-        except ImportError:
+        from audiagentic.foundation.components.loader import register_all_components
+        from audiagentic.foundation.components.registry import get_descriptor
+
+        register_all_components()
+        if not get_descriptor("providers"):
             print_error("providers component not available")
             return 1
+
+        from audiagentic.components.providers.services.lifecycle import (
+            reconcile_all_providers,
+            reconcile_provider,
+        )
 
         if reconcile_all_match:
             result = reconcile_all_providers(project_root=project_root, on_progress=_print_progress)
@@ -65,15 +69,21 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
     action = match.group(1).lower()
     provider_id = match.group(2).lower()
 
-    try:
-        from audiagentic.components.providers.services.lifecycle import (
-            install_provider_cli,
-            repair_provider_cli,
-            uninstall_provider_cli,
-        )
-    except ImportError:
+    from audiagentic.foundation.components.loader import register_all_components
+    from audiagentic.foundation.components.registry import (
+        get_descriptor as _get_component_descriptor,
+    )
+
+    register_all_components()
+    if not _get_component_descriptor("providers"):
         print_error("providers component not available")
         return 1
+
+    from audiagentic.components.providers.services.lifecycle import (
+        install_provider_cli,
+        repair_provider_cli,
+        uninstall_provider_cli,
+    )
 
     handlers = {
         "install": install_provider_cli,

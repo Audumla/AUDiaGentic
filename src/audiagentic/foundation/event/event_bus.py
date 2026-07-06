@@ -282,7 +282,13 @@ _bus_instance: EventBus | None = None
 
 
 def get_bus() -> EventBus:
-    """Get the singleton EventBus instance."""
+    """Get the singleton EventBus instance.
+
+    Note: The event bus is shared across all component profiles within a process.
+    Component registration is constrained to one profile per process (CP05).
+    Subscriptions from lifecycle observers are bound at registration time and
+    persist for the process lifetime.
+    """
     global _bus_instance
     if _bus_instance is None:
         _bus_instance = EventBus()

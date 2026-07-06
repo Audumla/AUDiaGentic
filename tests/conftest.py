@@ -40,6 +40,23 @@ def _isolate_audiagentic_home(
     monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path_factory.mktemp("audiagentic-home")))
 
 
+@pytest.fixture(autouse=True)
+def _reset_test_registries():
+    """Invalidate the loader's registration cache between every unit test.
+
+    The CP02 cache guard in register_all_components() is keyed on resolved
+    config dirs; after a fixture clears underlying registries, a subsequent
+    lazy call would short-circuit and leave them empty (RV115: 67 failures).
+    This fixture clears the cache but preserves import-time registrations
+    that many test harnesses rely on.
+    """
+    from audiagentic.foundation.components.loader import (
+        _reset_registration_cache,
+    )
+
+    _reset_registration_cache()
+
+
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     docker_ok = os.environ.get("AUDIAGENTIC_DOCKER_TESTS") == "1"
 

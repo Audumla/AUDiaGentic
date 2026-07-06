@@ -5,7 +5,6 @@ import logging
 from typing import Any
 
 from audiagentic.components.memory import memory_api
-from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.mcp.component_server import (
     FastMCP,
     log_tool_call,
@@ -16,10 +15,11 @@ from audiagentic.foundation.mcp.component_server import (
 
 logger = logging.getLogger(__name__)
 
-register_all_components()
-
 
 def build_server() -> FastMCP:
+    from audiagentic.foundation.components.loader import register_all_components
+
+    register_all_components()
     mcp = mcp_server(__name__)
 
     @mcp.tool()

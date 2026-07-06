@@ -23,7 +23,7 @@ def _sync_provider_mcp(project_root: Path, on_progress: ComponentOutputSink | No
     """
     from audiagentic.components.providers.services.lifecycle import _emit
     try:
-        from audiagentic.foundation.lifecycle.component_mcp import sync_all_provider_mcp_servers
+        from audiagentic.components.providers.services.mcp_sync import sync_all_provider_mcp_servers
 
         sync_all_provider_mcp_servers(project_root)
         _emit(on_progress, "MCP server configs synced")

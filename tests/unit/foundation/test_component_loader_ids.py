@@ -35,13 +35,15 @@ def test_component_descriptor_requires_id(tmp_path: Path) -> None:
 
 
 def test_loaded_components_reject_duplicate_ids() -> None:
+    layer = "/base/components"
     with pytest.raises(AudiaGenticError, match="duplicate component ids"):
-        _validate_descriptors_data([_descriptor("one"), _descriptor("one")])
+        _validate_descriptors_data([(_descriptor("one"), layer), (_descriptor("one"), layer)])
 
 
 def test_loaded_components_reject_unknown_dependency() -> None:
+    layer = "/base/components"
     with pytest.raises(AudiaGenticError, match="depends on unknown component"):
-        _validate_descriptors_data([_descriptor("one", depends_on=("missing",))])
+        _validate_descriptors_data([(_descriptor("one", depends_on=("missing",)), layer)])
 
 
 def test_default_detection_marker_project_scope(tmp_path: Path) -> None:
