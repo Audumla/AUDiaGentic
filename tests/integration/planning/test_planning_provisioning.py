@@ -81,11 +81,11 @@ def _stub(path: Path, content: str) -> None:
 
 
 def apply_surfaces(project_root: Path) -> None:
+    from audiagentic.components.providers.services.mcp_sync import sync_all_provider_mcp_servers
     from audiagentic.components.providers.surfaces.manager import (
         apply_provider_surfaces,
         prune_provider_surfaces,
     )
-    from audiagentic.foundation.lifecycle.component_mcp import sync_all_provider_mcp_servers
 
     sync_all_provider_mcp_servers(project_root)
     prune_provider_surfaces(project_root)
@@ -331,17 +331,19 @@ def test_uninstall_removes_planning_contribution_from_surfaces(tmp_path: Path) -
 
 
 # ---------------------------------------------------------------------------
-# Sync payload
+# Lifecycle result contract (EV01)
 # ---------------------------------------------------------------------------
 
-def test_install_sync_action_is_reload_required(tmp_path: Path) -> None:
-    """agent-planning has MCP servers — install must signal reload_required."""
+def test_install_result_has_no_sync_field(tmp_path: Path) -> None:
+    """EV01 deleted the 'sync' advisory: the harness lifecycle subscriber now
+    decides reload/refresh itself (see tests/unit/lifecycle/test_harness_seam.py).
+    The install result must not resurrect the dead advisory payload."""
     from audiagentic.foundation.lifecycle.components import install_component
 
     with component_sandbox(tmp_path, "plan-sync") as sb:
         install_with_deps("project", sb.repo)
         result = install_component("agent-planning", sb.repo)
-        sync = result.get("sync", {})
-        assert sync.get("action") == "reload_required", (
-            f"Expected reload_required, got {sync.get('action')!r}"
+        assert result.get("ok") is True, result
+        assert "sync" not in result, (
+            "install result resurrected the dead 'sync' advisory field"
         )

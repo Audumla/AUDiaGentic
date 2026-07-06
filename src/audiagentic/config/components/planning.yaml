@@ -120,7 +120,7 @@ contributions:
 
         ## Item lifecycle
         1. Create items with plan_create_item — lands in docs/planning/active/<plan>/
-        2. Revise content with plan_update_item as work progresses
+        2. Revise content with plan_update_item as work progresses; for a findings-driven correction (not routine progress), record a plan_create_review first, then close it once incorporated
         3. After review triage, close handled reviews with plan_set_review_state(review_id, 'closed')
         4. Mark done with plan_set_state(item_id, 'completed') only when implementation and validation are done
         5. Keep unfinished work pending; remove stale/superseded/cancelled items with plan_delete_item

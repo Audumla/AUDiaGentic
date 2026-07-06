@@ -5,7 +5,6 @@ import logging
 from typing import Any
 
 from audiagentic.foundation.components.ids import COMPONENT_PROJECT
-from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.foundation.mcp.component_server import (
     FastMCP,
@@ -20,12 +19,13 @@ from audiagentic.foundation.mcp.component_server import (
 
 from . import project_api
 
-register_all_components()
-
 logger = logging.getLogger(__name__)
 
 
 def _server_decl():
+    from audiagentic.foundation.components.loader import register_all_components
+
+    register_all_components()
     return get_mcp_server_declaration(COMPONENT_PROJECT, "ag-project-mgmt")
 
 

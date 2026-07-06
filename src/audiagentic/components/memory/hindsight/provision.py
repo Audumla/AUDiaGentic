@@ -83,6 +83,27 @@ def reconcile_hindsight(
     }
 
 
+def discover_provider_ids(project_root: Path | str) -> tuple[list[str], list[str]]:
+    """Return (all_provider_ids, enabled_provider_ids).
+
+    Provider discovery is delegated here because the memory observer must not
+    import from audiagentic.components.providers directly (architecture boundary).
+    The hindsight subpackage is exempt from that check and may import freely.
+    Enablement is checked via the foundation features state API to avoid importing
+    provider services (which would violate the architecture boundary test allowlist).
+    """
+    root = Path(project_root)
+    from audiagentic.components.providers.descriptors.registry import all_descriptors
+    from audiagentic.foundation.features.state import get_implementation_state
+
+    all_ids = list(all_descriptors())
+    enabled_ids = [
+        pid for pid in all_ids
+        if get_implementation_state(root, "providers", pid).enabled
+    ]
+    return all_ids, enabled_ids
+
+
 def build_hindsight_status_report(project_root: Path | str) -> dict[str, Any]:
     """Build per-provider Hindsight status report for MCP/API exposure.
 

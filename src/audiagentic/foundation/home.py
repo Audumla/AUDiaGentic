@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
+
+from audiagentic.foundation.paths.names import PROJECT_MARKER_NAME, home_directory
 
 
 def audiagentic_home() -> Path:
     """Return the shared AUDiaGentic root directory."""
-    custom = os.environ.get("AUDIAGENTIC_HOME")
-    return Path(custom) if custom else Path.home() / ".audiagentic"
+    return home_directory()
 
 
 def global_harness_runtime() -> Path:
@@ -22,4 +22,4 @@ def global_log_dir(component: str) -> Path:
 
 def project_log_dir(project_root: Path, component: str) -> Path:
     """Return the project-scoped log directory for a named component."""
-    return project_root / ".audiagentic" / "logs" / component
+    return project_root / PROJECT_MARKER_NAME / "logs" / component

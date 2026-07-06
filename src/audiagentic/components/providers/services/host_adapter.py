@@ -13,10 +13,9 @@ from pathlib import Path
 
 from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.foundation.io import load_yaml_file
+from audiagentic.foundation.paths.names import get_package_config_dir
 
-_HOSTS_CONFIG = (
-    Path(__file__).resolve().parents[3] / "config" / "components" / "providers" / "hosts.yaml"
-)
+_HOSTS_CONFIG = get_package_config_dir() / "components" / "providers" / "hosts.yaml"
 
 _EXT_ID_RE = re.compile(r"^([a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+?)(?:-\d+.*)?$")
 

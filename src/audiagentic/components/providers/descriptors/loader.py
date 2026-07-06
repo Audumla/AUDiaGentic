@@ -21,6 +21,7 @@ from audiagentic.foundation.descriptors import (
     load_descriptor,
     resolve_ref,
 )
+from audiagentic.foundation.paths.names import get_package_providers_config_dir
 
 from .base import (
     AgentFile,
@@ -207,4 +208,4 @@ def get_providers_config_dir() -> Path:
     Returns:
         Path to src/audiagentic/config/providers/
     """
-    return Path(__file__).parent.parent.parent.parent / "config" / "providers"
+    return get_package_providers_config_dir()

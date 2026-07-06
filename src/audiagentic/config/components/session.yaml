@@ -23,3 +23,65 @@ mcp-servers:
       set_cli_visibility: Set CLI visibility for thinking blocks and tool or MCP blocks, then request an in-session reload.
       refresh_harness_config: Regenerate mcp.json and SYSTEM.md from current component state, then request in-session reload.
       update_rig: Update llama.cpp rig binaries. Use scope='local' to update the active local/project-preferred rig and restart if needed, or scope='global' to update the shared global harness rig binaries.
+
+contributions:
+  - id: session/component-profile-doctrine
+    owner: session
+    title: Component profile doctrine
+    preferred-targets:
+      - skill
+      - instruction
+    content:
+      body: |
+        Component profiles select an alternative set of component configurations for a
+        single process invocation. They override the base component definitions with
+        per-profile customizations (enabled/disabled components, overridden mcp-servers,
+        adjusted parameters).
+
+        ## What component profiles are
+
+        A component profile is a named configuration layer loaded via the
+        `--component-profile` CLI flag or the `AUDIAGENTIC_COMPONENT_PROFILE`
+        environment variable. The profile name maps to a project-scoped folder:
+        `<project-root>/.audiagentic/<profile-name>/components/`. Descriptor
+        YAML files in that folder layer on top of the base component definitions
+        from the package's `config/components/`; a profile descriptor sharing an
+        id with a base descriptor wins (last-wins overlay).
+
+        ## Distinction from other profile concepts
+
+        Three unrelated mechanisms use the word "profile" in this codebase:
+
+        - **Component profiles** — select alternative component configurations for the
+          harness. Controlled by `--component-profile` /
+          `AUDIAGENTIC_COMPONENT_PROFILE`. Stored in
+          `<project-root>/.audiagentic/<profile-name>/components/`.
+
+        - **Agent profiles** — bind a provider to a specific model with optional
+          execution parameters. Used at job-launch time to resolve which model to
+          invoke. Stored in `.audiagentic/config/agent-profiles.yaml`. Referenced via
+          `agent-profile-id` in job requests.
+
+        - **Workflow profiles** — define lite/standard/strict stage pipelines for
+          task execution. Controlled by `workflow-profile` in job or plan
+          configuration. Not the same as component profiles or agent profiles.
+
+        Additionally, rig model profiles (controlled by
+        `AUDIAGENTIC_RIG_MODEL_PROFILE` and related env vars) configure llama.cpp
+        inference parameters and are orthogonal to all three of the above.
+
+        ## Usage
+
+        - CLI flag: `--component-profile <profile-name>`
+        - Environment variable: `AUDIAGENTIC_COMPONENT_PROFILE=<profile-name>`
+        - Default fallback: if neither is set, the harness loads base component
+          definitions from `src/audiagentic/config/components/` with no overlay.
+
+        ## One-profile-per-process constraint
+
+        A single process runs with exactly one component profile (or none). The
+        profile is captured at the first component registration in the process;
+        requesting a different profile later in the same process raises
+        VAL-COMP-010. To switch profiles, stop the current session and restart
+        with a different `--component-profile` value or updated environment
+        variable.

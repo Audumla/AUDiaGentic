@@ -129,15 +129,18 @@ def _regenerate_provider_configs(project_root: Path) -> dict[str, object]:
 
 
 def _cmd_job_control(args: argparse.Namespace, project_root: Path) -> int:
-    try:
-        from audiagentic.components.agent_jobs.control import (
-            build_job_control_request,
-            request_job_control,
-        )
-    except ImportError:
+    from audiagentic.foundation.components.loader import register_all_components
+    from audiagentic.foundation.components.registry import get_descriptor
+
+    register_all_components()
+    if not get_descriptor("agent-jobs"):
         print_error("agent_jobs component not available")
         return 1
 
+    from audiagentic.components.agent_jobs.control import (
+        build_job_control_request,
+        request_job_control,
+    )
     from audiagentic.components.agent_jobs.jobs_store import read_job_record
 
     control_root = Path(args.project_root).resolve() if args.project_root else project_root
@@ -175,11 +178,15 @@ def _cmd_session_input(args: argparse.Namespace, project_root: Path) -> int:
 
 
 def _cmd_release_bootstrap(args: argparse.Namespace, project_root: Path) -> int:
-    try:
-        from audiagentic.components.ledger.ledger_bootstrap import bootstrap_ledger
-    except ImportError:
+    from audiagentic.foundation.components.loader import register_all_components
+    from audiagentic.foundation.components.registry import get_descriptor
+
+    register_all_components()
+    if not get_descriptor("agent-ledger"):
         print_error("ledger component not available")
         return 1
+
+    from audiagentic.components.ledger.ledger_bootstrap import bootstrap_ledger
 
     bootstrap_root = Path(args.project_root).resolve() if args.project_root else project_root
     result = bootstrap_ledger(bootstrap_root)
@@ -257,6 +264,12 @@ def _main(argv: list[str] | None = None) -> int:
         default=None,
         help="Agent output mode when using --prompt (default: text)",
     )
+    parser.add_argument(
+        "--component-profile",
+        metavar="NAME",
+        default=None,
+        help="Component configuration profile name (env: AUDIAGENTIC_COMPONENT_PROFILE)",
+    )
 
     subparsers = parser.add_subparsers(dest="command")
 
@@ -315,6 +328,12 @@ def _main(argv: list[str] | None = None) -> int:
     mcp_parser.add_argument("module_args", nargs=argparse.REMAINDER)
 
     args, remaining = parser.parse_known_args(argv)
+
+    # Propagate --component-profile to env so loader and other modules pick it up
+    if args.component_profile:
+        import os
+
+        os.environ["AUDIAGENTIC_COMPONENT_PROFILE"] = args.component_profile
 
     project_root = Path(args.project).resolve() if args.project else Path.cwd()
 

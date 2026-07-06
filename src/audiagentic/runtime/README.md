@@ -29,6 +29,6 @@ This layer owns code that turns packaged defaults plus installed components into
 - release ledger business rules
 - generic contracts, schemas, or workflow primitives
 
-Those belong in `components/` or `foundation/`. The harness registers the
-capabilities lifecycle consumes (`harness.runtime-sync`, `harness.config-refresh`)
-instead of being imported from foundation.
+Those belong in `components/` or `foundation/`. The harness subscribes to
+`lifecycle.component.*` events at module import time to react to component
+install/enable/disable/uninstall — no capability registration is involved.

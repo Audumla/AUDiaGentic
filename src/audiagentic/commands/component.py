@@ -16,6 +16,7 @@ def _cmd_component_list(_args: Any, project_root: Path) -> int:
     from audiagentic.foundation.components.loader import register_all_components
     from audiagentic.foundation.components.registry import (
         all_descriptors,
+        get_descriptor,
         is_enabled,
         is_installed,
     )
@@ -36,13 +37,11 @@ def _cmd_component_list(_args: Any, project_root: Path) -> int:
             "scope": desc.scope,
         }
         if desc.scope == "project" and (getattr(desc, "cli_probe", None)):
-            try:
+            prov_descriptor = get_descriptor("providers")
+            if prov_descriptor:
                 from audiagentic.components.providers.descriptors.registry import (
                     get_descriptor as _get_provider_descriptor,
                 )
-            except ImportError:
-                pass
-            else:
                 prov_desc = _get_provider_descriptor(cid)
                 if prov_desc and prov_desc.cli_probe:
                     row["cli_available"] = shutil.which(prov_desc.cli_probe[0]) is not None
