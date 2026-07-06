@@ -76,22 +76,33 @@ class HarnessInstruction:
 
 @dataclass(frozen=True)
 class ComponentDescriptor:
+    # --- identity ---
     component_id: str
     display_name: str
     description: str
     detection_marker: str   # rel_path proving component is installed (relative to component_root)
     aliases: tuple[str, ...] = ()
-    files: tuple[ComponentFile, ...] = ()
-    depends_on: tuple[str, ...] = ()
-    yaml_path: Path | None = None   # absolute path to the component's YAML file
+    type: str = "component"         # discriminator: "component" vs other config types
     scope: str = SCOPE_PROJECT      # SCOPE_PROJECT | SCOPE_HARNESS
+    core: bool = False              # if True, component cannot be uninstalled
+    yaml_path: Path | None = None   # absolute path to the component's YAML file
+
+    # --- files ---
+    files: tuple[ComponentFile, ...] = ()
+
+    # --- dependencies ---
+    depends_on: tuple[str, ...] = ()
+
+    # --- mcp ---
     mcp_servers: tuple[McpServerDeclaration, ...] = ()
     external_mcp_servers: tuple[ExternalMcpServerDeclaration, ...] = ()
-    harness_instructions: tuple[HarnessInstruction, ...] = ()
-    core: bool = False              # if True, component cannot be uninstalled
-    type: str = "component"         # discriminator: "component" vs other config types
+
+    # --- lifecycle hooks ---
     post_install: str | None = None  # dotted import path to a function(project_root)
     lifecycle_observer: str | None = None  # dotted module path imported by register_all_components to self-register bus subscribers
     lifecycle_hook: str | None = None  # dotted import path to a function(event_type, payload, metadata)
     status_hook: str | None = None  # dotted import path to a function(project_root) -> dict
+
+    # --- feature ---
+    harness_instructions: tuple[HarnessInstruction, ...] = ()
     implementation_cardinality: str | None = None  # None | "exclusive" | "multi"

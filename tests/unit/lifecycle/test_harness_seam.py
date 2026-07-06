@@ -1,87 +1,142 @@
-"""Tests for the lifecycle→harness capability seam (AR19).
+"""Tests for the harness lifecycle event subscription (EV01).
 
-foundation/lifecycle never imports runtime/harness; it resolves the harness
-through registered capabilities and no-ops gracefully when no harness is
-active (headless installs, tests).
+The harness subscribes to lifecycle.component.* events at module import time.
+On each event it refreshes its MCP config and logs the computed reload action.
+No capability registration is involved — the harness reacts directly via
+the event bus, following the surfaces/observer.py pattern.
 """
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
-import pytest
-
-from audiagentic.foundation.capabilities import _REGISTRY
-from audiagentic.foundation.components.base import ComponentDescriptor, McpServerDeclaration
-from audiagentic.foundation.lifecycle.component_mcp import _refresh_mcp_config_if_needed
-from audiagentic.foundation.lifecycle.components import _resolve_harness_sync
+from audiagentic.foundation.event import get_bus
 
 
-@pytest.fixture
-def no_harness_capabilities():
-    """Temporarily hide harness capabilities so tests exercise the absent path.
+def test_lifecycle_handler_reacts_to_installed_event(tmp_path: Path):
+    """Handler calls refresh and logs action for installed events."""
+    with patch(
+        "audiagentic.runtime.harness.refresh_harness_config_if_installed",
+        return_value=True,
+    ) as mock_refresh:
+        import audiagentic.runtime.harness  # noqa: F401
 
-    runtime/harness registers them at import time; other tests may already
-    have imported it, so remove-and-restore rather than assume absence.
-    """
-    saved = {k: _REGISTRY.pop(k) for k in list(_REGISTRY) if k.startswith("harness.")}
-    yield
-    # Drop any fakes the test registered, then restore what was there before.
-    for key in [k for k in _REGISTRY if k.startswith("harness.")]:
-        _REGISTRY.pop(key)
-    _REGISTRY.update(saved)
+        bus = get_bus()
+        bus.publish(
+            "lifecycle.component.installed",
+            {"component_id": "test-component", "project_root": tmp_path},
+            metadata={"source_component": "lifecycle"},
+        )
+
+        mock_refresh.assert_called_once_with(
+            tmp_path,
+            reason="component-installed",
+            component_id="test-component",
+        )
 
 
-def _descriptor_with_mcp() -> ComponentDescriptor:
-    return ComponentDescriptor(
-        component_id="sample",
-        display_name="Sample",
-        description="",
-        detection_marker=".sample",
-        mcp_servers=(
-            McpServerDeclaration(name="ag-sample", module="audiagentic.components.sample.sample_mcp"),
-        ),
+def test_lifecycle_handler_disabled_event(tmp_path: Path):
+    """Handler calls refresh with correct reason for disable events."""
+    with patch(
+        "audiagentic.runtime.harness.refresh_harness_config_if_installed",
+        return_value=True,
+    ) as mock_refresh:
+        bus = get_bus()
+        bus.publish(
+            "lifecycle.component.disabled",
+            {"component_id": "disable-test", "project_root": tmp_path},
+            metadata={"source_component": "lifecycle"},
+        )
+
+        mock_refresh.assert_called_once_with(
+            tmp_path,
+            reason="component-disabled",
+            component_id="disable-test",
+        )
+
+
+def test_lifecycle_handler_performs_config_refresh(tmp_path: Path):
+    """Handler calls refresh_harness_config_if_installed on lifecycle events."""
+    with patch(
+        "audiagentic.runtime.harness.refresh_harness_config_if_installed",
+        return_value=True,
+    ) as mock_refresh:
+        bus = get_bus()
+        bus.publish(
+            "lifecycle.component.installed",
+            {"component_id": "refresh-test", "project_root": tmp_path},
+            metadata={"source_component": "lifecycle"},
+        )
+
+        mock_refresh.assert_called_once_with(
+            tmp_path,
+            reason="component-installed",
+            component_id="refresh-test",
+        )
+
+
+def test_lifecycle_handler_uninstalled_event(tmp_path: Path):
+    """Handler calls refresh with correct reason for uninstall events."""
+    with patch(
+        "audiagentic.runtime.harness.refresh_harness_config_if_installed",
+        return_value=True,
+    ) as mock_refresh:
+        bus = get_bus()
+        bus.publish(
+            "lifecycle.component.uninstalled",
+            {"component_id": "uninstall-test", "project_root": tmp_path},
+            metadata={"source_component": "lifecycle"},
+        )
+
+        mock_refresh.assert_called_once_with(
+            tmp_path,
+            reason="component-uninstalled",
+            component_id="uninstall-test",
+        )
+
+
+def test_lifecycle_handler_enabled_event(tmp_path: Path):
+    """Handler calls refresh with correct reason for enable events."""
+    with patch(
+        "audiagentic.runtime.harness.refresh_harness_config_if_installed",
+        return_value=True,
+    ) as mock_refresh:
+        bus = get_bus()
+        bus.publish(
+            "lifecycle.component.enabled",
+            {"component_id": "enable-test", "project_root": tmp_path},
+            metadata={"source_component": "lifecycle"},
+        )
+
+        mock_refresh.assert_called_once_with(
+            tmp_path,
+            reason="component-enabled",
+            component_id="enable-test",
+        )
+
+
+def test_component_result_has_no_sync_field(tmp_path: Path):
+    """Install/uninstall result no longer includes dead 'sync' field."""
+    from audiagentic.foundation.lifecycle.components import _component_result
+
+    result = _component_result(
+        "test-component",
+        reason="component-installed",
+        extra_field="value",
     )
 
-
-def test_resolve_harness_sync_noop_when_harness_absent(no_harness_capabilities):
-    result = _resolve_harness_sync(reason="unit-test")
-    assert result == {"skipped": "harness not active", "reason": "unit-test"}
-
-
-def test_resolve_harness_sync_forwards_when_registered(no_harness_capabilities):
-    calls: list[dict] = []
-    _REGISTRY["harness.runtime-sync"] = lambda **kwargs: calls.append(kwargs) or {"ok": True}
-
-    result = _resolve_harness_sync(reason="unit-test", component_id="sample", target="project")
-
-    assert result == {"ok": True}
-    assert calls == [{
-        "reason": "unit-test",
-        "component_id": "sample",
-        "target": "project",
-        "has_mcp_servers": True,
-    }]
+    assert "sync" not in result
+    assert result["ok"] is True
+    assert result["component_id"] == "test-component"
+    assert result["extra_field"] == "value"
 
 
-def test_mcp_config_refresh_noop_when_harness_absent(no_harness_capabilities, tmp_path: Path):
-    # Must not raise or attempt any harness import when nothing is registered.
-    _refresh_mcp_config_if_needed(_descriptor_with_mcp(), tmp_path, reason="unit-test")
+def test_component_mcp_module_removed():
+    """component_mcp.py module was deleted as part of EV01."""
+    import importlib
 
-
-def test_mcp_config_refresh_uses_registered_capability(no_harness_capabilities, tmp_path: Path):
-    calls: list[tuple] = []
-    _REGISTRY["harness.config-refresh"] = (
-        lambda project_root, *, reason, component_id: calls.append((project_root, reason, component_id))
-    )
-
-    _refresh_mcp_config_if_needed(_descriptor_with_mcp(), tmp_path, reason="unit-test")
-
-    assert calls == [(tmp_path, "unit-test", "sample")]
-
-
-def test_harness_registers_capabilities_on_import():
-    import audiagentic.runtime.harness  # noqa: F401
-    from audiagentic.foundation.capabilities import get_capability
-
-    assert get_capability("harness.runtime-sync") is not None
-    assert get_capability("harness.config-refresh") is not None
+    try:
+        importlib.import_module("audiagentic.foundation.lifecycle.component_mcp")
+        raise AssertionError("component_mcp module should not exist")
+    except ModuleNotFoundError:
+        pass

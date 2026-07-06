@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.paths.names import PROJECT_MARKER_NAME
 
 
 def find_project_root(start: Path | None = None) -> Path | None:
@@ -25,7 +26,7 @@ def find_project_root(start: Path | None = None) -> Path | None:
     for _ in range(10):
         if time.monotonic() > deadline:
             break
-        if (current / ".audiagentic").exists():
+        if (current / PROJECT_MARKER_NAME).exists():
             return current
         parent = current.parent
         if parent == current:

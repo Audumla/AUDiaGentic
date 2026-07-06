@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import Any
 
 from audiagentic.components.providers import providers_api
-from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.foundation.mcp.component_server import (
     FastMCP,
@@ -18,10 +17,11 @@ from audiagentic.foundation.mcp.component_server import (
 
 _COMPONENT_ID = "providers"
 
-register_all_components()
-
 
 def _server_decl():
+    from audiagentic.foundation.components.loader import register_all_components
+
+    register_all_components()
     return get_mcp_server_declaration(_COMPONENT_ID, "ag-providers-mgmt")
 
 

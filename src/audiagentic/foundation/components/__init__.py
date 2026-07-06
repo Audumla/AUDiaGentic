@@ -22,6 +22,7 @@ from .registry import (
     is_enabled,
     is_installed,
     register,
+    reset,
     resolve_component_id,
 )
 
@@ -40,5 +41,6 @@ __all__ = [
     "is_installed",
     "is_enabled",
     "resolve_component_id",
+    "reset",
     "initialize_lifecycle_hook_dispatch",
 ]

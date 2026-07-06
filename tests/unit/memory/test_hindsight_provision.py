@@ -91,7 +91,7 @@ def test_disable_component_event_tears_down_all_providers(tmp_path, monkeypatch)
     """End-to-end event wiring: disabling the memory component uninstalls everywhere.
 
     Exercises the real chain: disable_component -> lifecycle.component.disabled
-    event -> memory observer -> refresh_provider_recipes -> reconcile_hindsight
+    event -> memory observer -> _reconcile -> reconcile_hindsight
     (active=False) -> teardown across all providers.
     """
     from audiagentic.foundation.components.loader import register_all_components
@@ -131,14 +131,13 @@ def test_disable_component_event_tears_down_all_providers(tmp_path, monkeypatch)
 def test_bridge_skips_when_memory_not_installed(tmp_path):
     """An empty project has no installed memory -> the reconciler self-skips.
 
-    The memory reconciler self-registers via lifecycle-observer, so it is always
-    present, but it no-ops (returns a skip payload) when memory is not installed.
-    The runtime bridge itself stays generic and never imports memory.
+    The memory observer's _reconcile is always present, but it no-ops
+    (returns a skip payload) when memory is not installed.
     """
-    from audiagentic.foundation.lifecycle.provider_recipes import refresh_provider_recipes
+    from audiagentic.components.memory.memory_observer import _reconcile
 
-    out = refresh_provider_recipes(tmp_path)
-    assert out.get("memory", {}).get("skipped")
+    out = _reconcile(tmp_path)
+    assert out.get("skipped")
 
 
 def test_backend_switch_reconfigures_providers(tmp_path, monkeypatch):
@@ -180,7 +179,7 @@ def test_config_change_event_triggers_reconcile(tmp_path, monkeypatch):
     """memory_set_config publishes lifecycle.event that fires reconcile via observer.
 
     Validates the observer-driven path: API change -> bus event -> observer ->
-    refresh_provider_recipes -> reconcile_hindsight. The observer is the guaranteed
+    _reconcile -> reconcile_hindsight. The observer is the guaranteed
     consumer; MCP tools do not reconcile synchronously.
     """
     import audiagentic.components.memory.hindsight.provision as prov_module
