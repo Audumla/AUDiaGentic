@@ -5,28 +5,35 @@ from pathlib import Path
 
 from audiagentic.foundation.home import audiagentic_home
 from audiagentic.foundation.io import load_yaml_file
+from audiagentic.foundation.paths.names import PROJECT_MARKER_NAME
+from audiagentic.foundation.registry_utils import Registry
 
 from .base import SCOPE_HARNESS, ComponentDescriptor, McpServerDeclaration
 
 logger = logging.getLogger(__name__)
 
-_registry: dict[str, ComponentDescriptor] = {}
-_aliases: dict[str, str] = {}
+_registry = Registry[ComponentDescriptor](aliases=True)
 
 
-def register(descriptor: ComponentDescriptor) -> None:
-    for alias, owner in list(_aliases.items()):
-        if owner == descriptor.component_id:
-            del _aliases[alias]
-    _registry[descriptor.component_id] = descriptor
-    for alias in descriptor.aliases:
-        _aliases[alias] = descriptor.component_id
+def register(descriptor: ComponentDescriptor, *, replace: bool = False) -> None:
+    """Register a component descriptor.
+
+    By default, re-registering the same descriptor object is idempotent, and
+    registering a *different* descriptor under an existing key raises (collision
+    detection gained from CP10 Registry adoption).  Pass ``replace=True`` for
+    the loader's cross-layer overwrite path (CP04: profile wins over base).
+    """
+    if replace:
+        _registry.pop(descriptor.component_id)
+    _registry.register(
+        descriptor.component_id,
+        descriptor,
+        aliases=list(descriptor.aliases),
+    )
 
 
 def resolve_component_id(component_id: str) -> str | None:
-    if component_id in _registry:
-        return component_id
-    return _aliases.get(component_id)
+    return _registry.resolve(component_id)
 
 
 def get_descriptor(component_id: str) -> ComponentDescriptor | None:
@@ -35,7 +42,22 @@ def get_descriptor(component_id: str) -> ComponentDescriptor | None:
 
 
 def all_descriptors() -> dict[str, ComponentDescriptor]:
-    return dict(_registry)
+    return _registry.all()
+
+
+def reset() -> None:
+    """Clear the component registry. Used for test isolation.
+
+    Clears internal storage and invalidates the loader's registration
+    cache guard so that a subsequent lazy register_all_components() call
+    re-populates all registries instead of returning stale cache data.
+    """
+    _registry.reset()
+    from audiagentic.foundation.components.loader import (
+        _reset_registration_cache,
+    )
+
+    _reset_registration_cache()
 
 
 def get_mcp_server_declaration(
@@ -70,7 +92,7 @@ def marker_path(component_id: str, root: Path, scope: str) -> Path:
     """
     if scope == SCOPE_HARNESS:
         return root / "components" / f"{component_id}.yaml"
-    return root / ".audiagentic" / "components" / f"{component_id}.yaml"
+    return root / PROJECT_MARKER_NAME / "components" / f"{component_id}.yaml"
 
 
 def is_installed(component_id: str, project_root: Path) -> bool:

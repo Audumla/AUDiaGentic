@@ -6,7 +6,6 @@ import shutil
 from pathlib import Path
 from typing import Any, cast
 
-from audiagentic.foundation.capabilities import get_capability
 from audiagentic.foundation.components.base import (
     MODE_CREATE_IF_MISSING,
     MODE_GENERATED_MANAGED,
@@ -28,33 +27,9 @@ from audiagentic.foundation.time import now_iso_z
 
 # Local imports (relative to lifecycle package)
 from .baseline_sync import sync_managed_baseline
-from .component_mcp import _refresh_mcp_config_if_needed
 from .observers import fire_post_disable, fire_post_enable, fire_post_install, fire_post_uninstall
 
 logger = logging.getLogger(__name__)
-
-_HARNESS_SYNC_KEY = "harness.runtime-sync"
-
-
-def _resolve_harness_sync(
-    *,
-    reason: str,
-    component_id: str | None = None,
-    target: str | None = None,
-    has_mcp_servers: bool = True,
-) -> dict[str, object]:
-    """Resolve harness runtime sync via capability registry.
-
-    Uses get_capability("harness.runtime-sync") — when the harness is active
-    it registers its build_runtime_sync under this key.  When the harness is
-    not loaded (e.g. headless install/test without a running harness) this
-    returns a no-op sentinel so lifecycle operations still succeed.
-    """
-    fn = get_capability(_HARNESS_SYNC_KEY)
-    if fn is None:
-        return {"skipped": "harness not active", "reason": reason}
-    return fn(reason=reason, component_id=component_id, target=target, has_mcp_servers=has_mcp_servers)
-
 
 _REMOVE_ALWAYS = {MODE_REQUIRED_MANAGED, MODE_GENERATED_MANAGED, MODE_RUNTIME_ONLY}
 _REMOVE_WITH_CONFIGS = {MODE_CREATE_IF_MISSING}
@@ -98,14 +73,9 @@ def _component_result(
     **payload: object,
 ) -> dict[str, object]:
     canonical_id = resolve_component_id(component_id) or component_id
-    descriptor = get_descriptor(canonical_id)
-    has_mcp = bool(
-        descriptor and (descriptor.mcp_servers or descriptor.external_mcp_servers)
-    )
     return {
         "ok": True,
         "component_id": canonical_id,
-        "sync": _resolve_harness_sync(reason=reason, component_id=canonical_id, has_mcp_servers=has_mcp, target="project"),
         **payload,
     }
 
@@ -177,7 +147,6 @@ def install_component(
         _resolve_and_run_post_install(descriptor.post_install, project_root)
 
     fire_post_install(resolved_id, project_root)
-    _refresh_mcp_config_if_needed(descriptor, project_root, reason="component-installed")
     result = _component_result(
         resolved_id,
         reason="component-installed",
@@ -233,7 +202,6 @@ def uninstall_component(
         deleted.append(mpath)
         mpath.unlink()
     fire_post_uninstall(resolved_id, project_root)
-    _refresh_mcp_config_if_needed(descriptor, project_root, reason="component-uninstalled")
     return _component_result(
         resolved_id,
         reason="component-uninstalled",
@@ -259,13 +227,11 @@ def _toggle_component(component_id: str, project_root: Path, *, enabled: bool, e
     resolved_id = resolve_component_id(component_id) or component_id
     if not is_installed(resolved_id, project_root):
         return {"ok": False, "error": f"component {component_id} is not installed"}
-    descriptor = get_descriptor(component_id)
     data = _read_marker(resolved_id, project_root)
     data["component-id"] = resolved_id
     data["enabled"] = enabled
     _write_marker(resolved_id, project_root, data)
     event_fn(resolved_id, project_root)
-    _refresh_mcp_config_if_needed(descriptor, project_root, reason=f"component-{reason_suffix}")
     return _component_result(resolved_id, reason=f"component-{reason_suffix}", enabled=enabled)
 
 

@@ -11,12 +11,17 @@ in ag.yaml (default: ``pi``). Adding a new harness means:
 from __future__ import annotations
 
 import importlib
+import logging
 import re
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
-from audiagentic.foundation.capabilities import register_capability
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.foundation.event import subscribe_component_lifecycle
+from audiagentic.foundation.interaction import ask, push_status
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -206,11 +211,103 @@ def load_pi_config(project_root: Path | None = None) -> dict:
     return _load(project_root=project_root)
 
 
-# Register harness capabilities at module import time.
-# Placed at EOF so the registered functions are already defined.
-register_capability(  # noqa: E402
-    "harness.runtime-sync", build_runtime_sync,
-)
-register_capability(  # noqa: E402
-    "harness.config-refresh", refresh_harness_config_if_installed,
+# Subscribe to component lifecycle events at module import time.
+# Placed at EOF so the referenced functions are already defined.
+# Wires ask/reload through foundation.interaction for reload_required actions.
+# noqa: E402
+
+_REASON_TO_VERB = {
+    "component-installed": "installed",
+    "component-enabled": "enabled",
+    "component-disabled": "disabled",
+    "component-uninstalled": "uninstalled",
+    "component-config-changed": "config-changed",
+}
+
+
+def _harness_has_mcp_servers(component_id: str | None) -> bool:
+    """Compute has_mcp_servers from the component descriptor, not a constant."""
+    if not component_id:
+        return True
+    from audiagentic.foundation.components.registry import get_descriptor
+
+    desc = get_descriptor(component_id)
+    if not desc:
+        return True
+    return bool(desc.mcp_servers or desc.external_mcp_servers)
+
+
+def _harness_lifecycle_handler(
+    project_root: Path,
+    payload: dict,
+    metadata: dict,
+    *,
+    reason: str,
+) -> None:
+    from audiagentic.runtime.harness.reload import _runtime_action_for_reason
+
+    component_id = payload.get("component_id")
+
+    refresh_harness_config_if_installed(
+        project_root,
+        reason=reason,
+        component_id=component_id,
+    )
+
+    action = _runtime_action_for_reason(reason, has_mcp_servers=_harness_has_mcp_servers(component_id))
+
+    if action != "reload_required":
+        verb = _REASON_TO_VERB.get(reason, reason)
+        push_status(
+            component="harness",
+            message=f"Config refreshed after {verb}ing {component_id}.",
+        )
+        return
+
+    verb = _REASON_TO_VERB.get(reason, reason)
+    title = f"Reload harness after {verb}"
+    description = (
+        f"Component \"{component_id}\" was just {verb}. "
+        "A full reload may be required to pick up the change."
+    )
+    resp = ask(
+        title=title,
+        description=description,
+        choices=("reload-now", "later"),
+        default_choice="reload-now",
+    )
+
+    if resp.choice == "reload-now":
+        try:
+            request_runtime_reload(
+                project_root,
+                reason=reason,
+                component_id=component_id,
+            )
+            logger.info(
+                "harness reload initiated via interaction ask",
+                extra={"component": component_id, "reason": reason},
+            )
+        except Exception:
+            logger.warning(
+                "Failed to request runtime reload after user approval",
+                extra={"component": component_id, "reason": reason},
+                exc_info=True,
+            )
+    else:
+        status_text = "deferred" if resp.choice == "later" else "timed out"
+        push_status(
+            component="harness",
+            message=f"Harness reload {status_text} for component {component_id}.",
+            level="info",
+        )
+
+
+subscribe_component_lifecycle(
+    None,
+    on_installed=partial(_harness_lifecycle_handler, reason="component-installed"),
+    on_enabled=partial(_harness_lifecycle_handler, reason="component-enabled"),
+    on_disabled=partial(_harness_lifecycle_handler, reason="component-disabled"),
+    on_uninstalled=partial(_harness_lifecycle_handler, reason="component-uninstalled"),
+    on_config_changed=partial(_harness_lifecycle_handler, reason="component-config-changed"),
 )

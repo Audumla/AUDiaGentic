@@ -189,45 +189,25 @@ def test_project_component_selector_matches_registry_contract() -> None:
     assert selected == expected
 
 
-# --- sync payload ---
+# --- lifecycle result contract (EV01) ---
+# The 'sync' advisory field was deleted by EV01: the harness now subscribes to
+# lifecycle.component.* events and decides reload/refresh itself (see
+# tests/unit/lifecycle/test_harness_seam.py for the handler's behavior).
+# Lifecycle results must not resurrect the dead advisory payload.
 
 @pytest.mark.parametrize("component_id", project_component_ids())
-def test_install_sync_target_is_project(component_id: str, tmp_path: Path) -> None:
-    with component_sandbox(tmp_path, f"sync-install-{component_id}") as sb:
+def test_lifecycle_results_have_no_sync_field(component_id: str, tmp_path: Path) -> None:
+    with component_sandbox(tmp_path, f"sync-contract-{component_id}") as sb:
         install_with_deps(component_id, sb.repo)
-        result = install_component(component_id, sb.repo)
-        sync = result.get("sync", {})
-        assert sync.get("target") == "project", (
-            f"{component_id}: sync.target should be 'project', got {sync.get('target')!r}"
-        )
-
-
-@pytest.mark.parametrize("component_id", project_component_ids())
-def test_disable_sync_action_reflects_mcp_servers(component_id: str, tmp_path: Path) -> None:
-    with component_sandbox(tmp_path, f"sync-disable-{component_id}") as sb:
-        install_with_deps(component_id, sb.repo)
-        result = disable_component(component_id, sb.repo)
-        sync = result.get("sync", {})
-        descriptor = all_descriptors()[component_id]
-        has_mcp = bool(descriptor.mcp_servers or descriptor.external_mcp_servers)
-        expected_action = "reload_required" if has_mcp else "refresh_required"
-        assert sync.get("action") == expected_action, (
-            f"{component_id}: sync.action={sync.get('action')!r}, expected={expected_action!r} "
-            f"(has_mcp={has_mcp})"
-        )
-
-
-@pytest.mark.parametrize("component_id", project_component_ids())
-def test_enable_sync_action_reflects_mcp_servers(component_id: str, tmp_path: Path) -> None:
-    with component_sandbox(tmp_path, f"sync-enable-{component_id}") as sb:
-        install_with_deps(component_id, sb.repo)
-        disable_component(component_id, sb.repo)
-        result = enable_component(component_id, sb.repo)
-        sync = result.get("sync", {})
-        descriptor = all_descriptors()[component_id]
-        has_mcp = bool(descriptor.mcp_servers or descriptor.external_mcp_servers)
-        expected_action = "reload_required" if has_mcp else "refresh_required"
-        assert sync.get("action") == expected_action, (
-            f"{component_id}: sync.action={sync.get('action')!r}, expected={expected_action!r} "
-            f"(has_mcp={has_mcp})"
-        )
+        install_result = install_component(component_id, sb.repo)
+        disable_result = disable_component(component_id, sb.repo)
+        enable_result = enable_component(component_id, sb.repo)
+        for op, result in (
+            ("install", install_result),
+            ("disable", disable_result),
+            ("enable", enable_result),
+        ):
+            assert "sync" not in result, (
+                f"{component_id}: {op} result resurrected the dead 'sync' advisory field"
+            )
+            assert result.get("ok") is True, f"{component_id}: {op} failed: {result}"

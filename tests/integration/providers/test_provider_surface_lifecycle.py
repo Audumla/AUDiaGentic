@@ -115,11 +115,11 @@ def apply_surfaces(project_root: Path) -> None:
     Surface changes may not fire in test isolation (no event bus), so we call
     these explicitly.
     """
+    from audiagentic.components.providers.services.mcp_sync import sync_all_provider_mcp_servers
     from audiagentic.components.providers.surfaces.manager import (
         apply_provider_surfaces,
         prune_provider_surfaces,
     )
-    from audiagentic.foundation.lifecycle.component_mcp import sync_all_provider_mcp_servers
 
     sync_all_provider_mcp_servers(project_root)
     prune_provider_surfaces(project_root)

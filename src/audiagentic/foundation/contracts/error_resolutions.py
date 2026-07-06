@@ -17,6 +17,7 @@ from pathlib import Path
 
 from audiagentic.foundation.contracts.errors import register_error_resolution
 from audiagentic.foundation.io import load_yaml_file
+from audiagentic.foundation.paths.names import get_component_config_dirs
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +46,13 @@ def load_error_resolutions_from_component(component_id: str, config_dir: Path) -
 
 
 def load_all_error_resolutions(config_dirs: list[Path] | None = None) -> None:
-    """Load error resolutions from all registered component config directories."""
-    targets = config_dirs or [Path(__file__).resolve().parents[2] / "config" / "components"]
+    """Load error resolutions from all registered component config directories.
+
+    Uses the shared resolver in foundation/paths/names.py — the same override
+    source as loader.register_all_components — so descriptors and error
+    resolutions cannot drift into reversed precedence.
+    """
+    targets = config_dirs or get_component_config_dirs()
     for config_dir in targets:
         if not config_dir.exists():
             continue

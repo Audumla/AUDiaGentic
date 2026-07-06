@@ -15,9 +15,8 @@ Component-lifecycle capability: install, baseline sync, uninstall, and installed
 ## Must NOT Own
 - Job execution or prompt launching (→ `components/agent_jobs`)
 - Release audit generation (→ `release`)
-- Harness orchestration — reach the harness only through registered
-  capabilities (`harness.runtime-sync`, `harness.config-refresh`), never
-  by importing `runtime/harness`
+- Harness orchestration — lifecycle publishes events; the harness reacts
+  via event subscription, not direct imports
 
 ## Allowed Dependencies
 - `foundation/*` — components machinery, contracts, config, events, capabilities
@@ -27,15 +26,13 @@ Component-lifecycle capability: install, baseline sync, uninstall, and installed
 | Module | Responsibility |
 |--------|---------------|
 | `baseline_sync.py` | Sync managed baseline assets from repo template to project |
-| `components.py` | Install, uninstall, enable, disable components; read/write `.audiagentic/components/{id}.yaml` markers |
-| `component_mcp.py` | MCP config propagation for lifecycle events |
+| `components.py` | Install, uninstall, enable, disable components; read/write `.audiagentic/components/{id}.yaml` markers; publish lifecycle events |
 | `detector.py` | Detect and report current installed state |
 | `fresh_install.py` | Bootstrap a fresh project installation |
 | `uninstall.py` | Remove runtime and component-owned files |
 | `external_mcp_probe.py` | External MCP server probing |
 | `observers.py` | Lifecycle event observers |
-| `provider_recipes.py` | Generic capability → provider-recipe reconciliation |
 
 ## Related Domains
 - `release` — calls lifecycle after install to bootstrap release workflow
-- `runtime/harness` — registers the harness capabilities lifecycle consumes
+- `runtime/harness` — subscribes to `lifecycle.component.*` events to react to component changes
