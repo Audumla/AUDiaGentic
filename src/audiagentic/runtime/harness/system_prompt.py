@@ -11,7 +11,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import (
     all_descriptors,
     is_enabled,
@@ -47,8 +46,6 @@ def build_system_prompt_injections(project_root: Path | None = None, *, for_prov
     """
     if project_root is None:
         project_root = Path.cwd()
-
-    register_all_components()
 
     injections: dict[str, str] = {}
     if not for_providers:
