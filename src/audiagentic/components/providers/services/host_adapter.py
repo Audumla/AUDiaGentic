@@ -14,6 +14,7 @@ from pathlib import Path
 from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.foundation.io import load_yaml_file
 from audiagentic.foundation.paths.names import get_package_config_dir
+from audiagentic.foundation.registry_utils import Registry
 
 _HOSTS_CONFIG = get_package_config_dir() / "components" / "providers" / "hosts.yaml"
 
@@ -67,18 +68,15 @@ class HostAdapter:
         return self._ext_cache
 
 
-_registry: dict[str, HostAdapter] = {}
-_loaded = False
+_registry: Registry[HostAdapter]
 
 
 def _load_hosts() -> None:
-    global _loaded
-    if _loaded:
-        return
-    _loaded = True
     data = load_yaml_file(_HOSTS_CONFIG)
     for host_id, spec in (data.get("hosts") or {}).items():
-        _registry.setdefault(
+        if _registry.get(host_id) is not None:
+            continue
+        _registry.register(
             host_id,
             HostAdapter(
                 host_id=host_id,
@@ -90,13 +88,15 @@ def _load_hosts() -> None:
         )
 
 
+_registry = Registry(loader=_load_hosts)
+
+
 def register_host_adapter(adapter: HostAdapter) -> None:
     """Register an additional host adapter (tests, plugins)."""
-    _registry[adapter.host_id] = adapter
+    _registry.register(adapter.host_id, adapter, replace=True)
 
 
 def get_host_adapter(host_id: str) -> HostAdapter:
-    _load_hosts()
     adapter = _registry.get(host_id)
     if adapter is None:
         raise make_error(
@@ -105,11 +105,10 @@ def get_host_adapter(host_id: str) -> HostAdapter:
             number=1,
             kind="providers",
             message=f"unknown editor host: {host_id!r}",
-            details={"host-id": host_id, "known": sorted(_registry)},
+            details={"host-id": host_id, "known": sorted(_registry.keys())},
         )
     return adapter
 
 
 def all_host_adapters() -> dict[str, HostAdapter]:
-    _load_hosts()
-    return dict(_registry)
+    return _registry.all()

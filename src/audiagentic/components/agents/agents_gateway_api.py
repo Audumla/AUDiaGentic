@@ -152,6 +152,49 @@ def list_llm_requests(
     return records
 
 
+def reconcile_gateway_state(project_root: Path) -> dict[str, Any]:
+    """Resolve orphaned queued/running records after a process restart.
+
+    The in-memory GatewayQueueManager cannot recover worker execution state.
+    Running records become failed; queued records become rejected. Terminal
+    records are ignored, making this safe to call repeatedly.
+    """
+    reconciled: list[dict[str, str]] = []
+    for record in store.list_records(project_root):
+        request_id = record["request-id"]
+        if record["state"] == "running":
+            updated = store.transition_record(
+                project_root,
+                request_id,
+                "failed",
+                updates={
+                    "error": {
+                        "code": "INT-AGW-ORPHANED",
+                        "kind": "agents",
+                        "message": "gateway request orphaned after process restart",
+                    },
+                    "finished_at": None,
+                },
+            )
+            reconciled.append({"request-id": request_id, "state": updated["state"]})
+        elif record["state"] == "queued":
+            updated = store.transition_record(
+                project_root,
+                request_id,
+                "rejected",
+                updates={
+                    "error": {
+                        "code": "INT-AGW-ORPHANED",
+                        "kind": "agents",
+                        "message": "queued gateway request rejected after process restart",
+                    },
+                    "finished_at": None,
+                },
+            )
+            reconciled.append({"request-id": request_id, "state": updated["state"]})
+    return {"ok": True, "reconciled": reconciled}
+
+
 def gateway_overview(project_root: Path) -> dict[str, Any]:
     """Operator-facing summary: persisted request counts by state (works even
     after a process restart) plus in-process queue depths for active profiles.

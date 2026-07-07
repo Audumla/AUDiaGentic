@@ -17,6 +17,7 @@ from .event_bus import (
     DeliveryMode,
     EventBus,
     EventBusProtocol,
+    EventHandler,
     SubscriptionHandle,
     get_bus,
     reset_bus,
@@ -37,6 +38,7 @@ from .lifecycle_observer import (
     COMPONENT_ENABLED,
     COMPONENT_INSTALLED,
     COMPONENT_UNINSTALLED,
+    LifecycleEventPayload,
     subscribe_component_lifecycle,
 )
 
@@ -50,6 +52,8 @@ __all__ = [
     "EventBus",
     "EventBusProtocol",
     "EventBusError",
+    "EventHandler",
+    "LifecycleEventPayload",
     "DeliveryMode",
     "SubscriptionHandle",
     "CycleDetectedError",

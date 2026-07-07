@@ -17,11 +17,12 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Protocol, TypeVar
 
 from ..util import pattern_matches
 from .envelope import EventEnvelope
-from .event_exceptions import CycleDetectedError
+from .event_config import EventLayerConfig
+from .event_exceptions import CycleDetectedError, EventBusError, SubscriberError
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,23 @@ class DeliveryMode(Enum):
 
     SYNC = "sync"
     ASYNC = "async"
+
+
+PayloadT = TypeVar("PayloadT", bound=dict, contravariant=True)
+
+
+class EventHandler(Protocol[PayloadT]):
+    """Structural type for event handlers with an optionally-typed payload.
+
+    Payload types are TypedDicts (plain dicts at runtime), so typed and
+    untyped handlers are interchangeable on the bus — this is static typing
+    only, with no runtime dispatch difference. Default usage:
+    ``EventHandler[dict[str, Any]]``.
+    """
+
+    def __call__(
+        self, event_type: str, payload: PayloadT, metadata: dict[str, Any]
+    ) -> None: ...
 
 
 @dataclass
@@ -59,7 +77,11 @@ class SubscriptionHandle:
 class EventBusProtocol(ABC):
     """Abstract protocol for event bus implementations.
 
-    This interface allows swapping between in-process and external MQ transports.
+    This interface allows swapping between in-process and external MQ
+    transports. Implementations must provide graceful shutdown via
+    :meth:`close` (idempotent; post-close publishes raise VAL-EVT-002),
+    envelope passthrough via :meth:`publish_envelope`, and the
+    :meth:`wait_idle`/:meth:`subscription_count` observability surface.
     """
 
     @abstractmethod
@@ -68,6 +90,14 @@ class EventBusProtocol(ABC):
         event_type: str,
         payload: dict[str, Any],
         metadata: dict[str, Any] | None = None,
+        mode: DeliveryMode = DeliveryMode.SYNC,
+    ) -> None:
+        pass
+
+    @abstractmethod
+    def publish_envelope(
+        self,
+        envelope: EventEnvelope,
         mode: DeliveryMode = DeliveryMode.SYNC,
     ) -> None:
         pass
@@ -83,6 +113,27 @@ class EventBusProtocol(ABC):
     @abstractmethod
     def unsubscribe(self, handle: SubscriptionHandle) -> None:
         pass
+
+    @abstractmethod
+    def unsubscribe_all(self) -> None:
+        """Remove every subscription (clean shutdown support)."""
+
+    @abstractmethod
+    def subscription_count(self, pattern: str | None = None) -> int:
+        """Count subscriptions for an exact pattern key, or all when None.
+
+        The pattern argument matches the subscription pattern literally (no
+        wildcard expansion): ``subscription_count("a.*")`` counts handlers
+        subscribed with the pattern string ``"a.*"``.
+        """
+
+    @abstractmethod
+    def close(self) -> None:
+        """Shut down the bus. Idempotent; releases transport resources."""
+
+    @abstractmethod
+    def wait_idle(self, timeout: float | None = None) -> None:
+        """Block until queued async subscriber work completes (or timeout)."""
 
 
 class EventBus(EventBusProtocol):
@@ -111,18 +162,39 @@ class EventBus(EventBusProtocol):
         source_component: str = "default",
         max_depth: int = 10,
         async_executor: ThreadPoolExecutor | None = None,
+        config: EventLayerConfig | None = None,
     ) -> None:
+        self._config = config
+        if config is not None:
+            max_depth = config.cycle_detection.max_depth
+            self._correlation_tracking = config.cycle_detection.correlation_tracking
+        else:
+            self._correlation_tracking = True
         self._source_component = source_component
         self._max_depth = max_depth
         self._async_executor = async_executor or ThreadPoolExecutor(max_workers=4)
         self._pending_async: set[Future] = set()
         self._pending_lock = threading.Lock()
+        self._closed = False
 
         self._subscriptions: dict[str, list[SubscriptionHandle]] = {}
         self._subscription_lock = threading.Lock()
 
         self._correlation_chains: dict[str, set[str]] = {}
         self._chain_lock = threading.Lock()
+
+    @property
+    def config(self) -> EventLayerConfig | None:
+        """The EventLayerConfig this bus was constructed with, if any."""
+        return self._config
+
+    def _require_open(self, operation: str) -> None:
+        if self._closed:
+            raise EventBusError(
+                f"event bus is closed; {operation} rejected",
+                code="VAL-EVT-002",
+                details={"operation": operation},
+            )
 
     def publish(
         self,
@@ -147,6 +219,7 @@ class EventBus(EventBusProtocol):
         mode: DeliveryMode = DeliveryMode.SYNC,
     ) -> None:
         """Publish an already-created canonical event envelope."""
+        self._require_open("publish")
         self._check_cycle(envelope)
 
         if mode == DeliveryMode.SYNC:
@@ -159,6 +232,7 @@ class EventBus(EventBusProtocol):
         pattern: str,
         handler: Callable[[str, dict[str, Any], dict[str, Any]], None],
     ) -> SubscriptionHandle:
+        self._require_open("subscribe")
         handle = SubscriptionHandle(pattern=pattern, handler=handler)
 
         with self._subscription_lock:
@@ -194,18 +268,40 @@ class EventBus(EventBusProtocol):
             },
         )
 
+    def unsubscribe_all(self) -> None:
+        with self._subscription_lock:
+            self._subscriptions.clear()
+        logger.debug("Unsubscribed all patterns", extra={"operation": "event-unsubscribe-all"})
+
+    def subscription_count(self, pattern: str | None = None) -> int:
+        with self._subscription_lock:
+            if pattern is not None:
+                return len(self._subscriptions.get(pattern, []))
+            return sum(len(handles) for handles in self._subscriptions.values())
+
     def _dispatch_sync(self, envelope: EventEnvelope) -> None:
-        """Dispatch event synchronously to all matching subscribers."""
+        """Dispatch event synchronously to all matching subscribers.
+
+        Subscriber isolation invariant: handler failures are wrapped in
+        SubscriberError for structured diagnostics and logged — never
+        re-raised — so remaining subscribers always receive the event.
+        """
         matching = self._find_matching_subscribers(envelope.type)
 
         for handle in matching:
             try:
                 handle.handler(envelope.type, envelope.payload, envelope.metadata)
             except Exception as e:
-                logger.error(
+                error = SubscriberError(
+                    str(e),
+                    pattern=handle.pattern,
+                    handler_name=_handler_name(handle.handler),
+                    event_type=envelope.type,
+                )
+                logger.warning(
                     "Subscriber error for pattern %s: %s",
                     handle.pattern,
-                    e,
+                    error,
                     exc_info=True,
                     extra={
                         "operation": "event-dispatch",
@@ -213,6 +309,7 @@ class EventBus(EventBusProtocol):
                         "event_id": envelope.id,
                         "subscription_pattern": handle.pattern,
                         "handler": _handler_name(handle.handler),
+                        "error_code": error.code,
                     },
                 )
 
@@ -247,7 +344,7 @@ class EventBus(EventBusProtocol):
                 propagation_depth=envelope.propagation_depth,
             )
 
-        if envelope.correlation_id:
+        if envelope.correlation_id and self._correlation_tracking:
             with self._chain_lock:
                 if envelope.correlation_id not in self._correlation_chains:
                     self._correlation_chains[envelope.correlation_id] = set()
@@ -262,7 +359,10 @@ class EventBus(EventBusProtocol):
                 self._correlation_chains[envelope.correlation_id].add(envelope.id)
 
     def close(self) -> None:
-        """Close the event bus and cleanup resources."""
+        """Close the event bus and cleanup resources. Idempotent."""
+        if self._closed:
+            return
+        self._closed = True
         self._async_executor.shutdown(wait=True)
 
     def wait_idle(self, timeout: float | None = None) -> None:
@@ -279,23 +379,55 @@ class EventBus(EventBusProtocol):
 
 # Singleton
 _bus_instance: EventBus | None = None
+_bus_lock = threading.Lock()
 
 
-def get_bus() -> EventBus:
-    """Get the singleton EventBus instance.
+def get_bus(config: EventLayerConfig | None = None) -> EventBus:
+    """Get the singleton EventBus instance (thread-safe, double-checked).
 
-    Note: The event bus is shared across all component profiles within a process.
-    Component registration is constrained to one profile per process (CP05).
-    Subscriptions from lifecycle observers are bound at registration time and
-    persist for the process lifetime.
+    On first creation the bus is configured from *config*, or from
+    ``load_event_config()`` when none is passed (missing config file yields
+    defaults — the loader never fails on absence). A *config* argument on a
+    later call does NOT reconfigure the existing bus; use
+    :func:`reset_bus` to swap configuration.
+
+    Note: The event bus is shared across all component profiles within a
+    process. Component registration is constrained to one profile per process
+    (CP05). Subscriptions from lifecycle observers are bound at registration
+    time and persist for the process lifetime.
     """
     global _bus_instance
     if _bus_instance is None:
-        _bus_instance = EventBus()
+        with _bus_lock:
+            if _bus_instance is None:
+                if config is None:
+                    from .event_config import load_event_config
+
+                    config = load_event_config()
+                _bus_instance = EventBus(config=config)
     return _bus_instance
 
 
-def reset_bus() -> None:
-    """Reset the singleton EventBus instance. Use in tests for isolation."""
+def reset_bus(config: EventLayerConfig | None = None) -> None:
+    """Replace the singleton EventBus, closing the old instance first.
+
+    The new bus reuses the old bus's config unless *config* is passed.
+    Lifecycle-observer dispatchers are re-subscribed on the new bus so
+    observers registered before the reset keep working. Used by tests for
+    isolation and by config hot-swap paths.
+    """
     global _bus_instance
-    _bus_instance = None
+    with _bus_lock:
+        old = _bus_instance
+        if old is not None:
+            try:
+                old.close()
+            except Exception:
+                logger.warning("failed to close previous event bus on reset", exc_info=True)
+        _bus_instance = EventBus(config=config if config is not None else (old.config if old else None))
+    try:
+        from .lifecycle_observer import _resubscribe_all
+
+        _resubscribe_all()
+    except Exception:
+        logger.debug("failed to resubscribe lifecycle observers after bus reset", exc_info=True)

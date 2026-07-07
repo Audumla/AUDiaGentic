@@ -19,9 +19,6 @@ _COMPONENT_ID = "providers"
 
 
 def _server_decl():
-    from audiagentic.foundation.components.loader import register_all_components
-
-    register_all_components()
     return get_mcp_server_declaration(_COMPONENT_ID, "ag-providers-mgmt")
 
 

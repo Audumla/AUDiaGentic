@@ -1,71 +1,84 @@
-"""Hindsight implementation recipes with provider-facing strategy dispatch.
+"""Hindsight provider recipe implementations.
 
-Registers Hindsight capability recipes per provider, using matrix data from this
-implementation package. Each recipe strategy type dispatches to the appropriate
-implementation. Hindsight-specific provider setup is contained here; the
+Recipe classes only: strategy selection lives in strategies.py, the
+apply/teardown/prune orchestration in lifecycle.py, and aggregate status
+in status.py. Hindsight-specific provider setup is contained here; the
 providers component exposes only generic recipe interfaces.
 """
 from __future__ import annotations
 
 import logging
-import shlex
-from collections.abc import Callable
-from enum import Enum
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
-
-class HindsightStatusState(str, Enum):
-    """Aggregate status for a provider's Hindsight integration.
-
-    Distinct from RecipeState (per-recipe lifecycle state). This value summarizes
-    whether the provider's Hindsight recipe set is active, inactive, or absent
-    from the registry — useful for CLI/dashboard consumers that need a single
-    machine-readable token rather than per-recipe details.
-    """
-
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    NOT_REGISTERED = "not_registered"
-
 from audiagentic.components.memory.hindsight.export import (
     HindsightBackendConfig,
-    build_hindsight_backend,
 )
 from audiagentic.components.memory.hindsight.matrix import (
-    HINDSIGHT_RECIPE_MATRIX,
     HindsightRecipeRow,
 )
 from audiagentic.components.memory.hindsight.mcp_recipe import (
     HindsightMcpRecipe,
     HindsightTarget,
+    build_hindsight_mcp_entry,
 )
-from audiagentic.components.providers.descriptors.registry import get_descriptor
 from audiagentic.components.providers.services.recipes import (
     ProviderCapabilityRecipe,
     ProviderRecipeKind,
-    ProviderRecipeRegistry,
     ProviderRecipeResult,
+    RecipeResult,
     RecipeState,
 )
-from audiagentic.foundation.descriptors import resolve_ref
+from audiagentic.foundation.refs import resolve_ref
 from audiagentic.foundation.toolchains.artifact_registry import ArtifactRegistry
 from audiagentic.foundation.toolchains.managed_block import (
     apply_managed_block,
     block_artifact_id,
     remove_managed_block,
 )
-from audiagentic.foundation.toolchains.probes import CommandProbe
+from audiagentic.foundation.toolchains.probes import CommandProbe, safe_command_parts
 from audiagentic.foundation.toolchains.provision_steps import (
-    CompensatingSequence,
     ManagedBlockStep,
     ProvisionStep,
-    provision_step_from_dict,
+    steps_from_defs,
+    substitute_params,
 )
+from audiagentic.foundation.toolchains.recipe_contract import run_steps
 
-_SHELL_METACHARS = ("|", "&&", ";", ">", "<")
+logger = logging.getLogger(__name__)
+
+
+#: Managed-mcp registry id under which the hindsight entry is owned. Ownership
+#: rides the same managed sync as ag-* servers, so managed tooling can see,
+#: collision-check, and prune the entry; ag-* projections use subset sync and
+#: never touch this id.
+HINDSIGHT_MANAGED_ID = "ag-hindsight"
+
+
+def _sync_hindsight_mcp_entry(
+    provider_id: str,
+    project_root: Path | None,
+    backend: HindsightBackendConfig | None,
+    *,
+    remove: bool = False,
+) -> dict[str, Any]:
+    """Write/remove the hindsight MCP entry through the managed ownership sync."""
+    from audiagentic.components.providers.services.mcp import (
+        sync_managed_provider_mcp_subset,
+    )
+
+    root = Path(project_root) if project_root else Path.cwd()
+    desired: dict[str, Any] = {}
+    if not remove and backend is not None:
+        desired[HINDSIGHT_MANAGED_ID] = (
+            backend.server_name,
+            build_hindsight_mcp_entry(backend),
+        )
+    return sync_managed_provider_mcp_subset(
+        provider_id, root, desired, managed_ids={HINDSIGHT_MANAGED_ID}
+    )
+
+
 RULE_TEXT = """Use Hindsight memory when prior project context may help.
 - Recall before design/history questions or non-trivial work.
 - Retain durable decisions, user preferences, architecture constraints, and outcomes.
@@ -74,34 +87,30 @@ RULE_TEXT = """Use Hindsight memory when prior project context may help.
 _RULE_BLOCK_ID = "hindsight-memory"
 
 
-def _command_parts(command: str) -> list[str]:
-    """Return argv for a simple command, refusing shell compound syntax.
+def _absolute_project_path(path: str | Path, project_root: Path | None = None) -> Path:
+    target = Path(path).expanduser()
+    if target.is_absolute() or project_root is None:
+        return target
+    return Path(project_root) / target
 
-    Raises AudiaGenticError with code REC-ML-001 if the command contains
-    shell compound operators. Callers should catch and log externally.
-    """
-    if any(token in command for token in _SHELL_METACHARS):
-        from audiagentic.foundation.contracts.errors import AudiaGenticError
-
-        raise AudiaGenticError(
-            code="REC-ML-001",
-            kind="validation",
-            message=(
-                f"shell compound command requires structured shell-step support: {command!r}"
-            ),
-        )
-    return shlex.split(command)
 
 
 class _RowRecipe(ProviderCapabilityRecipe):
     """Common provider metadata + result re-stamping for Hindsight recipes.
 
     Extends ProviderCapabilityRecipe with Hindsight-specific provenance and
-    action-guidance overlay drawn from a matrix row.
+    action-guidance overlay drawn from a matrix row. Provision/teardown
+    orchestration comes from the ProvisioningRecipe base, with every result
+    routed through :meth:`to_result` for the provenance overlay.
     """
 
     capability_id = "hindsight"
     backend_id: str | None = None
+    # provision_steps() on these recipes exists for matrix-step introspection
+    # and dry-run tooling; configure() often does work the steps cannot
+    # express (inner MCP writes, URL-config files, registry registration), so
+    # execution always uses the primitive path.
+    provision_via_steps = False
 
     def __init__(
         self,
@@ -137,57 +146,6 @@ class _RowRecipe(ProviderCapabilityRecipe):
         """Convert generic result with Hindsight provenance overlay."""
         return self._stamp(base)
 
-    def provision(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        """Hindsight-specific provision: probe → install → configure → verify."""
-        probed = self.probe(context)
-        if probed.success and probed.state is RecipeState.VERIFIED:
-            return self._stamp(ProviderRecipeResult.ok(
-                RecipeState.VERIFIED, status="already provisioned",
-            ))
-
-        owned: list[str] = []
-        for op in (self.install, self.configure):
-            result = op(context)
-            owned.extend(result.artifacts_owned)
-            if not result.success:
-                return self._stamp(ProviderRecipeResult.fail(
-                    result.error or "provision failed",
-                    state=result.state,
-                    details={"artifacts_owned": owned},
-                ))
-
-        verified = self.verify(context)
-        all_owned = [*owned, *verified.artifacts_owned]
-        if not verified.success:
-            return self._stamp(ProviderRecipeResult.fail(
-                verified.error or "verify failed",
-                state=RecipeState.ERROR,
-                details={"artifacts_owned": all_owned},
-            ))
-        return self._stamp(ProviderRecipeResult.ok(
-            RecipeState.VERIFIED, artifacts=all_owned, status="provisioned",
-        ))
-
-    def teardown(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        """Hindsight-specific teardown: prune → uninstall → verify absent."""
-        pruned = self.prune(context)
-        if not pruned.success:
-            return pruned
-
-        removed = self.uninstall(context)
-        if not removed.success:
-            return removed
-
-        probed = self.probe(context)
-        if probed.success and probed.state is RecipeState.ABSENT:
-            return self._stamp(ProviderRecipeResult.ok(
-                RecipeState.ABSENT, status="removed",
-            ))
-        return self._stamp(ProviderRecipeResult.fail(
-            "integration still present after teardown",
-            action_needed=self._row.audia_action,
-        ))
-
 
 class HooksInstallerRecipe(_RowRecipe):
     """Command-installer recipe: runs official hook installer CLI.
@@ -216,7 +174,7 @@ class HooksInstallerRecipe(_RowRecipe):
             ))
         try:
             cmd = _parameterize_command(self._row.status_command, self._backend)
-            probe = CommandProbe(tuple(_command_parts(cmd)), expect_exit=0, timeout=15)
+            probe = CommandProbe(tuple(safe_command_parts(cmd)), expect_exit=0, timeout=15)
             result = probe.check()
             state = RecipeState.VERIFIED if result.passed else RecipeState.ABSENT
             return self._stamp(ProviderRecipeResult.ok(state, status=result.detail))
@@ -240,14 +198,12 @@ class HooksInstallerRecipe(_RowRecipe):
                 "no install steps for this provider",
             ))
         params = _hindsight_params(self._backend)
-        steps = _steps_from_defs(self._row.install_steps, params)
-        seq_result = CompensatingSequence(steps).run(context)
-        if seq_result.status == "ok":
-            return self._stamp(ProviderRecipeResult.ok(
-                RecipeState.INSTALLING, status="installer succeeded",
-            ))
-        return self._stamp(ProviderRecipeResult.fail(
-            f"installer failed: {seq_result.reason or 'unknown'}",
+        steps = steps_from_defs(self._row.install_steps, params)
+        return self._stamp(run_steps(
+            steps, context,
+            ok_state=RecipeState.INSTALLING,
+            ok_status="installer succeeded",
+            fail_prefix="installer failed",
         ))
 
     def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
@@ -276,14 +232,12 @@ class HooksInstallerRecipe(_RowRecipe):
                 "no uninstall steps for this provider",
             ))
         params = _hindsight_params(self._backend)
-        steps = _steps_from_defs(self._row.uninstall_steps, params)
-        seq_result = CompensatingSequence(steps).run(context)
-        if seq_result.status == "ok":
-            return self._stamp(ProviderRecipeResult.ok(
-                RecipeState.ABSENT, status="uninstaller succeeded",
-            ))
-        return self._stamp(ProviderRecipeResult.fail(
-            f"uninstaller failed: {seq_result.reason or 'unknown'}",
+        steps = steps_from_defs(self._row.uninstall_steps, params)
+        return self._stamp(run_steps(
+            steps, context,
+            ok_state=RecipeState.ABSENT,
+            ok_status="uninstaller succeeded",
+            fail_prefix="uninstaller failed",
         ))
 
     def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
@@ -293,7 +247,7 @@ class HooksInstallerRecipe(_RowRecipe):
 
     def provision_steps(self) -> list[ProvisionStep]:
         params = _hindsight_params(self._backend)
-        return _steps_from_defs(
+        return steps_from_defs(
             self._row.install_steps, params,
             recipe_id=f"hindsight-{self.provider_id}",
         )
@@ -345,12 +299,10 @@ class PluginConfigRecipe(_RowRecipe):
                     action_needed=self._row.notes or self._row.audia_action,
                 ))
             params = _hindsight_params(self._backend)
-            steps = _steps_from_defs(self._row.install_steps, params)
-            seq_result = CompensatingSequence(steps).run(context)
-            if seq_result.status != "ok":
-                return self._stamp(ProviderRecipeResult.fail(
-                    f"plugin install failed: {seq_result.reason or 'unknown'}",
-                ))
+            steps = steps_from_defs(self._row.install_steps, params)
+            seq = run_steps(steps, context, fail_prefix="plugin install failed")
+            if not seq.success:
+                return self._stamp(seq)
         return self._stamp(ProviderRecipeResult.ok(
             RecipeState.INSTALLING, status="plugin installed",
         ))
@@ -378,12 +330,10 @@ class PluginConfigRecipe(_RowRecipe):
                     action_needed=self._row.notes or self._row.audia_action,
                 ))
             params = _hindsight_params(self._backend)
-            steps = _steps_from_defs(self._row.uninstall_steps, params)
-            seq_result = CompensatingSequence(steps).run(context)
-            if seq_result.status != "ok":
-                return self._stamp(ProviderRecipeResult.fail(
-                    f"plugin uninstall failed: {seq_result.reason or 'unknown'}",
-                ))
+            steps = steps_from_defs(self._row.uninstall_steps, params)
+            seq = run_steps(steps, context, fail_prefix="plugin uninstall failed")
+            if not seq.success:
+                return self._stamp(seq)
         return self._stamp(ProviderRecipeResult.ok(
             RecipeState.ABSENT, status="plugin uninstalled",
         ))
@@ -401,12 +351,12 @@ class PluginConfigRecipe(_RowRecipe):
             params["CONFIG_PATH"] = str(self._target.config_path)
         steps: list[ProvisionStep] = []
         if self._row.install_steps and self._should_run_plugin_command():
-            steps.extend(_steps_from_defs(
+            steps.extend(steps_from_defs(
                 self._row.install_steps, params,
                 recipe_id=f"hindsight-{self.provider_id}",
             ))
         if self._row.configure_steps:
-            steps.extend(_steps_from_defs(
+            steps.extend(steps_from_defs(
                 self._row.configure_steps, params,
                 recipe_id=f"hindsight-{self.provider_id}",
             ))
@@ -567,12 +517,12 @@ class _PluginUrlConfigRecipe(_RowRecipe):
         params["CONFIG_PATH"] = str(config_path_for_steps)
         steps: list[ProvisionStep] = []
         if self._row.install_steps and self._should_run_plugin_command():
-            steps.extend(_steps_from_defs(
+            steps.extend(steps_from_defs(
                 self._row.install_steps, params,
                 recipe_id=f"hindsight-{self.provider_id}",
             ))
         if self._row.configure_steps:
-            steps.extend(_steps_from_defs(
+            steps.extend(steps_from_defs(
                 self._row.configure_steps, params,
                 recipe_id=f"hindsight-{self.provider_id}",
             ))
@@ -602,12 +552,10 @@ class _PluginUrlConfigRecipe(_RowRecipe):
                     action_needed=self._row.notes or self._row.audia_action,
                 ))
             params = _hindsight_params(self._backend)
-            steps = _steps_from_defs(self._row.install_steps, params)
-            seq_result = CompensatingSequence(steps).run(context)
-            if seq_result.status != "ok":
-                return self._stamp(ProviderRecipeResult.fail(
-                    f"plugin install failed: {seq_result.reason or 'unknown'}",
-                ))
+            steps = steps_from_defs(self._row.install_steps, params)
+            seq = run_steps(steps, context, fail_prefix="plugin install failed")
+            if not seq.success:
+                return self._stamp(seq)
         return self._stamp(ProviderRecipeResult.ok(RecipeState.INSTALLING, status="plugin installed"))
 
     def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
@@ -617,15 +565,13 @@ class _PluginUrlConfigRecipe(_RowRecipe):
             params = _hindsight_params(self._backend)
             config_path_for_steps = self._harness_config_path or self._url_config_path
             params["CONFIG_PATH"] = str(config_path_for_steps)
-            steps = _steps_from_defs(
+            steps = steps_from_defs(
                 self._row.configure_steps, params,
                 recipe_id=f"hindsight-{self.provider_id}",
             )
-            seq_result = CompensatingSequence(steps).run(context)
-            if seq_result.status != "ok":
-                return self._stamp(ProviderRecipeResult.fail(
-                    f"plugin configure failed: {seq_result.reason or 'unknown'}",
-                ))
+            seq = run_steps(steps, context, fail_prefix="plugin configure failed")
+            if not seq.success:
+                return self._stamp(seq)
         self._url_config_path.parent.mkdir(parents=True, exist_ok=True)
         self._url_config_path.write_text(
             json.dumps(self._expected_config(), indent=2),
@@ -655,12 +601,10 @@ class _PluginUrlConfigRecipe(_RowRecipe):
                     action_needed=self._row.notes or self._row.audia_action,
                 ))
             params = _hindsight_params(self._backend)
-            steps = _steps_from_defs(self._row.uninstall_steps, params)
-            seq_result = CompensatingSequence(steps).run(context)
-            if seq_result.status != "ok":
-                return self._stamp(ProviderRecipeResult.fail(
-                    f"plugin uninstall failed: {seq_result.reason or 'unknown'}",
-                ))
+            steps = steps_from_defs(self._row.uninstall_steps, params)
+            seq = run_steps(steps, context, fail_prefix="plugin uninstall failed")
+            if not seq.success:
+                return self._stamp(seq)
         return self._stamp(ProviderRecipeResult.ok(RecipeState.ABSENT, status="plugin uninstalled"))
 
     def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
@@ -927,7 +871,7 @@ class RulesOnlyRecipe(_RowRecipe):
     def provision_steps(self) -> list[ProvisionStep]:
         if self._row.configure_steps:
             params = {"URL": "", "MCP_URL": "", "TOKEN": "", "KEY": "", "ID": ""}
-            return _steps_from_defs(
+            return steps_from_defs(
                 self._row.configure_steps, params,
                 recipe_id=self.recipe_id,
             )
@@ -967,19 +911,8 @@ def _parameterize_command(
     command: str,
     backend: HindsightBackendConfig,
 ) -> str:
-    """Replace brace-delimited placeholder tokens with backend values.
-
-    Uses the same parameter mapping as _hindsight_params for consistency:
-    URL, MCP_URL, TOKEN, KEY, ID.  Empty optional fields produce no replacement,
-    so "{TOKEN}" remains literal when the backend has no api_key — callers that
-    rely on those placeholders should check configuration first.
-    """
-    if not command:
-        return command
-    params = _hindsight_params(backend)
-    for key, value in params.items():
-        command = command.replace(f"{{{key}}}", value)
-    return command
+    """Replace {URL}/{MCP_URL}/{TOKEN}/{KEY}/{ID} placeholders with backend values."""
+    return substitute_params(command, _hindsight_params(backend))
 
 
 def _hindsight_params(backend: HindsightBackendConfig) -> dict[str, str]:
@@ -999,487 +932,39 @@ def _hindsight_params(backend: HindsightBackendConfig) -> dict[str, str]:
     }
 
 
-def _steps_from_defs(
-    step_defs: list[dict[str, Any]],
-    params: dict[str, str],
-    *,
-    recipe_id: str | None = None,
-    registry: ArtifactRegistry | None = None,
-) -> list[ProvisionStep]:
-    """Build ProvisionStep instances from YAML step definitions."""
-    steps: list[ProvisionStep] = []
-    for i, defn in enumerate(step_defs):
-        step_data = dict(defn)
-        if "id" not in step_data:
-            step_data["id"] = f"step-{i}"
-        steps.append(
-            provision_step_from_dict(
-                step_data,
-                params,
-                registry=registry,
-                recipe_id=recipe_id,
-            )
-        )
-    return steps
-
-
-def _normalize_platform(key: str) -> str:
-    """Normalize a platform key to canonical form.
-
-    Accepts aliases ('macos', 'darwin') → 'darwin', 'linux' → 'linux',
-    ('win', 'windows', 'win32') → 'win'. Returns the lowercased key if no
-    mapping applies, so an unknown constraint simply won't match any platform.
-    """
-    normalized = key.lower().strip()
-    if normalized in ("macos", "darwin"):
-        return "darwin"
-    if normalized in ("linux",):
-        return "linux"
-    if normalized in ("win", "windows", "win32"):
-        return "win"
-    return normalized
-
-
-def _platform_supported(row: HindsightRecipeRow) -> bool:
-    """Check if the current platform is in the row's platform constraints.
-
-    Constraints must be canonical keys: 'darwin', 'linux', or 'win'.
-    Empty constraint list means supported on all platforms.
-    """
-    from audiagentic.foundation.toolchains import platform_key
-
-    if not row.platform_constraints:
-        return True
-    current = platform_key()
-    allowed = {_normalize_platform(c) for c in row.platform_constraints}
-    return current in allowed
-
-
-_INSTALLER_KINDS = (
-    ProviderRecipeKind.HOOKS,
-    ProviderRecipeKind.WRAPPER_CLI,
-    ProviderRecipeKind.PLUGIN_CONFIG,
-)
-
-
-def _external_fallback_row(
-    row: HindsightRecipeRow, provider_id: str, reason: str
-) -> HindsightRecipeRow:
-    """Downgrade an installer-style row so the provider points at the external
-    Hindsight server without a local install: MCP config when the provider
-    supports MCP, otherwise a rules-only block.
-    """
-    descriptor = get_descriptor(provider_id)
-    if descriptor and descriptor.mcp_config:
-        return HindsightRecipeRow(
-            provider_id=provider_id,
-            display_name=row.display_name,
-            integration_type="fallback-mcp",
-            recipe_kind=ProviderRecipeKind.MCP_CONFIG,
-            source_url=row.source_url,
-            source_date=row.source_date,
-            source_status="unconfirmed",
-            audia_action="manage_config_writes",
-            notes=reason,
-        )
-    return HindsightRecipeRow(
-        provider_id=provider_id,
-        display_name=row.display_name,
-        integration_type="rules-only",
-        recipe_kind=ProviderRecipeKind.GUIDANCE_ONLY,
-        source_url=row.source_url,
-        source_date=row.source_date,
-        source_status="unconfirmed",
-        audia_action="action_needed",
-        notes=reason,
-    )
-
-
-def resolve_hindsight_strategy(
-    provider_id: str,
-    project_root: Path | None = None,
-) -> HindsightRecipeRow | None:
-    """Resolve the best Hindsight strategy for a provider.
-
-    Precedence: verified native/installer > mcp-config > fallback-mcp > rules-only.
-    Platform gate drops unsupported installer strategies and falls back to
-    pointing at the external server via MCP/rules. Source gate is enforced by
-    the builder.
-    """
-    rows = [row for row in HINDSIGHT_RECIPE_MATRIX if row.provider_id == provider_id]
-    if not rows:
-        return None
-
-    row = rows[0]  # one row per provider
-
-    if row.recipe_kind in _INSTALLER_KINDS and not _platform_supported(row):
-        return _external_fallback_row(
-            row, provider_id,
-            f"platform-gated ({', '.join(row.platform_constraints)}); external fallback",
-        )
-
-    return row
-
-
-def _build_hooks_recipe(
-    row: HindsightRecipeRow,
-    backend: HindsightBackendConfig,
-) -> Any:
-    """Build HooksInstallerRecipe with source gate."""
-    if row.source_status != "verified":
-        return GuidanceOnlyRecipe(row)
-    return HooksInstallerRecipe(row, backend)
-
-
-def _build_plugin_url_config_recipe(
-    row: HindsightRecipeRow,
-    backend: HindsightBackendConfig,
-    url_config_path: str | Path,
-    harness_config_path: str | Path | None = None,
-) -> Any:
-    """Build Plugin URL config recipe with optional Windows repair."""
-    return _PluginUrlConfigRecipe(
-        row, backend, url_config_path,
-        harness_config_path=harness_config_path,
-    )
-
-
-def _build_plugin_config_recipe(
-    row: HindsightRecipeRow,
-    backend: HindsightBackendConfig,
-    provider_id: str,
-    project_root: Path | None,
-) -> Any:
-    """Build plugin config recipe from metadata.
-
-    Prefers plugin_array > url_config_path > generic MCP target fallback.
-    Source gate applies only when install_steps are present and unverified.
-    """
-    harness_path = _resolve_harness_config_path(provider_id, project_root)
-    if row.source_status != "verified" and row.install_steps:
-        return GuidanceOnlyRecipe(row)
-    if row.plugin_array_package and harness_path:
-        return _PluginArrayRecipe(row, backend, harness_path)
-    if row.plugin_url_config_path:
-        return _build_plugin_url_config_recipe(
-            row, backend, row.plugin_url_config_path,
-            harness_path or row.plugin_url_config_path,
-        )
-    if harness_path:
-        descriptor = get_descriptor(provider_id)
-        spec = descriptor.mcp_config if descriptor else None
-        target = HindsightTarget(
-            config_path=harness_path,
-            writer_fn=spec.writer if spec else None,
-            reader_fn=spec.reader if spec else None,
-            remover_fn=spec.remover if spec else None,
-        )
-        return PluginConfigRecipe(row, backend, target)
-    return GuidanceOnlyRecipe(row)
-
-
-def _build_mcp_config_recipe(
-    row: HindsightRecipeRow,
-    backend: HindsightBackendConfig,
-    provider_id: str,
-    project_root: Path | None,
-) -> Any:
-    """Build MCP-config recipe.
-
-    Blocked source status returns guidance-only. Otherwise dispatches to
-    _build_mcp_recipe for inner composition (MCP + rules).
-    """
-    if row.source_status == "blocked":
-        return GuidanceOnlyRecipe(row)
-    harness_path = _resolve_harness_config_path(provider_id, project_root)
-    rule_path = _resolve_rule_path(provider_id, project_root)
-    return _build_mcp_recipe(
-        row, backend, provider_id, project_root, harness_path, rule_path,
-    )
-
-
-def _build_guidance_only_recipe(
-    row: HindsightRecipeRow,
-    backend: HindsightBackendConfig,
-    provider_id: str,
-    project_root: Path | None,
-) -> Any:
-    """Build guidance-only recipe with rules fallback."""
-    rule_path = _resolve_rule_path(provider_id, project_root)
-    if rule_path:
-        return RulesOnlyRecipe(row, rule_path, project_root=project_root)
-    return GuidanceOnlyRecipe(row)
-
-
-# Factory registry keyed by ProviderRecipeKind.
-# Each entry is a callable that accepts (row, backend, provider_id, project_root)
-# and returns a recipe instance.
-_RecipeFactory = Callable[
-    [HindsightRecipeRow, HindsightBackendConfig, str, Path | None], Any
-]
-
-_RECIPE_FACTORIES: dict[ProviderRecipeKind, _RecipeFactory] = {
-    ProviderRecipeKind.HOOKS: lambda r, b, p, pr: _build_hooks_recipe(r, b),
-    ProviderRecipeKind.WRAPPER_CLI: lambda r, b, p, pr: _build_hooks_recipe(r, b),
-    ProviderRecipeKind.PLUGIN_CONFIG: _build_plugin_config_recipe,
-    ProviderRecipeKind.MCP_CONFIG: _build_mcp_config_recipe,
-    ProviderRecipeKind.HYBRID: _build_mcp_config_recipe,
-    ProviderRecipeKind.GUIDANCE_ONLY: _build_guidance_only_recipe,
-}
-
-
-def build_hindsight_recipe(
-    row: HindsightRecipeRow,
-    backend: HindsightBackendConfig,
-    provider_id: str,
-    project_root: Path | None = None,
-) -> Any:
-    """Build a recipe object for a resolved Hindsight strategy row.
-
-    Dispatches through _RECIPE_FACTORIES keyed by ProviderRecipeKind.
-    Unknown kinds fall back to GuidanceOnlyRecipe (intentional default).
-    """
-    factory = _RECIPE_FACTORIES.get(row.recipe_kind)
-    if factory is not None:
-        return factory(row, backend, provider_id, project_root)
-    return GuidanceOnlyRecipe(row)
-
-
-def _build_mcp_recipe(
-    row: HindsightRecipeRow,
-    backend: HindsightBackendConfig,
-    provider_id: str,
-    project_root: Path | None,
-    harness_path: str | None,
-    rule_path: Path | None,
-) -> Any:
-    """Build MCP-config recipe for MCP_CONFIG or HYBRID kind.
-
-    When HYBRID and rule_path exists, wraps in _CompositeRecipe with rules layer.
-    Falls back to rules-only or guidance when paths are unavailable.
-    """
-    if harness_path:
-        descriptor = get_descriptor(provider_id)
-        spec = descriptor.mcp_config if descriptor else None
-
-        target = HindsightTarget(
-            config_path=harness_path,
-            writer_fn=spec.writer if spec else None,
-            reader_fn=spec.reader if spec else None,
-            remover_fn=spec.remover if spec else None,
-        )
-        registry = ArtifactRegistry(project_root) if project_root else None
-        inner = HindsightMcpRecipe(
-            backend,
-            target,
-            registry=registry,
-            recipe_id=f"hindsight:{provider_id}:mcp",
-        )
-
-        if row.recipe_kind == ProviderRecipeKind.HYBRID and rule_path:
-            rules = RulesOnlyRecipe(row, rule_path, project_root=project_root)
-            return _CompositeRecipe(row, inner, rules)
-        return _McpConfigAdapter(row, inner)
-    if rule_path:
-        return RulesOnlyRecipe(row, rule_path, project_root=project_root)
-    return GuidanceOnlyRecipe(row)
-
-
-def _resolve_harness_config_path(provider_id: str, project_root: Path | None = None) -> str | None:
-    """Resolve the real harness config path for a provider from its descriptor.
-
-    The path is anchored to ``project_root`` so provisioning writes inside the
-    target project, never relative to the current working directory.
-    """
-    descriptor = get_descriptor(provider_id)
-    if descriptor is None:
-        return None
-    spec = descriptor.mcp_config
-    if spec is None:
-        return None
-    config_path = spec.config_path
-    resolved = config_path(project_root) if callable(config_path) else config_path
-    if resolved is None:
-        return None
-    return str(_absolute_project_path(resolved, Path(project_root) if project_root else None))
-
-
-def _absolute_project_path(path: str | Path, project_root: Path | None = None) -> Path:
-    target = Path(path).expanduser()
-    if target.is_absolute() or project_root is None:
-        return target
-    return Path(project_root) / target
-
-
-def _resolve_rule_path(provider_id: str, project_root: Path | None = None) -> Path | None:
-    """Resolve a provider instruction/rules file from generic descriptor metadata."""
-    descriptor = get_descriptor(provider_id)
-    if descriptor is None:
-        return None
-    rel_path = descriptor.instruction_file
-    if rel_path is None:
-        for agent_file in descriptor.agent_files:
-            if agent_file.managed and agent_file.rel_path.lower().endswith((".md", ".mdx")):
-                rel_path = agent_file.rel_path
-                break
-    if rel_path is None:
-        return None
-    return _absolute_project_path(rel_path, Path(project_root) if project_root else None)
-
-
-def register_hindsight_recipes(
-    registry: ProviderRecipeRegistry,
-    backend: HindsightBackendConfig | None = None,
-    project_root: Path | None = None,
-) -> list[Any]:
-    """Register Hindsight recipes for providers that have matrix rows.
-
-    Uses resolve_hindsight_strategy + build_hindsight_recipe for each provider.
-    Applies platform gate and source gate automatically.
-    Returns the list of registered recipes.
-    """
-    if backend is None and project_root:
-        backend = build_hindsight_backend(project_root)
-
-    registered: list[Any] = []
-
-    for row in HINDSIGHT_RECIPE_MATRIX:
-        resolved = resolve_hindsight_strategy(row.provider_id, project_root)
-        if resolved is None:
-            continue
-
-        if not backend:
-            recipe = GuidanceOnlyRecipe(resolved)
-        else:
-            recipe = build_hindsight_recipe(resolved, backend, resolved.provider_id, project_root)
-
-        registry.register(recipe)
-        registered.append(recipe)
-
-    return registered
-
-
-def _reconcile(
-    project_root: Path,
-    operation: str,
-    *,
-    backend: HindsightBackendConfig | None = None,
-    provider_ids: list[str] | None = None,
-    context: dict[str, Any] | None = None,
-) -> dict[str, ProviderRecipeResult]:
-    """Central registry setup + dispatch for apply/teardown/prune operations.
-
-    ``operation`` is one of: 'install', 'uninstall', 'prune'.
-    For install/uninstall the registry lifecycle (probe → ops → verify) runs via
-    ``_RowRecipe.provision/teardown``.  For prune only the prune primitive runs
-    to avoid executing command-based uninstallers on stale config.
-    """
-    registry = ProviderRecipeRegistry()
-    recipes = register_hindsight_recipes(
-        registry,
-        backend=backend,
-        project_root=project_root,
-    )
-    selected = set(provider_ids) if provider_ids is not None else None
-    ctx = context or {}
-    results: dict[str, ProviderRecipeResult] = {}
-    for recipe in recipes:
-        if selected is not None and recipe.provider_id not in selected:
-            continue
-        if operation == "prune":
-            results[recipe.provider_id] = recipe.prune(ctx)
-        elif operation == "uninstall":
-            result = registry.uninstall(
-                recipe.provider_id, recipe.capability_id, recipe.backend_id, ctx
-            )
-            results[recipe.provider_id] = result if result else ProviderRecipeResult.ok(
-                RecipeState.ABSENT, status="nothing to uninstall",
-            )
-        else:  # install
-            result = registry.install(
-                recipe.provider_id, recipe.capability_id, recipe.backend_id, ctx
-            )
-            results[recipe.provider_id] = result if result else ProviderRecipeResult.ok(
-                RecipeState.ABSENT, status="nothing to install",
-            )
-    return results
-
-
-def apply_hindsight(
-    project_root: Path,
-    *,
-    backend: HindsightBackendConfig | None = None,
-    provider_ids: list[str] | None = None,
-    context: dict[str, Any] | None = None,
-) -> dict[str, ProviderRecipeResult]:
-    """Provision Hindsight recipes from the contained memory implementation."""
-    return _reconcile(
-        project_root, "install",
-        backend=backend, provider_ids=provider_ids, context=context,
-    )
-
-
-def teardown_hindsight(
-    project_root: Path,
-    *,
-    backend: HindsightBackendConfig | None = None,
-    provider_ids: list[str] | None = None,
-    context: dict[str, Any] | None = None,
-) -> dict[str, ProviderRecipeResult]:
-    """Remove Hindsight artifacts managed by the contained memory implementation."""
-    return _reconcile(
-        project_root, "uninstall",
-        backend=backend, provider_ids=provider_ids, context=context,
-    )
-
-
-def prune_hindsight(
-    project_root: Path,
-    *,
-    backend: HindsightBackendConfig | None = None,
-    provider_ids: list[str] | None = None,
-    context: dict[str, Any] | None = None,
-) -> dict[str, ProviderRecipeResult]:
-    """Remove only Hindsight *config* artifacts (MCP entries, rule blocks).
-
-    Unlike :func:`teardown_hindsight`, this runs each recipe's ``prune`` only —
-    never a command-based uninstaller. It is safe and idempotent, used to clear
-    stale config from providers that are no longer enabled without executing
-    destructive package uninstalls that may never have installed anything.
-    """
-    return _reconcile(
-        project_root, "prune",
-        backend=backend, provider_ids=provider_ids, context=context,
-    )
-
 
 class _McpConfigAdapter(_RowRecipe):
     """Thin adapter that wraps HindsightMcpRecipe with provider metadata.
 
-    Every lifecycle call delegates to the inner recipe and re-stamps the
-    result with this provider's provenance via ``_stamp``.
+    Probe/verify delegate to the inner recipe (descriptor-reader comparison);
+    configure/prune go through the managed ownership sync so the hindsight
+    entry is registered in managed-mcp-servers.json like every other
+    AUDiaGentic-owned entry (HM21/RV155). Results are re-stamped with this
+    provider's provenance via ``_stamp``.
     """
 
     def __init__(
         self,
         row: HindsightRecipeRow,
         inner: HindsightMcpRecipe,
+        project_root: Path | None = None,
     ) -> None:
         super().__init__(row)
         self._inner = inner
+        self._project_root = project_root
 
     def provision_steps(self) -> list[ProvisionStep]:
         params = _hindsight_params(self._inner.backend)
         steps: list[ProvisionStep] = []
         # Row-level install/uninstall steps from matrix (e.g. pip install + init)
         if self._row.install_steps:
-            steps.extend(_steps_from_defs(
+            steps.extend(steps_from_defs(
                 self._row.install_steps, params,
                 recipe_id=f"hindsight-{self.provider_id}",
             ))
         # Row-level configure steps (e.g. config-set for plugin arrays)
         if self._row.configure_steps:
-            steps.extend(_steps_from_defs(
+            steps.extend(steps_from_defs(
                 self._row.configure_steps, params,
                 recipe_id=f"hindsight-{self.provider_id}",
             ))
@@ -1489,9 +974,6 @@ class _McpConfigAdapter(_RowRecipe):
             steps.extend(inner_fn())  # type: ignore[misc]
         return steps
 
-    def provision(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(self._inner.provision(context))
-
     def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
         return self._stamp(self._inner.probe(context))
 
@@ -1499,7 +981,18 @@ class _McpConfigAdapter(_RowRecipe):
         return self._stamp(self._inner.install(context))
 
     def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(self._inner.configure(context))
+        sync = _sync_hindsight_mcp_entry(
+            self.provider_id, self._project_root, self._inner.backend
+        )
+        if not sync.get("ok"):
+            return self._stamp(ProviderRecipeResult.fail(
+                f"managed MCP sync refused: {sync.get('collisions')}",
+            ))
+        return self._stamp(ProviderRecipeResult.ok(
+            RecipeState.CONFIGURING,
+            artifacts=[f"{sync.get('config_path')}::{self._inner.backend.server_name}"],
+            status="entry written (managed)",
+        ))
 
     def verify(self, context: dict[str, Any]) -> ProviderRecipeResult:
         return self._stamp(self._inner.verify(context))
@@ -1508,7 +1001,14 @@ class _McpConfigAdapter(_RowRecipe):
         return self._stamp(self._inner.uninstall(context))
 
     def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(self._inner.prune(context))
+        # Single removal path regardless of when the entry was written: the
+        # server name is ours by construction, so remove it by name via the
+        # inner recipe, then clear the ownership record (idempotent).
+        result = self._inner.prune(context)
+        _sync_hindsight_mcp_entry(
+            self.provider_id, self._project_root, self._inner.backend, remove=True
+        )
+        return self._stamp(result)
 
     def dry_run(self, context: dict[str, Any]) -> ProviderRecipeResult:
         result = self._inner.probe(context)
@@ -1524,17 +1024,23 @@ class _McpConfigAdapter(_RowRecipe):
 
 
 class _CompositeRecipe(_RowRecipe):
-    """Wraps an MCP config recipe and a rules recipe, executing both in sequence."""
+    """Wraps an MCP config recipe and a rules recipe, executing both in sequence.
+
+    The MCP entry write/remove goes through the managed ownership sync
+    (HM21/RV155); the inner recipe remains the probe/verify reader.
+    """
 
     def __init__(
         self,
         row: HindsightRecipeRow,
         mcp_inner: HindsightMcpRecipe,
         rules_inner: RulesOnlyRecipe,
+        project_root: Path | None = None,
     ) -> None:
         super().__init__(row)
         self._mcp = mcp_inner
         self._rules = rules_inner
+        self._project_root = project_root
 
     def provision_steps(self) -> list[ProvisionStep]:
         backend = self._mcp.backend
@@ -1542,7 +1048,7 @@ class _CompositeRecipe(_RowRecipe):
         steps: list[ProvisionStep] = []
         # Row-level install steps first (e.g. CLI installer)
         if self._row.install_steps:
-            steps.extend(_steps_from_defs(
+            steps.extend(steps_from_defs(
                 self._row.install_steps, params,
                 recipe_id=f"hindsight-{self.provider_id}",
             ))
@@ -1610,13 +1116,20 @@ class _CompositeRecipe(_RowRecipe):
         )
 
     def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        mcp_result = self._mcp.configure(context)
+        sync = _sync_hindsight_mcp_entry(
+            self.provider_id, self._project_root, self._mcp.backend
+        )
+        mcp_ok = bool(sync.get("ok"))
+        mcp_status = "entry written (managed)" if mcp_ok else f"sync refused: {sync.get('collisions')}"
+        mcp_artifacts = (
+            [f"{sync.get('config_path')}::{self._mcp.backend.server_name}"] if mcp_ok else []
+        )
         rules_result = self._rules.configure(context)
         return ProviderRecipeResult(
-            success=mcp_result.success and rules_result.success,
+            success=mcp_ok and rules_result.success,
             state=RecipeState.CONFIGURING,
-            artifacts_owned=list(mcp_result.artifacts_owned) + list(rules_result.artifacts_owned),
-            status=f"mcp: {mcp_result.status}; rules: {rules_result.status}",
+            artifacts_owned=mcp_artifacts + list(rules_result.artifacts_owned),
+            status=f"mcp: {mcp_status}; rules: {rules_result.status}",
             source_url=self.source_url,
             source_date=self.source_date,
             action_needed=self._row.audia_action,
@@ -1649,7 +1162,12 @@ class _CompositeRecipe(_RowRecipe):
         )
 
     def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        # Single removal path (see _McpConfigAdapter.prune): remove by name,
+        # then clear the ownership record.
         mcp_result = self._mcp.prune(context)
+        _sync_hindsight_mcp_entry(
+            self.provider_id, self._project_root, self._mcp.backend, remove=True
+        )
         rules_result = self._rules.prune(context)
         return ProviderRecipeResult(
             success=mcp_result.success and rules_result.success,
@@ -1684,65 +1202,12 @@ class _CompositeRecipe(_RowRecipe):
         )
 
 
-def build_hindsight_status(
-    registry: ProviderRecipeRegistry,
-    provider_id: str,
-    context: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Build Hindsight status for a specific provider from the recipe registry."""
-    recipes = registry.list_for_provider(provider_id, "hindsight")
-    if not recipes:
-        return {
-            "provider_id": provider_id,
-            "hindsight": {
-                "status": HindsightStatusState.NOT_REGISTERED.value,
-                "action_needed": "no Hindsight recipe for this provider",
-            },
-        }
-
-    results = []
-    for recipe in recipes:
-        status = registry.status(
-            recipe.provider_id,
-            recipe.capability_id,
-            recipe.backend_id,
-            context,
-        )
-        if status is not None:
-            row = getattr(recipe, "_row", None)
-            source_status = getattr(row, "source_status", "") or "unconfirmed"
-            results.append({
-                "provider_id": recipe.provider_id,
-                "capability_id": recipe.capability_id,
-                "kind": recipe.recipe_kind.value,
-                "state": status.state.value,
-                "status": status.status,
-                "action_needed": getattr(status, "action_needed", ""),
-                "source_url": getattr(status, "source_url", ""),
-                "source_date": getattr(status, "source_date", ""),
-                "source_status": source_status,
-                "artifacts_owned": list(getattr(status, "artifacts_owned", [])),
-            })
-
-    is_active = any(r["state"] == RecipeState.VERIFIED.value for r in results)
-    return {
-        "provider_id": provider_id,
-        "hindsight": {
-            "status": HindsightStatusState.ACTIVE.value if is_active else HindsightStatusState.INACTIVE.value,
-            "recipes": results,
-        },
-    }
-
 
 __all__ = [
     "GuidanceOnlyRecipe",
+    "HINDSIGHT_MANAGED_ID",
     "HooksInstallerRecipe",
-    "HindsightStatusState",
     "PluginConfigRecipe",
     "RULE_TEXT",
     "RulesOnlyRecipe",
-    "apply_hindsight",
-    "build_hindsight_status",
-    "register_hindsight_recipes",
-    "teardown_hindsight",
 ]

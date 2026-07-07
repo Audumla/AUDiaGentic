@@ -13,6 +13,20 @@ from .base import SCOPE_HARNESS, ComponentDescriptor, McpServerDeclaration
 logger = logging.getLogger(__name__)
 
 _registry = Registry[ComponentDescriptor](aliases=True)
+_LOADING_DEFAULT_COMPONENTS = False
+
+
+def _set_default_loading(value: bool) -> None:
+    global _LOADING_DEFAULT_COMPONENTS
+    _LOADING_DEFAULT_COMPONENTS = value
+
+
+def _self_populate() -> None:
+    if _LOADING_DEFAULT_COMPONENTS or _registry.keys():
+        return
+    from audiagentic.foundation.components.loader import register_all_components
+
+    register_all_components()
 
 
 def register(descriptor: ComponentDescriptor, *, replace: bool = False) -> None:
@@ -33,15 +47,18 @@ def register(descriptor: ComponentDescriptor, *, replace: bool = False) -> None:
 
 
 def resolve_component_id(component_id: str) -> str | None:
+    _self_populate()
     return _registry.resolve(component_id)
 
 
 def get_descriptor(component_id: str) -> ComponentDescriptor | None:
+    _self_populate()
     resolved = resolve_component_id(component_id) or component_id
     return _registry.get(resolved)
 
 
 def all_descriptors() -> dict[str, ComponentDescriptor]:
+    _self_populate()
     return _registry.all()
 
 

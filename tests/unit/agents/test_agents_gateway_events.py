@@ -92,10 +92,10 @@ def test_register_is_idempotent():
     # must be a no-op from here on (never touch the _REGISTERED flag directly
     # in a test — that would leave a real duplicate subscription on the
     # process-global event bus for the rest of the test session).
-    subs_before = list(get_bus()._subscriptions.get(events._REQUESTED_TOPIC, []))
+    subs_before = get_bus().subscription_count(events._REQUESTED_TOPIC)
     events.register()
     events.register()
-    subs_after = list(get_bus()._subscriptions.get(events._REQUESTED_TOPIC, []))
+    subs_after = get_bus().subscription_count(events._REQUESTED_TOPIC)
     assert subs_after == subs_before
 
 

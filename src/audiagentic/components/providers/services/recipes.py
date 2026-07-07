@@ -179,7 +179,12 @@ class ProviderCapabilityRecipe(ProvisioningRecipe):
         )
 
     def to_result(self, base: RecipeResult) -> ProviderRecipeResult:
-        """Convert a generic RecipeResult to ProviderRecipeResult."""
+        """Convert a generic RecipeResult to ProviderRecipeResult.
+
+        Called by the base orchestration on every provision/teardown return,
+        including results that are already ProviderRecipeResult — provider
+        fields (action_needed, source_*) carried by the input are preserved.
+        """
         return ProviderRecipeResult(
             success=base.success,
             state=base.state,
@@ -187,8 +192,9 @@ class ProviderCapabilityRecipe(ProvisioningRecipe):
             status=base.status,
             error=base.error,
             details=dict(base.details),
-            source_url=self.source_url,
-            source_date=self.source_date,
+            source_url=getattr(base, "source_url", "") or self.source_url,
+            source_date=getattr(base, "source_date", "") or self.source_date,
+            action_needed=getattr(base, "action_needed", ""),
         )
 
 

@@ -17,9 +17,6 @@ logger = logging.getLogger(__name__)
 
 
 def build_server() -> FastMCP:
-    from audiagentic.foundation.components.loader import register_all_components
-
-    register_all_components()
     mcp = mcp_server(__name__)
 
     @mcp.tool()
