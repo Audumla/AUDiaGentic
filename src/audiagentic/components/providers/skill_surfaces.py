@@ -96,9 +96,9 @@ def _load_skills_from_registry(project_root: Path | None = None) -> list[SkillDe
         active_tag_ids,
     )
     from audiagentic.components.providers.tags.registry import (  # noqa: PLC0415
-        all_tags_loaded,
+        all_tags,
     )
-    tags = all_tags_loaded()
+    tags = all_tags()
     active = active_tag_ids(project_root)
     skills: list[SkillDefinition] = []
     for tag_id, descriptor in sorted(tags.items()):

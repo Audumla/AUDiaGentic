@@ -22,9 +22,9 @@ _DIRECTIVE_ALIASES: dict[str, str] = {
 def _build_default_syntax() -> dict[str, Any]:
     """Build the default prompt syntax dict from the tag registry."""
     from audiagentic.components.providers.tags.registry import (  # noqa: PLC0415
-        all_tags_loaded,
+        all_tags,
     )
-    tags = all_tags_loaded()
+    tags = all_tags()
     canonical_tags = sorted(tags)
     tag_aliases: dict[str, str] = {}
     for tag_id, descriptor in tags.items():

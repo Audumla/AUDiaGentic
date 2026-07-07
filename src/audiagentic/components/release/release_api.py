@@ -71,9 +71,6 @@ def finalize(project_root: Path, release_id: str) -> dict[str, Any]:
     renders CHANGELOG.md etc. from the archived ledger state.
     After this returns, the agent should call the GitHub MCP server create_release_tag tool.
     """
-    from audiagentic.components.ledger import ledger_events as _ledger_events
-
-    _ledger_events.register()
     archive_result: dict[str, Any] = {}
     get_bus().publish(
         RELEASE_LEDGER_ARCHIVE_REQUESTED,
@@ -92,7 +89,7 @@ def finalize(project_root: Path, release_id: str) -> dict[str, Any]:
         raise AudiaGenticError(
             code="INT-RELEASE-001",
             kind="release",
-            message="ledger archive event was not handled — ledger_events.register() may not have been called",
+            message="ledger archive event was not handled",
             details={"release-id": release_id},
         )
     released_ids = archive_result.get("released-event-ids") or None

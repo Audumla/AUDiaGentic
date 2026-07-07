@@ -9,6 +9,7 @@ from pathlib import Path
 import yaml
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.io import atomic_write_text
 from audiagentic.foundation.mcp import McpServerEntry
 
 
@@ -35,7 +36,6 @@ def read_goose_yaml(path: Path) -> dict[str, McpServerEntry]:
 
 
 def write_goose_yaml(path: Path, entries: dict[str, McpServerEntry]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     existing: dict = {}
     if path.exists():
         try:
@@ -62,7 +62,7 @@ def write_goose_yaml(path: Path, entries: dict[str, McpServerEntry]) -> None:
         else:
             extensions.append(ext_entry)
     existing["extensions"] = extensions
-    path.write_text(yaml.dump(existing, default_flow_style=False, sort_keys=False), encoding="utf-8")
+    atomic_write_text(path, yaml.dump(existing, default_flow_style=False, sort_keys=False))
 
 
 def remove_goose_yaml(path: Path, name: str) -> bool:
@@ -77,5 +77,5 @@ def remove_goose_yaml(path: Path, name: str) -> bool:
     if len(new_extensions) == len(extensions):
         return False
     data["extensions"] = new_extensions
-    path.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False), encoding="utf-8")
+    atomic_write_text(path, yaml.dump(data, default_flow_style=False, sort_keys=False))
     return True
