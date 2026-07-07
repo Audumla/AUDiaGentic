@@ -340,38 +340,64 @@ async def run_blocking_with_output(
     heartbeat_seconds: float = 10.0,
     poll_seconds: float = 0.25,
 ) -> T:
-    """Run a sync component API call in a worker thread, bridging output to MCP."""
+    """Run a sync component API call in a worker thread, bridging output to MCP.
+
+    Also sets the interaction contextvar so sync ask() calls can reach live
+    MCP elicitation via run_coroutine_threadsafe (FI06/RV129).
+    """
     if ctx is None:
         return work(None)
 
-    events: queue.Queue[ComponentOutputEvent] = queue.Queue()
-    bridge = McpOutputBridge(ctx, logger=logger)
+    from audiagentic.foundation import interaction as _interaction_mod
 
-    def sink(event: ComponentOutputEvent) -> None:
-        events.put(coerce_output_event(event))
+    _ctx_token = _interaction_mod._mcp_ctx_var.set((ctx, asyncio.get_running_loop()))
+    try:
+        events: queue.Queue[ComponentOutputEvent] = queue.Queue()
+        bridge = McpOutputBridge(ctx, logger=logger)
 
-    task = asyncio.create_task(asyncio.to_thread(work, sink))
-    last_emit = asyncio.get_running_loop().time()
+        def sink(event: ComponentOutputEvent) -> None:
+            events.put(coerce_output_event(event))
 
-    while not task.done():
-        emitted = False
+        task = asyncio.create_task(asyncio.to_thread(work, sink))
+        last_emit = asyncio.get_running_loop().time()
+
+        while not task.done():
+            emitted = False
+            while True:
+                try:
+                    await bridge.emit(events.get_nowait())
+                    emitted = True
+                except queue.Empty:
+                    break
+            if emitted:
+                last_emit = asyncio.get_running_loop().time()
+            elif heartbeat_message and asyncio.get_running_loop().time() - last_emit >= heartbeat_seconds:
+                await bridge.emit(ComponentOutputEvent(message=heartbeat_message))
+                last_emit = asyncio.get_running_loop().time()
+            await asyncio.sleep(poll_seconds)
+
+        result = await task
         while True:
             try:
                 await bridge.emit(events.get_nowait())
-                emitted = True
             except queue.Empty:
                 break
-        if emitted:
-            last_emit = asyncio.get_running_loop().time()
-        elif heartbeat_message and asyncio.get_running_loop().time() - last_emit >= heartbeat_seconds:
-            await bridge.emit(ComponentOutputEvent(message=heartbeat_message))
-            last_emit = asyncio.get_running_loop().time()
-        await asyncio.sleep(poll_seconds)
+        return result
+    finally:
+        _interaction_mod._mcp_ctx_var.reset(_ctx_token)
 
-    result = await task
-    while True:
-        try:
-            await bridge.emit(events.get_nowait())
-        except queue.Empty:
-            break
-    return result
+
+async def ask_via_ctx(
+    ctx: Context,
+    title: str,
+    description: str = "",
+    choices: tuple[str, ...] | list[str] | None = None,
+    default_choice: str | None = None,
+    timeout_seconds: int = 30,
+) -> Any:
+    """Sanctioned entry point for MCP tool handlers to perform live elicitation.
+
+    Mirrors the McpOutputBridge pattern: per-request ctx, not global backend.
+    """
+    from audiagentic.foundation.interaction import ask_async
+    return await ask_async(title, description, choices, default_choice, timeout_seconds, ctx=ctx)

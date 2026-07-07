@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.mcp import McpServerEntry
 
 
@@ -55,7 +56,6 @@ def read_continue_json(path: Path) -> dict[str, McpServerEntry]:
 
 
 def write_continue_json(path: Path, entries: dict[str, McpServerEntry]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     existing: dict[str, Any] = {}
     if path.exists():
         try:
@@ -86,7 +86,7 @@ def write_continue_json(path: Path, entries: dict[str, McpServerEntry]) -> None:
         else:
             servers.append(server_entry)
     existing["mcpServers"] = servers
-    path.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+    atomic_write_json(path, existing, indent=2, sort_keys=False)
 
 
 def remove_continue_json(path: Path, name: str) -> bool:
@@ -101,5 +101,5 @@ def remove_continue_json(path: Path, name: str) -> bool:
     if len(new_servers) == len(servers):
         return False
     data["mcpServers"] = new_servers
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    atomic_write_json(path, data, indent=2, sort_keys=False)
     return True

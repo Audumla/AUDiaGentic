@@ -9,6 +9,7 @@ from audiagentic.components.providers.surfaces.base import (
     MANAGED_REGION_END,
     SurfaceBlock,
     apply_managed_blocks,
+    parse_contribution_descriptor,
 )
 from audiagentic.components.providers.surfaces.contributions import (
     load_surface_contributions,
@@ -44,6 +45,26 @@ def test_loads_release_ledger_surface_contribution() -> None:
     contribution = by_id["agent-ledger/process"]
     assert contribution.owner_component == "agent-ledger"
     assert "agent ledger process" in contribution.title.lower()
+
+
+def test_shipped_surface_contributions_have_known_preferred_targets(caplog) -> None:
+    load_surface_contributions()
+
+    assert "unknown preferred-target" not in caplog.text
+
+
+def test_unknown_surface_preferred_target_warns(caplog) -> None:
+    parse_contribution_descriptor(
+        {
+            "id": "test/unknown-target",
+            "title": "Unknown target",
+            "preferred-targets": ["frobnicate"],
+            "content": "body",
+        },
+        default_owner="test",
+    )
+
+    assert "unknown preferred-target 'frobnicate'" in caplog.text
 
 
 def test_managed_region_replaces_without_duplicate() -> None:

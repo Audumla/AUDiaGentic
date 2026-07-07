@@ -1,4 +1,10 @@
-"""Shell command provisioning step."""
+"""Shell command provisioning step.
+
+Deliberately separate from ``workflow.invocation.steps.ShellStep`` (SL09):
+this step carries revert commands, shell-mode strings, and compensation
+semantics; the workflow step carries streaming progress and the
+answers/question protocol. See the SL09 review for the won't-merge rationale.
+"""
 from __future__ import annotations
 
 import os

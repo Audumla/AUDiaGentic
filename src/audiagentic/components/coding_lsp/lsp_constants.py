@@ -25,6 +25,8 @@ METHOD_TIMEOUTS: dict[str, float] = {
     "textDocument/completion": 3.0,
     "textDocument/signatureHelp": 3.0,
     "textDocument/inlayHint": 3.0,
+    # Document diagnostics — needs higher budget for large files with deep imports
+    "textDocument/diagnostic": 60.0,
     # Workspace-level queries
     "workspace/symbol": 8.0,
     "workspace/diagnostic": 30.0,

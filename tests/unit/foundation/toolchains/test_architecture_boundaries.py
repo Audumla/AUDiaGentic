@@ -155,6 +155,10 @@ class TestMemoryComponentBoundaries:
         allowed = {
             "audiagentic.components.providers.descriptors.registry",
             "audiagentic.components.providers.services.recipes",
+            # HM21: the managed MCP ownership sync is the sanctioned write
+            # path for provider MCP entries — hindsight must use it rather
+            # than writing provider configs behind its back.
+            "audiagentic.components.providers.services.mcp",
         }
         violations = []
         for pyfile in _get_python_files(memory_dir / "hindsight"):
