@@ -84,3 +84,35 @@ def test_component_list_without_profile_excludes_profile_component(tmp_path: Pat
     ids = {row["component_id"] for row in rows}
     assert "cli-profile-component" not in ids, ids
     assert "session" in ids, ids
+
+
+def test_component_profile_with_project_sets_repo_root_from_unrelated_cwd(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    unrelated_cwd = tmp_path / "elsewhere"
+    profile_dir = project_root / ".audiagentic" / "cli-test-profile" / "components"
+    profile_dir.mkdir(parents=True)
+    unrelated_cwd.mkdir()
+    (profile_dir / "cli-profile-component.yaml").write_text(
+        PROFILE_COMPONENT_YAML, encoding="utf-8"
+    )
+    env = _base_env(project_root)
+    env.pop("AUDIAGENTIC_REPO_ROOT", None)
+
+    result = _run_cli(
+        [
+            "--project",
+            str(project_root),
+            "--component-profile",
+            "cli-test-profile",
+            "component",
+            "list",
+        ],
+        cwd=unrelated_cwd,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stderr
+    rows = json.loads(result.stdout)
+    ids = {row["component_id"] for row in rows}
+    assert "cli-profile-component" in ids, ids
+    assert "session" in ids, ids

@@ -47,6 +47,7 @@ agent_files:
     description: "Shared project instructions"
 
 mcp_config:
+  remote: false  # config format is stdio-only; url-form entries are not expressible
   config_path: ".goose/config.yaml"
   reader: "audiagentic.components.providers.adapters.goose.mcp_format:read_goose_yaml"
   writer: "audiagentic.components.providers.adapters.goose.mcp_format:write_goose_yaml"

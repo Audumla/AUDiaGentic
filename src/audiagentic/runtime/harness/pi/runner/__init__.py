@@ -4,6 +4,17 @@ import os
 from pathlib import Path
 
 from audiagentic.foundation.contracts.errors import make_error
+from audiagentic.runtime.harness.config import (
+    env_flag,
+    load_harness_config,
+    require_harness_provider,
+    require_harness_rig_port,
+)
+from audiagentic.runtime.harness.context import (
+    AgentContext,
+    env_with_pythonpath,
+    resolve_agent_bin,
+)
 from audiagentic.runtime.harness.rig import launch_rig_if_needed
 from audiagentic.runtime.rig.embedded.config import load_rig_model
 from audiagentic.runtime.rig.models import (
@@ -18,15 +29,6 @@ from .agent_run import (
     run_agent,
 )
 from .command import _build_run_env, build_agent_command
-from .context import (
-    AgentContext,
-    env_flag,
-    env_with_pythonpath,
-    load_harness_config,
-    require_harness_provider,
-    require_harness_rig_port,
-    resolve_agent_bin,
-)
 
 __all__ = [
     "AgentContext",

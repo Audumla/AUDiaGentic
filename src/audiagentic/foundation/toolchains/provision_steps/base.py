@@ -11,10 +11,12 @@ types (S1 layering constraint).
 """
 from __future__ import annotations
 
+import importlib
 from collections.abc import Callable
 from typing import Any, Protocol
 
 from audiagentic.foundation.contracts.errors import make_error_factory
+from audiagentic.foundation.registry_utils import Registry
 from audiagentic.foundation.workflow.invocation.models import StepResult
 
 from ..artifact_registry import ArtifactRegistry
@@ -38,16 +40,40 @@ StepFromDict = Callable[
     ProvisionStep,
 ]
 
-_STEP_TYPES: dict[str, StepFromDict] = {}
+def _load_builtin_step_types() -> None:
+    modules = {
+        "shell": (
+            "audiagentic.foundation.toolchains.provision_steps.shell",
+            "_shell_from_dict",
+        ),
+        "config-set": (
+            "audiagentic.foundation.toolchains.provision_steps.config_set",
+            "_config_set_from_dict",
+        ),
+        "managed-block": (
+            "audiagentic.foundation.toolchains.provision_steps.managed_block_step",
+            "_managed_block_from_dict",
+        ),
+        "write-file": (
+            "audiagentic.foundation.toolchains.provision_steps.write_file",
+            "_write_file_from_dict",
+        ),
+    }
+    for kind, (module_name, factory_name) in modules.items():
+        module = importlib.import_module(module_name)
+        register_step_type(kind, getattr(module, factory_name))
+
+
+_STEP_TYPES: Registry[StepFromDict] = Registry(loader=_load_builtin_step_types)
 
 
 def register_step_type(kind: str, from_dict: StepFromDict) -> None:
     """Register a step-kind constructor for provision_step_from_dict."""
-    _STEP_TYPES[kind] = from_dict
+    _STEP_TYPES.register(kind, from_dict, replace=True)
 
 
 def registered_step_types() -> dict[str, StepFromDict]:
-    return dict(_STEP_TYPES)
+    return _STEP_TYPES.all()
 
 
 def _substitute(value: Any, params: dict[str, str], path: str = "") -> Any:
