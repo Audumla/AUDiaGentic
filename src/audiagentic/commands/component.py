@@ -13,15 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 def _cmd_component_list(_args: Any, project_root: Path) -> int:
-    from audiagentic.foundation.components.loader import register_all_components
     from audiagentic.foundation.components.registry import (
         all_descriptors,
         get_descriptor,
         is_enabled,
         is_installed,
     )
-
-    register_all_components()
 
     rows = []
     for cid, desc in sorted(all_descriptors().items()):
@@ -52,14 +49,11 @@ def _cmd_component_list(_args: Any, project_root: Path) -> int:
 
 def _cmd_component_status(args: Any, project_root: Path) -> int:
     from audiagentic.foundation.components.hooks import get_component_status
-    from audiagentic.foundation.components.loader import register_all_components
     from audiagentic.foundation.components.registry import (
         get_descriptor,
         is_enabled,
         is_installed,
     )
-
-    register_all_components()
 
     component_id: str = args.component_id
 
@@ -91,10 +85,7 @@ _SUBCOMMAND_REGISTRY: dict[str, Callable] = {
 
 def _cmd_component(args: argparse.Namespace, project_root: Path) -> int:
     from audiagentic.components.project import project_api
-    from audiagentic.foundation.components.loader import register_all_components
     from audiagentic.foundation.components.registry import get_descriptor
-
-    register_all_components()
 
     sub = args.component_cmd
 

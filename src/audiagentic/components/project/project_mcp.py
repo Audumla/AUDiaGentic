@@ -23,9 +23,6 @@ logger = logging.getLogger(__name__)
 
 
 def _server_decl():
-    from audiagentic.foundation.components.loader import register_all_components
-
-    register_all_components()
     return get_mcp_server_declaration(COMPONENT_PROJECT, "ag-project-mgmt")
 
 

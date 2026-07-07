@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import audiagentic.components.providers  # noqa: F401  (register provider descriptors)
 from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
+from audiagentic.components.memory.hindsight.lifecycle import (
+    apply_hindsight,
+    teardown_hindsight,
+)
 from audiagentic.components.memory.hindsight.matrix import (
     HindsightRecipeRow,
     get_matrix_rows,
@@ -11,12 +15,8 @@ from audiagentic.components.memory.hindsight.mcp_recipe import (
     HindsightTarget,
     build_hindsight_entry,
 )
-from audiagentic.components.memory.hindsight.recipes import (
-    RulesOnlyRecipe,
-    apply_hindsight,
-    build_hindsight_recipe,
-    teardown_hindsight,
-)
+from audiagentic.components.memory.hindsight.recipes import RulesOnlyRecipe
+from audiagentic.components.memory.hindsight.strategies import build_hindsight_recipe
 from audiagentic.components.providers.services.recipes import ProviderRecipeKind
 from audiagentic.foundation.mcp import McpServerEntry
 from audiagentic.foundation.toolchains.artifact_registry import ArtifactRegistry
@@ -211,7 +211,7 @@ def test_hindsight_orchestration_entrypoints_run_selected_provider(tmp_path, mon
         return [recipe]
 
     monkeypatch.setattr(
-        "audiagentic.components.memory.hindsight.recipes.register_hindsight_recipes",
+        "audiagentic.components.memory.hindsight.lifecycle.register_hindsight_recipes",
         fake_register,
     )
 
@@ -300,7 +300,7 @@ def test_apply_hindsight_mcp_provider_writes_inside_project_root(tmp_path, monke
     """Regression: MCP-config provisioning must (a) succeed through the adapter
     path (inner RecipeResult re-stamped, not assumed ProviderRecipeResult) and
     (b) write inside project_root, never relative to the current directory."""
-    from audiagentic.components.memory.hindsight.recipes import apply_hindsight
+    from audiagentic.components.memory.hindsight.lifecycle import apply_hindsight
 
     # Run from an unrelated cwd to prove paths anchor to project_root, not cwd.
     other = tmp_path / "elsewhere"
@@ -326,9 +326,9 @@ class TestBuildHindsightStatus:
     """HM15: status output includes source freshness, artifacts, and provenance."""
 
     def test_status_includes_source_date_and_source_status(self, tmp_path):
-        from audiagentic.components.memory.hindsight.recipes import (
+        from audiagentic.components.memory.hindsight.status import build_hindsight_status
+        from audiagentic.components.memory.hindsight.strategies import (
             build_hindsight_recipe,
-            build_hindsight_status,
         )
         from audiagentic.components.providers.services.recipes import ProviderRecipeRegistry
 
@@ -372,9 +372,7 @@ class TestBuildHindsightStatus:
         assert entry["state"] == "verified"
 
     def test_status_for_unknown_provider(self, tmp_path):
-        from audiagentic.components.memory.hindsight.recipes import (
-            build_hindsight_status,
-        )
+        from audiagentic.components.memory.hindsight.status import build_hindsight_status
         from audiagentic.components.providers.services.recipes import ProviderRecipeRegistry
 
         registry = ProviderRecipeRegistry()
@@ -384,7 +382,7 @@ class TestBuildHindsightStatus:
 
     def test_status_artifacts_owned_present_in_result(self, tmp_path):
         """artifacts_owned field is populated by provision (not probe/status)."""
-        from audiagentic.components.memory.hindsight.recipes import build_hindsight_recipe
+        from audiagentic.components.memory.hindsight.strategies import build_hindsight_recipe
 
         row = HindsightRecipeRow(
             provider_id="gemini",

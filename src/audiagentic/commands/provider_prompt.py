@@ -3,14 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from audiagentic.cli_io import print_error, print_json, print_message
-
-
-def _print_progress(event, prefix: str | None = None) -> None:
-    message = getattr(event, "message", str(event))
-    if prefix:
-        message = f"[{prefix}] {message}"
-    print_message(message)
+from audiagentic.cli_io import print_error, print_json
 
 
 def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
@@ -34,10 +27,8 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
         flags=re.IGNORECASE,
     )
     if reconcile_all_match or reconcile_one_match:
-        from audiagentic.foundation.components.loader import register_all_components
         from audiagentic.foundation.components.registry import get_descriptor
 
-        register_all_components()
         if not get_descriptor("providers"):
             print_error("providers component not available")
             return 1
@@ -48,9 +39,9 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
         )
 
         if reconcile_all_match:
-            result = reconcile_all_providers(project_root=project_root, on_progress=_print_progress)
+            result = reconcile_all_providers(project_root=project_root)
         elif reconcile_one_match:
-            result = reconcile_provider(reconcile_one_match.group(1).lower(), project_root=project_root, on_progress=_print_progress)
+            result = reconcile_provider(reconcile_one_match.group(1).lower(), project_root=project_root)
         else:
             print_error("providers component not available")
             return 1
@@ -69,12 +60,10 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
     action = match.group(1).lower()
     provider_id = match.group(2).lower()
 
-    from audiagentic.foundation.components.loader import register_all_components
     from audiagentic.foundation.components.registry import (
         get_descriptor as _get_component_descriptor,
     )
 
-    register_all_components()
     if not _get_component_descriptor("providers"):
         print_error("providers component not available")
         return 1
@@ -96,7 +85,6 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
         provider_id,
         dry_run=False,
         project_root=project_root,
-        on_progress=lambda e: _print_progress(e, prefix=provider_id),
     )
     print_json(result)
     return 0 if result.get("status") in {"installed", "uninstalled", "repaired", "skipped"} else 1

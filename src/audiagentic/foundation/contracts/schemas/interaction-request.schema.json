@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "interaction-request.schema.json",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "contract-version",
+    "request_id",
+    "kind",
+    "title",
+    "description",
+    "choices",
+    "state",
+    "answer",
+    "source_kind",
+    "source_id",
+    "requested_at",
+    "answered_at",
+    "ttl_seconds"
+  ],
+  "properties": {
+    "contract-version": { "const": "v1" },
+    "request_id": { "type": "string", "minLength": 1 },
+    "kind": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "choices": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "state": { "enum": ["pending", "answered", "expired"] },
+    "answer": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["choice", "details"],
+          "properties": {
+            "choice": { "type": ["string", "null"] },
+            "details": { "type": "object" }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "source_kind": { "type": "string" },
+    "source_id": { "type": "string" },
+    "requested_at": { "type": "string", "minLength": 1 },
+    "answered_at": { "type": ["string", "null"] },
+    "ttl_seconds": { "type": "integer", "minimum": 1 }
+  }
+}

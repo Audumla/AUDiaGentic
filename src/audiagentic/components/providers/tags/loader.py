@@ -241,10 +241,8 @@ def load_all_tags(config_root: Path | None = None) -> list[ActionDescriptor]:
 
     Idempotent — re-registering an already-known tag-id overwrites silently.
     """
-    from audiagentic.foundation.components.loader import register_all_components  # noqa: PLC0415
     from audiagentic.foundation.components.registry import all_descriptors  # noqa: PLC0415
 
-    register_all_components()
     root = (config_root or _CONFIG_ROOT).resolve()
     descriptors: list[ActionDescriptor] = []
     for component in sorted(all_descriptors().values(), key=lambda d: d.component_id):

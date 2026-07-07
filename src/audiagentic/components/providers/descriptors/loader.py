@@ -1,7 +1,7 @@
 """Provider descriptor YAML loader.
 
 Builds ``ProviderDescriptor`` instances from YAML files under
-``config/providers/``. Uses the generic foundation/descriptors mechanism:
+``config/providers/``. Uses the DescriptorSpec mechanism from ``spec.py``:
     load YAML → resolve dotpath hooks → build step tree → construct typed descriptor
 
 The PROVIDER_SPEC declares the field map for ProviderDescriptor.
@@ -13,15 +13,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.descriptors import (
-    DescriptorRegistry,
-    DescriptorSpec,
-    build_step_from_spec,
-    build_toolchain_step,
-    load_descriptor,
-    resolve_ref,
-)
 from audiagentic.foundation.paths.names import get_package_providers_config_dir
+from audiagentic.foundation.refs import resolve_ref
+from audiagentic.foundation.workflow.invocation.from_spec import build_step_from_spec
 
 from .base import (
     AgentFile,
@@ -32,6 +26,7 @@ from .base import (
     ProviderDescriptor,
     ProviderPermissions,
 )
+from .spec import DescriptorSpec, iter_descriptor_files, load_descriptor
 
 
 def _list_to_tuple(value: Any) -> tuple:
@@ -80,7 +75,7 @@ def _build_cli_install(data: dict[str, Any]) -> CliInstallRecipe:
     """Build CliInstallRecipe from YAML dict.
 
     Supports two forms:
-    1. toolchain-based: {toolchain, package, executable} — uses build_toolchain_step
+    1. toolchain-based: {toolchain, package, executable} — uses toolchains loader build_step
     2. explicit steps: {package_manager, package_name, executable, install, uninstall, probe_fn}
     """
     if "toolchain" in data:
@@ -91,7 +86,7 @@ def _build_cli_install(data: dict[str, Any]) -> CliInstallRecipe:
         extra = data.get("extra", [])
         uninstall_package = data.get("uninstall_package", package)
 
-        from audiagentic.foundation.toolchains.loader import has_action
+        from audiagentic.foundation.toolchains.loader import build_step, has_action
 
         un_action = "uninstall" if has_action(toolchain, "uninstall") else "remove"
 
@@ -99,8 +94,8 @@ def _build_cli_install(data: dict[str, Any]) -> CliInstallRecipe:
             package_manager=toolchain,
             package_name=package,
             executable=executable,
-            install=build_toolchain_step(toolchain, "install", package, extra),
-            uninstall=build_toolchain_step(toolchain, un_action, uninstall_package),
+            install=build_step(toolchain, "install", package, *extra),
+            uninstall=build_step(toolchain, un_action, uninstall_package),
             probe_fn=resolve_ref(data["probe_fn"]) if "probe_fn" in data else None,
         )
     else:
@@ -128,6 +123,7 @@ def _build_mcp_config(data: dict[str, Any]) -> McpConfigSpec:
         format=data.get("format", ""),
         refresh_mode=data["refresh_mode"],
         reload_fn=resolve_ref(data["reload_fn"]) if "reload_fn" in data else None,
+        remote=data.get("remote", True),
     )
 
 
@@ -197,9 +193,11 @@ def load_providers_from_directory(directory: Path) -> dict[str, ProviderDescript
     Returns:
         Dict mapping provider_id to ProviderDescriptor.
     """
-    registry = DescriptorRegistry()
-    registry.load_yaml_directory(directory, PROVIDER_SPEC, id_field="provider_id")
-    return registry.all()
+    providers: dict[str, ProviderDescriptor] = {}
+    for path in iter_descriptor_files(directory):
+        descriptor = load_descriptor(path, PROVIDER_SPEC)
+        providers[descriptor.provider_id] = descriptor
+    return providers
 
 
 def get_providers_config_dir() -> Path:
