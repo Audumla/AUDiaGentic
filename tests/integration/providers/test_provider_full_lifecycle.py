@@ -70,6 +70,7 @@ register_all_components()
 # Providers that can be installed in Docker (npm, uv, script)
 _DOCKER_INSTALLABLE = {
     "aider",  # uv
+    "antigravity",  # npm
     "claude",  # npm
     "cline",  # npm
     "codex",  # npm

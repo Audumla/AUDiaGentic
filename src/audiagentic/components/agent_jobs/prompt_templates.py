@@ -42,12 +42,12 @@ def load_prompt_template(project_root: Path, *, tag: str, provider_id: str, temp
 
 def _load_packaged_prompt_template(*, tag: str, template_name: str | None) -> tuple[str, Path | None] | None:
     from audiagentic.components.providers.tags.registry import (
-        all_tags_loaded,  # noqa: PLC0415
+        all_tags,  # noqa: PLC0415
     )
 
-    descriptor = all_tags_loaded().get(tag)
+    descriptor = all_tags().get(tag)
     if descriptor is None and tag.startswith("ag-"):
-        descriptor = all_tags_loaded().get(tag.removeprefix("ag-"))
+        descriptor = all_tags().get(tag.removeprefix("ag-"))
     if descriptor is None:
         return None
 
