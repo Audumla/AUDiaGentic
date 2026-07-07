@@ -16,7 +16,7 @@
 #   configure_steps    list of ProvisionStep definitions
 #   status_command     command to check integration status (empty if unknown)
 #   config_artifacts   list of config files/artifacts created
-#   platform_constraints: list of supported platforms (macOS, Linux, Windows)
+#   platform_constraints: canonical platform keys (darwin, linux, win)
 #   scope              project-local | global | both
 #   source_status      verified | unconfirmed | blocked | no_hindsight
 #   audia_action       call_official_installer | manage_config_writes |
@@ -185,9 +185,9 @@ matrix:
       - ./.vscode/mcp.json
       - ./.github/copilot-instructions.md
     platform_constraints:
-      - macOS
-      - Linux
-      - Windows
+      - darwin
+      - linux
+      - win
     scope: project-local
     audia_action: call_official_installer
     source_url: https://hindsight.vectorize.io/sdks/integrations/github-copilot
@@ -212,9 +212,9 @@ matrix:
     config_artifacts:
       - opencode.json (plugin array entry)
     platform_constraints:
-      - macOS
-      - Linux
-      - Windows
+      - darwin
+      - linux
+      - win
     scope: both
     audia_action: manage_config_writes
     source_url: https://hindsight.vectorize.io/sdks/integrations/opencode
@@ -254,9 +254,9 @@ matrix:
       - ./config.toml (MCP server entry under [mcp])
       - ./AGENTS.md (recall/retain rule)
     platform_constraints:
-      - macOS
-      - Linux
-      - Windows
+      - darwin
+      - linux
+      - win
     scope: project-local
     audia_action: call_official_installer
     source_url: https://hindsight.vectorize.io/sdks/integrations/openhands
@@ -291,9 +291,9 @@ matrix:
       - .roo/mcp.json
       - .roo/rules/hindsight-memory.md
     platform_constraints:
-      - macOS
-      - Linux
-      - Windows
+      - darwin
+      - linux
+      - win
     scope: both
     audia_action: call_official_installer
     source_url: https://hindsight.vectorize.io/sdks/integrations/roo-code
@@ -319,9 +319,9 @@ matrix:
     config_artifacts:
       - config.yaml (HTTP context provider entry for Continue)
     platform_constraints:
-      - macOS
-      - Linux
-      - Windows
+      - darwin
+      - linux
+      - win
     scope: project-local
     audia_action: call_official_installer
     source_url: https://hindsight.vectorize.io/sdks/integrations/continue
@@ -355,9 +355,9 @@ matrix:
     config_artifacts:
       - .aider.hindsight-memory.md (recalled memory file, passed via --read)
     platform_constraints:
-      - macOS
-      - Linux
-      - Windows
+      - darwin
+      - linux
+      - win
     scope: project-local
     audia_action: call_official_installer
     source_url: https://hindsight.vectorize.io/sdks/integrations/aider
@@ -392,9 +392,9 @@ matrix:
       - antigravity.yaml (hosted agent manifest)
       - ~/.gemini/antigravity/mcp_config.json (desktop/IDE config)
     platform_constraints:
-      - macOS
-      - Linux
-      - Windows
+      - darwin
+      - linux
+      - win
     scope: global
     audia_action: manage_config_writes
     source_url: https://hindsight.vectorize.io/sdks/integrations/gemini-spark
@@ -414,9 +414,9 @@ matrix:
     status_command: ""
     config_artifacts: []
     platform_constraints:
-      - macOS
-      - Linux
-      - Windows
+      - darwin
+      - linux
+      - win
     scope: project-local
     audia_action: no_source
     source_url: ""
@@ -435,9 +435,9 @@ matrix:
     status_command: ""
     config_artifacts: []
     platform_constraints:
-      - macOS
-      - Linux
-      - Windows
+      - darwin
+      - linux
+      - win
     scope: project-local
     audia_action: no_source
     source_url: ""
@@ -456,9 +456,9 @@ matrix:
     status_command: ""
     config_artifacts: []
     platform_constraints:
-      - macOS
-      - Linux
-      - Windows
+      - darwin
+      - linux
+      - win
     scope: project-local
     audia_action: no_source
     source_url: ""
@@ -477,9 +477,9 @@ matrix:
     status_command: ""
     config_artifacts: []
     platform_constraints:
-      - macOS
-      - Linux
-      - Windows
+      - darwin
+      - linux
+      - win
     scope: project-local
     audia_action: no_source
     source_url: ""
@@ -498,9 +498,9 @@ matrix:
     status_command: ""
     config_artifacts: []
     platform_constraints:
-      - macOS
-      - Linux
-      - Windows
+      - darwin
+      - linux
+      - win
     scope: project-local
     audia_action: no_source
     source_url: ""

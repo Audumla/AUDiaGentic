@@ -1,11 +1,32 @@
+"""Operator interaction module — live ask, durable store, and push-status.
+
+Provides ask/answer semantics over two surfaces:
+- MCP elicitation (async-native, per-request ctx)
+- CLI backend (sync stdin/stdout, set at composition root)
+
+FI06: async-native ask path, Literal choice schema, contextvar ctx wiring,
+error taxonomy, and ResponseStatus semantics fix.
+"""
 from __future__ import annotations
 
 import asyncio
+import contextvars
+import json
 import logging
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from enum import Enum
+from pathlib import Path
 from typing import Any, Protocol
+
+try:
+    import pydantic
+    from pydantic import BaseModel
+    _HAS_PYDANTIC = True
+except ImportError:
+    pydantic = None  # type: ignore[assignment]
+    _HAS_PYDANTIC = False
 
 try:
     from mcp.server.elicitation import (
@@ -17,18 +38,13 @@ try:
 except ImportError:
     _HAS_MCP = False
 
-try:
-    from pydantic import BaseModel
-    _HAS_PYDANTIC = True
-except ImportError:
-    _HAS_PYDANTIC = False
-
 logger = logging.getLogger(__name__)
+DEFAULT_TTL_SECONDS = 8 * 60 * 60
 
 
 class ResponseStatus(Enum):
-    APPROVED = "approved"
-    REJECTED = "rejected"
+    ANSWERED = "answered"
+    DECLINED = "declined"
     TIMED_OUT = "timed_out"
 
 
@@ -71,51 +87,30 @@ class InteractionBackend(Protocol):
     def respond(self, request_id: str, choice: str | None, *, details: dict[str, Any]) -> None: ...
 
 
-# ── MCP elicitation backend (FI02) ─────────────────────────────────────────
+# ── MCP context wiring (FI06/RV129) ────────────────────────────────────────
 
-class McpAskBackend:
-    """Wraps MCP ctx.elicit as the live-ask fast path.
+_mcp_ctx_var: contextvars.ContextVar[tuple[Any, asyncio.AbstractEventLoop] | None] = \
+    contextvars.ContextVar("_mcp_ctx", default=None)
 
-    Uses a pydantic schema generated from the request choices to elicit
-    a structured response from the connected MCP client.  Handles accept,
-    decline, and cancel as real answers (not transport failures).
-    """
 
-    def __init__(self, ctx: Any) -> None:
-        self._ctx = ctx
-
-    def ask(self, request: AskRequest) -> AskResponse:
-        if not _HAS_MCP or not hasattr(self._ctx, "elicit"):
-            return AskResponse(status=ResponseStatus.TIMED_OUT)
-
-        schema = _build_elicit_schema(request.choices)
-        if schema is None:
-            return AskResponse(status=ResponseStatus.TIMED_OUT)
-
-        message = f"{request.title}\n\n{request.description}".strip() or request.title
-        result = _elicit_sync(self._ctx, message, schema, timeout=request.timeout_seconds)
-        return _parse_elicit_result(result, request)
-
+# ── MCP elicitation schema ─────────────────────────────────────────────────
 
 def _build_elicit_schema(choices: tuple[str, ...] | None) -> type[BaseModel] | None:  # type: ignore[name-defined]
-    """Build a pydantic model for ctx.elicit from the request choices."""
-    if not _HAS_PYDANTIC:
+    """Build a pydantic model for ctx.elicit from the request choices.
+
+    For enumerated choices, generates a Literal-typed 'value' field so the
+    MCP client renders the valid options.  For freeform, plain str.
+    """
+    if not _HAS_PYDANTIC or pydantic is None:
         return None
 
-    allowed = set(choices) if choices else None
-
-    if allowed:
-
-        class _ChoiceSchema(BaseModel):  # type: ignore[misc]
-            value: str
-
-            def __init__(self, **data: Any) -> None:
-                super().__init__(**data)
-                if self.value not in allowed:
-                    from pydantic import ValidationError
-                    raise ValidationError(_ChoiceSchema, f"value {self.value!r} not in {allowed}")
-
-        return _ChoiceSchema
+    from typing import Literal
+    if choices:
+        literal_type = Literal[tuple(choices)]  # type: ignore[type-arg]
+        return pydantic.create_model(
+            "ElicitChoice",
+            value=(literal_type, ...),  # type: ignore[misc]
+        )
     else:
 
         class _FreeformSchema(BaseModel):  # type: ignore[misc]
@@ -124,26 +119,12 @@ def _build_elicit_schema(choices: tuple[str, ...] | None) -> type[BaseModel] | N
         return _FreeformSchema
 
 
-def _elicit_sync(ctx: Any, message: str, schema: type[Any], timeout: int) -> Any:
-    """Run ctx.elicit synchronously by blocking on the current event loop."""
-    coro = ctx.elicit(message, schema)
-
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.get_event_loop().run_until_complete(coro)
-
-    future = asyncio.ensure_future(coro, loop=loop)
-    try:
-        return loop.run_until_complete(asyncio.wait_for(future, timeout))
-    except (asyncio.TimeoutError, Exception):
-        if not future.done():
-            future.cancel()
-        return None
-
-
 def _parse_elicit_result(result: Any, request: AskRequest) -> AskResponse:
-    """Convert an MCP ElicitationResult into an AskResponse."""
+    """Convert an MCP ElicitationResult into an AskResponse.
+
+    Status expresses transport outcome only (answered/declined/timed_out);
+    the selected option lives exclusively in .choice.
+    """
     if result is None:
         return AskResponse(
             request_id=request.request_id,
@@ -154,18 +135,18 @@ def _parse_elicit_result(result: Any, request: AskRequest) -> AskResponse:
         choice = getattr(result.data, "value", None) or ""
         return AskResponse(
             request_id=request.request_id,
-            status=ResponseStatus.APPROVED,
+            status=ResponseStatus.ANSWERED,
             choice=str(choice) if choice else None,
         )
 
     if isinstance(result, (DeclinedElicitation, CancelledElicitation)):  # type: ignore[arg-type]
         return AskResponse(
             request_id=request.request_id,
-            status=ResponseStatus.REJECTED,
+            status=ResponseStatus.DECLINED,
             details={"elicit_action": result.action},
         )
 
-    logger.debug("Unrecognized elicitation result, returning timeout", exc_info=True)
+    logger.debug("Unrecognized elicitation result, returning timeout")
     return AskResponse(status=ResponseStatus.TIMED_OUT)
 
 
@@ -201,10 +182,9 @@ class CliBackend:
                     except ValueError:
                         choice = raw if raw in request.choices else default
 
-                status = ResponseStatus.APPROVED if choice != "rejected" else ResponseStatus.REJECTED
                 return AskResponse(
                     request_id=request.request_id,
-                    status=status,
+                    status=ResponseStatus.ANSWERED,
                     choice=choice or None,
                 )
             else:
@@ -214,7 +194,7 @@ class CliBackend:
                 raw = input("> ").strip()
                 return AskResponse(
                     request_id=request.request_id,
-                    status=ResponseStatus.APPROVED if raw else ResponseStatus.REJECTED,
+                    status=ResponseStatus.ANSWERED if raw else ResponseStatus.DECLINED,
                     choice=raw or None,
                 )
         except (EOFError, KeyboardInterrupt):
@@ -248,25 +228,28 @@ def clear_backend() -> None:
     _backend = None
 
 
-# ── Public API ─────────────────────────────────────────────────────────────
+# ── Async ask (FI06) ───────────────────────────────────────────────────────
 
-def ask(
+async def ask_async(
     title: str,
     description: str = "",
     choices: tuple[str, ...] | list[str] | None = None,
     default_choice: str | None = None,
     timeout_seconds: int = 30,
+    *,
+    ctx: Any = None,
 ) -> AskResponse:
-    """Ask the operator a question. Returns an AskResponse.
+    """Async-native ask — awaits ctx.elicit directly under a timeout.
 
-    If no backend is configured, returns a timed-out response (non-blocking).
-    The caller should handle TIMED_OUT gracefully.
+    When ctx is provided, performs live MCP elicitation.  Falls back to
+    TIMED_OUT when no eligible context is available (non-blocking).
     """
-    if _backend is None:
-        logger.debug(
-            "ask() called with no backend configured — returning timeout",
-            extra={"title": title},
-        )
+    effective_ctx = ctx or _mcp_ctx_var.get()
+    if isinstance(effective_ctx, tuple):
+        effective_ctx = effective_ctx[0]
+
+    if not effective_ctx or not hasattr(effective_ctx, "elicit"):
+        logger.debug("ask_async: no eligible ctx available, returning timeout")
         return AskResponse(status=ResponseStatus.TIMED_OUT)
 
     request = AskRequest(
@@ -276,25 +259,259 @@ def ask(
         default_choice=default_choice,
         timeout_seconds=timeout_seconds,
     )
-    return _backend.ask(request)
+
+    schema = _build_elicit_schema(request.choices)
+    if schema is None:
+        return AskResponse(status=ResponseStatus.TIMED_OUT)
+
+    message = f"{request.title}\n\n{request.description}".strip() or request.title
+
+    try:
+        result = await asyncio.wait_for(
+            effective_ctx.elicit(message, schema),
+            timeout=timeout_seconds,
+        )
+    except asyncio.TimeoutError:
+        logger.debug("MCP elicitation timed out", extra={"title": title})
+        return AskResponse(request_id=request.request_id, status=ResponseStatus.TIMED_OUT)
+    except Exception as exc:
+        if _HAS_MCP:
+            try:
+                from mcp import McpError
+                if isinstance(exc, McpError):
+                    logger.warning("MCP elicitation protocol failure", exc_info=True)
+                    return AskResponse(request_id=request.request_id, status=ResponseStatus.TIMED_OUT)
+            except ImportError:
+                pass
+        logger.warning("MCP elicitation failed", exc_info=True)
+        return AskResponse(request_id=request.request_id, status=ResponseStatus.TIMED_OUT)
+
+    return _parse_elicit_result(result, request)
+
+
+# ── Public API ─────────────────────────────────────────────────────────────
+
+def ask(
+    title: str,
+    description: str = "",
+    choices: tuple[str, ...] | list[str] | None = None,
+    default_choice: str | None = None,
+    timeout_seconds: int = 30,
+    *,
+    persist: bool = False,
+    project_root: Path | None = None,
+) -> AskResponse:
+    """Ask the operator a question. Returns an AskResponse.
+
+    Resolution order: explicit global backend > MCP contextvar (with
+    run_coroutine_threadsafe for cross-thread calls) > TIMED_OUT fallback.
+    """
+    if _backend is not None and hasattr(_backend, "ask"):
+        request = AskRequest(
+            title=title,
+            description=description,
+            choices=tuple(choices) if choices else (),
+            default_choice=default_choice,
+            timeout_seconds=timeout_seconds,
+        )
+        try:
+            return _backend.ask(request)
+        except Exception:
+            logger.debug("Backend ask failed", exc_info=True)
+
+    ctx_pair = _mcp_ctx_var.get()
+    if ctx_pair is not None:
+        mcp_ctx, loop = ctx_pair
+        try:
+            current: asyncio.AbstractEventLoop | None = asyncio.get_running_loop()
+        except RuntimeError:
+            current = None
+        # Worker thread (no loop here) or a different loop: submit to the MCP
+        # loop and block this thread. Same loop: cannot block without deadlock —
+        # fall through to timeout (async callers must use ask_async/ask_via_ctx).
+        if current is not loop:
+            coro = ask_async(
+                title, description, choices, default_choice, timeout_seconds, ctx=mcp_ctx,
+            )
+            future = asyncio.run_coroutine_threadsafe(coro, loop)
+            try:
+                # ask_async enforces timeout_seconds internally via wait_for;
+                # the outer margin only guards against a wedged loop.
+                return future.result(timeout=timeout_seconds + 5)
+            except TimeoutError:
+                future.cancel()
+                logger.warning("Cross-thread ask() did not complete", extra={"title": title})
+                return AskResponse(status=ResponseStatus.TIMED_OUT)
+
+    logger.debug("ask() called with no backend or ctx — returning timeout", extra={"title": title})
+    if persist and project_root is not None:
+        request_id = globals()["request"](
+            kind="ask",
+            title=title,
+            description=description,
+            choices=tuple(choices) if choices else (),
+            project_root=project_root,
+            ttl_seconds=timeout_seconds or DEFAULT_TTL_SECONDS,
+        )
+        return AskResponse(
+            request_id=request_id,
+            status=ResponseStatus.TIMED_OUT,
+            details={"request_id": request_id},
+        )
+    return AskResponse(status=ResponseStatus.TIMED_OUT)
+
+
+def interactions_root(project_root: Path) -> Path:
+    from audiagentic.foundation.paths.names import project_marker_path
+
+    return project_marker_path(project_root) / "runtime" / "interactions"
+
+
+def interaction_path(project_root: Path, request_id: str) -> Path:
+    return interactions_root(project_root) / f"{request_id}.json"
+
+
+def _validate_record(payload: dict[str, Any]) -> None:
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    from audiagentic.foundation.contracts.schema_registry import validate_with_schema
+
+    issues = validate_with_schema("interaction-request", payload)
+    if issues:
+        raise AudiaGenticError(
+            code="VAL-INTERACT-001",
+            kind="interaction",
+            message="interaction request failed validation",
+            details={"issues": issues},
+        )
+
+
+def read_record(project_root: Path, request_id: str) -> dict[str, Any]:
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    path = interaction_path(project_root, request_id)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        raise AudiaGenticError(
+            code="IO-INTERACT-001",
+            kind="interaction",
+            message="failed to read interaction request",
+            details={"request-id": request_id, "error": str(exc)},
+        ) from exc
+    _validate_record(payload)
+    return payload
+
+
+def write_record(project_root: Path, payload: dict[str, Any]) -> None:
+    from audiagentic.foundation.io import atomic_write_json
+
+    _validate_record(payload)
+    atomic_write_json(interaction_path(project_root, payload["request_id"]), payload)
+
+
+def _is_expired(payload: dict[str, Any], now_ts: str) -> bool:
+    if payload.get("state") != "pending":
+        return False
+    requested_at = str(payload.get("requested_at", ""))
+    ttl_seconds = int(payload.get("ttl_seconds") or DEFAULT_TTL_SECONDS)
+    requested = datetime.fromisoformat(requested_at.replace("Z", "+00:00"))
+    expires = requested + timedelta(seconds=ttl_seconds)
+    now = datetime.fromisoformat(now_ts.replace("Z", "+00:00"))
+    return expires <= now
+
+
+def _publish(event_type: str, payload: dict[str, Any]) -> None:
+    from audiagentic.foundation.event import DeliveryMode, get_bus
+
+    get_bus().publish(event_type, payload, mode=DeliveryMode.SYNC)
+
+
+def request(
+    kind: str,
+    title: str,
+    *,
+    description: str = "",
+    choices: tuple[str, ...] | list[str] | None = None,
+    source_kind: str = "",
+    source_id: str = "",
+    ttl_seconds: int = DEFAULT_TTL_SECONDS,
+    project_root: Path,
+    request_id: str | None = None,
+) -> str:
+    """Persist a pending interaction request and publish interaction.requested."""
+    from audiagentic.foundation.time import now_iso_z
+
+    payload = {
+        "contract-version": "v1",
+        "request_id": request_id or uuid.uuid4().hex[:12],
+        "kind": kind,
+        "title": title,
+        "description": description,
+        "choices": list(choices or []),
+        "state": "pending",
+        "answer": None,
+        "source_kind": source_kind,
+        "source_id": source_id,
+        "requested_at": now_iso_z(),
+        "answered_at": None,
+        "ttl_seconds": ttl_seconds,
+    }
+    write_record(project_root, payload)
+    _publish("interaction.requested", dict(payload))
+    return payload["request_id"]
+
+
+def respond(
+    request_id: str,
+    choice: str | None,
+    *,
+    details: dict[str, Any] | None = None,
+    project_root: Path | None = None,
+) -> None:
+    """Submit a response to a pending live or persisted ask."""
+    if project_root is not None:
+        from audiagentic.foundation.time import now_iso_z
+
+        payload = read_record(project_root, request_id)
+        payload["state"] = "answered"
+        payload["answer"] = {"choice": choice, "details": dict(details or {})}
+        payload["answered_at"] = now_iso_z()
+        write_record(project_root, payload)
+        _publish("interaction.answered", dict(payload))
+        return
+
+    if _backend is not None and hasattr(_backend, "respond"):
+        try:
+            _backend.respond(request_id, choice, details=details or {})
+        except Exception:
+            logger.debug("Backend respond failed", exc_info=True)
 
 
 def get_response(
-    ask_id: str,
+    request_id: str,
     *,
-    choices: tuple[str, ...] | None = None,
-    default_choice: str | None = None,
-) -> AskResponse:
-    """Get a named response. Convenience wrapper around ask() for
-    well-known decisions (e.g. job approval, reload confirmation).
+    project_root: Path,
+    now_ts: str | None = None,
+) -> AskResponse | None:
+    """Poll a persisted interaction request."""
+    from audiagentic.foundation.time import now_iso_z
 
-    Uses the ask_id as the title if no explicit title is provided.
-    """
-    return ask(
-        title=ask_id,
-        choices=choices or (),
-        default_choice=default_choice,
-    )
+    payload = read_record(project_root, request_id)
+    if _is_expired(payload, now_ts or now_iso_z()):
+        payload["state"] = "expired"
+        write_record(project_root, payload)
+        return AskResponse(request_id=request_id, status=ResponseStatus.TIMED_OUT)
+    if payload.get("state") == "pending":
+        return None
+    if payload.get("state") == "answered":
+        answer = payload.get("answer") or {}
+        return AskResponse(
+            request_id=request_id,
+            status=ResponseStatus.ANSWERED,
+            choice=answer.get("choice"),
+            details=dict(answer.get("details") or {}),
+        )
+    return AskResponse(request_id=request_id, status=ResponseStatus.TIMED_OUT)
 
 
 def push_status(
@@ -319,24 +536,21 @@ def push_status(
     if _backend is not None and hasattr(_backend, "push_status"):
         try:
             _backend.push_status(msg)
+            _publish("interaction.status", {
+                "component": component,
+                "level": level,
+                "message": message,
+                "details": msg.details,
+            })
             return
         except Exception:
             logger.debug("Backend push_status failed, falling back to log", exc_info=True)
 
     log_method = getattr(logger, level, logger.info)
     log_method(f"[{component}] {message}", extra={"details": msg.details})
-
-
-def respond(
-    request_id: str,
-    choice: str | None,
-    *,
-    details: dict[str, Any] | None = None,
-) -> None:
-    """Submit a response to a pending ask. Intended for test harnesses and
-    async backends that decouple the ask from the answer."""
-    if _backend is not None and hasattr(_backend, "respond"):
-        try:
-            _backend.respond(request_id, choice, details=details or {})
-        except Exception:
-            logger.debug("Backend respond failed", exc_info=True)
+    _publish("interaction.status", {
+        "component": component,
+        "level": level,
+        "message": message,
+        "details": msg.details,
+    })

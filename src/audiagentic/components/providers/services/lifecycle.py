@@ -29,6 +29,11 @@ from .reconcile import (  # noqa: F401
 def _emit(output: ComponentOutputSink | None, message: str, **data: Any) -> None:
     if output is not None:
         output(ComponentOutputEvent(message=message, data=data))
+        return
+    from audiagentic.foundation.interaction import push_status
+
+    level = str(data.pop("level", "info"))
+    push_status("providers", message, level=level, details=data)
 
 
 def _descriptor(provider_id: str) -> ProviderDescriptor:

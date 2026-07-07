@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from .event_bus import get_bus
 
@@ -24,8 +24,22 @@ COMPONENT_ENABLED = "lifecycle.component.enabled"
 COMPONENT_DISABLED = "lifecycle.component.disabled"
 COMPONENT_CONFIG_CHANGED = "lifecycle.component.config_changed"
 
+
+class LifecycleEventPayload(TypedDict):
+    """Payload published with every lifecycle.component.* event.
+
+    A TypedDict is a plain dict at runtime — this is static typing only.
+    project_root is a live Path (in-process bus, not serialized; the event
+    store persists its string form).
+    """
+
+    component_id: str
+    project_root: Path
+
+
 # handler(project_root, payload, metadata)
-LifecycleHandler = Callable[[Path, dict[str, Any], dict[str, Any]], None]
+LifecycleHandler = Callable[[Path, LifecycleEventPayload, dict[str, Any]], None]
+_DISPATCHERS: list[Callable[[str, dict, dict], None]] = []
 
 
 def subscribe_component_lifecycle(
@@ -60,13 +74,21 @@ def subscribe_component_lifecycle(
         handler = handlers.get(event_type)
         if handler is None:
             return
+        # Runtime guard stays despite the TypedDict: events arrive from the
+        # bus as untyped dicts and external publishers are not type-checked.
         project_root = payload.get("project_root")
         subject_id = payload.get("component_id")
         if not isinstance(project_root, Path) or not isinstance(subject_id, str):
             return
         if component_id is not None and subject_id != component_id:
             return
-        handler(project_root, payload, metadata)
+        handler(project_root, payload, metadata)  # type: ignore[arg-type]
 
+    _DISPATCHERS.append(_dispatch)
     get_bus().subscribe("lifecycle.component.*", _dispatch)
     return _dispatch
+
+
+def _resubscribe_all() -> None:
+    for dispatcher in _DISPATCHERS:
+        get_bus().subscribe("lifecycle.component.*", dispatcher)

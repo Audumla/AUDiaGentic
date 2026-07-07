@@ -15,7 +15,7 @@ from audiagentic.components.memory.hindsight.export import (
     HindsightBackendConfig,
     build_hindsight_backend,
 )
-from audiagentic.components.memory.hindsight.recipes import (
+from audiagentic.components.memory.hindsight.lifecycle import (
     apply_hindsight,
     prune_hindsight,
     teardown_hindsight,
@@ -117,10 +117,10 @@ def build_hindsight_status_report(project_root: Path | str) -> dict[str, Any]:
     if backend is None:
         return {"providers": {}, "configured": False}
 
-    from audiagentic.components.memory.hindsight.recipes import (
-        build_hindsight_status,
+    from audiagentic.components.memory.hindsight.lifecycle import (
         register_hindsight_recipes,
     )
+    from audiagentic.components.memory.hindsight.status import build_hindsight_status
     from audiagentic.components.providers.descriptors.registry import all_descriptors
     from audiagentic.components.providers.services.recipes import ProviderRecipeRegistry
 
