@@ -29,9 +29,9 @@ def _skill_paths_for_tag(project_root: Path, tag_id: str) -> list[Path]:
 # ── active_tag_ids ────────────────────────────────────────────────────────────
 
 def test_active_tag_ids_none_returns_all_loaded() -> None:
-    from audiagentic.components.providers.tags.registry import all_tags_loaded
+    from audiagentic.components.providers.tags.registry import all_tags
 
-    assert contributions.active_tag_ids(None) == set(all_tags_loaded())
+    assert contributions.active_tag_ids(None) == set(all_tags())
 
 
 def test_active_tag_ids_filters_by_owner_state(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -53,7 +53,7 @@ def test_active_tag_ids_filters_by_owner_state(monkeypatch: pytest.MonkeyPatch) 
         "tag-noowner": _tag("tag-noowner", ""),
     }
     monkeypatch.setattr(
-        "audiagentic.components.providers.tags.registry.all_tags_loaded",
+        "audiagentic.components.providers.tags.registry.all_tags",
         lambda: fake_tags,
     )
     monkeypatch.setattr(

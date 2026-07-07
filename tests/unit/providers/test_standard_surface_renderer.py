@@ -20,6 +20,7 @@ from audiagentic.components.providers.surfaces.registry import (
     load_contribution_renderer_registry,
     load_renderer_registry,
 )
+from audiagentic.foundation.registry_utils import reset_all_registries
 
 _SKILL = SkillDefinition(
     tag="jobs",
@@ -39,6 +40,16 @@ def test_yaml_driven_providers_have_renderers():
     for pid in ("gemini", "qwen", "copilot", "goose", "plandex", "openhands"):
         assert pid in renderers, f"no surface renderer for {pid}"
         assert pid in contribs, f"no contribution renderer for {pid}"
+
+
+def test_surface_registry_shared_loader_repopulates_both_registries():
+    reset_all_registries()
+
+    renderers = load_renderer_registry()
+    contribs = load_contribution_renderer_registry()
+
+    assert "gemini" in renderers
+    assert "plandex" in contribs
 
 
 def test_flat_skill_renderer_matches_previous_adapter_output(tmp_path: Path):
