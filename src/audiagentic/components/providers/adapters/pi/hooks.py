@@ -30,7 +30,7 @@ def _pi_uninstall(project_root=None):
 def _pi_ensure_lens(project_root=None):
     """Install the pi-lens LSP extension into the pi harness (best-effort)."""
     from audiagentic.foundation.home import global_harness_runtime
-    from audiagentic.runtime.harness.pi.runner.context import resolve_agent_bin
+    from audiagentic.runtime.harness.context import resolve_agent_bin
     pi_bin = resolve_agent_bin(global_harness_runtime())
     if not pi_bin.exists():
         return {"ok": False, "skipped": "pi harness not installed"}

@@ -4,7 +4,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from audiagentic.foundation.components.ids import COMPONENT_PROJECT
-from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.lifecycle.baseline_sync import (
     ensure_project_layout,
@@ -23,8 +22,6 @@ def apply_fresh_install(project_root: Path) -> dict:
             message="fresh install requires empty state",
             details={"state": state.state},
         )
-
-    register_all_components()
 
     ensure_project_layout(project_root)
     from audiagentic.foundation.components.base import MODE_CREATE_IF_MISSING

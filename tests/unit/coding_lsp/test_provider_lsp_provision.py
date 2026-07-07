@@ -41,7 +41,7 @@ def test_pi_descriptor_declares_lsp_hook() -> None:
 def test_ensure_lens_skips_when_harness_absent(tmp_path: Path, monkeypatch) -> None:
     missing = tmp_path / "cli" / "node_modules" / ".bin" / "pi"
     monkeypatch.setattr(
-        "audiagentic.runtime.harness.pi.runner.context.resolve_agent_bin",
+        "audiagentic.runtime.harness.context.resolve_agent_bin",
         lambda runtime: missing,
     )
     monkeypatch.setattr("audiagentic.foundation.home.global_harness_runtime", lambda: tmp_path)
@@ -62,7 +62,7 @@ def test_ensure_lens_starts_background_install_when_harness_present(tmp_path: Pa
     pi_bin.write_text("#!/bin/sh\n", encoding="utf-8")
 
     monkeypatch.setattr(
-        "audiagentic.runtime.harness.pi.runner.context.resolve_agent_bin",
+        "audiagentic.runtime.harness.context.resolve_agent_bin",
         lambda runtime: pi_bin,
     )
     monkeypatch.setattr("audiagentic.foundation.home.global_harness_runtime", lambda: tmp_path)
@@ -92,7 +92,7 @@ def test_install_pi_lens_runs_install_command(tmp_path: Path, monkeypatch) -> No
 
     monkeypatch.setattr(pi_desc.subprocess, "run", _fake_run)
     monkeypatch.setattr(
-        "audiagentic.runtime.harness.pi.runner.context.resolve_agent_bin",
+        "audiagentic.runtime.harness.context.resolve_agent_bin",
         lambda runtime: pi_bin,
     )
     monkeypatch.setattr("audiagentic.foundation.home.global_harness_runtime", lambda: tmp_path)

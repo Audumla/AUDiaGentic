@@ -49,17 +49,21 @@ def launch_rig_if_needed(
     if not model_profile.get("model_file"):
         return f"http://127.0.0.1:{rig_port}/v1", model, None, False
 
-    from audiagentic.foundation.home import global_harness_runtime
-    from audiagentic.foundation.system.process import StartupLock
     from audiagentic.runtime.rig.registry import (
         ensure_rig_state,
         reap_orphan_rigs,
+        register_client,
+        rig_start_lock,
         write_rig_state,
     )
 
-    with StartupLock(global_harness_runtime() / "rig" / "start.lock"):
+    with rig_start_lock():
         state = ensure_rig_state(rig_port, model=profile_name)
         if state is not None:
+            # Register while still holding the lock: a departing last client
+            # counts clients under the same lock, so it can never miss us and
+            # kill the rig we just decided to reuse (PR04 start/stop race).
+            register_client()
             endpoint = str(state["endpoint"])
             os.environ["AUDIAGENTIC_AG_BASE_URL"] = endpoint
             return endpoint, model_id, None, True
@@ -89,6 +93,7 @@ def launch_rig_if_needed(
         endpoint = payload["base_url"]
         pid = int(payload["pid"])
         write_rig_state(pid, rig_port, endpoint, profile_name)
+        register_client()
         os.environ["AUDIAGENTIC_AG_BASE_URL"] = endpoint
         os.environ.setdefault("AUDIAGENTIC_AG_MODEL", model_id)
         return endpoint, model_id, pid, True

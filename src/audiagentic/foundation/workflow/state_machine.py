@@ -15,7 +15,7 @@ from typing import Any
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error_factory
 
 from .interfaces import ItemView, WorkflowContext
-from .transitions import is_known_state, transition_allowed
+from .transition_engine import TransitionConfig, TransitionEngine
 from .util import extract_ref_ids
 
 logger = logging.getLogger(__name__)
@@ -43,9 +43,19 @@ class StateMachine:
         wf = self.ctx.config.workflow_for(item.kind, wf_name)
         old = data.get("state", self.ctx.config.initial_state(item.kind, wf_name))
 
-        if not is_known_state(wf, new_state):
+        engine = TransitionEngine(
+            TransitionConfig(
+                transitions={
+                    str(state): frozenset(str(target) for target in targets)
+                    for state, targets in (wf.get("transitions") or {}).items()
+                },
+                values=frozenset(str(state) for state in (wf.get("values") or [])),
+            )
+        )
+        reason_code = engine.check(old, new_state)
+        if reason_code == "unknown-target":
             raise _state_error(1, f"unknown state {new_state} for workflow", state=new_state)
-        if not transition_allowed(wf, old, new_state):
+        if reason_code is not None:
             raise _state_error(2, f"invalid transition {old} -> {new_state}", old_state=old, new_state=new_state)
 
         data["state"] = new_state
@@ -114,6 +124,8 @@ class StateMachine:
             item = self.ctx._find(id_)
         except KeyError:
             return True
+        # Terminal semantics come from named config sets, which can be richer
+        # than the flat terminal_states known to TransitionEngine.
         return self.ctx.config.state_in_set(
             item.kind, item.data.get("state"), "terminal", item.data.get("workflow")
         )

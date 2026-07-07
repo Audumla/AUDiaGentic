@@ -1,3 +1,4 @@
+from .from_spec import build_step_from_spec
 from .models import (
     StepResult,
     WorkflowAnswer,
@@ -15,6 +16,7 @@ __all__ = [
     "SequenceStep",
     "ShellStep",
     "StepResult",
+    "build_step_from_spec",
     "WorkflowAnswer",
     "WorkflowInvocationResult",
     "WorkflowInvocationRunner",

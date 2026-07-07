@@ -7,8 +7,8 @@ from audiagentic.components.memory.hindsight.matrix import (
     get_rows_by_kind,
     get_rows_for_provider,
 )
-from audiagentic.components.memory.hindsight.recipes import (
-    GuidanceOnlyRecipe,
+from audiagentic.components.memory.hindsight.recipes import GuidanceOnlyRecipe
+from audiagentic.components.memory.hindsight.strategies import (
     resolve_hindsight_strategy,
 )
 from audiagentic.components.providers.services.recipes import (
@@ -87,7 +87,7 @@ class TestSourceGate:
             audia_action="call_official_installer",
         )
         from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
-        from audiagentic.components.memory.hindsight.recipes import build_hindsight_recipe
+        from audiagentic.components.memory.hindsight.strategies import build_hindsight_recipe
 
         backend = HindsightBackendConfig(base_url="http://test")
         recipe = build_hindsight_recipe(row, backend, "test")
@@ -99,7 +99,7 @@ class TestBuilder:
 
     def test_builder_mcp_config_creates_adapter(self):
         from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
-        from audiagentic.components.memory.hindsight.recipes import build_hindsight_recipe
+        from audiagentic.components.memory.hindsight.strategies import build_hindsight_recipe
 
         row = HindsightRecipeRow(
             provider_id="gemini",
@@ -116,7 +116,7 @@ class TestBuilder:
 
     def test_builder_guidance_only(self):
         from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
-        from audiagentic.components.memory.hindsight.recipes import build_hindsight_recipe
+        from audiagentic.components.memory.hindsight.strategies import build_hindsight_recipe
 
         row = HindsightRecipeRow(
             provider_id="test",
@@ -324,10 +324,10 @@ class TestHM11Validation:
         assert not hasattr(recipes, "_run_teardown")
 
     def test_reconcile_exists(self):
-        """_reconcile helper exists and is callable."""
-        from audiagentic.components.memory.hindsight import recipes
+        """_reconcile helper exists and is callable (lifecycle module post-split)."""
+        from audiagentic.components.memory.hindsight import lifecycle
 
-        assert callable(getattr(recipes, "_reconcile", None))
+        assert callable(getattr(lifecycle, "_reconcile", None))
 
     def test_row_recipe_is_capability_recipe(self):
         """_RowRecipe subclasses ProviderCapabilityRecipe."""
@@ -338,10 +338,16 @@ class TestHM11Validation:
 
         assert issubclass(_RowRecipe, ProviderCapabilityRecipe)
 
-    def test_row_recipe_has_provision_method(self):
-        """_RowRecipe has its own provision and teardown methods."""
+    def test_row_recipe_uses_base_orchestration(self):
+        """_RowRecipe inherits provision/teardown from the base contract (HM20).
+
+        Orchestration lives once in ProvisioningRecipe; hindsight overlays
+        provenance solely via to_result, and execution stays on the primitive
+        path (provision_steps() is introspection-only for these recipes).
+        """
         from audiagentic.components.memory.hindsight.recipes import _RowRecipe
 
-        # Must have explicit implementations (not just inherited from base)
-        assert "provision" in _RowRecipe.__dict__
-        assert "teardown" in _RowRecipe.__dict__
+        assert "provision" not in _RowRecipe.__dict__
+        assert "teardown" not in _RowRecipe.__dict__
+        assert "to_result" in _RowRecipe.__dict__
+        assert _RowRecipe.provision_via_steps is False
