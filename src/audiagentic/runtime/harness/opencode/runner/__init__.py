@@ -6,36 +6,24 @@ CLI invocation (opencode CLI vs pi TUI).
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 
 from audiagentic.cli_io import print_message
 from audiagentic.foundation.contracts.errors import make_error
+from audiagentic.runtime.harness.context import AgentContext
+from audiagentic.runtime.harness.run_common import (
+    build_base_run_env,
+    make_log_path,
+    print_startup_info,
+    run_supervised,
+    write_run_started,
+)
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class AgentContext:
-    project_root: Path
-    agent_work: Path
-    agent_log_dir: Path
-    endpoint: str
-    model: str
-    model_profile: dict[str, object]
-    profile_name: str
-    provider: str
-    rig_pid: int | None
-    manages_rig: bool
-    enable_mcp: bool
-    server_version: str | None = None
-    harness_cfg: dict = field(default_factory=dict)
 
 
 def env_flag(name: str, default: bool = False) -> bool:
@@ -137,19 +125,10 @@ def translate_agent_args(params) -> list[str]:
 
 
 def _build_run_env(ctx: AgentContext) -> dict[str, str]:
-    env = os.environ.copy()
-    env["AUDIAGENTIC_REPO_ROOT"] = str(ctx.project_root)
-    env["AUDIAGENTIC_AG_BASE_URL"] = ctx.endpoint
-    env["AUDIAGENTIC_RIG_TYPE"] = "embedded" if ctx.manages_rig else "external"
-    env["AUDIAGENTIC_RIG_PROFILE"] = ctx.profile_name
-    env["OPENAI_API_BASE"] = ctx.endpoint
-    env["OPENAI_BASE_URL"] = ctx.endpoint
-    env["OPENAI_API_KEY"] = "dummy"
-    return env
+    return build_base_run_env(ctx)
 
 
 def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
-    from audiagentic.foundation.system.process import kill_process_tree
     from audiagentic.runtime.rig.http import require_models_endpoint
 
     executable = shutil.which("opencode")
@@ -163,10 +142,8 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
         )
 
     env = _build_run_env(ctx)
-    ctx.agent_log_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     mode = "smoke" if smoke else "run"
-    log_path = ctx.agent_log_dir / f"{mode}-{stamp}.log"
+    log_path = make_log_path(ctx, mode)
 
     if smoke:
         print_message(f"Checking local LLM endpoint: {ctx.endpoint}/models")
@@ -190,46 +167,13 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
         log_path.write_text(f"smoke ok\nopencode: {version}\n", encoding="utf-8")
         return 0
 
-    ui_cfg = ctx.harness_cfg.get("ui", {})
-    if ui_cfg.get("show_startup_info", True):
-        print_message("AUDiaGentic (opencode)")
-        print_message(f"  Project:  {ctx.project_root}")
-        print_message(f"  Provider: {ctx.provider}")
-        print_message(f"  Model:    {ctx.model}")
-        print_message(f"  Endpoint: {ctx.endpoint}")
-        if ctx.server_version:
-            print_message(f"  Server:   {ctx.server_version}")
-        print_message(f"  MCP:      {'enabled' if ctx.enable_mcp else 'disabled'}")
-        print_message(f"  Log:      {log_path}")
-        print_message("")
+    print_startup_info(ctx, log_path, title="AUDiaGentic (opencode)")
 
     cmd = [executable] + agent_args
 
-    try:
-        with log_path.open("w", encoding="utf-8") as handle:
-            handle.write(
-                json.dumps({
-                    "event": "agent_run_started",
-                    "project_root": str(ctx.project_root),
-                    "provider": ctx.provider,
-                    "model": ctx.model,
-                    "endpoint": ctx.endpoint,
-                    "mcp": ctx.enable_mcp,
-                    "args": agent_args,
-                }, indent=2) + "\n"
-            )
-
-        from audiagentic.foundation.system.supervised_process import supervised_run
-
-        returncode = supervised_run(cmd, cwd=ctx.agent_work, env=env)
-
-        with log_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps({
-                "event": "agent_run_finished",
-                "returncode": int(returncode),
-            }) + "\n")
-        return int(returncode)
-    finally:
-        if ctx.manages_rig:
-            if ctx.rig_pid:
-                kill_process_tree(ctx.rig_pid)
+    # Rig shutdown is owned exclusively by the refcounted client registry
+    # (shutdown_rig_if_last in commands/launch.py). Killing rig_pid here would
+    # destroy a rig other harnesses may still be attached to — rig_pid marks
+    # the starter, not the last user (PR04).
+    write_run_started(log_path, ctx, agent_args)
+    return run_supervised(cmd, ctx.agent_work, env, log_path)

@@ -9,7 +9,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from audiagentic.foundation.components.loader import register_all_components
+from audiagentic.foundation.components.loader import register_all_components  # noqa: F401
 from audiagentic.foundation.components.registry import (
     all_descriptors,
     get_external_probe_results,
@@ -31,8 +31,6 @@ def collect_mcp_servers(project_root: Path | None = None) -> dict[str, McpServer
     """
     if project_root is None:
         project_root = Path.cwd()
-
-    register_all_components()
 
     servers: dict[str, McpServerEntry] = {}
 

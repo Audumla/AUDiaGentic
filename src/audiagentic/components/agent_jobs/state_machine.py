@@ -15,10 +15,10 @@ from audiagentic.components.agent_jobs import jobs_store as store
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.workflow import (
-    is_known_state,
+    TransitionConfig,
+    TransitionEngine,
     load_workflow,
     states_in_set,
-    transition_allowed,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,23 +30,34 @@ LEGAL_TRANSITIONS: dict[str, set[str]] = {
     state: set(targets) for state, targets in (_JOB_WORKFLOW.get("transitions") or {}).items()
 }
 TERMINAL_STATES: set[str] = set(states_in_set(_JOB_WORKFLOW, "terminal"))
+_ENGINE = TransitionEngine(
+    TransitionConfig(
+        transitions={state: frozenset(targets) for state, targets in LEGAL_TRANSITIONS.items()},
+        terminal_states=frozenset(TERMINAL_STATES),
+    )
+)
 
 
 def ensure_transition(current_state: str, new_state: str) -> None:
-    if not is_known_state(_JOB_WORKFLOW, current_state):
+    reason = _ENGINE.check(current_state, new_state)
+    if reason == "unknown-current":
         raise AudiaGenticError(
             code="VAL-STATE-001",
             kind="agent-jobs",
             message="unknown job state",
             details={"state": current_state},
         )
-    if not transition_allowed(_JOB_WORKFLOW, current_state, new_state):
+    if reason is not None:
         raise AudiaGenticError(
             code="CON-STATE-001",
             kind="agent-jobs",
             message="illegal job state transition",
             details={"from": current_state, "to": new_state},
         )
+
+
+def is_terminal_state(state: str | None) -> bool:
+    return _ENGINE.is_terminal(state)
 
 
 def transition_job(

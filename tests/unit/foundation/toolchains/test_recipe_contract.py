@@ -172,3 +172,116 @@ def test_recipe_result_helpers():
     assert ok.success and ok.artifacts_owned == ["a"]
     bad = RecipeResult.fail("nope")
     assert not bad.success and bad.state is RecipeState.ERROR
+
+
+class _StampingRecipe(_Recipe):
+    """Records every result routed through to_result (HM20 hook)."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.stamped: list[RecipeResult] = []
+
+    def to_result(self, base):
+        self.stamped.append(base)
+        return base
+
+
+def test_to_result_routes_every_provision_return():
+    # idempotent skip
+    r = _StampingRecipe(already_present=True)
+    r.provision({})
+    assert len(r.stamped) == 1
+
+    # full lifecycle
+    r = _StampingRecipe()
+    r.provision({})
+    assert len(r.stamped) == 1
+
+    # install failure
+    r = _StampingRecipe(fail_at="install")
+    r.provision({})
+    assert len(r.stamped) == 1
+
+
+def test_to_result_routes_teardown_and_post_verify():
+    r = _StampingRecipe()
+    result = r.teardown({})
+    assert result.success
+    assert len(r.stamped) == 1  # post_uninstall_verify's result
+
+    r = _StampingRecipe(fail_at="prune")
+    r.teardown({})
+    assert len(r.stamped) == 1  # prune failure routed
+
+
+def test_provision_via_steps_false_forces_primitive_path():
+    step = _ProvisionStep("install")
+
+    class _IntrospectionOnly(_StructuredRecipe):
+        provision_via_steps = False
+
+    r = _IntrospectionOnly(steps=[step])
+    result = r.provision({})
+
+    assert result.success
+    assert not step.run_called
+    assert r.calls == ["probe", "install", "configure", "verify"]
+
+
+def test_provision_does_not_mutate_frozen_results():
+    from dataclasses import dataclass, field
+    from typing import Any
+
+    # Standalone frozen dataclass mirroring RecipeResult's fields, matching
+    # how ProviderRecipeResult is defined (frozen, not a subclass).
+    @dataclass(frozen=True)
+    class _FrozenResult:
+        success: bool = True
+        state: RecipeState = RecipeState.VERIFIED
+        artifacts_owned: list = field(default_factory=list)
+        status: str = ""
+        error: str | None = None
+        details: dict[str, Any] = field(default_factory=dict)
+
+    class _FrozenRecipe(_Recipe):
+        def install(self, context):
+            self.calls.append("install")
+            return _FrozenResult(artifacts_owned=["bin"], state=RecipeState.INSTALLING)
+
+        def configure(self, context):
+            self.calls.append("configure")
+            return _FrozenResult(
+                success=(self.fail_at != "configure"),
+                state=RecipeState.CONFIGURING,
+                error="configure failed" if self.fail_at == "configure" else None,
+            )
+
+        def verify(self, context):
+            self.calls.append("verify")
+            return _FrozenResult()
+
+    # failure path exercises replace() on the frozen result — must not raise
+    r = _FrozenRecipe(fail_at="configure")
+    result = r.provision({})
+    assert not result.success
+    assert "bin" in result.artifacts_owned
+
+    r = _FrozenRecipe()
+    result = r.provision({})
+    assert result.success
+    assert "bin" in result.artifacts_owned
+
+
+def test_run_steps_helper_maps_sequence_result():
+    from audiagentic.foundation.toolchains.recipe_contract import run_steps
+
+    ok = run_steps([_ProvisionStep("a")], {}, ok_status="did it")
+    assert ok.success and ok.status == "did it"
+
+    bad = run_steps(
+        [_ProvisionStep("a"), _ProvisionStep("b", status="failed")],
+        {},
+        fail_prefix="install failed",
+    )
+    assert not bad.success
+    assert bad.error is not None and bad.error.startswith("install failed:")

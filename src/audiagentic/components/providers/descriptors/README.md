@@ -5,15 +5,15 @@ Provider descriptor model, registry, and YAML loader.
 ## Intent
 
 Define uniform metadata contract for every provider adapter. Provider descriptors
-are declared in YAML under `config/providers/*.yaml` and loaded via the shared
-`foundation/descriptors` mechanism.
+are declared in YAML under `config/providers/*.yaml` and loaded via the
+`DescriptorSpec` mechanism in `spec.py`.
 
 ## Files
 
 - `base.py` — `ProviderDescriptor` dataclass and nested types (permissions, agent files, etc.)
 - `registry.py` — Public registry API: `register`, `get_descriptor`, `all_descriptors`,
   `canonical_provider_ids`, `provider_alias_map`, `interrogate`. Composes
-  `DescriptorRegistry[ProviderDescriptor]` internally.
+  `foundation.registry_utils.Registry[ProviderDescriptor]` internally.
 - `loader.py` — YAML loader: `load_provider_descriptor`, `load_providers_from_directory`,
   `PROVIDER_SPEC` field specification. Uses the generic `foundation/descriptors` mechanism.
 - `feature_mapping.py` — Derives implementation-scoped features from provider descriptors.
@@ -41,5 +41,8 @@ The single canonical resolver is `foundation/descriptors/resolver.py:resolve_ref
 ## Architecture notes
 
 - Foundation registries (`foundation/components/`, `foundation/features/`) are out of scope.
-- Provider registry composes `DescriptorRegistry[T]` (PD08 D2).
+- Provider registry composes `foundation.registry_utils.Registry[T]` (PD08 D2; consolidated
+  from the former `DescriptorRegistry` in 2026-07). Step specs are built by
+  `foundation.workflow.invocation.from_spec.build_step_from_spec` — workflow owns its
+  own YAML deserializer.
 - Hindsight-specific provider matrices remain in `config/components/memory/hindsight_matrix.yaml`.
