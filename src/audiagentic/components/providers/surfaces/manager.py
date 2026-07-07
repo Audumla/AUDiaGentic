@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,8 @@ from ..descriptors.feature_mapping import KIND_SKILLS, KIND_SURFACE
 from .base import SurfaceBlock, apply_managed_blocks
 from .contributions import load_surface_contributions
 from .registry import load_contribution_renderer_registry
+
+logger = logging.getLogger(__name__)
 
 
 def _emit(output: ComponentOutputSink | None, message: str, level: str = "info", **data: Any) -> None:
@@ -56,7 +59,11 @@ def build_provider_surface_blocks(
                 blocks.setdefault((block.path, block.block_id), block)
         except AudiaGenticError as exc:
             if exc.code.startswith("UNS-"):
-                _emit(on_progress, f"Skipping {current_provider_id}: unsupported surface feature", level="debug")
+                logger.debug(
+                    "Skipping %s: unsupported surface feature",
+                    current_provider_id,
+                    extra={"provider": current_provider_id},
+                )
                 continue
             raise
     return sorted(blocks.values(), key=lambda item: (str(item.path), item.block_id))
@@ -141,9 +148,9 @@ def prune_provider_surfaces(
     from audiagentic.components.providers.descriptors.registry import all_descriptors
 
     descriptors = all_descriptors()
-    from audiagentic.components.providers.tags.registry import all_tags_loaded
+    from audiagentic.components.providers.tags.registry import all_tags
 
-    tag_ids = sorted(all_tags_loaded())
+    tag_ids = sorted(all_tags())
     active_tags = active_tag_ids(project_root)
     inactive_tags = [tag_id for tag_id in tag_ids if tag_id not in active_tags]
     descriptor_ids = provider_ids if provider_id else sorted(descriptors)

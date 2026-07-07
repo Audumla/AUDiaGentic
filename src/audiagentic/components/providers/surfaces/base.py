@@ -35,10 +35,9 @@ class ContributionDescriptor:
     skill_content_file: str | None = None
 
 
-# Known surface types for preferred_targets validation
-KNOWN_SURFACE_TYPES = frozenset({
-    "aider", "claude", "cline", "codex", "copilot", "gemini", "goose",
-})
+# Target kinds describe how content should surface.
+KNOWN_TARGET_KINDS = frozenset({"skill", "instruction", "rule"})
+KNOWN_PREFERRED_TARGETS = KNOWN_TARGET_KINDS
 
 
 def validate_config_reference(config_path: str, component_id: str) -> str | None:
@@ -133,12 +132,12 @@ def parse_contribution_descriptor(raw: dict[str, Any], default_owner: str) -> Co
         if isinstance(raw_targets, list):
             for target in raw_targets:
                 if isinstance(target, str) and target:
-                    if target not in KNOWN_SURFACE_TYPES:
+                    if target not in KNOWN_PREFERRED_TARGETS:
                         logger.warning(
                             "Contribution %r: unknown preferred-target %r (known: %s)",
                             contribution_id,
                             target,
-                            ", ".join(sorted(KNOWN_SURFACE_TYPES)),
+                            ", ".join(sorted(KNOWN_PREFERRED_TARGETS)),
                         )
                     preferred_targets += (target,)
 
@@ -213,7 +212,7 @@ class SurfaceBlock:
 
 
 class ProviderSurfaceRenderer(Protocol):
-    def render(
+    def __call__(
         self,
         *,
         project_root: Path,
@@ -270,10 +269,8 @@ def render_instruction_file(
 
 def is_component_active(project_root: Path, component_id: str) -> bool:
     """Return True when a component is both installed and enabled."""
-    from audiagentic.foundation.components.loader import register_all_components  # noqa: PLC0415
     from audiagentic.foundation.components.registry import is_enabled, is_installed  # noqa: PLC0415
 
-    register_all_components()
     return is_installed(component_id, project_root) and is_enabled(component_id, project_root)
 
 

@@ -38,6 +38,7 @@ agent_files:
     description: "Codex project instructions"
 
 mcp_config:
+  remote: false  # config format is stdio-only; url-form entries are not expressible
   config_path: ".codex/config.toml"
   reader: "audiagentic.components.providers.adapters.codex.mcp_format:read_codex_toml"
   writer: "audiagentic.components.providers.adapters.codex.mcp_format:write_codex_toml"

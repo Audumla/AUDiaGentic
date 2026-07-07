@@ -163,9 +163,9 @@ class TestLoadProvidersFromDirectory:
     def test_load_all_providers(self) -> None:
         """Load all providers from config directory."""
         providers = load_providers_from_directory(get_providers_config_dir())
-        expected = {"aider", "claude", "cline", "codex", "continue", "copilot",
-                     "gemini", "goose", "local-openai", "opencode", "openhands",
-                     "pi", "plandex", "qwen", "roo"}
+        expected = {"aider", "antigravity", "claude", "cline", "codex", "continue",
+                     "copilot", "gemini", "goose", "local-openai", "opencode",
+                     "openhands", "pi", "plandex", "qwen", "roo"}
         loaded = set(providers)
         assert expected == loaded, f"Missing: {expected - loaded}, Extra: {loaded - expected}"
         for descriptor in providers.values():

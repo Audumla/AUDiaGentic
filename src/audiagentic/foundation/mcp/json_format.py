@@ -6,15 +6,39 @@ Standard shape (stdio):
 Remote shape:
   {"mcpServers": {"name": {"type": "http", "url": "...", "headers": {...}}}}
 
-Preserves unknown top-level keys on write.
+Preserves unknown top-level keys on write. Writes OS-agnostic python placeholder
+for AUDiaGentic-owned entries; resolves at read time to current sys.executable.
 """
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.mcp import McpServerEntry
+
+_PYTHON_PLACEHOLDER = "__AUDIAGENTIC_PYTHON__"
+
+
+def _is_audiagentic_python_entry(args: tuple[str, ...]) -> bool:
+    """Return True if this entry uses audiagentic's launcher module."""
+    return any("audiagentic.launcher" in a for a in args)
+
+
+def _resolve_command(command: str) -> str:
+    """Resolve python placeholder to current sys.executable on read."""
+    if command == _PYTHON_PLACEHOLDER:
+        return str(sys.executable)
+    return command
+
+
+def _sanitize_command(command: str, args: tuple[str, ...]) -> str:
+    """Replace absolute python path with OS-agnostic placeholder on write."""
+    if _is_audiagentic_python_entry(args) and command == str(sys.executable):
+        return _PYTHON_PLACEHOLDER
+    return command
 
 
 def read_mcp_json(path: Path) -> dict[str, McpServerEntry]:
@@ -34,17 +58,17 @@ def read_mcp_json(path: Path) -> dict[str, McpServerEntry]:
                 transport=cfg.get("type"),
             )
         else:
+            raw_args = tuple(cfg.get("args", []))
             entries[name] = McpServerEntry(
                 name=name,
-                command=cfg.get("command", ""),
-                args=tuple(cfg.get("args", [])),
+                command=_resolve_command(cfg.get("command", "")),
+                args=raw_args,
                 env=dict(cfg.get("env", {})),
             )
     return entries
 
 
 def write_mcp_json(path: Path, entries: dict[str, McpServerEntry]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     existing: dict[str, Any] = {}
     if path.exists():
         try:
@@ -61,12 +85,15 @@ def write_mcp_json(path: Path, entries: dict[str, McpServerEntry]) -> None:
             if entry.headers:
                 cfg["headers"] = dict(entry.headers)
         else:
-            cfg = {"command": entry.command, "args": list(entry.args)}
+            cfg = {
+                "command": _sanitize_command(entry.command, entry.args),
+                "args": list(entry.args),
+            }
             if entry.env:
                 cfg["env"] = dict(entry.env)
         servers[name] = cfg
     existing["mcpServers"] = servers
-    path.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+    atomic_write_json(path, existing, indent=2, sort_keys=False)
 
 
 def remove_mcp_json(path: Path, name: str) -> bool:
@@ -81,5 +108,5 @@ def remove_mcp_json(path: Path, name: str) -> bool:
         return False
     del servers[name]
     data["mcpServers"] = servers
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    atomic_write_json(path, data, indent=2, sort_keys=False)
     return True
