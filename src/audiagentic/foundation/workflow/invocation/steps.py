@@ -1,3 +1,12 @@
+"""Interactive workflow step vocabulary.
+
+Deliberately separate from ``foundation.toolchains.provision_steps`` (SL09):
+these steps carry the answers/WorkflowQuestion protocol, streaming progress,
+and conditional/select composition; provision steps carry compensation,
+artifact ownership, and declared reverts. The ~60 shared subprocess lines are
+accepted duplication — merging the two would need a dual-mode sequence and an
+answers-threading shim, more concepts than it removes.
+"""
 from __future__ import annotations
 
 import os

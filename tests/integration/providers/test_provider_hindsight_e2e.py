@@ -21,7 +21,7 @@ import pytest
 
 import audiagentic.components.providers  # noqa: F401  register descriptors
 from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
-from audiagentic.components.memory.hindsight.recipes import apply_hindsight
+from audiagentic.components.memory.hindsight.lifecycle import apply_hindsight
 
 pytestmark = [
     pytest.mark.slow,

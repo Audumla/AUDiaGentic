@@ -23,9 +23,6 @@ def bootstrap_ledger(project_root: Path) -> dict[str, Any]:
     project_root = project_root.resolve()
     ensure_project_layout(project_root)
 
-    from audiagentic.foundation.components.loader import register_all_components
-    register_all_components()
-
     sync_report = sync_managed_baseline(project_root, source_root=REPO_ROOT)
     created_files_raw = sync_report.get("created-files", [])
     created_files: list[str] = list(created_files_raw) if isinstance(created_files_raw, (list, tuple)) else []

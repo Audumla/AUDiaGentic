@@ -10,6 +10,7 @@ from .id_gen import next_id
 from .interfaces import ItemView, WorkflowConfig, WorkflowContext
 from .propagation import StatePropagationEngine, WorkflowItemAPI
 from .state_machine import StateMachine
+from .transition_engine import TransitionConfig, TransitionEngine
 from .transitions import (
     in_state_set,
     is_known_state,
@@ -24,6 +25,8 @@ __all__ = [
     "ItemView",
     "Relationships",
     "StateMachine",
+    "TransitionConfig",
+    "TransitionEngine",
     "StatePropagationEngine",
     "WorkflowActionExecutor",
     "WorkflowConfig",
