@@ -4,7 +4,6 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.lifecycle.components import uninstall_all_components
 from audiagentic.foundation.lifecycle.detector import detect_installed_state
@@ -20,8 +19,6 @@ def apply_uninstall(
     remove_configs: bool = False,
     remove_workflows: bool = False,
 ) -> dict:
-    register_all_components()
-
     state = detect_installed_state(project_root)
     if state.state != "installed":
         raise AudiaGenticError(

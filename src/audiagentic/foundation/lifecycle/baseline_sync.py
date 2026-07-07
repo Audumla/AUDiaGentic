@@ -38,9 +38,7 @@ def _iter_component_assets(component_ids: set[str] | None = None) -> Iterable[Ba
 
     from audiagentic.foundation.components import all_descriptors
     from audiagentic.foundation.components.base import MODE_REQUIRED_MANAGED
-    from audiagentic.foundation.components.loader import register_all_components
     from audiagentic.paths import REPO_ROOT
-    register_all_components()
     for descriptor in all_descriptors().values():
         if component_ids is not None and descriptor.component_id not in component_ids:
             continue
