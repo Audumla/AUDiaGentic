@@ -1,43 +1,61 @@
 from __future__ import annotations
 
 import importlib
+import sys
+
+from audiagentic.foundation.registry_utils import Registry
 
 from .base import ProviderContributionRenderer, ProviderSurfaceRenderer
 
-_renderer_registry: dict[str, ProviderSurfaceRenderer] = {}
-_contribution_renderer_registry: dict[str, ProviderContributionRenderer] = {}
 _providers_imported = False
 
 
 def _ensure_provider_modules_registered() -> None:
     global _providers_imported
     if _providers_imported:
+        adapters = sys.modules.get("audiagentic.components.providers.adapters")
+        if adapters is not None:
+            load_providers = getattr(adapters, "load_providers", None)
+            if callable(load_providers):
+                for module_name, module in list(sys.modules.items()):
+                    if (
+                        module_name.startswith("audiagentic.components.providers.adapters.")
+                        and module_name.endswith(".surface")
+                    ):
+                        importlib.reload(module)
+                load_providers()
         return
     importlib.import_module("audiagentic.components.providers")
     _providers_imported = True
 
 
+_renderer_registry: Registry[ProviderSurfaceRenderer] = Registry(
+    loader=_ensure_provider_modules_registered,
+)
+_contribution_renderer_registry: Registry[ProviderContributionRenderer] = Registry(
+    loader=_ensure_provider_modules_registered,
+)
+
+
 def register_renderer(provider_id: str, renderer: ProviderSurfaceRenderer) -> None:
-    _renderer_registry[provider_id] = renderer
+    _renderer_registry.register(provider_id, renderer, replace=True)
 
 
 def renderer_registered(provider_id: str) -> bool:
-    return provider_id in _renderer_registry
+    return _renderer_registry.get(provider_id) is not None
 
 
 def contribution_renderer_registered(provider_id: str) -> bool:
-    return provider_id in _contribution_renderer_registry
+    return _contribution_renderer_registry.get(provider_id) is not None
 
 
 def load_renderer_registry() -> dict[str, ProviderSurfaceRenderer]:
-    _ensure_provider_modules_registered()
-    return dict(_renderer_registry)
+    return _renderer_registry.all()
 
 
 def register_contribution_renderer(provider_id: str, renderer: ProviderContributionRenderer) -> None:
-    _contribution_renderer_registry[provider_id] = renderer
+    _contribution_renderer_registry.register(provider_id, renderer, replace=True)
 
 
 def load_contribution_renderer_registry() -> dict[str, ProviderContributionRenderer]:
-    _ensure_provider_modules_registered()
-    return dict(_contribution_renderer_registry)
+    return _contribution_renderer_registry.all()

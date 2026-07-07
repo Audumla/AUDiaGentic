@@ -24,6 +24,10 @@ class McpConfigSpec:
     refresh_mode: str  # "file-watch" | "restart-required"
     format: str = ""   # informational label
     reload_fn: Callable[[Path], dict[str, Any]] | None = None
+    #: False when the provider's config format cannot express url-form
+    #: (remote) MCP entries — writers accept stdio entries only. Consulted by
+    #: capabilities (e.g. hindsight) before projecting a remote entry.
+    remote: bool = True
 
 
 @dataclass(frozen=True)

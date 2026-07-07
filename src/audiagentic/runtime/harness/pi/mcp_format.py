@@ -17,7 +17,12 @@ import json
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.mcp import McpServerEntry
+from audiagentic.foundation.mcp.json_format import (
+    _resolve_command,
+    _sanitize_command,
+)
 
 _PI_SETTINGS_ENABLED: dict[str, Any] = {
     "toolPrefix": "mcp",
@@ -39,7 +44,7 @@ def pi_mcp_path(project_root: Path | None = None) -> Path:
 
 def _entry_to_pi_cfg(entry: McpServerEntry) -> dict[str, Any]:
     cfg: dict[str, Any] = {
-        "command": entry.command,
+        "command": _sanitize_command(entry.command, entry.args),
         "args": list(entry.args),
         "lifecycle": "lazy",
     }
@@ -58,7 +63,7 @@ def read_pi_mcp_json(path: Path) -> dict[str, McpServerEntry]:
     return {
         name: McpServerEntry(
             name=name,
-            command=cfg.get("command", ""),
+            command=_resolve_command(cfg.get("command", "")),
             args=tuple(cfg.get("args", [])),
             env=dict(cfg.get("env", {})),
         )
@@ -68,7 +73,6 @@ def read_pi_mcp_json(path: Path) -> dict[str, McpServerEntry]:
 
 def write_pi_mcp_json(path: Path, entries: dict[str, McpServerEntry]) -> None:
     """Merge entries into the existing pi mcp.json, preserving unknown servers."""
-    path.parent.mkdir(parents=True, exist_ok=True)
     existing: dict[str, Any] = {}
     if path.exists():
         try:
@@ -80,7 +84,7 @@ def write_pi_mcp_json(path: Path, entries: dict[str, McpServerEntry]) -> None:
         servers[name] = _entry_to_pi_cfg(entry)
     existing.setdefault("settings", _PI_SETTINGS_ENABLED)
     existing["mcpServers"] = servers
-    path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+    atomic_write_json(path, existing, indent=2, sort_keys=False)
 
 
 def remove_pi_mcp_json(path: Path, name: str) -> bool:
@@ -95,7 +99,7 @@ def remove_pi_mcp_json(path: Path, name: str) -> bool:
         return False
     del servers[name]
     data["mcpServers"] = servers
-    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    atomic_write_json(path, data, indent=2, sort_keys=False)
     return True
 
 

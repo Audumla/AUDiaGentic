@@ -19,12 +19,12 @@ from typing import Any
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.foundation.features.base import FeatureDescriptor, OptionSchema
 from audiagentic.foundation.features.options import load_option_schema
+from audiagentic.foundation.registry_utils import Registry
 from audiagentic.foundation.toolchains.detect import tool_available
 
 _COMPONENT_ID = "coding-lsp"
 
-_REGISTRY: dict[str, LanguageSpec] = {}
-_LOADED = False
+_REGISTRY: Registry[LanguageSpec]
 
 
 def _lsp_error(code_number: int, message: str, **details: Any) -> AudiaGenticError:
@@ -149,37 +149,30 @@ def _load_from_feature_registry() -> bool:
         if not isinstance(descriptor.raw, dict) or not _is_language_feature(descriptor.raw):
             continue
         spec = language_spec_from_feature(descriptor)
-        _REGISTRY[spec.id] = spec
+        if _REGISTRY.get(spec.id) is None:
+            _REGISTRY.register(spec.id, spec)
         loaded = True
     return loaded
 
 
-def _ensure_feature_catalog_loaded() -> None:
+def _load_languages() -> None:
     """Load component descriptors so coding-lsp language features are registered."""
     from audiagentic.foundation.components.loader import register_all_components
     from audiagentic.foundation.features.registry import get_features
 
-    if get_features(_COMPONENT_ID, "language"):
-        return
-    register_all_components()
-
-
-def _ensure_loaded() -> None:
-    global _LOADED
-    if _LOADED:
-        return
-    _ensure_feature_catalog_loaded()
+    if not get_features(_COMPONENT_ID, "language"):
+        register_all_components()
     _load_from_feature_registry()
-    _LOADED = True
+
+
+_REGISTRY = Registry(loader=_load_languages)
 
 
 def all_languages() -> dict[str, LanguageSpec]:
-    _ensure_loaded()
-    return dict(_REGISTRY)
+    return _REGISTRY.all()
 
 
 def get_language(language_id: str) -> LanguageSpec | None:
-    _ensure_loaded()
     return _REGISTRY.get(language_id)
 
 
@@ -201,9 +194,9 @@ def dependency_cfgs(language_ids: list[str] | None = None) -> dict[str, dict[str
     to configured languages is how install/status stay scoped: a non-enabled
     language's server never enters the workflow.
     """
-    _ensure_loaded()
-    langs = _REGISTRY.values() if language_ids is None else (
-        _REGISTRY[lid] for lid in language_ids if lid in _REGISTRY
+    registry = _REGISTRY.all()
+    langs = registry.values() if language_ids is None else (
+        registry[lid] for lid in language_ids if lid in registry
     )
     result: dict[str, dict[str, Any]] = {}
     for spec in langs:
@@ -214,9 +207,9 @@ def dependency_cfgs(language_ids: list[str] | None = None) -> dict[str, dict[str
 
 def dependency_ids(language_ids: list[str] | None = None) -> list[str]:
     """Dep ids for the given languages (or all)."""
-    _ensure_loaded()
-    langs = _REGISTRY.values() if language_ids is None else (
-        _REGISTRY[lid] for lid in language_ids if lid in _REGISTRY
+    registry = _REGISTRY.all()
+    langs = registry.values() if language_ids is None else (
+        registry[lid] for lid in language_ids if lid in registry
     )
     return [spec.dependency.id for spec in langs if spec.dependency is not None]
 
