@@ -12,6 +12,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+
 from .lsp_bridge import _lsp_error
 from .lsp_constants import BATCH_DIAGNOSTIC_CLIS, CLI_SEVERITY
 
@@ -228,7 +230,11 @@ class LspDiagnostics:
     def _file_diagnostics_via_pull(
         self, uri: str, min_severity: int, timeout: float,
     ) -> list[dict[str, Any]]:
-        """Pull diagnostics for a single document via textDocument/diagnostic."""
+        """Pull diagnostics for a single document via textDocument/diagnostic.
+
+        Falls back to push-based diagnostics if the server advertises the pull
+        capability but doesn't actually respond (e.g. ruff LSP).
+        """
         try:
             result = self._bridge.send_request(
                 "textDocument/diagnostic",
@@ -239,12 +245,13 @@ class LspDiagnostics:
                 },
                 timeout=timeout,
             )
-        except Exception as exc:
-            raise _lsp_error(
-                "EXT-LSP-008",
-                "Document pull diagnostics request failed",
-                details={"uri": uri, "error": str(exc)},
-            )
+        except AudiaGenticError as exc:
+            if exc.code == "EXT-LSP-003":
+                logger.debug(
+                    "Pull diagnostics timed out for %s — falling back to push", uri,
+                )
+                return self._file_diagnostics_via_push(uri, min_severity, timeout)
+            raise
 
         if not isinstance(result, dict):
             return []
