@@ -54,3 +54,24 @@ def detect_pkg_manager() -> str | None:
         if tool_available(pm):
             return pm
     return None
+
+
+def platform_allowed(constraints: tuple[str, ...] | list[str]) -> bool:
+    """Check the current platform against a canonical constraint list.
+
+    Constraints must use canonical platform keys: ``darwin``, ``linux``,
+    ``win`` (matching :func:`platform_key`). Unknown keys never match and are
+    logged as data errors — fix the config rather than aliasing here. An
+    empty constraint list means all platforms are allowed.
+    """
+    if not constraints:
+        return True
+    valid = set(PLATFORM_PM_MAP)
+    unknown = [c for c in constraints if c not in valid]
+    if unknown:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "unknown platform constraint keys %s (valid: %s)", unknown, sorted(valid)
+        )
+    return platform_key() in set(constraints)

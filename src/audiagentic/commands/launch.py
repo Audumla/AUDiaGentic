@@ -88,9 +88,11 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
         args = translate_agent_args(runner_params) + args
 
     if ctx.manages_rig:
-        from audiagentic.runtime.rig.registry import register_client, shutdown_rig_if_last
+        # Client registration happened inside launch_rig_if_needed, under the
+        # rig start lock — registering here (outside the lock) left a window
+        # where a departing last client killed the rig we just attached to.
+        from audiagentic.runtime.rig.registry import shutdown_rig_if_last
 
-        register_client()
         rig_port = int(str(ctx.endpoint).rsplit(":", 1)[-1].split("/", 1)[0])
 
         def _sigterm_handler(sig: int, frame: object) -> None:

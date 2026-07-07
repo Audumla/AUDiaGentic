@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-import os
-
-from .context import AgentContext
+from audiagentic.runtime.harness.context import AgentContext
+from audiagentic.runtime.harness.run_common import build_base_run_env
 
 
 def build_agent_command(ctx: AgentContext, *, smoke: bool) -> list[str]:
+    assert ctx.agent_bin is not None
+    assert ctx.agent_dir is not None
+    assert ctx.agent_runtime is not None
+
     from audiagentic.runtime.harness.pi.install.constants import load_pi_config
     pi_cfg = load_pi_config(ctx.project_root)
     tools_cfg = pi_cfg.get("tools", {})
@@ -71,13 +74,8 @@ def build_agent_command(ctx: AgentContext, *, smoke: bool) -> list[str]:
 
 
 def _build_run_env(ctx: AgentContext) -> dict[str, str]:
-    env = os.environ.copy()
+    env = build_base_run_env(ctx)
     env["HOME"] = str(ctx.agent_home)
     env["PI_CODING_AGENT_DIR"] = str(ctx.agent_dir)
     env["PI_CODING_AGENT_SESSION_DIR"] = str(ctx.project_root / ".audiagentic" / "sessions")
-    env["AUDIAGENTIC_REPO_ROOT"] = str(ctx.project_root)
-    env["AUDIAGENTIC_AG_BASE_URL"] = ctx.endpoint
-    env["AUDIAGENTIC_AG_MODEL"] = ctx.model
-    env["AUDIAGENTIC_RIG_TYPE"] = "embedded" if ctx.manages_rig else "external"
-    env["AUDIAGENTIC_RIG_PROFILE"] = ctx.profile_name
     return env

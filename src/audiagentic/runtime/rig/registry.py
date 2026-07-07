@@ -19,6 +19,19 @@ def _rig_runtime_dir() -> Path:
     return global_harness_runtime() / "rig"
 
 
+def rig_start_lock():
+    """The one lock serializing every rig lifecycle transition.
+
+    Start (launch_rig_if_needed), attach (register_client), and detach/stop
+    (shutdown_rig_if_last) must all hold this lock so a departing last client
+    cannot kill the rig between another client's reuse decision and its
+    registration (PR04 start/stop race).
+    """
+    from audiagentic.foundation.system.process import StartupLock
+
+    return StartupLock(_rig_runtime_dir() / "start.lock")
+
+
 def _rig_json() -> Path:
     return _rig_runtime_dir() / "rig.json"
 
@@ -69,16 +82,18 @@ def read_rig_state(*, expected_model: str | None = None) -> dict | None:
 def write_rig_state(pid: int, port: int, endpoint: str, model: str) -> None:
     path = _rig_json()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps({
-            "pid": pid,
-            "port": port,
-            "endpoint": endpoint,
-            "model": model,
-            "started_at": time.time(),
-        }, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    payload = json.dumps({
+        "pid": pid,
+        "port": port,
+        "endpoint": endpoint,
+        "model": model,
+        "started_at": time.time(),
+    }, indent=2) + "\n"
+    # Atomic replace: a torn read would make readers unlink rig.json, leaving
+    # a live rig untracked (and reapable).
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(payload, encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def _clear_rig_state() -> None:
@@ -91,10 +106,18 @@ def _query_server_model(endpoint: str, timeout: float = 2.0) -> str | None:
 
 
 def adopt_rig_state(port: int, *, endpoint: str | None = None, model: str | None = None) -> dict | None:
-    """Reconstruct rig.json for a healthy rig already listening on the expected port."""
+    """Reconstruct rig.json for a healthy rig already listening on the expected port.
+
+    When *model* is given, adoption is refused unless the server actually
+    serves it (the rig launcher registers the profile name as the served
+    alias) — silently recording the requested name over a different live
+    model would hand callers the wrong backend.
+    """
     endpoint = endpoint or _default_endpoint(port)
     server_model = _query_server_model(endpoint)
     if server_model is None:
+        return None
+    if model is not None and server_model != model:
         return None
 
     pid = find_pid_on_port(port)
@@ -146,17 +169,23 @@ def _live_client_count() -> int:
 
 
 def shutdown_rig_if_last(port: int | None = None) -> None:
-    """Deregister this client. If none remain, stop the embedded rig."""
-    (_clients_dir() / str(os.getpid())).unlink(missing_ok=True)
-    if _live_client_count() > 0:
-        return
-    state = read_rig_state()
-    if state is None and port is not None:
-        state = adopt_rig_state(port)
-    if state is None:
-        return
-    kill_pid(int(state["pid"]))
-    _clear_rig_state()
+    """Deregister this client. If none remain, stop the embedded rig.
+
+    Deregister → count → kill happens under the same startup lock as
+    launch/attach, so a concurrent client that just reused the rig (and is
+    about to register) cannot lose it to a departing last client.
+    """
+    with rig_start_lock():
+        (_clients_dir() / str(os.getpid())).unlink(missing_ok=True)
+        if _live_client_count() > 0:
+            return
+        state = read_rig_state()
+        if state is None and port is not None:
+            state = adopt_rig_state(port)
+        if state is None:
+            return
+        kill_pid(int(state["pid"]))
+        _clear_rig_state()
 
 
 def reap_orphan_rigs(keep_pid: int | None = None) -> list[int]:

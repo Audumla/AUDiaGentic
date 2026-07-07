@@ -39,6 +39,30 @@ def _expand(path: str | Path) -> Path:
     return Path(str(path)).expanduser()
 
 
+_SHELL_METACHARS = ("|", "&&", ";", ">", "<")
+
+
+def safe_command_parts(command: str) -> list[str]:
+    """Return argv for a simple command, refusing shell compound syntax.
+
+    Security guard for commands sourced from config/matrix data: compound
+    shell operators are rejected (VAL-CMD-001) rather than passed to a shell.
+    """
+    if any(token in command for token in _SHELL_METACHARS):
+        raise make_error(
+            prefix="VAL",
+            component="CMD",
+            number=1,
+            kind="validation",
+            message=(
+                f"shell compound command requires structured shell-step support: {command!r}"
+            ),
+        )
+    import shlex
+
+    return shlex.split(command)
+
+
 @dataclass(frozen=True)
 class CommandProbe:
     """Run a command and check its exit code and/or stdout against a pattern."""
@@ -197,4 +221,5 @@ __all__ = [
     "Probe",
     "ProbeResult",
     "check_with_retry",
+    "safe_command_parts",
 ]

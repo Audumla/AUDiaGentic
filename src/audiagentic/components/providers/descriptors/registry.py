@@ -5,9 +5,9 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.descriptors.registry import DescriptorRegistry
 from audiagentic.foundation.features.base import ImplementationDescriptor
 from audiagentic.foundation.features.registry import register as register_feature_descriptor
+from audiagentic.foundation.registry_utils import Registry
 
 from ..services.host_capabilities import host_extension_statuses
 from .base import ProviderDescriptor
@@ -15,7 +15,19 @@ from .feature_mapping import impl_features_for
 
 _COMPONENT_ID = "providers"
 
-_registry: DescriptorRegistry[ProviderDescriptor] = DescriptorRegistry()
+
+def _load_providers() -> None:
+    """(Re)load provider descriptors from YAML into this registry.
+
+    Importing the adapters package registers all providers as a side effect;
+    the explicit call covers re-population after reset_all_registries().
+    """
+    from audiagentic.components.providers import adapters
+
+    adapters.load_providers()
+
+
+_registry: Registry[ProviderDescriptor] = Registry(loader=_load_providers)
 
 
 def _register_feature_implementation(descriptor: ProviderDescriptor) -> None:
@@ -40,7 +52,9 @@ def _sync_feature_implementations() -> None:
 
 
 def register(descriptor: ProviderDescriptor) -> None:
-    _registry.register(descriptor.provider_id, descriptor)
+    # replace=True: descriptors are rebuilt as new instances on every YAML
+    # (re)load, so strict same-value idempotency would reject legitimate reloads.
+    _registry.register(descriptor.provider_id, descriptor, replace=True)
     _register_feature_implementation(descriptor)
 
 
@@ -56,12 +70,20 @@ def all_descriptors() -> dict[str, ProviderDescriptor]:
 
 def canonical_provider_ids() -> tuple[str, ...]:
     """Return all registered provider ids. Owned by the providers component."""
-    return _registry.ids()
+    return _registry.keys()
 
 
 def provider_alias_map() -> dict[str, str]:
-    """Return prompt/provider aliases contributed by provider descriptors."""
-    return _registry.alias_map(aliases_field="prompt_aliases")
+    """Return prompt/provider aliases contributed by provider descriptors.
+
+    Maps each canonical id and each prompt alias to the canonical id.
+    """
+    aliases: dict[str, str] = {}
+    for provider_id, descriptor in _registry.all().items():
+        aliases[provider_id] = provider_id
+        for alias in descriptor.prompt_aliases or ():
+            aliases[alias] = provider_id
+    return aliases
 
 
 def _probe_cli(command: list[str]) -> dict[str, Any]:

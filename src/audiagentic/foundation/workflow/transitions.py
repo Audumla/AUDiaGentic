@@ -28,6 +28,8 @@ import yaml
 
 from audiagentic.foundation.contracts.errors import make_error
 
+from .transition_engine import TransitionConfig, TransitionEngine
+
 
 def load_workflow(path: str | Path, kind: str, name: str | None = None) -> dict[str, Any]:
     """Load a single workflow definition (values/transitions/state-sets/initial).
@@ -56,12 +58,12 @@ def load_workflow(path: str | Path, kind: str, name: str | None = None) -> dict[
 
 def is_known_state(workflow: dict[str, Any], state: str) -> bool:
     """True if ``state`` is a declared value of the workflow."""
-    return state in (workflow.get("values") or [])
+    return _engine_for(workflow).is_known_state(state)
 
 
 def transition_allowed(workflow: dict[str, Any], old: str, new: str) -> bool:
     """True if moving ``old -> new`` is permitted by the workflow's transitions."""
-    return new in (workflow.get("transitions") or {}).get(old, [])
+    return _engine_for(workflow).is_legal(old, new)
 
 
 def states_in_set(workflow: dict[str, Any], set_name: str) -> list[str]:
@@ -72,3 +74,17 @@ def states_in_set(workflow: dict[str, Any], set_name: str) -> list[str]:
 def in_state_set(workflow: dict[str, Any], state: str | None, set_name: str) -> bool:
     """True if ``state`` belongs to the named state-set."""
     return state in (workflow.get("state-sets") or {}).get(set_name, [])
+
+
+def _engine_for(workflow: dict[str, Any]) -> TransitionEngine:
+    transitions = {
+        str(state): frozenset(str(target) for target in targets)
+        for state, targets in (workflow.get("transitions") or {}).items()
+    }
+    values = workflow.get("values")
+    return TransitionEngine(
+        TransitionConfig(
+            transitions=transitions,
+            values=frozenset(str(state) for state in values) if values is not None else None,
+        )
+    )

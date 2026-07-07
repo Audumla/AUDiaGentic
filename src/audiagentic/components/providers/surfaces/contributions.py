@@ -57,11 +57,11 @@ def active_tag_ids(project_root: Path | None = None) -> set[str]:
     that ownership-unaware callers keep working.
     """
     from audiagentic.components.providers.tags.registry import (  # noqa: PLC0415
-        all_tags_loaded,
+        all_tags,
     )
     from audiagentic.foundation.components.registry import is_enabled, is_installed  # noqa: PLC0415
 
-    tags = all_tags_loaded()
+    tags = all_tags()
     if project_root is None:
         return set(tags)
     active: set[str] = set()
@@ -79,12 +79,12 @@ def load_tag_surface_contributions(project_root: Path | None = None) -> list[Sur
     enabled (see active_tag_ids). With no project_root, all loaded tags contribute.
     """
     from audiagentic.components.providers.tags.registry import (  # noqa: PLC0415
-        all_tags_loaded,
+        all_tags,
     )
 
     active = active_tag_ids(project_root)
     contributions: list[SurfaceContribution] = []
-    for tag_id, descriptor in sorted(all_tags_loaded().items()):
+    for tag_id, descriptor in sorted(all_tags().items()):
         if tag_id not in active:
             continue
         for contrib in descriptor.instructions:
@@ -138,10 +138,10 @@ def build_summary_contributions(project_root: Path | None = None) -> list[Surfac
     duplicated here; alias tables live in the tag registry, not the surfaces.
     """
     from audiagentic.components.providers.tags.registry import (  # noqa: PLC0415
-        all_tags_loaded,
+        all_tags,
     )
 
-    tags = all_tags_loaded()
+    tags = all_tags()
     if not tags:
         return []
     return [
@@ -163,10 +163,7 @@ def build_summary_contributions(project_root: Path | None = None) -> list[Surfac
 def load_surface_contributions(
     project_root: Path | None = None,
 ) -> list[SurfaceContribution]:
-    from audiagentic.foundation.components.loader import register_all_components
     from audiagentic.foundation.components.registry import all_descriptors, is_enabled, is_installed
-
-    register_all_components()
 
     # Component-level contributions (from each component's YAML file)
     contributions: list[SurfaceContribution] = []

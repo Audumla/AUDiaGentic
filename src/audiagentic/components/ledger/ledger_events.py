@@ -7,7 +7,7 @@ from audiagentic.components.ledger import ledger_api
 from audiagentic.components.release.events import RELEASE_LEDGER_ARCHIVE_REQUESTED
 from audiagentic.foundation.event import get_bus
 
-_REGISTERED = False
+_REGISTERED_BUS_ID: int | None = None
 
 
 def _on_release_ledger_archive_requested(
@@ -24,11 +24,13 @@ def _on_release_ledger_archive_requested(
 
 
 def register() -> None:
-    global _REGISTERED
-    if _REGISTERED:
+    global _REGISTERED_BUS_ID
+    bus = get_bus()
+    bus_id = id(bus)
+    if _REGISTERED_BUS_ID == bus_id:
         return
-    get_bus().subscribe(RELEASE_LEDGER_ARCHIVE_REQUESTED, _on_release_ledger_archive_requested)
-    _REGISTERED = True
+    bus.subscribe(RELEASE_LEDGER_ARCHIVE_REQUESTED, _on_release_ledger_archive_requested)
+    _REGISTERED_BUS_ID = bus_id
 
 
 register()

@@ -19,8 +19,8 @@ Any step may transition to ``error``.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any, TypeVar
 
@@ -88,6 +88,31 @@ CleanupHook = Callable[[dict[str, Any]], None]
 _ResultT = TypeVar("_ResultT", bound="RecipeResult")
 
 
+def run_steps(
+    steps: Sequence[Any],
+    context: dict[str, Any],
+    *,
+    ok_state: RecipeState = RecipeState.INSTALLING,
+    ok_status: str = "steps succeeded",
+    fail_prefix: str = "step sequence failed",
+) -> RecipeResult:
+    """Run provision steps through CompensatingSequence, returning a RecipeResult.
+
+    Shared adapter between the step layer's SequenceResult and the recipe
+    layer's RecipeResult so lifecycle methods don't each re-implement the
+    run/branch/format dance.
+    """
+    from .provision_steps import CompensatingSequence
+
+    seq_result = CompensatingSequence(list(steps)).run(context)
+    if seq_result.status == "ok":
+        return RecipeResult.ok(ok_state, status=ok_status)
+    return RecipeResult.fail(
+        f"{fail_prefix}: {seq_result.reason or 'unknown'}",
+        details={"steps": seq_result.outputs.get("steps", [])},
+    )
+
+
 class ProvisioningRecipe(ABC):
     """Abstract lifecycle contract for an installable integration.
 
@@ -102,6 +127,12 @@ class ProvisioningRecipe(ABC):
     #: Provider-specific teardown callables run during :meth:`teardown`, after
     #: generic prune. Populate in ``__init__`` of a concrete recipe (RV01).
     custom_cleanup_hooks: list[CleanupHook]
+
+    #: When False, :meth:`provision` ignores ``provision_steps()`` and always
+    #: uses the primitive-call path. Set on recipes whose ``provision_steps()``
+    #: exists for introspection/dry-run only and does not fully represent
+    #: provisioning (e.g. configure() performs work the steps cannot express).
+    provision_via_steps: bool = True
 
     def __init__(self) -> None:
         self.custom_cleanup_hooks = []
@@ -137,6 +168,19 @@ class ProvisioningRecipe(ABC):
     def prune(self, context: dict[str, Any]) -> RecipeResult:
         """Remove managed configuration/artifacts, leaving user content intact."""
 
+    # --- result conversion ----------------------------------------------------
+
+    def to_result(self, base: RecipeResult) -> RecipeResult:
+        """Convert an orchestration result to this recipe's result type.
+
+        Every result returned by :meth:`provision`, :meth:`teardown`, and
+        :meth:`post_uninstall_verify` is routed through this hook, so
+        subclasses that narrow ``RecipeResult`` (or overlay metadata such as
+        provenance) override this single method instead of re-implementing
+        the orchestration. Default: identity.
+        """
+        return base
+
     # --- default orchestration ----------------------------------------------
 
     def provision(self, context: dict[str, Any]) -> RecipeResult:
@@ -147,33 +191,34 @@ class ProvisioningRecipe(ABC):
 
         When the recipe exposes ``provision_steps()`` (TO12), execution delegates
         to :class:`~.provision_steps.CompensatingSequence` for structured rollback
-        instead of the primitive-call path.
+        instead of the primitive-call path. Recipes whose ``configure`` does work
+        the steps cannot express must return an empty step list to stay on the
+        primitive path.
+
+        Results are never mutated in place (subclasses may return frozen
+        dataclasses); adjustments use :func:`dataclasses.replace`.
         """
         probed = self.probe(context)
         if probed.success and probed.state is RecipeState.VERIFIED:
-            return RecipeResult.ok(
+            return self.to_result(RecipeResult.ok(
                 RecipeState.VERIFIED,
                 status="already provisioned",
                 details=probed.details,
-            )
+            ))
 
         # TO12: structured step path with rollback
-        provision_steps_fn = getattr(self, "provision_steps", None)
+        provision_steps_fn = (
+            getattr(self, "provision_steps", None) if self.provision_via_steps else None
+        )
         steps = provision_steps_fn() if callable(provision_steps_fn) else None  # type: ignore[operator]
         if steps:
-            from .provision_steps import CompensatingSequence
-
-            seq_result = CompensatingSequence(steps).run(context)  # type: ignore[arg-type]
-            if seq_result.status != "ok":
-                return RecipeResult.fail(
-                    seq_result.reason or "provision sequence failed",
-                    details={"steps": seq_result.outputs.get("steps", [])},
-                )
+            seq = run_steps(steps, context, fail_prefix="provision sequence failed")
+            if not seq.success:
+                return self.to_result(seq)
             verified = self.verify(context)
-            verified.artifacts_owned = list(verified.artifacts_owned)
             if not verified.success:
-                verified.state = RecipeState.ERROR
-            return verified
+                verified = replace(verified, state=RecipeState.ERROR)
+            return self.to_result(verified)
 
         # Legacy primitive-call path
         owned: list[str] = []
@@ -181,30 +226,31 @@ class ProvisioningRecipe(ABC):
             result = op(context)
             owned.extend(result.artifacts_owned)
             if not result.success:
-                result.artifacts_owned = owned
-                return result
+                return self.to_result(replace(result, artifacts_owned=owned))
 
         verified = self.verify(context)
-        verified.artifacts_owned = [*owned, *verified.artifacts_owned]
+        verified = replace(
+            verified, artifacts_owned=[*owned, *verified.artifacts_owned]
+        )
         if not verified.success:
             # verify failure is terminal: surface the diagnostic, do not proceed.
-            verified.state = RecipeState.ERROR
-        return verified
+            verified = replace(verified, state=RecipeState.ERROR)
+        return self.to_result(verified)
 
     def teardown(self, context: dict[str, Any]) -> RecipeResult:
         """Run prune -> uninstall -> cleanup hooks -> post-uninstall verify."""
         pruned = self.prune(context)
         if not pruned.success:
-            return pruned
+            return self.to_result(pruned)
 
         removed = self.uninstall(context)
         if not removed.success:
-            return removed
+            return self.to_result(removed)
 
         try:
             self.run_cleanup_hooks(context)
         except Exception as exc:  # noqa: BLE001 - report hook failure, do not crash
-            return RecipeResult.fail(f"cleanup hook failed: {exc}")
+            return self.to_result(RecipeResult.fail(f"cleanup hook failed: {exc}"))
 
         return self.post_uninstall_verify(context)
 
@@ -216,11 +262,11 @@ class ProvisioningRecipe(ABC):
         """
         probed = self.probe(context)
         if probed.success and probed.state is RecipeState.ABSENT:
-            return RecipeResult.ok(RecipeState.ABSENT, status="removed")
-        return RecipeResult.fail(
+            return self.to_result(RecipeResult.ok(RecipeState.ABSENT, status="removed"))
+        return self.to_result(RecipeResult.fail(
             "integration still present after teardown",
             details=probed.details,
-        )
+        ))
 
     def run_cleanup_hooks(self, context: dict[str, Any]) -> None:
         """Invoke each registered cleanup hook in order. Raises on first failure."""
@@ -233,4 +279,5 @@ __all__ = [
     "ProvisioningRecipe",
     "RecipeResult",
     "RecipeState",
+    "run_steps",
 ]
