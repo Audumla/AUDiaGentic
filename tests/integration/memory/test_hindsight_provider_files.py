@@ -22,7 +22,7 @@ import audiagentic.components.providers  # noqa: F401  (register provider descri
 from audiagentic.components.memory.hindsight import provision as prov
 from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
 from audiagentic.components.memory.hindsight.matrix import HINDSIGHT_RECIPE_MATRIX
-from audiagentic.components.memory.hindsight.recipes import resolve_hindsight_strategy
+from audiagentic.components.memory.hindsight.strategies import resolve_hindsight_strategy
 from audiagentic.components.providers.services.recipes import ProviderRecipeKind
 
 # Kinds that shell out to an external installer (global/network side effects).

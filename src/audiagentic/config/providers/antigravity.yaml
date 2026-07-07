@@ -1,0 +1,59 @@
+# Antigravity (Google) — provider descriptor
+# curl-based install, MCP JSON config, AGENTS.md instruction file
+# All claims verified via live CLI execution
+
+provider_id: antigravity
+display_name: "Antigravity"
+description: "Google's Antigravity CLI and IDE. AI-first development platform with code execution and browser tools."
+url: "https://antigravity.google"
+prompt_aliases:
+  - ag
+  - agy
+
+cli_probe:
+  - agy
+  - "--version"
+
+cli_install:
+  package_manager: script
+  package_name: antigravity-cli
+  executable: agy
+  install:
+    type: shell
+    id: install
+    command:
+      - bash
+      - "-lc"
+      - "curl -fsSL https://antigravity.google/cli/install.sh | bash"
+
+permissions:
+  can_write_files: true
+  can_execute_shell: true
+  can_browse_web: true
+  can_read_env: true
+  notes: "Google's Antigravity development assistant."
+
+instruction_file: "AGENTS.md"
+skill_surface_path: ".agents/skills/{tag}/SKILL.md"
+
+agent_files:
+  - rel_path: "AGENTS.md"
+    managed: false
+    description: "Shared project instructions"
+
+mcp_config:
+  config_path: "~/.gemini/antigravity/mcp_config.json"
+  reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
+  writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
+  remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
+  format: "mcp-json"
+  refresh_mode: "file-watch"
+
+surfaces:
+  renderer: flat-skill
+  contribution-file: "AGENTS.md"
+
+execution:
+  mode: stub
+  aliases: [agy]
+  message: "Antigravity adapter is registered; execution bridge not wired yet."

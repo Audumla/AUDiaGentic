@@ -24,9 +24,9 @@ from audiagentic.components.memory.hindsight.matrix import (
     get_matrix_rows,
     get_rows_for_provider,
 )
-from audiagentic.components.memory.hindsight.recipes import (
+from audiagentic.components.memory.hindsight.recipes import GuidanceOnlyRecipe
+from audiagentic.components.memory.hindsight.strategies import (
     _RECIPE_FACTORIES,
-    GuidanceOnlyRecipe,
     build_hindsight_recipe,
 )
 from audiagentic.components.providers.services.recipes import ProviderRecipeKind
@@ -117,7 +117,7 @@ class TestPlatformGates:
 
     def test_platform_gate_blocks_unsupported(self, monkeypatch):
         """Provider constrained to darwin/linux is platform-gated on win."""
-        from audiagentic.components.memory.hindsight import recipes as rec
+        from audiagentic.components.memory.hindsight import strategies as rec
 
         row = HindsightRecipeRow(
             provider_id="test",
@@ -136,7 +136,7 @@ class TestPlatformGates:
 
     def test_platform_gate_allows_supported(self, monkeypatch):
         """Provider constrained to darwin/linux is allowed on linux."""
-        from audiagentic.components.memory.hindsight import recipes as rec
+        from audiagentic.components.memory.hindsight import strategies as rec
 
         row = HindsightRecipeRow(
             provider_id="test",

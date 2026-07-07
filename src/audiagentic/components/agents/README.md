@@ -106,10 +106,15 @@ flow from the triggering request's `metadata` through to every lifecycle event f
 Publish never raises even if the event bus or a subscriber misbehaves — a broken observer
 must never prevent a request from reaching its real terminal state.
 
+### Restart reconciliation
+
+`GatewayQueueManager` is an in-process singleton. A restarted host cannot recover
+the old worker's execution state, so `agents_gateway_api.reconcile_gateway_state(project_root)`
+performs one-shot cleanup for persisted non-terminal records: `running` requests become
+`failed` with an orphaned-after-restart error, and `queued` requests become `rejected`.
+The reconciliation is idempotent and leaves already-terminal records untouched.
+
 ### Known limitations
 
-- **No cross-process durability**: `GatewayQueueManager` is an in-process singleton. If the
-  hosting process restarts, persisted `queued`/`running` records are orphaned — no worker
-  resumes them. Tracked as a follow-up: [AG14](../../../../docs/planning/active/agents/AG14.md).
 - **Not project-scoped**: the queue manager singleton is process-wide, not keyed by
   project-root. Fine in practice (one project per process), but worth knowing.

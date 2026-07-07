@@ -17,7 +17,9 @@ def _reset_foundation_state():
     """
     from audiagentic.foundation.components import registry as components_registry
     from audiagentic.foundation.logging.config import reset_logging_for_test
+    from audiagentic.foundation.registry_utils import reset_all_registries
 
+    reset_all_registries()
     components_registry.reset()
     features_registry.clear()
     reset_logging_for_test()

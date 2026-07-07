@@ -10,9 +10,9 @@ from typing import Any
 from audiagentic.components.agent_jobs import jobs_store as store
 from audiagentic.components.agent_jobs.reviews import read_review_bundle
 from audiagentic.components.agent_jobs.state_machine import transition_and_persist
+from audiagentic.foundation import interaction
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
-from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
@@ -23,11 +23,11 @@ DEFAULT_TTL = timedelta(hours=8)
 
 
 def _approvals_root(project_root: Path) -> Path:
-    return project_root / ".audiagentic" / "runtime" / "approvals"
+    return interaction.interactions_root(project_root)
 
 
 def _approval_path(project_root: Path, approval_id: str) -> Path:
-    return _approvals_root(project_root) / f"{approval_id}.json"
+    return interaction.interaction_path(project_root, approval_id)
 
 
 def _validate_approval(payload: dict[str, Any]) -> list[str]:
@@ -73,6 +73,50 @@ def build_approval_request(
     return payload
 
 
+def _ttl_seconds(requested_at: str, expires_at: str) -> int:
+    requested = datetime.fromisoformat(requested_at.replace("Z", "+00:00"))
+    expires = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+    return max(1, int((expires - requested).total_seconds()))
+
+
+def _interaction_to_approval(payload: dict[str, Any]) -> dict[str, Any]:
+    answer = payload.get("answer") or {}
+    state = payload.get("state")
+    choice = answer.get("choice")
+    if state == "answered":
+        state = choice or "answered"
+    requested_at = payload["requested_at"]
+    expires = datetime.fromisoformat(requested_at.replace("Z", "+00:00")) + timedelta(
+        seconds=int(payload.get("ttl_seconds") or DEFAULT_TTL.total_seconds())
+    )
+    details = answer.get("details") or {}
+    return {
+        "contract-version": "v1",
+        "approval-id": payload["request_id"],
+        "project-id": payload.get("project_id") or details.get("project_id", ""),
+        "kind": payload["kind"],
+        "source-kind": payload.get("source_kind", ""),
+        "source-id": payload.get("source_id", ""),
+        "summary": payload["title"],
+        "state": state,
+        "requested-at": requested_at,
+        "expires-at": expires.isoformat().replace("+00:00", "Z"),
+    }
+
+
+def _approval_to_interaction_payload(approval: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": approval["kind"],
+        "title": approval["summary"],
+        "description": "",
+        "choices": ("approved", "rejected"),
+        "source_kind": approval["source-kind"],
+        "source_id": approval["source-id"],
+        "ttl_seconds": _ttl_seconds(approval["requested-at"], approval["expires-at"]),
+        "request_id": approval["approval-id"],
+    }
+
+
 def _list_pending(project_root: Path, project_id: str, kind: str, source_id: str) -> dict[str, Any] | None:
     root = _approvals_root(project_root)
     if not root.exists():
@@ -83,14 +127,15 @@ def _list_pending(project_root: Path, project_id: str, kind: str, source_id: str
         except Exception:
             logger.warning("Failed to parse approval file %s", path, exc_info=True)
             continue
-        if payload.get("state") != "pending":
+        approval = _interaction_to_approval(payload)
+        if approval.get("state") != "pending":
             continue
         if (
-            payload.get("project-id") == project_id
-            and payload.get("kind") == kind
-            and payload.get("source-id") == source_id
+            approval.get("project-id") == project_id
+            and approval.get("kind") == kind
+            and approval.get("source-id") == source_id
         ):
-            return payload
+            return approval
     return None
 
 
@@ -111,15 +156,20 @@ def request_approval(project_root: Path, payload: dict[str, Any]) -> dict[str, A
     )
     if existing:
         return existing
-    path = _approval_path(project_root, payload["approval-id"])
-    atomic_write_json(path, payload)
+    interaction.request(
+        project_root=project_root,
+        **_approval_to_interaction_payload(payload),
+    )
+    record = interaction.read_record(project_root, payload["approval-id"])
+    record["project_id"] = payload["project-id"]
+    record["requested_at"] = payload["requested-at"]
+    interaction.write_record(project_root, record)
     return payload
 
 
 def read_approval(project_root: Path, approval_id: str) -> dict[str, Any]:
-    path = _approval_path(project_root, approval_id)
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = interaction.read_record(project_root, approval_id)
     except Exception as exc:  # noqa: BLE001
         raise AudiaGenticError(
             code="IO-APPROVE-001",
@@ -127,7 +177,8 @@ def read_approval(project_root: Path, approval_id: str) -> dict[str, Any]:
             message="failed to read approval",
             details={"approval-id": approval_id, "error": str(exc)},
         ) from exc
-    issues = _validate_approval(payload)
+    approval = _interaction_to_approval(payload)
+    issues = _validate_approval(approval)
     if issues:
         raise AudiaGenticError(
             code="VAL-APPROVE-003",
@@ -135,7 +186,7 @@ def read_approval(project_root: Path, approval_id: str) -> dict[str, Any]:
             message="approval failed validation",
             details={"approval-id": approval_id, "issues": issues},
         )
-    return payload
+    return approval
 
 
 def update_approval_state(project_root: Path, approval_id: str, new_state: str) -> dict[str, Any]:
@@ -149,7 +200,12 @@ def update_approval_state(project_root: Path, approval_id: str, new_state: str) 
             message="approval update failed validation",
             details={"approval-id": approval_id, "issues": issues},
         )
-    atomic_write_json(_approval_path(project_root, approval_id), payload)
+    if new_state in {"approved", "rejected", "cancelled"}:
+        interaction.respond(approval_id, new_state, details={"project_id": payload["project-id"]}, project_root=project_root)
+    elif new_state == "expired":
+        record = interaction.read_record(project_root, approval_id)
+        record["state"] = "expired"
+        interaction.write_record(project_root, record)
     return payload
 
 

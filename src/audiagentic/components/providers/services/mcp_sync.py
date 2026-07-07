@@ -17,7 +17,6 @@ def sync_all_provider_mcp_servers(project_root: Path) -> None:
     Direct relocation from foundation/lifecycle/component_mcp.py — no capability
     indirection needed since this function now lives inside the providers component.
     """
-    from audiagentic.foundation.components.loader import register_all_components
     from audiagentic.foundation.components.registry import (
         all_descriptors,
         is_enabled,
@@ -25,8 +24,6 @@ def sync_all_provider_mcp_servers(project_root: Path) -> None:
     )
 
     from ..services.mcp_projection import sync_component_mcp_to_providers
-
-    register_all_components()
 
     for component_id, descriptor in all_descriptors().items():
         if not descriptor.mcp_servers and not descriptor.external_mcp_servers:

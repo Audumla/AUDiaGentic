@@ -129,10 +129,8 @@ def _regenerate_provider_configs(project_root: Path) -> dict[str, object]:
 
 
 def _cmd_job_control(args: argparse.Namespace, project_root: Path) -> int:
-    from audiagentic.foundation.components.loader import register_all_components
     from audiagentic.foundation.components.registry import get_descriptor
 
-    register_all_components()
     if not get_descriptor("agent-jobs"):
         print_error("agent_jobs component not available")
         return 1
@@ -178,10 +176,8 @@ def _cmd_session_input(args: argparse.Namespace, project_root: Path) -> int:
 
 
 def _cmd_release_bootstrap(args: argparse.Namespace, project_root: Path) -> int:
-    from audiagentic.foundation.components.loader import register_all_components
     from audiagentic.foundation.components.registry import get_descriptor
 
-    register_all_components()
     if not get_descriptor("agent-ledger"):
         print_error("ledger component not available")
         return 1
@@ -329,7 +325,9 @@ def _main(argv: list[str] | None = None) -> int:
 
     args, remaining = parser.parse_known_args(argv)
 
-    # Propagate --component-profile to env so loader and other modules pick it up
+    # Propagate --component-profile and --project to env so loader and other
+    # modules pick them up (AUDIAGENTIC_REPO_ROOT drives profile resolution,
+    # MCP server env forwarding, logging discovery — closes CP13/RV128).
     if args.component_profile:
         import os
 
@@ -337,10 +335,18 @@ def _main(argv: list[str] | None = None) -> int:
 
     project_root = Path(args.project).resolve() if args.project else Path.cwd()
 
+    if args.project:
+        import os
+
+        os.environ["AUDIAGENTIC_REPO_ROOT"] = str(project_root)
+
     import atexit
 
     from audiagentic.foundation.logging import bootstrap as _log_bootstrap
     _log_bootstrap("harness", project_root=project_root)
+    from audiagentic.foundation.interaction import CliBackend, set_backend
+
+    set_backend(CliBackend())
 
     logger.info("audiagentic started", extra={"project_root": str(project_root), "command": args.command})
 

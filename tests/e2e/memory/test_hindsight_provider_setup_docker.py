@@ -89,8 +89,8 @@ class TestDockerProviderSetup:
             resolved_kind = row.recipe_kind.value
             # The recipe builder returns GuidanceOnlyRecipe for non-verified installers
             from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
-            from audiagentic.components.memory.hindsight.recipes import (
-                GuidanceOnlyRecipe,
+            from audiagentic.components.memory.hindsight.recipes import GuidanceOnlyRecipe
+            from audiagentic.components.memory.hindsight.strategies import (
                 build_hindsight_recipe,
             )
 
