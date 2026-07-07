@@ -223,6 +223,7 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
     One profile per process; switching profiles mid-process raises an error (CP05).
     """
     global _active_profile_on_first_register
+    from audiagentic.foundation.components import registry as component_registry
 
     # CP05: Guard against cross-profile pollution
     from audiagentic.foundation.paths.names import get_active_profile
@@ -257,8 +258,9 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
         # Profiles are project-scoped (.audiagentic/<profile>/components/), so
         # they need the real project root — walk up from cwd to the marker
         # directory, matching how the rest of the app locates the project.
-        # Known limitation: launching with --project X from outside X resolves
-        # the profile against cwd's project, not X (tracked on CP03 reviews).
+        # Resolved CP13: launcher propagates AUDIAGENTIC_REPO_ROOT when --project
+        # is given, so find_project_root() returns the correct root. If the env var
+        # is not set (direct invocation outside launcher), falls back to cwd walk-up.
         project_root = find_project_root() or Path.cwd()
         profile_dir = resolve_profile_component_config_dir(
             project_root.resolve(), current_profile
@@ -274,31 +276,35 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
     # same-layer vs cross-layer duplicates.
     descriptor_layers: list[tuple[ComponentDescriptor, str]] = []
     feature_descriptor_types = {"feature", "implementation", "binding"}
-    for target in targets:
-        resolved_target = str(target.resolve())
-        for path in sorted(target.resolve().glob("*.yaml")):
-            data = load_yaml_file(path)
-            if data.get("type") in feature_descriptor_types:
-                from audiagentic.foundation.features.loader import (
-                    register_from_yaml as register_feature_from_yaml,
-                )
+    component_registry._set_default_loading(True)
+    try:
+        for target in targets:
+            resolved_target = str(target.resolve())
+            for path in sorted(target.resolve().glob("*.yaml")):
+                data = load_yaml_file(path)
+                if data.get("type") in feature_descriptor_types:
+                    from audiagentic.foundation.features.loader import (
+                        register_from_yaml as register_feature_from_yaml,
+                    )
 
-                register_feature_from_yaml(path)
-                continue
-            desc = register_from_yaml(path)
-            descriptors.append(desc)
-            descriptor_layers.append((desc, resolved_target))
+                    register_feature_from_yaml(path)
+                    continue
+                desc = register_from_yaml(path)
+                descriptors.append(desc)
+                descriptor_layers.append((desc, resolved_target))
 
-        for path in sorted(target.resolve().glob("**/*.yaml")):
-            if path.parent == target.resolve():
-                continue
-            data = load_yaml_file(path)
-            if data.get("type") in feature_descriptor_types:
-                from audiagentic.foundation.features.loader import (
-                    register_from_yaml as register_feature_from_yaml,
-                )
+            for path in sorted(target.resolve().glob("**/*.yaml")):
+                if path.parent == target.resolve():
+                    continue
+                data = load_yaml_file(path)
+                if data.get("type") in feature_descriptor_types:
+                    from audiagentic.foundation.features.loader import (
+                        register_from_yaml as register_feature_from_yaml,
+                    )
 
-                register_feature_from_yaml(path)
+                    register_feature_from_yaml(path)
+    finally:
+        component_registry._set_default_loading(False)
 
     # Validate data-driven constraints (duplicates, deps) before observers import.
     _validate_descriptors_data(descriptor_layers)
