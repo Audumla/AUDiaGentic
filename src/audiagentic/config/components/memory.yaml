@@ -59,6 +59,18 @@ contributions:
         - When memory is configured, the active backend's tools are available for
           long-term memory operations (recall, reflect, retain).
 
+  - id: hindsight/memory-usage
+    owner: memory
+    title: Memory usage guidance
+    preferred-targets:
+      - instruction
+    content:
+      body: |
+        Use Hindsight memory when prior project context may help.
+        - Recall before design/history questions or non-trivial work.
+        - Retain durable decisions, user preferences, architecture constraints, and outcomes.
+        - Do not retain secrets, credentials, or transient noise.
+
 # v1 decision: no ag-memory activity server. Memory persists backend config only.
 # Backend-specific projection/reconcile is owned by the active implementation
 # package and uses generic provider seams. An activity server (e.g.

@@ -9,9 +9,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.source_control.probes import gh_mcp_available
 from audiagentic.foundation.components import is_enabled, is_installed
+from audiagentic.foundation.components.dependencies import (
+    build_dependency_probes,
+)
 from audiagentic.foundation.components.hooks import ComponentStatusPayload
+from audiagentic.foundation.components.loader import component_yaml_path
+from audiagentic.foundation.io import load_yaml_file
 from audiagentic.foundation.toolchains.detect import tool_available
 
 _COMPONENT_ID = "source-control"
@@ -19,11 +23,18 @@ _COMPONENT_ID = "source-control"
 SOURCE_CONTROL_DEPENDENCY_IDS = ["git", "gh", "gh-mcp", "uv"]
 
 
+def _load_probes() -> dict[str, Any]:
+    cfg = load_yaml_file(component_yaml_path(_COMPONENT_ID))
+    dep_cfgs = cfg.get("dependencies") or {}
+    return build_dependency_probes(dep_cfgs)
+
+
 def detect_availability() -> dict[str, Any]:
+    probes = _load_probes()
     git_ok = tool_available("git")
     uvx_ok = tool_available("uvx")
     gh_ok = tool_available("gh")
-    gh_mcp_ok = gh_mcp_available() if gh_ok else False
+    gh_mcp_ok = probes.get("gh-mcp", lambda: False)()
 
     return {
         "git": git_ok,

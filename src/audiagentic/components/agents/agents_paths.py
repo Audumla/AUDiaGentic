@@ -25,3 +25,8 @@ def gateway_request_dir(project_root: Path, request_id: str) -> Path:
 def gateway_request_path(project_root: Path, request_id: str) -> Path:
     """Return the record.json path for a gateway request."""
     return gateway_request_dir(project_root, request_id) / "record.json"
+
+
+def gateway_timeline_path(project_root: Path, request_id: str) -> Path:
+    """Return the timeline.ndjson path for a gateway request."""
+    return gateway_request_dir(project_root, request_id) / "timeline.ndjson"

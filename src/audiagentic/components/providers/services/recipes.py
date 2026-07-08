@@ -4,8 +4,15 @@ Defines the types and registry for provider-scoped recipes that manage
 capability integrations (MCP servers, hooks, plugins, language servers, etc.)
 per provider + capability + backend.
 
-These types compose generic foundation/toolchain primitives (ShellStep,
-ConfigPatcher, probes, artifact registry) into a provider-specific lifecycle.
+Layering (SL11/SL12/SL13):
+- foundation/toolchains = lifecycle contract (ProvisioningRecipe, RecipeResult)
+  + reusable install patterns (recipe_patterns: DeclaredStepRecipe,
+  NoAutomationRecipe). Domain-neutral; returns plain RecipeResult.
+- this module (providers/services) = the registry + the provenance overlay
+  (ProviderCapabilityRecipe.to_result stamps source/action_needed once at the
+  dispatch boundary).
+- a capability (e.g. memory/hindsight) = data + thin wiring that binds a
+  pattern to its payloads.
 """
 from __future__ import annotations
 
@@ -192,10 +199,24 @@ class ProviderCapabilityRecipe(ProvisioningRecipe):
             status=base.status,
             error=base.error,
             details=dict(base.details),
+            # source_url/source_date are provider-only fields absent from a
+            # plain RecipeResult, so they stay defensive; action_needed is a
+            # universal RecipeResult field (SL11) and is read directly.
             source_url=getattr(base, "source_url", "") or self.source_url,
             source_date=getattr(base, "source_date", "") or self.source_date,
-            action_needed=getattr(base, "action_needed", ""),
+            action_needed=base.action_needed,
         )
+
+
+def _stamped(recipe: Any, result: Any) -> Any:
+    """Route a primitive result through the recipe's provenance stamp.
+
+    Recipes overlay provenance in ``to_result``; this is the single boundary
+    where primitive results (probe/prune/dry_run) get stamped, so the
+    primitives themselves can return plain RecipeResult (SL11).
+    """
+    to_result = getattr(recipe, "to_result", None)
+    return to_result(result) if callable(to_result) else result
 
 
 class ProviderRecipeRegistry:
@@ -258,12 +279,17 @@ class ProviderRecipeRegistry:
         backend_id: str | None = None,
         context: dict[str, Any] | None = None,
     ) -> ProviderRecipeResult | None:
-        """Get status for a recipe without mutating anything."""
+        """Get status for a recipe without mutating anything.
+
+        The primitive result is routed through the recipe's ``to_result`` hook
+        so provenance stamping happens once at this boundary rather than inside
+        every ``probe`` implementation (SL11).
+        """
         recipe = self.get(provider_id, capability_id, backend_id)
         if recipe is None:
             return None
         ctx = context or {}
-        return recipe.probe(ctx)
+        return _stamped(recipe, recipe.probe(ctx))
 
     def install(
         self,
@@ -351,7 +377,7 @@ class ProviderRecipeRegistry:
             return None
         ctx = context or {}
         if hasattr(recipe, "dry_run"):
-            return recipe.dry_run(ctx)
+            return _stamped(recipe, recipe.dry_run(ctx))
         return ProviderRecipeResult.ok(
             RecipeState.ABSENT,
             status="would install (dry-run)",
@@ -373,7 +399,7 @@ class ProviderRecipeRegistry:
         ctx = context or {}
         pruned = recipe.prune(ctx)
         if not pruned.success:
-            return pruned
+            return _stamped(recipe, pruned)
         return self.install(provider_id, capability_id, backend_id, ctx)
 
 

@@ -24,6 +24,10 @@ standards:
     title: Creating Components
     path: docs/standards/CREATING_A_COMPONENT.md
     description: 'Guide for adding new Components to Audiagentic: describes the concepts of implementations, descriptors, MCP servers, features and options'
+  - id: observability-standards
+    title: Observability Standards
+    path: docs/standards/OBSERVABILITY_STANDARDS.md
+    description: 'Durable resource timelines, event/log roles, and redaction expectations'
 
 files:
   - path: docs/planning

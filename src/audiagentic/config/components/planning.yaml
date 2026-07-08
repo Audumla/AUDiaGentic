@@ -58,7 +58,8 @@ mcp-servers:
       plan_create_item: >
         Create a new plan item. Required: plan, title.
         Optional: priority (P0/P1/P2/P3/HIGH/MEDIUM), complexity (simple/mid/complex),
-        order, validate_first, description, steps, files, validation, effort_risk, notes.
+        order, validate_first, created-by/created_by/creator_id, description,
+        steps, files, validation, effort_risk, notes.
         ID is auto-generated — do not supply it.
         Returns {id, title, plan, path} for the created item.
       plan_list_groups: >
@@ -80,10 +81,12 @@ mcp-servers:
       plan_update_item: >
         Update frontmatter fields (priority, complexity, order, etc.) or body sections
         (title, description, steps, files, validation, effort_risk, notes) of an existing item.
+        Accepts created-by/created_by/creator_id for creator identity.
       plan_delete_item: Permanently delete a plan item by ID.
       plan_create_review: >
         Create a new review linked to a plan item. Required: review-of (parent item ID), title.
-        Optional: notes, findings, conclusion, reviewed-by. ID is auto-generated (e.g. RV01).
+        Optional: notes, findings, conclusion, reviewed-by/reviewed_by/reviewer_id.
+        ID is auto-generated (e.g. RV01).
         Returns {id, title, review-of, plan, path}.
       plan_list_reviews: >
         List reviews. state: 'created'/'considered' for active, 'closed' for completed (omit for all).
@@ -99,6 +102,7 @@ mcp-servers:
       plan_update_review: >
         Update frontmatter fields (reviewed-by, reviewed-at) or body sections
         (title, notes, findings, conclusion) of an existing review.
+        Accepts reviewed_by/reviewer_id aliases for reviewer identity.
         Returns {id, path}.
       plan_delete_review: Permanently delete a review. Returns {id}.
 
@@ -143,4 +147,5 @@ contributions:
         - complexity: simple / mid / complex (default simple)
         - order: integer sort key (default 0)
         - validate_first: true if validation steps must precede implementation (default true)
+        - created-by / created_by / creator_id: creator identity for the item
         - description, steps, files, validation, effort_risk, notes: body section content
