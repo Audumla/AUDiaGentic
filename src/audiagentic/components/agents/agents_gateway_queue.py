@@ -214,12 +214,34 @@ class GatewayQueueManager:
                     "kind": "agents",
                 }},
             )
+            store.record_gateway_timeline(
+                project_root,
+                request_id,
+                "queue.rejected",
+                state=rejected["state"],
+                attributes={
+                    "agent-profile-id": agent_profile_id,
+                    "queue-max-size": pq.queue_max_size,
+                    "correlation_id": (rejected.get("metadata") or {}).get("correlation_id"),
+                },
+            )
             _publish_lifecycle_event("rejected", rejected)
             return rejected
 
         logger.info(
             "gateway request queued",
             extra={"request-id": request_id, "agent-profile-id": agent_profile_id, "pending": pending_count},
+        )
+        store.record_gateway_timeline(
+            project_root,
+            request_id,
+            "queue.queued",
+            state=record["state"],
+            attributes={
+                "agent-profile-id": agent_profile_id,
+                "pending": pending_count,
+                "correlation_id": (record.get("metadata") or {}).get("correlation_id"),
+            },
         )
         _publish_lifecycle_event("queued", record)
 
@@ -262,6 +284,7 @@ class GatewayQueueManager:
             if request_id in pq.cancel_requested:
                 logger.info("gateway request cancelled before dispatch", extra={"request-id": request_id})
                 cancelled = store.transition_record(project_root, request_id, "cancelled")
+                store.record_gateway_timeline(project_root, request_id, "queue.cancelled-before-dispatch", state="cancelled")
                 _publish_lifecycle_event("cancelled", cancelled)
                 return
             record = store.transition_record(
@@ -269,6 +292,16 @@ class GatewayQueueManager:
                 updates={"started-at": now_iso_z()},
             )
             logger.info("gateway request running", extra={"request-id": request_id, "agent-profile-id": agent_profile_id})
+            store.record_gateway_timeline(
+                project_root,
+                request_id,
+                "queue.started",
+                state=record["state"],
+                attributes={
+                    "agent-profile-id": agent_profile_id,
+                    "correlation_id": (record.get("metadata") or {}).get("correlation_id"),
+                },
+            )
             _publish_lifecycle_event("started", record)
             try:
                 result = runner(project_root, record)
@@ -276,6 +309,17 @@ class GatewayQueueManager:
                     "gateway request finished",
                     extra={"request-id": request_id, "state": result.get("state") if isinstance(result, dict) else None},
                 )
+                if isinstance(result, dict):
+                    store.record_gateway_timeline(
+                        project_root,
+                        request_id,
+                        "queue.finished",
+                        state=result.get("state"),
+                        attributes={
+                            "agent-profile-id": agent_profile_id,
+                            "correlation_id": (result.get("metadata") or {}).get("correlation_id"),
+                        },
+                    )
                 if isinstance(result, dict) and result.get("state") in ("completed", "failed", "cancelled"):
                     _publish_lifecycle_event(result["state"], result)
             except AudiaGenticError as exc:

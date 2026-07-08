@@ -11,8 +11,10 @@ import pytest
 
 from audiagentic.components.agents import agents_gateway_queue as queue_mod
 from audiagentic.components.agents import agents_gateway_store as store
+from audiagentic.components.agents.agents_paths import gateway_timeline_path
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event import get_bus, reset_bus
+from audiagentic.foundation.io import load_ndjson
 from audiagentic.foundation.time import now_iso_z
 
 
@@ -326,6 +328,10 @@ def test_wait_returns_completed_result(tmp_path: Path):
     result = manager.wait(tmp_path, record["request-id"], timeout_seconds=5)
     assert result["state"] == "completed"
     assert result["output"] == "done"
+    events = [entry["event"] for entry in load_ndjson(gateway_timeline_path(tmp_path, record["request-id"]))]
+    assert "queue.queued" in events
+    assert "queue.started" in events
+    assert "queue.finished" in events
 
 
 def test_failing_runner_transitions_to_failed(tmp_path: Path):

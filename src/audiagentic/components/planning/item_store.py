@@ -73,7 +73,7 @@ ITEM_SECTION_HEADING: dict[str, str] = {
     "notes": "Notes",
 }
 HEADING_TO_FIELD: dict[str, str] = {v: k for k, v in ITEM_SECTION_HEADING.items()}
-FRONTMATTER_FIELDS = {"id", "order", "plan", "state", "validate-first", "priority", "complexity"}
+FRONTMATTER_FIELDS = {"id", "order", "plan", "state", "validate-first", "priority", "complexity", "created-by"}
 REVIEW_SECTIONS: dict[str, str] = {"notes": "Notes", "findings": "Findings", "conclusion": "Conclusion"}
 
 _ITEM_ID_RE = re.compile(r"^([A-Z]+)(\d+)$", re.IGNORECASE)

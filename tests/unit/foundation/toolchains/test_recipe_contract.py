@@ -285,3 +285,56 @@ def test_run_steps_helper_maps_sequence_result():
     )
     assert not bad.success
     assert bad.error is not None and bad.error.startswith("install failed:")
+
+
+def test_recipe_result_carries_action_needed():
+    ok = RecipeResult.ok(
+        RecipeState.ABSENT, status="skipped", action_needed="run installer manually"
+    )
+    assert ok.action_needed == "run installer manually"
+
+    bad = RecipeResult.fail("blocked", action_needed="verify source first")
+    assert bad.action_needed == "verify source first"
+
+    # default is empty, never None
+    assert RecipeResult.ok(RecipeState.VERIFIED).action_needed == ""
+
+
+def test_action_needed_survives_orchestration_replace_paths():
+    """The provision/teardown replace() adjustments must preserve action_needed."""
+
+    class _GuidedRecipe(_Recipe):
+        def install(self, context):
+            self.calls.append("install")
+            return RecipeResult.ok(
+                RecipeState.INSTALLING, artifacts=["bin"], action_needed="restart shell"
+            )
+
+        def configure(self, context):
+            self.calls.append("configure")
+            # fail so provision returns the install/configure result via replace()
+            return RecipeResult.fail("configure blocked", action_needed="set API key")
+
+    r = _GuidedRecipe(fail_at="configure")
+    result = r.provision({})
+    assert not result.success
+    # replace(result, artifacts_owned=owned) must not drop action_needed
+    assert result.action_needed == "set API key"
+    assert "bin" in result.artifacts_owned
+
+
+def test_action_needed_propagates_through_verify_error_replace():
+    """verify-failure terminal replace() (state->ERROR) keeps action_needed."""
+
+    class _VerifyGuided(_Recipe):
+        def verify(self, context):
+            self.calls.append("verify")
+            return RecipeResult.fail(
+                "not verified", state=RecipeState.ABSENT, action_needed="check logs"
+            )
+
+    r = _VerifyGuided()
+    result = r.provision({})
+    assert not result.success
+    assert result.state is RecipeState.ERROR  # terminal replace applied
+    assert result.action_needed == "check logs"  # and preserved

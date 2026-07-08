@@ -1,6 +1,7 @@
 """Tests for Hindsight strategy resolver and builder (HM03)."""
 from __future__ import annotations
 
+from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
 from audiagentic.components.memory.hindsight.matrix import (
     HindsightRecipeRow,
     get_matrix_rows,
@@ -9,11 +10,11 @@ from audiagentic.components.memory.hindsight.matrix import (
 )
 from audiagentic.components.memory.hindsight.recipes import GuidanceOnlyRecipe
 from audiagentic.components.memory.hindsight.strategies import (
+    build_hindsight_recipe,
     resolve_hindsight_strategy,
 )
-from audiagentic.components.providers.services.recipes import (
-    ProviderRecipeKind,
-)
+from audiagentic.components.providers.services.recipes import ProviderRecipeKind
+from audiagentic.foundation.toolchains.recipe_contract import RecipeState
 
 
 class TestResolverPrecedence:
@@ -86,8 +87,6 @@ class TestSourceGate:
             source_status="unconfirmed",
             audia_action="call_official_installer",
         )
-        from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
-        from audiagentic.components.memory.hindsight.strategies import build_hindsight_recipe
 
         backend = HindsightBackendConfig(base_url="http://test")
         recipe = build_hindsight_recipe(row, backend, "test")
@@ -98,8 +97,6 @@ class TestBuilder:
     """test_builder: produces correct recipe types for each strategy kind."""
 
     def test_builder_mcp_config_creates_adapter(self):
-        from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
-        from audiagentic.components.memory.hindsight.strategies import build_hindsight_recipe
 
         row = HindsightRecipeRow(
             provider_id="gemini",
@@ -115,8 +112,6 @@ class TestBuilder:
         assert recipe.provider_id == "gemini"
 
     def test_builder_guidance_only(self):
-        from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
-        from audiagentic.components.memory.hindsight.strategies import build_hindsight_recipe
 
         row = HindsightRecipeRow(
             provider_id="test",
@@ -127,14 +122,15 @@ class TestBuilder:
         )
         backend = HindsightBackendConfig(base_url="http://test")
         recipe = build_hindsight_recipe(row, backend, "test")
-        assert isinstance(recipe, GuidanceOnlyRecipe)
+        # GUIDANCE_ONLY is now assembled via RecipeSpec; verify behaviour, not class
+        result = recipe.probe({})
+        assert result.state == RecipeState.ABSENT
 
 
 class TestParameterizeCommand:
     """test_parameterize_command: replaces brace-delimited placeholders with backend values."""
 
     def test_replaces_url(self):
-        from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
         from audiagentic.components.memory.hindsight.recipes import _parameterize_command
 
         backend = HindsightBackendConfig(base_url="http://localhost:8888")
@@ -143,7 +139,6 @@ class TestParameterizeCommand:
         assert "http://localhost:8888" in result
 
     def test_replaces_token_and_key(self):
-        from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
         from audiagentic.components.memory.hindsight.recipes import _parameterize_command
 
         backend = HindsightBackendConfig(
@@ -155,7 +150,6 @@ class TestParameterizeCommand:
         assert "sk-test-key" in result
 
     def test_replaces_bank_id(self):
-        from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
         from audiagentic.components.memory.hindsight.recipes import _parameterize_command
 
         backend = HindsightBackendConfig(
@@ -168,7 +162,6 @@ class TestParameterizeCommand:
         assert "my-bank" in result
 
     def test_empty_command_returns_empty(self):
-        from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
         from audiagentic.components.memory.hindsight.recipes import _parameterize_command
 
         backend = HindsightBackendConfig(base_url="http://localhost:8888")
@@ -177,7 +170,6 @@ class TestParameterizeCommand:
 
     def test_literal_ident_not_corrupted(self):
         """Brace-delimited format does not corrupt commands containing bare words like IDENT."""
-        from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
         from audiagentic.components.memory.hindsight.recipes import _parameterize_command
 
         backend = HindsightBackendConfig(
@@ -226,15 +218,15 @@ class TestHM10Validation:
 
         assert not hasattr(mcp_recipe, "_desired_mcp_entry")
 
-    def test_duplicate_prune_block_removed(self):
-        """mcp_recipe.py has no unreachable code after prune's early returns."""
-        import inspect
+    def test_mcp_recipe_module_has_no_recipe_classes(self):
+        """SL13 A4: mcp_recipe.py reduced to payload builders; no recipe classes remain."""
+        from audiagentic.components.memory.hindsight import mcp_recipe
 
-        from audiagentic.components.memory.hindsight.mcp_recipe import HindsightMcpRecipe
-
-        source = inspect.getsource(HindsightMcpRecipe.prune)
-        prune_calls = source.count("ConfigPatcher(self.target.config_path).remove_key")
-        assert prune_calls == 1, f"Expected exactly 1 remove_key call, found {prune_calls}"
+        assert not hasattr(mcp_recipe, "HindsightMcpRecipe")
+        assert not hasattr(mcp_recipe, "HindsightTarget")
+        # Only payload builder functions should be public
+        assert hasattr(mcp_recipe, "build_hindsight_entry")
+        assert hasattr(mcp_recipe, "build_hindsight_mcp_entry")
 
     def test_invalid_recipe_kind_fallback(self):
         """Invalid recipe kind falls back to GUIDANCE_ONLY without raising."""
@@ -278,7 +270,6 @@ class TestHM10Validation:
 
     def test_build_hindsight_mcp_entry_stdio(self):
         """McpServerEntry built directly from backend for stdio transport."""
-        from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
         from audiagentic.components.memory.hindsight.mcp_recipe import build_hindsight_mcp_entry
 
         backend = HindsightBackendConfig(
@@ -295,7 +286,6 @@ class TestHM10Validation:
 
     def test_build_hindsight_mcp_entry_http(self):
         """McpServerEntry built directly from backend for HTTP transport."""
-        from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
         from audiagentic.components.memory.hindsight.mcp_recipe import build_hindsight_mcp_entry
 
         backend = HindsightBackendConfig(
