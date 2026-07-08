@@ -19,10 +19,12 @@ from typing import Any
 from audiagentic.components.agents.agents_paths import (
     gateway_request_path,
     gateway_root,
+    gateway_timeline_path,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 from audiagentic.foundation.io import atomic_write_json
+from audiagentic.foundation.observability import record_timeline_event
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.workflow import (
     is_known_state,
@@ -41,6 +43,29 @@ _REDACTED_ERROR_KEYS = {"code", "message", "kind"}
 
 _request_locks: dict[str, threading.Lock] = {}
 _request_locks_guard = threading.Lock()
+
+_COMPONENT_ID = "agents"
+_RESOURCE_KIND = "agent-llm-gateway-request"
+
+
+def record_gateway_timeline(
+    project_root: Path,
+    request_id: str,
+    event: str,
+    *,
+    state: str | None = None,
+    attributes: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return record_timeline_event(
+        gateway_timeline_path(project_root, request_id),
+        component=_COMPONENT_ID,
+        resource_kind=_RESOURCE_KIND,
+        resource_id=request_id,
+        event=event,
+        state=state,
+        attributes=attributes,
+        correlation_id=(attributes or {}).get("correlation_id") or (attributes or {}).get("correlation-id"),
+    )
 
 
 def _request_lock(request_id: str) -> threading.Lock:
@@ -278,6 +303,17 @@ def transition_record(
             for key, value in updates.items():
                 updated[key.replace("_", "-")] = _redact_error(value) if key in ("error",) else value
         write_record(project_root, updated)
+        record_gateway_timeline(
+            project_root,
+            request_id,
+            "state.changed",
+            state=new_state,
+            attributes={
+                "from": record["state"],
+                "to": new_state,
+                "updated-keys": sorted((updates or {}).keys()),
+            },
+        )
         return updated
 
 
@@ -297,6 +333,12 @@ def mark_cancel_requested(project_root: Path, request_id: str) -> dict[str, Any]
         updated["cancel-requested"] = True
         updated["updated-at"] = now_iso_z()
         write_record(project_root, updated)
+        record_gateway_timeline(
+            project_root,
+            request_id,
+            "cancel.requested",
+            state=updated["state"],
+        )
         return updated
 
 
@@ -329,4 +371,18 @@ def append_attempt(
         updated["attempts"] = attempts
         updated["updated-at"] = now_iso_z()
         write_record(project_root, updated)
+        record_gateway_timeline(
+            project_root,
+            request_id,
+            "attempt.recorded",
+            state=record["state"],
+            attributes={
+                "agent-profile-id": agent_profile_id,
+                "provider-id": provider_id,
+                "model-id": model_id,
+                "attempt-state": state,
+                "attempt-count": len(attempts),
+                "error": _redact_error(error),
+            },
+        )
         return updated

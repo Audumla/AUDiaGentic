@@ -16,7 +16,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.planning import item_store, planning_paths
+from audiagentic.components.planning import events, item_store, planning_paths
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.workflow.frontmatter import (
     build_sectioned_body,
@@ -41,7 +41,7 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
     """Create a new review linked to a plan item.
 
     Required: review-of (parent item ID), title.
-    Optional: notes, findings, conclusion, reviewed-by.
+    Optional: notes, findings, conclusion, reviewed-by/reviewed_by/reviewer_id.
     Parent item may live in active/ or completed/.
     ID is auto-generated (e.g. RV01).
     Returns {id, title, review-of, plan, path}
@@ -83,7 +83,7 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
         "review-of": parent_path.stem,
         "plan": parent_fm.get("plan", item_store.plan_frontmatter_value(slug)),
         "state": "created",
-        "reviewed-by": review.get("reviewed-by", ""),
+        "reviewed-by": review.get("reviewed-by") or review.get("reviewed_by") or review.get("reviewer_id") or "",
         "reviewed-at": review.get("reviewed-at", ""),
     }
     sections = {k: review.get(k, "") for k in item_store.REVIEW_SECTIONS}
@@ -99,14 +99,23 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(item_store.render_item(fm, body), encoding="utf-8")
 
-    logger.info("review created", extra={"review_id": review_id, "review_of": parent_id, "plan": slug})
-    return {
+    payload = {
         "id": review_id,
         "title": title,
         "review-of": parent_id,
         "plan": slug,
+        "state": "created",
+        "reviewed-by": fm.get("reviewed-by", ""),
         "path": str(target.relative_to(project_root)),
     }
+    events.publish_planning_event(
+        events.PLANNING_REVIEW_CREATED,
+        payload,
+        subject_kind="planning-review",
+        subject_id=review_id,
+    )
+    logger.info("review created", extra={"review_id": review_id, "review_of": parent_id, "plan": slug})
+    return {key: payload[key] for key in ("id", "title", "review-of", "plan", "path")}
 
 
 def list_reviews(
@@ -224,7 +233,8 @@ def set_review_state(project_root: Path, review_id: str, new_state: str) -> dict
     path = item_store.require_item(project_root, review_id)
     fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_review(fm, review_id, "VAL-PLN-013")
-    item_store.check_transition("review", fm.get("state", "created"), new_state)
+    old_state = fm.get("state", "created")
+    item_store.check_transition("review", old_state, new_state)
 
     slug = path.parent.parent.parent.name
     parent_id = path.parent.name
@@ -246,8 +256,22 @@ def set_review_state(project_root: Path, review_id: str, new_state: str) -> dict
 
     item_store.cleanup_empty_plan_dirs(project_root, slug, [source_state_dir])
 
+    result = {"id": review_id, "state": new_state, "path": str(target.relative_to(project_root))}
+    events.publish_planning_event(
+        events.PLANNING_REVIEW_STATE_CHANGED,
+        {
+            **result,
+            "review-of": parent_id,
+            "plan": slug,
+            "old_state": old_state,
+            "new_state": new_state,
+            "reviewed-by": fm.get("reviewed-by", ""),
+        },
+        subject_kind="planning-review",
+        subject_id=review_id,
+    )
     logger.info("review state changed", extra={"review_id": review_id, "state": new_state})
-    return {"id": review_id, "state": new_state, "path": str(target.relative_to(project_root))}
+    return result
 
 
 def update_review(project_root: Path, review_id: str, updates: dict[str, Any]) -> dict[str, Any]:
@@ -265,8 +289,9 @@ def update_review(project_root: Path, review_id: str, updates: dict[str, Any]) -
     sections = _parse_review_sections(body)
 
     for key, value in updates.items():
-        if key in ("reviewed-by", "reviewed-at", "review-of", "review_of", "id", "plan", "state"):
-            fm[key] = value
+        frontmatter_key = "reviewed-by" if key in ("reviewed_by", "reviewer_id") else key
+        if frontmatter_key in ("reviewed-by", "reviewed-at", "review-of", "review_of", "id", "plan", "state"):
+            fm[frontmatter_key] = value
         elif key in item_store.REVIEW_SECTIONS:
             sections[key] = value
 
@@ -276,8 +301,21 @@ def update_review(project_root: Path, review_id: str, updates: dict[str, Any]) -
     new_body = build_sectioned_body(title, sections, item_store.REVIEW_SECTIONS)
     path.write_text(item_store.render_item(fm, new_body), encoding="utf-8")
 
+    result = {"id": review_id, "path": str(path.relative_to(project_root))}
+    events.publish_planning_event(
+        events.PLANNING_REVIEW_UPDATED,
+        {
+            **result,
+            "review-of": fm.get("review-of", ""),
+            "plan": fm.get("plan", ""),
+            "updated_keys": list(updates.keys()),
+            "reviewed-by": fm.get("reviewed-by", ""),
+        },
+        subject_kind="planning-review",
+        subject_id=review_id,
+    )
     logger.info("review updated", extra={"review_id": review_id})
-    return {"id": review_id, "path": str(path.relative_to(project_root))}
+    return result
 
 
 def delete_review(project_root: Path, review_id: str) -> dict[str, Any]:
@@ -287,7 +325,21 @@ def delete_review(project_root: Path, review_id: str) -> dict[str, Any]:
     item_store.ensure_review(fm, review_id, "VAL-PLN-024")
     slug = path.parent.parent.parent.name
     source_state_dir = path.parent.parent.parent.parent
+    payload = {
+        "id": review_id,
+        "review-of": fm.get("review-of", ""),
+        "plan": fm.get("plan", item_store.plan_frontmatter_value(slug)),
+        "state": fm.get("state", "created"),
+        "reviewed-by": fm.get("reviewed-by", ""),
+        "path": str(path.relative_to(project_root)),
+    }
     path.unlink()
+    events.publish_planning_event(
+        events.PLANNING_REVIEW_DELETED,
+        payload,
+        subject_kind="planning-review",
+        subject_id=review_id,
+    )
     logger.info("review deleted", extra={"review_id": review_id})
     item_store.cleanup_empty_plan_dirs(project_root, slug, [source_state_dir])
     return {"id": review_id}

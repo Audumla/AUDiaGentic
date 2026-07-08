@@ -290,3 +290,89 @@ def remove_mcp_entry(
         "existed": change.existed,
         "operation": change.operation,
     }
+
+
+def get_managed_entry_status(
+    provider_id: str,
+    project_root: Path,
+    server_name: str,
+    desired_entry: McpServerEntry,
+) -> dict[str, Any]:
+    """Read the full MCP entry for *server_name* and compare against *desired_entry*.
+
+    Returns a dict with all keys always present:
+
+    - ``ok`` (bool): descriptor resolved and reader succeeded.
+    - ``present`` (bool): an entry named *server_name* exists in config.
+    - ``matches`` (bool): present AND equal to *desired_entry*.
+    - ``config_path`` (str): resolved config file path (or "" if no mcp_config).
+    - ``server_name`` (str): the passed server name.
+    - ``actual_entry`` (McpServerEntry | None): the entry as read, or None.
+    - ``desired_entry``: the passed desired entry.
+    - ``reason`` (str): one of 'no mcp_config', 'read failed', 'absent', 'stale', 'match'.
+
+    When the descriptor has no ``mcp_config``, returns ok=False with reason='no mcp_config'
+    so callers can treat the entry as ABSENT without crashing.
+    """
+    _base: dict[str, Any] = {
+        "server_name": server_name,
+        "desired_entry": desired_entry,
+        "actual_entry": None,
+    }
+
+    descriptor = get_descriptor(provider_id)
+    if descriptor is None or descriptor.mcp_config is None:
+        return {
+            **_base,
+            "ok": False,
+            "present": False,
+            "matches": False,
+            "config_path": "",
+            "reason": "no mcp_config",
+        }
+
+    spec = descriptor.mcp_config
+    config_path = _resolve_mcp_path(spec, project_root)
+
+    try:
+        entries = spec.reader(config_path)
+    except Exception:
+        return {
+            **_base,
+            "ok": False,
+            "present": False,
+            "matches": False,
+            "config_path": str(config_path),
+            "reason": "read failed",
+        }
+
+    actual = entries.get(server_name)
+    if actual is None:
+        return {
+            **_base,
+            "ok": True,
+            "present": False,
+            "matches": False,
+            "config_path": str(config_path),
+            "reason": "absent",
+        }
+
+    _base["actual_entry"] = actual
+    if actual == desired_entry:
+        return {
+            **_base,
+            "ok": True,
+            "present": True,
+            "matches": True,
+            "config_path": str(config_path),
+            "reason": "match",
+        }
+
+    return {
+        **_base,
+        "ok": True,
+        "present": True,
+        "matches": False,
+        "config_path": str(config_path),
+        "reason": "stale",
+    }

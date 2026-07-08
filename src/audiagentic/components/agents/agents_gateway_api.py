@@ -65,6 +65,20 @@ def submit_llm_request(
         metadata=metadata,
     )
     store.write_record(project_root, record)
+    store.record_gateway_timeline(
+        project_root,
+        record["request-id"],
+        "request.created",
+        state=record["state"],
+        attributes={
+            "agent-profile-id": resolved_profile_id,
+            "mode": mode,
+            "source": source,
+            "fallback-profile-ids": resolved_fallback_ids,
+            "correlation_id": (metadata or {}).get("correlation_id"),
+            "subject": (metadata or {}).get("subject"),
+        },
+    )
     record = _QUEUE_MANAGER.enqueue(project_root, record, params, dispatch.dispatch_request)
 
     if mode == "blocking":

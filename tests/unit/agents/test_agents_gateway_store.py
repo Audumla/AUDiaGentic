@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 
 from audiagentic.components.agents import agents_gateway_store as store
+from audiagentic.components.agents.agents_paths import gateway_timeline_path
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.io import load_ndjson
 
 
 def test_build_record_defaults(tmp_path: Path) -> None:
@@ -93,6 +95,12 @@ def test_transition_record_queued_to_running(tmp_path: Path) -> None:
     assert updated["state"] == "running"
     assert updated["provider-id"] == "local-openai"
     assert updated["started-at"] == "2026-01-01T00:00:00Z"
+    timeline = load_ndjson(gateway_timeline_path(tmp_path, record["request-id"]))
+    assert timeline[-1]["event"] == "state.changed"
+    assert "correlation-id" in timeline[-1]
+    assert timeline[-1]["state"] == "running"
+    assert timeline[-1]["attributes"]["from"] == "queued"
+    assert timeline[-1]["attributes"]["to"] == "running"
 
 
 def test_transition_record_illegal_transition_raises(tmp_path: Path) -> None:
@@ -156,6 +164,8 @@ def test_mark_cancel_requested_persists_flag(tmp_path: Path) -> None:
     # observable independent of any in-memory queue manager state
     fetched = store.read_record(tmp_path, record["request-id"])
     assert fetched["cancel-requested"] is True
+    timeline = load_ndjson(gateway_timeline_path(tmp_path, record["request-id"]))
+    assert timeline[-1]["event"] == "cancel.requested"
 
 
 def test_mark_cancel_requested_is_idempotent(tmp_path: Path) -> None:
@@ -220,6 +230,10 @@ def test_append_attempt_does_not_change_state(tmp_path: Path) -> None:
     assert updated["state"] == "queued"
     assert len(updated["attempts"]) == 1
     assert updated["attempts"][0]["agent-profile-id"] == "default"
+    timeline = load_ndjson(gateway_timeline_path(tmp_path, record["request-id"]))
+    assert timeline[-1]["event"] == "attempt.recorded"
+    assert timeline[-1]["attributes"]["attempt-state"] == "running"
+    assert timeline[-1]["attributes"]["attempt-count"] == 1
 
 
 def test_terminal_states() -> None:

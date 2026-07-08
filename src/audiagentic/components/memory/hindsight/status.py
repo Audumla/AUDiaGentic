@@ -51,17 +51,19 @@ def build_hindsight_status(
         if status is not None:
             row = getattr(recipe, "_row", None)
             source_status = getattr(row, "source_status", "") or "unconfirmed"
+            # registry.status returns a stamped ProviderRecipeResult (SL11
+            # boundary), so provenance fields are read directly.
             results.append({
                 "provider_id": recipe.provider_id,
                 "capability_id": recipe.capability_id,
                 "kind": recipe.recipe_kind.value,
                 "state": status.state.value,
                 "status": status.status,
-                "action_needed": getattr(status, "action_needed", ""),
-                "source_url": getattr(status, "source_url", ""),
-                "source_date": getattr(status, "source_date", ""),
+                "action_needed": status.action_needed,
+                "source_url": status.source_url,
+                "source_date": status.source_date,
                 "source_status": source_status,
-                "artifacts_owned": list(getattr(status, "artifacts_owned", [])),
+                "artifacts_owned": list(status.artifacts_owned),
             })
 
     is_active = any(r["state"] == RecipeState.VERIFIED.value for r in results)

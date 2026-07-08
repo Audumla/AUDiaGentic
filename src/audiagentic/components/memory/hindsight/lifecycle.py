@@ -81,7 +81,9 @@ def _reconcile(
         if selected is not None and recipe.provider_id not in selected:
             continue
         if operation == "prune":
-            results[recipe.provider_id] = recipe.prune(ctx)
+            # Stamp the primitive result at this boundary (SL11) so prune()
+            # can return a plain RecipeResult.
+            results[recipe.provider_id] = recipe.to_result(recipe.prune(ctx))
         elif operation == "uninstall":
             result = registry.uninstall(
                 recipe.provider_id, recipe.capability_id, recipe.backend_id, ctx
