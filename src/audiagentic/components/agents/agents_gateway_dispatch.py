@@ -181,6 +181,20 @@ def _try_profile_with_retries(
     for attempt_num in range(max_attempts):
         _raise_if_cancelled(project_root, record["request-id"])
         started_at = now_iso_z()
+        store.record_gateway_timeline(
+            project_root,
+            record["request-id"],
+            "attempt.started",
+            state=store.read_record(project_root, record["request-id"])["state"],
+            attributes={
+                "agent-profile-id": agent_profile_id,
+                "provider-id": profile.get("provider_id"),
+                "model-id": profile.get("model_id"),
+                "attempt-index": attempt_num,
+                "max-attempts": max_attempts,
+                "correlation_id": (record.get("metadata") or {}).get("correlation_id"),
+            },
+        )
         try:
             result = _dispatch_one_attempt(project_root, record, agent_profile_id)
         except AudiaGenticError as exc:

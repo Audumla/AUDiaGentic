@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.planning import item_store, planning_paths
+from audiagentic.components.planning import events, item_store, planning_paths
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.workflow.frontmatter import parse_frontmatter, parse_title
 
@@ -49,6 +49,7 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
         "validate-first": item.get("validate_first", True),
         "priority": item.get("priority", "P2"),
         "complexity": item.get("complexity", "simple"),
+        "created-by": item.get("created-by") or item.get("created_by") or item.get("creator_id") or "",
     }
     sections = {k: item.get(k, "") for k in item_store.ITEM_SECTION_HEADING}
     body = item_store.build_item_body(title, sections)
@@ -58,13 +59,22 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(item_store.render_item(fm, body), encoding="utf-8")
 
-    logger.info("plan item created", extra={"item_id": item_id, "plan": slug})
-    return {
+    payload = {
         "id": item_id,
         "title": title,
         "plan": slug,
+        "state": "pending",
+        "created-by": fm.get("created-by", ""),
         "path": str(target.relative_to(project_root)),
     }
+    events.publish_planning_event(
+        events.PLANNING_ITEM_CREATED,
+        payload,
+        subject_kind="planning-item",
+        subject_id=item_id,
+    )
+    logger.info("plan item created", extra={"item_id": item_id, "plan": slug})
+    return {key: payload[key] for key in ("id", "title", "plan", "path")}
 
 
 def list_items(
@@ -111,6 +121,7 @@ def list_items(
                 "state": fm.get("state", "pending"),
                 "priority": fm.get("priority", ""),
                 "complexity": fm.get("complexity", ""),
+                "created-by": fm.get("created-by", ""),
                 "title": parse_title(body) or "",
                 "path": str(path.relative_to(project_root)),
             })
@@ -203,7 +214,8 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
 
     # Normalise the stored state to the canonical name and validate the move
     canonical_state = "pending" if new_state in item_store.ACTIVE_STATES else "completed"
-    item_store.check_transition("item", fm.get("state", "pending"), canonical_state)
+    old_state = fm.get("state", "pending")
+    item_store.check_transition("item", old_state, canonical_state)
     fm["state"] = canonical_state
 
     target = target_dir / path.parent.name / path.name
@@ -220,14 +232,28 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
     )
     item_store.cleanup_empty_plan_dirs(project_root, path.parent.name, [source_dir])
 
+    result = {"ok": True, "id": item_id, "state": canonical_state, "path": str(target.relative_to(project_root))}
+    events.publish_planning_event(
+        events.PLANNING_ITEM_STATE_CHANGED,
+        {
+            **result,
+            "old_state": old_state,
+            "new_state": canonical_state,
+            "plan": path.parent.name,
+            "created-by": fm.get("created-by", ""),
+        },
+        subject_kind="planning-item",
+        subject_id=item_id,
+    )
     logger.info("plan item state changed", extra={"item_id": item_id, "state": canonical_state})
-    return {"ok": True, "id": item_id, "state": canonical_state, "path": str(target.relative_to(project_root))}
+    return result
 
 
 def update_item(project_root: Path, item_id: str, updates: dict[str, Any]) -> dict[str, Any]:
     """Update frontmatter fields and/or body sections of a plan item.
 
-    Frontmatter keys: id, order, plan, state, validate-first, priority, complexity.
+    Frontmatter keys: id, order, plan, state, validate-first, priority,
+    complexity, created-by.
     Section keys: title, description, steps, files, validation, effort_risk, notes.
     """
     path = item_store.require_item(project_root, item_id)
@@ -236,8 +262,9 @@ def update_item(project_root: Path, item_id: str, updates: dict[str, Any]) -> di
     sections = item_store.parse_item_sections(body)
 
     for key, value in updates.items():
-        if key in item_store.FRONTMATTER_FIELDS:
-            fm[key] = value
+        frontmatter_key = "created-by" if key in ("created_by", "creator_id") else key
+        if frontmatter_key in item_store.FRONTMATTER_FIELDS:
+            fm[frontmatter_key] = value
         elif key in item_store.ITEM_SECTION_HEADING or key == "title":
             sections[key] = value
 
@@ -248,8 +275,20 @@ def update_item(project_root: Path, item_id: str, updates: dict[str, Any]) -> di
     new_body = item_store.build_item_body(title, sections)
     path.write_text(item_store.render_item(fm, new_body), encoding="utf-8")
 
+    result = {"ok": True, "id": item_id, "path": str(path.relative_to(project_root))}
+    events.publish_planning_event(
+        events.PLANNING_ITEM_UPDATED,
+        {
+            **result,
+            "plan": path.parent.name,
+            "updated_keys": list(updates.keys()),
+            "created-by": fm.get("created-by", ""),
+        },
+        subject_kind="planning-item",
+        subject_id=item_id,
+    )
     logger.info("plan item updated", extra={"item_id": item_id})
-    return {"ok": True, "id": item_id, "path": str(path.relative_to(project_root))}
+    return result
 
 
 def delete_item(project_root: Path, item_id: str) -> dict[str, Any]:
@@ -258,7 +297,20 @@ def delete_item(project_root: Path, item_id: str) -> dict[str, Any]:
     fm, _body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_not_review(fm, item_id, "VAL-PLN-021")
     slug = path.parent.name
+    payload = {
+        "id": item_id,
+        "plan": slug,
+        "state": fm.get("state", "pending"),
+        "created-by": fm.get("created-by", ""),
+        "path": str(path.relative_to(project_root)),
+    }
     path.unlink()
+    events.publish_planning_event(
+        events.PLANNING_ITEM_DELETED,
+        payload,
+        subject_kind="planning-item",
+        subject_id=item_id,
+    )
     logger.info("plan item deleted", extra={"item_id": item_id})
     state_dirs = [
         planning_paths.plans_active_dir(project_root),

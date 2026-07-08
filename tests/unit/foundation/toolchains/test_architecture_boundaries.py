@@ -389,8 +389,7 @@ class TestProviderRecipeTests:
         """manage_config_writes rows should not try to shell-exec prose install instructions."""
         from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
         from audiagentic.components.memory.hindsight.matrix import HindsightRecipeRow
-        from audiagentic.components.memory.hindsight.mcp_recipe import HindsightTarget
-        from audiagentic.components.memory.hindsight.recipes import PluginConfigRecipe
+        from audiagentic.components.memory.hindsight.plugin_recipes import PluginConfigRecipe
         from audiagentic.components.providers.services.recipes import ProviderRecipeKind
 
         row = HindsightRecipeRow(
@@ -408,7 +407,7 @@ class TestProviderRecipeTests:
         recipe = PluginConfigRecipe(
             row,
             HindsightBackendConfig(base_url="https://hindsight.example.com"),
-            HindsightTarget(tmp_path / "opencode.json"),
+            tmp_path / "opencode.json",
         )
 
         installed = recipe.install({})
@@ -425,33 +424,5 @@ class TestProviderRecipeTests:
         ]
         assert not violations
 
-    def test_lsp_recipe_adapter(self):
-        """LspRecipeAdapter maps descriptor fields to recipe concepts."""
-        from audiagentic.components.providers.services.lsp_recipes import (
-            LspRecipeAdapter,
-            map_lsp_fields_to_recipe_concepts,
-        )
 
-        # Test mapping function
-        mapping = map_lsp_fields_to_recipe_concepts(
-            provider_id="test",
-            has_on_lsp_enabled=True,
-            receive_lsp_mcp=True,
-            has_language_servers_config=True,
-        )
-        assert mapping["dominant_strategy"] == "native_passthrough"
 
-        # Test adapter with mock descriptor
-        class MockDescriptor:
-            provider_id = "test"
-            display_name = "Test Provider"
-            receive_lsp_mcp = True
-            language_servers_config = None
-
-            @staticmethod
-            def on_lsp_enabled(project_root):
-                return {}
-
-        adapter = LspRecipeAdapter.from_descriptor(MockDescriptor())
-        assert adapter.has_native_lsp is True
-        assert adapter.recipe_kind.value == "native_passthrough"

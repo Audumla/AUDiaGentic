@@ -10,18 +10,9 @@ from audiagentic.components.memory.hindsight.matrix import (
     HindsightRecipeRow,
     get_matrix_rows,
 )
-from audiagentic.components.memory.hindsight.mcp_recipe import (
-    HindsightMcpRecipe,
-    HindsightTarget,
-    build_hindsight_entry,
-)
-from audiagentic.components.memory.hindsight.recipes import RulesOnlyRecipe
+from audiagentic.components.memory.hindsight.mcp_recipe import build_hindsight_entry
 from audiagentic.components.memory.hindsight.strategies import build_hindsight_recipe
 from audiagentic.components.providers.services.recipes import ProviderRecipeKind
-from audiagentic.foundation.mcp import McpServerEntry
-from audiagentic.foundation.toolchains.artifact_registry import ArtifactRegistry
-from audiagentic.foundation.toolchains.config_reader import load_config
-from audiagentic.foundation.toolchains.recipe_contract import RecipeState
 
 
 def _backend(**kw):
@@ -42,161 +33,58 @@ def test_stdio_entry_shape():
     assert entry["env"]["HINDSIGHT_API_KEY"] == "k"
 
 
-def test_provision_writes_mcp_entry(tmp_path):
-    cfg = tmp_path / "mcp.json"
-    recipe = HindsightMcpRecipe(_backend(), HindsightTarget(cfg))
+def test_managed_block_and_surface_coexistence(tmp_path):
+    """Infrastructure test: managed_block and surfaces regions survive each other.
 
-    result = recipe.provision({})
-    assert result.success
-    assert result.state is RecipeState.VERIFIED
-    data = load_config(cfg)
-    assert data["mcpServers"]["hindsight"]["url"] == "https://hs.example.com/mcp"
-
-
-def test_provision_idempotent(tmp_path):
-    cfg = tmp_path / "mcp.json"
-    recipe = HindsightMcpRecipe(_backend(), HindsightTarget(cfg))
-    recipe.provision({})
-    second = recipe.provision({})
-    assert second.success
-    # still exactly one entry
-    assert list(load_config(cfg)["mcpServers"]) == ["hindsight"]
-
-
-def test_custom_container_key(tmp_path):
-    cfg = tmp_path / "settings.json"
-    recipe = HindsightMcpRecipe(
-        _backend(), HindsightTarget(cfg, container=("mcp", "servers"))
+    Retained after SL13 A7 as a safety net for the underlying infrastructure,
+    even though hindsight no longer writes blocks directly (flows via surface
+    contributions). Pins the coexistence invariant — strip_managed_content only
+    strips HTML-comment regions; managed_block uses Markdown #-comments.
+    """
+    from audiagentic.components.providers.surfaces.base import (
+        SurfaceBlock,
+        apply_managed_blocks,
     )
-    recipe.provision({})
-    assert "hindsight" in load_config(cfg)["mcp"]["servers"]
-
-
-def test_teardown_removes_entry(tmp_path):
-    cfg = tmp_path / "mcp.json"
-    cfg.write_text('{"mcpServers": {"other": {"url": "x"}}}', encoding="utf-8")
-    recipe = HindsightMcpRecipe(_backend(), HindsightTarget(cfg))
-
-    recipe.provision({})
-    result = recipe.teardown({})
-    assert result.success
-    data = load_config(cfg)
-    assert "hindsight" not in data["mcpServers"]
-    assert "other" in data["mcpServers"]  # user entry preserved
-
-
-def test_prune_via_registry(tmp_path):
-    cfg = tmp_path / "mcp.json"
-    registry = ArtifactRegistry(tmp_path)
-    recipe = HindsightMcpRecipe(_backend(), HindsightTarget(cfg), registry=registry)
-
-    recipe.provision({})
-    assert registry.owned(recipe.recipe_id)["config_keys"]
-
-    result = recipe.prune({})
-    assert result.success
-    assert "hindsight" not in load_config(cfg).get("mcpServers", {})
-
-
-def test_switching_backend_url_updates_entry(tmp_path):
-    cfg = tmp_path / "mcp.json"
-    HindsightMcpRecipe(_backend(), HindsightTarget(cfg)).provision({})
-    HindsightMcpRecipe(
-        HindsightBackendConfig(base_url="https://new.example.com"), HindsightTarget(cfg)
-    ).provision({})
-    assert load_config(cfg)["mcpServers"]["hindsight"]["url"] == "https://new.example.com/mcp"
-
-
-def test_entry_builder_override(tmp_path):
-    cfg = tmp_path / "mcp.json"
-    recipe = HindsightMcpRecipe(
-        _backend(),
-        HindsightTarget(cfg),
-        entry_builder=lambda b: {"custom": b.base_url},
-    )
-    recipe.provision({})
-    assert load_config(cfg)["mcpServers"]["hindsight"] == {
-        "custom": "https://hs.example.com"
-    }
-
-
-def test_provider_writer_callbacks_use_mcp_entries_and_prune(tmp_path):
-    """Test that custom writer_fn receives McpServerEntry objects, and probe/prune
-    use the callback path correctly."""
-    cfg = tmp_path / "provider.toml"
-    store: dict[str, McpServerEntry] = {}
-
-    def reader(path):
-        return dict(store)
-
-    def writer(path, entries):
-        store.clear()
-        store.update(entries)
-        path.write_text("provider-owned format\n", encoding="utf-8")
-
-    def remover(path, name):
-        return store.pop(name, None) is not None
-
-    recipe = HindsightMcpRecipe(
-        _backend(api_key="k"),
-        HindsightTarget(
-            cfg,
-            writer_fn=writer,
-            reader_fn=reader,
-            remover_fn=remover,
-        ),
-        registry=ArtifactRegistry(tmp_path),
+    from audiagentic.foundation.toolchains.managed_block import (
+        apply_managed_block,
+        remove_managed_block,
     )
 
-    # Verify configure uses writer_fn with McpServerEntry
-    configured = recipe.configure({})
-    assert configured.success
-    assert "hindsight" in store
-    assert store["hindsight"] == McpServerEntry(
-        name="hindsight",
-        url="https://hs.example.com/mcp",
-        headers={"Authorization": "Bearer k"},
-        transport="http",
-    )
-
-    # Verify probe uses reader_fn and detects entry
-    probed = recipe.probe({})
-    assert probed.success
-    assert probed.state is RecipeState.VERIFIED
-
-    # Verify teardown/prune uses remover_fn
-    pruned = recipe.prune({})
-    assert pruned.success
-    assert "hindsight" not in store
-
-
-def test_rules_only_recipe_writes_and_removes_rule_block(tmp_path):
     rule_file = tmp_path / "AGENTS.md"
-    rule_file.write_text("User rules stay.\n", encoding="utf-8")
-    row = HindsightRecipeRow(
-        provider_id="test",
-        display_name="Test",
-        integration_type="rules-only",
-        recipe_kind=ProviderRecipeKind.GUIDANCE_ONLY,
-        audia_action="no_source",
+    rule_file.write_text("User content.\n", encoding="utf-8")
+
+    surface_block = SurfaceBlock(
+        path=rule_file, block_id="provider-surface", content="## Provider note\nSome text."
     )
-    recipe = RulesOnlyRecipe(row, rule_file, project_root=tmp_path)
+    existing = rule_file.read_text(encoding="utf-8")
+    with_region = apply_managed_blocks(existing, [surface_block])
+    rule_file.write_text(with_region, encoding="utf-8")
+    assert "<!-- ag:managed:begin -->" in rule_file.read_text(encoding="utf-8")
 
-    result = recipe.configure({})
-    assert result.success
-    text = rule_file.read_text(encoding="utf-8")
-    assert "User rules stay." in text
-    assert "audiagentic:hindsight-memory" in text
-    assert "Recall before design/history questions" in text
+    change = apply_managed_block(rule_file, "hindsight-memory", "Rule content.")
+    assert change.existed is False
+    text_after_hindsight = rule_file.read_text(encoding="utf-8")
+    assert "audiagentic:hindsight-memory" in text_after_hindsight
 
-    removed = recipe.prune({})
-    assert removed.success
-    assert "audiagentic:hindsight-memory" not in rule_file.read_text(encoding="utf-8")
-    assert "User rules stay." in rule_file.read_text(encoding="utf-8")
+    surface_reapply = apply_managed_blocks(text_after_hindsight, [surface_block])
+    rule_file.write_text(surface_reapply, encoding="utf-8")
+    assert "audiagentic:hindsight-memory" in rule_file.read_text(encoding="utf-8")
+
+    remove_managed_block(rule_file, "hindsight-memory")
+    text_after_prune = rule_file.read_text(encoding="utf-8")
+    assert "<!-- ag:managed:begin -->" in text_after_prune
+    assert "User content." in text_after_prune
+    assert "audiagentic:hindsight-memory" not in text_after_prune
 
 
 def test_hindsight_orchestration_entrypoints_run_selected_provider(tmp_path, monkeypatch):
-    rule_file = tmp_path / "AGENTS.md"
+    """After SL13 A7: GuidanceOnlyRecipe delegates to NoAutomationRecipe.
+
+    apply_hindsight and teardown_hindsight succeed with guidance recipes; no file
+    writing is expected (content flows via surface contributions).
+    """
+    from audiagentic.components.memory.hindsight.recipes import GuidanceOnlyRecipe
+
     row = HindsightRecipeRow(
         provider_id="test",
         display_name="Test",
@@ -206,7 +94,7 @@ def test_hindsight_orchestration_entrypoints_run_selected_provider(tmp_path, mon
     )
 
     def fake_register(registry, backend=None, project_root=None):
-        recipe = RulesOnlyRecipe(row, rule_file, project_root=project_root)
+        recipe = GuidanceOnlyRecipe(row)
         registry.register(recipe)
         return [recipe]
 
@@ -217,11 +105,9 @@ def test_hindsight_orchestration_entrypoints_run_selected_provider(tmp_path, mon
 
     applied = apply_hindsight(tmp_path, backend=_backend(), provider_ids=["test"])
     assert applied["test"].success
-    assert "audiagentic:hindsight-memory" in rule_file.read_text(encoding="utf-8")
 
     torn_down = teardown_hindsight(tmp_path, backend=_backend(), provider_ids=["test"])
     assert torn_down["test"].success
-    assert "audiagentic:hindsight-memory" not in rule_file.read_text(encoding="utf-8")
 
 
 def test_verified_matrix_step_definitions_build_provision_steps(tmp_path):
@@ -268,7 +154,12 @@ def test_mcp_config_adapter_provision_writes_config_via_step_path(tmp_path):
     assert "hindsight" in settings.read_text(encoding="utf-8")
 
 
-def test_hybrid_recipe_provision_steps_include_installer_and_mcp_and_rules(tmp_path):
+def test_hybrid_recipe_provision_steps_include_installer_and_mcp(tmp_path):
+    """After SL13 A8: HYBRID maps to _McpConfigAdapter (rules via surfaces).
+
+    Provision steps include installer + MCP config steps; rule block steps are
+    handled by surface contributions, not the recipe.
+    """
     row = HindsightRecipeRow(
         provider_id="copilot",
         display_name="GitHub Copilot",
@@ -293,7 +184,6 @@ def test_hybrid_recipe_provision_steps_include_installer_and_mcp_and_rules(tmp_p
 
     assert "copilot-init" in ids
     assert any("mcp" in step_id or "config" in step_id for step_id in ids)
-    assert any("rule" in step_id for step_id in ids)
 
 
 def test_apply_hindsight_mcp_provider_writes_inside_project_root(tmp_path, monkeypatch):

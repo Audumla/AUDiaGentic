@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import pytest
 
+from audiagentic.components.planning import events as planning_events
 from audiagentic.components.planning import planning_api, planning_paths
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
@@ -114,6 +115,49 @@ def test_create_item_optional_fields_in_frontmatter(tmp_path):
     assert "priority: P0" in text
     assert "complexity: complex" in text
     assert "order: 3" in text
+
+
+def test_create_item_records_creator_identity(tmp_path):
+    planning_api.create_item(tmp_path, _make_item(created_by="codex"))
+    item = planning_api.get_item(tmp_path, "TST01")
+    listed = planning_api.list_items(tmp_path)
+
+    assert item["created-by"] == "codex"
+    assert listed[0]["created-by"] == "codex"
+
+
+def test_create_item_event_includes_creator_identity(tmp_path, monkeypatch):
+    published = []
+    monkeypatch.setattr(planning_events, "publish_planning_event", lambda *args, **kwargs: published.append((args, kwargs)))
+
+    planning_api.create_item(tmp_path, _make_item(created_by="codex"))
+
+    event_type, payload = published[0][0]
+    assert event_type == planning_events.PLANNING_ITEM_CREATED
+    assert payload["id"] == "TST01"
+    assert payload["created-by"] == "codex"
+    assert published[0][1]["subject_id"] == "TST01"
+
+
+def test_update_item_accepts_creator_identity_alias(tmp_path):
+    planning_api.create_item(tmp_path, _make_item())
+    planning_api.update_item(tmp_path, "TST01", {"creator_id": "claude"})
+
+    assert planning_api.get_item(tmp_path, "TST01")["created-by"] == "claude"
+
+
+def test_update_item_event_includes_creator_identity(tmp_path, monkeypatch):
+    published = []
+    monkeypatch.setattr(planning_events, "publish_planning_event", lambda *args, **kwargs: published.append((args, kwargs)))
+    planning_api.create_item(tmp_path, _make_item(created_by="codex"))
+    published.clear()
+
+    planning_api.update_item(tmp_path, "TST01", {"creator_id": "claude"})
+
+    event_type, payload = published[0][0]
+    assert event_type == planning_events.PLANNING_ITEM_UPDATED
+    assert payload["created-by"] == "claude"
+    assert payload["updated_keys"] == ["creator_id"]
 
 
 # ---------------------------------------------------------------------------
@@ -516,6 +560,60 @@ def test_create_review_writes_file(tmp_path):
     assert result["plan"] == "test-plan"
     target = tmp_path / result["path"]
     assert target.exists()
+
+
+def test_create_review_records_reviewer_identity_alias(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_review(
+        tmp_path,
+        {"review-of": "ITM01", "title": "Review 1", "reviewer_id": "codex"},
+    )
+    review = planning_api.get_review(tmp_path, "RV01")
+    listed = planning_api.list_reviews(tmp_path)
+
+    assert review["reviewed-by"] == "codex"
+    assert listed[0]["reviewed-by"] == "codex"
+
+
+def test_create_review_event_includes_reviewer_identity(tmp_path, monkeypatch):
+    published = []
+    monkeypatch.setattr(planning_events, "publish_planning_event", lambda *args, **kwargs: published.append((args, kwargs)))
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    published.clear()
+
+    planning_api.create_review(
+        tmp_path,
+        {"review-of": "ITM01", "title": "Review 1", "reviewer_id": "codex"},
+    )
+
+    event_type, payload = published[0][0]
+    assert event_type == planning_events.PLANNING_REVIEW_CREATED
+    assert payload["id"] == "RV01"
+    assert payload["reviewed-by"] == "codex"
+    assert published[0][1]["subject_id"] == "RV01"
+
+
+def test_update_review_accepts_reviewer_identity_alias(tmp_path):
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
+    planning_api.update_review(tmp_path, "RV01", {"reviewed_by": "claude"})
+
+    assert planning_api.get_review(tmp_path, "RV01")["reviewed-by"] == "claude"
+
+
+def test_update_review_event_includes_reviewer_identity(tmp_path, monkeypatch):
+    published = []
+    monkeypatch.setattr(planning_events, "publish_planning_event", lambda *args, **kwargs: published.append((args, kwargs)))
+    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1", "reviewer_id": "codex"})
+    published.clear()
+
+    planning_api.update_review(tmp_path, "RV01", {"reviewed_by": "claude"})
+
+    event_type, payload = published[0][0]
+    assert event_type == planning_events.PLANNING_REVIEW_UPDATED
+    assert payload["reviewed-by"] == "claude"
+    assert payload["updated_keys"] == ["reviewed_by"]
 
 
 # ---------------------------------------------------------------------------

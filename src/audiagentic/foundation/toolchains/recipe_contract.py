@@ -42,6 +42,10 @@ class RecipeResult:
     ``artifacts_owned`` lists the stable identifiers (file paths, ``file::key``
     paths, hook ids) the operation created or now manages, so callers can hand
     them to an :class:`~.artifact_registry.ArtifactRegistry` for later prune.
+
+    ``action_needed`` carries user-facing guidance when automation cannot fully
+    proceed (an unverified source, a manual install step, a required restart) —
+    a generic "a human must do X" signal, not tied to any one integration.
     """
 
     success: bool
@@ -50,6 +54,7 @@ class RecipeResult:
     status: str = ""
     error: str | None = None
     details: dict[str, Any] = field(default_factory=dict)
+    action_needed: str = ""
 
     @classmethod
     def ok(
@@ -59,6 +64,7 @@ class RecipeResult:
         artifacts: list[str] | None = None,
         status: str = "",
         details: dict[str, Any] | None = None,
+        action_needed: str = "",
     ) -> RecipeResult:
         return cls(
             success=True,
@@ -66,6 +72,7 @@ class RecipeResult:
             artifacts_owned=list(artifacts or []),
             status=status,
             details=dict(details or {}),
+            action_needed=action_needed,
         )
 
     @classmethod
@@ -75,8 +82,15 @@ class RecipeResult:
         *,
         state: RecipeState = RecipeState.ERROR,
         details: dict[str, Any] | None = None,
+        action_needed: str = "",
     ) -> RecipeResult:
-        return cls(success=False, state=state, error=error, details=dict(details or {}))
+        return cls(
+            success=False,
+            state=state,
+            error=error,
+            details=dict(details or {}),
+            action_needed=action_needed,
+        )
 
 
 # A cleanup hook performs integration-specific teardown that falls outside generic

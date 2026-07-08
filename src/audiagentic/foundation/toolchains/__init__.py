@@ -44,7 +44,6 @@ from .recipe_contract import (
     RecipeState,
     run_steps,
 )
-from .recipe_steps import StepRecipe
 
 __all__ = [
     "UNSET",
@@ -73,7 +72,6 @@ __all__ = [
     "RecipeResult",
     "RecipeState",
     "ShellProvisionStep",
-    "StepRecipe",
     "WriteFileStep",
     "tool_available",
     "uv_available",

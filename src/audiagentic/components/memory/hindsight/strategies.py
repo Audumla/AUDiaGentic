@@ -15,24 +15,19 @@ from audiagentic.components.memory.hindsight.matrix import (
     HINDSIGHT_RECIPE_MATRIX,
     HindsightRecipeRow,
 )
-from audiagentic.components.memory.hindsight.mcp_recipe import (
-    HindsightMcpRecipe,
-    HindsightTarget,
+from audiagentic.components.memory.hindsight.plugin_recipes import (
+    PluginConfigRecipe,
+    _PluginArrayRecipe,
+    _PluginUrlConfigRecipe,
 )
 from audiagentic.components.memory.hindsight.recipes import (
     GuidanceOnlyRecipe,
     HooksInstallerRecipe,
-    PluginConfigRecipe,
-    RulesOnlyRecipe,
     _absolute_project_path,
-    _CompositeRecipe,
     _McpConfigAdapter,
-    _PluginArrayRecipe,
-    _PluginUrlConfigRecipe,
 )
 from audiagentic.components.providers.descriptors.registry import get_descriptor
 from audiagentic.components.providers.services.recipes import ProviderRecipeKind
-from audiagentic.foundation.toolchains.artifact_registry import ArtifactRegistry
 from audiagentic.foundation.toolchains.detect import platform_allowed
 
 
@@ -154,15 +149,7 @@ def _build_plugin_config_recipe(
             harness_path or row.plugin_url_config_path,
         )
     if harness_path:
-        descriptor = get_descriptor(provider_id)
-        spec = descriptor.mcp_config if descriptor else None
-        target = HindsightTarget(
-            config_path=harness_path,
-            writer_fn=spec.writer if spec else None,
-            reader_fn=spec.reader if spec else None,
-            remover_fn=spec.remover if spec else None,
-        )
-        return PluginConfigRecipe(row, backend, target)
+        return PluginConfigRecipe(row, backend, Path(harness_path))
     return GuidanceOnlyRecipe(row)
 
 
@@ -174,15 +161,14 @@ def _build_mcp_config_recipe(
 ) -> Any:
     """Build MCP-config recipe.
 
-    Blocked source status returns guidance-only. Otherwise dispatches to
-    _build_mcp_recipe for inner composition (MCP + rules).
+    Blocked source status returns guidance-only. After SL13 A8, HYBRID collapses
+    to _McpConfigAdapter (rules flow via surface contributions).
     """
     if row.source_status == "blocked":
         return GuidanceOnlyRecipe(row)
     harness_path = _resolve_harness_config_path(provider_id, project_root)
-    rule_path = _resolve_rule_path(provider_id, project_root)
     return _build_mcp_recipe(
-        row, backend, provider_id, project_root, harness_path, rule_path,
+        row, backend, provider_id, project_root, harness_path, None,
     )
 
 
@@ -192,10 +178,12 @@ def _build_guidance_only_recipe(
     provider_id: str,
     project_root: Path | None,
 ) -> Any:
-    """Build guidance-only recipe with rules fallback."""
-    rule_path = _resolve_rule_path(provider_id, project_root)
-    if rule_path:
-        return RulesOnlyRecipe(row, rule_path, project_root=project_root)
+    """Build guidance-only recipe.
+
+    After SL13 A7: rules content flows via surface contributions (memory.yaml).
+    There is no rules-writing recipe — every guidance/rules strategy resolves to
+    GuidanceOnlyRecipe, and the surface pipeline renders the memory contribution.
+    """
     return GuidanceOnlyRecipe(row)
 
 
@@ -243,37 +231,20 @@ def _build_mcp_recipe(
 ) -> Any:
     """Build MCP-config recipe for MCP_CONFIG or HYBRID kind.
 
-    When HYBRID and rule_path exists, wraps in _CompositeRecipe with rules layer.
-    Falls back to rules-only or guidance when paths are unavailable.
+    After SL13 A8: _CompositeRecipe collapsed into _McpConfigAdapter — rules
+    content flows via surface contributions (memory.yaml), so HYBRID is
+    equivalent to MCP_CONFIG. Falls back to guidance when paths are unavailable.
     """
     descriptor = get_descriptor(provider_id)
     spec = descriptor.mcp_config if descriptor else None
     # A remote (url-form) entry cannot be expressed in a stdio-only provider
-    # config — fall through to the rules/guidance paths instead of writing a
-    # broken entry (audit finding, HM21/RV155).
+    # config — fall through to the guidance path instead of writing a broken
+    # entry (audit finding, HM21/RV155).
     if spec is not None and not spec.remote and backend.transport != "stdio":
         harness_path = None
     if harness_path:
-        target = HindsightTarget(
-            config_path=harness_path,
-            writer_fn=spec.writer if spec else None,
-            reader_fn=spec.reader if spec else None,
-            remover_fn=spec.remover if spec else None,
-        )
-        registry = ArtifactRegistry(project_root) if project_root else None
-        inner = HindsightMcpRecipe(
-            backend,
-            target,
-            registry=registry,
-            recipe_id=f"hindsight:{provider_id}:mcp",
-        )
-
-        if row.recipe_kind == ProviderRecipeKind.HYBRID and rule_path:
-            rules = RulesOnlyRecipe(row, rule_path, project_root=project_root)
-            return _CompositeRecipe(row, inner, rules, project_root=project_root)
-        return _McpConfigAdapter(row, inner, project_root=project_root)
-    if rule_path:
-        return RulesOnlyRecipe(row, rule_path, project_root=project_root)
+        config_path = Path(harness_path)
+        return _McpConfigAdapter(row, backend, config_path, project_root=project_root)
     return GuidanceOnlyRecipe(row)
 
 
@@ -296,7 +267,6 @@ def _resolve_harness_config_path(provider_id: str, project_root: Path | None = N
     return str(_absolute_project_path(resolved, Path(project_root) if project_root else None))
 
 
-
 def _resolve_rule_path(provider_id: str, project_root: Path | None = None) -> Path | None:
     """Resolve a provider instruction/rules file from generic descriptor metadata."""
     descriptor = get_descriptor(provider_id)
@@ -311,7 +281,6 @@ def _resolve_rule_path(provider_id: str, project_root: Path | None = None) -> Pa
     if rel_path is None:
         return None
     return _absolute_project_path(rel_path, Path(project_root) if project_root else None)
-
 
 
 __all__ = [
