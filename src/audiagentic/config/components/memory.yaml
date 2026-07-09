@@ -43,22 +43,6 @@ mcp-servers:
         config, status, and a neutral provider recipe refresh hint.
 
 contributions:
-  - id: memory/process
-    owner: memory
-    title: Memory component
-    preferred-targets:
-      - skill
-      - instruction
-    content:
-      body: |
-        Memory is backed by a swappable backend. Use the ag-memory-mgmt MCP tools
-        to check status, switch implementations, and configure the active backend.
-        - `memory_status` — Active implementation and configuration state
-        - `memory_select_implementation` — Switch memory backend
-        - `memory_get_config` / `memory_set_config` — Read and update backend config
-        - When memory is configured, the active backend's tools are available for
-          long-term memory operations (recall, reflect, retain).
-
   - id: hindsight/memory-usage
     owner: memory
     title: Memory usage guidance
