@@ -493,5 +493,10 @@ def list_missing(root: str = ".") -> dict[str, Any]:
     return {
         "project_root": str(project_root),
         "missing": missing,
-        "hint": "Use lsp_install_dependencies to install missing servers." if missing else "All configured language servers are available.",
+        "hint": (
+            "Missing servers auto-install on first file-based LSP use; "
+            "use lsp_install_dependencies only for eager install or retry."
+            if missing
+            else "All configured language servers are available."
+        ),
     }

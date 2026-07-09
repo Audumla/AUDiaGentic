@@ -39,6 +39,28 @@ def _format_command(command: list[str]) -> str:
     return " ".join(command)
 
 
+def _format_dependency_install_offer(
+    missing: list[str],
+    install_commands: dict[str, list[list[str]]],
+    dep_labels: dict[str, str],
+) -> str:
+    offers = []
+    for dep_id in missing:
+        commands = install_commands.get(dep_id) or []
+        fallback = (
+            "; manual fallback if automation fails: "
+            + " && ".join(_format_command(command) for command in commands)
+            if commands
+            else ""
+        )
+        label = dep_labels.get(dep_id, dep_id)
+        offers.append(
+            f"{label} auto-installs on first file-based LSP use; "
+            f"for eager install call lsp_install_dependencies(['{dep_id}']){fallback}"
+        )
+    return ". ".join(offers)
+
+
 def _on_installed(project_root: Path) -> None:
     """Create .coding-lsp/ structure without inferring runtime server config."""
     coding_lsp_dir = project_root / CODING_LSP_DIR
@@ -169,13 +191,6 @@ def status_payload(project_root: Path | None = None) -> ComponentStatusPayload:
     )
     dep_labels = build_dependency_labels(dep_cfgs)
 
-    offers = []
-    for dep_id in missing:
-        commands = install_commands.get(dep_id) or []
-        cmd = " && ".join(_format_command(command) for command in commands) if commands else "install manually"
-        label = dep_labels.get(dep_id, dep_id)
-        offers.append(f"Install {label}: {cmd}")
-
     return ComponentStatusPayload(
         enabled=enabled,
         configured=False,
@@ -183,7 +198,12 @@ def status_payload(project_root: Path | None = None) -> ComponentStatusPayload:
         missing_required=[],
         details={
             "missing_dependencies": missing,
-            "dependency_install_offer": ". ".join(offers),
+            "dependency_auto_install": True,
+            "dependency_install_offer": _format_dependency_install_offer(
+                missing,
+                install_commands,
+                dep_labels,
+            ),
         },
     )
 

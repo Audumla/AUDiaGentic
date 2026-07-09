@@ -16,6 +16,11 @@ mcp = mcp_server(__name__)
 @mcp.tool()
 @log_tool_call
 def lsp_config_status(root: str = ".") -> dict[str, Any]:
+    """Report LSP config and binary availability.
+
+    Missing language-server binaries auto-install on first file-based LSP use;
+    status alone should not cause manual install instructions.
+    """
     return lsp_config_api.config_status(root)
 
 
@@ -61,6 +66,7 @@ def lsp_set_config(root: str = ".", implementation_id: str = "", updates: dict[s
 @mcp.tool()
 @log_tool_call
 async def lsp_add_language(root: str = ".", language: str = "") -> dict[str, Any]:
+    """Enable a language and install its language-server dependency if missing."""
     resolved = root if root != "." else str(project_root_from_env())
     return await lsp_config_api.enable_language(resolved, language)
 
@@ -92,6 +98,11 @@ def lsp_list_languages() -> dict[str, Any]:
 @mcp.tool()
 @log_tool_call
 async def lsp_install_dependencies(names: list[str], root: str = ".") -> dict[str, Any]:
+    """Eagerly install configured missing language-server binaries.
+
+    File-based LSP tools already auto-install missing binaries on use. Use this
+    tool to pre-install, retry, or make the install explicit.
+    """
     resolved = root if root != "." else str(project_root_from_env())
     return await lsp_config_api.install_lsp_dependencies(names, root=resolved)
 
@@ -99,6 +110,11 @@ async def lsp_install_dependencies(names: list[str], root: str = ".") -> dict[st
 @mcp.tool()
 @log_tool_call
 def lsp_list_missing() -> dict[str, Any]:
+    """List configured binaries currently missing from PATH.
+
+    Missing binaries auto-install on first file-based LSP use; manual shell
+    installation is only a fallback if automation fails.
+    """
     return lsp_config_api.list_missing(str(project_root_from_env()))
 
 
