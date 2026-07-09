@@ -6,7 +6,7 @@ import sys
 from audiagentic.foundation.components.base import MODE_REQUIRED_MANAGED
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import all_descriptors
-from audiagentic.paths import REPO_ROOT
+from audiagentic.foundation.paths.package import REPO_ROOT
 
 MANAGED_MARKDOWN_HEADER = "<!-- MANAGED_BY_AUDIAGENTIC: do not edit directly. -->"
 

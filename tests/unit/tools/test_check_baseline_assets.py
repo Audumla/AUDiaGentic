@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 
-from audiagentic.paths import REPO_ROOT
+from audiagentic.foundation.paths.package import REPO_ROOT
 
 
 def test_check_baseline_assets_managed_headers() -> None:
