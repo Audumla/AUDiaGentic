@@ -1,10 +1,11 @@
+"""Layered configuration loading."""
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import make_error_factory
-from audiagentic.foundation.home import audiagentic_home
+from audiagentic.foundation.paths.home import audiagentic_home
 from audiagentic.foundation.paths.resolution import load_layered_mapping
 
 _config_error = make_error_factory("CFG", "CONF", "config")
