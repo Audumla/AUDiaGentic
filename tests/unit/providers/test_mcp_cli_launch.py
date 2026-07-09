@@ -3,7 +3,8 @@ from __future__ import annotations
 import sys
 import types
 
-from audiagentic.launcher import _cmd_mcp, _main
+from audiagentic.commands.mcp import cmd_mcp
+from audiagentic.launcher import _main
 
 
 def test_cmd_mcp_imports_module_and_calls_main(monkeypatch) -> None:
@@ -17,7 +18,7 @@ def test_cmd_mcp_imports_module_and_calls_main(monkeypatch) -> None:
     module.main = main  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "tests.fake_mcp_server", module)
 
-    assert _cmd_mcp("tests.fake_mcp_server", ["--flag", "value"]) == 0
+    assert cmd_mcp("tests.fake_mcp_server", ["--flag", "value"]) == 0
     assert captured["argv"] == ["tests.fake_mcp_server", "--flag", "value"]
 
 
@@ -32,7 +33,7 @@ def test_cmd_mcp_restores_argv(monkeypatch) -> None:
     module.main = main  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "tests.fake_mcp_server_restore", module)
 
-    assert _cmd_mcp("tests.fake_mcp_server_restore", []) == 0
+    assert cmd_mcp("tests.fake_mcp_server_restore", []) == 0
     assert sys.argv == old_argv
 
 

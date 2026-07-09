@@ -15,7 +15,6 @@ import difflib
 import sys
 from pathlib import Path
 
-from audiagentic.foundation.cli_io import print_message
 from audiagentic.components.agent_jobs.prompt_syntax import load_prompt_syntax
 from audiagentic.components.providers.surfaces.base import (
     SkillDefinition,
@@ -23,6 +22,7 @@ from audiagentic.components.providers.surfaces.base import (
 )
 from audiagentic.components.providers.surfaces.manager import build_provider_surface_blocks
 from audiagentic.components.providers.surfaces.registry import load_renderer_registry
+from audiagentic.foundation.cli_io import print_message
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_text
 

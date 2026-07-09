@@ -41,6 +41,48 @@ def _npm_env() -> dict[str, str]:
     return env
 
 
+def _repo_root(project_root: Path | None) -> Path | None:
+    if project_root is None:
+        return None
+    current = project_root.resolve()
+    for candidate in (current, *current.parents):
+        if (candidate / "src" / "audiagentic").exists():
+            return candidate
+    return None
+
+
+def _should_provision_embedded_rig() -> bool:
+    return (
+        os.environ.get("AUDIAGENTIC_PROVISION_PI_RIG") == "1"
+        or os.environ.get("AUDIAGENTIC_DOCKER_TESTS") == "1"
+        or os.environ.get("AUDIAGENTIC_REAL_PROVIDER_CLI_TESTS") == "1"
+        or "pytest" in (os.environ.get("PYTEST_CURRENT_TEST") or "").lower()
+    )
+
+
+def _seed_test_model(target: Path, project_root: Path | None) -> None:
+    repo_root = _repo_root(project_root)
+    if repo_root is None:
+        return
+    source_model = repo_root / "tests" / "unit" / "runtime" / "Qwen3.5-0.8B-UD-Q5_K_XL.gguf"
+    if not source_model.exists():
+        return
+    model_dir = target / "rig" / "bin" / "models"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    target_model = model_dir / "Qwen_Qwen3.5-2B-Q4_K_S.gguf"
+    if target_model.exists():
+        return
+    shutil.copyfile(source_model, target_model)
+    print_message(f"Seeded embedded rig model fixture: {target_model}")
+
+
+def _provision_embedded_rig(target: Path, project_root: Path | None) -> None:
+    from audiagentic.runtime.rig.embedded.binaries import update_binaries
+
+    update_binaries(target_bin_dir=target / "rig" / "bin")
+    _seed_test_model(target, project_root)
+
+
 def build_runtime_sync(
     *,
     reason: str,
@@ -104,6 +146,9 @@ def install_to(target: Path, project_root: Path | None = None) -> int:
     print_message("  Place llama-server binaries in the platform subfolder (windows/macOS/linux).")
     print_message(f"Model dir:      {rig_bin / 'models'}")
     print_message("  Place .gguf model files here.")
+    if _should_provision_embedded_rig():
+        print_message("Provisioning embedded rig assets for Pi runtime")
+        _provision_embedded_rig(target, project_root)
 
     npm = _c._npm()
     pi_cfg = _c.load_pi_config(project_root=project_root)

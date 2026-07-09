@@ -8,18 +8,17 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.event import DeliveryMode, get_bus
-from audiagentic.foundation.interaction.backend import _backend, InteractionBackend
+from audiagentic.foundation.interaction import backend as _backend_mod
 from audiagentic.foundation.interaction.mcp import ask_async
 from audiagentic.foundation.interaction.models import (
+    DEFAULT_TTL_SECONDS,
     AskRequest,
     AskResponse,
-    DEFAULT_TTL_SECONDS,
     PushStatusMessage,
     ResponseStatus,
 )
 from audiagentic.foundation.interaction.store import (
     _is_expired,
-    interaction_path,
     read_record,
     write_record,
 )
@@ -47,8 +46,8 @@ def ask(
     Resolution order: explicit global backend > MCP contextvar (with
     run_coroutine_threadsafe for cross-thread calls) > TIMED_OUT fallback.
     """
-    if _backend is not None and hasattr(_backend, "ask"):
-        request = AskRequest(
+    if _backend_mod._backend is not None and hasattr(_backend_mod._backend, "ask"):
+        ask_req = AskRequest(
             title=title,
             description=description,
             choices=tuple(choices) if choices else (),
@@ -56,7 +55,7 @@ def ask(
             timeout_seconds=timeout_seconds,
         )
         try:
-            return _backend.ask(request)
+            return _backend_mod._backend.ask(ask_req)
         except Exception:
             logger.debug("Backend ask failed", exc_info=True)
 
@@ -154,9 +153,9 @@ def respond(
         _publish("interaction.answered", dict(payload))
         return
 
-    if _backend is not None and hasattr(_backend, "respond"):
+    if _backend_mod._backend is not None and hasattr(_backend_mod._backend, "respond"):
         try:
-            _backend.respond(request_id, choice, details=details or {})
+            _backend_mod._backend.respond(request_id, choice, details=details or {})
         except Exception:
             logger.debug("Backend respond failed", exc_info=True)
 
@@ -205,9 +204,9 @@ def push_status(
         details=dict(details) if details else {},
     )
 
-    if _backend is not None and hasattr(_backend, "push_status"):
+    if _backend_mod._backend is not None and hasattr(_backend_mod._backend, "push_status"):
         try:
-            _backend.push_status(msg)
+            _backend_mod._backend.push_status(msg)
             _publish("interaction.status", {
                 "component": component,
                 "level": level,

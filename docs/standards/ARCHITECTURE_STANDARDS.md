@@ -102,6 +102,7 @@ Extensibility must never require editing Python source.
 - **No legacy code left behind** — do not create shim functions, deprecation warnings, or parallel paths. Remove legacy code in the same change that introduces the replacement.
 - **Atomic migration** — each migration step must leave the system in a working state. Never pass through a broken intermediate state.
 - **Test-driven migration** — add or update tests alongside the migration. Do not defer testing.
+- **Move/rename/delete verification** — when a migration moves, renames, or deletes a module, an `import`-shaped grep over `src/` is not sufficient proof it landed. The old dotted path also hides in **string-literal references** that no import scan catches — `monkeypatch.setattr("old.path...")`, `mock.patch("old.path...")`, `importlib.import_module`, patch decorators, and dotted paths in config/YAML. Grep the **whole repo including `tests/`** for the old path as a bare string, and treat only a green **full** test suite (`python -m pytest tests/unit`) — not the grep — as proof. A partial-suite run plus a `src`-only import grep is what lets a completed migration ship tests that fail with `ModuleNotFoundError` on the deleted module.
 
 ## 11. Lazy Initialization
 
