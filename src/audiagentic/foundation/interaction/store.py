@@ -8,8 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.interaction.models import (
+    DEFAULT_TTL_SECONDS,
+)
 from audiagentic.foundation.io import atomic_write_json
-from audiagentic.foundation.interaction.models import AskResponse, DEFAULT_TTL_SECONDS, ResponseStatus
 from audiagentic.foundation.paths.names import project_marker_path
 
 logger = logging.getLogger(__name__)

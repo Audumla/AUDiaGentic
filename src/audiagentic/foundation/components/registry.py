@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from audiagentic.foundation.paths.home import audiagentic_home
 from audiagentic.foundation.io import load_yaml_file
+from audiagentic.foundation.paths.home import audiagentic_home
 from audiagentic.foundation.paths.names import PROJECT_MARKER_NAME
 from audiagentic.foundation.registry_utils import Registry
 
