@@ -1,12 +1,5 @@
-"""Shared utility functions for foundation modules.
-
-Extracted from duplicated implementations across event_bus, event_store,
-paths/resolution, and logging/config modules.
-"""
+"""Event type pattern matching with wildcard support."""
 from __future__ import annotations
-
-from copy import deepcopy
-from typing import Any
 
 
 def pattern_matches(pattern: str, event_type: str) -> bool:
@@ -43,14 +36,3 @@ def pattern_matches(pattern: str, event_type: str) -> bool:
                 return False
 
         return True
-
-
-def deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
-    """Deep-merge overlay onto base. Lists are replaced (caller handles union)."""
-    result = deepcopy(base)
-    for key, value in overlay.items():
-        if isinstance(value, dict) and isinstance(result.get(key), dict):
-            result[key] = deep_merge(result[key], value)
-        else:
-            result[key] = deepcopy(value)
-    return result
