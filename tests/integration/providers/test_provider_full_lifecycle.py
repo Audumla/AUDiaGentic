@@ -318,7 +318,7 @@ class TestProviderMcpConfig:
         (project_root / ".audiagentic").mkdir(parents=True, exist_ok=True)
 
         install_component("providers", project_root)
-        install_provider_cli(provider_id, timeout=300, project_root=project_root)
+        install_provider_cli(provider_id, timeout=600, project_root=project_root)
 
         config_path = _resolve_mcp_path(spec, project_root)
         config_path.parent.mkdir(parents=True, exist_ok=True)

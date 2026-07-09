@@ -55,6 +55,12 @@ def _iter_component_assets(component_ids: set[str] | None = None) -> Iterable[Ba
                 if source_path.exists():
                     asset_component_root = component_root
                     source = stripped_source
+            elif cf.lifecycle == MODE_CREATE_IF_MISSING and source.startswith(".audiagentic/"):
+                stripped_source = source[len(".audiagentic/"):]
+                template_path = Path(REPO_ROOT) / component_root / stripped_source
+                if template_path.exists():
+                    asset_component_root = component_root
+                    source = stripped_source
             yield BaselineAsset(source, cf.rel_path, cf.lifecycle, cf.recursive, asset_component_root)
 
 

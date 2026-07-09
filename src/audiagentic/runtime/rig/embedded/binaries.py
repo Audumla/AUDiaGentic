@@ -168,13 +168,21 @@ def _kill_running_server(target_dir: Path) -> None:
     if platform_key() == "win":
         subprocess.run(
             ["taskkill", "/F", "/IM", "llama-server.exe"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False, timeout=10,
         )
     else:
         try:
-            subprocess.run(["pkill", "-f", "llama-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            subprocess.run(
+                ["pkill", "-f", "llama-server"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=10,
+            )
         except FileNotFoundError:
             pass  # pkill not available, server likely not running
+        except subprocess.TimeoutExpired:
+            pass
 
 
 def update_binaries(runtime_dir: Path | None = None, target_bin_dir: Path | None = None) -> None:

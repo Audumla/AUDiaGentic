@@ -19,7 +19,7 @@ from pathlib import Path
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.foundation.event import subscribe_component_lifecycle
-from audiagentic.foundation.interaction import ask, push_status
+from audiagentic.foundation.interaction import push_status
 
 logger = logging.getLogger(__name__)
 
@@ -218,12 +218,12 @@ def load_pi_config(project_root: Path | None = None) -> dict:
 # Wires ask/reload through foundation.interaction for reload_required actions.
 # noqa: E402
 
-_REASON_TO_VERB = {
-    "component-installed": "installed",
-    "component-enabled": "enabled",
-    "component-disabled": "disabled",
-    "component-uninstalled": "uninstalled",
-    "component-config-changed": "config-changed",
+_REASON_TO_ACTION = {
+    "component-installed": ("install", "installing"),
+    "component-enabled": ("enable", "enabling"),
+    "component-disabled": ("disable", "disabling"),
+    "component-uninstalled": ("uninstall", "uninstalling"),
+    "component-config-changed": ("config change", "config change"),
 }
 
 
@@ -259,50 +259,17 @@ def _harness_lifecycle_handler(
     action = _runtime_action_for_reason(reason, has_mcp_servers=_harness_has_mcp_servers(component_id))
 
     if action != "reload_required":
-        verb = _REASON_TO_VERB.get(reason, reason)
+        verb, gerund = _REASON_TO_ACTION.get(reason, (reason, reason))
         push_status(
             component="harness",
-            message=f"Config refreshed after {verb}ing {component_id}.",
+            message=f"Config refreshed after {gerund} {component_id}.",
         )
         return
 
-    verb = _REASON_TO_VERB.get(reason, reason)
-    title = f"Reload harness after {verb}"
-    description = (
-        f"Component \"{component_id}\" was just {verb}. "
-        "A full reload may be required to pick up the change."
+    logger.debug(
+        "harness reload marker requested",
+        extra={"component": component_id, "reason": reason},
     )
-    resp = ask(
-        title=title,
-        description=description,
-        choices=("reload-now", "later"),
-        default_choice="reload-now",
-    )
-
-    if resp.choice == "reload-now":
-        try:
-            request_runtime_reload(
-                project_root,
-                reason=reason,
-                component_id=component_id,
-            )
-            logger.info(
-                "harness reload initiated via interaction ask",
-                extra={"component": component_id, "reason": reason},
-            )
-        except Exception:
-            logger.warning(
-                "Failed to request runtime reload after user approval",
-                extra={"component": component_id, "reason": reason},
-                exc_info=True,
-            )
-    else:
-        status_text = "deferred" if resp.choice == "later" else "timed out"
-        push_status(
-            component="harness",
-            message=f"Harness reload {status_text} for component {component_id}.",
-            level="info",
-        )
 
 
 subscribe_component_lifecycle(
