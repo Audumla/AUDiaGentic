@@ -62,7 +62,7 @@ mcp-servers:
       - agent_llm_list_requests
       - agent_llm_gateway_overview
     description: Agent LLM Gateway — async submit/status/wait/cancel/run and observability (list/overview) for provider execution through an agent profile
-    propagate: audiagentic
+    propagate: providers
     instructions: >
       Async path: agent_llm_submit returns request-id immediately; poll agent_llm_status
       or block later with agent_llm_wait. Blocking path: agent_llm_run submits and waits
@@ -70,8 +70,8 @@ mcp-servers:
       Cancellation is best-effort: agent_llm_cancel on a queued request removes it before
       it ever runs; on a running request it only records intent (cancel-requested) —
       the request may still complete normally, and the persisted state reflects what
-      actually happened, not the cancel intent. Not propagated to providers — a provider
-      surface must never be able to invoke the gateway that dispatches back into providers.
+      actually happened, not the cancel intent. Propagated to providers only; the
+      AUDiaGentic CLI harness must not receive the gateway server.
       For most agent profiles, "output" is provider CLI/session execution output, not a
       raw chat completion — only API-style providers (e.g. local-openai) return a direct
       completion. Use agent_llm_gateway_overview or agent_llm_list_requests to see what's
