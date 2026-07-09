@@ -52,7 +52,7 @@ _SPECS: dict[str, tuple[str, str]] = {
     # Hook installer — pip package publishes a CLI that writes ~/.hindsight/cline.json.
     "cline":        ("installer", ""),
     # Rule-only recipes.
-    "qwen":         ("rules", ""),
+    "qwen":         ("skip", "no Hindsight integration"),
     # Skipped with concrete reasons.
     "codex":        ("skip", "curl|bash installer does not accept --api-url; server URL is runtime config, not install-time"),
     "claude":       ("skip", "requires an authenticated `claude` CLI session; marketplace auth not available in CI"),

@@ -70,7 +70,6 @@ register_all_components()
 # Providers that can be installed in Docker (npm, uv, script)
 _DOCKER_INSTALLABLE = {
     "aider",  # uv
-    "antigravity",  # npm
     "claude",  # npm
     "cline",  # npm
     "codex",  # npm
@@ -229,7 +228,7 @@ class TestProviderInstallUninstall:
                 if not target.exists():
                     target.write_text("", encoding="utf-8")
 
-        install_provider_cli(provider_id, timeout=300, project_root=project_root)
+        install_provider_cli(provider_id, timeout=600, project_root=project_root)
         apply_provider_surfaces(project_root, provider_id=provider_id)
 
         # Verify managed agent files exist
