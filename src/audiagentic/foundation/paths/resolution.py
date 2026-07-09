@@ -5,7 +5,6 @@ from typing import Any
 
 import yaml
 
-from audiagentic.foundation.config.merge import deep_merge
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 
 _RESOLUTION_ORDER = ("project_local", "user_global", "package_default")
@@ -115,8 +114,10 @@ def load_layered_mapping(
         payloads["user_global"] = {}
 
     result: dict[str, Any] = {}
+    from audiagentic.foundation.config.merge import deep_merge as _deep_merge
+
     for layer in _MERGE_ORDER:
-        result = deep_merge(result, payloads[layer])
+        result = _deep_merge(result, payloads[layer])
     return result
 
 
