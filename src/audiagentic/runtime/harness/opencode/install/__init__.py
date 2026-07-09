@@ -11,7 +11,7 @@ import logging
 import shutil
 from pathlib import Path
 
-from audiagentic.cli_io import print_message
+from audiagentic.foundation.cli_io import print_message
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.runtime.harness.reload import (
     build_runtime_sync as _build_sync,

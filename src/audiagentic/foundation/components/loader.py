@@ -253,7 +253,7 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
         from audiagentic.foundation.paths.names import (
             resolve_profile_component_config_dir,
         )
-        from audiagentic.paths import find_project_root
+        from audiagentic.foundation.paths.project import find_project_root
 
         # Profiles are project-scoped (.audiagentic/<profile>/components/), so
         # they need the real project root — walk up from cwd to the marker

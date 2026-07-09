@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def versions() -> dict[str, Any]:
-    from audiagentic.foundation.home import global_harness_runtime
+    from audiagentic.foundation.paths.home import global_harness_runtime
     from audiagentic.runtime.harness import query_rig_server_version, version_info
 
     version_payload = version_info()
@@ -32,7 +32,7 @@ def versions() -> dict[str, Any]:
 
 
 def model_info() -> dict[str, Any]:
-    from audiagentic.foundation.home import global_harness_runtime
+    from audiagentic.foundation.paths.home import global_harness_runtime
     from audiagentic.runtime.harness import (
         default_config_path,
         load_active_profile,
@@ -73,7 +73,7 @@ def model_info() -> dict[str, Any]:
 
 
 def harness_config() -> dict[str, Any]:
-    from audiagentic.foundation.home import global_harness_runtime
+    from audiagentic.foundation.paths.home import global_harness_runtime
     from audiagentic.runtime.harness import default_config_path
 
     harness = global_harness_runtime()

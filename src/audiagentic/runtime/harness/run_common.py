@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from audiagentic.cli_io import print_message
+from audiagentic.foundation.cli_io import print_message
 from audiagentic.runtime.harness.context import AgentContext
 
 

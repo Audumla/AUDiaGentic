@@ -10,7 +10,7 @@ from typing import Any
 
 import yaml
 
-from audiagentic.cli_io import print_json
+from audiagentic.foundation.cli_io import print_json
 from audiagentic.foundation.components.ids import CORE_COMPONENT_IDS, get_optional_component_ids
 from audiagentic.foundation.contracts.canonical_ids import (
     validate_ids,
@@ -18,7 +18,7 @@ from audiagentic.foundation.contracts.canonical_ids import (
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import SCHEMA_DIR
-from audiagentic.paths import REPO_ROOT
+from audiagentic.foundation.paths.package import REPO_ROOT
 
 
 def _extract_ids(payload: Any) -> tuple[list[str], list[str]]:

@@ -9,10 +9,10 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from audiagentic.cli_io import print_json
+from audiagentic.foundation.cli_io import print_json
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import SCHEMA_DIR, schema_filename
-from audiagentic.paths import REPO_ROOT
+from audiagentic.foundation.paths.package import REPO_ROOT
 
 FIXTURES_DIR = REPO_ROOT / "docs" / "examples" / "fixtures"
 

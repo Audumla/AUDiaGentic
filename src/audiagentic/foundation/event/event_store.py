@@ -12,7 +12,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..util import pattern_matches
+from .patterns import pattern_matches
 from .envelope import EventEnvelope
 
 logger = logging.getLogger(__name__)

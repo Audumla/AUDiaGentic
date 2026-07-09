@@ -4,7 +4,7 @@ import json
 import shutil
 from pathlib import Path
 
-from audiagentic.cli_io import print_message
+from audiagentic.foundation.cli_io import print_message
 from audiagentic.runtime.harness.config import require_harness_provider, require_harness_rig_port
 from audiagentic.runtime.harness.paths import _RIG_CONFIG
 from audiagentic.runtime.rig.embedded.config import load_rig_model, resolve_profile_definition
