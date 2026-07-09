@@ -23,6 +23,7 @@ Runtime (orchestration)  --bootstraps/wires via seams-->  foundation capabilitie
 
   _Rationale: every real and planned use of the registered-callback pattern (`get_capability`/`register_capability`) was found to be a misapplication — either a fire-and-forget reaction better served by the event bus, logic needing no indirection at all, or composition-root code exempt from import rules that could check the component registry and import directly._
 
+- Tests are exempt from production import constraints. Test code may import across layers, private helpers, optional components, or composition-root modules as needed to validate behavior, boundaries, fixtures, and migration safety.
 - **Domain-neutral naming:** foundation module names, function names, event-type strings, and contribution-registry keys must be domain-neutral. A name referencing one specific component's vocabulary is a layering violation even when it produces zero forbidden imports.
 - Composition roots are exempt from import-direction rules by definition.
 

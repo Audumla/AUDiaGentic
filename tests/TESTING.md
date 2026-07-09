@@ -400,6 +400,57 @@ The former `install-test`, `release-test` and `server-smoke` images merged into
 old standalone Hindsight provider image folded into
 `audiagentic-provider-lifecycle-e2e`.
 
+### Provider prompt-launch env vars
+
+`audiagentic-provider-lifecycle-e2e` now also runs
+`tests/integration/providers/test_provider_prompt_launch_e2e.py`, which
+accounts for every registered provider.
+
+Not every provider is expected to launch successfully:
+
+- Real launch expected: `pi`, `claude`, `cline`, `codex`, `copilot`, `gemini`, `local-openai`, `opencode`, `qwen`
+- Expected stubbed: `aider`, `antigravity`, `goose`, `openhands`, `plandex`
+- Expected ok-stub: `continue`
+- Expected unsupported error: `roo`
+
+For the real-launch providers, supply env vars only for the providers you want
+the Docker recipe to exercise. Missing required env vars cause a skip, not a
+false failure.
+
+Required by provider:
+
+| Provider        | Required env vars |
+| --------------- | ----------------- |
+| `pi`            | optional: `AUDIAGENTIC_TEST_PI_MODEL`, `AUDIAGENTIC_TEST_PI_PROVIDER` |
+| `claude`        | `ANTHROPIC_API_KEY`, `AUDIAGENTIC_TEST_CLAUDE_MODEL` |
+| `cline`         | `AUDIAGENTIC_TEST_CLINE_AUTH`, `AUDIAGENTIC_TEST_CLINE_MODEL` |
+| `codex`         | `OPENAI_API_KEY`, `AUDIAGENTIC_TEST_CODEX_MODEL` |
+| `copilot`       | `GH_TOKEN`, `AUDIAGENTIC_TEST_COPILOT_MODEL` |
+| `gemini`        | `GEMINI_API_KEY`, `AUDIAGENTIC_TEST_GEMINI_MODEL` |
+| `local-openai`  | `AUDIAGENTIC_TEST_LOCAL_OPENAI_MODEL`, `AUDIAGENTIC_TEST_LOCAL_OPENAI_BASE_URL` |
+| `opencode`      | `OPENAI_API_KEY`, `AUDIAGENTIC_TEST_OPENCODE_MODEL` |
+| `qwen`          | `DASHSCOPE_API_KEY`, `AUDIAGENTIC_TEST_QWEN_MODEL` |
+
+Optional shared overrides:
+
+- `AUDIAGENTIC_TEST_PROVIDER_PROMPT`
+- `AUDIAGENTIC_TEST_PROVIDER_EXPECTED`
+
+Example:
+
+```bash
+cp tests/docker/provider-lifecycle.env.example tests/docker/provider-lifecycle.env
+# edit tests/docker/provider-lifecycle.env
+make test-provider-lifecycle-docker
+```
+
+Direct shell env still works and overrides the env file:
+
+```bash
+OPENAI_API_KEY=... AUDIAGENTIC_TEST_CODEX_MODEL=gpt-5.4-mini \
+make test-provider-lifecycle-docker
+```
+
 ### Build once, run many
 
 ```bash
@@ -408,6 +459,7 @@ make build-lsp-install      # Build LSP install test image
 make test-lsp-docker        # Run LSP install recipe in docker
 make test-docker            # Run the clean non-mutating suite in docker
 make test-packaging-docker  # Run clean-room wheel/install/server checks
+make test-provider-lifecycle-docker  # Run provider lifecycle/Hindsight/prompt-launch image
 ```
 
 ---
@@ -422,6 +474,7 @@ make test-packaging-docker  # Run clean-room wheel/install/server checks
 | `make test`                            | `unit`, `integration` | `mutates_host`, `opt_in` | —                            |
 | `make test-docker`                     | clean non-mutating suite | `mutates_host`, `opt_in` | runs inside Docker        |
 | `make test-packaging-docker`           | clean-room wheel/install/server | —                | runs inside Docker           |
+| `make test-provider-lifecycle-docker`  | provider lifecycle + Hindsight + prompt-launch | — | runs inside Docker |
 | `make test-lsp-docker`                 | LSP install recipe    | —                        | runs inside Docker           |
 | `pytest -m smoke`                      | `smoke`               | —                        | —                            |
 | `pytest -m 'not slow'`                 | all except `slow`     | —                        | —                            |
