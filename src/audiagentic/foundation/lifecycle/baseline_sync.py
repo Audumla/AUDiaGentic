@@ -19,7 +19,7 @@ from audiagentic.foundation.components.base import (
     MODE_GENERATED_MANAGED,
     MODE_RUNTIME_ONLY,
 )
-from audiagentic.paths import REPO_ROOT
+from audiagentic.foundation.paths.package import REPO_ROOT
 
 DEFAULT_DOC_DIRS: tuple[str, ...] = ("specifications", "implementation", "releases", "decisions")
 
@@ -38,7 +38,7 @@ def _iter_component_assets(component_ids: set[str] | None = None) -> Iterable[Ba
 
     from audiagentic.foundation.components import all_descriptors
     from audiagentic.foundation.components.base import MODE_REQUIRED_MANAGED
-    from audiagentic.paths import REPO_ROOT
+    from audiagentic.foundation.paths.package import REPO_ROOT
     for descriptor in all_descriptors().values():
         if component_ids is not None and descriptor.component_id not in component_ids:
             continue

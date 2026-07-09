@@ -5,9 +5,9 @@ import argparse
 import sys
 from pathlib import Path
 
-from audiagentic.cli_io import print_json
+from audiagentic.foundation.cli_io import print_json
 from audiagentic.foundation.contracts.validate_ids import scan_paths
-from audiagentic.paths import REPO_ROOT
+from audiagentic.foundation.paths.package import REPO_ROOT
 
 
 def _canonical_provider_ids() -> tuple[str, ...]:

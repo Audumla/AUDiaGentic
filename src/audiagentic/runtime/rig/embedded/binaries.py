@@ -13,7 +13,7 @@ import zipfile
 from pathlib import Path
 from typing import NamedTuple
 
-from audiagentic.cli_io import print_error, print_message
+from audiagentic.foundation.cli_io import print_error, print_message
 from audiagentic.foundation.system.process import executable_command
 from audiagentic.runtime.rig.constants import (
     GITHUB_API,

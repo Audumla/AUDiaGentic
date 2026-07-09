@@ -23,7 +23,7 @@ def _project_config_path(project_root: Path) -> Path:
 
 
 def _global_config_path() -> Path:
-    from audiagentic.foundation.home import audiagentic_home
+    from audiagentic.foundation.paths.home import audiagentic_home
     return audiagentic_home() / "config" / "harness" / "ag.yaml"
 
 
@@ -107,7 +107,7 @@ def set_cli_visibility(
 
     save_yaml_file(path, current, sort_keys=False)
 
-    from audiagentic.foundation.home import global_harness_runtime
+    from audiagentic.foundation.paths.home import global_harness_runtime
     from audiagentic.runtime.harness import (
         build_runtime_sync,
         refresh_materialized_agent_config,

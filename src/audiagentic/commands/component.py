@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from audiagentic.cli_io import print_json
+from audiagentic.foundation.cli_io import print_json
 
 logger = logging.getLogger(__name__)
 

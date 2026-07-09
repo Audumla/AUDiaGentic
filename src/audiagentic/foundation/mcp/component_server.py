@@ -189,7 +189,7 @@ def project_root_from_env() -> Path:
     generically by walking up from CWD — the MCP server runs with CWD set to the
     project root, so no path needs to be hard-coded anywhere.
     """
-    from audiagentic.paths import find_project_root
+    from audiagentic.foundation.paths.project import find_project_root
 
     root = find_project_root()
     if root is None:

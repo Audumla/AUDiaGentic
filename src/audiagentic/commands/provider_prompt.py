@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from audiagentic.cli_io import print_error, print_json
+from audiagentic.foundation.cli_io import print_error, print_json
 
 
 def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:

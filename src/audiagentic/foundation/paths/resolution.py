@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from audiagentic.foundation.config.merge import deep_merge
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 
 _RESOLUTION_ORDER = ("project_local", "user_global", "package_default")
@@ -21,17 +21,6 @@ def _path_error(prefix: str, code_number: int, message: str, **details: Any) -> 
         message=message,
         details=details,
     )
-
-
-def deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
-    """Return new dict with overlay merged on top of base."""
-    result = deepcopy(base)
-    for key, value in overlay.items():
-        if isinstance(value, dict) and isinstance(result.get(key), dict):
-            result[key] = deep_merge(result[key], value)
-        else:
-            result[key] = deepcopy(value)
-    return result
 
 
 def build_layered_path_map(

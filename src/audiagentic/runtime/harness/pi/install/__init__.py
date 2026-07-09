@@ -6,7 +6,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from audiagentic.cli_io import print_message
+from audiagentic.foundation.cli_io import print_message
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.runtime.harness.reload import (
     build_runtime_sync as _build_sync,
@@ -184,7 +184,7 @@ def refresh_harness_config_if_installed(
 
     Returns True if harness was present and config was refreshed.
     """
-    from audiagentic.foundation.home import global_harness_runtime
+    from audiagentic.foundation.paths.home import global_harness_runtime
     harness_runtime = global_harness_runtime()
     if not (harness_runtime / "cli" / "node_modules" / ".bin").exists():
         return False
