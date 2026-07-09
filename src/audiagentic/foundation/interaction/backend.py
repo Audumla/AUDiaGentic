@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Protocol
 
+from audiagentic.foundation.cli_io import print_message
 from audiagentic.foundation.interaction.models import (
     AskRequest,
     AskResponse,
@@ -28,19 +29,19 @@ class CliBackend:
     def ask(self, request: AskRequest) -> AskResponse:
         try:
             if request.choices:
-                print(f"\n{request.title}")  # noqa: T201
+                print_message(f"\n{request.title}")
                 if request.description:
-                    print(f"  {request.description}")  # noqa: T201
+                    print_message(f"  {request.description}")
                 for i, c in enumerate(request.choices, 1):
-                    print(f"  [{i}] {c}")  # noqa: T201
+                    print_message(f"  [{i}] {c}")
                 default = request.default_choice
                 if default:
                     idx = list(request.choices).index(default) + 1
-                    print(f"  (default: [{idx}] {default})")  # noqa: T201
+                    print_message(f"  (default: [{idx}] {default})")
                 else:
                     idx = 1
                     default = request.choices[0] if request.choices else ""
-                    print(f"  (default: [{idx}] {default})")  # noqa: T201
+                    print_message(f"  (default: [{idx}] {default})")
 
                 raw = input("> ").strip()
                 if not raw:
@@ -58,9 +59,9 @@ class CliBackend:
                     choice=choice or None,
                 )
             else:
-                print(f"\n{request.title}")  # noqa: T201
+                print_message(f"\n{request.title}")
                 if request.description:
-                    print(f"  {request.description}")  # noqa: T201
+                    print_message(f"  {request.description}")
                 raw = input("> ").strip()
                 return AskResponse(
                     request_id=request.request_id,
@@ -75,7 +76,7 @@ class CliBackend:
 
     def push_status(self, msg: PushStatusMessage) -> None:
         prefix = f"[{msg.component}] " if msg.component else ""
-        print(f"{prefix}{msg.message}")  # noqa: T201
+        print_message(f"{prefix}{msg.message}")
 
     def respond(self, request_id: str, choice: str | None, *, details: dict[str, Any]) -> None:
         pass
