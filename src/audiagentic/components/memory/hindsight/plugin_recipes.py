@@ -155,6 +155,8 @@ class PluginConfigRecipe(_RowRecipe):
             seq = run_steps(steps, context, fail_prefix="plugin uninstall failed")
             if not seq.success:
                 return self._stamp(seq)
+        if self._config_path:
+            return self.prune(context)
         return self._stamp(ProviderRecipeResult.ok(
             RecipeState.ABSENT, status="plugin uninstalled",
         ))
@@ -229,13 +231,10 @@ def _repair_windows_plugin_mcp(
 
     # Resolve data directory from environment variable or fallback
     if data_dir_str:
-        raw_data = Path(data_dir_str)
         appdata = os.environ.get("APPDATA", "")
         if "${APPDATA}" in data_dir_str and not appdata:
             return False, "APPDATA not set; cannot resolve plugin data dir"
-        data_dir = raw_data.expanduser()
-        if "${APPDATA}" in data_dir_str:
-            data_dir = Path(appdata) / str(raw_data).split("/Claude/")[1]
+        data_dir = Path(data_dir_str.replace("${APPDATA}", appdata)).expanduser()
     else:
         return False, "plugin_repair_data_dir not configured"
 
@@ -362,12 +361,18 @@ class _PluginUrlConfigRecipe(_RowRecipe):
         return self._row.audia_action == "call_official_installer"
 
     def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        import os
         current = self._current_config()
         expected = self._expected_config()
         if all(current.get(k) == v for k, v in expected.items()):
+            artifacts = [str(self._url_config_path)]
+            if os.name == "nt":
+                ok, detail = _repair_windows_plugin_mcp(self._backend, self._row)
+                if ok and "patched" in detail:
+                    artifacts.append(detail)
             return self._stamp(ProviderRecipeResult.ok(
                 RecipeState.VERIFIED,
-                artifacts=[str(self._url_config_path)],
+                artifacts=artifacts,
                 status="plugin URL config correct",
             ))
         return self._stamp(ProviderRecipeResult.ok(
@@ -435,7 +440,7 @@ class _PluginUrlConfigRecipe(_RowRecipe):
             seq = run_steps(steps, context, fail_prefix="plugin uninstall failed")
             if not seq.success:
                 return self._stamp(seq)
-        return self._stamp(ProviderRecipeResult.ok(RecipeState.ABSENT, status="plugin uninstalled"))
+        return self.prune(context)
 
     def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
         self._url_config_path.unlink(missing_ok=True)
@@ -510,9 +515,7 @@ class _PluginArrayRecipe(_RowRecipe):
         return self._stamp(ProviderRecipeResult.fail("plugin array entry not verified after configure"))
 
     def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(ProviderRecipeResult.ok(
-            RecipeState.ABSENT, status="plugin managed via config array; nothing to uninstall",
-        ))
+        return self.prune(context)
 
     def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
         if self._remover:

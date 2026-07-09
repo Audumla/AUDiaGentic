@@ -21,6 +21,17 @@ logger = logging.getLogger(__name__)
 _UNMANAGED_KEY = "unmanaged-recommendations"
 
 
+def _publisher_name(metadata: dict[str, Any]) -> str:
+    """Extract publisher name from extension metadata variants."""
+    publisher = metadata.get("publisher", "")
+    if isinstance(publisher, str):
+        return publisher
+    if isinstance(publisher, dict):
+        name = publisher.get("name", "")
+        return name if isinstance(name, str) else ""
+    return ""
+
+
 def _read_extension_metadata(ext_id: str, *, host_id: str = "vscode") -> dict[str, Any] | None:
     """Read package.json from an installed host extension for version/metadata.
 
@@ -68,7 +79,7 @@ def build_recommendations(
         metadata = _read_extension_metadata(ext.capability_id)
         if metadata:
             rec["version"] = metadata.get("version", "")
-            rec["publisher"] = metadata.get("publisher", {}).get("name", "")
+            rec["publisher"] = _publisher_name(metadata)
         managed_recommendations.append(rec)
 
     return {

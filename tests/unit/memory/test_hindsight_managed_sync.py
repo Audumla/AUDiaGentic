@@ -156,6 +156,21 @@ class TestManagedOwnership:
         assert _backend().server_name not in spec.reader(root / spec.config_path)
         assert HINDSIGHT_MANAGED_ID not in load_managed_mcp_registry(root).get("stub-provider", {})
 
+    def test_uninstall_removes_entry_and_ownership(self, stub_provider) -> None:
+        from audiagentic.components.providers.services.managed_mcp_registry import (
+            load_managed_mcp_registry,
+        )
+
+        spec, root = stub_provider
+        adapter = _adapter(spec, root)
+        adapter.configure({})
+
+        result = adapter.uninstall({})
+
+        assert result.success
+        assert _backend().server_name not in spec.reader(root / spec.config_path)
+        assert HINDSIGHT_MANAGED_ID not in load_managed_mcp_registry(root).get("stub-provider", {})
+
     def test_ag_subset_sync_never_touches_hindsight_entry(self, stub_provider) -> None:
         from audiagentic.components.providers.services.mcp import (
             sync_managed_provider_mcp_subset,

@@ -73,3 +73,39 @@ def test_second_host_is_config_only(tmp_path: Path):
         all_host_adapters()  # ensure loaded
         from audiagentic.components.providers.services import host_adapter as mod
         mod._registry.pop("fixture-editor", None)
+
+
+def test_extension_metadata_accepts_string_publisher(monkeypatch, tmp_path: Path):
+    from audiagentic.components.providers.descriptors.base import HostCapability
+    from audiagentic.components.providers.surfaces import extensions_json
+
+    monkeypatch.setattr(
+        extensions_json,
+        "_read_extension_metadata",
+        lambda _ext_id: {"version": "1.2.3", "publisher": "pub"},
+    )
+
+    data = extensions_json.build_recommendations(
+        (HostCapability(host="vscode", capability_id="pub.some-ext", display_name="X"),),
+        project_root=tmp_path,
+    )
+
+    assert data["managed"][0]["publisher"] == "pub"
+
+
+def test_extension_metadata_accepts_object_publisher(monkeypatch, tmp_path: Path):
+    from audiagentic.components.providers.descriptors.base import HostCapability
+    from audiagentic.components.providers.surfaces import extensions_json
+
+    monkeypatch.setattr(
+        extensions_json,
+        "_read_extension_metadata",
+        lambda _ext_id: {"version": "1.2.3", "publisher": {"name": "pub"}},
+    )
+
+    data = extensions_json.build_recommendations(
+        (HostCapability(host="vscode", capability_id="pub.some-ext", display_name="X"),),
+        project_root=tmp_path,
+    )
+
+    assert data["managed"][0]["publisher"] == "pub"

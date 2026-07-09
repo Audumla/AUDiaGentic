@@ -272,9 +272,7 @@ class _McpConfigAdapter(_RowRecipe):
         ))
 
     def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(ProviderRecipeResult.ok(
-            RecipeState.ABSENT, status="external backend",
-        ))
+        return self.prune(context)
 
     def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
         sync = _sync_hindsight_mcp_entry(
