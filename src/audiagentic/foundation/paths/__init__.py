@@ -1,7 +1,8 @@
+from audiagentic.foundation.config.merge import deep_merge
+
 from .component_paths import load_component_paths, resolve_component_path
 from .resolution import (
     build_layered_path_map,
-    deep_merge,
     iter_layered_candidates,
     load_layered_mapping,
     resolve_existing_dir,
