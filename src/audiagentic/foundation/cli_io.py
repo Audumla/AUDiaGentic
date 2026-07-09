@@ -6,7 +6,7 @@ CLI entrypoints and harness user-facing output. Shared library code should use
 
 Usage
 -----
-    from audiagentic.cli_io import print_json, print_message, print_error
+    from audiagentic.foundation.cli_io import print_json, print_message, print_error
 
     # Structured machine-readable output (stdout)
     print_json({"status": "ok", "version": "1.0.0"})
