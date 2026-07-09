@@ -8,7 +8,7 @@ from audiagentic.components.agent_jobs.profiles import (
     validate_profile,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.paths import REPO_ROOT
+from audiagentic.foundation.paths.package import REPO_ROOT
 
 
 def test_builtin_profiles_validate() -> None:

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.paths import REPO_ROOT
+from audiagentic.foundation.paths.package import REPO_ROOT
 
 CoreServiceBoundary = pytest.importorskip(
     "audiagentic.channels.server.service_boundary",

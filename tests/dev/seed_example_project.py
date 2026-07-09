@@ -10,7 +10,7 @@ from audiagentic.foundation.lifecycle.baseline_sync import (
     ensure_project_layout,
     sync_managed_baseline,
 )
-from audiagentic.paths import REPO_ROOT
+from audiagentic.foundation.paths.package import REPO_ROOT
 
 
 def seed_example_project(target: Path, overwrite: bool = False) -> None:

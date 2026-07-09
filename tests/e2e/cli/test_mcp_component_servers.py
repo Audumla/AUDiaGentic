@@ -299,7 +299,7 @@ def test_update_rig_works_directly(tmp_path: Path) -> None:
     import io
 
     from audiagentic.foundation.contracts.output import ComponentOutputEvent
-    from audiagentic.foundation.home import global_harness_runtime
+    from audiagentic.foundation.paths.home import global_harness_runtime
     from audiagentic.runtime.rig.embedded.binaries import update_binaries as _update
 
     os.environ["AUDIAGENTIC_HOME"] = str(tmp_path / ".audiagentic")

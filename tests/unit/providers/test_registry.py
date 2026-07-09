@@ -6,7 +6,7 @@ from audiagentic.components.providers.services.provider_registry import (
     load_provider_registry,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.paths import REPO_ROOT
+from audiagentic.foundation.paths.package import REPO_ROOT
 
 
 def _load_fixture(name: str) -> dict:

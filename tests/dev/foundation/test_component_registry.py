@@ -35,7 +35,7 @@ from audiagentic.foundation.lifecycle.components import (
     get_owned_files,
     uninstall_component,
 )
-from audiagentic.paths import SRC_ROOT as SRC
+from audiagentic.foundation.paths.package import SRC_ROOT as SRC
 
 pytestmark = pytest.mark.dev
 
