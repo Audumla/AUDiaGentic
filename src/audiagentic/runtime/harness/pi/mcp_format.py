@@ -21,7 +21,6 @@ from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.mcp import McpServerEntry
 from audiagentic.foundation.mcp.json_format import (
     _resolve_command,
-    _sanitize_command,
 )
 
 _PI_SETTINGS_ENABLED: dict[str, Any] = {
@@ -43,8 +42,10 @@ def pi_mcp_path(project_root: Path | None = None) -> Path:
 
 
 def _entry_to_pi_cfg(entry: McpServerEntry) -> dict[str, Any]:
+    # Pi's MCP adapter consumes this file directly, so runtime config must not
+    # contain AUDiaGentic-only portability placeholders.
     cfg: dict[str, Any] = {
-        "command": _sanitize_command(entry.command, entry.args),
+        "command": _resolve_command(entry.command),
         "args": list(entry.args),
         "lifecycle": "lazy",
     }
