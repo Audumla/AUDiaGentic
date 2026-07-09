@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.io import load_yaml_file
-from audiagentic.paths import SRC_ROOT
+from audiagentic.foundation.paths.package import SRC_ROOT
 
 logger = logging.getLogger(__name__)
 

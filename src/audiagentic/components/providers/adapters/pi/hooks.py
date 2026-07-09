@@ -6,7 +6,7 @@ import subprocess
 
 
 def _pi_install(project_root=None):
-    from audiagentic.foundation.home import global_harness_runtime
+    from audiagentic.foundation.paths.home import global_harness_runtime
     from audiagentic.runtime.harness.pi.install import install_to
     try:
         rc = install_to(global_harness_runtime(), project_root=project_root)
@@ -18,7 +18,7 @@ def _pi_install(project_root=None):
 
 
 def _pi_uninstall(project_root=None):
-    from audiagentic.foundation.home import global_harness_runtime
+    from audiagentic.foundation.paths.home import global_harness_runtime
     from audiagentic.runtime.harness.pi.install import uninstall_from
     try:
         rc = uninstall_from(global_harness_runtime())
@@ -29,7 +29,7 @@ def _pi_uninstall(project_root=None):
 
 def _pi_ensure_lens(project_root=None):
     """Install the pi-lens LSP extension into the pi harness (best-effort)."""
-    from audiagentic.foundation.home import global_harness_runtime
+    from audiagentic.foundation.paths.home import global_harness_runtime
     from audiagentic.runtime.harness.context import resolve_agent_bin
     pi_bin = resolve_agent_bin(global_harness_runtime())
     if not pi_bin.exists():
@@ -55,7 +55,7 @@ def _pi_ensure_lens(project_root=None):
 
 
 def _pi_probe(descriptor):
-    from audiagentic.foundation.home import global_harness_runtime
+    from audiagentic.foundation.paths.home import global_harness_runtime
     from audiagentic.runtime.harness.pi.runner import resolve_agent_bin
     harness_runtime = global_harness_runtime()
     executable = resolve_agent_bin(harness_runtime)

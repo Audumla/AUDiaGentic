@@ -12,7 +12,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from audiagentic.cli_io import print_message
+from audiagentic.foundation.cli_io import print_message
 from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.runtime.harness.context import AgentContext
 from audiagentic.runtime.harness.run_common import (

@@ -6,7 +6,7 @@ import subprocess
 from dataclasses import asdict
 from typing import cast
 
-from audiagentic.cli_io import print_json, print_message
+from audiagentic.foundation.cli_io import print_json, print_message
 from audiagentic.runtime.rig.embedded.process import build_command
 
 DEFAULT_HOST = "127.0.0.1"

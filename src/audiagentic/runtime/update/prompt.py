@@ -5,7 +5,7 @@ import logging
 import sys
 from pathlib import Path
 
-from audiagentic.cli_io import print_message
+from audiagentic.foundation.cli_io import print_message
 
 from .checker import check_update, current_version, record_failed_install, skip_version
 from .runner import install_version
