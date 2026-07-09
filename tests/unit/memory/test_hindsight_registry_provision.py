@@ -6,7 +6,9 @@ assembler's _SpecDrivenRecipe.provision() raised NotImplementedError for declare
 which would have crashed apply_hindsight for any HOOKS/WRAPPER_CLI provider — but
 the full unit suite passed because only goldens were run.
 
-After revert: direct class instantiation must pass through registry lifecycle without exception.
+Post-SL15: the guidance/hooks kinds are assembled from a RecipeSpec; each must
+still pass through the registry lifecycle without exception (the assembled
+provision() delegates or inherits base orchestration — never raises).
 """
 from __future__ import annotations
 

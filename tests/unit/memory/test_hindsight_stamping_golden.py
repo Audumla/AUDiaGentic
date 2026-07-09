@@ -5,6 +5,9 @@ source_date/action_needed) of every recipe class's probe() and dry_run(), plus
 a couple of full lifecycle results, so the per-method-stamping strip in SL11 is
 provably behaviour-preserving. If a value here changes, the strip altered
 observable behaviour and must be reviewed — not blindly re-baselined.
+
+After SL15: GuidanceOnlyRecipe and HooksInstallerRecipe classes are replaced
+by config-driven assembly via RecipeSpec; goldens assert the same behaviour.
 """
 from __future__ import annotations
 
@@ -15,11 +18,13 @@ from audiagentic.components.memory.hindsight.plugin_recipes import (
     _PluginArrayRecipe,
     _PluginUrlConfigRecipe,
 )
-from audiagentic.components.memory.hindsight.recipes import (
-    GuidanceOnlyRecipe,
-    HooksInstallerRecipe,
-    _McpConfigAdapter,
+from audiagentic.components.memory.hindsight.recipe_spec import (
+    ParamBinding,
+    RecipeSpec,
+    StatusOverride,
+    assemble_hindsight_recipe,
 )
+from audiagentic.components.memory.hindsight.recipes import _McpConfigAdapter
 from audiagentic.components.providers.services.recipes import ProviderRecipeKind
 
 
@@ -53,9 +58,42 @@ def _snap(result) -> dict:
     }
 
 
+#: Spec for guidance-only golden tests (matches strategies._GUIDANCE_SPEC).
+_GUIDANCE_ONLY_SPEC = RecipeSpec(
+    pattern="no_automation",
+    params=[
+        ParamBinding(param_name="action_needed", row_field="notes"),
+        ParamBinding(param_name="skip_status", literal="skipped: no automated Hindsight integration for this provider"),
+    ],
+    status_overrides=[
+        StatusOverride(method="probe", state="absent", status_text="no automated integration available"),
+    ],
+)
+
+#: Spec for hooks installer golden tests (matches strategies._HOOKS_SPEC).
+_HOOKS_SPEC = RecipeSpec(
+    pattern="declared_step",
+    params=[
+        ParamBinding(param_name="install_steps", row_field="install_steps"),
+        ParamBinding(param_name="uninstall_steps", row_field="uninstall_steps"),
+        ParamBinding(param_name="status_command", row_field="status_command"),
+        ParamBinding(param_name="verified", literal=True),
+        ParamBinding(param_name="source_label", literal=""),
+        ParamBinding(param_name="gate_action", row_field="notes"),
+    ],
+    status_overrides=[
+        StatusOverride(method="configure", state="configuring", status_text="hooks installed via CLI; no config write needed"),
+        StatusOverride(method="prune", state="absent", status_text="hooks managed by CLI; no config to prune"),
+        StatusOverride(method="dry_run", state="absent", status_text="would run install steps (dry-run)"),
+    ],
+)
+
+
 def test_hooks_probe_and_dry_run_golden():
-    r = HooksInstallerRecipe(
-        _row(recipe_kind=ProviderRecipeKind.HOOKS, status_command=""), _backend()
+    r = assemble_hindsight_recipe(
+        _row(recipe_kind=ProviderRecipeKind.HOOKS, status_command=""),
+        _backend(),
+        _HOOKS_SPEC,
     )
     assert _snap(r.probe({})) == {
         "success": True,
@@ -65,25 +103,32 @@ def test_hooks_probe_and_dry_run_golden():
         "source_date": "2026-01-01",
         "action_needed": "manage_config_writes",
     }
+    # dry_run uses spec override: "would run install steps (dry-run)"
     assert _snap(r.dry_run({})) == {
         "success": True,
         "state": "absent",
-        "status": "no install steps (dry-run)",
+        "status": "would run install steps (dry-run)",
         "source_url": "https://src.example/doc",
         "source_date": "2026-01-01",
         "action_needed": "manage_config_writes",
     }
 
 
-def test_hooks_unverified_probe_golden():
-    r = HooksInstallerRecipe(
+def test_hooks_unverified_fallback_golden():
+    """Unverified hooks fall back to guidance-only via strategy.
+
+    The _GUIDANCE_SPEC binds action_needed from row.notes; when notes is empty,
+    the stamp falls through to row.audia_action (source gate rationale).
+    """
+    r = assemble_hindsight_recipe(
         _row(recipe_kind=ProviderRecipeKind.HOOKS, source_status="unconfirmed", notes="do X"),
         _backend(),
+        _GUIDANCE_ONLY_SPEC,
     )
     assert _snap(r.probe({})) == {
         "success": True,
         "state": "absent",
-        "status": "source unconfirmed; installer blocked",
+        "status": "no automated integration available",
         "source_url": "https://src.example/doc",
         "source_date": "2026-01-01",
         "action_needed": "do X",
@@ -143,7 +188,11 @@ def test_plugin_array_probe_golden(tmp_path):
 
 
 def test_guidance_only_probe_provision_golden():
-    r = GuidanceOnlyRecipe(_row(source_status="unconfirmed", notes="manual note"))
+    r = assemble_hindsight_recipe(
+        _row(source_status="unconfirmed", notes="manual note"),
+        None,
+        _GUIDANCE_ONLY_SPEC,
+    )
     assert _snap(r.probe({})) == {
         "success": True,
         "state": "absent",

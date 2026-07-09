@@ -1,11 +1,10 @@
 """Hindsight provider recipe implementations.
 
-Base + installer/MCP-config/rules/guidance recipe classes. The plugin-family
-recipes live in plugin_recipes.py (they import the ``_RowRecipe`` base and
-``_hindsight_params`` from here); strategy selection lives in strategies.py, the
-apply/teardown/prune orchestration in lifecycle.py, and aggregate status in
-status.py. Hindsight-specific provider setup is contained here; the providers
-component exposes only generic recipe interfaces.
+Base + MCP-config adapter recipe classes. After SL15, the config-collapsible
+kinds (GuidanceOnly, HooksInstaller) are assembled via RecipeSpec in
+recipe_spec.py; this module retains _RowRecipe (provenance base), helper
+functions, and genuinely-custom recipe classes (_McpConfigAdapter). Plugin
+recipes live in plugin_recipes.py. Strategy selection lives in strategies.py.
 """
 from __future__ import annotations
 
@@ -34,11 +33,6 @@ from audiagentic.foundation.toolchains.provision_steps import (
     ProvisionStep,
     steps_from_defs,
     substitute_params,
-)
-from audiagentic.foundation.toolchains.recipe_patterns import (
-    DeclaredStepRecipe,
-    InstallManifest,
-    NoAutomationRecipe,
 )
 
 logger = logging.getLogger(__name__)
@@ -137,114 +131,6 @@ class _RowRecipe(ProviderCapabilityRecipe):
     def to_result(self, base: RecipeResult) -> ProviderRecipeResult:  # type: ignore[override]
         """Convert generic result with Hindsight provenance overlay."""
         return self._stamp(base)
-
-
-class HooksInstallerRecipe(_RowRecipe):
-    """Command-installer recipe: runs official hook installer CLI.
-
-    Hindsight wiring over the generic :class:`DeclaredStepRecipe`: probe /
-    install / uninstall / verify / provision_steps are the reusable gated
-    declared-step logic; configure/prune/dry_run carry hindsight-phrased
-    no-op statuses. For providers like Codex, Cline installed via a CLI.
-    """
-
-    def __init__(
-        self,
-        row: HindsightRecipeRow,
-        backend: HindsightBackendConfig,
-    ) -> None:
-        super().__init__(row)
-        self._backend = backend
-        self._installer = DeclaredStepRecipe(
-            InstallManifest(
-                install_steps=tuple(row.install_steps),
-                uninstall_steps=tuple(row.uninstall_steps),
-                status_command=row.status_command,
-                verified=(row.source_status == "verified"),
-                source_label=row.source_status,
-                gate_action=row.notes or row.audia_action,
-                recipe_id=f"hindsight-{row.provider_id}",
-            ),
-            _hindsight_params(backend),
-            subject="installer",
-        )
-
-    def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(self._installer.probe(context))
-
-    def install(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(self._installer.install(context))
-
-    def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(self._installer.uninstall(context))
-
-    def verify(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(self._installer.verify(context))
-
-    def provision_steps(self) -> list[ProvisionStep]:
-        return self._installer.provision_steps()
-
-    def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(RecipeResult.ok(
-            RecipeState.CONFIGURING,
-            status="hooks installed via CLI; no config write needed",
-        ))
-
-    def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(RecipeResult.ok(
-            RecipeState.ABSENT, status="hooks managed by CLI; no config to prune",
-        ))
-
-    def dry_run(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        if self._row.install_steps:
-            step_info = ", ".join(s.get("id", str(i)) for i, s in enumerate(self._row.install_steps))
-            return self._stamp(RecipeResult.ok(
-                RecipeState.ABSENT,
-                status=f"would run install steps [{step_info}] (dry-run)",
-            ))
-        return self._stamp(RecipeResult.ok(
-            RecipeState.ABSENT, status="no install steps (dry-run)",
-        ))
-
-
-class GuidanceOnlyRecipe(_RowRecipe):
-    """Guidance-only recipe: no automation, action-needed guidance only.
-
-    Hindsight wiring over the generic :class:`NoAutomationRecipe`: the delegate
-    supplies the no-op lifecycle and guidance text; ``_stamp`` overlays this
-    provider's provenance. For providers with no official Hindsight integration.
-    """
-
-    def __init__(self, row: HindsightRecipeRow) -> None:
-        super().__init__(row, recipe_kind=ProviderRecipeKind.GUIDANCE_ONLY)
-        self._delegate = NoAutomationRecipe(
-            action_needed=row.notes or "manual setup required",
-            skip_status="skipped: no automated Hindsight integration for this provider",
-        )
-
-    def provision(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(self._delegate.provision(context))
-
-    def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(self._delegate.probe(context))
-
-    def install(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(self._delegate.install(context))
-
-    def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(self._delegate.configure(context))
-
-    def verify(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(self._delegate.verify(context))
-
-    def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(self._delegate.uninstall(context))
-
-    def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(self._delegate.prune(context))
-
-    def dry_run(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        return self._stamp(self._delegate.probe(context))
 
 
 def _parameterize_command(
@@ -416,7 +302,5 @@ class _McpConfigAdapter(_RowRecipe):
 
 
 __all__ = [
-    "GuidanceOnlyRecipe",
     "HINDSIGHT_MANAGED_ID",
-    "HooksInstallerRecipe",
 ]
