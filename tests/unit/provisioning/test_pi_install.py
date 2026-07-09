@@ -76,6 +76,6 @@ def test_install_to_seeds_test_model_when_repo_fixture_exists(
 
     _seed_test_model(target, project_root)
 
-    seeded = target / "rig" / "bin" / "models" / "Qwen_Qwen3.5-2B-Q4_K_S.gguf"
+    seeded = target / "rig" / "bin" / "models" / "Qwen3.5-0.8B.Q8_0.gguf"
     assert seeded.exists()
     assert seeded.read_bytes() == b"gguf"
