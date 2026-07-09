@@ -15,8 +15,8 @@ from audiagentic.foundation.lifecycle.baseline_sync import (
 )
 from audiagentic.foundation.lifecycle.components import DEFAULT_VERSION
 from audiagentic.foundation.lifecycle.detector import detect_installed_state
-from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.paths.package import REPO_ROOT
+from audiagentic.foundation.time import now_iso_z
 
 
 def bootstrap_ledger(project_root: Path) -> dict[str, Any]:

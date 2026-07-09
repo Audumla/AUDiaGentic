@@ -150,7 +150,7 @@ def test_component_install_refreshes_materialized_agent_config(
     reload_calls: list[tuple[Path, str, str | None]] = []
 
     monkeypatch.setattr(
-        "audiagentic.foundation.home.global_harness_runtime",
+         "audiagentic.foundation.paths.home.global_harness_runtime",
         lambda: harness_root,
     )
     monkeypatch.setattr(
@@ -226,7 +226,7 @@ def test_set_cli_visibility_updates_project_config_and_requests_reload(
     reload_calls: list[tuple[Path, str]] = []
 
     monkeypatch.setattr(
-        "audiagentic.foundation.home.global_harness_runtime",
+         "audiagentic.foundation.paths.home.global_harness_runtime",
         lambda: harness_root,
     )
     monkeypatch.setattr(

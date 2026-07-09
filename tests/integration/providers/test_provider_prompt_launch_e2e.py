@@ -24,7 +24,6 @@ from audiagentic.components.providers.services.lifecycle import (
     install_provider_cli,
     uninstall_provider_cli,
 )
-from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.paths.home import global_harness_runtime
 from audiagentic.runtime.harness import RunnerParams, build_global_context, run_agent
 
@@ -169,6 +168,9 @@ def _pi_case(project_root: Path) -> None:
             "AUDIAGENTIC_TEST_PI_PROVIDER",
             "audiagentic",
         )
+        rig_bin_dir = global_harness_runtime() / "rig" / "bin"
+        if not rig_bin_dir.exists():
+            pytest.skip(f"pi embedded rig assets missing at {rig_bin_dir}")
         ctx = build_global_context(
             project_root=project_root,
             agent_runtime=global_harness_runtime(),

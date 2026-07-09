@@ -19,10 +19,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Protocol, TypeVar
 
-from .patterns import pattern_matches
 from .envelope import EventEnvelope
 from .event_config import EventLayerConfig
 from .event_exceptions import CycleDetectedError, EventBusError, SubscriberError
+from .patterns import pattern_matches
 
 logger = logging.getLogger(__name__)
 

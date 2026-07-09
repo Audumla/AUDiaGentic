@@ -8,10 +8,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.cli_io import print_json
 from audiagentic.components.providers.adapters.claude.restrictions import (
     enforce_stage_restrictions,
 )
+from audiagentic.foundation.cli_io import print_json
 from audiagentic.foundation.io import _ensure_dict
 
 __all__ = [
