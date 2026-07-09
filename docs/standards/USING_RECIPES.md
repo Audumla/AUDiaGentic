@@ -149,7 +149,42 @@ class MyCapRecipe(ProviderCapabilityRecipe):
     # to_result() overlay is inherited; keep primitives returning RecipeResult
 ```
 
-## 8. Anti-patterns (do not repeat)
+## 8. Config-driven assembly (Hindsight-local)
+
+When several recipe *kinds* differ only in configuration binding + provenance
+stamping — not logic — declare them as data instead of one class each. Hindsight
+does this for its guidance and hooks kinds via `RecipeSpec`
+(`components/memory/hindsight/recipe_spec.py`): a `pattern`
+(`no_automation` | `declared_step`), a list of `ParamBinding`s (row field or
+literal → the pattern's constructor param), and per-method `StatusOverride`s.
+`assemble_hindsight_recipe(row, backend, spec)` validates the spec (raising a
+canonical `VAL-RSPEC-*` `AudiaGenticError`) and binds it to the foundation
+pattern, inheriting the SL11 `to_result` provenance overlay.
+
+```python
+_GUIDANCE_SPEC = RecipeSpec(
+    pattern="no_automation",
+    params=[ParamBinding("action_needed", row_field="notes")],
+    status_overrides=[StatusOverride("probe", "absent", "no automated integration available")],
+)
+recipe = assemble_hindsight_recipe(row, backend, _GUIDANCE_SPEC)
+```
+
+Scope rules — this is **not** a global default:
+
+- **It replaces classes, it does not sit on top of them.** Migrate a kind to a
+  spec only by *deleting* its class. A spec layer added above the classes is
+  duplication (the SL15 first attempt, reverted as SL16).
+- **Only genuinely config-shaped kinds qualify.** A kind that is more than ~30%
+  custom logic (`_McpConfigAdapter`, the plugin recipes) stays a small class.
+- **Add machinery only with its consumer.** The assembler carries no hook
+  dispatch or path-policy validation because no migrated spec needs them; add
+  those with the first pattern that does, never ahead of it.
+- **It stays under `components/memory/hindsight/`.** Promoting to a shared
+  `providers/services` assembler is a separate future item, gated on a real
+  second capability adopting it — never on a synthetic/test consumer.
+
+## 9. Anti-patterns (do not repeat)
 
 - **Reimplementing provider config management in a recipe.** MCP entries → the
   MCP sync; instruction blocks → surfaces. A recipe that reads/writes those
@@ -157,12 +192,15 @@ class MyCapRecipe(ProviderCapabilityRecipe):
 - **A foundation pattern with one consumer.** `ManagedEntryRecipe` was extracted
   for one caller and duplicated the provider MCP machinery — it is being retired
   (SL13). Prefer the existing home over a new abstraction.
+- **A config layer on top of the classes it was meant to replace.** If the old
+  recipe classes still exist after you add a spec/assembler, it is duplication,
+  not simplification (SL15 attempt 1 → SL16 revert). Delete the classes.
 - **Per-method provenance stamping.** Return `RecipeResult`; let the boundary
   stamp (SL11).
 - **Hand-rolled subprocess/config writes.** Use `run_steps`/`ConfigPatcher`/
   `reconcile_fragments`, never raw `subprocess`/file writes in a recipe.
 
-## 9. Reference
+## 10. Reference
 
 - Contract + orchestration: `foundation/toolchains/recipe_contract.py`
 - Reusable patterns: `foundation/toolchains/recipe_patterns.py`
