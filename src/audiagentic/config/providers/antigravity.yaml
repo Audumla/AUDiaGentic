@@ -25,6 +25,13 @@ cli_install:
       - bash
       - "-lc"
       - "curl -fsSL https://antigravity.google/cli/install.sh | bash"
+  uninstall:
+    type: shell
+    id: uninstall
+    command:
+      - bash
+      - "-lc"
+      - "rm -f $(which agy) 2>/dev/null; rm -rf ~/.gemini/antigravity 2>/dev/null; true"
 
 permissions:
   can_write_files: true
