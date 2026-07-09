@@ -41,7 +41,12 @@ def test_status_payload_uses_workflow_derived_install_commands(tmp_path: Path, m
     assert data["configured"] is False
     assert data["missing_required"] == []
     assert data["details"]["missing_dependencies"] == ["pyright"]
-    assert data["details"]["dependency_install_offer"] == "Install Pyright (Python LSP): uv tool install pyright"
+    assert data["details"]["dependency_auto_install"] is True
+    assert data["details"]["dependency_install_offer"] == (
+        "Pyright (Python LSP) auto-installs on first file-based LSP use; "
+        "for eager install call lsp_install_dependencies(['pyright']); "
+        "manual fallback if automation fails: uv tool install pyright"
+    )
 
 
 def test_status_payload_returns_contract_when_nothing_missing(tmp_path: Path, monkeypatch) -> None:

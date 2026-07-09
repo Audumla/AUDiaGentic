@@ -43,6 +43,28 @@ def test_typescript_dependency_installs_server_and_runtime() -> None:
     assert command[4:] == ("typescript",)
 
 
+def test_typescript_dependency_uses_cross_platform_npm() -> None:
+    dep_cfgs = language_registry.dependency_cfgs(["typescript"])
+    cfg = dep_cfgs["typescript-language-server"]
+
+    assert cfg["toolchain"] == "npm"
+    assert cfg["package"] == ["typescript-language-server", "typescript"]
+    assert cfg["probe"] == "all-binaries:typescript-language-server,tsserver"
+
+
+def test_clangd_dependency_has_os_package_manager_variants() -> None:
+    dep_cfgs = language_registry.dependency_cfgs(["cpp"])
+    via = dep_cfgs["clangd"]["via"]
+
+    assert via["winget"] == "LLVM.LLVM"
+    assert via["scoop"] == "clangd"
+    assert via["choco"] == "llvm"
+    assert via["brew"] == "clangd"
+    assert via["apt"] == "clangd"
+    assert via["dnf"] == "clangd"
+    assert via["pacman"] == "clangd"
+
+
 def test_language_feature_options_are_loaded() -> None:
     spec = language_registry.get_language("python")
     assert spec is not None

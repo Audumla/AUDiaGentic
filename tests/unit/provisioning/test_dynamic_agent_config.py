@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from audiagentic import launcher
@@ -65,6 +66,32 @@ def test_materialize_agent_config_rebuilds_mcp_from_installed_components(
     updated = json.loads(mcp_path.read_text(encoding="utf-8"))
 
     assert "ag-lsp-mgmt" in updated["mcpServers"]
+    assert "ag-lsp" not in updated["mcpServers"], (
+        "ag-lsp is provider-only and must not appear in the harness mcp.json."
+    )
+
+
+def test_agents_gateway_is_provider_only_in_harness_mcp_config(
+    tmp_path: Path,
+) -> None:
+    """ag-agents-gateway is operational/provider-facing, not a harness server."""
+    project_root = tmp_path / "project"
+    harness_root = tmp_path / "harness"
+    project_root.mkdir()
+    harness_root.mkdir()
+
+    register_all_components()
+    harness_cfg = {"rig": {"model": "qwen3.5-0.8b", "port": 42001, "provider": "audiagentic"}}
+    mcp_path = project_root / ".audiagentic" / "mcp.json"
+
+    install_component("agents", project_root)
+    materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
+    payload = json.loads(mcp_path.read_text(encoding="utf-8"))
+
+    assert "ag-agents-mgmt" in payload["mcpServers"]
+    assert "ag-agents-gateway" not in payload["mcpServers"], (
+        "ag-agents-gateway is provider-only and must not appear in the harness mcp.json."
+    )
 
 
 def test_providers_component_uses_optional_server_module_in_mcp_config(
@@ -116,6 +143,28 @@ def test_ledger_component_uses_optional_server_module_in_mcp_config(
         "ag-ledger is an operational server (propagate: providers) and must not appear "
         "in the harness mcp.json."
     )
+
+
+def test_harness_mcp_config_uses_runtime_python_command(
+    tmp_path: Path,
+) -> None:
+    """Pi adapter reads mcp.json directly; AUDiaGentic placeholders cannot be used there."""
+    project_root = tmp_path / "project"
+    harness_root = tmp_path / "harness"
+    project_root.mkdir()
+    harness_root.mkdir()
+
+    register_all_components()
+    harness_cfg = {"rig": {"model": "qwen3.5-0.8b", "port": 42001, "provider": "audiagentic"}}
+    mcp_path = project_root / ".audiagentic" / "mcp.json"
+
+    install_component("agent-ledger", project_root)
+    materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
+    payload = json.loads(mcp_path.read_text(encoding="utf-8"))
+
+    command = payload["mcpServers"]["ag-ledger-mgmt"]["command"]
+    assert command == str(sys.executable)
+    assert command != "__AUDIAGENTIC_PYTHON__"
 
 
 def test_component_mcp_metadata_loads_from_yaml() -> None:
