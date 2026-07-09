@@ -394,7 +394,7 @@ class TestPlanningHarnessMcpCollection:
         assert entry.args, "ag-planning-mgmt: args is empty"
 
     def test_pi_mcp_dict_includes_mgmt_server_only_when_installed(self, tmp_path: Path) -> None:
-        """Full pi mcp.json build: collect → build_pi_mcp_dict → only mgmt server present."""
+        """Full pi mcp.json build: collect -> build_pi_mcp_dict -> only mgmt server present."""
         from audiagentic.foundation.components.loader import register_all_components
         from audiagentic.foundation.lifecycle.components import install_component
         from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
