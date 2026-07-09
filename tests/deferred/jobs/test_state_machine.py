@@ -13,7 +13,7 @@ from audiagentic.components.agent_jobs.state_machine import (
     transition_job,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.paths import REPO_ROOT
+from audiagentic.foundation.paths.package import REPO_ROOT
 
 
 def _fixture_job(state: str = "created") -> dict:
