@@ -6,7 +6,9 @@ with platform and source gates) and builds the matching recipe objects.
 """
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -139,6 +141,29 @@ def _build_hooks_recipe(
     original "refusing to execute" error, so no separate guidance fallback is
     needed here.
     """
+    if row.provider_id == "codex":
+        from audiagentic.components.memory.hindsight.codex_recipe import CodexHindsightRecipe
+
+        return CodexHindsightRecipe(row, backend)
+    if row.provider_id == "pi":
+        from audiagentic.components.memory.hindsight.pi_recipe import PiHindsightRecipe
+
+        return PiHindsightRecipe(row, backend)
+    if row.provider_id == "aider" and sys.version_info >= (3, 13):
+        blocked = replace(
+            row,
+            recipe_kind=ProviderRecipeKind.GUIDANCE_ONLY,
+            source_status="blocked",
+            audia_action="action_needed",
+            notes=(
+                "Hindsight Aider installer is skipped on Python 3.13+. "
+                "The current hindsight-aider/aider-chat dependency chain pulls "
+                "old pinned build dependencies that fail under Python 3.13; "
+                "use Python 3.12 or wait for an updated Hindsight Aider package."
+            ),
+        )
+        return assemble_hindsight_recipe(blocked, None, _GUIDANCE_SPEC)
+
     from audiagentic.components.memory.hindsight.recipe_spec import ParamBinding, RecipeSpec
 
     is_verified = row.source_status == "verified"

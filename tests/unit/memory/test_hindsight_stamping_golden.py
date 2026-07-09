@@ -17,6 +17,7 @@ from audiagentic.components.memory.hindsight.plugin_recipes import (
     PluginConfigRecipe,
     _PluginArrayRecipe,
     _PluginUrlConfigRecipe,
+    _repair_windows_plugin_mcp,
 )
 from audiagentic.components.memory.hindsight.recipe_spec import (
     ParamBinding,
@@ -171,6 +172,54 @@ def test_plugin_url_config_probe_golden(tmp_path):
     }
 
 
+def test_plugin_url_config_uninstall_removes_file(tmp_path):
+    path = tmp_path / "url.json"
+    r = _PluginUrlConfigRecipe(
+        _row(recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG),
+        _backend(),
+        path,
+    )
+    r.configure({})
+
+    result = r.uninstall({})
+
+    assert result.success
+    assert not path.exists()
+
+
+def test_plugin_url_repair_resolves_appdata_placeholder(tmp_path, monkeypatch):
+    cache = tmp_path / "cache" / "0.7.3"
+    cache.mkdir(parents=True)
+    mcp_path = cache / ".mcp.json"
+    script = cache / "scripts" / "mcp_server.py"
+    script.parent.mkdir()
+    script.write_text("print('ok')\n", encoding="utf-8")
+    appdata = tmp_path / "AppData" / "Roaming"
+    venv_python = appdata / "Claude" / "plugins" / "data" / "hindsight-memory" / "venv" / "Scripts" / "python.exe"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text("", encoding="utf-8")
+    mcp_path.write_text(
+        '{"mcpServers":{"hindsight":{"command":"bash","args":["run_mcp.sh"]}}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("APPDATA", str(appdata))
+    row = _row(
+        recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG,
+        plugin_repair_cache_pattern=str(tmp_path / "cache" / "*" / ".mcp.json"),
+        plugin_repair_data_dir="${APPDATA}/Claude/plugins/data/hindsight-memory",
+        plugin_repair_venv_python="venv/Scripts/python.exe",
+        plugin_repair_server_script="scripts/mcp_server.py",
+    )
+
+    ok, detail = _repair_windows_plugin_mcp(_backend(), row)
+
+    assert ok, detail
+    import json
+
+    data = json.loads(mcp_path.read_text(encoding="utf-8"))
+    assert data["mcpServers"]["hindsight"]["command"] == str(venv_python)
+
+
 def test_plugin_array_probe_golden(tmp_path):
     r = _PluginArrayRecipe(
         _row(recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG),
@@ -185,6 +234,25 @@ def test_plugin_array_probe_golden(tmp_path):
         "source_date": "2026-01-01",
         "action_needed": "manage_config_writes",
     }
+
+
+def test_plugin_array_uninstall_removes_entry(tmp_path):
+    path = tmp_path / "arr.json"
+    package = "@vectorize-io/opencode-hindsight"
+    row = _row(
+        recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG,
+        plugin_array_package=package,
+        plugin_array_reader="audiagentic.components.providers.adapters.opencode.plugin_array:read_opencode_plugin",
+        plugin_array_writer="audiagentic.components.providers.adapters.opencode.plugin_array:write_opencode_plugin",
+        plugin_array_remover="audiagentic.components.providers.adapters.opencode.plugin_array:remove_opencode_plugin",
+    )
+    r = _PluginArrayRecipe(row, _backend(), path)
+    r.configure({})
+
+    result = r.uninstall({})
+
+    assert result.success
+    assert package not in path.read_text(encoding="utf-8")
 
 
 def test_guidance_only_probe_provision_golden():

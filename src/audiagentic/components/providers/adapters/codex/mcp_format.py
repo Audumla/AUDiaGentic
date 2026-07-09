@@ -33,6 +33,8 @@ def _format_scalar(value: Any) -> str:
     if isinstance(value, (int, float)):
         return str(value)
     if isinstance(value, str):
+        if "'" not in value:
+            return f"'{value}'"
         return json.dumps(value)
     if isinstance(value, list):
         return "[" + ", ".join(_format_scalar(item) for item in value) + "]"
