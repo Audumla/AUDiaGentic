@@ -102,6 +102,40 @@ class TestMcpJsonFormat:
         assert result["srv"].args == ("-m", "mod")
         assert result["srv"].env == {"K": "V"}
 
+    def test_write_resolves_python_for_audiagentic_entry(self, tmp_path: Path) -> None:
+        """External tools (cline, roo, ...) read this file directly and cannot
+        resolve the portability placeholder — the interpreter path must be
+        written resolved, never as ``__AUDIAGENTIC_PYTHON__``."""
+        import sys
+
+        path = tmp_path / ".cline" / "mcp.json"
+        path.parent.mkdir()
+        entry = McpServerEntry(
+            name="ag-planning",
+            command=sys.executable,
+            args=("-m", "audiagentic.launcher", "mcp", "audiagentic.components.planning.planning_mcp"),
+        )
+        write_mcp_json(path, {"ag-planning": entry})
+        data = json.loads(path.read_text())
+        command = data["mcpServers"]["ag-planning"]["command"]
+        assert command == sys.executable
+        assert command != "__AUDIAGENTIC_PYTHON__"
+
+    def test_write_resolves_preexisting_placeholder(self, tmp_path: Path) -> None:
+        """A file already containing the placeholder is healed on next write."""
+        import sys
+
+        path = tmp_path / ".mcp.json"
+        path.write_text(json.dumps({"mcpServers": {"ag-planning": {
+            "command": "__AUDIAGENTIC_PYTHON__",
+            "args": ["-m", "audiagentic.launcher"],
+        }}}))
+        # Read resolves the placeholder; writing it back must persist a real path.
+        entries = read_mcp_json(path)
+        write_mcp_json(path, entries)
+        data = json.loads(path.read_text())
+        assert data["mcpServers"]["ag-planning"]["command"] == sys.executable
+
 
 class TestGooseYamlFormat:
     def test_read_missing_file_returns_empty(self, tmp_path: Path) -> None:
@@ -181,8 +215,8 @@ class TestCodexTomlFormat:
         write_codex_toml(path, {"srv": entry})
         data = path.read_text(encoding="utf-8")
         assert "[mcp_servers.srv]" in data
-        assert 'command = "python"' in data
-        assert 'args = ["-m", "mod"]' in data
+        assert "command = 'python'" in data
+        assert "args = ['-m', 'mod']" in data
         assert "enabled = true" in data
 
     def test_write_preserves_existing_codex_settings(self, tmp_path: Path) -> None:
@@ -195,7 +229,7 @@ class TestCodexTomlFormat:
         entry = McpServerEntry(name="srv", command="python", args=("-m", "mod"))
         write_codex_toml(path, {"srv": entry})
         data = path.read_text(encoding="utf-8")
-        assert 'model = "gpt-5.4"' in data
+        assert "model = 'gpt-5.4'" in data
         assert "[features]" in data
         assert "[mcp_servers.srv]" in data
 
@@ -207,6 +241,21 @@ class TestCodexTomlFormat:
         assert removed is True
         result = read_codex_toml(path)
         assert "srv" not in result
+
+    def test_write_windows_paths_as_valid_toml(self, tmp_path: Path) -> None:
+        path = tmp_path / ".codex" / "config.toml"
+        entry = McpServerEntry(
+            name="srv",
+            command=r"C:\Users\mgs\AppData\Local\python.exe",
+            args=("-m", "mod"),
+            env={"AUDIAGENTIC_REPO_ROOT": r"H:\development\projects\AUDia\AUDiaGentic"},
+        )
+
+        write_codex_toml(path, {"srv": entry})
+
+        result = read_codex_toml(path)
+        assert result["srv"].command == entry.command
+        assert result["srv"].env == entry.env
 
 
 
@@ -248,7 +297,7 @@ class TestAddProviderMcpServer:
         assert path.exists()
         data = path.read_text(encoding="utf-8")
         assert "[mcp_servers.my-srv]" in data
-        assert 'command = "python"' in data
+        assert "command = 'python'" in data
 
 
 class TestRemoveProviderMcpServer:
@@ -476,6 +525,8 @@ class TestMcpConfigSpecOnDescriptors:
         assert cont.mcp_config.config_path == ".continue/config.json"
         gem = get_descriptor("gemini")
         assert gem.mcp_config.config_path == ".gemini/settings.json"
+        cline = get_descriptor("cline")
+        assert cline.mcp_config.config_path == ".cline/mcp.json"
         codex = get_descriptor("codex")
         assert codex.mcp_config.format == "codex-toml"
         assert codex.mcp_config.config_path == ".codex/config.toml"

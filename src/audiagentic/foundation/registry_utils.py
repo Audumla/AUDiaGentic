@@ -59,6 +59,10 @@ class Registry(Generic[T]):
         finally:
             self._loading = False
 
+    def is_registered(self, key: str) -> bool:
+        """Check if key exists in registry without triggering lazy load."""
+        return key in self._items or key in self._aliases
+
     def register(
         self,
         key: str,
@@ -74,7 +78,14 @@ class Registry(Generic[T]):
         collisions and shadow collisions (alias equals another key) raise.
         """
         if replace:
-            self.pop(key)
+            if key in self._items:
+                self.pop(key)
+            else:
+                # Key not yet registered — skip lazy load trigger entirely.
+                # This avoids recursive import chains when register(replace=True)
+                # is called during initial module loading (e.g., surface modules
+                # registering at import time before the registry's loader has run).
+                pass
 
         # Collision check on primary key
         if key in self._items:
@@ -155,11 +166,20 @@ class Registry(Generic[T]):
         self._ensure_loaded()
         return tuple(self._items)
 
-    def pop(self, key: str, default: T | None = None) -> T | None:
+    def pop(self, key: str, default: T | None = None, *, bypass_lazy_loader: bool = False) -> T | None:
         """Remove and return the value for *key*.
 
         Removes associated aliases. Returns *default* if key is not found.
+
+        When *bypass_lazy_loader* is True and the key is not already in
+        _items, skips the lazy-load trigger entirely. Use when the caller
+        knows the key doesn't exist (e.g., initial registration cleanup)
+        to avoid triggering recursive module imports during loading.
+        Default False preserves backward compatibility: existing callers
+        that rely on lazy-load-on-pop are unaffected.
         """
+        if bypass_lazy_loader and key not in self._items:
+            return default
         self._ensure_loaded()
         if key in self._items:
             if self._aliases_enabled:

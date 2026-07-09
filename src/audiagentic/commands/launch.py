@@ -14,11 +14,36 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_RECONCILE_PROVIDERS_ENV = "AUDIAGENTIC_RECONCILE_PROVIDERS_ON_LAUNCH"
+
 
 def _status(msg: str) -> None:
     """Print a startup status line to stderr. Set AUDIAGENTIC_STARTUP_STATUS=0 to suppress."""
     if os.environ.get("AUDIAGENTIC_STARTUP_STATUS", "1") != "0":
         print_error(f"[audiagentic] {msg}")
+
+
+def _provider_reconcile_stamp_path(project_root: Path) -> Path:
+    return project_root / ".audiagentic" / "runtime" / "providers" / "launch-reconciled"
+
+
+def _should_reconcile_providers_on_launch(project_root: Path) -> bool:
+    setting = os.environ.get(_RECONCILE_PROVIDERS_ENV, "").strip().lower()
+    if setting in {"0", "false", "no", "never", "off"}:
+        return False
+    if setting in {"1", "true", "yes", "always", "on"}:
+        return True
+
+    from audiagentic.foundation.features.state import shard_path
+
+    providers_feature_state = shard_path(project_root, "providers")
+    return not providers_feature_state.exists() and not _provider_reconcile_stamp_path(project_root).exists()
+
+
+def _mark_provider_launch_reconciled(project_root: Path) -> None:
+    stamp_path = _provider_reconcile_stamp_path(project_root)
+    stamp_path.parent.mkdir(parents=True, exist_ok=True)
+    stamp_path.write_text("reconciled\n", encoding="utf-8")
 
 
 def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams | None = None) -> int:
@@ -43,14 +68,12 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
     except Exception:
         logger.warning("Auto-update check failed", exc_info=True)
 
-    # Sync providers.yaml with actual host state on first run only.
+    # Sync provider enablement with actual host state on first run only.
     # Subsequent reconciliations are available via the provider MCP server.
     try:
         from audiagentic.components.providers.services.lifecycle import reconcile_all_providers
-        from audiagentic.components.providers.services.provider_config import _providers_yaml_path
 
-        providers_path = _providers_yaml_path(project_root)
-        if not providers_path.exists():
+        if _should_reconcile_providers_on_launch(project_root):
             _status("reconciling providers...")
 
             def _on_provider(provider_id: str, status: str) -> None:
@@ -58,6 +81,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
                     _status(f"  {provider_id}: {status}")
 
             reconcile_all_providers(project_root=project_root, on_provider=_on_provider)
+            _mark_provider_launch_reconciled(project_root)
     except Exception:
         logger.warning("Provider reconciliation failed", exc_info=True)
 
