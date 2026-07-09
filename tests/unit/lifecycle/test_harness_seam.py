@@ -115,6 +115,29 @@ def test_lifecycle_handler_enabled_event(tmp_path: Path):
         )
 
 
+def test_lifecycle_status_messages_use_valid_gerunds(tmp_path: Path):
+    """Refresh-only lifecycle status messages should not build words by suffix."""
+    import audiagentic.runtime.harness as harness
+
+    messages: list[str] = []
+
+    with (
+        patch("audiagentic.runtime.harness.refresh_harness_config_if_installed", return_value=True),
+        patch("audiagentic.runtime.harness.push_status") as mock_push_status,
+    ):
+        mock_push_status.side_effect = lambda **kw: messages.append(kw["message"])
+
+        harness._harness_lifecycle_handler(
+            tmp_path,
+            {"component_id": "plain-component"},
+            {},
+            reason="component-config-changed",
+        )
+
+    assert messages == ["Config refreshed after config change plain-component."]
+    assert "config-changeding" not in messages[0]
+
+
 def test_component_result_has_no_sync_field(tmp_path: Path):
     """Install/uninstall result no longer includes dead 'sync' field."""
     from audiagentic.foundation.lifecycle.components import _component_result

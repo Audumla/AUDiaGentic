@@ -4,6 +4,7 @@ import logging
 import os
 import shutil
 import subprocess
+import urllib.request
 from pathlib import Path
 
 from audiagentic.foundation.cli_io import print_message
@@ -64,19 +65,33 @@ def _should_provision_embedded_rig() -> bool:
 
 
 def _seed_test_model(target: Path, project_root: Path | None) -> None:
-    repo_root = _repo_root(project_root)
-    if repo_root is None:
-        return
-    source_model = repo_root / "tests" / "unit" / "runtime" / "Qwen3.5-0.8B-UD-Q5_K_XL.gguf"
-    if not source_model.exists():
-        return
     model_dir = target / "rig" / "bin" / "models"
     model_dir.mkdir(parents=True, exist_ok=True)
-    target_model = model_dir / "Qwen_Qwen3.5-2B-Q4_K_S.gguf"
-    if target_model.exists():
+    target_models = (
+        model_dir / "Qwen3.5-0.8B.Q8_0.gguf",
+        model_dir / "Qwen_Qwen3.5-2B-Q4_K_S.gguf",
+    )
+    if all(path.exists() for path in target_models):
         return
-    shutil.copyfile(source_model, target_model)
-    print_message(f"Seeded embedded rig model fixture: {target_model}")
+    repo_root = _repo_root(project_root)
+    source_model = None if repo_root is None else repo_root / "tests" / "unit" / "runtime" / "Qwen3.5-0.8B-UD-Q5_K_XL.gguf"
+    if source_model is not None and source_model.exists():
+        for target_model in target_models:
+            if not target_model.exists():
+                shutil.copyfile(source_model, target_model)
+        print_message(f"Seeded embedded rig model fixtures: {', '.join(str(path) for path in target_models)}")
+        return
+    model_url = os.environ.get(
+        "AUDIAGENTIC_PI_RIG_MODEL_URL",
+        "https://huggingface.co/lmstudio-community/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_K_M.gguf?download=true",
+    )
+    source_target = next((path for path in target_models if not path.exists()), target_models[0])
+    print_message(f"Downloading embedded rig smoke model to {source_target}")
+    urllib.request.urlretrieve(model_url, source_target)
+    for target_model in target_models:
+        if target_model != source_target and not target_model.exists():
+            shutil.copyfile(source_target, target_model)
+    print_message(f"Provisioned embedded rig smoke models: {', '.join(str(path) for path in target_models)}")
 
 
 def _provision_embedded_rig(target: Path, project_root: Path | None) -> None:
