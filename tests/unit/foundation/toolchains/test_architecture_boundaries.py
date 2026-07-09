@@ -331,7 +331,7 @@ class TestProviderRecipeTests:
         """Unverified command rows are blocked before subprocess execution."""
         from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
         from audiagentic.components.memory.hindsight.matrix import HindsightRecipeRow
-        from audiagentic.components.memory.hindsight.recipes import HooksInstallerRecipe
+        from audiagentic.components.memory.hindsight.strategies import build_hindsight_recipe
         from audiagentic.components.providers.services.recipes import ProviderRecipeKind
 
         row = HindsightRecipeRow(
@@ -343,9 +343,10 @@ class TestProviderRecipeTests:
             source_status="unconfirmed",
             source_url="https://example.invalid",
         )
-        recipe = HooksInstallerRecipe(
+        recipe = build_hindsight_recipe(
             row,
             HindsightBackendConfig(base_url="https://hindsight.example.com"),
+            "test",
         )
 
         result = recipe.install({})
@@ -358,7 +359,7 @@ class TestProviderRecipeTests:
 
         from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
         from audiagentic.components.memory.hindsight.matrix import HindsightRecipeRow
-        from audiagentic.components.memory.hindsight.recipes import HooksInstallerRecipe
+        from audiagentic.components.memory.hindsight.strategies import build_hindsight_recipe
         from audiagentic.components.providers.services.recipes import ProviderRecipeKind
 
         row = HindsightRecipeRow(
@@ -371,9 +372,10 @@ class TestProviderRecipeTests:
             source_url="https://example.invalid/docs",
             source_date="2026-06-26",
         )
-        recipe = HooksInstallerRecipe(
+        recipe = build_hindsight_recipe(
             row,
             HindsightBackendConfig(base_url="https://hindsight.example.com"),
+            "test",
         )
 
         def fake_run(command, **kwargs):

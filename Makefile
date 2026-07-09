@@ -5,13 +5,15 @@
 .PHONY: help test test-all test-fast test-unit test-integration test-e2e \
         test-docker test-lsp-docker test-packaging-docker \
         test-providers-docker test-providers-real-docker test-provider-real-one \
-        build-base build-test build-lsp-install build-packaging clean-docker
+        test-provider-lifecycle-docker build-base build-test build-lsp-install \
+        build-packaging build-provider-lifecycle clean-docker
 
 PYTHON     ?= python3
 PYTEST     ?= $(PYTHON) -m pytest
 BASE_IMAGE  = audia-test-base:latest
 TEST_IMAGE  = audiagentic-test:latest
 LSP_IMAGE   = audiagentic-lsp-install-test:latest
+PROVIDER_LIFECYCLE_IMAGE = audiagentic-provider-lifecycle-e2e:latest
 
 # On Windows with Git Bash / MSYS2, Docker Desktop requires Windows-style paths
 # for volume mounts (e.g. C:/path, not /c/path). cygpath -m converts MSYS → mixed.
@@ -31,11 +33,13 @@ DOCKER_MOUNT := $(shell cygpath -m "$(CURDIR)" 2>/dev/null || pwd)
 	@echo "  test-providers-docker Run provider tests in docker"
 	@echo "  test-providers-real-docker Run opt-in real provider CLI tests in docker"
 	@echo "  test-provider-real-one PROVIDER=<id>  Run one real provider CLI test in isolated docker"
+	@echo "  test-provider-lifecycle-docker Run provider lifecycle/Hindsight/prompt-launch docker image"
 	@echo "  test-lsp-docker      Run LSP installation test in docker"
 	@echo "  build-base           Build audia-test-base image"
 	@echo "  build-test           Build audiagentic-test image (requires base)"
 	@echo "  build-lsp-install    Build LSP install test image (requires base)"
 	@echo "  build-packaging      Build clean-room packaging image"
+	@echo "  build-provider-lifecycle Build provider lifecycle docker image"
 	@echo "  clean-docker         Remove all audia test images"
 
 # ── Consolidated entrypoint ──────────────────────────────────────────────────
@@ -84,6 +88,9 @@ PACKAGING_IMAGE = audia-packaging:latest
 build-packaging:
 	docker build -f tests/docker/Dockerfile.packaging -t $(PACKAGING_IMAGE) .
 
+build-provider-lifecycle: build-base
+	docker build -f tests/docker/Dockerfile.provider-lifecycle-e2e -t $(PROVIDER_LIFECYCLE_IMAGE) .
+
 # ── Docker test run targets ──────────────────────────────────────────────────
 
 # Runs the whole CLEAN, non-mutating suite inside the standard test image
@@ -111,6 +118,12 @@ test-providers-real-docker: build-test
 test-provider-real-one: build-test
 	$(PYTHON) tests/dev/run_provider_cli_isolated.py --image $(TEST_IMAGE) --provider $(PROVIDER)
 
+# Runs isolated provider lifecycle coverage image.
+# Supports passing provider prompt-launch env vars directly to `docker run`, e.g.:
+#   OPENAI_API_KEY=... AUDIAGENTIC_TEST_CODEX_MODEL=... make test-provider-lifecycle-docker
+test-provider-lifecycle-docker: build-provider-lifecycle
+	$(PYTHON) tests/dev/run_provider_lifecycle_docker.py --image $(PROVIDER_LIFECYCLE_IMAGE)
+
 # Validates LSP dependency installation from a clean toolchain state.
 # Source is bind-mounted so no rebuild needed for code changes.
 test-lsp-docker: build-lsp-install
@@ -123,4 +136,4 @@ test-lsp-docker: build-lsp-install
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 
 clean-docker:
-	-docker rmi $(BASE_IMAGE) $(TEST_IMAGE) $(LSP_IMAGE) $(PACKAGING_IMAGE) 2>/dev/null || true
+	-docker rmi $(BASE_IMAGE) $(TEST_IMAGE) $(LSP_IMAGE) $(PACKAGING_IMAGE) $(PROVIDER_LIFECYCLE_IMAGE) 2>/dev/null || true

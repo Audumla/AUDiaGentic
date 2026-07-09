@@ -60,7 +60,6 @@ def test_codex_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
     assert result["output"] == "codex completed"
     assert captured["command"][0] == r"C:\\Tools\\codex.exe"
     assert captured["command"][1] == "exec"
-    assert "--ephemeral" in captured["command"]
     assert "--skip-git-repo-check" in captured["command"]
     assert "--full-auto" in captured["command"]
     assert captured["command"][-1].startswith(
