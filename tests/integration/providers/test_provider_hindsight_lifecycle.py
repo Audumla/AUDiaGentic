@@ -46,7 +46,7 @@ _SPECS: dict[str, tuple[str, str]] = {
     "cline": ("success-installer", ""),
     "codex": ("success-installer", ""),
     "opencode": ("success-mcp", ""),
-    "qwen": ("success-rules", ""),
+    "qwen": ("expected-failure", "no Hindsight integration"),
     "continue": ("success-mcp", ""),
     "claude": ("success-plugin", ""),
     "aider": ("expected-failure", "hindsight-aider"),
