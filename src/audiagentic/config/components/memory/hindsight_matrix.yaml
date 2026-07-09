@@ -48,19 +48,24 @@ matrix:
     config_artifacts:
       - ~/.hindsight/codex.json
       - ~/.hindsight/codex/settings.json
+      - ~/.hindsight/codex/scripts/
+      - ~/.codex/hooks.json
+      - ~/.codex/config.toml [features].codex_hooks
     platform_constraints:
       - darwin
       - linux
       - win
     scope: global
-    audia_action: call_official_installer
+    audia_action: manage_config_writes
     source_url: https://hindsight.vectorize.io/sdks/integrations/codex
-    source_date: "2026-06-26"
+    source_date: "2026-07-09"
     source_status: verified
     notes: >-
       Three Python lifecycle hooks: session_start.py (SessionStart),
-      recall.py (UserPromptSubmit), retain.py (Stop). Config in ~/.hindsight/.
-      Pure Python stdlib, cross-platform.
+      recall.py (UserPromptSubmit), retain.py (Stop). Installer places hooks
+      under ~/.hindsight/codex/scripts/, writes ~/.codex/hooks.json, enables
+      [features].codex_hooks in ~/.codex/config.toml, and reads connection
+      settings from ~/.hindsight/codex.json. Pure Python stdlib.
 
   - provider_id: claude
     display_name: Claude Code
@@ -449,24 +454,43 @@ matrix:
 
   - provider_id: pi
     display_name: Pi
-    integration_type: none
-    recipe_kind: guidance_only
-    install_steps: []
-    uninstall_steps: []
+    integration_type: extension
+    recipe_kind: hooks
+    install_steps:
+      - type: shell
+        id: pi-hindsight-install
+        command:
+          - pi
+          - install
+          - npm:@walodayeet/hindsight-pi
+    uninstall_steps:
+      - type: shell
+        id: pi-hindsight-remove
+        command:
+          - pi
+          - remove
+          - npm:@walodayeet/hindsight-pi
     status_command: ""
-    config_artifacts: []
+    config_artifacts:
+      - ~/.hindsight/config.json
+      - pi package npm:@walodayeet/hindsight-pi
     platform_constraints:
       - darwin
       - linux
       - win
-    scope: project-local
-    audia_action: no_source
-    source_url: ""
-    source_date: "2026-06-26"
-    source_status: no_hindsight
+    scope: global
+    audia_action: manage_config_writes
+    source_url: https://github.com/walodayeet/hindsight-pi
+    source_date: "2026-07-09"
+    source_status: unconfirmed
     notes: >-
-      No official Hindsight integration for Pi. Could connect via generic
-      MCP server fallback if Pi supports MCP.
+      Community Hindsight extension for pi. Installs with
+      `pi install npm:@walodayeet/hindsight-pi`; runtime commands include
+      /hindsight:setup, /hindsight:doctor, /hindsight:status, and explicit
+      tools hindsight_search, hindsight_context, hindsight_retain, and
+      hindsight_bank_profile. Config is read from ~/.hindsight/config.json
+      or ~/.hindsight/config.toml with project-local overrides under
+      <repo>/.hindsight/config.json|toml.
 
   - provider_id: plandex
     display_name: Plandex

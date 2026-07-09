@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import logging
+import sys
 from typing import Any, Protocol
 
-from audiagentic.foundation.cli_io import print_message
+from audiagentic.foundation.cli_io import print_error, print_message
 from audiagentic.foundation.interaction.models import (
     AskRequest,
     AskResponse,
@@ -27,6 +28,8 @@ class CliBackend:
     """Sync backend that uses sys.stdin/sys.stdout for interaction."""
 
     def ask(self, request: AskRequest) -> AskResponse:
+        if not sys.stdout.isatty():
+            return AskResponse(status=ResponseStatus.TIMED_OUT)
         try:
             if request.choices:
                 print_message(f"\n{request.title}")
@@ -76,7 +79,7 @@ class CliBackend:
 
     def push_status(self, msg: PushStatusMessage) -> None:
         prefix = f"[{msg.component}] " if msg.component else ""
-        print_message(f"{prefix}{msg.message}")
+        print_error(f"{prefix}{msg.message}")
 
     def respond(self, request_id: str, choice: str | None, *, details: dict[str, Any]) -> None:
         pass
