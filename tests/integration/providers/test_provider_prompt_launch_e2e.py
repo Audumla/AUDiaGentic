@@ -162,8 +162,9 @@ def _success_case(
 
 def _pi_case(project_root: Path) -> None:
     def _run() -> None:
-        model = os.environ.get("AUDIAGENTIC_TEST_PI_MODEL", "audiagentic-rig")
+        model = os.environ.get("AUDIAGENTIC_TEST_PI_MODEL", "qwen3.5-0.8b")
         os.environ["AUDIAGENTIC_AG_MODEL"] = model
+        os.environ["AUDIAGENTIC_RIG_MODEL_PROFILE"] = model
         os.environ["AUDIAGENTIC_AG_PROVIDER"] = os.environ.get(
             "AUDIAGENTIC_TEST_PI_PROVIDER",
             "audiagentic",

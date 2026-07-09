@@ -42,10 +42,13 @@ def _npm_env() -> dict[str, str]:
 
 
 def _repo_root(project_root: Path | None) -> Path | None:
-    if project_root is None:
-        return None
-    current = project_root.resolve()
-    for candidate in (current, *current.parents):
+    candidates: list[Path] = []
+    if project_root is not None:
+        current = project_root.resolve()
+        candidates.extend([current, *current.parents])
+    module_root = Path(__file__).resolve()
+    candidates.extend(module_root.parents)
+    for candidate in candidates:
         if (candidate / "src" / "audiagentic").exists():
             return candidate
     return None
