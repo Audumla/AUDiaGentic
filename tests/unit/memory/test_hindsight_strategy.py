@@ -8,7 +8,7 @@ from audiagentic.components.memory.hindsight.matrix import (
     get_rows_by_kind,
     get_rows_for_provider,
 )
-from audiagentic.components.memory.hindsight.recipes import GuidanceOnlyRecipe
+from audiagentic.components.memory.hindsight.recipe_spec import _AssembledBase
 from audiagentic.components.memory.hindsight.strategies import (
     build_hindsight_recipe,
     resolve_hindsight_strategy,
@@ -90,7 +90,8 @@ class TestSourceGate:
 
         backend = HindsightBackendConfig(base_url="http://test")
         recipe = build_hindsight_recipe(row, backend, "test")
-        assert isinstance(recipe, GuidanceOnlyRecipe)
+        # After SL15: GuidanceOnly is assembled via RecipeSpec
+        assert isinstance(recipe, _AssembledBase)
 
 
 class TestBuilder:
