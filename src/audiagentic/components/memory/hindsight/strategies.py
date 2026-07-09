@@ -20,15 +20,39 @@ from audiagentic.components.memory.hindsight.plugin_recipes import (
     _PluginArrayRecipe,
     _PluginUrlConfigRecipe,
 )
+from audiagentic.components.memory.hindsight.recipe_spec import (
+    ParamBinding,
+    RecipeSpec,
+    StatusOverride,
+    assemble_hindsight_recipe,
+)
 from audiagentic.components.memory.hindsight.recipes import (
-    GuidanceOnlyRecipe,
-    HooksInstallerRecipe,
     _absolute_project_path,
     _McpConfigAdapter,
 )
 from audiagentic.components.providers.descriptors.registry import get_descriptor
 from audiagentic.components.providers.services.recipes import ProviderRecipeKind
 from audiagentic.foundation.toolchains.detect import platform_allowed
+
+# ---------------------------------------------------------------------------
+# RecipeSpec definitions for config-collapsible kinds (SL15)
+# ---------------------------------------------------------------------------
+
+#: Guidance-only spec: no automation, action-needed guidance.
+# Both GuidanceOnly and former RulesOnly (now GUIDANCE_ONLY post-SL13 A7) use this pattern.
+_GUIDANCE_SPEC = RecipeSpec(
+    pattern="no_automation",
+    params=[
+        ParamBinding(param_name="action_needed", row_field="notes"),
+        ParamBinding(param_name="skip_status", literal="skipped: no automated Hindsight integration for this provider"),
+    ],
+    status_overrides=[
+        StatusOverride(method="probe", state="absent", status_text="no automated integration available"),
+    ],
+)
+
+# The hooks (declared_step) spec is built per-row in _build_hooks_recipe because
+# its `verified` / `source_label` bindings depend on the row's source_status.
 
 
 def _platform_supported(row: HindsightRecipeRow) -> bool:
@@ -108,10 +132,33 @@ def _build_hooks_recipe(
     row: HindsightRecipeRow,
     backend: HindsightBackendConfig,
 ) -> Any:
-    """Build HooksInstallerRecipe with source gate."""
-    if row.source_status != "verified":
-        return GuidanceOnlyRecipe(row)
-    return HooksInstallerRecipe(row, backend)
+    """Build hooks recipe with source gate.
+
+    Assembles a per-row declared_step spec. The DeclaredStepRecipe enforces the
+    verification gate natively: verified=False makes install() refuse with the
+    original "refusing to execute" error, so no separate guidance fallback is
+    needed here.
+    """
+    from audiagentic.components.memory.hindsight.recipe_spec import ParamBinding, RecipeSpec
+
+    is_verified = row.source_status == "verified"
+    spec = RecipeSpec(
+        pattern="declared_step",
+        params=[
+            ParamBinding(param_name="install_steps", row_field="install_steps"),
+            ParamBinding(param_name="uninstall_steps", row_field="uninstall_steps"),
+            ParamBinding(param_name="status_command", row_field="status_command"),
+            ParamBinding("verified", literal=is_verified),
+            ParamBinding("source_label", literal=row.source_status or ""),
+            ParamBinding(param_name="gate_action", row_field="notes"),
+        ],
+        status_overrides=[
+            StatusOverride(method="configure", state="configuring", status_text="hooks installed via CLI; no config write needed"),
+            StatusOverride(method="prune", state="absent", status_text="hooks managed by CLI; no config to prune"),
+            StatusOverride(method="dry_run", state="absent", status_text="would run install steps (dry-run)"),
+        ],
+    )
+    return assemble_hindsight_recipe(row, backend, spec)
 
 
 def _build_plugin_url_config_recipe(
@@ -140,7 +187,7 @@ def _build_plugin_config_recipe(
     """
     harness_path = _resolve_harness_config_path(provider_id, project_root)
     if row.source_status != "verified" and row.install_steps:
-        return GuidanceOnlyRecipe(row)
+        return assemble_hindsight_recipe(row, backend, _GUIDANCE_SPEC)
     if row.plugin_array_package and harness_path:
         return _PluginArrayRecipe(row, backend, harness_path)
     if row.plugin_url_config_path:
@@ -150,7 +197,7 @@ def _build_plugin_config_recipe(
         )
     if harness_path:
         return PluginConfigRecipe(row, backend, Path(harness_path))
-    return GuidanceOnlyRecipe(row)
+    return assemble_hindsight_recipe(row, backend, _GUIDANCE_SPEC)
 
 
 def _build_mcp_config_recipe(
@@ -165,7 +212,7 @@ def _build_mcp_config_recipe(
     to _McpConfigAdapter (rules flow via surface contributions).
     """
     if row.source_status == "blocked":
-        return GuidanceOnlyRecipe(row)
+        return assemble_hindsight_recipe(row, backend, _GUIDANCE_SPEC)
     harness_path = _resolve_harness_config_path(provider_id, project_root)
     return _build_mcp_recipe(
         row, backend, provider_id, project_root, harness_path, None,
@@ -178,13 +225,13 @@ def _build_guidance_only_recipe(
     provider_id: str,
     project_root: Path | None,
 ) -> Any:
-    """Build guidance-only recipe.
+    """Build guidance-only recipe via config-driven assembly.
 
     After SL13 A7: rules content flows via surface contributions (memory.yaml).
     There is no rules-writing recipe — every guidance/rules strategy resolves to
-    GuidanceOnlyRecipe, and the surface pipeline renders the memory contribution.
+    the no_automation pattern assembled from _GUIDANCE_SPEC.
     """
-    return GuidanceOnlyRecipe(row)
+    return assemble_hindsight_recipe(row, backend, _GUIDANCE_SPEC)
 
 
 # Factory registry keyed by ProviderRecipeKind.
@@ -213,12 +260,12 @@ def build_hindsight_recipe(
     """Build a recipe object for a resolved Hindsight strategy row.
 
     Dispatches through _RECIPE_FACTORIES keyed by ProviderRecipeKind.
-    Unknown kinds fall back to GuidanceOnlyRecipe (intentional default).
+    Unknown kinds fall back to the guidance-only (_GUIDANCE_SPEC) default.
     """
     factory = _RECIPE_FACTORIES.get(row.recipe_kind)
     if factory is not None:
         return factory(row, backend, provider_id, project_root)
-    return GuidanceOnlyRecipe(row)
+    return assemble_hindsight_recipe(row, backend, _GUIDANCE_SPEC)
 
 
 def _build_mcp_recipe(
@@ -245,7 +292,7 @@ def _build_mcp_recipe(
     if harness_path:
         config_path = Path(harness_path)
         return _McpConfigAdapter(row, backend, config_path, project_root=project_root)
-    return GuidanceOnlyRecipe(row)
+    return assemble_hindsight_recipe(row, backend, _GUIDANCE_SPEC)
 
 
 def _resolve_harness_config_path(provider_id: str, project_root: Path | None = None) -> str | None:
