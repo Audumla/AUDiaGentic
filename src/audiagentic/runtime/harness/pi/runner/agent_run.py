@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 
-from audiagentic.cli_io import print_message
+from audiagentic.foundation.cli_io import print_message
 from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.runtime.harness.context import AgentContext, require_smoke_timeout
 from audiagentic.runtime.harness.run_common import (

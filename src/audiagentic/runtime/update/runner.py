@@ -8,7 +8,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from audiagentic.cli_io import print_message
+from audiagentic.foundation.cli_io import print_message
 
 from . import GITHUB_REPO
 
@@ -136,7 +136,7 @@ def install_version(version: str) -> dict:
 
     print_message("  Refreshing harness config...")
     try:
-        from audiagentic.foundation.home import global_harness_runtime
+        from audiagentic.foundation.paths.home import global_harness_runtime
         from audiagentic.runtime.harness import install_to
         install_to(global_harness_runtime())
     except Exception as exc:

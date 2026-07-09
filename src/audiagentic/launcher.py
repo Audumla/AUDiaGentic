@@ -23,13 +23,13 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from audiagentic.cli_io import print_error, print_json, print_message
+from audiagentic.foundation.cli_io import print_error, print_json, print_message
 from audiagentic.commands.component import _cmd_component
 from audiagentic.commands.launch import _cmd_launch
 from audiagentic.commands.provider_prompt import _try_provider_prompt
 from audiagentic.foundation.components.ids import COMPONENT_SESSION
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.home import global_harness_runtime
+from audiagentic.foundation.paths.home import global_harness_runtime
 from audiagentic.runtime.harness import (
     install_to,
 )

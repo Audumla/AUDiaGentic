@@ -8,8 +8,8 @@ from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
-from audiagentic.cli_io import print_json
-from audiagentic.paths import REPO_ROOT
+from audiagentic.foundation.cli_io import print_json
+from audiagentic.foundation.paths.package import REPO_ROOT
 
 REGISTRY_PATH = REPO_ROOT / "docs" / "implementation" / "31_Build_Status_and_Work_Registry.md"
 

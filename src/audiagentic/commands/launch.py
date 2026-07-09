@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from audiagentic.cli_io import print_error
+from audiagentic.foundation.cli_io import print_error
 
 if TYPE_CHECKING:
     from audiagentic.runtime.harness import RunnerParams
@@ -26,7 +26,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
         print_error(f"Project root does not exist: {project_root}")
         return 1
 
-    from audiagentic.foundation.home import global_harness_runtime
+    from audiagentic.foundation.paths.home import global_harness_runtime
 
     harness_runtime = global_harness_runtime()
 

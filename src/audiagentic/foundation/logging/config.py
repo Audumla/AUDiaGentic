@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from audiagentic.cli_io import print_error
+from audiagentic.foundation.cli_io import print_error
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.logging.context import reset_correlation_id
 from audiagentic.foundation.logging.formatters import (
@@ -88,7 +88,7 @@ class LoggingConfig:
 
 def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
     """Deep-merge overlay onto base. Lists are replaced (caller handles silenced union)."""
-    from ..util import deep_merge as _shared_deep_merge
+    from audiagentic.foundation.config.merge import deep_merge as _shared_deep_merge
     return _shared_deep_merge(base, overlay)
 
 
@@ -175,7 +175,7 @@ def _dict_to_config(
 
 def _find_project_root_from_env_or_cwd() -> Path | None:
     """Walk up from CWD looking for .audiagentic/. Max 10 levels, 500ms cap."""
-    from audiagentic.paths import find_project_root
+    from audiagentic.foundation.paths.project import find_project_root
 
     return find_project_root()
 
