@@ -1,5 +1,5 @@
 [mcp_servers.ag-ledger]
-command = "H:\\development\\projects\\AUDia\\AUDiaGentic\\.venv\\Scripts\\python.exe"
+command = "C:\\Users\\mgs\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\python.exe"
 args = [
     "-m",
     "audiagentic.launcher",
@@ -11,7 +11,7 @@ args = [
 AUDIAGENTIC_REPO_ROOT = "H:\\development\\projects\\AUDia\\AUDiaGentic"
 
 [mcp_servers.ag-agents]
-command = "H:\\development\\projects\\AUDia\\AUDiaGentic\\.venv\\Scripts\\python.exe"
+command = "C:\\Users\\mgs\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\python.exe"
 args = [
     "-m",
     "audiagentic.launcher",
@@ -23,7 +23,7 @@ args = [
 AUDIAGENTIC_REPO_ROOT = "H:\\development\\projects\\AUDia\\AUDiaGentic"
 
 [mcp_servers.ag-planning]
-command = "H:\\development\\projects\\AUDia\\AUDiaGentic\\.venv\\Scripts\\python.exe"
+command = "C:\\Users\\mgs\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\python.exe"
 args = [
     "-m",
     "audiagentic.launcher",
@@ -35,7 +35,7 @@ args = [
 AUDIAGENTIC_REPO_ROOT = "H:\\development\\projects\\AUDia\\AUDiaGentic"
 
 [mcp_servers.ag-release-please]
-command = "H:\\development\\projects\\AUDia\\AUDiaGentic\\.venv\\Scripts\\python.exe"
+command = "C:\\Users\\mgs\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\python.exe"
 args = [
     "-m",
     "audiagentic.launcher",
@@ -65,13 +65,25 @@ args = [
 GITHUB_TOKEN = "${GITHUB_TOKEN}"
 
 [mcp_servers.ag-lsp]
-command = "H:\\development\\projects\\AUDia\\AUDiaGentic\\.venv\\Scripts\\python.exe"
+command = "C:\\Users\\mgs\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\python.exe"
 args = [
     "-m",
     "audiagentic.launcher",
     "mcp",
     "audiagentic.components.coding_lsp.lsp_mcp",
 ]
+
+[mcp_servers.ag-agents-gateway]
+command = "C:\\Users\\mgs\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\python.exe"
+args = [
+    "-m",
+    "audiagentic.launcher",
+    "mcp",
+    "audiagentic.components.agents.agents_gateway_mcp",
+]
+
+[mcp_servers.ag-agents-gateway.env]
+AUDIAGENTIC_REPO_ROOT = "H:\\development\\projects\\AUDia\\AUDiaGentic"
 
 [mcp_servers.hindsight]
 type = "http"
