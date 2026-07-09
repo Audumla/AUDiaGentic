@@ -41,8 +41,10 @@ class _Ctx:
 
 
 def teardown_function() -> None:
+    from audiagentic.foundation.interaction.mcp import _mcp_ctx_var
+
     interaction.clear_backend()
-    interaction._mcp_ctx_var.set(None)
+    _mcp_ctx_var.set(None)
 
 
 def test_ask_returns_timeout_without_backend_or_ctx() -> None:
@@ -76,11 +78,13 @@ def test_sync_ask_on_same_loop_does_not_block_or_elicit() -> None:
     async def _run() -> tuple[AskResponse, _Ctx]:
         loop = asyncio.get_running_loop()
         ctx = _Ctx()
-        token = interaction._mcp_ctx_var.set((ctx, loop))
+        from audiagentic.foundation.interaction.mcp import _mcp_ctx_var
+
+        token = _mcp_ctx_var.set((ctx, loop))
         try:
             return interaction.ask("Reload?", timeout_seconds=1), ctx
         finally:
-            interaction._mcp_ctx_var.reset(token)
+            _mcp_ctx_var.reset(token)
 
     response, ctx = asyncio.run(_run())
 
@@ -106,11 +110,13 @@ def test_sync_ask_from_worker_thread_submits_to_mcp_loop() -> None:
     thread.start()
     assert ready.wait(timeout=5)
     loop = box["loop"]
-    token = interaction._mcp_ctx_var.set((ctx, loop))
+    from audiagentic.foundation.interaction.mcp import _mcp_ctx_var
+
+    token = _mcp_ctx_var.set((ctx, loop))
     try:
         response = interaction.ask("Reload?", timeout_seconds=1)
     finally:
-        interaction._mcp_ctx_var.reset(token)
+        _mcp_ctx_var.reset(token)
         stop.set()
         thread.join(timeout=5)
 
