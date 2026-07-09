@@ -143,7 +143,6 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
     cwd = Path(working_root) if working_root else None
 
     execution_policy = provider_cfg.get("execution-policy", {})
-    ephemeral = bool(execution_policy.get("ephemeral", True))
     full_auto = bool(execution_policy.get("full-auto", True))
 
     fd, last_message_path = tempfile.mkstemp(prefix="codex-last-message-", suffix=".txt")
@@ -156,10 +155,8 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
         "--output-last-message",
         str(output_path),
     ]
-    if ephemeral:
-        command.insert(2, "--ephemeral")
     if full_auto:
-        command.insert(3, "--full-auto")
+        command.insert(2, "--full-auto")
     if default_model:
         command.extend(["--model", str(default_model)])
     command.append(prompt)
