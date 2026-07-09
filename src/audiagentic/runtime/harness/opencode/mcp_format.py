@@ -9,7 +9,7 @@ from pathlib import Path
 
 from audiagentic.foundation.mcp import McpServerEntry
 from audiagentic.foundation.mcp.json_format import (
-    _sanitize_command,
+    _resolve_command,
     read_mcp_json,
     remove_mcp_json,
     write_mcp_json,
@@ -34,7 +34,7 @@ def build_opencode_mcp_dict(
         "mcpServers": {
             name: {
                 "type": "stdio",
-                "command": _sanitize_command(e.command, e.args),
+                "command": _resolve_command(e.command),
                 "args": list(e.args),
                 **({"env": dict(e.env)} if e.env else {}),
             }
