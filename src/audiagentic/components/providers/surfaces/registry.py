@@ -17,6 +17,9 @@ def _ensure_provider_modules_registered() -> None:
         if adapters is not None:
             load_providers = getattr(adapters, "load_providers", None)
             if callable(load_providers):
+                # Clear before reload so re-registration isn't seen as collision
+                _renderer_registry._items.clear()
+                _contribution_renderer_registry._items.clear()
                 for module_name, module in list(sys.modules.items()):
                     if (
                         module_name.startswith("audiagentic.components.providers.adapters.")
@@ -38,15 +41,15 @@ _contribution_renderer_registry: Registry[ProviderContributionRenderer] = Regist
 
 
 def register_renderer(provider_id: str, renderer: ProviderSurfaceRenderer) -> None:
-    _renderer_registry.register(provider_id, renderer, replace=True)
+    _renderer_registry.register(provider_id, renderer)
 
 
 def renderer_registered(provider_id: str) -> bool:
-    return _renderer_registry.get(provider_id) is not None
+    return _renderer_registry.is_registered(provider_id)
 
 
 def contribution_renderer_registered(provider_id: str) -> bool:
-    return _contribution_renderer_registry.get(provider_id) is not None
+    return _contribution_renderer_registry.is_registered(provider_id)
 
 
 def load_renderer_registry() -> dict[str, ProviderSurfaceRenderer]:
@@ -54,7 +57,7 @@ def load_renderer_registry() -> dict[str, ProviderSurfaceRenderer]:
 
 
 def register_contribution_renderer(provider_id: str, renderer: ProviderContributionRenderer) -> None:
-    _contribution_renderer_registry.register(provider_id, renderer, replace=True)
+    _contribution_renderer_registry.register(provider_id, renderer)
 
 
 def load_contribution_renderer_registry() -> dict[str, ProviderContributionRenderer]:
