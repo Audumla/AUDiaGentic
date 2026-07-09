@@ -233,10 +233,13 @@ def reap_orphan_rigs(keep_pid: int | None = None) -> list[int]:
         if shutil.which("pgrep") is None:
             return killed
         for name in ("llama-server", "llamafile"):
-            result = subprocess.run(
-                ["pgrep", "-x", name],
-                capture_output=True, text=True, check=False, timeout=10,
-            )
+            try:
+                result = subprocess.run(
+                    ["pgrep", "-x", name],
+                    capture_output=True, text=True, check=False, timeout=10,
+                )
+            except subprocess.TimeoutExpired:
+                continue
             for line in result.stdout.splitlines():
                 try:
                     pid = int(line.strip())

@@ -44,7 +44,7 @@ def test_ensure_lens_skips_when_harness_absent(tmp_path: Path, monkeypatch) -> N
         "audiagentic.runtime.harness.context.resolve_agent_bin",
         lambda runtime: missing,
     )
-    monkeypatch.setattr("audiagentic.foundation.home.global_harness_runtime", lambda: tmp_path)
+    monkeypatch.setattr("audiagentic.foundation.paths.home.global_harness_runtime", lambda: tmp_path)
 
     def _boom(*a, **k):
         raise AssertionError("subprocess must not run when pi bin is absent")
@@ -65,7 +65,7 @@ def test_ensure_lens_starts_background_install_when_harness_present(tmp_path: Pa
         "audiagentic.runtime.harness.context.resolve_agent_bin",
         lambda runtime: pi_bin,
     )
-    monkeypatch.setattr("audiagentic.foundation.home.global_harness_runtime", lambda: tmp_path)
+    monkeypatch.setattr("audiagentic.foundation.paths.home.global_harness_runtime", lambda: tmp_path)
 
     captured: dict[str, object] = {}
 
@@ -95,7 +95,7 @@ def test_install_pi_lens_runs_install_command(tmp_path: Path, monkeypatch) -> No
         "audiagentic.runtime.harness.context.resolve_agent_bin",
         lambda runtime: pi_bin,
     )
-    monkeypatch.setattr("audiagentic.foundation.home.global_harness_runtime", lambda: tmp_path)
+    monkeypatch.setattr("audiagentic.foundation.paths.home.global_harness_runtime", lambda: tmp_path)
 
     pi_desc._pi_ensure_lens(tmp_path)
 

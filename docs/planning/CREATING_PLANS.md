@@ -124,7 +124,15 @@ Check every box; if any fails, the item stays `pending`:
    failed criterion.
 3. **The full unit test suite is green** (`python -m pytest tests/unit`), not just the
    tests you added. Architecture-boundary tests are part of the suite; a red boundary
-   test is an architecture violation, not a test problem.
+   test is an architecture violation, not a test problem. When the item **moves, renames,
+   or deletes a module**, running the full suite is non-negotiable and a residual-reference
+   grep over `src/` alone is not sufficient: the old dotted path also hides in
+   **string-literal references** that no import-shaped scan catches — `monkeypatch.setattr("old.path...")`,
+   `mock.patch("old.path...")`, `importlib.import_module`, patch decorators, and dotted
+   paths in config/YAML. Grep the **whole repo including `tests/`** for the old module
+   path as a bare string, and only the green full suite — not the grep — proves the move
+   landed. (A grep scoped to `src` with an `import`-shaped pattern is what let a completed
+   item ship 5 tests that failed with `ModuleNotFoundError` on the deleted module.)
 4. **Standards compliance verified** against the item's Standards section — including
    error handling (no raw `ValueError` at public boundaries), logging (no `print()` in
    library code), and layer boundaries (no new cross-component imports without an
