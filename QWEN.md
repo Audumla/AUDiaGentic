@@ -47,6 +47,7 @@ Choose a prefix matching the plan name (CC → code-cleanup, LSP → lsp-mcp-enh
 - complexity: simple / mid / complex (default simple)
 - order: integer sort key (default 0)
 - validate_first: true if validation steps must precede implementation (default true)
+- created-by / created_by / creator_id: creator identity for the item
 - description, steps, files, validation, effort_risk, notes: body section content
 
 ## Agent profile doctrine
@@ -68,15 +69,12 @@ parameters. They are stored in .audiagentic/config/agent-profiles.yaml.
 Use `agent-profile-id` (NOT `profile-id`) in job requests to avoid
 collision with `workflow-profile` (lite/standard/strict stage pipelines).
 
-## Memory component
+## Memory usage guidance
 
-Memory is backed by a swappable backend. Use the ag-memory-mgmt MCP tools
-to check status, switch implementations, and configure the active backend.
-- `memory_status` — Active implementation and configuration state
-- `memory_select_implementation` — Switch memory backend
-- `memory_get_config` / `memory_set_config` — Read and update backend config
-- When memory is configured, the active backend's tools are available for
-  long-term memory operations (recall, reflect, retain).
+Use Hindsight memory when prior project context may help.
+- Recall before design/history questions or non-trivial work.
+- Retain durable decisions, user preferences, architecture constraints, and outcomes.
+- Do not retain secrets, credentials, or transient noise.
 
 ## Release doctrine
 
