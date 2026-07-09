@@ -1,6 +1,6 @@
 # Check-In Summary
 
-Total changes: 25
+Total changes: 141
 
 - PRR08 complete: Provider recipe lifecycle tests added, foundation/toolchains cleaned of component-specific language, architecture boundary gates all pass, memory/provider separation verified.
 - Hindsight memory plan complete (HM01-HM09): Backend config export, remote MCP entry support, strategy contract, TOML writer for openhands, orchestration wiring, boundary gates clean.
@@ -27,3 +27,119 @@ Total changes: 25
 - Hindsight now installs and cleanly uninstalls for Claude (and other CLI-driven providers) on Windows. Fixed a crash on installer output with special characters, a Windows path-resolution failure that prevented installers from running at all, and a gap where disabling did not actually remove the Claude plugin.
 - Added optional live per-provider tests that validate Hindsight install and teardown against the actual provider CLIs on the developer's machine, in an isolated home so they never modify the real environment. These catch platform-specific install failures and incomplete teardowns that the Docker-only tests miss.
 - Fix Claude Code MCP connectivity on Windows: servers were silently broken because pythonw.exe suppresses stdout (now uses python.exe), AUDiaGentic MCP servers now write to ~/.claude/mcp.json (globally available across all projects), and the Hindsight plugin now correctly writes its backend URL to ~/.hindsight/claude-code.json with a Windows repair for the bash→python.exe launcher issue.
+- Cleaned up dead code from Hindsight recipe migration: removed legacy _run_command helper, unused step model imports, and updated test assertions to match new ProvisionStep contract.
+- Completed TO12 Phase E: All Hindsight recipes now expose provision_steps() for structured rollback-aware provisioning through CompensatingSequence.
+- Fixed Hindsight teardown for providers with custom MCP format handlers (Cline, Gemini) — artifact registry sidecar is now cleaned up on prune.
+- Cleaned test-related files out of the repository root while preserving pytest imports; tests/run_all.py remains the supported test runner.
+- Added an Agent LLM Gateway: submit direct LLM completion requests asynchronously, block for a result, or trigger them via events — with automatic retry and fallback across agent profiles.
+- Fixed planning cleanup so empty review and plan folders are removed when items or reviews move between active and completed.
+- Tighten planning MCP state-management guidance
+- Move standards docs into a shared standards folder
+- Clarified error/message standards so error-resolutions config is remediation-only and canonical raised messages stay code-owned.
+- Cleaned up the coding-lsp config tree so it reads by role instead of looking duplicated. Implementations, features, and bindings now live in separate folders, the YAML language file has a readable name, and the loader/tests/docs were updated to match.
+- Renamed the alternate external LSP implementation to blackwell-agent-lsp so it no longer reads like the native ag-lsp. The actual installed command is still agent-lsp, but AUDiaGentic config and UI-facing IDs now make the Blackwell origin clear.
+- Cleaned the coding-lsp binding files so they no longer repeat language server dependencies like clangd or pyright. Features now own language server dependencies, implementations own runtime dependencies, and bindings only say which implementation supports which feature and how to project it.
+- Validated current Hindsight cleanup state and broke the remaining HM07, HM12, and HM09 work into six smaller agent-ready plan items.
+- Added review items documenting the remaining HM07, HM12, and HM09 implementation gaps for follow-on agents.
+- Added HM07 code review items for the remaining implementation-selection, duplicate-reconcile, and test-coverage issues.
+- Updated planning docs and API comments to explicitly allow review items on completed plan items.
+- Created review notes for all active architecture-standards planning items with concrete feedback on scope, sequencing, and validation gaps.
+- Memory/Hindsight hardening: recipe factory registry, YAML-driven plugin repair metadata, canonical error handling, offline gate tests, and Docker e2e stubs. All 105 memory tests pass.
+- Added another AR17 review note covering stronger acceptance checks and an explicit AR08-completed prerequisite.
+- Resolved reviews: observer reconciliation proven in tests, Hindsight status exposed via API/MCP, duplicate placeholder path eliminated.
+- Architecture doctrine updated: foundation is the capability layer and may read runtime-environment facts (runtime/system); runtime acts as a bootstrap/composition layer with import rules relaxed accordingly.
+- Added new review feedback on the updated runtime/foundation refactor plan items, focusing on capability registration rules, lifecycle constant moves, session path ownership, and AR19 sequencing.
+- Foundation and runtime no longer import from the providers component — all cross-layer calls now go through a generic capability registry that gracefully degrades when providers is absent.
+- Added an AR02 implementation review noting the capability bootstrap-order bug and the remaining runtime fallback import.
+- Fixed capability registry bootstrap ordering and removed forbidden direct imports in provider recipe reconciliation
+- Added another AR02 implementation review noting the remaining bespoke provider recipe registry.
+- Cleaned up runtime layer: removed config/home/state shims, moved state persistence into agent_jobs component
+- Added an AR18 implementation review noting the remaining duplicate job_dir helper and session path aliases.
+- Fixed planning MCP sometimes showing no items or reviews by passing the project root into generated MCP server configs, plus added a regression test and updated the local `.mcp.json`.
+- Internal architecture cleanup: removed duplicated lifecycle modules so component lifecycle state lives in one place, fixed a latent harness import bug, and hardened the test suite against cross-test state leakage.
+- Internal architecture: component lifecycle now lives fully in the foundation layer, with the harness reached only through registered capabilities — no cross-layer imports remain.
+- Finished AR16 cleanup so deprecated optional component constants no longer appear in source or tests.
+- Finished AR16 and fixed test-suite blockers so the constant migration now validates cleanly.
+- Added review feedback items for the refactor plans so implementation agents have clearer sequencing, architecture, and validation requirements.
+- Removed registered callbacks from architecture standards; events and contribution registries are the sanctioned indirection patterns. Added domain-neutral naming rule.
+- Added foundation.interaction module for unified operator interaction primitives
+- Config reference validation no longer depends on providers component being present
+- Moved MCP server sync logic into the providers component where it belongs, removing unnecessary capability indirection.
+- Removed generic provider-recipe reconciliation layer; memory now self-reconciles on config change
+- EV01: Replaced harness capability registration with event bus subscription for lifecycle reactions
+- Deleted the generic capability registry — all prior uses were found to be misapplications and removed by EV01-EV05 and CP00
+- Added generic registry utility with alias support and test-isolation reset fixture for foundation tests
+- Harness now asks for reload confirmation via interaction backend instead of logging silently
+- Slimmed component loader: deduplicated files-tuple construction and organized ComponentDescriptor fields
+- Component descriptor loading is now cached on config directory paths, with env-var override support and test-safe cache invalidation.
+- Component profiles: --component-profile flag, layered config discovery, and single-profile-per-process safety guard
+- Component profiles (--component-profile flag), capability registry deletion, unified interaction primitives, and architecture standards update.
+- Plan-item guidance now includes mandatory implementation-adherence rules and a Definition of Done, preventing items from being marked completed with unexecuted validation, a failing test suite, or unresolved reviews.
+- Plan-item guidance now defines the required level of detail explicitly, so implementers never have to invent design decisions mid-implementation.
+- Fixed test-isolation cache guard, profile root resolution, harness lifecycle subscriptions, register collision detection, and memory→providers architecture boundary.
+- Component profiles now resolve against the real project root instead of the package directory, with end-to-end CLI tests; stale docs and a false migration claim corrected; full test suite green.
+- Cleanup plans created with concrete solutions for all outstanding review findings (interaction/elicitation rework, durable ask store, registry utility completion, profile --project fix, doctrine warning fix), reviewed and corrected before implementation.
+- Full audit of the new lazy-initialization transparency rule: all violations catalogued, a new plan item covers making registry access self-populating and removing ~25 caller-side priming calls, and the registry-migration item was extended accordingly.
+- Duplicate lazy-initialization plan items from parallel sessions were merged into the canonical AR22/CP12 items (keeping both sets' unique findings), and plan-creation guidance now requires a duplicate check first.
+- Refactored core foundation: streamlined component lifecycle, registration, and event system; removed obsolete capabilities and legacy lifecycle modules.
+- Added component profiles (overlay-based config layers) and provider MCP sync reconciliation.
+- Enhanced memory, session, and project MCP components; refined agent approvals.
+- Updated and extended test suite: added component profile tests, adjusted lifecycle/memory/planning/provider tests for refactored foundation.
+- Updated agent documentation, architecture standards, and project guides to reflect current system state.
+- Unified the AgentContext type across both harness runners — one canonical dataclass shared by pi and opencode.
+- Fixed MCP elicitation: async-native ask path works correctly, choice schema carries options to client, sync callers can reach live MCP via contextvar threading.
+- Fixed profile resolution when launching with --project from outside the project directory.
+- Fixed provider surface warnings, added missing profile CLI coverage, cleaned runner imports, proved MCP interaction thread handling, and advanced shared registry lazy-loading infrastructure.
+- Added persistent operator interactions, moved job approvals onto them, unified provider progress through the interaction surface, and cleaned up orphaned agent gateway records after restarts.
+- Made component and feature registries load transparently, removed defensive loader calls, and fixed event observer registration after test/runtime bus resets.
+- Shared runner and state transition logic now use common foundation helpers with existing behavior preserved.
+- Final review fixes for the cleanup batch: a crash in the provider-surface skip path, a private-API boundary violation between job approvals and the interaction store, and the provider inventory test; full suite green at 1953 passing.
+- Added an Antigravity provider adapter (recorded post-hoc; the addition was unplanned and awaits explicit confirmation).
+- A retroactive plan item now tracks the Antigravity provider addition, scoping verification of its external claims (npm package, CLI, MCP config location, instruction conventions) before the provider is considered production-ready.
+- Fix Antigravity CLI installation method: npm package does not exist; now uses curl install scripts from official docs
+- Record PV01 review: CLI install verification findings incorporated
+- PV01 review: host coverage, adapter docs, and test parametrization verified
+- Fixed antigravity.yaml: restored mcp_config section that was incorrectly removed during PV01 verification (repo search did not reflect actual CLI capabilities)
+- MCP configs now store a portable python placeholder instead of absolute executable paths, making them cross-platform safe.
+- Internal restructuring: workflow step building and descriptor registries were consolidated for a cleaner foundation layering; no user-facing behavior change.
+- Internal restructuring: descriptor-loading utilities were relocated to match their actual usage; no user-facing behavior change.
+- Improved event-layer migration plan items (EV07-EV12): fixed cross-references, added protocol completeness checks, removed out-of-scope features, and added acceptance criteria per architecture standards.
+- The internal event system is now configurable, thread-safe at startup, cleans up properly on reset, and reports structured diagnostics when an event handler fails.
+- Internal cleanup of the provisioning recipe framework: shared install/teardown machinery was consolidated into the core toolchain layer, fixing a latent crash and a broken error code along the way; no user-facing behavior change.
+- Internal restructuring: the machinery that keeps AUDiaGentic-managed entries in provider config files reconciled is now a reusable core capability; no user-facing behavior change.
+- Fixed two bugs where closing one AI harness could kill the shared local model server other harnesses were still using; the server now shuts down only when the last harness detaches.
+- Hindsight memory integrations are now tracked by the same ownership system as other managed MCP entries, and a bug was fixed where two providers (Codex, Goose) could receive broken remote-server config entries.
+- Internal restructuring of the Hindsight memory integration module into focused submodules; no user-facing behavior change.
+- Fix LSP document diagnostics timeout — added explicit 60s budget for textDocument/diagnostic requests
+- Fix LSP file diagnostics: added explicit 60s timeout for textDocument/diagnostic and fallback to push-based diagnostics when pull times out (fixes ruff hanging on large files)
+- Internal refactor of the install-recipe framework: guidance-to-user text is now a first-class field on the generic result type, and provenance tagging happens in one place instead of scattered through every step; no user-facing behavior change.
+- The install-recipe framework now provides reusable building blocks (declared-step installer, managed config entry, guidance-only) in the core layer, so any component that installs code can reuse them instead of hand-rolling the lifecycle; no user-facing behavior change.
+- Internal file reorganization: the Hindsight plugin-integration recipes were moved to their own module for readability; no user-facing behavior change.
+- Added a concise standards guide for how new components install and configure themselves, and made the recipe-consolidation plan item concrete enough to hand off.
+- Deleted zero-consumer recipe abstractions: HindsightMcpRecipe, ManagedEntryRecipe, ConfigEntryTarget. mcp_recipe.py trimmed to payload builders.
+- Fixed prune to fail on refused MCP sync; cleaned up stale docstring reference.
+- Planning items now record creator identity, and reviews accept reviewer identity aliases.
+- Planning item and review events now publish through the event bus and include creator/reviewer identities.
+- Added coexistence guard test for surfaces-managed region + hindsight blocks; full A7 unification deferred.
+- Added durable gateway timelines and a shared observability standard for async resource debugging.
+- Clean up: removed deprecated StepRecipe, LspRecipeAdapter, and dead LSP recipe files — consolidation onto existing provider/foundation machinery is now complete.
+- RecipeSpec framework: declarative recipe description with schema validation and hindsight-local assembler — first migration (GuidanceOnly) validated green.
+- SL15: RecipeSpec framework — collapsible recipe kinds driven by config instead of Python classes. Migration of GUIDANCE_ONLY and HOOKS validated; strategy gates and genuinely-custom kinds preserved in code.
+- Gateway timelines now carry correlation IDs to connect execution paths with logs and event metadata.
+- Created planning items for event-driven agent job enhancements.
+- Eliminated rules dual-writer: hindsight guidance now delivered via surface contributions instead of direct block writing; collapsed composite recipe into MCP adapter
+- Added planning items for prompt context injection and file-loaded event trigger templates.
+- Removed dead hindsight rules-recipe code left over after memory guidance moved to the shared instruction-file mechanism, simplifying the memory-provisioning path.
+- Provider MCP sync now exposes managed-entry status lookup for use by recipe probes; test coverage added.
+- Source control probes migrated to YAML-driven dependency probes; deleted bespoke Python probe module.
+- Event-driven job plan items now capture generic prompt injection and all required component/foundation touch points.
+- Clarified architecture standards so tests are not constrained by production import boundaries.
+- Fixed guidance-only provision delegation and hooks verification gate in config-driven recipe assembly
+- Finished the config-driven memory-integration recipe system: invalid configurations now fail with a clear error, and unused speculative code was removed, keeping the provisioning layer lean.
+- Documented provider custom/local model endpoint capabilities and proposed MCP-style managed model sync design.
+- Refined event-driven job plan items (EDJ01-EDJ11) with schema validation, trigger-neutral prompt assembly, path safety guards, and clearer cross-item dependencies.
+- Finished config-driven memory-integration recipe system: RecipeSpec framework replaces per-kind recipe classes for hindsight; invalid configs fail clearly, speculative code removed.
+- Fixed Codex adapter MCP config handling; aligned runtime harness with refactored event registration.
+- Updated architecture standards to clarify test boundaries; added recipe usage guide; refreshed testing documentation.
+- Extended test infrastructure with provider lifecycle Docker targets and prompt-launch e2e test; updated hindsight memory tests for RecipeSpec framework.
+- Planning state updates: SL15 completed, EDJ reviews resolved, new cleanup items created.
