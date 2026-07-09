@@ -17,177 +17,25 @@ Usage
 from __future__ import annotations
 
 import argparse
-import importlib
 import logging
-import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from audiagentic.foundation.cli_io import print_error, print_json, print_message
 from audiagentic.commands.component import _cmd_component
+from audiagentic.commands.install import cmd_install
+from audiagentic.commands.job_control import cmd_job_control
 from audiagentic.commands.launch import _cmd_launch
+from audiagentic.commands.mcp import cmd_mcp
 from audiagentic.commands.provider_prompt import _try_provider_prompt
-from audiagentic.foundation.components.ids import COMPONENT_SESSION
+from audiagentic.commands.refresh import cmd_refresh
+from audiagentic.commands.release_bootstrap import cmd_release_bootstrap
+from audiagentic.commands.session_input import cmd_session_input
+from audiagentic.commands.update import cmd_update
+from audiagentic.foundation.cli_io import print_error
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.paths.home import global_harness_runtime
-from audiagentic.runtime.harness import (
-    install_to,
-)
 
 logger = logging.getLogger(__name__)
-
-
-def _cmd_install(target: Path, project_root: Path) -> int:
-    print_message(f"Installing AUDiaGentic harness into {target}")
-    rc = install_to(target, project_root=project_root)
-    if not rc:
-        # Auto-install harness components
-        try:
-            from audiagentic.foundation.components.loader import register_all_components
-            from audiagentic.foundation.lifecycle.components import install_component
-            register_all_components()
-            install_component(COMPONENT_SESSION, project_root)
-        except Exception:
-            logger.warning("Failed to auto-install session component", exc_info=True)
-        print_message("\nInstall complete. Run 'audiagentic' from any project directory.")
-        if target != global_harness_runtime():
-            print_message(f"Set AUDIAGENTIC_HOME={target.parent} to use this location.")
-    return rc
-
-
-def _dispatch_install(args: argparse.Namespace, project_root: Path) -> int:
-    target = Path(args.target).resolve() if args.target else global_harness_runtime()
-    return _cmd_install(target, project_root)
-
-
-def _cmd_update(args: argparse.Namespace, project_root: Path) -> int:
-    del args, project_root
-    from audiagentic.runtime.update.prompt import run_update_now
-    return run_update_now()
-
-
-def _cmd_mcp(
-    module_name_or_args: str | argparse.Namespace,
-    module_args_or_project_root: list[str] | Path = [],
-) -> int:
-    if isinstance(module_name_or_args, str):
-        module_name = module_name_or_args
-        module_args = module_args_or_project_root if isinstance(module_args_or_project_root, list) else []
-    else:
-        args = module_name_or_args
-        project_root = module_args_or_project_root
-        del project_root
-        module_name = args.module
-        module_args = args.module_args or []
-    module = importlib.import_module(module_name)
-    main = getattr(module, "main", None)
-    if not callable(main):
-        raise AudiaGenticError(
-            code="CFG-MCP-002",
-            kind="mcp",
-            message="MCP module does not expose a callable main()",
-            details={"module": module_name},
-        )
-    old_argv = sys.argv
-    try:
-        sys.argv = [module_name, *module_args]
-        result = main()
-    finally:
-        sys.argv = old_argv
-    return result if isinstance(result, int) else 0
-
-
-def _regenerate_provider_configs(project_root: Path) -> dict[str, object]:
-    """Regenerate every provider's MCP config from current component state.
-
-    Chains the two projections that own provider MCP entries so a single refresh
-    rewrites them all in managed launcher form (module renames are picked up
-    automatically):
-      - provider reconcile: component servers (ag-ledger, ag-release-please, …)
-        plus external servers (git, github).
-      - LSP generic-mcp projection: the language-server bridge (ag-lsp).
-    Each is best-effort: a missing/disabled component never fails the refresh.
-    """
-    result: dict[str, object] = {}
-    try:
-        from audiagentic.components.providers.services.reconcile import (
-            reconcile_all_providers,
-        )
-        reconciled = reconcile_all_providers(project_root=project_root)
-        result["providers_reconciled"] = len(reconciled.get("providers", []))
-    except Exception as exc:  # noqa: BLE001
-        result["providers_error"] = str(exc)
-    try:
-        from audiagentic.components.coding_lsp.language_servers_sync import (
-            sync_generic_lsp_mcp_to_providers,
-        )
-        lsp = sync_generic_lsp_mcp_to_providers(project_root)
-        result["lsp_synced"] = lsp.get("synced", [])
-    except Exception as exc:  # noqa: BLE001
-        result["lsp_error"] = str(exc)
-    return result
-
-
-def _cmd_job_control(args: argparse.Namespace, project_root: Path) -> int:
-    from audiagentic.foundation.components.registry import get_descriptor
-
-    if not get_descriptor("agent-jobs"):
-        print_error("agent_jobs component not available")
-        return 1
-
-    from audiagentic.components.agent_jobs.control import (
-        build_job_control_request,
-        request_job_control,
-    )
-    from audiagentic.components.agent_jobs.jobs_store import read_job_record
-
-    control_root = Path(args.project_root).resolve() if args.project_root else project_root
-    job = read_job_record(control_root, args.job_id)
-    payload = build_job_control_request(
-        job_id=args.job_id,
-        project_id=job["project-id"],
-        requested_action=args.action,
-        requested_by=args.requested_by,
-        reason=args.reason,
-    )
-    result = request_job_control(control_root, payload)
-    print_json(result, sort_keys=True)
-    return 0
-
-
-def _cmd_session_input(args: argparse.Namespace, project_root: Path) -> int:
-    from audiagentic.components.agent_jobs.session_input_store import (
-        build_and_persist_session_input,
-    )
-
-    input_root = Path(args.project_root).resolve() if args.project_root else project_root
-    record = build_and_persist_session_input(
-        input_root,
-        job_id=args.job_id,
-        prompt_id=args.prompt_id,
-        provider_id=args.provider_id,
-        surface=args.surface,
-        stage=args.stage,
-        event_kind=args.event_kind,
-        message=args.message,
-    )
-    print_json({"status": "recorded", "record": record}, sort_keys=True)
-    return 0
-
-
-def _cmd_release_bootstrap(args: argparse.Namespace, project_root: Path) -> int:
-    from audiagentic.foundation.components.registry import get_descriptor
-
-    if not get_descriptor("agent-ledger"):
-        print_error("ledger component not available")
-        return 1
-
-    from audiagentic.components.ledger.ledger_bootstrap import bootstrap_ledger
-
-    bootstrap_root = Path(args.project_root).resolve() if args.project_root else project_root
-    result = bootstrap_ledger(bootstrap_root)
-    print_json(result, sort_keys=True)
-    return 0
 
 
 def _cmd_update_binaries(args: argparse.Namespace, project_root: Path) -> int:
@@ -198,35 +46,16 @@ def _cmd_update_binaries(args: argparse.Namespace, project_root: Path) -> int:
     return 0
 
 
-def _cmd_refresh(args: argparse.Namespace, project_root: Path) -> int:
-    from audiagentic.runtime.harness import (
-        build_runtime_sync,
-        refresh_harness_config_if_installed,
-    )
-    # Regenerate provider MCP configs (.mcp.json, .opencode/opencode.json, …)
-    # from current component state — independent of whether the agent harness
-    # is installed.
-    provider_configs = _regenerate_provider_configs(project_root)
-    refreshed = refresh_harness_config_if_installed(project_root, reason="manual-refresh")
-    print_json({
-        "ok": True,
-        "provider_configs": provider_configs,
-        "harness_refreshed": refreshed,
-        "sync": build_runtime_sync(reason="manual-refresh") if refreshed else None,
-    })
-    return 0
-
-
 _COMMAND_HANDLERS: dict[str, Callable] = {
-    "install": _dispatch_install,
+    "install": cmd_install,
     "component": _cmd_component,
-    "update": _cmd_update,
-    "mcp": _cmd_mcp,
-    "job-control": _cmd_job_control,
-    "session-input": _cmd_session_input,
-    "release-bootstrap": _cmd_release_bootstrap,
+    "update": cmd_update,
+    "mcp": cmd_mcp,
+    "job-control": cmd_job_control,
+    "session-input": cmd_session_input,
+    "release-bootstrap": cmd_release_bootstrap,
     "update-binaries": _cmd_update_binaries,
-    "refresh": _cmd_refresh,
+    "refresh": cmd_refresh,
 }
 
 
