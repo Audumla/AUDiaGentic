@@ -199,7 +199,7 @@ def reap_orphan_rigs(keep_pid: int | None = None) -> list[int]:
     if os.name == "nt":
         result = subprocess.run(
             ["tasklist", "/FI", "IMAGENAME eq llama-server.exe", "/FO", "CSV", "/NH"],
-            capture_output=True, text=True, check=False,
+            capture_output=True, text=True, check=False, timeout=10,
         )
         for line in result.stdout.splitlines():
             parts = line.strip().strip('"').split('","')
@@ -215,7 +215,7 @@ def reap_orphan_rigs(keep_pid: int | None = None) -> list[int]:
             killed.append(pid)
         result2 = subprocess.run(
             ["tasklist", "/FI", "IMAGENAME eq llamafile.exe", "/FO", "CSV", "/NH"],
-            capture_output=True, text=True, check=False,
+            capture_output=True, text=True, check=False, timeout=10,
         )
         for line in result2.stdout.splitlines():
             parts = line.strip().strip('"').split('","')
@@ -235,7 +235,7 @@ def reap_orphan_rigs(keep_pid: int | None = None) -> list[int]:
         for name in ("llama-server", "llamafile"):
             result = subprocess.run(
                 ["pgrep", "-x", name],
-                capture_output=True, text=True, check=False,
+                capture_output=True, text=True, check=False, timeout=10,
             )
             for line in result.stdout.splitlines():
                 try:
