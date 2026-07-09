@@ -78,12 +78,23 @@ def test_managed_block_and_surface_coexistence(tmp_path):
 
 
 def test_hindsight_orchestration_entrypoints_run_selected_provider(tmp_path, monkeypatch):
-    """After SL13 A7: GuidanceOnlyRecipe delegates to NoAutomationRecipe.
+    """After SL13 A7 and SL15: guidance recipes are assembled via RecipeSpec.
 
     apply_hindsight and teardown_hindsight succeed with guidance recipes; no file
     writing is expected (content flows via surface contributions).
     """
-    from audiagentic.components.memory.hindsight.recipes import GuidanceOnlyRecipe
+    from audiagentic.components.memory.hindsight.recipe_spec import (
+        ParamBinding,
+        RecipeSpec,
+        StatusOverride,
+        assemble_hindsight_recipe,
+    )
+
+    _GUIDANCE_SPEC = RecipeSpec(
+        pattern="no_automation",
+        params=[ParamBinding(param_name="action_needed", row_field="notes")],
+        status_overrides=[StatusOverride(method="probe", state="absent", status_text="no automated integration available")],
+    )
 
     row = HindsightRecipeRow(
         provider_id="test",
@@ -94,7 +105,7 @@ def test_hindsight_orchestration_entrypoints_run_selected_provider(tmp_path, mon
     )
 
     def fake_register(registry, backend=None, project_root=None):
-        recipe = GuidanceOnlyRecipe(row)
+        recipe = assemble_hindsight_recipe(row, None, _GUIDANCE_SPEC)  # type: ignore[arg-type]
         registry.register(recipe)
         return [recipe]
 

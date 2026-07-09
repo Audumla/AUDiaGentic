@@ -9,7 +9,12 @@ from audiagentic.components.memory.hindsight.export import (
     build_hindsight_backend,
 )
 from audiagentic.components.memory.hindsight.matrix import HINDSIGHT_RECIPE_MATRIX
-from audiagentic.components.memory.hindsight.recipes import GuidanceOnlyRecipe
+from audiagentic.components.memory.hindsight.recipe_spec import (
+    ParamBinding,
+    RecipeSpec,
+    StatusOverride,
+    assemble_hindsight_recipe,
+)
 from audiagentic.components.memory.hindsight.strategies import (
     build_hindsight_recipe,
     resolve_hindsight_strategy,
@@ -18,6 +23,19 @@ from audiagentic.components.providers.services.recipes import (
     ProviderRecipeRegistry,
     ProviderRecipeResult,
     RecipeState,
+)
+
+#: Inline guidance-only spec for the no-backend fallback path in lifecycle.
+#: Matches strategies._GUIDANCE_SPEC but defined here to avoid circular imports.
+_NO_BACKEND_GUIDANCE_SPEC = RecipeSpec(
+    pattern="no_automation",
+    params=[
+        ParamBinding(param_name="action_needed", row_field="notes"),
+        ParamBinding(param_name="skip_status", literal="skipped: no automated Hindsight integration for this provider"),
+    ],
+    status_overrides=[
+        StatusOverride(method="probe", state="absent", status_text="no automated integration available"),
+    ],
 )
 
 
@@ -43,7 +61,7 @@ def register_hindsight_recipes(
             continue
 
         if not backend:
-            recipe = GuidanceOnlyRecipe(resolved)
+            recipe = assemble_hindsight_recipe(resolved, None, _NO_BACKEND_GUIDANCE_SPEC)  # type: ignore[arg-type]
         else:
             recipe = build_hindsight_recipe(resolved, backend, resolved.provider_id, project_root)
 
@@ -147,7 +165,6 @@ def prune_hindsight(
         project_root, "prune",
         backend=backend, provider_ids=provider_ids, context=context,
     )
-
 
 
 __all__ = [
