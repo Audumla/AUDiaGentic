@@ -21,7 +21,7 @@ import pytest
 from audiagentic.components.providers.descriptors.registry import all_descriptors
 from audiagentic.components.providers.services.execution import execute_provider
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.home import global_harness_runtime
+from audiagentic.foundation.paths.home import global_harness_runtime
 from audiagentic.runtime.harness import RunnerParams, build_global_context, run_agent
 
 pytestmark = [

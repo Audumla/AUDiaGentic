@@ -10,7 +10,7 @@ from audiagentic.foundation.contracts.errors import (
     AudiaGenticError,
     to_error_envelope,
 )
-from audiagentic.paths import REPO_ROOT
+from audiagentic.foundation.paths.package import REPO_ROOT
 
 FIXTURES = REPO_ROOT / "docs" / "examples" / "fixtures"
 

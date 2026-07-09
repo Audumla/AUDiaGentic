@@ -7,7 +7,7 @@ from tests.helpers import sandbox as sandbox_helper
 
 from audiagentic.components.agent_jobs.stages import execute_stage, stage_output_path
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.paths import REPO_ROOT
+from audiagentic.foundation.paths.package import REPO_ROOT
 
 
 def test_stage_execution_persists_output(tmp_path: Path) -> None:

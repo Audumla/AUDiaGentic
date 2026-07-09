@@ -7,7 +7,7 @@ from tests.helpers import sandbox as sandbox_helper
 
 from audiagentic.components.release import release_api
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.paths import REPO_ROOT
+from audiagentic.foundation.paths.package import REPO_ROOT
 
 FIXTURES = REPO_ROOT / "docs" / "examples" / "fixtures"
 
