@@ -10,5 +10,8 @@ ENV PIP_BREAK_SYSTEM_PACKAGES=1
 # filesystem deadlocks on Windows Docker Desktop. .dockerignore curates the context.
 # Build: docker build -f tests/docker/Dockerfile.provider-lifecycle-e2e -t audiagentic-provider-lifecycle-e2e .
 # Run:   docker run --rm audiagentic-provider-lifecycle-e2e
+# Prompt-launch coverage in this image can additionally use provider-specific env vars
+# such as OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY / DASHSCOPE_API_KEY /
+# GH_TOKEN plus AUDIAGENTIC_TEST_<PROVIDER>_MODEL values; see tests/TESTING.md.
 COPY . /app
-CMD ["bash", "-c", "export PATH=/root/.local/bin:$PATH && uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-timeout pytest-xdist pytest-asyncio tomli-w && /venv/bin/pytest tests/integration/providers/test_provider_full_lifecycle.py tests/integration/providers/test_provider_hindsight_e2e.py -v --tb=short --timeout=300"]
+CMD ["bash", "-c", "export PATH=/root/.local/bin:$PATH && uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-timeout pytest-xdist pytest-asyncio tomli-w && /venv/bin/pytest tests/integration/providers/test_provider_full_lifecycle.py tests/integration/providers/test_provider_hindsight_e2e.py tests/integration/providers/test_provider_prompt_launch_e2e.py -v --tb=short --timeout=300"]
