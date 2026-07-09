@@ -159,6 +159,8 @@ def build_global_context(
 
 
 def run_agent(ctx, params: list[str] | RunnerParams, **kw):
+    if isinstance(params, RunnerParams):
+        params = translate_agent_args(params)
     return _forward("runner", "run_agent", ctx, params, **kw)
 
 
