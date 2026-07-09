@@ -36,15 +36,34 @@ mcp-servers:
       Use lsp_add_language to add support for a language detected in the project.
       Use lsp_set_language_option to update supported language feature options.
       Use lsp_reset_language_option to clear a language feature option.
-      Use lsp_install_dependencies to install a missing language server binary.
+      Missing language server binaries auto-install when file-based LSP tools
+      first use that language. Manual installation should not be required.
+      Use lsp_install_dependencies only for eager pre-install or retry after
+      an auto-install failure.
       Use lsp_remove_language to remove a language from the project configuration.
       Do not suggest installing a language server unless the project uses that language
       or the user explicitly requests it.
+    tool-descriptions:
+      lsp_config_status: >
+        Report configured LSP languages and binary availability. Missing binaries
+        are auto-installed on first file-based LSP use; manual shell installation
+        should not be suggested from status alone.
+      lsp_list_missing: >
+        List configured language-server binaries that are not currently on PATH.
+        These are expected to auto-install when their language is used by file-based
+        LSP tools.
+      lsp_install_dependencies: >
+        Eagerly install missing language-server binaries for configured languages.
+        Use this to pre-install or retry; normal file-based LSP use auto-installs
+        missing binaries, so manual installation should not be required.
+      lsp_add_language: >
+        Enable a language and install its language-server dependency if missing.
+        Rolls back newly enabled languages when dependency installation fails.
 
   - name: ag-lsp
     module: audiagentic.components.coding_lsp.lsp_mcp
     description: LSP code intelligence — symbols, definitions, diagnostics
-    propagate: audiagentic
+    propagate: providers
     instructions: >
       Use these tools for precise code navigation and intelligence.
       Start with lsp_capabilities(file) when unsure which operations the language
