@@ -6,8 +6,13 @@ Standard shape (stdio):
 Remote shape:
   {"mcpServers": {"name": {"type": "http", "url": "...", "headers": {...}}}}
 
-Preserves unknown top-level keys on write. Writes OS-agnostic python placeholder
-for AUDiaGentic-owned entries; resolves at read time to current sys.executable.
+Preserves unknown top-level keys on write. These config files are consumed
+directly by external tools (cline, roo, gemini, copilot, ...) that launch the
+MCP servers themselves, so the python interpreter path must be written resolved
+to the current sys.executable — a portability placeholder would leave those
+tools trying to spawn a program literally named ``__AUDIAGENTIC_PYTHON__``. The
+placeholder is still resolved on read for backward compatibility with any file
+that already contains it.
 """
 from __future__ import annotations
 
@@ -22,22 +27,14 @@ from audiagentic.foundation.mcp import McpServerEntry
 _PYTHON_PLACEHOLDER = "__AUDIAGENTIC_PYTHON__"
 
 
-def _is_audiagentic_python_entry(args: tuple[str, ...]) -> bool:
-    """Return True if this entry uses audiagentic's launcher module."""
-    return any("audiagentic.launcher" in a for a in args)
-
-
 def _resolve_command(command: str) -> str:
-    """Resolve python placeholder to current sys.executable on read."""
+    """Resolve the python placeholder to the current sys.executable.
+
+    Applied on both read and write: external tools consume these files
+    directly, so the interpreter path must never be left as a placeholder.
+    """
     if command == _PYTHON_PLACEHOLDER:
         return str(sys.executable)
-    return command
-
-
-def _sanitize_command(command: str, args: tuple[str, ...]) -> str:
-    """Replace absolute python path with OS-agnostic placeholder on write."""
-    if _is_audiagentic_python_entry(args) and command == str(sys.executable):
-        return _PYTHON_PLACEHOLDER
     return command
 
 
@@ -86,7 +83,7 @@ def write_mcp_json(path: Path, entries: dict[str, McpServerEntry]) -> None:
                 cfg["headers"] = dict(entry.headers)
         else:
             cfg = {
-                "command": _sanitize_command(entry.command, entry.args),
+                "command": _resolve_command(entry.command),
                 "args": list(entry.args),
             }
             if entry.env:
