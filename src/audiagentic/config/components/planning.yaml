@@ -8,6 +8,7 @@ description: >
   or any other planning store; only one is active at a time.
 implementation-cardinality: exclusive
 status-hook: audiagentic.components.planning.planning_api.planning_status
+lifecycle-observer: audiagentic.components.planning.events
 
 mcp-servers:
   - name: ag-planning-mgmt
@@ -56,10 +57,10 @@ mcp-servers:
         the active planning implementation descriptor. Use this to discover which standards apply
         before creating or updating plan items.
       plan_create_item: >
-        Create a new plan item. Required: plan, title.
+        Create a new plan item. Required: plan, title, created-by (also accepted as
+        created_by or creator_id).
         Optional: priority (P0/P1/P2/P3/HIGH/MEDIUM), complexity (simple/mid/complex),
-        order, validate_first, created-by/created_by/creator_id, description,
-        steps, files, validation, effort_risk, notes.
+        order, validate_first, description, steps, files, validation, effort_risk, notes.
         ID is auto-generated — do not supply it.
         Returns {id, title, plan, path} for the created item.
       plan_list_groups: >
