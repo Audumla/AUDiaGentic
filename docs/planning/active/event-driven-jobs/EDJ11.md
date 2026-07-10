@@ -60,4 +60,8 @@ component-creation — template loader owned by agent-jobs; managed defaults und
 
 ## Notes
 
-This lets config stay concise while prompt content lives in versioned markdown files. Containment check lands with the file loader (see step 3).
+This lets config stay concise while prompt content lives in versioned markdown files. Containment check lands with the file loader (step 3). Register the new IO/containment error codes in agent-jobs error-resolutions.yaml before use (arch-standards §8). Schema edits here extend event-trigger.schema.json — follow the EDJ19 ownership rule (expected component-only, no foundation mirror).
+
+## Ledger Events
+
+
