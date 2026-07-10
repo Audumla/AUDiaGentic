@@ -73,13 +73,13 @@ Extensibility must never require editing Python source.
 **Rules:**
 - `AudiaGenticError` is the only domain exception. No parallel hierarchies (`EventBusError`, `LspError`). No raw `ValueError`/`RuntimeError` at public boundaries.
 - Every error must carry a canonical code: `PREFIX-COMPONENT-NNN` (e.g., `VAL-PCFG-001`).
+- **YAML registration is mandatory:** every error code used in source must have an entry in the owning component's `error-resolutions.yaml` (located at `config/components/<component>/error-resolutions.yaml`). A code raised without a YAML registration is a defect — `get_error_resolution(code)` returns the raw code string, producing unhelpful diagnostics. Do not introduce new codes without first adding them to the YAML file.
 - Error ownership is split intentionally:
   - `code` is canonical identity and must be stable.
-  - `message` is the concise operator-facing statement raised by code and returned in the error envelope.
-  - `resolution` is optional agent/operator guidance and belongs in config (`error-resolutions.yaml`).
+  - `message` is the concise operator-facing statement raised by code and returned in the error envelope. The inline `message=` at the raise site is acceptable as the operator-facing diagnostic; it need not match the YAML resolution text verbatim (they serve different audiences).
+  - `resolution` is optional agent/operator guidance and belongs exclusively in config (`error-resolutions.yaml`). It should describe remediation steps, configuration checks, or further action — not repeat the error message.
   - `details` carries contextual diagnostics only; never use it as the primary message channel.
-- `error-resolutions.yaml` is for remediation/help text only. It must not be treated as the canonical source of the raised `message`.
-- If a component needs config-driven canonical messages in the future, use a separate dedicated registry/file; do not overload `error-resolutions.yaml` with two meanings.
+- **Error file ownership:** each component owns its own `error-resolutions.yaml`. The owning component is determined by the component part of the error code (e.g., AGW codes belong in the agents component's YAML, PLN codes in planning's). If a component does not yet have an error-resolutions.yaml, create one before adding codes.
 - Prefer `make_error()` from `foundation.contracts.errors` for construction.
 - Prefer a module-local bound factory (`make_error_factory(...)`) or thin helper so one module does not hand-inline dozens of `AudiaGenticError(...)` strings/code tuples.
 - `except Exception:` only at external boundaries (I/O, subprocess, network, third-party). Internal code catches specific types.
@@ -137,3 +137,4 @@ Extensibility must never require editing Python source.
 | Hand-rolled `_loaded`/`_ensure_loaded()` guard per registry | Shared registry utility's built-in lazy-loader |
 | Single-slot registered-callback/capability lookup for a direct import | Convert to an event; or in composition-root, check component registry and import directly |
 | Component-domain vocabulary in foundation module/event/registry-key name | Rename to domain-neutral concept, or move logic into owning component |
+| Error code raised without error-resolutions.yaml entry | Add the code to the owning component's YAML before using it |
