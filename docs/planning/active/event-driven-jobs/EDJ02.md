@@ -16,13 +16,15 @@ Add an agent-jobs event observer that subscribes to configured event patterns an
 
 ## Steps
 
-1. Add `agent_jobs/event_observer.py` with idempotent registration.
-2. Update `src/audiagentic/config/components/agent-jobs.yaml` to register the observer class through the component lifecycle observer mechanism.
-3. Load trigger config at registration time and subscribe to enabled patterns.
-4. Track subscription handles and clean up stale subscriptions on re-registration/reload using event bus unsubscribe support.
-5. On event, map the real `EventEnvelope` dict shape into event_type, payload, metadata, and trigger config for the dispatcher; verify against `components/planning/events.py` output.
-6. Preserve event bus subscriber isolation; handler failures should log via structured event logging/observability and publish/record `agent.job.trigger.rejected` (or final chosen topic) without breaking other subscribers.
-7. Record whether rejection is job timeline state (EDJ03/EDJ07) or observer-only log when no job record exists yet.
+1. Add `agent_jobs/event_observer.py` with idempotent registration through the component descriptor lifecycle-observer mechanism.
+2. Load trigger config at registration time and subscribe to enabled patterns via the event bus (patterns delegate to foundation.event.patterns).
+3. On event, pass event_type, payload, metadata, and trigger config to the trigger handler.
+4. Correlation doctrine (load-bearing for observability end-to-end):
+   - if inbound `metadata.correlation_id` is present, propagate it unchanged through job record, gateway metadata, timeline entries, and lifecycle events;
+   - if absent, GENERATE one at trigger-firing time (uuid) so every event-triggered job has a correlation id from its first artifact onward;
+   - the new job's id becomes `metadata.subject` for events the job itself emits downstream.
+5. Subscriber isolation: a handler failure must log (exc_info=True), write a durable firing-failure record (dead-letter — format owned by EDJ12), and return without raising, so other bus subscribers are unaffected.
+6. Record a trigger-firing audit entry for every match: fired / suppressed(disabled) / failed (record shape and writer owned by EDJ14; consumed by EDJ14's overview).
 
 ## Files
 
@@ -31,7 +33,7 @@ src/audiagentic/config/components/agent-jobs.yaml
 
 ## Validation
 
-Unit tests for idempotent registration (second register does not double subscriptions), subscription count, stale subscription cleanup on reload, disabled trigger skip, malformed payload handling, planning.item.created envelope mapping, and handler failure isolation with rejected outcome/log emitted.
+Unit tests: idempotent registration (double-register subscribes once); subscription count matches enabled triggers; disabled trigger records 'suppressed' audit entry and does not dispatch; malformed payload -> handler logs + dead-letters + does not raise; inbound correlation_id propagated verbatim; missing correlation_id -> generated and stable across job record + dispatch metadata.
 
 ## Effort & Risk
 
@@ -44,4 +46,8 @@ component-creation — observer registered through the component descriptor life
 
 ## Notes
 
-Use `metadata.correlation_id` and `metadata.subject` from the inbound event as execution lineage.
+Use `metadata.correlation_id` and `metadata.subject` from the inbound event as execution lineage. Dead-letter record format is defined by EDJ12 — this item just writes it at the failure point; if EDJ12 has not landed, write a minimal ndjson stub in the job area and note it in EDJ12.
+
+## Ledger Events
+
+
