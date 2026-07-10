@@ -16,15 +16,11 @@ Bring agent-jobs observability up to the new standard by writing per-job `timeli
 
 ## Steps
 
-1. Add `job_timeline_path` helper in `paths.py`; this item lands before EDJ03 so initial event-trigger job creation uses canonical timeline paths.
-2. Define canonical lifecycle/milestone event constants in `agent_jobs/events.py`, including job state events and prompt/dispatch/gateway milestones.
-3. Publish job lifecycle events with subject metadata and correlation id using the pattern from `components/planning/events.py` (best-effort publish through `get_bus().publish()`).
-4. Clarify timeline ownership: state transitions should record state lifecycle entries inside `state_machine.py`/transition helper; callers record non-state milestones (prompt-rendered, dispatch-requested, gateway-linked, etc.).
-5. Record job created/ready/running/completed/failed/cancelled and control requested/applied/ignored milestones.
-6. Include prompt assembly milestones: template-loaded, context-built, prompt-rendered, dispatch-requested, gateway-linked. Redact prompt body; store prompt source and context key names only.
-7. Audit `control.py` current control-event/log behavior and migrate/align it to timeline entries while preserving compatibility for existing tests/tools.
-8. Keep existing control-events compatibility if needed, but make timeline canonical.
-9. Document single-writer-per-job-directory assumption or add file-level locking if multi-process writes are supported.
+1. Add `job_timeline_path` helper in paths.py; timeline is per-job `timeline.ndjson` written via `foundation.observability.record_timeline_event`.
+2. Define the canonical, namespaced timeline event-name set in ONE module-level tuple so later monitoring can enumerate it without parsing code: `job.created`, `job.ready`, `job.running`, `job.awaiting-approval`, `job.completed`, `job.failed`, `job.cancelled`, `job.control.requested`, `job.control.applied`, `job.control.ignored`, `job.dispatch.accepted`, `job.dispatch.rejected`, `job.gateway-outcome-received`, `job.state-propagated`. New names must extend this tuple — additive only, never rename (downstream monitoring keys on them).
+3. Every timeline entry carries: `job-id`, `correlation_id`, and where relevant `trigger-id` / `request-id` as attributes — this is the join key set for cross-record tracing (job timeline <-> gateway timeline <-> event log).
+4. Publish job lifecycle events with subject metadata mirroring the timeline milestones.
+5. Keep existing control-events compatibility if needed, but timeline is canonical.
 
 ## Files
 
@@ -35,7 +31,7 @@ src/audiagentic/components/agent_jobs/events.py
 
 ## Validation
 
-Tests that job state transitions and control requests append timeline entries and lifecycle events include job id/correlation id. Tests for lifecycle topic constants, best-effort event publish behavior, prompt/dispatch milestone redaction, control.py compatibility, and concurrent writer assumption/locking behavior.
+Tests: each state transition and control request appends exactly one timeline entry with the canonical name; lifecycle events include job id/correlation id; the event-name tuple covers every name written anywhere in agent_jobs (grep-style test); entries for event-triggered jobs include trigger-id.
 
 ## Effort & Risk
 
@@ -48,5 +44,8 @@ arch-standards — atomic appends, AudiaGenticError at boundary.
 
 ## Notes
 
-Use `foundation.observability.record_timeline_event`; no component-local JSONL writer for new paths.
-Overlaps EDJ03 step 3 (which writes the first job timeline entries). This item owns the canonical `job_timeline_path` helper and lifecycle-event set; EDJ03 should consume that helper rather than defining its own path/format. Define timeline path + entry shape once, here, and have EDJ03 adopt it.
+Use `foundation.observability.record_timeline_event`; no component-local JSONL writer for new paths. Extendability is deliberate and cheap: stable namespaced names + stable join keys (job-id/correlation_id/trigger-id/request-id) are what allow richer monitoring (EDJ14 overview, future metrics) to be layered on later without touching this code again. Do not build metrics/aggregation here.
+
+## Ledger Events
+
+

@@ -57,4 +57,10 @@ component-creation — job record owned by agent-jobs; gateway request record st
 
 ## Notes
 
-Keep ownership split: job record in agent-jobs, gateway request record in agents. EDJ07 now lands before EDJ03 and owns canonical timeline path/entry shape; EDJ03 consumes that helper.
+Keep ownership split: job record in agent-jobs, gateway request record in agents.
+Timeline: EDJ03 records the first job timeline entries via `foundation.observability.record_timeline_event`. EDJ07 introduces the shared `job_timeline_path` helper and canonical lifecycle-event set — EDJ03's timeline writes should adopt that helper once it lands (avoid a second, divergent JSONL writer). Coordinate so the timeline path/format is defined once.
+SCHEMA MIRROR (EDJ19/RV231): job-record.schema.json exists in BOTH components/agent_jobs/contracts/ and foundation/contracts/schemas/. Apply the event-source extension to both copies per the EDJ19 ownership rule (component copy authoritative, mirror byte-identical) — the EDJ19 drift test must pass after this change.
+
+## Ledger Events
+
+

@@ -50,7 +50,10 @@ component-creation — rendering primitive lives in foundation, consumed by agen
 ## Notes
 
 Needed for readable config-driven prompts without custom Python per trigger.
-Coordinate with EDJ10 (job prompt context object) and EDJ11 (file-loaded templates);
-this item owns rendering mechanics, while those items own context construction
-and template source loading. Event-specific aliases are context data, not renderer
-behavior.
+Coordinate with EDJ10 (prompt context object) and EDJ11 (file-loaded templates); this item owns rendering mechanics, while those items own context construction and template source loading.
+DESIGN CONSTRAINT (RV232/EDJ21): shape templates.py as the future shared core — a pure function over a mapping context with no workflow- or agent-jobs-specific coupling — so `workflow.actions.render` can later delegate to it under characterization tests (EDJ21). Do not migrate actions.render in this item.
+NAMING: this renderer resolves dotted DATA paths inside prompt templates; `foundation.refs.resolve_ref` resolves `module:object` config references — unrelated mechanisms. State the distinction in the module docstring and keep test names unambiguous.
+
+## Ledger Events
+
+

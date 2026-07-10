@@ -16,15 +16,10 @@ Document the architecture, config shape, prompt injection pipeline, and operatio
 
 ## Steps
 
-1. Create or update `src/audiagentic/components/agent_jobs/README.md` with event trigger flow.
-2. Add example `planning.item.created` trigger config.
-3. Add example direct prompt launch using `prompt-template-file` and explicit `context` to show injection is not event-only.
-4. Explain full agent-profile resolution chain: trigger `agent-profile-id` -> prompt/context path -> gateway request event normalization -> agents profile resolution/defaulting.
-5. Explain correlation id propagation and timeline files.
-6. Add diagnostics/runbook section with runtime locations for job records, per-job `timeline.ndjson`, event store (if enabled), and gateway request records, plus commands/tests operators can use to inspect state.
-7. Document failure/retry behavior, provider dispatch interaction (`agents_gateway_dispatch.py`), fallback profiles if supported, and terminal vs transient error classification as seen from job timelines.
-8. Document touch points: agent-jobs owns triggers/job records/prompt context; agents owns gateway execution; foundation owns renderer/observability/event bus; planning only emits planning events with creator/reviewer ids.
-9. Update project `AGENTS.md` or the owning component config that generates its managed section with a brief reference/link to event-driven job doctrine, without editing generated output only.
+1. Update agent-jobs README with the event trigger flow, including the async-only dispatch contract (publish `agents.llm.gateway.requested`, outcomes via `agents.llm.*` lifecycle events — no blocking mode for triggers).
+2. Add example `planning.item.created` trigger config (must parse against the real EDJ01 schema).
+3. Document the correlation chain end-to-end: inbound event correlation_id (or generated at firing) -> job record event-source -> gateway request metadata -> lifecycle events -> job + gateway timelines; list the join keys (job-id, correlation_id, trigger-id, request-id).
+4. Document failure behavior: dispatch/handler failures dead-letter (EDJ12), gateway rejection -> job failed, and where to inspect state (job.json, timeline.ndjson, gateway record, trigger audit/overview from EDJ14).
 
 ## Files
 
@@ -50,4 +45,8 @@ component-creation — clarify ownership split (agents own profile execution; ag
 
 ## Notes
 
-Clarify that agents own profile execution, agent-jobs own durable work.
+Clarify that agents own profile execution, agent-jobs own durable work; the gateway is accessed only via events, which is what keeps the design compatible with a future shared gateway service (EDJ13). Keep examples aligned with real schema names after EDJ01 lands.
+
+## Ledger Events
+
+
