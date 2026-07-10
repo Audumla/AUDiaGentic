@@ -37,6 +37,7 @@ mcp-servers:
       record_change_event: >
         Record a change event fragment. Required: change-class, files,
         technical-summary, user-summary-candidate, status ('unreleased').
+        Optional: plan-item-ids (array of plan item IDs for automatic linkage).
         change-class: feature, code-fix, refactor, docs, tests, config, release, audit, workflow.
       get_current_summary: Return the current release summary markdown.
       sync_ledger: Merge all pending fragments into the current release ledger.
@@ -65,3 +66,7 @@ contributions:
         - Check release ledger state before changing release notes, changelog fragments, or release workflow files.
         - Keep release artifacts and job records synchronized with implementation and review outcomes.
         - Do not bypass ledger updates by editing generated release outputs only.
+
+        When recording a change event for work associated with one or more plan items,
+        include "plan-item-ids" in the event dict (e.g. {"plan-item-ids": ["CC07", "CC08"]}).
+        The planning component will automatically link the ledger event ID to those items.
