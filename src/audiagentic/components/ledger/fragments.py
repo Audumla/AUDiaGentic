@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.ledger.events import publish_ledger_event_recorded
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 from audiagentic.foundation.io import atomic_write_text
@@ -72,4 +73,9 @@ def record_change_event(project_root: Path, event: dict[str, Any]) -> dict[str, 
         return {"fragment-path": str(fragment_path), "event-id": event_id, "status": "exists"}
 
     atomic_write_text(fragment_path, json.dumps(event, indent=2, sort_keys=True))
+
+    plan_item_ids = event.get("plan-item-ids")
+    if isinstance(plan_item_ids, list) and plan_item_ids:
+        publish_ledger_event_recorded(event_id, plan_item_ids, project_root)
+
     return {"fragment-path": str(fragment_path), "event-id": event_id, "status": "created"}

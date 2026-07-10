@@ -31,6 +31,10 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
     if not title:
         raise AudiaGenticError(code="VAL-PLN-004", kind="validation", message="item 'title' is required")
 
+    created_by = item.get("created-by") or item.get("created_by") or item.get("creator_id")
+    if not created_by:
+        raise AudiaGenticError(code="VAL-PLN-025", kind="validation", message="item 'created-by' is required")
+
     if not item_id:
         item_id = item_store.next_item_id(project_root, plan)
 
@@ -49,7 +53,7 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
         "validate-first": item.get("validate_first", True),
         "priority": item.get("priority", "P2"),
         "complexity": item.get("complexity", "simple"),
-        "created-by": item.get("created-by") or item.get("created_by") or item.get("creator_id") or "",
+        "created-by": created_by,
     }
     sections = {k: item.get(k, "") for k in item_store.ITEM_SECTION_HEADING}
     body = item_store.build_item_body(title, sections)
