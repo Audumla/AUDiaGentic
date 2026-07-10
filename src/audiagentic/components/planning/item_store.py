@@ -71,6 +71,7 @@ ITEM_SECTION_HEADING: dict[str, str] = {
     "effort_risk": "Effort & Risk",
     "standards": "Standards",
     "notes": "Notes",
+    "ledger-events": "Ledger Events",
 }
 HEADING_TO_FIELD: dict[str, str] = {v: k for k, v in ITEM_SECTION_HEADING.items()}
 FRONTMATTER_FIELDS = {"id", "order", "plan", "state", "validate-first", "priority", "complexity", "created-by"}
