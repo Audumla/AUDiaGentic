@@ -60,13 +60,6 @@
       },
       "uniqueItems": true,
       "description": "Git commit SHAs from post-commit hook. Append-only. Do not set manually."
-    },
-    "plan-item-ids": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "Plan item IDs associated with this change event for automatic ledger-to-plan linkage."
     }
   }
 }
