@@ -172,6 +172,25 @@ Ownership split: **capability components** own upstream truth (selected impl, va
 
 If cross-component notification is unavoidable: the capability component emits a neutral hint (e.g. `needs_provider_recipe_refresh`); the providers component owns the observer that consumes it; any adapter lives in one small boundary module with architecture tests proving the dependency direction. Backend-specific integration knowledge (e.g. per-provider setup for a memory backend) stays in an implementation-owned package like `components/<component>/<implementation>/`, never in provider core.
 
+### Managed mutation decision
+
+Before adding any writer, choose the ownership primitive from Architecture Standards
+§16. Components contribute desired state or a format adapter; they do not implement
+their own ownership registry, reconcile loop, dry-run, reload, or prune lifecycle.
+
+- Shared named config entries: contribute a `ManagedConfigSpec` adapter and call the
+  generic managed-config service.
+- One nested structured key: use `ConfigPatcher` and register its `OwnedChange` with
+  `ArtifactRegistry`.
+- One recipe-owned file: use `WriteFileStep` with a registry and recipe id.
+- Generated surfaces: register a renderer/virtual asset; never write from component
+  business logic.
+
+Custom adapters contain only parse/render/merge behavior. Path resolution, ownership,
+collisions, dry-run, reload, status, errors, redaction, and timelines remain generic.
+Provider/component-specific selection belongs in descriptor data or a registry, not an
+`if/elif` chain. Third-party repair exemptions must satisfy every §16 exemption gate.
+
 ## 7. Harness instructions and contributions
 
 - **`harness-instructions:`** — markdown sections merged into the harness prompt (`section`, `content`, `propagate`). The tool catalog is **auto-generated** from `mcp-servers[].direct-tools` + `tool-descriptions` — do NOT hand-write one. Use this for operating rules and doctrine that can't be derived from MCP declarations.
