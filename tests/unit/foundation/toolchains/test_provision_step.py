@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -151,6 +152,126 @@ class TestShellProvisionStep:
         )
         result = step.run({})
         assert result.status == "failed"
+
+    def test_shell_stdout_token_is_redacted(self, monkeypatch):
+        """RS16: token-like strings in stdout ARE redacted."""
+        fake_stdout = "sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+
+        def fake_run(command, **kwargs):
+            return subprocess.CompletedProcess(
+                command, 0, stdout=fake_stdout, stderr=""
+            )
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        step = ShellProvisionStep(
+            id="token-redacted",
+            command=["python", "-c", "print('sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')"],
+        )
+        result = step.run({})
+        assert result.status == "ok"
+        stdout = result.outputs.get("stdout", "")
+        assert "sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" not in stdout, (
+            "Token must NOT be present in stdout after redaction"
+        )
+        assert "[REDACTED]" in stdout, (
+            "Redaction marker must be present when a token is found"
+        )
+
+    def test_shell_failure_reason_is_redacted(self, monkeypatch):
+        """RS16: failure reason must NOT carry raw secret text."""
+        fake_stdout = "ERROR: token=sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa exposed in output\n"
+
+        def fake_run(command, **kwargs):
+            return subprocess.CompletedProcess(
+                command, 1, stdout=fake_stdout, stderr=""
+            )
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        step = ShellProvisionStep(
+            id="fail-redacted",
+            command=["python", "-c", "import sys; sys.exit(1)"],
+        )
+        result = step.run({})
+        assert result.status == "failed"
+        reason = result.reason or ""
+        assert "sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" not in reason, (
+            "Raw secret must NOT appear in failure reason after redaction"
+        )
+        assert "[REDACTED]" in reason, (
+            "Redaction marker must be present in failure reason when secrets are found"
+        )
+
+    def test_shell_env_secret_is_redacted(self, monkeypatch):
+        """RS16: env secrets echoed to stdout MUST be redacted."""
+        secret_value = "sk-secret-value-12345678901234567890"
+
+        def fake_run(command, **kwargs):
+            return subprocess.CompletedProcess(
+                command, 0, stdout=secret_value + "\n", stderr=""
+            )
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        step = ShellProvisionStep(
+            id="env-redacted",
+            command=["python", "-c", "import os; print(os.environ['API_KEY'])"],
+            env={"API_KEY": secret_value},
+        )
+        result = step.run({})
+        assert result.status == "ok"
+        stdout = result.outputs.get("stdout", "")
+        assert secret_value not in stdout, (
+            "Secret value from env must NOT appear in stdout after redaction"
+        )
+        assert "[REDACTED]" in stdout, (
+            "Redaction marker must be present when env-sourced secrets are detected"
+        )
+
+
+# ---------------------------------------------------------------------------
+# CompensatingSequence aggregation leak
+# ---------------------------------------------------------------------------
+
+class TestCompensatingSequenceOutput:
+    def test_compensating_sequence_redacts_step_output(self, monkeypatch):
+        """RS16: CompensatingSequence aggregates REDACTED step outputs."""
+        from audiagentic.foundation.toolchains.provision_steps.sequence import CompensatingSequence
+
+        secret_token = "sk-comp-secret-abcdefghij1234567890"
+
+        def fake_run(command, **kwargs):
+            return subprocess.CompletedProcess(
+                command, 0, stdout=f"result: {secret_token}\n", stderr=""
+            )
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        steps = [
+            ShellProvisionStep(
+                id="step-a",
+                command=["python", "-c", "print('token')"],
+            ),
+            ShellProvisionStep(
+                id="step-b",
+                command=["python", "-c", "print('more')"],
+            ),
+        ]
+        seq = CompensatingSequence(steps, id="agg-test")
+        result = seq.run({})
+
+        assert result.status == "ok"
+        steps_output = result.outputs.get("steps", [])
+        all_stdout_values = []
+        for step_info in steps_output:
+            step_outputs = step_info.get("outputs", {})
+            if "stdout" in step_outputs:
+                all_stdout_values.append(step_outputs["stdout"])
+
+        combined_stdout = "\n".join(all_stdout_values)
+        assert secret_token not in combined_stdout, (
+            "Secret token must NOT appear in aggregated sequence output after redaction"
+        )
+        assert "[REDACTED]" in combined_stdout, (
+            "Redaction marker must be present in aggregated output when secrets are found"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -599,3 +720,103 @@ class TestStepTypeRegistry:
             assert step.note == "hi"
         finally:
             _STEP_TYPES.pop("dummy-step", None)
+
+
+# ---------------------------------------------------------------------------
+# RS13 - Characterization: substitution and path behavior
+# ---------------------------------------------------------------------------
+
+
+class TestSubstituteStrictAtDefinitionTime:
+    """RS13a: _substitute() is strict at YAML-parse (definition) time."""
+
+    def test_substitute_is_strict_at_definition_time(self):
+        """Unknown placeholder raises VAL-PSTEP-002 at parse time, not run time."""
+        with pytest.raises(AudiaGenticError) as exc_info:
+            _substitute("{UNKNOWN_PLACEHOLDER}", {"OTHER": "val"}, "definition")
+        assert exc_info.value.code == "VAL-PSTEP-002"
+
+
+class TestSubstituteParamsLenient:
+    """RS13b: substitute_params() leaves unknown/unset placeholders literal."""
+
+    def test_substitute_params_is_lenient(self):
+        from audiagentic.foundation.toolchains.provision_steps.factory import (
+            substitute_params,
+        )
+
+        result = substitute_params("--url={UNKNOWN}", {})
+        assert result == "--url={UNKNOWN}"
+
+
+class TestShellStepTwoSubstitutionPasses:
+    """RS13c: ShellProvisionStep applies two substitution passes."""
+
+    def test_shell_step_two_substitution_passes_intentional(self):
+        """First pass at factory (_substitute for {PARAM}), second at run (str.format for {context_key}).
+
+        Pass GREETING as a known param and name as literal "{name}" so the factory
+        resolves GREETING but preserves the runtime placeholder. Then _render applies
+        str.format with context, substituting name=Alice.
+        """
+        step = provision_step_from_dict(
+            {
+                "type": "shell",
+                "id": "two-pass",
+                "command": "echo {GREETING} {name}",
+                "shell": True,
+            },
+            {"GREETING": "hello", "name": "{name}"},
+        )
+
+        assert isinstance(step, ShellProvisionStep)
+        assert step.command == "echo hello {name}"
+
+        result = step.run({"name": "Alice"})
+        assert result.status == "ok"
+
+
+class TestFoundationPathNoProjectRootAnchoring:
+    """RS13d: Foundation path steps have NO concept of project root."""
+
+    def test_foundation_path_no_project_root_anchoring(self):
+        home = Path.home()
+        step = WriteFileStep(
+            id="home-path",
+            path="~/some/path/file.txt",
+            content="data",
+            create_parents=True,
+        )
+        result = step.run({})
+        assert result.status == "ok"
+        expected = home / "some" / "path" / "file.txt"
+        assert expected.exists()
+        assert expected.read_text() == "data"
+
+
+class TestHindsightAbsoluteProjectPathAnchors:
+    """RS13e: _absolute_project_path anchors relative paths against project_root."""
+
+    def test_hindsight_absolute_project_path_anchors(self):
+        from audiagentic.components.memory.hindsight.recipes import (
+            _absolute_project_path,
+        )
+
+        result = _absolute_project_path("subdir/file.txt", Path("/project"))
+        assert result == Path("/project/subdir/file.txt")
+
+    def test_hindsight_absolute_project_path_ignores_root_for_absolute(self):
+        from audiagentic.components.memory.hindsight.recipes import (
+            _absolute_project_path,
+        )
+
+        result = _absolute_project_path("/etc/config", Path("/project"))
+        assert result == Path("/etc/config")
+
+    def test_hindsight_absolute_project_path_expands_user(self):
+        from audiagentic.components.memory.hindsight.recipes import (
+            _absolute_project_path,
+        )
+
+        result = _absolute_project_path("~/file.txt", Path("/project"))
+        assert result == Path.home() / "file.txt"
