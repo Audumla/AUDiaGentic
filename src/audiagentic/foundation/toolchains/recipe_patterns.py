@@ -46,6 +46,7 @@ class NoAutomationRecipe(ProvisioningRecipe):
         super().__init__()
 
     def provision(self, context: dict[str, Any]) -> RecipeResult:
+        """Override provision to always skip — this recipe has no automation."""
         return RecipeResult.ok(
             RecipeState.ABSENT, status=self.skip_status, action_needed=self.action_needed
         )

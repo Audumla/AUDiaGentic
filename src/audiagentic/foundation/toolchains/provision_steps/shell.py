@@ -11,6 +11,7 @@ import os
 import subprocess
 from typing import Any
 
+from audiagentic.foundation.logging.redaction import redact_text, truncate_output
 from audiagentic.foundation.workflow.invocation.models import StepResult
 
 from ..artifact_registry import ArtifactRegistry
@@ -85,14 +86,16 @@ class ShellProvisionStep:
                 timeout=self.timeout,
                 env=env,
             )
+            raw_stdout = redact_text(proc.stdout.rstrip("\n"))
+            safe_stdout = truncate_output(raw_stdout)
             return StepResult(
                 status="ok" if proc.returncode == 0 else "failed",
                 outputs={
                     "command": command,
                     "returncode": proc.returncode,
-                    "stdout": proc.stdout.rstrip("\n"),
+                    "stdout": safe_stdout,
                 },
-                reason=None if proc.returncode == 0 else proc.stdout.strip() or None,
+                reason=None if proc.returncode == 0 else redact_text(proc.stdout.strip()) or None,
             )
         except subprocess.TimeoutExpired:
             return StepResult(
@@ -134,14 +137,16 @@ class ShellProvisionStep:
                 timeout=self.timeout,
                 env=env,
             )
+            raw_stdout = redact_text(proc.stdout.rstrip("\n"))
+            safe_stdout = truncate_output(raw_stdout)
             return StepResult(
                 status="ok" if proc.returncode == 0 else "failed",
                 outputs={
                     "command": cmd_str,
                     "returncode": proc.returncode,
-                    "stdout": proc.stdout.rstrip("\n"),
+                    "stdout": safe_stdout,
                 },
-                reason=None if proc.returncode == 0 else proc.stdout.strip() or None,
+                reason=None if proc.returncode == 0 else redact_text(proc.stdout.strip()) or None,
             )
         except subprocess.TimeoutExpired:
             return StepResult(
@@ -179,6 +184,22 @@ class ShellProvisionStep:
         )
 
     def _render(self, value: list[str] | str, context: dict[str, Any]) -> list[str] | str:
+        """Two-stage template substitution — only ShellProvisionStep uses this pattern.
+
+        Stage 1 (factory time): ``_substitute()`` in ``_shell_from_dict`` resolves
+        ``{PARAM}`` placeholders from the recipe's params dict. This is strict:
+        unknown keys raise at YAML-parse / factory time so bad recipes fail fast.
+
+        Stage 2 (run time): ``str.format(**context)`` here resolves ``{context_key}``
+        values only known when the step executes. Python's built-in format is
+        lenient — missing keys produce ``KeyError``, but the template surface is
+        narrow (runtime values from the invocation context, not recipe author input).
+
+        This two-stage design separates concerns: params known at recipe-build time
+        vs context keys only known at run time. Per Std §3, no shared render helper
+        is extracted because ShellProvisionStep is the sole consumer of runtime
+        str.format substitution (RS13 characterization confirmed single-consumer).
+        """
         if isinstance(value, list):
             return [part.format(**context) for part in value]
         return value.format(**context)
