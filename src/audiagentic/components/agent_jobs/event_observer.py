@@ -12,13 +12,14 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.agent_jobs import jobs_store as store
 from audiagentic.components.agent_jobs.dead_letter import write_dead_letter
 from audiagentic.components.agent_jobs.event_triggers import (
     TriggerConfig,
     load_event_triggers,
+    matches_filter,
 )
 from audiagentic.components.agent_jobs.events import record_job_timeline_event
-from audiagentic.components.agent_jobs import jobs_store as store
 from audiagentic.components.agent_jobs.prompt_context import (
     build_prompt_context_from_event,
     to_template_dict,
@@ -32,11 +33,17 @@ from audiagentic.components.agent_jobs.state_machine import (
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error_factory
 from audiagentic.foundation.event.envelope import EventEnvelope
 from audiagentic.foundation.event.event_bus import DeliveryMode, SubscriptionHandle, get_bus
+from audiagentic.foundation.event.lifecycle_observer import subscribe_component_lifecycle
 from audiagentic.foundation.logging.context import (
     get_correlation_id as _get_ctx_correlation_id,
 )
 from audiagentic.foundation.logging.context import (
     new_correlation_id as _new_correlation_id,
+)
+from audiagentic.foundation.logging.redaction import (
+    redact_text,
+    safe_metadata,
+    summarize_structure,
 )
 from audiagentic.foundation.observability.operational_records import append_operational_record
 from audiagentic.foundation.time import now_iso_z
@@ -62,11 +69,13 @@ class EventObserver:
     # ------------------------------------------------------------------
 
     def initialize(self, project_root: Path) -> None:
-        """Load trigger config and subscribe to enabled event patterns.
+        """Load trigger config and subscribe once per configured trigger.
 
-        Double-register (calling twice with the same or different roots) only
-        subscribes once per pattern — the ``_subscribed`` flag guards against
-        duplicate registration.
+        Every schema-valid trigger gets its own subscription, including
+        triggers that share an event pattern and disabled triggers (whose
+        matches are suppressed with an audit record).  Double-register
+        (calling twice with the same or different roots) is a no-op — the
+        ``_subscribed`` flag is the sole duplicate-initialization guard.
         """
         if self._subscribed:
             return
@@ -94,19 +103,11 @@ class EventObserver:
             return
 
         bus = get_bus()
-        seen_patterns: set[str] = set()
 
         for trigger in self._triggers:
             if not trigger.event_pattern:
                 continue
             pattern = trigger.event_pattern
-            if pattern in seen_patterns:
-                logger.warning(
-                    "Duplicate event pattern %r; skipping second subscription",
-                    pattern,
-                )
-                continue
-            seen_patterns.add(pattern)
 
             try:
                 handle = bus.subscribe(pattern, self._make_handler(trigger))
@@ -178,7 +179,9 @@ class EventObserver:
             logger.error("EventObserver not initialized; cannot dispatch event")
             return
 
-        metadata = metadata or {}
+        # Never mutate the inbound bus metadata dict — the bus hands the same
+        # dict to every subscriber.
+        metadata = dict(metadata or {})
 
         # -- resolve correlation_id --------------------------------------------------
         correlation_id = (
@@ -207,6 +210,27 @@ class EventObserver:
             )
             return
 
+        # -- filter conditions (EDJ15) => suppressed audit with reason ---------------
+        if trigger_config.filter and not matches_filter(
+            {"payload": payload, "metadata": metadata}, trigger_config.filter
+        ):
+            _write_trigger_audit(
+                self._project_root,
+                trigger_id=trigger_config.trigger_id,
+                event_type=event_type,
+                correlation_id=correlation_id,
+                status="suppressed",
+                job_id=None,
+                reason="filter",
+            )
+            logger.info(
+                "Trigger %s suppressed (filter); event=%s corr=%s",
+                trigger_config.trigger_id,
+                event_type,
+                correlation_id,
+            )
+            return
+
         try:
             self._dispatch(trigger_config, event_type, payload, metadata, correlation_id)
         except Exception as exc:  # noqa: BLE001 — subscriber isolation boundary
@@ -227,12 +251,12 @@ class EventObserver:
                     self._project_root,
                     {
                         "event_type": event_type,
-                        "payload_summary": str(payload)[:500] if payload else "",
-                        "metadata": metadata,
+                        "payload_summary": summarize_structure(payload) if payload else "",
+                        "metadata": safe_metadata(metadata),
                         "trigger_id": trigger_config.trigger_id,
                         "job_id": None,
                         "error_code": error_code or "INT-EVT-001",
-                        "error_message": error_message,
+                        "error_message": redact_text(error_message),
                         "correlation_id": correlation_id,
                     },
                 )
@@ -278,7 +302,7 @@ class EventObserver:
             "metadata": metadata,
         }
 
-        # -- build durable job record ------------------------------------------------
+        # -- build durable job record (temporarily with empty prompt) ----------------
         trigger_dict = self._trigger_to_dict(trigger_config)
         job_record = build_job_from_event(
             root,
@@ -287,6 +311,29 @@ class EventObserver:
             envelope=envelope_dict,
             prompt_body="",
         )
+
+        # From here on a durable job exists; any failure below must not strand
+        # it in a non-terminal state (EDJ23 FIX 4/5).
+        job_id = job_record["job-id"]
+        try:
+            self._dispatch_created_job(
+                trigger_config, event_type, payload, metadata, correlation_id, job_record
+            )
+        except Exception as exc:
+            self._fail_job_best_effort(root, job_id, exc, correlation_id)
+            raise
+
+    def _dispatch_created_job(
+        self,
+        trigger_config: TriggerConfig,
+        event_type: str,
+        payload: dict[str, Any],
+        metadata: dict[str, Any],
+        correlation_id: str,
+        job_record: dict[str, Any],
+    ) -> None:
+        root = self._project_root
+        assert root is not None
 
         # -- propagate correlation_id through metadata -------------------------------
         metadata["correlation_id"] = correlation_id
@@ -329,15 +376,22 @@ class EventObserver:
         prompt_body = ""
         if trigger_config.prompt_template:
             template_values = to_template_dict(prompt_context)
-            try:
-                prompt_body = render_prompt_template(trigger_config.prompt_template, template_values)
-            except Exception:  # noqa: BLE001 — template rendering is best-effort
-                logger.warning(
-                    "Prompt template rendering failed for trigger %s; using empty body",
-                    trigger_config.trigger_id,
-                    exc_info=True,
-                )
-                prompt_body = ""
+            prompt_body = render_prompt_template(trigger_config.prompt_template, template_values)
+
+        # -- RV245: update job record with rendered prompt (provenance) ---------------
+        if prompt_body:
+            from audiagentic.foundation.io import atomic_write_json
+
+            launch_path = (
+                root / ".audiagentic" / "runtime" / "jobs"
+                / job_record["job-id"] / "launch-request.json"
+            )
+            if launch_path.exists():
+                import json as _json
+
+                launch_req = _json.loads(launch_path.read_text(encoding="utf-8")) or {}
+                launch_req["prompt-body"] = prompt_body
+                atomic_write_json(launch_path, launch_req)
 
         # -- EDJ04: state transitions before dispatch --------------------------------
         job_id = job_record["job-id"]
@@ -385,6 +439,44 @@ class EventObserver:
     # Helpers
     # ------------------------------------------------------------------
 
+    def _fail_job_best_effort(
+        self,
+        root: Path,
+        job_id: str,
+        exc: Exception,
+        correlation_id: str,
+    ) -> None:
+        """Transition *job_id* to ``failed`` after a dispatch error, best-effort.
+
+        Never raises and never masks the original dispatch exception; the
+        timeline entry carries only the error code (no message content).
+        """
+        error_code = exc.code if isinstance(exc, AudiaGenticError) else "INT-EVT-001"
+        try:
+            transition_and_persist(root, job_id, "failed", correlation_id=correlation_id)
+        except Exception:  # noqa: BLE001 — cleanup must not mask the original error
+            logger.error(
+                "Failed to transition job %s to failed after dispatch error",
+                job_id,
+                exc_info=True,
+            )
+            return
+        try:
+            record_job_timeline_event(
+                root,
+                job_id,
+                "job.failed",
+                state="failed",
+                attributes={"error-code": error_code, "reason": "dispatch-failure"},
+                correlation_id=correlation_id,
+            )
+        except Exception:  # noqa: BLE001 — cleanup must not mask the original error
+            logger.error(
+                "Failed to write job.failed timeline entry for job %s",
+                job_id,
+                exc_info=True,
+            )
+
     # ------------------------------------------------------------------
     # EDJ05: gateway outcome handler
     # ------------------------------------------------------------------
@@ -402,10 +494,19 @@ class EventObserver:
         payload: dict[str, Any],
         metadata: dict[str, Any],
     ) -> None:
-        """Handle gateway lifecycle outcome events and propagate to job state (EDJ05)."""
+        """Handle gateway lifecycle outcome events and propagate to job state (EDJ05).
+
+        Never raises (EDJ23 FIX 3): a raise here would bypass dead-lettering —
+        the bus swallows handler exceptions, so raising loses auditability.
+        """
         root = self._project_root
         if root is None:
             return
+
+        # Never mutate the inbound bus metadata dict (shared across subscribers).
+        metadata = dict(metadata or {})
+        job_id: str | None = None
+        current_state: str | None = None
 
         try:
             target_state = self.GW_OUTCOME_MAP.get(event_type)
@@ -434,6 +535,24 @@ class EventObserver:
                 return
 
             current_state = record.get("state")
+
+            # created/ready → failed edges exist only for the dispatch-failure
+            # path (EDJ23 FIX 4); gateway outcomes must never drive them.
+            if current_state in ("created", "ready"):
+                raise AudiaGenticError(
+                    code="CON-STATE-001",
+                    kind="agent-jobs",
+                    message=(
+                        "gateway outcome received for pre-dispatch job; "
+                        "refusing state propagation"
+                    ),
+                    details={
+                        "job-id": job_id,
+                        "from": current_state,
+                        "to": target_state,
+                        "event-type": event_type,
+                    },
+                )
 
             if is_terminal_state(current_state):
                 logger.info(
@@ -521,25 +640,43 @@ class EventObserver:
                 target_state,
             )
 
-        except AudiaGenticError:
-            raise
-        except Exception as exc:  # noqa: BLE001 — subscriber isolation boundary
+        except Exception as exc:  # noqa: BLE001 — handler must never raise (EDJ23)
             logger.error(
                 "Gateway outcome handler failed for event %s",
                 event_type,
                 exc_info=True,
             )
+            error_code = exc.code if isinstance(exc, AudiaGenticError) else "INT-GW-001"
+
+            if job_id:
+                try:
+                    record_job_timeline_event(
+                        root,
+                        job_id,
+                        "job.gateway-outcome-received",
+                        state=current_state,
+                        attributes={
+                            "event_type": event_type,
+                            "reason": error_code,
+                        },
+                    )
+                except Exception:  # noqa: BLE001 — best-effort; never mask original error
+                    logger.error(
+                        "Timeline write failed for gateway outcome handler",
+                        exc_info=True,
+                    )
+
             try:
                 write_dead_letter(
                     root,
                     {
                         "event_type": event_type,
-                        "payload_summary": str(payload)[:500],
-                        "metadata": metadata,
+                        "payload_summary": summarize_structure(payload),
+                        "metadata": safe_metadata(metadata),
                         "trigger_id": "",
-                        "job_id": metadata.get("job-id"),
-                        "error_code": "INT-GW-001",
-                        "error_message": str(exc)[:500],
+                        "job_id": job_id or metadata.get("job-id"),
+                        "error_code": error_code,
+                        "error_message": redact_text(str(exc)[:500]),
                         "correlation_id": metadata.get("correlation_id") or "",
                     },
                 )
@@ -565,6 +702,7 @@ class EventObserver:
             "target": tc.target,
             "prompt-template": tc.prompt_template,
             "prompt-template-file": tc.prompt_template_file,
+            "filter": tc.filter,
             "metadata-propagation": tc.metadata_propagation,
         }
         return {k: v for k, v in d.items() if v is not None}
@@ -597,8 +735,13 @@ def _write_trigger_audit(
     job_id: str | None = None,
     error_code: str | None = None,
     error_message: str | None = None,
+    reason: str | None = None,
 ) -> None:
-    """Append a single trigger-audit ndjson entry (EDJ14 shape)."""
+    """Append a single trigger-audit ndjson entry (EDJ14 shape).
+
+    ``reason`` is an additive field (EDJ15) explaining a suppression (e.g.
+    ``"filter"``); existing callers omit it and the key is absent.
+    """
     record = {
         "timestamp": now_iso_z(),
         "trigger_id": trigger_id or "",
@@ -609,6 +752,8 @@ def _write_trigger_audit(
         "error_code": error_code,
         "error_message": error_message,
     }
+    if reason is not None:
+        record["reason"] = reason
     try:
         append_operational_record(
             project_root / _TRIGGER_AUDIT_PATH,
@@ -643,3 +788,23 @@ def get_event_observer(project_root: Path) -> EventObserver:
     if not _observer_instance._subscribed and project_root is not None:
         _observer_instance.initialize(project_root)
     return _observer_instance
+
+
+def _initialize_for_component_lifecycle(
+    project_root: Path,
+    _payload: dict,
+    _metadata: dict,
+) -> None:
+    """Activate configured event triggers when agent-jobs becomes available."""
+    try:
+        get_event_observer(project_root)
+    except Exception:  # noqa: BLE001 — lifecycle observer isolation boundary
+        logger.error("Failed to initialize agent-jobs event observer", exc_info=True)
+
+
+subscribe_component_lifecycle(
+    "agent-jobs",
+    on_installed=_initialize_for_component_lifecycle,
+    on_enabled=_initialize_for_component_lifecycle,
+    on_config_changed=_initialize_for_component_lifecycle,
+)
