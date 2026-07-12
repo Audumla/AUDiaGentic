@@ -32,6 +32,47 @@ from audiagentic.foundation.toolchains.provision_steps import (
 from audiagentic.foundation.toolchains.recipe_contract import run_steps
 
 
+def _should_run_plugin_command(row: HindsightRecipeRow) -> bool:
+    return row.audia_action == "call_official_installer"
+
+
+def _run_gated_steps(
+    row: HindsightRecipeRow,
+    backend: HindsightBackendConfig,
+    step_defs: list[Any] | None,
+    context: dict[str, Any],
+    stamp_fn,
+    *,
+    operation: str,  # "install" or "uninstall"
+) -> ProviderRecipeResult | None:
+    """Run source-gated plugin install/uninstall steps.
+
+    Returns the stamped result if steps were executed (success or failure),
+    or None if no steps to run (caller handles fallback).
+    """
+    if not step_defs or not _should_run_plugin_command(row):
+        return None
+
+    if row.source_status != "verified":
+        if operation == "uninstall":
+            return stamp_fn(ProviderRecipeResult.ok(
+                RecipeState.ABSENT,
+                status=f"source {row.source_status}; no plugin installer was executed",
+                action_needed=row.notes or row.audia_action,
+            ))
+        return stamp_fn(ProviderRecipeResult.fail(
+            f"plugin {operation} source {row.source_status}; refusing to execute",
+            action_needed=row.notes or row.audia_action,
+        ))
+
+    params = _hindsight_params(backend)
+    steps = steps_from_defs(step_defs, params)
+    seq = run_steps(steps, context, fail_prefix=f"plugin {operation} failed")
+    if not seq.success:
+        return stamp_fn(seq)
+    return None
+
+
 class PluginConfigRecipe(_RowRecipe):
     """Plugin-config recipe: writes plugin registration to provider config.
 
@@ -84,21 +125,13 @@ class PluginConfigRecipe(_RowRecipe):
             RecipeState.ABSENT, status="plugin config managed by CLI",
         ))
 
-    def _should_run_plugin_command(self) -> bool:
-        return self._row.audia_action == "call_official_installer"
-
     def install(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        if self._row.install_steps and self._should_run_plugin_command():
-            if self._row.source_status != "verified":
-                return self._stamp(ProviderRecipeResult.fail(
-                    f"plugin installer source {self._row.source_status}; refusing to execute",
-                    action_needed=self._row.notes or self._row.audia_action,
-                ))
-            params = _hindsight_params(self._backend)
-            steps = steps_from_defs(self._row.install_steps, params)
-            seq = run_steps(steps, context, fail_prefix="plugin install failed")
-            if not seq.success:
-                return self._stamp(seq)
+        result = _run_gated_steps(
+            self._row, self._backend, self._row.install_steps, context,
+            self._stamp, operation="install",
+        )
+        if result is not None:
+            return result
         return self._stamp(ProviderRecipeResult.ok(
             RecipeState.INSTALLING, status="plugin installed",
         ))
@@ -143,18 +176,12 @@ class PluginConfigRecipe(_RowRecipe):
         ))
 
     def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        if self._row.uninstall_steps and self._should_run_plugin_command():
-            if self._row.source_status != "verified":
-                return self._stamp(ProviderRecipeResult.ok(
-                    RecipeState.ABSENT,
-                    status=f"source {self._row.source_status}; no plugin installer was executed",
-                    action_needed=self._row.notes or self._row.audia_action,
-                ))
-            params = _hindsight_params(self._backend)
-            steps = steps_from_defs(self._row.uninstall_steps, params)
-            seq = run_steps(steps, context, fail_prefix="plugin uninstall failed")
-            if not seq.success:
-                return self._stamp(seq)
+        result = _run_gated_steps(
+            self._row, self._backend, self._row.uninstall_steps, context,
+            self._stamp, operation="uninstall",
+        )
+        if result is not None:
+            return result
         if self._config_path:
             return self.prune(context)
         return self._stamp(ProviderRecipeResult.ok(
@@ -182,7 +209,7 @@ class PluginConfigRecipe(_RowRecipe):
         if self._config_path:
             params["CONFIG_PATH"] = str(self._config_path)
         steps: list[ProvisionStep] = []
-        if self._row.install_steps and self._should_run_plugin_command():
+        if self._row.install_steps and _should_run_plugin_command(self._row):
             steps.extend(steps_from_defs(
                 self._row.install_steps, params,
                 recipe_id=f"hindsight-{self.provider_id}",
@@ -200,6 +227,8 @@ class PluginConfigRecipe(_RowRecipe):
         ))
 
 
+# RS18/RS06: intentional one-off — patches a third-party plugin file this recipe
+# does not create or own; no shared primitive (WriteFileStep/ArtifactRegistry) applies.
 def _repair_windows_plugin_mcp(
     backend: HindsightBackendConfig,
     row: HindsightRecipeRow | None = None,
@@ -211,6 +240,7 @@ def _repair_windows_plugin_mcp(
     function returns without attempting repair. The official plugin ships a
     bash launcher (run_mcp.sh) that fails when Git Bash is absent. Idempotent.
     """
+    # Intentional one-off: patches third-party plugin .mcp.json file via glob discovery; no shared primitive covers OS-specific repair of unowned files (RS06/RS18)
     import glob
     import json
     import os
@@ -345,7 +375,7 @@ class _PluginUrlConfigRecipe(_RowRecipe):
         config_path_for_steps = self._harness_config_path or self._url_config_path
         params["CONFIG_PATH"] = str(config_path_for_steps)
         steps: list[ProvisionStep] = []
-        if self._row.install_steps and self._should_run_plugin_command():
+        if self._row.install_steps and _should_run_plugin_command(self._row):
             steps.extend(steps_from_defs(
                 self._row.install_steps, params,
                 recipe_id=f"hindsight-{self.provider_id}",
@@ -356,9 +386,6 @@ class _PluginUrlConfigRecipe(_RowRecipe):
                 recipe_id=f"hindsight-{self.provider_id}",
             ))
         return steps
-
-    def _should_run_plugin_command(self) -> bool:
-        return self._row.audia_action == "call_official_installer"
 
     def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
         import os
@@ -380,21 +407,15 @@ class _PluginUrlConfigRecipe(_RowRecipe):
         ))
 
     def install(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        if self._row.install_steps and self._should_run_plugin_command():
-            if self._row.source_status != "verified":
-                return self._stamp(ProviderRecipeResult.fail(
-                    f"plugin installer source {self._row.source_status}; refusing to execute",
-                    action_needed=self._row.notes or self._row.audia_action,
-                ))
-            params = _hindsight_params(self._backend)
-            steps = steps_from_defs(self._row.install_steps, params)
-            seq = run_steps(steps, context, fail_prefix="plugin install failed")
-            if not seq.success:
-                return self._stamp(seq)
+        result = _run_gated_steps(
+            self._row, self._backend, self._row.install_steps, context,
+            self._stamp, operation="install",
+        )
+        if result is not None:
+            return result
         return self._stamp(ProviderRecipeResult.ok(RecipeState.INSTALLING, status="plugin installed"))
 
     def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        import json
         import os
         if self._row.configure_steps:
             params = _hindsight_params(self._backend)
@@ -407,11 +428,21 @@ class _PluginUrlConfigRecipe(_RowRecipe):
             seq = run_steps(steps, context, fail_prefix="plugin configure failed")
             if not seq.success:
                 return self._stamp(seq)
-        self._url_config_path.parent.mkdir(parents=True, exist_ok=True)
-        self._url_config_path.write_text(
-            json.dumps(self._expected_config(), indent=2),
-            encoding="utf-8",
+        # Direct write: JSON config content built by _build_plugin_url_config(); WriteFileStep not used because this recipe doesn't maintain an ArtifactRegistry instance (RS06/RS18)
+        from audiagentic.foundation.toolchains.provision_steps.write_file import (
+            WriteFileStep,
         )
+
+        content = _build_plugin_url_config(self._backend)
+        import json
+        step = WriteFileStep(
+            id="plugin-url-config-write",
+            path=str(self._url_config_path),
+            content=json.dumps(content, indent=2),
+            create_parents=True,
+            recipe_id=f"hindsight-{self.provider_id}",
+        )
+        step.run(context)
         artifacts = [str(self._url_config_path)]
         if os.name == "nt":
             ok, detail = _repair_windows_plugin_mcp(self._backend, self._row)
@@ -428,21 +459,16 @@ class _PluginUrlConfigRecipe(_RowRecipe):
         return self._stamp(ProviderRecipeResult.fail("plugin URL config not verified after configure"))
 
     def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        if self._row.uninstall_steps and self._should_run_plugin_command():
-            if self._row.source_status != "verified":
-                return self._stamp(ProviderRecipeResult.ok(
-                    RecipeState.ABSENT,
-                    status=f"source {self._row.source_status}; no plugin installer was executed",
-                    action_needed=self._row.notes or self._row.audia_action,
-                ))
-            params = _hindsight_params(self._backend)
-            steps = steps_from_defs(self._row.uninstall_steps, params)
-            seq = run_steps(steps, context, fail_prefix="plugin uninstall failed")
-            if not seq.success:
-                return self._stamp(seq)
+        result = _run_gated_steps(
+            self._row, self._backend, self._row.uninstall_steps, context,
+            self._stamp, operation="uninstall",
+        )
+        if result is not None:
+            return result
         return self.prune(context)
 
     def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        # Direct prune: URL config file not registered with ArtifactRegistry; bare unlink is acceptable for self-owned files (RS06/RS18)
         self._url_config_path.unlink(missing_ok=True)
         return self._stamp(ProviderRecipeResult.ok(
             RecipeState.ABSENT, status="plugin URL config removed",

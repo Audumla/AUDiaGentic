@@ -70,6 +70,15 @@ def _sync_hindsight_mcp_entry(
 
 
 def _absolute_project_path(path: str | Path, project_root: Path | None = None) -> Path:
+    """Resolve a path that may be relative to the caller-supplied project root.
+
+    This is the capability-layer's deliberate addition of project-root anchoring.
+    Foundation provision steps do NOT anchor to a project root — they use
+    ``Path.expanduser()`` and leave relative paths as-is (the runner sets cwd).
+    That function anchors relative paths against the explicitly passed
+    ``project_root``, distinguishing it from foundation's expanduser-only behavior.
+    See RS04/RS14 in docs/planning for the audit trail on this boundary.
+    """
     target = Path(path).expanduser()
     if target.is_absolute() or project_root is None:
         return target

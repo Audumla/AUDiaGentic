@@ -68,6 +68,9 @@ def _codex_hooks_enabled(config_path: Path) -> bool:
     return False
 
 
+# RS18/RS06: intentional one-off — surgical TOML editing to upsert [features] section.
+# Not expressible via WriteFileStep because the file is not owned by this recipe
+# (shared with other codex settings); only a single key must be patched, not rewritten.
 def _enable_codex_hooks(config_path: Path) -> None:
     config_path.parent.mkdir(parents=True, exist_ok=True)
     text = _read_text(config_path)
@@ -201,16 +204,25 @@ class CodexHindsightRecipe(_RowRecipe):
         ))
 
     def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        self._user_config.parent.mkdir(parents=True, exist_ok=True)
+        from audiagentic.foundation.toolchains.provision_steps.write_file import (
+            WriteFileStep,
+        )
+
         config: dict[str, Any] = {
             "hindsightApiUrl": self._backend.base_url,
             "bankId": self._backend.bank_id or "codex",
         }
         if self._backend.api_key:
             config["hindsightApiToken"] = self._backend.api_key
-        self._user_config.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+        user_step = WriteFileStep(
+            id="codex-user-config-write",
+            path=str(self._user_config),
+            content=json.dumps(config, indent=2) + "\n",
+            create_parents=True,
+            recipe_id=f"hindsight-{self.provider_id}",
+        )
+        user_step.run(context)
 
-        self._codex_dir.mkdir(parents=True, exist_ok=True)
         hooks = {
             "hooks": {
                 "SessionStart": [{"hooks": [{"type": "command", "command": self._expected_hook_command("session_start.py"), "timeout": 5}]}],
@@ -218,7 +230,14 @@ class CodexHindsightRecipe(_RowRecipe):
                 "Stop": [{"hooks": [{"type": "command", "command": self._expected_hook_command("retain.py"), "timeout": 30}]}],
             }
         }
-        self._hooks_file.write_text(json.dumps(hooks, indent=2) + "\n", encoding="utf-8")
+        hooks_step = WriteFileStep(
+            id="codex-hooks-write",
+            path=str(self._hooks_file),
+            content=json.dumps(hooks, indent=2) + "\n",
+            create_parents=True,
+            recipe_id=f"hindsight-{self.provider_id}",
+        )
+        hooks_step.run(context)
         _enable_codex_hooks(self._config_file)
         return self._stamp(RecipeResult.ok(
             RecipeState.CONFIGURING,
@@ -229,6 +248,9 @@ class CodexHindsightRecipe(_RowRecipe):
     def verify(self, context: dict[str, Any]) -> ProviderRecipeResult:
         return self.probe(context)
 
+    # RS18/RS06: intentional one-off — batch removal of downloaded scripts directory
+    # plus config files; rmtree + multi-file unlink pattern not expressible via
+    # ArtifactRegistry.prune() without per-install registration overhead.
     def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
         for path in (self._hooks_file, self._user_config):
             try:
