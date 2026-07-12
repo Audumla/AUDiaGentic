@@ -24,8 +24,18 @@ def render(value, context: dict) -> Any:
     - Single placeholder string returns the original typed value
     - Mixed text uses str.format(**context)
     - Lists and dicts render recursively
-    - Unknown placeholder raises ValueError
+    - Unknown placeholder raises VAL-WFACT-001/002
     - Non-string scalars pass through unchanged
+
+    Deliberately NOT delegated to :mod:`audiagentic.foundation.templates`
+    (EDJ21 decision): that renderer is string-only with dotted-path lookup
+    and JSON value coercion, while this one preserves typed whole-placeholder
+    values and carries full ``str.format`` semantics (format specs,
+    ``{{...}}`` literal-brace escaping, ``str()`` coercion). The contracts
+    are characterized in ``tests/unit/foundation/test_actions_render_compat.py``
+    — any future consolidation must keep those tests green. Also distinct
+    from :func:`audiagentic.foundation.refs.resolve_ref`, which resolves
+    ``module:object`` config references, never data paths.
     """
     if value is None:
         return None
