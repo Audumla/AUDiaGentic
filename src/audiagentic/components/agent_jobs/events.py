@@ -23,6 +23,7 @@ JOB_TIMELINE_EVENTS: tuple[str, ...] = (
     "job.control.requested",
     "job.control.applied",
     "job.control.ignored",
+    "job.gateway-cancel-requested",
     "job.dispatch.accepted",
     "job.dispatch.rejected",
     "job.gateway-outcome-received",

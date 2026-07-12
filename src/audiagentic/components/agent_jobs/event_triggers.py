@@ -3,7 +3,8 @@
 Reads ``.audiagentic/config/agent-jobs/event-triggers.yaml``, validates each
 trigger against the local JSON Schema (EDJ19 — component-only, NOT registered in
 foundation schema_registry), and returns a list of :class:`TriggerConfig`
-instances.  Disabled triggers are skipped.
+instances.  Disabled triggers are returned too (``enabled=False``); suppression
+is the observer's responsibility so it stays auditable (EDJ23).
 """
 from __future__ import annotations
 
@@ -15,9 +16,10 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from audiagentic.components.agent_jobs.prompt_templates import load_prompt_from_file
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import load_yaml_file
-from audiagentic.foundation.path_safety import ensure_contained
+from audiagentic.foundation.templates import _MISSING, resolve_path
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,7 @@ class TriggerConfig:
     target: dict[str, Any] | None = None
     prompt_template: str | None = None
     prompt_template_file: str | None = None
+    filter: dict[str, Any] | None = None
     metadata_propagation: dict[str, Any] | None = None
 
 
@@ -68,85 +71,6 @@ def _check_template_xor(trigger: dict[str, Any]) -> bool:
     return has_inline ^ has_file
 
 
-def _load_template_file(
-    project_root: Path,
-    template_path: str,
-    trigger_id: str,
-) -> str:
-    """Load a prompt template file with path containment check.
-
-    Parameters
-    ----------
-    project_root:
-        Root of the AUDiaGentic project.
-    template_path:
-        File path from ``prompt-template-file`` config field.
-    trigger_id:
-        Trigger identifier for error messages.
-
-    Returns
-    -------
-    str
-        The file contents as a string.
-
-    Raises
-    ------
-    AudiaGenticError
-        IO-PTMPL-001 if the file does not exist after containment resolution,
-        IO-PTMPL-002 on read errors, IO-PATH-001 if path escapes project root.
-    """
-    try:
-        resolved = ensure_contained(project_root, template_path)
-    except AudiaGenticError as exc:
-        if exc.code == "IO-PATH-001":
-            raise AudiaGenticError(
-                code="IO-PATH-001",
-                kind="foundation",
-                message=(
-                    f"Trigger {trigger_id!r}: prompt-template-file {template_path!r} "
-                    f"resolves outside the project root."
-                ),
-                details={
-                    "trigger_id": trigger_id,
-                    "requested_path": template_path,
-                    "project_root": str(project_root),
-                },
-            ) from exc
-        raise
-
-    if not resolved.is_file():
-        raise AudiaGenticError(
-            code="IO-PTMPL-001",
-            kind="agent-jobs",
-            message=(
-                f"Trigger {trigger_id!r}: prompt template file not found at "
-                f"{resolved}"
-            ),
-            details={
-                "trigger_id": trigger_id,
-                "template_path": template_path,
-                "resolved_path": str(resolved),
-            },
-        )
-
-    try:
-        return resolved.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        raise AudiaGenticError(
-            code="IO-PTMPL-002",
-            kind="agent-jobs",
-            message=(
-                f"Trigger {trigger_id!r}: failed to read prompt template file "
-                f"{resolved}"
-            ),
-            details={
-                "trigger_id": trigger_id,
-                "template_path": template_path,
-                "error": str(exc),
-            },
-        ) from exc
-
-
 def _coerce(
     trigger: dict[str, Any],
     project_root: Path,
@@ -161,8 +85,8 @@ def _coerce(
     template_file = trigger.get("prompt-template-file")
 
     if template_file and not prompt_template:
-        prompt_template = _load_template_file(
-            project_root, template_file, trigger["trigger-id"]
+        prompt_template, _ = load_prompt_from_file(
+            project_root, template_file, source_label=f"Trigger {trigger['trigger-id']!r}"
         )
 
     return TriggerConfig(
@@ -176,8 +100,33 @@ def _coerce(
         target=trigger.get("target"),
         prompt_template=prompt_template,
         prompt_template_file=template_file,
+        filter=trigger.get("filter"),
         metadata_propagation=trigger.get("metadata-propagation"),
     )
+
+
+def matches_filter(context: dict[str, Any], filter_spec: dict[str, Any] | None) -> bool:
+    """Evaluate a trigger's filter conditions against an event context (EDJ15).
+
+    *context* is exactly ``{"payload": payload, "metadata": metadata}``. Each
+    filter key is a dotted path resolved via the shared
+    :func:`foundation.templates.resolve_path`; scalar expectations match by
+    equality, lists by membership; all clauses AND. A missing path, a present
+    ``None``, or any mismatch yields ``False`` — never an exception. No
+    expression language: equality/membership only.
+    """
+    if not filter_spec:
+        return True
+    for path, expected in filter_spec.items():
+        value = resolve_path(context, path)
+        if value is _MISSING or value is None:
+            return False
+        if isinstance(expected, list):
+            if value not in expected:
+                return False
+        elif value != expected:
+            return False
+    return True
 
 
 def load_event_triggers(project_root: Path) -> list[TriggerConfig]:
@@ -190,8 +139,10 @@ def load_event_triggers(project_root: Path) -> list[TriggerConfig]:
 
     Returns
     -------
-    List of enabled :class:`TriggerConfig` instances.  Disabled triggers are
-    silently skipped.
+    List of every schema-valid :class:`TriggerConfig`, including triggers with
+    ``enabled: false`` — callers that must not act on disabled triggers check
+    ``TriggerConfig.enabled`` themselves (the observer suppresses them with an
+    audit record).
 
     Raises
     ------
@@ -267,10 +218,6 @@ def load_event_triggers(project_root: Path) -> list[TriggerConfig]:
                 message=f"trigger {tid!r} with kind=event requires event-pattern",
                 details={"trigger-id": tid},
             )
-
-        # -- skip disabled --
-        if not trigger.get("enabled", True):
-            continue
 
         result.append(_coerce(trigger, project_root))
 
