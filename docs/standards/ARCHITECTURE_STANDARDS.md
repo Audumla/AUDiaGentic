@@ -74,6 +74,7 @@ Extensibility must never require editing Python source.
 - `AudiaGenticError` is the only domain exception. No parallel hierarchies (`EventBusError`, `LspError`). No raw `ValueError`/`RuntimeError` at public boundaries.
 - Every error must carry a canonical code: `PREFIX-COMPONENT-NNN` (e.g., `VAL-PCFG-001`).
 - **YAML registration is mandatory:** every error code used in source must have an entry in the owning component's `error-resolutions.yaml` (located at `config/components/<component>/error-resolutions.yaml`). A code raised without a YAML registration is a defect — `get_error_resolution(code)` returns the raw code string, producing unhelpful diagnostics. Do not introduce new codes without first adding them to the YAML file.
+- **YAML coverage is enforced:** periodic audits must verify that every `code=` in an `AudiaGenticError(...)` call across `src/` has a corresponding entry in some `error-resolutions.yaml`. Missing entries are tracked as plan items and resolved before release. The resolution text should describe remediation steps, configuration checks, or further action — not merely restate the error message.
 - Error ownership is split intentionally:
   - `code` is canonical identity and must be stable.
   - `message` is the concise operator-facing statement raised by code and returned in the error envelope. The inline `message=` at the raise site is acceptable as the operator-facing diagnostic; it need not match the YAML resolution text verbatim (they serve different audiences).
@@ -138,3 +139,32 @@ Extensibility must never require editing Python source.
 | Single-slot registered-callback/capability lookup for a direct import | Convert to an event; or in composition-root, check component registry and import directly |
 | Component-domain vocabulary in foundation module/event/registry-key name | Rename to domain-neutral concept, or move logic into owning component |
 | Error code raised without error-resolutions.yaml entry | Add the code to the owning component's YAML before using it |
+
+## 13. Contract Schema Ownership
+
+**Principle:** Every JSON Schema contract has exactly one authoritative source; mirrored copies must be byte-identical.
+
+**Rules:**
+- **Component-owned schemas:** A schema file under `components/<component>/contracts/<name>.schema.json` is the authoritative (writable) copy owned by that component. The component owns its contract — changes are made there first.
+- **Foundation mirror:** A file `foundation/contracts/schemas/<name>.schema.json` with the same filename is a read-only mirror used by the `schema_registry` for canonical validation lookups. After any change to the authoritative copy, the mirror must be updated to be byte-identical.
+- **Component-only schemas:** Some schemas are consumed only by their owning component (e.g., `event-trigger.schema.json` is agent-jobs-only). These live exclusively under `components/<component>/contracts/` and are NOT mirrored into foundation. They are not registered in `schema_registry.py` or `canonical_ids.py`.
+- **Foundation-native schemas:** Schemas that belong to the foundation layer itself (e.g., `error-envelope.schema.json`, `event-envelope.schema.json`) live exclusively under `foundation/contracts/schemas/` with no component copy.
+- **Drift detection:** A unit test walks `foundation/contracts/schemas/` and asserts byte equality with every matching component copy. Schemas without a component copy are exempt (foundation-native).
+
+**Decision log:**
+- 2026-07-10: `event-trigger.schema.json` is agent-jobs-only; NOT mirrored into foundation, NOT registered in schema_registry.
+
+## 14. Async Event Handling
+
+Guidelines for failure handling in event-driven, asynchronous work — what happens when a bus handler fails, a dispatch event cannot be published, or a lifecycle outcome cannot be applied. Extends §8 (Error Handling) to async boundaries.
+
+**Rules:**
+- **Isolation rule:** Handlers must never raise out of the bus. Any exception caught at the handler boundary is logged and converted into a durable dead-letter entry via `write_dead_letter`. The calling pipeline proceeds; one failing handler does not break the event bus.
+- **Retry policy (v1):** Default is NO automatic retry for trigger firings. An LLM job launch is not safely idempotent — a silent retry could create duplicate jobs or double-charge an API. Retries must be explicit and idempotency-keyed. If a component needs automatic retry, it must implement its own idempotency guard (e.g., dedup key in correlation metadata) and document the guarantee.
+- **Dead-letter:** Any failed firing, dispatch, or outcome-application is recorded durably via `write_dead_letter` from `audiagentic.components.agent_jobs.dead_letter`. The record shape carries `{event_type, payload_summary (redacted, max 500 chars), metadata, trigger_id/job_id, error_code, error_message, correlation_id, timestamp}`. Dead-letter entries are append-only ndjson at `.audiagentic/runtime/agent-jobs/dead-letter.ndjson`, written via the shared `append_operational_record` helper (EDJ20).
+- **Replay:** Dead-letter entries carry enough context to re-fire manually: event_type, correlation_id, trigger_id/job_id identifiers. A consumer can read entries with `read_dead_letters`, look up the original inputs, and re-dispatch. Automatic replay is out of scope for v1.
+- **Redaction boundary:** Dead-letter entries must never contain raw prompts, API keys, tokens, or LLM outputs. The `payload_summary` field is a redacted description (e.g., "prompt launch request with 2 directives"). The `append_operational_record` denylist enforces this at write time.
+
+**Decision log:**
+- 2026-07-10: Async error standard created to fill guideline gap identified during EDJ02/EDJ04/EDJ05 review. Dead-letter record format owned by EDJ12, consumed by EDJ02 (step 5), EDJ04 (step 5), EDJ05 (notes).
+
