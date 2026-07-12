@@ -68,3 +68,8 @@ def job_launch_request_path(project_root: Path, job_id: str) -> Path:
 def job_subject_manifest_path(project_root: Path, job_id: str) -> Path:
     """Return the subject.json path for a job."""
     return job_dir(project_root, job_id) / "subject.json"
+
+
+def job_timeline_path(project_root: Path, job_id: str) -> Path:
+    """Return the timeline.ndjson path for a job."""
+    return job_dir(project_root, job_id) / "timeline.ndjson"

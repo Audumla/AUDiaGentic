@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agent_jobs import jobs_store as _default_store
+from audiagentic.components.agent_jobs.events import record_job_timeline_event
 from audiagentic.components.agent_jobs.paths import (
     job_control_events_path,
     job_control_path,
@@ -42,6 +43,26 @@ JobStoreInterface = types.ModuleType
 
 logger = logging.getLogger(__name__)
 
+
+def _record_control_timeline_event(
+    project_root: Path,
+    job_id: str,
+    event_name: str,
+    *,
+    payload: dict[str, Any],
+    correlation_id: str | None = None,
+) -> None:
+    attrs: dict[str, Any] = {
+        "requested-action": payload.get("requested-action"),
+        "result": payload.get("result"),
+    }
+    record_job_timeline_event(
+        project_root,
+        job_id,
+        event_name,
+        attributes=attrs,
+        correlation_id=correlation_id,
+    )
 
 
 
@@ -153,6 +174,12 @@ def request_job_control(
                 "reason": "job already terminal",
             },
         )
+        _record_control_timeline_event(
+            project_root,
+            payload["job-id"],
+            "job.control.ignored",
+            payload=payload,
+        )
         return payload
 
     payload = dict(payload)
@@ -177,6 +204,12 @@ def request_job_control(
             "result": payload["result"],
             "applied-at": payload["applied-at"],
         },
+    )
+    _record_control_timeline_event(
+        project_root,
+        payload["job-id"],
+        "job.control.requested",
+        payload=payload,
     )
     return payload
 
@@ -232,6 +265,12 @@ def apply_pending_job_control(
                 "reason": "job already terminal",
             },
         )
+        _record_control_timeline_event(
+            project_root,
+            job_id,
+            "job.control.ignored",
+            payload=control,
+        )
         return control
     transition_and_persist(project_root, job_id, "cancelled")
     control["result"] = "applied"
@@ -249,5 +288,11 @@ def apply_pending_job_control(
             "applied-at": control["applied-at"],
             "result": control["result"],
         },
+    )
+    _record_control_timeline_event(
+        project_root,
+        job_id,
+        "job.control.applied",
+        payload=control,
     )
     return control
