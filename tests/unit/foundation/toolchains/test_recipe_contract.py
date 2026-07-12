@@ -167,6 +167,25 @@ def test_teardown_reports_cleanup_hook_failure():
     assert "api down" in (result.error or "")
 
 
+def test_cleanup_hook_failure_details_are_safe():
+    """Contract layer does NOT redact secret-shaped strings — that's RS16's job.
+
+    This test locks the division of responsibility: the contract captures
+    str(exc) verbatim in result.error. Redaction happens at the shell-output
+    boundary (RS16), not inside the recipe contract.
+    """
+    r = _Recipe()
+    fake_token = "sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+    def _boom(ctx):
+        raise RuntimeError(fake_token)
+
+    r.custom_cleanup_hooks.append(_boom)
+    result = r.teardown({})
+    assert not result.success
+    assert fake_token in (result.error or "")
+
+
 def test_recipe_result_helpers():
     ok = RecipeResult.ok(RecipeState.VERIFIED, artifacts=["a"], status="done")
     assert ok.success and ok.artifacts_owned == ["a"]

@@ -427,4 +427,283 @@ class TestProviderRecipeTests:
         assert not violations
 
 
+class TestRecipeArchitectureGuards:
+    """RS19 — recipe architecture and standards guard tests."""
+
+    def test_no_provider_name_branching_in_dispatch(self):
+        """Std §2: _RECIPE_FACTORIES keys must be enum values, not string literals.
+
+        Verify no if/elif branches on provider name strings ("cline", "cursor", etc.)
+        exist in the strategies module outside of _build_hooks_recipe's explicit
+        per-provider specializations (which are documented and allowed).
+        """
+        strategies_path = (
+            WORKSPACE_ROOT
+            / "src"
+            / "audiagentic"
+            / "components"
+            / "memory"
+            / "hindsight"
+            / "strategies.py"
+        )
+        with open(strategies_path, encoding="utf-8") as f:
+            source = f.read()
+        tree = ast.parse(source, filename="strategies.py")
+
+        # Find _RECIPE_FACTORIES assignment and verify all keys are Name / Attribute nodes
+        # (enum member access like ProviderRecipeKind.HOOKS), not string literals.
+        factory_keys_ok = True
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == "_RECIPE_FACTORIES":
+                        if isinstance(node.value, ast.Dict):
+                            for key in node.value.keys:
+                                # Keys must NOT be ast.Constant strings
+                                if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                                    factory_keys_ok = False
+
+        assert factory_keys_ok, (
+            "_RECIPE_FACTORIES contains string literal keys — "
+            "keys must be ProviderRecipeKind enum values"
+        )
+
+        # Verify no top-level if/elif branches on provider name strings in dispatch logic.
+        # _build_hooks_recipe has allowed per-provider specialization; check that the
+        # main build_hindsight_recipe function does not branch on provider names.
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == "build_hindsight_recipe":
+                for child in ast.walk(node):
+                    if isinstance(child, ast.If):
+                        # Check the test expression for string comparisons on provider name
+                        test_str = ast.unparse(child.test)
+                        forbidden_names = ("cline", "cursor", "codex", "claude", "copilot")
+                        for name in forbidden_names:
+                            assert name not in test_str.lower(), (
+                                f"build_hindsight_recipe branches on provider name '{name}' — "
+                                "dispatch must use _RECIPE_FACTORIES keyed by enum"
+                            )
+
+    def test_redaction_gate_on_shell_step_results(self):
+        """Std §8: ShellProvisionStep output must be redacted.
+
+        Create a shell step that outputs a token-like string and assert the result
+        does NOT contain the raw token but DOES contain [REDACTED].
+        """
+        from audiagentic.foundation.toolchains.provision_steps.shell import ShellProvisionStep
+
+        test_token = "sk-aaaaaaaaaaaaaaaaaaaaaaaa"
+
+        # Use a command that echoes the token; run through step to verify redaction.
+        # On Windows, use PowerShell-compatible echo.
+        step = ShellProvisionStep(
+            id="test-redact",
+            command=f'echo {test_token}',
+            shell=True,
+        )
+        result = step.run({})
+
+        # The stdout in outputs should have the token redacted
+        stdout = result.outputs.get("stdout", "")
+        assert test_token not in stdout, (
+            f"ShellProvisionStep did not redact token in output: {stdout!r}"
+        )
+        assert "[REDACTED]" in stdout, (
+            f"ShellProvisionStep output missing [REDACTED] marker: {stdout!r}"
+        )
+
+    def test_factory_completeness(self):
+        """Every recipe_kind with matrix rows must have a factory or guidance fallback.
+
+        Read hindsight_matrix.yaml and verify each unique recipe_kind either has an
+        entry in _RECIPE_FACTORIES or falls back to _GUIDANCE_SPEC (which covers
+        unknown kinds via the .get() + fallback in build_hindsight_recipe).
+        """
+        import yaml as _yaml
+
+        from audiagentic.components.memory.hindsight.strategies import _RECIPE_FACTORIES
+        from audiagentic.components.providers.services.recipes import ProviderRecipeKind
+
+        matrix_path = (
+            WORKSPACE_ROOT
+            / "src"
+            / "audiagentic"
+            / "config"
+            / "components"
+            / "memory"
+            / "hindsight_matrix.yaml"
+        )
+        with open(matrix_path, encoding="utf-8") as f:
+            matrix_data = _yaml.safe_load(f)
+
+        # Build enum lookup
+        kind_by_value = {k.value: k for k in ProviderRecipeKind}
+
+        missing_uncovered = []
+        for row in matrix_data.get("matrix", []):
+            raw_kind = row.get("recipe_kind")
+            if not raw_kind:
+                continue
+            kind = kind_by_value.get(raw_kind)
+            if kind is None:
+                # recipe_kind value doesn't map to a valid enum — this would fail at runtime
+                missing_uncovered.append(
+                    f"row {row.get('provider_id')}: unknown recipe_kind '{raw_kind}'"
+                )
+                continue
+
+            has_factory = kind in _RECIPE_FACTORIES
+            # The build_hindsight_recipe fallback to _GUIDANCE_SPEC covers all
+            # missing keys, so technically every kind is covered. But for explicit
+            # traceability, flag kinds that rely on the generic fallback but have
+            # no dedicated factory (they'll get guidance-only behavior).
+            if not has_factory:
+                # Check that the row doesn't have substantive install steps that
+                # would need automation — if it does, missing a factory is a gap.
+                has_install_steps = bool(row.get("install_steps"))
+                if has_install_steps:
+                    missing_uncovered.append(
+                        f"{row.get('provider_id')}: kind {raw_kind} has install_steps "
+                        f"but no factory entry (falls back to guidance-only)"
+                    )
+
+        assert not missing_uncovered, (
+            "Factory completeness gaps:\n" + "\n".join(missing_uncovered)
+        )
+
+    def test_no_stale_path_strings_from_rs_refactors(self):
+        """Std §10: No source files should reference old/removed class/function names.
+
+        Check for ManagedEntryRecipe, ConfigEntryTarget, and run_provision /
+        run_teardown as code references (not comments/docstrings).
+        """
+        stale_names = {
+            "ManagedEntryRecipe",
+            "ConfigEntryTarget",
+            "_run_provision",
+            "_run_teardown",
+            "run_provision",
+            "run_teardown",
+        }
+
+        src_dir = WORKSPACE_ROOT / "src" / "audiagentic"
+        violations = []
+
+        for pyfile in sorted(src_dir.rglob("*.py")):
+            try:
+                with open(pyfile, encoding="utf-8") as f:
+                    source = f.read()
+                tree = ast.parse(source, filename=str(pyfile))
+            except (SyntaxError, SystemError, RecursionError):
+                continue
+
+            rel = pyfile.relative_to(WORKSPACE_ROOT)
+
+            # Check for import references
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if any(stale in alias.name for stale in stale_names):
+                            violations.append(f"{rel}: imports {alias.name}")
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module and any(stale in node.module for stale in stale_names):
+                        violations.append(f"{rel}: imports from {node.module}")
+                    elif node.names:
+                        for alias in node.names:
+                            if alias.name in stale_names:
+                                violations.append(f"{rel}: imports {alias.name}")
+                elif isinstance(node, ast.Name) and node.id in stale_names:
+                    violations.append(f"{rel}: references {node.id}")
+
+        # Allow known documentation references in recipe_patterns.py docstring
+        # (the "SL13 A6" removal note mentions the old names historically).
+        filtered = [
+            v for v in violations
+            if "recipe_patterns.py" not in v or ("imports" in v or "references" in v)
+        ]
+
+        assert not filtered, (
+            "Stale code references found:\n" + "\n".join(filtered)
+        )
+
+    def test_override_allowlist_for_provision_teardown(self):
+        """No dependant recipe should reimplement provision() or teardown() without rationale.
+
+        Search for classes that inherit from ProvisioningRecipe and override these
+        methods, then check for an allowlisted rationale in the method docstring
+        or a preceding comment containing "allow" or "override".
+        """
+        src_dir = WORKSPACE_ROOT / "src" / "audiagentic"
+        violations: list[str] = []
+
+        # Collect all ProvisioningRecipe subclasses and their overridden methods
+        for pyfile in sorted(src_dir.rglob("*.py")):
+            # Skip the abstract base class itself
+            if "recipe_contract.py" in str(pyfile):
+                continue
+
+            try:
+                with open(pyfile, encoding="utf-8") as f:
+                    source = f.read()
+                tree = ast.parse(source, filename=str(pyfile))
+            except (SyntaxError, SystemError, RecursionError):
+                continue
+
+            rel = pyfile.relative_to(WORKSPACE_ROOT)
+
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ClassDef):
+                    continue
+
+                # Check if this class inherits from ProvisioningRecipe (directly or indirectly)
+                is_recipe_subclass = False
+                for base in node.bases:
+                    base_name = ""
+                    if isinstance(base, ast.Name):
+                        base_name = base.id
+                    elif isinstance(base, ast.Attribute):
+                        base_name = base.attr
+
+                    # Check known recipe base classes
+                    if base_name in (
+                        "ProvisioningRecipe",
+                        "ProviderCapabilityRecipe",
+                        "NoAutomationRecipe",
+                        "DeclaredStepRecipe",
+                    ):
+                        is_recipe_subclass = True
+                        break
+
+                if not is_recipe_subclass:
+                    continue
+
+                # Check for overridden provision/teardown methods
+                for item in node.body:
+                    if isinstance(item, ast.FunctionDef) and item.name in ("provision", "teardown"):
+                        # Get the docstring
+                        docstring = ast.get_docstring(item) or ""
+
+                        # Check preceding comments by looking at source lines before the method
+                        method_line = item.lineno
+                        lines = source.split("\n")
+                        preceding_lines = lines[max(0, method_line - 5):method_line - 1]
+                        comment_context = "\n".join(preceding_lines).lower()
+
+                        # Check for allowlisted rationale keywords in docstring or comments
+                        combined = (docstring + " " + comment_context).lower()
+                        has_rationale = any(
+                            keyword in combined
+                            for keyword in ("allow", "override", "rationale", "reason", "custom")
+                        )
+
+                        if not has_rationale:
+                            violations.append(
+                                f"{rel}:{item.lineno}: {node.name}.{item.name}() overrides without rationale"
+                            )
+
+        assert not violations, (
+            "Override without allowlisted rationale:\n" + "\n".join(violations)
+        )
+
+
 
