@@ -7,8 +7,19 @@
     "source",
     "tag",
     "target",
-    "workflow-profile",
-    "prompt-body"
+    "workflow-profile"
+  ],
+  "oneOf": [
+    {
+      "required": [
+        "prompt-body"
+      ]
+    },
+    {
+      "required": [
+        "prompt-template-file"
+      ]
+    }
   ],
   "properties": {
     "contract-version": {
@@ -272,6 +283,16 @@
     },
     "prompt-body": {
       "type": "string"
+    },
+    "prompt-template-file": {
+      "type": "string"
+    },
+    "agent-profile-id": {
+      "type": "string"
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": true
     },
     "review-policy": {
       "type": "object",

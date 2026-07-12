@@ -36,7 +36,9 @@ from audiagentic.components.agent_jobs.state_machine import (
     transition_and_persist,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.event.event_bus import DeliveryMode, get_bus
 from audiagentic.foundation.io import atomic_write_json, atomic_write_ndjson
+from audiagentic.foundation.logging.context import get_correlation_id
 from audiagentic.foundation.time import now_iso_z
 
 JobStoreInterface = types.ModuleType
@@ -64,6 +66,82 @@ def _record_control_timeline_event(
         correlation_id=correlation_id,
     )
 
+
+
+def _publish_gateway_cancel_requested(
+    project_root: Path,
+    job: dict[str, Any],
+    correlation_id: str | None = None,
+) -> None:
+    """Propagate a persisted job cancellation to its owning gateway request (EDJ08).
+
+    Publishes ``agents.llm.gateway.cancel-requested`` for the job's
+    gateway-request artifact; no-op when the job has none. Called only after
+    the job's transition to ``cancelled`` has persisted — a publish failure is
+    dead-lettered and never rolls back the local cancellation. Never raises.
+    """
+    job_id = job.get("job-id", "")
+    request_id: str | None = None
+    for artifact in job.get("artifacts") or []:
+        if (
+            isinstance(artifact, dict)
+            and artifact.get("kind") == "gateway-request"
+            and isinstance(artifact.get("request-id"), str)
+        ):
+            request_id = artifact["request-id"]
+            break
+    if not request_id:
+        return
+
+    correlation_id = correlation_id or get_correlation_id() or ""
+    try:
+        get_bus().publish(
+            "agents.llm.gateway.cancel-requested",
+            {
+                "project-root": str(project_root),
+                "request-id": request_id,
+            },
+            metadata={"job-id": job_id, "correlation_id": correlation_id},
+            mode=DeliveryMode.SYNC,
+        )
+    except Exception as exc:  # noqa: BLE001 — never roll back a persisted cancellation
+        logger.error(
+            "Failed to publish gateway cancel request for job %s",
+            job_id,
+            exc_info=True,
+        )
+        from audiagentic.components.agent_jobs.dead_letter import write_dead_letter
+
+        error_code = exc.code if isinstance(exc, AudiaGenticError) else "INT-EVT-001"
+        try:
+            write_dead_letter(
+                project_root,
+                {
+                    "event_type": "agents.llm.gateway.cancel-requested",
+                    "payload_summary": f"request-id={request_id} job-id={job_id}",
+                    "metadata": {"job-id": job_id, "correlation_id": correlation_id},
+                    "trigger_id": "",
+                    "job_id": job_id,
+                    "error_code": error_code,
+                    "error_message": str(exc)[:500],
+                    "correlation_id": correlation_id,
+                },
+            )
+        except Exception:  # noqa: BLE001 — dead-letter must never raise
+            logger.error(
+                "Dead-letter write failed for gateway cancel request of job %s",
+                job_id,
+                exc_info=True,
+            )
+        return
+
+    record_job_timeline_event(
+        project_root,
+        job_id,
+        "job.gateway-cancel-requested",
+        attributes={"request-id": request_id},
+        correlation_id=correlation_id or None,
+    )
 
 
 def _control_path(project_root: Path, job_id: str) -> Path:
@@ -185,6 +263,7 @@ def request_job_control(
     payload = dict(payload)
     if job["state"] in {"ready", "awaiting-approval"}:
         transition_and_persist(project_root, payload["job-id"], "cancelled")
+        _publish_gateway_cancel_requested(project_root, job)
         payload["result"] = "applied"
         payload["applied-at"] = now_iso_z()
     else:
@@ -273,6 +352,7 @@ def apply_pending_job_control(
         )
         return control
     transition_and_persist(project_root, job_id, "cancelled")
+    _publish_gateway_cancel_requested(project_root, job)
     control["result"] = "applied"
     control["applied-at"] = now_iso_z()
     write_job_control(project_root, control)

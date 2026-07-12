@@ -45,6 +45,31 @@ def read_job_record(project_root: Path, job_id: str) -> dict[str, Any]:
     return payload
 
 
+def list_job_records(project_root: Path) -> list[dict[str, Any]]:
+    """Read every persisted job record under the jobs runtime root.
+
+    Unreadable or invalid records are logged and skipped — listing is a
+    read-only operator surface and must not fail on one bad record. Returns
+    an empty list when the jobs root does not exist.
+    """
+    from audiagentic.components.agent_jobs.paths import jobs_root
+
+    root = jobs_root(project_root)
+    if not root.is_dir():
+        return []
+    records: list[dict[str, Any]] = []
+    for entry in sorted(root.iterdir()):
+        if not entry.is_dir() or not (entry / "job.json").exists():
+            continue
+        try:
+            records.append(read_job_record(project_root, entry.name))
+        except AudiaGenticError:
+            logger.warning(
+                "Skipping unreadable job record", extra={"job-id": entry.name}, exc_info=True
+            )
+    return records
+
+
 def write_job_record(project_root: Path, payload: dict[str, Any]) -> Path:
     job_id = payload.get("job-id")
     if not job_id:
