@@ -12,6 +12,7 @@ from audiagentic.components.agents import agents_gateway_events as events
 from audiagentic.components.agents import agents_gateway_store as store
 from audiagentic.components.agents.agents_api import create_profile
 from audiagentic.foundation.event import get_bus, reset_bus
+from audiagentic.foundation.event.event_bus import DeliveryMode
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
 
@@ -199,3 +200,70 @@ def test_requested_event_preserves_correlation_id_and_subject(tmp_path: Path, mo
     _, _, metadata = _wait_for_own_event(received, done, request_id)
     assert metadata.get("correlation_id") == "corr-123"
     assert metadata.get("subject") == {"kind": "test"}
+
+
+# ---------------------------------------------------------------------------
+# EDJ08: agents.llm.gateway.cancel-requested handler
+# ---------------------------------------------------------------------------
+
+
+def test_cancel_requested_event_cancels_request(tmp_path: Path, monkeypatch):
+    calls = []
+
+    def fake_cancel(project_root, request_id):
+        calls.append((project_root, request_id))
+        return {"request-id": request_id, "state": "cancelled"}
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.agents_gateway_api.cancel_llm_request", fake_cancel
+    )
+
+    get_bus().publish(
+        "agents.llm.gateway.cancel-requested",
+        {"project-root": str(tmp_path), "request-id": "req_c1"},
+        metadata={"job-id": "job-1", "correlation_id": "corr-c1"},
+        mode=DeliveryMode.SYNC,
+    )
+
+    assert calls == [(Path(str(tmp_path)), "req_c1")]
+
+
+def test_cancel_requested_missing_request_id_ignored(tmp_path: Path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "audiagentic.components.agents.agents_gateway_api.cancel_llm_request",
+        lambda *a: calls.append(a),
+    )
+
+    # missing request-id — handler must log and return, never raise
+    get_bus().publish(
+        "agents.llm.gateway.cancel-requested",
+        {"project-root": str(tmp_path)},
+        mode=DeliveryMode.SYNC,
+    )
+    # missing project-root
+    get_bus().publish(
+        "agents.llm.gateway.cancel-requested",
+        {"request-id": "req_c2"},
+        mode=DeliveryMode.SYNC,
+    )
+
+    assert not calls
+
+
+def test_cancel_requested_api_failure_swallowed(tmp_path: Path, monkeypatch):
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    def boom(project_root, request_id):
+        raise AudiaGenticError("RES-AGW-001", "agents", "unknown request")
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.agents_gateway_api.cancel_llm_request", boom
+    )
+
+    # must not raise
+    get_bus().publish(
+        "agents.llm.gateway.cancel-requested",
+        {"project-root": str(tmp_path), "request-id": "req_gone"},
+        mode=DeliveryMode.SYNC,
+    )
