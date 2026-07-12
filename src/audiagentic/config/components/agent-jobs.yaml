@@ -3,6 +3,7 @@ contract-version: v1
 id: agent-jobs
 display-name: Agent Jobs
 description: Execution/jobs layer — workflow action tags, job records, session artifacts, and prompt tag doctrine.
+lifecycle-observer: audiagentic.components.agent_jobs.event_observer
 depends-on:
   - project
   - agents
