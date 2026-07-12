@@ -8,9 +8,18 @@ from typing import Any
 
 from audiagentic.components.agent_jobs import jobs_store as store
 from audiagentic.components.agent_jobs.paths import job_timeline_path
+from audiagentic.components.agent_jobs.prompt_context import (
+    build_prompt_context_from_request,
+    load_session_data,
+    to_template_dict,
+)
 from audiagentic.components.agent_jobs.prompt_syntax import (
     load_prompt_syntax,
     load_review_tag,
+)
+from audiagentic.components.agent_jobs.prompt_templates import (
+    load_prompt_from_file,
+    render_prompt_template,
 )
 from audiagentic.components.agent_jobs.records import build_job_record
 from audiagentic.components.agent_jobs.state_machine import TERMINAL_STATES
@@ -23,6 +32,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_json, load_yaml_file
 from audiagentic.foundation.logging.context import get_correlation_id, new_correlation_id
 from audiagentic.foundation.observability import record_timeline_event
+from audiagentic.foundation.templates import has_placeholders
 from audiagentic.foundation.time import now_iso_z
 
 
@@ -152,14 +162,63 @@ def _build_launch_subject(request: dict[str, Any], *, job_id: str, now_fn=None) 
             "contract-version": "v1",
             "subject-id": target.get("adhoc-id") or generate_subject_id(now_fn=now_fn),
             "kind": "adhoc",
-            "summary": request["prompt-body"].strip() or "Ad hoc prompt launch",
+            "summary": request.get("prompt-body", "").strip() or "Ad hoc prompt launch",
         }
     return {
         "contract-version": "v1",
         "subject-id": job_id,
         "kind": target["kind"],
-        "summary": request["prompt-body"].strip()[:240] or request["tag"],
+        "summary": request.get("prompt-body", "").strip()[:240] or request["tag"],
     }
+
+
+def _render_launch_prompt(
+    project_root: Path,
+    request: dict[str, Any],
+    *,
+    job_id: str,
+    provider_id: str,
+    model_id: str | None,
+) -> dict[str, Any]:
+    """Render the launch prompt through the shared context pipeline (EDJ25).
+
+    Returns a copy of *request* whose ``prompt-body`` carries the rendered
+    text and whose caller ``context`` is dropped (never persisted).  A
+    template-free inline body (no placeholders, no template file) passes
+    through byte-identical — the compatibility keystone for existing direct
+    launches.
+    """
+    template_file = request.get("prompt-template-file")
+    if template_file:
+        source_text, _ = load_prompt_from_file(
+            project_root, template_file, source_label=f"Prompt {request.get('prompt-id', '')!r}"
+        )
+    else:
+        source_text = request.get("prompt-body", "")
+
+    prepared = dict(request)
+    explicit_context = prepared.pop("context", None)
+
+    if not template_file and not has_placeholders(source_text):
+        prepared["prompt-body"] = source_text
+        return prepared
+
+    session_id = request.get("source", {}).get("session-id") or ""
+    session_data = load_session_data(project_root, session_id) if session_id else None
+
+    context = build_prompt_context_from_request(
+        request=request,
+        project_root=str(project_root),
+        project_id=load_project_config(project_root).get("project-id", ""),
+        job_id=job_id,
+        agent_profile_id=request.get("agent-profile-id") or "",
+        provider_id=provider_id,
+        model_id=model_id or "",
+        explicit_context=explicit_context if isinstance(explicit_context, dict) else None,
+        session_data=session_data,
+    )
+    prepared["prompt-body"] = render_prompt_template(source_text, to_template_dict(context))
+    return prepared
 
 
 def _build_job_from_request(
@@ -188,6 +247,13 @@ def _build_job_from_request(
         or target.get("artifact-id")
         or target.get("artifact-path")
         or "adhoc"
+    )
+    request = _render_launch_prompt(
+        project_root,
+        request,
+        job_id=job_id,
+        provider_id=provider_id,
+        model_id=selection.get("model-id"),
     )
     launch_source = {
         "prompt-id": request["prompt-id"],
@@ -250,6 +316,13 @@ def _resume_job_from_request(project_root: Path, request: dict[str, Any], *, now
         catalog=None,
     )
     job["updated-at"] = (now_fn or now_iso_z)()
+    request = _render_launch_prompt(
+        project_root,
+        request,
+        job_id=job_id,
+        provider_id=provider_id,
+        model_id=selection.get("model-id"),
+    )
     launch_source = {
         "prompt-id": request["prompt-id"],
         "surface": request["source"]["surface"],

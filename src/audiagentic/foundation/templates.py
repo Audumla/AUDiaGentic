@@ -10,6 +10,12 @@ related to :func:`audiagentic.foundation.refs.resolve_ref`, which resolves
 ``module:object`` config references to live Python objects — those are entirely
 unrelated mechanisms with different error codes and use cases.
 
+It is also distinct from :func:`audiagentic.foundation.workflow.actions.render`
+(EDJ21 decision): that renderer preserves typed whole-placeholder values and
+uses full ``str.format`` semantics for mixed strings; this one always returns
+a string and resolves dotted paths. Consolidating them was evaluated and
+stopped — see ``tests/unit/foundation/test_actions_render_compat.py``.
+
 Error codes:
     VAL-TPL-001 — placeholder path not found in context; message includes the
         missing path and available top-level keys for diagnostics.
@@ -17,11 +23,46 @@ Error codes:
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 _PLACEHOLDER_RE = re.compile(r"\{([^}]+)\}")
+
+
+class _Missing:
+    """Sentinel distinguishing a missing path from a present ``None`` value."""
+
+    def __repr__(self) -> str:  # pragma: no cover — diagnostics only
+        return "<MISSING>"
+
+
+# Exported for internal/foundation consumers only (e.g. trigger filter
+# evaluation); never surfaced in configuration.
+_MISSING = _Missing()
+
+
+def has_placeholders(template: str) -> bool:
+    """Return True when *template* contains at least one ``{...}`` placeholder."""
+    return bool(_PLACEHOLDER_RE.search(template))
+
+
+def resolve_path(context: Mapping[str, Any], path: str) -> Any:
+    """Resolve a dotted path against nested mappings.
+
+    Returns the resolved value (which may legitimately be ``None``) or the
+    :data:`_MISSING` sentinel when any segment is absent. This is the single
+    dotted-path lookup shared by template rendering and trigger filter
+    evaluation — the two must never diverge.
+    """
+    current: Any = context
+    for seg in path.split("."):
+        if isinstance(current, Mapping) and seg in current:
+            current = current[seg]
+        else:
+            return _MISSING
+    return current
 
 
 def render_template(template: str, context: dict[str, Any]) -> str:
@@ -49,22 +90,18 @@ def render_template(template: str, context: dict[str, Any]) -> str:
             the context. Includes the missing path and available top-level keys.
     """
     def _resolve(path: str, ctx: dict[str, Any]) -> Any:
-        segments = path.split(".")
-        current: Any = ctx
-        for seg in segments:
-            if isinstance(current, dict) and seg in current:
-                current = current[seg]
-            else:
-                raise AudiaGenticError(
-                    code="VAL-TPL-001",
-                    kind="template",
-                    message=(
-                        f"Template path {path!r} not found in context; "
-                        f"available top-level keys: {', '.join(sorted(ctx.keys()))}"
-                    ),
-                    details={"path": path, "available_keys": sorted(ctx.keys())},
-                )
-        return current
+        value = resolve_path(ctx, path)
+        if value is _MISSING:
+            raise AudiaGenticError(
+                code="VAL-TPL-001",
+                kind="template",
+                message=(
+                    f"Template path {path!r} not found in context; "
+                    f"available top-level keys: {', '.join(sorted(ctx.keys()))}"
+                ),
+                details={"path": path, "available_keys": sorted(ctx.keys())},
+            )
+        return value
 
     def _replace(match: re.Match[str]) -> str:
         path = match.group(1).strip()
