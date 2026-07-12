@@ -110,6 +110,48 @@ class TestRedactionDenylist:
         entries = load_ndjson(path)
         assert len(entries) == 1
 
+    @pytest.mark.parametrize("denied_key", denylist_keys)
+    def test_rejects_nested_denylisted_fields(self, tmp_path: Path, denied_key: str) -> None:
+        """EDJ24: the denylist is recursive — nested mappings are inspected too."""
+        path = tmp_path / "records.ndjson"
+        record = {
+            "correlation_id": "nested-redact",
+            "metadata": {"inner": {denied_key: "sensitive"}},
+        }
+        with pytest.raises(AudiaGenticError, match="CON-OPR-002"):
+            append_operational_record(path, record)
+        assert not path.exists(), "no partial write on rejection"
+
+    def test_rejects_denylisted_key_inside_list(self, tmp_path: Path) -> None:
+        path = tmp_path / "records.ndjson"
+        record = {
+            "correlation_id": "list-redact",
+            "entries": [{"ok": 1}, {"api_key": "sk-123"}],
+        }
+        with pytest.raises(AudiaGenticError, match="CON-OPR-002"):
+            append_operational_record(path, record)
+
+    def test_benign_nested_values_persist(self, tmp_path: Path) -> None:
+        path = tmp_path / "records.ndjson"
+        record = {
+            "correlation_id": "benign-nested",
+            "metadata": {"subject": {"kind": "job", "id": "job-1"}, "trigger-id": "t-1"},
+            "entries": [{"status": "fired"}],
+        }
+        append_operational_record(path, record)
+        entries = load_ndjson(path)
+        assert entries[0]["metadata"]["subject"]["id"] == "job-1"
+
+    def test_string_contents_not_inspected(self, tmp_path: Path) -> None:
+        """Values are the caller's responsibility (summarize/redact before write)."""
+        path = tmp_path / "records.ndjson"
+        record = {
+            "correlation_id": "strings-ok",
+            "summary": "mentions the word prompt-body inside a string",
+        }
+        append_operational_record(path, record)
+        assert len(load_ndjson(path)) == 1
+
 
 class TestNdjsonRoundTrip:
     def test_each_line_is_valid_json(self, tmp_path: Path) -> None:
@@ -182,3 +224,14 @@ class TestConcurrentAppends:
             valid_count += 1
 
         assert valid_count == 80
+
+
+class TestAppendOperationalRecordDurability:
+    def test_fsync_is_called_after_write(self, tmp_path: Path) -> None:
+        import os
+        from unittest.mock import patch
+
+        path = tmp_path / "fsync-test.ndjson"
+        with patch.object(os, "fsync") as mock_fsync:
+            append_operational_record(path, {"correlation_id": "fsync-01", "data": 1})
+            mock_fsync.assert_called_once()

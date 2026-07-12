@@ -132,7 +132,9 @@ class TestLoadValidTriggers:
 
 
 class TestDisabledTriggers:
-    def test_disabled_trigger_skipped(self, tmp_path: Path) -> None:
+    """EDJ23 FIX 2: the loader exposes disabled triggers; suppression is the observer's job."""
+
+    def test_disabled_trigger_returned_with_enabled_false(self, tmp_path: Path) -> None:
         _write_config(
             tmp_path,
             [
@@ -142,15 +144,19 @@ class TestDisabledTriggers:
         )
 
         triggers = load_event_triggers(tmp_path)
-        assert len(triggers) == 1
-        assert triggers[0].trigger_id == "enabled-t"
+        assert len(triggers) == 2
+        by_id = {t.trigger_id: t for t in triggers}
+        assert by_id["enabled-t"].enabled is True
+        assert by_id["disabled-t"].enabled is False
 
-    def test_all_disabled_returns_empty(self, tmp_path: Path) -> None:
+    def test_all_disabled_still_returned(self, tmp_path: Path) -> None:
         _write_config(
             tmp_path,
             [_valid_trigger({"enabled": False})],
         )
-        assert load_event_triggers(tmp_path) == []
+        triggers = load_event_triggers(tmp_path)
+        assert len(triggers) == 1
+        assert triggers[0].enabled is False
 
 
 class TestMissingRequiredFields:
@@ -359,3 +365,154 @@ class TestFileTemplateLoading:
         with pytest.raises(AudiaGenticError) as exc_info:
             load_event_triggers(tmp_path)
         assert exc_info.value.code == "VAL-AJT-003"
+
+
+class TestMatchesFilter:
+    """EDJ15 — equality/membership filter evaluation on dotted paths."""
+
+    @pytest.fixture()
+    def shared_context(self) -> dict:
+        """One context proving resolve_path, template interpolation, and
+        filters agree on dotted-path semantics."""
+        return {
+            "payload": {
+                "priority": "P1",
+                "count": 3,
+                "flags": {"urgent": True},
+                "empty": None,
+            },
+            "metadata": {"source-component": "planning"},
+        }
+
+    def test_scalar_equality_match(self, shared_context: dict) -> None:
+        from audiagentic.components.agent_jobs.event_triggers import matches_filter
+
+        assert matches_filter(shared_context, {"payload.priority": "P1"})
+        assert not matches_filter(shared_context, {"payload.priority": "P2"})
+
+    def test_list_membership_match(self, shared_context: dict) -> None:
+        from audiagentic.components.agent_jobs.event_triggers import matches_filter
+
+        assert matches_filter(shared_context, {"payload.priority": ["P0", "P1"]})
+        assert not matches_filter(shared_context, {"payload.priority": ["P2", "P3"]})
+
+    def test_multiple_clauses_and(self, shared_context: dict) -> None:
+        from audiagentic.components.agent_jobs.event_triggers import matches_filter
+
+        assert matches_filter(
+            shared_context,
+            {"payload.priority": "P1", "metadata.source-component": "planning"},
+        )
+        assert not matches_filter(
+            shared_context,
+            {"payload.priority": "P1", "metadata.source-component": "other"},
+        )
+
+    def test_missing_path_is_false_not_error(self, shared_context: dict) -> None:
+        from audiagentic.components.agent_jobs.event_triggers import matches_filter
+
+        assert not matches_filter(shared_context, {"payload.absent.deep": "x"})
+
+    def test_present_none_is_false(self, shared_context: dict) -> None:
+        from audiagentic.components.agent_jobs.event_triggers import matches_filter
+
+        assert not matches_filter(shared_context, {"payload.empty": "x"})
+
+    def test_nested_bool_and_int(self, shared_context: dict) -> None:
+        from audiagentic.components.agent_jobs.event_triggers import matches_filter
+
+        assert matches_filter(shared_context, {"payload.flags.urgent": True})
+        assert matches_filter(shared_context, {"payload.count": 3})
+
+    def test_empty_or_absent_filter_matches(self, shared_context: dict) -> None:
+        from audiagentic.components.agent_jobs.event_triggers import matches_filter
+
+        assert matches_filter(shared_context, None)
+        assert matches_filter(shared_context, {})
+
+    def test_resolve_path_agrees_with_template_rendering(self, shared_context: dict) -> None:
+        """The filter's path semantics and render_template's are one helper."""
+        from audiagentic.foundation.templates import _MISSING, render_template, resolve_path
+
+        assert resolve_path(shared_context, "payload.priority") == "P1"
+        assert render_template("{payload.priority}", shared_context) == "P1"
+        assert resolve_path(shared_context, "payload.absent") is _MISSING
+        with pytest.raises(AudiaGenticError) as exc_info:
+            render_template("{payload.absent}", shared_context)
+        assert exc_info.value.code == "VAL-TPL-001"
+        # present None: resolve_path returns None; render_template emits ""
+        assert resolve_path(shared_context, "payload.empty") is None
+        assert render_template("[{payload.empty}]", shared_context) == "[]"
+
+
+class TestFilterSchema:
+    """EDJ15 — filter shape enforced by the component schema at load time."""
+
+    def test_valid_scalar_and_list_filter_loads(self, tmp_path: Path) -> None:
+        trigger = _valid_trigger(
+            {"filter": {"payload.priority": ["P0", "P1"], "payload.kind": "task"}}
+        )
+        _write_config(tmp_path, [trigger])
+
+        triggers = load_event_triggers(tmp_path)
+        assert triggers[0].filter == {"payload.priority": ["P0", "P1"], "payload.kind": "task"}
+
+    def test_null_filter_value_rejected(self, tmp_path: Path) -> None:
+        trigger = _valid_trigger({"filter": {"payload.priority": None}})
+        _write_config(tmp_path, [trigger])
+        with pytest.raises(AudiaGenticError) as exc_info:
+            load_event_triggers(tmp_path)
+        assert exc_info.value.code == "VAL-AJT-001"
+
+    def test_object_filter_value_rejected(self, tmp_path: Path) -> None:
+        trigger = _valid_trigger({"filter": {"payload.priority": {"eq": "P1"}}})
+        _write_config(tmp_path, [trigger])
+        with pytest.raises(AudiaGenticError) as exc_info:
+            load_event_triggers(tmp_path)
+        assert exc_info.value.code == "VAL-AJT-001"
+
+    def test_mixed_type_list_rejected(self, tmp_path: Path) -> None:
+        trigger = _valid_trigger({"filter": {"payload.priority": ["P1", 2]}})
+        _write_config(tmp_path, [trigger])
+        with pytest.raises(AudiaGenticError) as exc_info:
+            load_event_triggers(tmp_path)
+        assert exc_info.value.code == "VAL-AJT-001"
+
+    def test_nested_list_rejected(self, tmp_path: Path) -> None:
+        trigger = _valid_trigger({"filter": {"payload.priority": [["P1"]]}})
+        _write_config(tmp_path, [trigger])
+        with pytest.raises(AudiaGenticError) as exc_info:
+            load_event_triggers(tmp_path)
+        assert exc_info.value.code == "VAL-AJT-001"
+
+    def test_empty_filter_object_rejected(self, tmp_path: Path) -> None:
+        trigger = _valid_trigger({"filter": {}})
+        _write_config(tmp_path, [trigger])
+        with pytest.raises(AudiaGenticError) as exc_info:
+            load_event_triggers(tmp_path)
+        assert exc_info.value.code == "VAL-AJT-001"
+
+
+class TestReadmeExample:
+    """EDJ09: the README's worked YAML example is the tested example."""
+
+    def test_readme_yaml_example_parses_against_shipped_schema(self, tmp_path: Path) -> None:
+        readme = (
+            Path(__file__).resolve().parents[3]
+            / "src" / "audiagentic" / "components" / "agent_jobs" / "README.md"
+        )
+        text = readme.read_text(encoding="utf-8")
+        start = text.index("```yaml") + len("```yaml\n")
+        end = text.index("```", start)
+        example = text[start:end]
+
+        config_dir = tmp_path / ".audiagentic" / "config" / "agent-jobs"
+        config_dir.mkdir(parents=True)
+        (config_dir / "event-triggers.yaml").write_text(example, encoding="utf-8")
+
+        triggers = load_event_triggers(tmp_path)
+        assert len(triggers) == 1
+        t = triggers[0]
+        assert t.trigger_id == "plan-item-review"
+        assert t.event_pattern == "planning.item.created"
+        assert t.filter == {"payload.priority": ["P0", "P1"]}

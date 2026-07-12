@@ -1,11 +1,15 @@
 """Unit tests for foundation/logging/redaction.py."""
 from __future__ import annotations
 
+import json
 import re
 
 from audiagentic.foundation.logging.redaction import (
+    is_sensitive_key,
     redact_env_like,
     redact_text,
+    safe_metadata,
+    summarize_structure,
     truncate_output,
 )
 
@@ -113,3 +117,105 @@ class TestTruncateOutput:
         assert len(result) < len(text)
         assert "[truncated" in result
         assert "600 chars total" in result
+
+
+class TestIsSensitiveKey:
+    def test_sensitive_keys_match(self):
+        for key in (
+            "prompt-body", "prompt_body", "api_key", "token", "SECRET",
+            "password", "Authorization", "output", "raw_output", "auth-header",
+        ):
+            assert is_sensitive_key(key), f"{key!r} should be sensitive"
+
+    def test_benign_keys_pass(self):
+        for key in ("correlation_id", "job-id", "trigger-id", "status", "event_type", "subject"):
+            assert not is_sensitive_key(key), f"{key!r} should be benign"
+
+
+class TestSummarizeStructure:
+    """EDJ24 — deterministic, redacted, bounded JSON summaries."""
+
+    def test_sensitive_values_redacted(self):
+        payload = {
+            "prompt-body": "SECRET_PROMPT",
+            "api_key": "sk-123",
+            "nested": {"token": "tkn"},
+        }
+        summary = summarize_structure(payload)
+        assert "SECRET_PROMPT" not in summary
+        assert "sk-123" not in summary
+        assert "tkn" not in summary
+        assert "[REDACTED]" in summary
+
+    def test_deterministic_output(self):
+        payload = {"b": 1, "a": {"z": [1, 2], "y": "x"}}
+        assert summarize_structure(payload) == summarize_structure(payload)
+        # sort_keys => key order in the input dict does not matter
+        assert summarize_structure({"a": 1, "b": 2}) == summarize_structure({"b": 2, "a": 1})
+
+    def test_output_is_json(self):
+        summary = summarize_structure({"a": [1, "two", None], "b": True})
+        json.loads(summary)
+
+    def test_bounded_for_deep_nesting(self):
+        deep: dict = {"leaf": "v"}
+        for _ in range(50):
+            deep = {"level": deep}
+        summary = summarize_structure(deep, max_len=500)
+        assert len(summary) <= 500
+        assert "[TRUNCATED]" in summary
+
+    def test_bounded_for_huge_lists(self):
+        payload = {"items": [f"value-{i}" for i in range(10_000)]}
+        summary = summarize_structure(payload, max_len=500)
+        assert len(summary) <= 500
+
+    def test_long_strings_truncated(self):
+        summary = summarize_structure({"note": "x" * 5000}, max_len=500)
+        assert len(summary) <= 500
+
+    def test_secret_shaped_string_values_redacted(self):
+        summary = summarize_structure({"note": "password=hunter2secret"})
+        assert "hunter2secret" not in summary
+
+    def test_never_raises_on_pathological_input(self):
+        class Unserializable:
+            def __str__(self):
+                return "unserializable-object"
+
+        summary = summarize_structure({"obj": Unserializable(), "b": {1, 2}})
+        assert isinstance(summary, str)
+
+    def test_non_dict_input(self):
+        assert isinstance(summarize_structure("plain string"), str)
+        assert isinstance(summarize_structure([1, 2, 3]), str)
+        assert isinstance(summarize_structure(None), str)
+
+
+class TestSafeMetadata:
+    """EDJ24 — allowlist-only metadata with recursively redacted values."""
+
+    def test_only_allowlisted_keys_survive(self):
+        metadata = {
+            "correlation_id": "corr-1",
+            "job-id": "job-7",
+            "trigger-id": "trg-1",
+            "subject": {"kind": "job", "id": "job-7"},
+            "source-component": "planning",
+            "api_key": "sk-123",
+            "arbitrary": "value",
+        }
+        result = safe_metadata(metadata)
+        assert set(result) == {
+            "correlation_id", "job-id", "trigger-id", "subject", "source-component",
+        }
+        assert "sk-123" not in json.dumps(result)
+
+    def test_nested_values_redacted(self):
+        result = safe_metadata({"subject": {"kind": "job", "token": "tkn-1"}})
+        assert result["subject"]["token"] == "[REDACTED]"
+
+    def test_non_mapping_returns_empty(self):
+        assert safe_metadata(None) == {}
+        assert safe_metadata("string") == {}
+        assert safe_metadata([1, 2]) == {}
