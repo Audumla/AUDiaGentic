@@ -90,7 +90,8 @@ class TestEventObserverIdempotent:
             "after double register"
         )
 
-    def test_subscription_count_matches_enabled_triggers(self, tmp_path):
+    def test_subscription_count_matches_configured_triggers(self, tmp_path):
+        """EDJ23 FIX 1/2: every configured trigger subscribes, including disabled ones."""
         from audiagentic.foundation.event.event_bus import get_bus, reset_bus
 
         project_root = _setup_project(tmp_path)
@@ -112,30 +113,116 @@ class TestEventObserverIdempotent:
             obs.initialize(project_root)
 
             delta = get_bus().subscription_count() - before
-            # 2 trigger subscriptions + 4 gateway outcome subscriptions
-            assert delta == 6, f"expected 6 new subscriptions (2 triggers + 4 outcomes), got {delta}"
+            # 3 trigger subscriptions (disabled included) + 4 gateway outcome subscriptions
+            assert delta == 7, f"expected 7 new subscriptions (3 triggers + 4 outcomes), got {delta}"
 
-
-class TestEventObserverDisabledTrigger:
-    """EDJ02: Disabled trigger is not subscribed (skipped by loader)."""
-
-    def test_disabled_trigger_not_subscribed(self, tmp_path):
+    def test_shared_pattern_triggers_both_fire(self, tmp_path):
+        """EDJ23 FIX 1: two triggers sharing one pattern BOTH fire on a matching event."""
         from audiagentic.foundation.event.event_bus import get_bus, reset_bus
 
         project_root = _setup_project(tmp_path)
-        # Only a disabled trigger — should NOT create any subscriptions
+        _write_triggers(
+            project_root,
+            [
+                _make_trigger(trigger_id="t-shared-a", event_pattern="planning.item.created"),
+                _make_trigger(trigger_id="t-shared-b", event_pattern="planning.item.created"),
+            ],
+        )
+        reset_bus()
+
+        job_counter = {"n": 0}
+
+        def build_side_effect(*args, **kwargs):
+            job_counter["n"] += 1
+            return _mock_build_factory(project_root, f"shared-job-{job_counter['n']:03d}")(
+                *args, **kwargs
+            )
+
+        with patch(
+            "audiagentic.components.agent_jobs.event_observer.build_job_from_event",
+            side_effect=build_side_effect,
+        ):
+            from audiagentic.components.agent_jobs.event_observer import EventObserver
+
+            obs = EventObserver()
+            obs.initialize(project_root)
+
+            get_bus().publish(
+                "planning.item.created",
+                {"test": True},
+                metadata={"correlation_id": "corr-shared-01"},
+            )
+
+        assert job_counter["n"] == 2, "both triggers on the shared pattern should fire"
+
+        audit_path = project_root / ".audiagentic" / "runtime" / "agent-jobs" / "trigger-audit.ndjson"
+        entries = [json.loads(l) for l in audit_path.read_text().strip().split("\n") if l.strip()]
+        fired_ids = sorted(e["trigger_id"] for e in entries if e.get("status") == "fired")
+        assert fired_ids == ["t-shared-a", "t-shared-b"]
+
+    def test_component_lifecycle_initializes_observer(self, tmp_path, monkeypatch):
+        """EDJ22: descriptor-loaded lifecycle observer activates configured triggers."""
+        import audiagentic.components.agent_jobs.event_observer as observer_module
+
+        project_root = _setup_project(tmp_path)
+        _write_triggers(project_root, [_make_trigger()])
+        instance = observer_module.EventObserver()
+        monkeypatch.setattr(observer_module, "_observer_instance", instance)
+
+        observer_module._initialize_for_component_lifecycle(project_root, {}, {})
+
+        assert instance._subscribed is True
+
+
+class TestEventObserverDisabledTrigger:
+    """EDJ23 FIX 2: disabled trigger is subscribed and suppressed with an audit record."""
+
+    def test_disabled_trigger_suppressed_with_audit(self, tmp_path):
+        from audiagentic.foundation.event.event_bus import get_bus, reset_bus
+
+        project_root = _setup_project(tmp_path)
         _write_triggers(project_root, [_make_trigger(trigger_id="t-disabled", enabled=False)])
         reset_bus()
 
-        from audiagentic.components.agent_jobs.event_observer import EventObserver
+        dispatched = []
 
-        obs = EventObserver()
-        before = get_bus().subscription_count()
-        obs.initialize(project_root)
+        with patch(
+            "audiagentic.components.agent_jobs.event_observer.build_job_from_event"
+        ) as mock_build:
+            from audiagentic.components.agent_jobs.event_observer import EventObserver
 
-        delta = get_bus().subscription_count() - before
-        # 0 trigger subscriptions + 4 gateway outcome subscriptions
-        assert delta == 4, f"expected 4 new subscriptions (0 triggers + 4 outcomes), got {delta}"
+            obs = EventObserver()
+            before = get_bus().subscription_count()
+            obs.initialize(project_root)
+
+            delta = get_bus().subscription_count() - before
+            # 1 trigger subscription (disabled included) + 4 gateway outcome subscriptions
+            assert delta == 5, f"expected 5 new subscriptions (1 trigger + 4 outcomes), got {delta}"
+
+            bus = get_bus()
+            original_publish = bus.publish
+
+            def track_dispatch(*args, **kwargs):
+                if args and args[0] == "agents.llm.gateway.requested":
+                    dispatched.append(args)
+                return original_publish(*args, **kwargs)
+
+            with patch.object(bus, "publish", side_effect=track_dispatch):
+                bus.publish(
+                    "planning.item.created",
+                    {"test": True},
+                    metadata={"correlation_id": "corr-suppressed-01"},
+                )
+
+            assert not mock_build.called, "suppressed trigger must not create a job"
+            assert not dispatched, "suppressed trigger must not publish a gateway request"
+
+        audit_path = project_root / ".audiagentic" / "runtime" / "agent-jobs" / "trigger-audit.ndjson"
+        assert audit_path.exists(), "suppression must be auditable"
+        entries = [json.loads(l) for l in audit_path.read_text().strip().split("\n") if l.strip()]
+        suppressed = [e for e in entries if e.get("status") == "suppressed"]
+        assert len(suppressed) == 1, f"expected exactly one suppressed entry, got {len(suppressed)}"
+        assert suppressed[0]["trigger_id"] == "t-disabled"
 
 
 class TestEventObserverCorrelationId:
@@ -349,6 +436,58 @@ class TestEventObserverAudit:
         assert fired[0].get("job_id") == "test-job-004"
 
 
+class TestEventObserverRenderErrorDeadLetter:
+    """RV246: Render errors propagate to dead-letter, no empty dispatch."""
+
+    def test_render_error_produces_dead_letter_and_no_dispatch(self, tmp_path):
+        import json as _json
+
+        from audiagentic.foundation.contracts.errors import AudiaGenticError
+        from audiagentic.foundation.event.event_bus import get_bus, reset_bus
+
+        project_root = _setup_project(tmp_path)
+        _write_triggers(project_root, [_make_trigger(trigger_id="t-render-fail")])
+        reset_bus()
+
+        bus = get_bus()
+        dispatched = []
+        original_publish = bus.publish
+
+        def track_dispatch(*args, **kwargs):
+            if args and args[0] == "agents.llm.gateway.requested":
+                dispatched.append(dict(kwargs))
+            return original_publish(*args, **kwargs)
+
+        with patch.object(bus, "publish", side_effect=track_dispatch):
+            with patch(
+                "audiagentic.components.agent_jobs.event_observer.build_job_from_event"
+            ) as mock_build:
+                with patch(
+                    "audiagentic.components.agent_jobs.event_observer.render_prompt_template",
+                    side_effect=AudiaGenticError("VAL-TPL-001", "template-rendering", "missing placeholder"),
+                ):
+                    mock_build.side_effect = _mock_build_factory(project_root, "test-job-err")
+
+                    from audiagentic.components.agent_jobs.event_observer import EventObserver
+
+                    obs = EventObserver()
+                    obs.initialize(project_root)
+
+                    bus.publish(
+                        "planning.item.created",
+                        {"test": True},
+                        metadata={"correlation_id": "corr-render-err"},
+                    )
+
+        assert not dispatched, "render error should prevent gateway dispatch"
+
+        dl_path = project_root / ".audiagentic" / "runtime" / "agent-jobs" / "dead-letter.ndjson"
+        assert dl_path.exists(), "dead-letter should exist after render error"
+        entries = [_json.loads(l) for l in dl_path.read_text().strip().split("\n") if l.strip()]
+        err_entries = [e for e in entries if e.get("error_code") == "VAL-TPL-001"]
+        assert len(err_entries) >= 1, f"expected dead-letter entry with VAL-TPL-001, got {len(err_entries)}"
+
+
 class TestEventObserverArchitectureBoundary:
     """EDJ04: event_observer must NOT import agents_gateway_api."""
 
@@ -373,8 +512,8 @@ class TestEventObserverDispatchTransitions:
     """EDJ04: job transitions created -> ready -> running before gateway dispatch."""
 
     def test_dispatch_transitions_ready_and_running(self, tmp_path):
-        from audiagentic.foundation.event.event_bus import get_bus, reset_bus
         from audiagentic.components.agent_jobs.jobs_store import write_job_record
+        from audiagentic.foundation.event.event_bus import get_bus, reset_bus
 
         project_root = _setup_project(tmp_path)
         _write_triggers(project_root, [_make_trigger(trigger_id="t-dispatch")])
@@ -422,8 +561,8 @@ class TestEventObserverDispatchTransitions:
         )
 
     def test_gateway_metadata_carrying_job_id(self, tmp_path):
-        from audiagentic.foundation.event.event_bus import get_bus, reset_bus
         from audiagentic.components.agent_jobs.jobs_store import write_job_record
+        from audiagentic.foundation.event.event_bus import get_bus, reset_bus
 
         project_root = _setup_project(tmp_path)
         _write_triggers(project_root, [_make_trigger()])
@@ -478,4 +617,467 @@ class TestEventObserverDispatchTransitions:
         assert captured_metadata is not None, "gateway dispatch should carry metadata"
         assert captured_metadata.get("job-id") == "test-job-meta-001", (
             f"gateway metadata must include job-id, got {captured_metadata}"
+        )
+
+
+class TestEventObserverMetadataImmutability:
+    """EDJ23 FIX 5: inbound bus metadata dict is never mutated by handlers."""
+
+    def test_trigger_handler_does_not_mutate_inbound_metadata(self, tmp_path):
+        from audiagentic.foundation.event.event_bus import get_bus, reset_bus
+
+        project_root = _setup_project(tmp_path)
+        _write_triggers(project_root, [_make_trigger()])
+        reset_bus()
+
+        with patch(
+            "audiagentic.components.agent_jobs.event_observer.build_job_from_event"
+        ) as mock_build:
+            mock_build.side_effect = _mock_build_factory(project_root, "test-job-immut")
+
+            from audiagentic.components.agent_jobs.event_observer import EventObserver
+
+            obs = EventObserver()
+            obs.initialize(project_root)
+
+            inbound = {"source-component": "planning"}
+            snapshot = dict(inbound)
+            get_bus().publish("planning.item.created", {"test": True}, metadata=inbound)
+
+        assert inbound == snapshot, (
+            f"handler mutated inbound metadata: {inbound} != {snapshot}"
+        )
+
+    def test_outcome_handler_does_not_mutate_inbound_metadata(self, tmp_path):
+        from audiagentic.components.agent_jobs.jobs_store import write_job_record
+        from audiagentic.foundation.event.event_bus import get_bus, reset_bus
+
+        project_root = _setup_project(tmp_path)
+        _write_triggers(project_root, [_make_trigger()])
+        reset_bus()
+
+        now = "2025-01-01T00:00:00Z"
+        write_job_record(project_root, {
+            "contract-version": "v1",
+            "job-id": "job-immut-out",
+            "project-id": "test-project",
+            "provider-id": "local-openai",
+            "workflow-profile": "standard",
+            "state": "running",
+            "packet-id": "adhoc",
+            "created-at": now,
+            "updated-at": now,
+            "artifacts": [],
+            "approvals": [],
+        })
+
+        from audiagentic.components.agent_jobs.event_observer import EventObserver
+
+        obs = EventObserver()
+        obs.initialize(project_root)
+
+        inbound = {"job-id": "job-immut-out"}
+        snapshot = dict(inbound)
+        get_bus().publish("agents.llm.completed", {"request-id": "req-1"}, metadata=inbound)
+
+        assert inbound == snapshot, (
+            f"outcome handler mutated inbound metadata: {inbound} != {snapshot}"
+        )
+
+
+class TestGatewayOutcomeNeverRaises:
+    """EDJ23 FIX 3/4: outcome handler never raises; pre-dispatch jobs stay unchanged."""
+
+    def _write_job(self, project_root, job_id: str, state: str) -> None:
+        from audiagentic.components.agent_jobs.jobs_store import write_job_record
+
+        now = "2025-01-01T00:00:00Z"
+        write_job_record(project_root, {
+            "contract-version": "v1",
+            "job-id": job_id,
+            "project-id": "test-project",
+            "provider-id": "local-openai",
+            "workflow-profile": "standard",
+            "state": state,
+            "packet-id": "adhoc",
+            "created-at": now,
+            "updated-at": now,
+            "artifacts": [],
+            "approvals": [],
+        })
+
+    def test_outcome_for_created_job_dead_letters_without_transition(self, tmp_path):
+        from audiagentic.components.agent_jobs.jobs_store import read_job_record
+        from audiagentic.foundation.event.event_bus import get_bus, reset_bus
+
+        project_root = _setup_project(tmp_path)
+        _write_triggers(project_root, [_make_trigger()])
+        reset_bus()
+
+        self._write_job(project_root, "job-pre-dispatch", "created")
+
+        from audiagentic.components.agent_jobs.event_observer import EventObserver
+
+        obs = EventObserver()
+        obs.initialize(project_root)
+
+        # Must not raise even though the transition is refused
+        get_bus().publish(
+            "agents.llm.completed",
+            {"request-id": "req-pre"},
+            metadata={"job-id": "job-pre-dispatch", "correlation_id": "corr-pre-01"},
+        )
+
+        record = read_job_record(project_root, "job-pre-dispatch")
+        assert record["state"] == "created", "pre-dispatch job state must remain unchanged"
+
+        dl_path = project_root / ".audiagentic" / "runtime" / "agent-jobs" / "dead-letter.ndjson"
+        assert dl_path.exists(), "refused propagation must be dead-lettered"
+        entries = [json.loads(l) for l in dl_path.read_text().strip().split("\n") if l.strip()]
+        assert any(e.get("error_code") == "CON-STATE-001" for e in entries)
+
+        timeline_path = (
+            project_root / ".audiagentic" / "runtime" / "jobs" / "job-pre-dispatch" / "timeline.ndjson"
+        )
+        assert timeline_path.exists(), "refused propagation must leave a timeline entry"
+        tl = [json.loads(l) for l in timeline_path.read_text().strip().split("\n") if l.strip()]
+        assert any(e.get("event") == "job.gateway-outcome-received" for e in tl)
+
+    def test_outcome_handler_refuses_created_to_failed_even_with_new_edges(self, tmp_path):
+        """created→failed is legal for dispatch failures only; outcome events must not use it."""
+        from audiagentic.components.agent_jobs.jobs_store import read_job_record
+        from audiagentic.foundation.event.event_bus import get_bus, reset_bus
+
+        project_root = _setup_project(tmp_path)
+        _write_triggers(project_root, [_make_trigger()])
+        reset_bus()
+
+        self._write_job(project_root, "job-pre-fail", "created")
+
+        from audiagentic.components.agent_jobs.event_observer import EventObserver
+
+        obs = EventObserver()
+        obs.initialize(project_root)
+
+        get_bus().publish(
+            "agents.llm.failed",
+            {"request-id": "req-pre-f"},
+            metadata={"job-id": "job-pre-fail"},
+        )
+
+        record = read_job_record(project_root, "job-pre-fail")
+        assert record["state"] == "created", (
+            "outcome handler must not drive created→failed even though the edge exists"
+        )
+
+    def test_audiagentic_error_in_outcome_handler_is_swallowed(self, tmp_path):
+        """A raise would bypass dead-lettering; AudiaGenticError must be handled too."""
+        from audiagentic.foundation.contracts.errors import AudiaGenticError
+        from audiagentic.foundation.event.event_bus import get_bus, reset_bus
+
+        project_root = _setup_project(tmp_path)
+        _write_triggers(project_root, [_make_trigger()])
+        reset_bus()
+
+        self._write_job(project_root, "job-agerr", "running")
+
+        from audiagentic.components.agent_jobs.event_observer import EventObserver
+
+        obs = EventObserver()
+        obs.initialize(project_root)
+
+        with patch(
+            "audiagentic.components.agent_jobs.event_observer.transition_and_persist",
+            side_effect=AudiaGenticError("CON-STATE-001", "agent-jobs", "forced"),
+        ):
+            get_bus().publish(
+                "agents.llm.completed",
+                {"request-id": "req-agerr"},
+                metadata={"job-id": "job-agerr"},
+            )
+
+        dl_path = project_root / ".audiagentic" / "runtime" / "agent-jobs" / "dead-letter.ndjson"
+        assert dl_path.exists()
+        entries = [json.loads(l) for l in dl_path.read_text().strip().split("\n") if l.strip()]
+        assert any(e.get("error_code") == "CON-STATE-001" for e in entries)
+
+
+class TestDispatchFailureJobLifecycle:
+    """EDJ23 FIX 4: dispatch failures transition the job to failed, never strand it."""
+
+    def test_render_failure_leaves_job_failed(self, tmp_path):
+        from audiagentic.components.agent_jobs.jobs_store import read_job_record
+        from audiagentic.foundation.contracts.errors import AudiaGenticError
+        from audiagentic.foundation.event.event_bus import get_bus, reset_bus
+
+        project_root = _setup_project(tmp_path)
+        _write_triggers(project_root, [_make_trigger(trigger_id="t-render-lifecycle")])
+        reset_bus()
+
+        with patch(
+            "audiagentic.components.agent_jobs.event_observer.build_job_from_event"
+        ) as mock_build:
+            mock_build.side_effect = _mock_build_factory(project_root, "job-render-fail")
+            with patch(
+                "audiagentic.components.agent_jobs.event_observer.render_prompt_template",
+                side_effect=AudiaGenticError("VAL-TPL-001", "template-rendering", "boom"),
+            ):
+                from audiagentic.components.agent_jobs.event_observer import EventObserver
+
+                obs = EventObserver()
+                obs.initialize(project_root)
+
+                get_bus().publish(
+                    "planning.item.created",
+                    {"test": True},
+                    metadata={"correlation_id": "corr-lifecycle-01"},
+                )
+
+        record = read_job_record(project_root, "job-render-fail")
+        assert record["state"] == "failed", (
+            f"render failure must fail the job, got {record['state']}"
+        )
+
+        timeline_path = (
+            project_root / ".audiagentic" / "runtime" / "jobs" / "job-render-fail" / "timeline.ndjson"
+        )
+        tl = [json.loads(l) for l in timeline_path.read_text().strip().split("\n") if l.strip()]
+        failed_entries = [e for e in tl if e.get("event") == "job.failed"]
+        assert failed_entries, "job.failed timeline entry expected"
+        attrs = failed_entries[-1].get("attributes") or {}
+        assert attrs.get("error-code") == "VAL-TPL-001"
+        assert "boom" not in json.dumps(tl), "timeline must carry only the error code"
+
+    def test_publish_failure_leaves_job_failed(self, tmp_path):
+        from audiagentic.components.agent_jobs.jobs_store import read_job_record
+        from audiagentic.foundation.event.event_bus import get_bus, reset_bus
+
+        project_root = _setup_project(tmp_path)
+        _write_triggers(project_root, [_make_trigger(trigger_id="t-publish-lifecycle")])
+        reset_bus()
+
+        bus = get_bus()
+        original_publish = bus.publish
+
+        def failing_gateway_publish(*args, **kwargs):
+            if args and args[0] == "agents.llm.gateway.requested":
+                raise RuntimeError("gateway publish failure")
+            return original_publish(*args, **kwargs)
+
+        with patch(
+            "audiagentic.components.agent_jobs.event_observer.build_job_from_event"
+        ) as mock_build:
+            mock_build.side_effect = _mock_build_factory(project_root, "job-publish-fail")
+
+            from audiagentic.components.agent_jobs.event_observer import EventObserver
+
+            obs = EventObserver()
+            obs.initialize(project_root)
+
+            with patch.object(bus, "publish", side_effect=failing_gateway_publish):
+                bus.publish(
+                    "planning.item.created",
+                    {"test": True},
+                    metadata={"correlation_id": "corr-lifecycle-02"},
+                )
+
+        record = read_job_record(project_root, "job-publish-fail")
+        assert record["state"] == "failed", (
+            f"publish failure must fail the job (not leave it running), got {record['state']}"
+        )
+
+
+class TestDeadLetterRedaction:
+    """EDJ24: dead-letter content is structurally summarized — no raw secrets on disk."""
+
+    def test_malformed_payload_secrets_never_reach_dead_letter_file(self, tmp_path):
+        from audiagentic.foundation.event.event_bus import get_bus, reset_bus
+
+        project_root = _setup_project(tmp_path)
+        _write_triggers(project_root, [_make_trigger(trigger_id="t-secret")])
+        reset_bus()
+
+        secret_payload = {
+            "prompt-body": "SECRET_PROMPT",
+            "api_key": "sk-123",
+            "nested": {"token": "tkn-nested-1"},
+        }
+        secret_metadata = {
+            "correlation_id": "corr-secret-01",
+            "session_token": "tok-meta-1",
+            "subject": {"kind": "job", "id": "j-1"},
+        }
+
+        with patch(
+            "audiagentic.components.agent_jobs.event_observer.build_job_from_event",
+            side_effect=Exception("dispatch failure"),
+        ):
+            from audiagentic.components.agent_jobs.event_observer import EventObserver
+
+            obs = EventObserver()
+            obs.initialize(project_root)
+
+            get_bus().publish("planning.item.created", secret_payload, metadata=secret_metadata)
+
+        dl_path = project_root / ".audiagentic" / "runtime" / "agent-jobs" / "dead-letter.ndjson"
+        assert dl_path.exists(), "dead-letter entry expected"
+        raw = dl_path.read_text(encoding="utf-8")
+        for secret in ("SECRET_PROMPT", "sk-123", "tkn-nested-1", "tok-meta-1"):
+            assert secret not in raw, f"secret {secret!r} leaked into dead-letter file"
+
+        entries = [json.loads(l) for l in raw.strip().split("\n") if l.strip()]
+        entry = entries[-1]
+        # metadata is allowlist-only: unexpected keys dropped, join keys kept
+        assert "session_token" not in entry["metadata"]
+        assert entry["metadata"]["correlation_id"] == "corr-secret-01"
+        assert entry["metadata"]["subject"] == {"kind": "job", "id": "j-1"}
+
+    def test_outcome_handler_dead_letter_redacted(self, tmp_path):
+        from audiagentic.components.agent_jobs.jobs_store import write_job_record
+        from audiagentic.foundation.event.event_bus import get_bus, reset_bus
+
+        project_root = _setup_project(tmp_path)
+        _write_triggers(project_root, [_make_trigger()])
+        reset_bus()
+
+        now = "2025-01-01T00:00:00Z"
+        write_job_record(project_root, {
+            "contract-version": "v1",
+            "job-id": "job-secret-out",
+            "project-id": "test-project",
+            "provider-id": "local-openai",
+            "workflow-profile": "standard",
+            "state": "created",
+            "packet-id": "adhoc",
+            "created-at": now,
+            "updated-at": now,
+            "artifacts": [],
+            "approvals": [],
+        })
+
+        from audiagentic.components.agent_jobs.event_observer import EventObserver
+
+        obs = EventObserver()
+        obs.initialize(project_root)
+
+        # created-state job => refused propagation => dead-letter path exercised
+        get_bus().publish(
+            "agents.llm.completed",
+            {"request-id": "req-s", "output": "RAW_MODEL_OUTPUT"},
+            metadata={"job-id": "job-secret-out"},
+        )
+
+        dl_path = project_root / ".audiagentic" / "runtime" / "agent-jobs" / "dead-letter.ndjson"
+        assert dl_path.exists()
+        raw = dl_path.read_text(encoding="utf-8")
+        assert "RAW_MODEL_OUTPUT" not in raw, "model output leaked into dead-letter file"
+
+
+class TestFilterSuppression:
+    """EDJ15: filter conditions gate dispatch with an auditable suppression."""
+
+    def _trigger_with_filter(self, filter_spec: dict) -> dict:
+        trigger = _make_trigger(trigger_id="t-filter")
+        trigger["filter"] = filter_spec
+        return trigger
+
+    def test_matching_filter_fires(self, tmp_path):
+        from audiagentic.foundation.event.event_bus import get_bus, reset_bus
+
+        project_root = _setup_project(tmp_path)
+        _write_triggers(project_root, [self._trigger_with_filter({"payload.priority": ["P0", "P1"]})])
+        reset_bus()
+
+        with patch(
+            "audiagentic.components.agent_jobs.event_observer.build_job_from_event"
+        ) as mock_build:
+            mock_build.side_effect = _mock_build_factory(project_root, "job-filter-hit")
+
+            from audiagentic.components.agent_jobs.event_observer import EventObserver
+
+            obs = EventObserver()
+            obs.initialize(project_root)
+
+            get_bus().publish(
+                "planning.item.created",
+                {"priority": "P1"},
+                metadata={"correlation_id": "corr-f1"},
+            )
+
+        assert mock_build.called, "matching filter must fire the trigger"
+
+        audit_path = project_root / ".audiagentic" / "runtime" / "agent-jobs" / "trigger-audit.ndjson"
+        entries = [json.loads(l) for l in audit_path.read_text().strip().split("\n") if l.strip()]
+        assert any(e.get("status") == "fired" for e in entries)
+
+    def test_non_matching_filter_suppressed_with_reason(self, tmp_path):
+        from audiagentic.foundation.event.event_bus import get_bus, reset_bus
+
+        project_root = _setup_project(tmp_path)
+        _write_triggers(project_root, [self._trigger_with_filter({"payload.priority": ["P0", "P1"]})])
+        reset_bus()
+
+        dispatched = []
+
+        with patch(
+            "audiagentic.components.agent_jobs.event_observer.build_job_from_event"
+        ) as mock_build:
+            from audiagentic.components.agent_jobs.event_observer import EventObserver
+
+            obs = EventObserver()
+            obs.initialize(project_root)
+
+            bus = get_bus()
+            original_publish = bus.publish
+
+            def track(*args, **kwargs):
+                if args and args[0] == "agents.llm.gateway.requested":
+                    dispatched.append(args)
+                return original_publish(*args, **kwargs)
+
+            with patch.object(bus, "publish", side_effect=track):
+                bus.publish(
+                    "planning.item.created",
+                    {"priority": "P3"},
+                    metadata={"correlation_id": "corr-f2"},
+                )
+
+            assert not mock_build.called, "non-matching filter must not create a job"
+            assert not dispatched, "non-matching filter must not publish a gateway request"
+
+        audit_path = project_root / ".audiagentic" / "runtime" / "agent-jobs" / "trigger-audit.ndjson"
+        entries = [json.loads(l) for l in audit_path.read_text().strip().split("\n") if l.strip()]
+        suppressed = [e for e in entries if e.get("status") == "suppressed"]
+        assert len(suppressed) == 1
+        assert suppressed[0].get("reason") == "filter"
+        assert suppressed[0]["trigger_id"] == "t-filter"
+        assert suppressed[0]["correlation_id"] == "corr-f2"
+
+    def test_missing_payload_path_suppressed_without_error(self, tmp_path):
+        from audiagentic.foundation.event.event_bus import get_bus, reset_bus
+
+        project_root = _setup_project(tmp_path)
+        _write_triggers(project_root, [self._trigger_with_filter({"payload.priority": "P1"})])
+        reset_bus()
+
+        with patch(
+            "audiagentic.components.agent_jobs.event_observer.build_job_from_event"
+        ) as mock_build:
+            from audiagentic.components.agent_jobs.event_observer import EventObserver
+
+            obs = EventObserver()
+            obs.initialize(project_root)
+
+            # payload lacks 'priority' entirely — must suppress, never raise
+            get_bus().publish(
+                "planning.item.created",
+                {"other": 1},
+                metadata={"correlation_id": "corr-f3"},
+            )
+
+        assert not mock_build.called
+        audit_path = project_root / ".audiagentic" / "runtime" / "agent-jobs" / "trigger-audit.ndjson"
+        entries = [json.loads(l) for l in audit_path.read_text().strip().split("\n") if l.strip()]
+        assert any(
+            e.get("status") == "suppressed" and e.get("reason") == "filter" for e in entries
         )
