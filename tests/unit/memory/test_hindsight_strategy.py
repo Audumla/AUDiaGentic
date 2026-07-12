@@ -299,6 +299,182 @@ class TestHM10Validation:
         assert entry.headers.get("Authorization") == "Bearer sk-test"
 
 
+class TestPlatformGateFallback:
+    """RS11: resolve_hindsight_strategy falls back to cross-platform row when platform-specific
+    match is absent or has source_status != "verified"."""
+
+    def test_fallback_to_guidance_when_unregistered_provider(self, monkeypatch):
+        """Installer-kind row on unsupported platform with no descriptor -> GUIDANCE_ONLY."""
+        from audiagentic.components.memory.hindsight import strategies
+
+        def fake_resolve(provider_id, project_root=None):
+            return HindsightRecipeRow(
+                provider_id=provider_id,
+                display_name="Test Fallback",
+                integration_type="hooks",
+                recipe_kind=ProviderRecipeKind.HOOKS,
+                source_status="verified",
+                platform_constraints=["linux"],
+                audia_action="call_official_installer",
+            )
+
+        monkeypatch.setattr(strategies, "_platform_supported", lambda row: False)
+        original = strategies.resolve_hindsight_strategy
+        strategies.resolve_hindsight_strategy = fake_resolve
+        try:
+            row = strategies._external_fallback_row(
+                fake_resolve("unregistered-provider"), "unregistered-provider", "test-reason"
+            )
+        finally:
+            strategies.resolve_hindsight_strategy = original
+
+        assert row is not None
+        assert row.recipe_kind == ProviderRecipeKind.GUIDANCE_ONLY
+        assert row.integration_type == "rules-only"
+
+    def test_fallback_to_mcp_config_when_descriptor_has_remote(self, monkeypatch):
+        """Installer-kind row on unsupported platform with descriptor.mcp_config.remote -> MCP_CONFIG."""
+        from audiagentic.components.memory.hindsight import strategies
+
+        mock_descriptor = type(
+            "MockDescriptor", (), {"mcp_config": type("McpConfig", (), {"remote": True})()}
+        )()
+
+        monkeypatch.setattr(strategies, "get_descriptor", lambda pid: mock_descriptor)
+
+        row = HindsightRecipeRow(
+            provider_id="mock-remote-provider",
+            display_name="Mock Remote Provider",
+            integration_type="hooks",
+            recipe_kind=ProviderRecipeKind.HOOKS,
+            source_status="verified",
+            platform_constraints=["linux"],
+            audia_action="call_official_installer",
+        )
+        fallback = strategies._external_fallback_row(
+            row, "mock-remote-provider", "platform-gated; external fallback"
+        )
+        assert fallback is not None
+        assert fallback.recipe_kind == ProviderRecipeKind.MCP_CONFIG
+        assert fallback.integration_type == "fallback-mcp"
+
+
+class TestBuildRecipeDispatchesByKind:
+    """RS11: build_hindsight_recipe dispatches to the correct factory for all 6 _RECIPE_FACTORIES kinds."""
+
+    def test_dispatch_hooks(self):
+        from audiagentic.components.memory.hindsight.recipe_spec import _AssembledBase
+
+        row = HindsightRecipeRow(
+            provider_id="test-hooks",
+            display_name="Test Hooks",
+            integration_type="hooks",
+            recipe_kind=ProviderRecipeKind.HOOKS,
+            source_status="verified",
+            audia_action="call_official_installer",
+            install_steps=[{"type": "shell", "id": "step1", "command": ["echo", "test"]}],
+        )
+        recipe = build_hindsight_recipe(row, HindsightBackendConfig(base_url="http://t"), "test-hooks")
+        assert isinstance(recipe, _AssembledBase)
+
+    def test_dispatch_wrapper_cli(self):
+        from audiagentic.components.memory.hindsight.recipe_spec import _AssembledBase
+
+        row = HindsightRecipeRow(
+            provider_id="test-wrapper",
+            display_name="Test Wrapper",
+            integration_type="wrapper-cli",
+            recipe_kind=ProviderRecipeKind.WRAPPER_CLI,
+            source_status="verified",
+            audia_action="call_official_installer",
+            install_steps=[{"type": "shell", "id": "step1", "command": ["echo", "test"]}],
+        )
+        recipe = build_hindsight_recipe(row, HindsightBackendConfig(base_url="http://t"), "test-wrapper")
+        assert isinstance(recipe, _AssembledBase)
+
+    def test_dispatch_plugin_config_fallback(self):
+        from audiagentic.components.memory.hindsight.recipe_spec import _AssembledBase
+
+        row = HindsightRecipeRow(
+            provider_id="test-plugin",
+            display_name="Test Plugin",
+            integration_type="plugin-config",
+            recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG,
+            source_status="verified",
+            audia_action="manage_config_writes",
+        )
+        recipe = build_hindsight_recipe(
+            row, HindsightBackendConfig(base_url="http://t"), "test-plugin"
+        )
+        assert isinstance(recipe, _AssembledBase)
+
+    def test_dispatch_mcp_config_fallback(self):
+        from audiagentic.components.memory.hindsight.recipe_spec import _AssembledBase
+
+        row = HindsightRecipeRow(
+            provider_id="test-mcp",
+            display_name="Test MCP",
+            integration_type="mcp",
+            recipe_kind=ProviderRecipeKind.MCP_CONFIG,
+            source_status="verified",
+            audia_action="manage_config_writes",
+        )
+        recipe = build_hindsight_recipe(
+            row, HindsightBackendConfig(base_url="http://t"), "test-mcp"
+        )
+        assert isinstance(recipe, _AssembledBase)
+
+    def test_dispatch_hybrid_fallback(self):
+        from audiagentic.components.memory.hindsight.recipe_spec import _AssembledBase
+
+        row = HindsightRecipeRow(
+            provider_id="test-hybrid",
+            display_name="Test Hybrid",
+            integration_type="mcp+rules",
+            recipe_kind=ProviderRecipeKind.HYBRID,
+            source_status="verified",
+            audia_action="call_official_installer",
+        )
+        recipe = build_hindsight_recipe(
+            row, HindsightBackendConfig(base_url="http://t"), "test-hybrid"
+        )
+        assert isinstance(recipe, _AssembledBase)
+
+    def test_dispatch_guidance_only(self):
+        from audiagentic.components.memory.hindsight.recipe_spec import _AssembledBase
+
+        row = HindsightRecipeRow(
+            provider_id="test-guidance",
+            display_name="Test Guidance",
+            integration_type="rules-only",
+            recipe_kind=ProviderRecipeKind.GUIDANCE_ONLY,
+            audia_action="action_needed",
+        )
+        recipe = build_hindsight_recipe(
+            row, HindsightBackendConfig(base_url="http://t"), "test-guidance"
+        )
+        assert isinstance(recipe, _AssembledBase)
+
+
+class TestUnknownKindFallback:
+    """RS11: Unknown kind falls back to guidance with non-empty action_needed."""
+
+    def test_unknown_kind_falls_back_to_guidance(self):
+        row = HindsightRecipeRow(
+            provider_id="test-unknown",
+            display_name="Test Unknown",
+            integration_type="custom",
+            recipe_kind=ProviderRecipeKind.COMMAND_INSTALLER,
+            audia_action="action_needed",
+            notes="manual guidance text",
+        )
+        recipe = build_hindsight_recipe(
+            row, HindsightBackendConfig(base_url="http://t"), "test-unknown"
+        )
+        result = recipe.probe({})
+        assert result.state == RecipeState.ABSENT
+
+
 class TestHM11Validation:
     """Deletion-proof tests for HM11 lifecycle cleanup."""
 
