@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Event Trigger Config",
+  "description": "Project-scoped event-trigger configuration for agent jobs. Component-only schema (EDJ19).",
+  "type": "object",
+  "oneOf": [
+    {
+      "title": "inline prompt-template",
+      "type": "object",
+      "required": ["contract-version", "trigger-id", "kind", "prompt-template"],
+      "properties": {
+        "contract-version": {"const": "v1"},
+        "trigger-id": {"type": "string"},
+        "kind": {"enum": ["event"]},
+        "enabled": {"type": "boolean"},
+        "event-pattern": {"type": "string"},
+        "agent-profile-id": {"type": "string"},
+        "workflow-profile": {
+          "type": "string",
+          "enum": ["lite", "standard", "strict"]
+        },
+        "target": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["packet", "job", "artifact", "adhoc"]
+            },
+            "packet-id": {"type": "string"},
+            "job-id": {"type": "string"},
+            "artifact-path": {"type": "string"},
+            "adhoc-id": {"type": "string"}
+          },
+          "required": ["kind"],
+          "additionalProperties": false
+        },
+        "prompt-template": {"type": "string"},
+        "metadata-propagation": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "title": "file-based prompt-template-file",
+      "type": "object",
+      "required": ["contract-version", "trigger-id", "kind", "prompt-template-file"],
+      "properties": {
+        "contract-version": {"const": "v1"},
+        "trigger-id": {"type": "string"},
+        "kind": {"enum": ["event"]},
+        "enabled": {"type": "boolean"},
+        "event-pattern": {"type": "string"},
+        "agent-profile-id": {"type": "string"},
+        "workflow-profile": {
+          "type": "string",
+          "enum": ["lite", "standard", "strict"]
+        },
+        "target": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["packet", "job", "artifact", "adhoc"]
+            },
+            "packet-id": {"type": "string"},
+            "job-id": {"type": "string"},
+            "artifact-path": {"type": "string"},
+            "adhoc-id": {"type": "string"}
+          },
+          "required": ["kind"],
+          "additionalProperties": false
+        },
+        "prompt-template-file": {"type": "string"},
+        "metadata-propagation": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}
