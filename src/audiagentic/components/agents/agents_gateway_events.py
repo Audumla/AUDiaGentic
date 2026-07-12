@@ -32,6 +32,10 @@ _REGISTERED = False
 # trigger real provider dispatch by publishing to what looked like a neutral
 # "an LLM request happened" marker (RV32 finding).
 _REQUESTED_TOPIC = "agents.llm.gateway.requested"
+# EDJ08: reverse propagation — agent-jobs publishes this when a job with an
+# owning gateway request is cancelled. Topic literal is owned here; other
+# components publish the string, never import a constant.
+_CANCEL_REQUESTED_TOPIC = "agents.llm.gateway.cancel-requested"
 
 
 def _payload_get(payload: dict[str, Any], *keys: str) -> Any:
@@ -110,12 +114,52 @@ def _on_llm_requested(event_type: str, payload: dict[str, Any], metadata: dict[s
         _publish_rejected("unexpected error while submitting the gateway request (see server logs)", metadata)
 
 
+def _on_cancel_requested(event_type: str, payload: dict[str, Any], metadata: dict[str, Any]) -> None:
+    """Cancel the gateway request named in an agents.llm.gateway.cancel-requested event.
+
+    Owns only gateway request cancellation; the publisher (agent-jobs) owns
+    the originating control event's durable audit — so this handler logs and
+    returns on failure rather than dead-lettering. Never raises.
+    """
+    project_root_raw = _payload_get(payload, "project-root", "project_root")
+    if not project_root_raw or not isinstance(project_root_raw, str):
+        logger.warning(
+            "gateway cancel event missing project-root; ignoring", extra={"event_type": event_type}
+        )
+        return
+
+    request_id = _payload_get(payload, "request-id", "request_id")
+    if not request_id or not isinstance(request_id, str):
+        logger.warning(
+            "gateway cancel event missing request-id; ignoring", extra={"event_type": event_type}
+        )
+        return
+
+    from audiagentic.components.agents import agents_gateway_api as gateway
+
+    try:
+        gateway.cancel_llm_request(Path(project_root_raw), request_id)
+    except AudiaGenticError:
+        logger.warning(
+            "gateway cancel event failed",
+            extra={"event_type": event_type, "request_id": request_id},
+            exc_info=True,
+        )
+    except Exception:  # noqa: BLE001 — external boundary; handler never raises
+        logger.error(
+            "gateway cancel event raised unexpectedly",
+            extra={"event_type": event_type, "request_id": request_id},
+            exc_info=True,
+        )
+
+
 def register() -> None:
-    """Subscribe to agents.llm.gateway.requested. Idempotent."""
+    """Subscribe to the gateway request/cancel topics. Idempotent."""
     global _REGISTERED
     if _REGISTERED:
         return
     get_bus().subscribe(_REQUESTED_TOPIC, _on_llm_requested)
+    get_bus().subscribe(_CANCEL_REQUESTED_TOPIC, _on_cancel_requested)
     _REGISTERED = True
 
 

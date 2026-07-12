@@ -118,3 +118,7 @@ The reconciliation is idempotent and leaves already-terminal records untouched.
 
 - **Not project-scoped**: the queue manager singleton is process-wide, not keyed by
   project-root. Fine in practice (one project per process), but worth knowing.
+- **Same-process only**: blocking wait/cancel and reconciliation assume one gateway
+  process owns the store. The shared-service readiness analysis and v1 decision
+  (events are the sole cross-instance contract; multi-instance work deferred) are
+  recorded in [docs/design/gateway-shared-service.md](../../../../docs/design/gateway-shared-service.md).
