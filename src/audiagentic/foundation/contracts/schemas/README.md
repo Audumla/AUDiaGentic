@@ -1,7 +1,14 @@
 # foundation/contracts/schemas/
 
 ## Purpose
-JSON Schema definitions for all AUDiaGentic configuration and data contracts. These are the single source of truth for schema validation across the entire system.
+JSON Schema definitions for all AUDiaGentic configuration and data contracts used by the `schema_registry` for canonical validation lookups.
+
+## Ownership
+
+**This directory is a MIRROR, not the authoritative source for component-owned schemas.**
+- **Component-owned:** A schema under `components/<component>/contracts/` is authoritative. This copy is a read-only mirror that must be byte-identical. See ARCHITECTURE_STANDARDS §13.
+- **Foundation-native:** Schemas without a component owner (e.g., `error-envelope.schema.json`) live here exclusively and ARE the authoritative source.
+- **Component-only:** Schemas consumed only by their owning component (e.g., `event-trigger.schema.json`) do NOT belong here. They live under `components/<component>/contracts/` and are not registered in schema_registry.
 
 ## Ownership
 - All `.json` schema files used by the system

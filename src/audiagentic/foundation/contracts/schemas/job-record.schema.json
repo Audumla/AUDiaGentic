@@ -90,7 +90,8 @@
           "type": "string",
           "enum": [
             "cli",
-            "vscode"
+            "vscode",
+            "event"
           ]
         },
         "session-id": {
@@ -188,6 +189,26 @@
     "planning-wp-id": {
       "type": "string",
       "description": "Planning work-package associated with this job (e.g. wp-0001). Optional; set when a WP-level dispatch is used."
+    },
+    "event-source": {
+      "type": "object",
+      "properties": {
+        "event-type": {"type": "string"},
+        "trigger-id": {"type": "string"},
+        "correlation-id": {"type": ["string", "null"]},
+        "subject": {
+          "type": ["object", "null"],
+          "properties": {
+            "kind": {"type": "string"},
+            "id": {"type": "string"}
+          },
+          "additionalProperties": false
+        },
+        "source-component": {"type": "string"},
+        "occurred-at": {"type": "string"}
+      },
+      "required": ["event-type", "trigger-id"],
+      "additionalProperties": false
     }
   }
 }
