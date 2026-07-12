@@ -16,7 +16,7 @@ Layering (SL11/SL12/SL13):
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any
 
@@ -315,29 +315,9 @@ class ProviderRecipeRegistry:
             result = op(ctx)
             owned.extend(result.artifacts_owned)
             if not result.success:
-                return ProviderRecipeResult(
-                    success=result.success,
-                    state=result.state,
-                    artifacts_owned=owned,
-                    status=result.status,
-                    error=result.error,
-                    details=dict(result.details),
-                    source_url=result.source_url,
-                    source_date=result.source_date,
-                    action_needed=result.action_needed,
-                )
+                return replace(result, artifacts_owned=owned)
         verified = recipe.verify(ctx)
-        return ProviderRecipeResult(
-            success=verified.success,
-            state=verified.state,
-            artifacts_owned=[*owned, *verified.artifacts_owned],
-            status=verified.status,
-            error=verified.error,
-            details=dict(verified.details),
-            source_url=verified.source_url,
-            source_date=verified.source_date,
-            action_needed=verified.action_needed,
-        )
+        return replace(verified, artifacts_owned=[*owned, *verified.artifacts_owned])
 
     def uninstall(
         self,
