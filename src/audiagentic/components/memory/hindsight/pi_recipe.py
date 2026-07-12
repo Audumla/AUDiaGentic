@@ -118,6 +118,9 @@ class PiHindsightRecipe(_RowRecipe):
             artifacts=[_PI_SOURCE],
         ))
 
+    # RS18/RS06: intentional one-off — config content includes literal brace
+    # placeholders (e.g. "{project}") that would be misinterpreted by
+    # WriteFileStep's variable substitution; bare write_text is required here.
     def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
         self._config_path.parent.mkdir(parents=True, exist_ok=True)
         data = _load_json(self._config_path)
@@ -160,6 +163,9 @@ class PiHindsightRecipe(_RowRecipe):
             ))
         return self.prune(context)
 
+    # RS18/RS06: intentional one-off — surgical JSON key removal from a shared config
+    # file; not expressible via WriteFileStep because only the "host.pi" key must be
+    # removed while preserving other top-level settings.
     def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
         data = _load_json(self._config_path)
         host = data.get("host")
