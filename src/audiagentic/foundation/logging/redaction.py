@@ -6,7 +6,9 @@ component machinery.
 """
 from __future__ import annotations
 
+import json
 import re
+from collections.abc import Mapping
 from typing import Any
 
 DEFAULT_REDACT_PATTERNS: tuple[re.Pattern[Any], ...] = (
@@ -56,3 +58,97 @@ def truncate_output(text: str, max_len: int = _MAX_OUTPUT_LEN) -> str:
     if len(text) <= max_len:
         return text
     return f"{text[:max_len]}\n... [truncated, {len(text)} chars total]"
+
+
+# ---------------------------------------------------------------------------
+# Structural summarization (EDJ24) — the sole sensitive-key matcher lives here.
+# ---------------------------------------------------------------------------
+
+SENSITIVE_KEY_PATTERN: re.Pattern[str] = re.compile(
+    r"(?i)prompt|key|token|secret|password|authorization|output|auth"
+)
+
+_REDACTED = "[REDACTED]"
+_TRUNCATED = "[TRUNCATED]"
+_MAX_STRUCT_DEPTH = 8
+_MAX_STRUCT_ENTRIES = 20
+_MAX_LEAF_STR_LEN = 80
+
+# Metadata keys safe to persist verbatim (values are still recursively redacted).
+_SAFE_METADATA_KEYS: tuple[str, ...] = (
+    "correlation_id",
+    "correlation-id",
+    "subject",
+    "job-id",
+    "trigger-id",
+    "source-component",
+)
+
+
+def is_sensitive_key(key: Any) -> bool:
+    """Return True when a mapping key looks secret-bearing (single shared matcher)."""
+    return bool(SENSITIVE_KEY_PATTERN.search(str(key)))
+
+
+def _summarize_value(value: Any, depth: int) -> Any:
+    if depth > _MAX_STRUCT_DEPTH:
+        return _TRUNCATED
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, str):
+        return redact_text(value)[:_MAX_LEAF_STR_LEN]
+    if isinstance(value, (bytes, bytearray)):
+        return f"[{len(value)} bytes]"
+    if isinstance(value, Mapping):
+        items = list(value.items())
+        summarized: dict[str, Any] = {}
+        for k, v in items[:_MAX_STRUCT_ENTRIES]:
+            key_str = str(k)
+            summarized[key_str] = (
+                _REDACTED if is_sensitive_key(key_str) else _summarize_value(v, depth + 1)
+            )
+        if len(items) > _MAX_STRUCT_ENTRIES:
+            summarized[_TRUNCATED] = f"{len(items) - _MAX_STRUCT_ENTRIES} entries omitted"
+        return summarized
+    if isinstance(value, (list, tuple, set, frozenset)):
+        items = list(value)
+        summarized_list = [_summarize_value(v, depth + 1) for v in items[:_MAX_STRUCT_ENTRIES]]
+        if len(items) > _MAX_STRUCT_ENTRIES:
+            summarized_list.append(_TRUNCATED)
+        return summarized_list
+    return redact_text(str(value))[:_MAX_LEAF_STR_LEN]
+
+
+def summarize_structure(value: Any, *, max_len: int = 500) -> str:
+    """Return a deterministic, redacted, bounded JSON summary of *value*.
+
+    Never raises. Sensitive keys (see :data:`SENSITIVE_KEY_PATTERN`) have their
+    values replaced with ``[REDACTED]``; other strings pass through
+    :func:`redact_text` and are truncated. Traversal is bounded in depth and
+    entry count; the result never exceeds *max_len* characters.
+    """
+    try:
+        text = json.dumps(_summarize_value(value, 0), sort_keys=True, default=str)
+    except Exception:  # noqa: BLE001 — summarizer must never raise
+        return _REDACTED
+    if len(text) <= max_len:
+        return text
+    return text[: max(0, max_len - len(_TRUNCATED))] + _TRUNCATED
+
+
+def safe_metadata(metadata: Any) -> dict[str, Any]:
+    """Return only allowlisted metadata keys with recursively redacted values.
+
+    Never raises; non-mapping input yields ``{}``. The allowlist is fixed here —
+    consumers must not define local variants.
+    """
+    if not isinstance(metadata, Mapping):
+        return {}
+    try:
+        return {
+            key: _summarize_value(metadata[key], 0)
+            for key in _SAFE_METADATA_KEYS
+            if key in metadata
+        }
+    except Exception:  # noqa: BLE001 — must never raise
+        return {}

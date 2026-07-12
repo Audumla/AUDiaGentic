@@ -3,6 +3,31 @@
   "title": "Event Trigger Config",
   "description": "Project-scoped event-trigger configuration for agent jobs. Component-only schema (EDJ19).",
   "type": "object",
+  "$defs": {
+    "filter": {
+      "title": "payload/metadata filter conditions (EDJ15)",
+      "description": "Dotted paths resolved against {payload, metadata}; scalar values match by equality, lists by membership; all clauses AND. No expressions, comparisons, or boolean composition.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {"type": ["string", "integer", "boolean"]},
+          {
+            "type": "array",
+            "minItems": 1,
+            "oneOf": [
+              {"items": {"type": "string"}},
+              {"items": {"type": "integer"}},
+              {"items": {"type": "boolean"}}
+            ]
+          }
+        ]
+      }
+    }
+  },
   "oneOf": [
     {
       "title": "inline prompt-template",
@@ -35,6 +60,7 @@
           "additionalProperties": false
         },
         "prompt-template": {"type": "string"},
+        "filter": {"$ref": "#/$defs/filter"},
         "metadata-propagation": {
           "type": "object"
         }
@@ -72,6 +98,7 @@
           "additionalProperties": false
         },
         "prompt-template-file": {"type": "string"},
+        "filter": {"$ref": "#/$defs/filter"},
         "metadata-propagation": {
           "type": "object"
         }
