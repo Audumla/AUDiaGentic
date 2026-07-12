@@ -33,8 +33,7 @@ class JobRecord:
     launch_target: dict[str, Any] | None = None
     review_policy: dict[str, Any] | None = None
     review_bundle_id: str | None = None
-
-
+    event_source: dict[str, Any] | None = None
 
 
 def build_job_record(
@@ -57,6 +56,7 @@ def build_job_record(
     launch_target: dict[str, Any] | None = None,
     review_policy: dict[str, Any] | None = None,
     review_bundle_id: str | None = None,
+    event_source: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     timestamp = now_iso_z()
     payload = {
@@ -88,6 +88,8 @@ def build_job_record(
         payload["review-policy"] = review_policy
     if review_bundle_id is not None:
         payload["review-bundle-id"] = review_bundle_id
+    if event_source is not None:
+        payload["event-source"] = event_source
     issues = validate_job_record(payload)
     if issues:
         raise AudiaGenticError(
@@ -128,4 +130,5 @@ def coerce_job_record(payload: dict[str, Any]) -> JobRecord:
         launch_target=payload.get("launch-target"),
         review_policy=payload.get("review-policy"),
         review_bundle_id=payload.get("review-bundle-id"),
+        event_source=payload.get("event-source"),
     )

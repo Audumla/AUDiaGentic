@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agent_jobs import jobs_store as store
+from audiagentic.components.agent_jobs.paths import job_timeline_path
 from audiagentic.components.agent_jobs.prompt_syntax import (
     load_prompt_syntax,
     load_review_tag,
@@ -20,6 +21,8 @@ from audiagentic.components.providers.services.provider_config import (
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_json, load_yaml_file
+from audiagentic.foundation.logging.context import get_correlation_id, new_correlation_id
+from audiagentic.foundation.observability import record_timeline_event
 from audiagentic.foundation.time import now_iso_z
 
 
@@ -296,3 +299,180 @@ def launch_prompt_request(
         return {"status": "resumed", "job-id": job["job-id"], "job": job}
     job = _build_job_from_request(project_root, request, now_fn=now_fn)
     return {"status": "created", "job-id": job["job-id"], "job": job}
+
+
+def build_job_from_event(
+    project_root: Path,
+    *,
+    event_type: str,
+    trigger_config: dict[str, Any],
+    envelope: dict[str, Any],
+    prompt_body: str,
+    job_id: str | None = None,
+) -> dict[str, Any]:
+    """Create a durable job record from an event trigger.
+
+    Populates event-source provenance from the event envelope, sets
+    launch-source.surface to 'event', writes the job record and launch
+    request, and records the first timeline entry (job.created).
+
+    Parameters
+    ----------
+    project_root:
+        Root of the AUDiaGentic project.
+    event_type:
+        Type of the triggering event (e.g. 'planning.item.created').
+    trigger_config:
+        Validated trigger configuration dict (from TriggerConfig or raw).
+    envelope:
+        EventEnvelope payload as a dict. Provides occurred_at, source_kind,
+        source_id, and metadata fields.
+    prompt_body:
+        Rendered prompt body to associate with this job.
+    job_id:
+        Explicit job id; auto-generated if not provided.
+
+    Returns
+    -------
+    dict containing the persisted job record.
+    """
+    timestamp = now_iso_z()
+
+    # Resolve correlation_id from envelope metadata or generate one
+    metadata = envelope.get("metadata", {}) or {}
+    correlation_id = (
+        metadata.get("correlation-id")
+        or metadata.get("correlation_id")
+        or get_correlation_id()
+        or new_correlation_id()
+    )
+
+    # Extract subject from envelope metadata
+    subject = metadata.get("subject")
+    if isinstance(subject, dict):
+        event_subject = {
+            "kind": subject.get("kind", ""),
+            "id": subject.get("id", ""),
+        }
+    elif subject is None:
+        event_subject = None
+    else:
+        event_subject = {"kind": "", "id": str(subject)}
+
+    # Build event-source block from envelope (additive provenance, no raw payload)
+    event_source = {
+        "event-type": event_type,
+        "trigger-id": trigger_config.get("trigger-id", ""),
+        "correlation-id": correlation_id,
+        "subject": event_subject,
+        "source-component": envelope.get("source-kind", ""),
+        "occurred-at": envelope.get("occurred-at"),
+    }
+
+    # Resolve provider/model selection
+    provider_config = load_provider_config(project_root).get("providers", {})
+    project_cfg = load_project_config(project_root)
+    provider_id, resolved_model, resolved_alias = _resolve_agent_provider_model(
+        project_root,
+        {
+            "agent-profile-id": trigger_config.get("agent-profile-id"),
+            "source": {},
+        },
+    )
+    selection = resolve_model_selection(
+        provider_id=provider_id,
+        provider_config=provider_config.get(provider_id, {}),
+        job_request={
+            "model-id": resolved_model,
+            "model-alias": resolved_alias,
+        },
+        catalog=None,
+    )
+
+    # Resolve workflow profile
+    workflow_profile = trigger_config.get("workflow-profile") or "standard"
+
+    # Auto-generate job id if not provided
+    if not job_id:
+        date_prefix = datetime.now(timezone.utc).strftime("%Y%m%d")
+        root = project_root / ".audiagentic" / "runtime" / "jobs"
+        root.mkdir(parents=True, exist_ok=True)
+        existing = 0
+        prefix = f"job_{date_prefix}_"
+        for path in root.iterdir():
+            if path.is_dir() and path.name.startswith(prefix):
+                suffix = path.name[len(prefix):]
+                if suffix.isdigit():
+                    existing = max(existing, int(suffix))
+        job_id = f"job_{date_prefix}_{existing + 1:04d}"
+
+    # Build trigger-specific target
+    target = trigger_config.get("target") or {"kind": "adhoc"}
+    packet_id = (
+        target.get("packet-id")
+        or target.get("job-id")
+        or target.get("artifact-id")
+        or target.get("artifact-path")
+        or "adhoc"
+    )
+
+    # Build launch-source with surface='event'
+    launch_source = {
+        "prompt-id": envelope.get("event-id", ""),
+        "surface": "event",
+        "session-id": None,
+    }
+
+    # Build and persist the job record
+    payload = build_job_record(
+        job_id=job_id,
+        packet_id=str(packet_id),
+        project_id=project_cfg.get("project-id", "my-project"),
+        provider_id=provider_id,
+        workflow_profile=workflow_profile,
+        state="created",
+        created_at=timestamp,
+        updated_at=timestamp,
+        model_id=selection.get("model-id"),
+        model_alias=selection.get("model-alias"),
+        default_model=selection.get("default-model"),
+        launch_source=launch_source,
+        launch_target=target,
+        event_source=event_source,
+    )
+
+    store.write_job_record(project_root, payload)
+
+    # Write minimal launch request for the event-triggered job
+    launch_request = {
+        "prompt-id": envelope.get("event-id", ""),
+        "prompt-body": prompt_body,
+        "source": {
+            "surface": "event",
+            "provider-id": provider_id,
+        },
+        "target": target,
+        "workflow-profile": workflow_profile,
+        "tag": "event-triggered",
+    }
+    atomic_write_json(prompt_launch_path(project_root, job_id), launch_request)
+
+    # Record the first timeline entry via EDJ07 shared helper
+    record_timeline_event(
+        job_timeline_path(project_root, job_id),
+        component="agent-jobs",
+        resource_kind="job",
+        resource_id=job_id,
+        event="job.created",
+        state="created",
+        attributes={
+            "correlation_id": correlation_id,
+            "trigger_id": event_source["trigger-id"],
+            "event_type": event_type,
+            "surface": "event",
+        },
+        timestamp=timestamp,
+        correlation_id=correlation_id,
+    )
+
+    return payload

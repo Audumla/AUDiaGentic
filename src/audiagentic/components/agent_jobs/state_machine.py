@@ -12,6 +12,10 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agent_jobs import jobs_store as store
+from audiagentic.components.agent_jobs.events import (
+    record_job_timeline_event,
+    state_to_event_name,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.workflow import (
@@ -65,11 +69,15 @@ def transition_job(
     new_state: str,
     *,
     now_fn: Callable[[], str] | None = None,
+    correlation_id: str | None = None,
+    trigger_id: str | None = None,
 ) -> dict[str, Any]:
     ensure_transition(job_record["state"], new_state)
     updated = dict(job_record)
     updated["state"] = new_state
     updated["updated-at"] = (now_fn or now_iso_z)()
+    if trigger_id is not None:
+        updated["trigger-id"] = trigger_id
     return updated
 
 
@@ -79,8 +87,26 @@ def transition_and_persist(
     new_state: str,
     *,
     now_fn: Callable[[], str] | None = None,
+    correlation_id: str | None = None,
+    trigger_id: str | None = None,
 ) -> dict[str, Any]:
     record = store.read_job_record(project_root, job_id)
-    updated = transition_job(record, new_state, now_fn=now_fn)
+    updated = transition_job(record, new_state, now_fn=now_fn, correlation_id=correlation_id, trigger_id=trigger_id)
     store.write_job_record(project_root, updated)
+    event_name = state_to_event_name(new_state)
+    if event_name is not None:
+        attrs: dict[str, Any] = {"previous-state": record["state"]}
+        if trigger_id is not None:
+            attrs["trigger-id"] = trigger_id
+        request_id = record.get("request-id") or record.get("packet-id")
+        if request_id is not None:
+            attrs["request-id"] = request_id
+        record_job_timeline_event(
+            project_root,
+            job_id,
+            event_name,
+            state=new_state,
+            attributes=attrs,
+            correlation_id=correlation_id,
+        )
     return updated
