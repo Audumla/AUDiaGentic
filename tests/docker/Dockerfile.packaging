@@ -15,6 +15,13 @@ ENV PYTHONUNBUFFERED=1
 ENV AUDIAGENTIC_STARTUP_STATUS=0
 ENV AUDIAGENTIC_AUTO_UPDATE_ENABLED=false
 ENV AUDIAGENTIC_DOCKER_TESTS=1
+# Packaging smoke must never discover or mutate the container image's default
+# root home.  Keeping every launcher-owned path below /tmp also makes the
+# containment assertion in run_packaging.sh meaningful.
+ENV HOME=/tmp/audiagentic-home
+ENV AUDIAGENTIC_HOME=/tmp/audiagentic-home/.audiagentic
+ENV XDG_CONFIG_HOME=/tmp/audiagentic-home/.config
+ENV XDG_CACHE_HOME=/tmp/audiagentic-home/.cache
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 python3-pip python3-venv python3-dev \
