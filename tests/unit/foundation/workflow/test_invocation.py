@@ -53,8 +53,8 @@ def test_shell_step_plans_command() -> None:
 
 def test_sequence_step_stops_on_failed_step() -> None:
     result = SequenceStep(
-        "seq",
-        (
+        id="seq",
+        steps=(
             ShellStep("missing", ("definitely-not-a-real-command",)),
             ShellStep("later", ("also-not-run",)),
         ),

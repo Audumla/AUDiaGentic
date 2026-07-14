@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from audiagentic.components.providers.descriptors.base import (
     AgentFile,
-    McpConfigSpec,
     ProviderDescriptor,
 )
 from audiagentic.components.providers.descriptors.feature_mapping import (
@@ -13,14 +12,15 @@ from audiagentic.components.providers.descriptors.feature_mapping import (
 )
 from audiagentic.foundation.features import registry as feature_registry
 from audiagentic.foundation.features.base import FEATURE_SCOPE_IMPLEMENTATION
+from audiagentic.foundation.toolchains.managed_config import ManagedConfigSpec
 
 
 def _provider(provider_id: str = "x", **kwargs) -> ProviderDescriptor:
     return ProviderDescriptor(provider_id=provider_id, display_name=provider_id, **kwargs)
 
 
-def _fake_mcp_spec() -> McpConfigSpec:
-    return McpConfigSpec(
+def _fake_mcp_spec() -> ManagedConfigSpec:
+    return ManagedConfigSpec(
         config_path="x.json",
         reader=lambda p: {},
         writer=lambda p, e: None,

@@ -20,12 +20,12 @@ from audiagentic.foundation.components.dependencies import (
     detect_missing,
     load_dependency_probes,
 )
+from audiagentic.foundation.steps import SelectStep, SequenceStep
 from audiagentic.foundation.toolchains.detect import (
     detect_pkg_manager,
     platform_key,
     privilege_prefix,
 )
-from audiagentic.foundation.workflow.invocation.steps import SelectStep, SequenceStep
 
 pytestmark = [pytest.mark.mutates_host, pytest.mark.slow]
 

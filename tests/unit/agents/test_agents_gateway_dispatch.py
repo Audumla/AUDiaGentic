@@ -74,6 +74,38 @@ def test_dispatch_success_builds_expected_packet_ctx(tmp_path: Path, monkeypatch
     assert captured["agent-profile-id"] == "default"
     assert captured["provider-id"] == "local-openai"
     assert captured["prompt-body"] == "do the thing"
+    assert captured["working-root"] == str(tmp_path.resolve())
+    assert captured["stream-controls"] == {}
+
+
+def test_dispatch_uses_profile_stream_controls_and_ignores_metadata_working_root(
+    tmp_path: Path, monkeypatch
+):
+    _make_profile(
+        tmp_path,
+        "default",
+        "local-openai",
+        **{"stream-controls": {"enabled": True, "tee-console": False}},
+    )
+    record = _record(tmp_path, "default")
+    record["metadata"] = {"working-root": "C:/untrusted"}
+    store.write_record(tmp_path, record)
+    captured = {}
+
+    def fake_execute_provider(*, provider_id, packet_ctx, provider_cfg):
+        captured.update(packet_ctx)
+        return {"provider-id": provider_id, "model": "gpt-4o", "output": "ok"}
+
+    monkeypatch.setattr(
+        "audiagentic.components.providers.services.execution.execute_provider",
+        fake_execute_provider,
+    )
+
+    result = dispatch.dispatch_request(tmp_path, record)
+
+    assert result["state"] == "completed"
+    assert captured["working-root"] == str(tmp_path.resolve())
+    assert captured["stream-controls"] == {"enabled": True, "tee-console": False}
 
 
 def test_dispatch_retries_transient_then_succeeds(tmp_path: Path, monkeypatch):
