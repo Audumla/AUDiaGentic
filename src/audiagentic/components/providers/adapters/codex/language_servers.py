@@ -13,6 +13,7 @@ import tomllib
 
 from audiagentic.components.coding_lsp.language_servers import LanguageServerEntry
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.io import atomic_write_text
 
 _BARE_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -64,10 +65,9 @@ def _load_toml(path: Path) -> dict[str, Any]:
 
 
 def _save_toml(path: Path, data: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = []
     _write_table(lines, (), data)
-    path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    atomic_write_text(path, "\n".join(lines).rstrip() + "\n")
 
 
 def _write_table(lines: list[str], path: tuple[str, ...], data: dict[str, Any]) -> None:

@@ -14,6 +14,7 @@ from typing import Any
 
 from audiagentic.components.providers.descriptors.base import HostCapability
 from audiagentic.components.providers.services.host_adapter import get_host_adapter
+from audiagentic.foundation.io import atomic_write_json, load_json_file
 
 logger = logging.getLogger(__name__)
 
@@ -92,13 +93,7 @@ def build_recommendations(
 def _load_extensions_json(project_root: Path, *, host_id: str = "vscode") -> dict[str, Any]:
     """Load the host's existing extensions manifest if present."""
     ext_path = get_host_adapter(host_id).extensions_manifest_path(project_root)
-    if not ext_path.exists():
-        return {}
-    try:
-        return json.loads(ext_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        logger.warning("Failed to read extensions.json", exc_info=True)
-        return {}
+    return load_json_file(ext_path)
 
 
 def write_extensions_json(
@@ -117,15 +112,11 @@ def write_extensions_json(
 
     data = build_recommendations(extensions, project_root=project_root)
 
-    # Standard VS Code format
     vs_code_format = {
         "recommendations": data["recommendations"],
     }
 
-    ext_path.write_text(
-        json.dumps(vs_code_format, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    atomic_write_json(ext_path, vs_code_format)
 
     logger.info("Wrote extensions.json with %d recommendations", len(data["recommendations"]))
     return ext_path
@@ -156,19 +147,10 @@ def prune_extensions_json(
         return  # No change
 
     # Update the file
-    data = {
-        "recommendations": [m["extension_id"] for m in filtered],
-        "managed": filtered,
-        _UNMANAGED_KEY: existing.get(_UNMANAGED_KEY, []),
-    }
-
     vs_code_format = {
-        "recommendations": data["recommendations"],
+        "recommendations": [m["extension_id"] for m in filtered],
     }
 
-    ext_path.write_text(
-        json.dumps(vs_code_format, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    atomic_write_json(ext_path, vs_code_format)
 
     logger.info("Pruned extensions.json to %d active recommendations", len(filtered))

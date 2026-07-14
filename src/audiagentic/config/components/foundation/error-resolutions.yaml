@@ -56,3 +56,8 @@ VAL-SEC-001: "The secret reference is invalid or uses an unsupported scheme. Use
 CON-SEC-001: "The referenced environment variable is unset. Set the named variable in the process environment and retry."
 VAL-MCFG-001: "The managed configuration contract or path is invalid. Check the declared path and ownership mapping."
 CON-MCFG-001: "The managed configuration ownership registry is unreadable or invalid. Restore a valid registry before applying changes."
+VAL-CAP-001: "An unknown core field was found in the capability declaration. Remove it — only the approved schema fields are accepted. See CAPABILITY_OPERATION_SCHEMA.md §5."
+VAL-CAP-002: "A kind, support state, mode, or other enum value is not recognized. Use a value from the closed taxonomy set. See CAPABILITY_OPERATION_SCHEMA.md §2 and §3."
+VAL-CAP-003: "The schema version is not supported. Only capability-catalog@1 is accepted — no migration layer exists. Update your declaration to the current schema or file a review for a new version (MA19)."
+VAL-CAP-004: "A capability claims support: supported but lacks an approved evidence record. Add an evidence ref with review state 'approved', or lower the support state. Quarantined/pending evidence cannot promote."
+VAL-CAP-005: "Two capabilities in the same provider share a capability-id. Each capability must have a unique id within its provider. See CAPABILITY_OPERATION_SCHEMA.md §8 for the canonical id list."

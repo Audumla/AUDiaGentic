@@ -54,6 +54,19 @@ _eob_error = make_error_factory("CON", "EOB", "event-observer-subscription")
 
 _TRIGGER_AUDIT_PATH = Path(".audiagentic") / "runtime" / "agent-jobs" / "trigger-audit.ndjson"
 
+# Cross-component mirror constants for agents-owned gateway topics.
+# BU02: agent_jobs must not import agents modules (enforced by test_gateway_boundary.py).
+# The registry-equality test in tests/unit/jobs/test_gateway_topic_mirrors.py asserts
+# these mirror strings match the registered owner topics.
+GW_TOPIC_REQUESTED = "agents.llm.gateway.requested"  # owner: agents/agents_gateway_events
+GW_TOPIC_CANCEL_REQUESTED = "agents.llm.gateway.cancel-requested"  # owner: agents/agents_gateway_events
+GW_OUTCOME_TOPICS = (
+    "agents.llm.completed",
+    "agents.llm.failed",
+    "agents.llm.rejected",
+    "agents.llm.cancelled",
+)
+
 
 class EventObserver:
     """Core event observer that subscribes to configured trigger patterns."""
@@ -130,13 +143,7 @@ class EventObserver:
                 )
 
         # -- EDJ05: subscribe to gateway outcome events ---------------------------
-        _GW_OUTCOME_TOPICS = (
-            "agents.llm.completed",
-            "agents.llm.failed",
-            "agents.llm.rejected",
-            "agents.llm.cancelled",
-        )
-        for topic in _GW_OUTCOME_TOPICS:
+        for topic in GW_OUTCOME_TOPICS:
             try:
                 handle = bus.subscribe(topic, self._handle_gateway_outcome)
                 self._handles.append(handle)
@@ -405,7 +412,7 @@ class EventObserver:
         gateway_metadata["subject"] = {"kind": "job", "id": job_id}
 
         get_bus().publish(
-            "agents.llm.gateway.requested",
+            GW_TOPIC_REQUESTED,
             {
                 "project-root": str(root),
                 "prompt-body": prompt_body,

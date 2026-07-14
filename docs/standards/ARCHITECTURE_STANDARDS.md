@@ -77,6 +77,21 @@ registry never grants an exemption from layer, ownership, vocabulary, or mutatio
 - Use `mcp_server(__name__)` from `foundation.mcp.component_server`; never `FastMCP` directly.
 - `main()` uses `run_mcp_server(server_factory, label)`.
 
+## 6.1 MCP Metadata Standard
+
+All MCP-facing text metadata — tool descriptions, server instructions, parameter docs — lives in component config YAML under `mcp-servers` / `tool-descriptions`. Zero hardcoded descriptions in Python code.
+
+**Schema:**
+- `instructions`: str — server-level instruction block agents see on connect
+- `tool-descriptions`: mapping of tool-name → value; value is a plain string (description only) or a dict with known standard keys: `description` (str), `parameters` (dict of param-name → description). Additional keys are provider/component-owned extension; foundation passes them through unchanged.
+
+**Construction rules:**
+- Use `mcp_server(__name__, instructions=server_instructions(decl))`; never hardcode instruction text.
+- Tools register via `@mcp.tool(description=tool_description(decl, "name"))` or rely on `_AutoDescFastMCP` auto-inject when no explicit description is given.
+- Parameter annotations (`@param(name, description)`) may be added to tool decorators; the foundation does not validate them against YAML — they are caller-owned enrichment.
+
+**No exceptions:** every `@mcp.tool()` decorator must resolve its description from YAML or have none (not a hardcoded string literal).
+
 ## 7. Virtual Assets
 
 - Generated assets: `(path_pattern, generator_fn)` registry; components register via lifecycle hooks.
@@ -244,3 +259,141 @@ substitution and exists for surgical structured-config edits.
 Inventory and current remediation ownership live in
 `docs/reference/MANAGED_MUTATION_AUDIT.md`. Architecture tests keep its scanner and
 table in exact agreement.
+
+## 17. Event Topic Registry
+
+Every published bus event topic is registered before first publish, the same way
+error codes are registered. The registry is data + a loader + a conformance test;
+the bus does NOT gate publish on registration at runtime (no runtime coupling or
+performance cost). Enforcement is test-time.
+
+### 17.1 Naming
+
+Dotted lowercase `<domain>.<resource>.<action>` with past-tense actions for facts
+(created/completed/failed) and request nouns for commands (requested/cancel-requested).
+Domain = owning component's public domain (planning, agents.llm, lifecycle,
+interaction, ledger, agent-jobs, release). Do NOT add a parallel `EVT-XXX-001`
+numeric code — the dotted topic is the canonical identifier; topics have no freeform
+message part that would require a numeric code.
+
+### 17.2 Ownership
+
+Exactly one component owns each topic and is its sole publisher. Documented consumers
+may be many. Cross-component communication uses the owner's published topic, never
+a private literal. A topic declared by two different owners is a `CON-*` defect.
+
+### 17.3 Registration
+
+Every published topic MUST be declared in the owning component's
+`config/components/<component>/events.yaml` before first publish. An unregistered
+published topic is an architectural defect, caught by the conformance test — the same
+rule as error codes: register first, use later.
+
+### 17.4 Code Hygiene
+
+Publishers and subscribers reference a module-level constant in the owning component's
+events module, never inline string literals (test-only literals exempt). For indirect
+publisher helpers, callers must pass exported constants; dynamic topic expressions
+(f-strings, variable interpolation) are violations.
+
+### 17.5 Payload Contract
+
+Each registration declares `payload-required` keys and `payload-optional` keys;
+the full JSON schema per topic is OPTIONAL and added only when a consumer needs
+strict validation (anti-overengineering guard).
+
+### 17.6 Registry File Shape
+
+File: `src/audiagentic/config/components/<component>/events.yaml`
+
+```yaml
+agents.llm.completed:
+  description: "Gateway request completed successfully"
+  payload-required: ["request-id", "agent-profile-id", "state"]
+  payload-optional: ["provider-id", "model-id", "attempt_count"]
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+```
+
+Schema validating the registry file itself:
+`foundation/contracts/schemas/event-topics.schema.json`.
+
+### 17.7 Loader Contract
+
+Use `get_component_config_dirs()` in the same precedence order as component/
+error-resolution loading. Registry identity is file location
+(`config/components/<owner>/events.yaml`). Reject the same topic declared by two
+different owners with a canonical `CON-*` error; same-owner later-overlay replacement
+follows shared last-wins precedence.
+
+### 17.8 Bus Topics vs Timeline Event Names
+
+State-machine timeline names (e.g. `JOB_TIMELINE_EVENTS`, or strings such as
+"job.state-propagated", "queue.cancelled-before-dispatch") are NOT bus topics and
+stay outside this registry — they are local observability artifacts, not
+inter-component communication.
+
+### 17.9 Conformance Detector
+
+The AST conformance test scans `src/**/*.py` for `get_bus().publish(...)` /
+`bus.publish(...)` first-argument string literals and module constants assigned
+dotted-topic-shaped strings that flow into publish; it asserts every publish-site
+topic is registered in some events.yaml and matches the naming grammar.
+Pattern-subscriptions (wildcards like `planning.**` from trigger config) are
+consumer-side data, not declarations — excluded from ownership check but validated
+against the naming grammar. Detector explicitly rejects f-strings and dynamic
+expressions in production code; indirect publisher helpers require callers to pass
+exported constants.
+
+## 18. Provider Platform Component Layer Rule
+
+`providers` is a **platform component**: domain-specific (external tool integration) but
+positioned **below** requester components in the dependency order, alongside foundation.
+Dependency arrows only point downward — from requester toward platform layers, never
+upward or sideways between requesters and providers internals.
+
+### 18.1 Sanctioned Import Edge
+
+Requester components (memory, coding-lsp, runtime bootstrap, release, …) may import **ONLY**
+one designated module: `audiagentic.components.providers.providers_api`.
+This is the single sanctioned edge. Never import adapters, services internals,
+serializers, capability config, matrices, or handlers.
+
+Violation = architectural defect. The allowed imports are enforced by machine-checked
+architecture guard tests (CC36+);
+a string key that conceals a `components.providers.adapters.*` or `services.mcp` call
+from a requester component is a §12 anti-pattern ("Callback lookup for direct import").
+
+### 18.2 Providers Imports Zero Requester Domains
+
+Providers must not import requester domains; handlers are requester-blind.
+Requests contain desired data and opaque ownership/correlation metadata only — never
+requester identity, domain vocabulary, or callback targets.
+Reverse imports (providers → memory, coding-lsp, planning) are forbidden regardless of
+registry indirection. A registry entry that causes providers to call into a requester
+domain is a coupling violation.
+
+### 18.3 Automation Authority Is Explicit Registration Only
+
+Runtime automation authority = explicit composition-root registration **ONLY**.
+Descriptive capability catalog and provider knowledge config are soft data — documentation,
+planning, MA19 views, status guidance. They can never enable a handler.
+Adding or changing descriptive capability data in YAML must not require runtime code change
+to dispatch an operation; it requires an explicit `registry.register(recipe)` call at
+composition time for the operation to execute.
+
+### 18.4 Foundation Placement Discriminator
+
+A type belongs in foundation **only if** both are true:
+(a) its definition contains no provider-domain concepts, and
+(b) a non-provider-managing component consumes it.
+
+Capability request/result fails this test — `capability_id` is a provider-domain concept,
+so capability types live in providers. The agent execution port passes the test —
+invocation-in, frozen-event-out, cancel-signal contains no provider vocabulary and is
+consumed by agents; its protocol lives in foundation/execution.
+
+**Decision:** 2026-07-14 — RV400–RV405 approved. Boundary was correct; location was wrong —
+visible narrow requester→providers dependency beats a laundered foundation edge.
+Foundation owns no capability concept; `foundation/capability_catalog/` is deleted.

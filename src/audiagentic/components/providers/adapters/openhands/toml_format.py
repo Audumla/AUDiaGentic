@@ -7,6 +7,7 @@ from typing import Any
 import tomllib
 
 from audiagentic.foundation.contracts.errors import make_error
+from audiagentic.foundation.io import atomic_write_text
 
 try:
     import tomli_w
@@ -75,7 +76,7 @@ def write_mcp_toml(path: Path, entries: dict[str, McpServerEntry]) -> None:
                 cfg["env"] = dict(entry.env)
         servers[name] = cfg
     existing["mcp_servers"] = servers
-    path.write_text(tomli_w.dumps(existing), encoding="utf-8")
+    atomic_write_text(path, tomli_w.dumps(existing))
 
 
 def remove_mcp_toml(path: Path, name: str) -> bool:
@@ -99,5 +100,5 @@ def remove_mcp_toml(path: Path, name: str) -> bool:
         return False
     del servers[name]
     data["mcp_servers"] = servers
-    path.write_text(tomli_w.dumps(data), encoding="utf-8")
+    atomic_write_text(path, tomli_w.dumps(data))
     return True

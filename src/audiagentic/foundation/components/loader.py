@@ -326,6 +326,14 @@ def register_all_components(config_dirs: list[Path] | None = None) -> list[Compo
 
     load_all_error_resolutions(targets)
 
+    # Initialize I18n translation catalogs after error resolutions
+    try:
+        from audiagentic.foundation.i18n import initialize as _i18n_init
+
+        _i18n_init(targets)
+    except ImportError:
+        logger.warning("I18n module not available — translation lookups will return keys")
+
     _registration_cache[cache_key] = descriptors
     return descriptors
 

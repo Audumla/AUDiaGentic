@@ -46,10 +46,17 @@ _REMOVED_IDS = (
 # ── synthetic contributions stay slim ─────────────────────────────────────────
 
 def test_summary_contributions_are_overview_and_canonical_only() -> None:
-    ids = {c.contribution_id for c in build_summary_contributions()}
-    assert "agent-jobs/overview" in ids
-    assert "agent-jobs/canonical-rule" in ids
-    assert "agent-jobs/tag-shortcuts" not in ids
+    # Synthetic summary builder now emits ONLY the dynamic canonical-rule block;
+    # overview moved to a config-driven contribution in agent-jobs.yaml (CC28).
+    summary_ids = {c.contribution_id for c in build_summary_contributions()}
+    assert "agent-jobs/canonical-rule" in summary_ids
+    assert "agent-jobs/overview" not in summary_ids
+
+    # Full surface set (config + synthetic) still carries both overview and canonical-rule.
+    all_ids = {c.contribution_id for c in load_surface_contributions()}
+    assert "agent-jobs/overview" in all_ids
+    assert "agent-jobs/canonical-rule" in all_ids
+    assert "agent-jobs/tag-shortcuts" not in all_ids
 
 
 def test_canonical_rule_does_not_duplicate_prompt_tag_doctrine() -> None:

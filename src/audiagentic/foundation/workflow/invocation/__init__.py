@@ -6,11 +6,11 @@ from audiagentic.foundation.steps import (
     SequenceStep,
     ShellStep,
     StepResult,
+    WorkflowAnswer,
 )
 
 from .from_spec import build_step_from_spec
 from .models import (
-    WorkflowAnswer,
     WorkflowInvocationResult,
     WorkflowProgress,
     WorkflowQuestion,

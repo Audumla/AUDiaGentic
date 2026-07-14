@@ -1,0 +1,67 @@
+# Planning item events
+planning.item.created:
+  description: "Plan item created"
+  payload-required: ["item-id"]
+  payload-optional: []
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+planning.item.updated:
+  description: "Plan item updated (content or metadata)"
+  payload-required: ["item-id"]
+  payload-optional: []
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+planning.item.state.changed:
+  description: "Plan item transitioned to a new state"
+  payload-required: ["item-id", "state"]
+  payload-optional: []
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+planning.item.deleted:
+  description: "Plan item permanently deleted"
+  payload-required: ["item-id"]
+  payload-optional: []
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+# Planning review events
+planning.review.created:
+  description: "Plan review created"
+  payload-required: ["review-id"]
+  payload-optional: []
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+planning.review.updated:
+  description: "Plan review updated (content or metadata)"
+  payload-required: ["review-id"]
+  payload-optional: []
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+planning.review.state.changed:
+  description: "Plan review transitioned to a new state"
+  payload-required: ["review-id", "state"]
+  payload-optional: []
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+planning.review.deleted:
+  description: "Plan review permanently deleted"
+  payload-required: ["review-id"]
+  payload-optional: []
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+# Ledger event — published by agent-ledger, consumed by planning
