@@ -28,11 +28,9 @@ from audiagentic.components.providers.services.recipes import (
     RecipeResult,
     RecipeState,
 )
-from audiagentic.foundation.toolchains.provision_steps import (
+from audiagentic.foundation.steps import (
     ConfigSetStep,
-    ProvisionStep,
-    steps_from_defs,
-    substitute_params,
+    build_step,
 )
 
 logger = logging.getLogger(__name__)
@@ -147,7 +145,16 @@ def _parameterize_command(
     backend: HindsightBackendConfig,
 ) -> str:
     """Replace {URL}/{MCP_URL}/{TOKEN}/{KEY}/{ID} placeholders with backend values."""
-    return substitute_params(command, _hindsight_params(backend))
+    return _lenient_substitute(command, _hindsight_params(backend))
+
+
+def _lenient_substitute(text: str, params: dict[str, str]) -> str:
+    """Lenient substitution: only replaces {KEY} for keys present in params."""
+    if not text:
+        return text
+    for key, value in params.items():
+        text = text.replace(f"{{{key}}}", value)
+    return text
 
 
 def _hindsight_params(backend: HindsightBackendConfig) -> dict[str, str]:
@@ -206,21 +213,23 @@ class _McpConfigAdapter(_RowRecipe):
             self._entry,
         )
 
-    def provision_steps(self) -> list[ProvisionStep]:
+    def provision_steps(self) -> list[Any]:
         params = _hindsight_params(self._backend)
-        steps: list[ProvisionStep] = []
+        steps: list[Any] = []
         # Row-level install/uninstall steps from matrix (e.g. pip install + init)
         if self._row.install_steps:
-            steps.extend(steps_from_defs(
-                self._row.install_steps, params,
-                recipe_id=f"hindsight-{self.provider_id}",
-            ))
+            for defn in self._row.install_steps:
+                step_data = dict(defn)
+                step_data.setdefault("id", f"hindsight-{self.provider_id}-step")
+                step_data["recipe_id"] = f"hindsight-{self.provider_id}"
+                steps.append(build_step(step_data))
         # Row-level configure steps (e.g. config-set for plugin arrays)
         if self._row.configure_steps:
-            steps.extend(steps_from_defs(
-                self._row.configure_steps, params,
-                recipe_id=f"hindsight-{self.provider_id}",
-            ))
+            for defn in self._row.configure_steps:
+                step_data = dict(defn)
+                step_data.setdefault("id", f"hindsight-{self.provider_id}-step")
+                step_data["recipe_id"] = f"hindsight-{self.provider_id}"
+                steps.append(build_step(step_data))
         # MCP config step rebuilt from data (introspection-only; keeps hybrid test green)
         steps.append(ConfigSetStep(
             id=f"config-entry-{self._server_name}",

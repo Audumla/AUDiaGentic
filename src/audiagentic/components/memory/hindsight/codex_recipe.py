@@ -204,9 +204,7 @@ class CodexHindsightRecipe(_RowRecipe):
         ))
 
     def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        from audiagentic.foundation.toolchains.provision_steps.write_file import (
-            WriteFileStep,
-        )
+        from audiagentic.foundation.steps import WriteFileStep
 
         config: dict[str, Any] = {
             "hindsightApiUrl": self._backend.base_url,

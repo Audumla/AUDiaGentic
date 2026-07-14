@@ -25,15 +25,22 @@ from audiagentic.components.providers.services.recipes import (
     RecipeState,
 )
 from audiagentic.foundation.refs import resolve_ref
-from audiagentic.foundation.toolchains.provision_steps import (
-    ProvisionStep,
-    steps_from_defs,
-)
+from audiagentic.foundation.steps import build_step
 from audiagentic.foundation.toolchains.recipe_contract import run_steps
 
 
 def _should_run_plugin_command(row: HindsightRecipeRow) -> bool:
     return row.audia_action == "call_official_installer"
+
+
+def _build_steps(step_defs: list[Any], params: dict[str, str]) -> list[Any]:
+    """Build step instances from YAML definitions using the canonical factory."""
+    steps: list[Any] = []
+    for defn in step_defs:
+        step_data = dict(defn)
+        step_data.setdefault("id", f"step-{len(steps)}")
+        steps.append(build_step(step_data))
+    return steps
 
 
 def _run_gated_steps(
@@ -66,7 +73,7 @@ def _run_gated_steps(
         ))
 
     params = _hindsight_params(backend)
-    steps = steps_from_defs(step_defs, params)
+    steps = _build_steps(step_defs, params)
     seq = run_steps(steps, context, fail_prefix=f"plugin {operation} failed")
     if not seq.success:
         return stamp_fn(seq)
@@ -190,6 +197,15 @@ class PluginConfigRecipe(_RowRecipe):
 
     def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
         if self._config_path:
+            # Fixture/custom paths without a registered provider cannot be
+            # reconciled through provider-owned config machinery.  Never fall
+            # back to a raw write; report the safe no-op instead.
+            from audiagentic.components.providers.descriptors.registry import get_descriptor
+            if get_descriptor(self.provider_id) is None:
+                return self._stamp(ProviderRecipeResult.ok(
+                    RecipeState.ABSENT,
+                    status="no registered provider config to prune",
+                ))
             from audiagentic.components.memory.hindsight.recipes import (
                 _sync_hindsight_mcp_entry,
             )
@@ -204,20 +220,18 @@ class PluginConfigRecipe(_RowRecipe):
             RecipeState.ABSENT, status="nothing to prune",
         ))
 
-    def provision_steps(self) -> list[ProvisionStep]:
+    def provision_steps(self) -> list[Any]:
         params = _hindsight_params(self._backend)
         if self._config_path:
             params["CONFIG_PATH"] = str(self._config_path)
-        steps: list[ProvisionStep] = []
+        steps: list[Any] = []
         if self._row.install_steps and _should_run_plugin_command(self._row):
-            steps.extend(steps_from_defs(
+            steps.extend(_build_steps(
                 self._row.install_steps, params,
-                recipe_id=f"hindsight-{self.provider_id}",
             ))
         if self._row.configure_steps:
-            steps.extend(steps_from_defs(
+            steps.extend(_build_steps(
                 self._row.configure_steps, params,
-                recipe_id=f"hindsight-{self.provider_id}",
             ))
         return steps
 
@@ -368,22 +382,20 @@ class _PluginUrlConfigRecipe(_RowRecipe):
         except (OSError, ValueError):
             return {}
 
-    def provision_steps(self) -> list[ProvisionStep]:
+    def provision_steps(self) -> list[Any]:
         params = _hindsight_params(self._backend)
         # configure_steps use {CONFIG_PATH} for the harness config (plugin array etc.),
         # not the url config file. Fall back to url_config_path when no harness path.
         config_path_for_steps = self._harness_config_path or self._url_config_path
         params["CONFIG_PATH"] = str(config_path_for_steps)
-        steps: list[ProvisionStep] = []
+        steps: list[Any] = []
         if self._row.install_steps and _should_run_plugin_command(self._row):
-            steps.extend(steps_from_defs(
+            steps.extend(_build_steps(
                 self._row.install_steps, params,
-                recipe_id=f"hindsight-{self.provider_id}",
             ))
         if self._row.configure_steps:
-            steps.extend(steps_from_defs(
+            steps.extend(_build_steps(
                 self._row.configure_steps, params,
-                recipe_id=f"hindsight-{self.provider_id}",
             ))
         return steps
 
@@ -421,17 +433,14 @@ class _PluginUrlConfigRecipe(_RowRecipe):
             params = _hindsight_params(self._backend)
             config_path_for_steps = self._harness_config_path or self._url_config_path
             params["CONFIG_PATH"] = str(config_path_for_steps)
-            steps = steps_from_defs(
+            steps = _build_steps(
                 self._row.configure_steps, params,
-                recipe_id=f"hindsight-{self.provider_id}",
             )
             seq = run_steps(steps, context, fail_prefix="plugin configure failed")
             if not seq.success:
                 return self._stamp(seq)
         # Direct write: JSON config content built by _build_plugin_url_config(); WriteFileStep not used because this recipe doesn't maintain an ArtifactRegistry instance (RS06/RS18)
-        from audiagentic.foundation.toolchains.provision_steps.write_file import (
-            WriteFileStep,
-        )
+        from audiagentic.foundation.steps import WriteFileStep
 
         content = _build_plugin_url_config(self._backend)
         import json
