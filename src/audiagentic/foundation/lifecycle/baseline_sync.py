@@ -6,6 +6,7 @@ contract that this inventory enforces.
 The asset inventory is derived from the foundation component registry — each component
 declares the files it owns. This file owns the sync logic only.
 """
+
 from __future__ import annotations
 
 import json
@@ -19,9 +20,37 @@ from audiagentic.foundation.components.base import (
     MODE_GENERATED_MANAGED,
     MODE_RUNTIME_ONLY,
 )
-from audiagentic.foundation.paths.package import REPO_ROOT
 
 DEFAULT_DOC_DIRS: tuple[str, ...] = ("specifications", "implementation", "releases", "decisions")
+
+
+def _package_root() -> Path:
+    """Return the audiagentic package root (works for both dev and installed)."""
+    from audiagentic.foundation.paths.package import find_package_root
+
+    return find_package_root(Path(__file__))
+
+
+def _repo_root(source_root: Path | None = None) -> Path:
+    """Resolve the repo/source root.
+
+    Uses AUDIAGENTIC_REPO_ROOT first, then falls back to the package root's
+    parent (the checkout root). In a wheel install without env var, this
+    resolves to the installed site-packages location — assets are found via
+    their relative path from the package root.
+    """
+    import os
+
+    if source_root is not None:
+        return source_root.resolve()
+    env_root = os.environ.get("AUDIAGENTIC_REPO_ROOT")
+    if env_root:
+        candidate = Path(env_root).resolve()
+        if candidate.is_dir():
+            return candidate
+    # Derive from the package root (parent of 'audiagentic' in site-packages
+    # or src/ directory): covers dev checkout and installed wheel.
+    return _package_root().parent.resolve()
 
 
 @dataclass(frozen=True)
@@ -33,12 +62,14 @@ class BaselineAsset:
     component_root: str = ""
 
 
-def _iter_component_assets(component_ids: set[str] | None = None) -> Iterable[BaselineAsset]:
-    from pathlib import Path
-
+def _iter_component_assets(
+    component_ids: set[str] | None = None,
+    source_root: Path | None = None,
+) -> Iterable[BaselineAsset]:
     from audiagentic.foundation.components import all_descriptors
     from audiagentic.foundation.components.base import MODE_REQUIRED_MANAGED
-    from audiagentic.foundation.paths.package import REPO_ROOT
+
+    repo = _repo_root(source_root)
     for descriptor in all_descriptors().values():
         if component_ids is not None and descriptor.component_id not in component_ids:
             continue
@@ -50,18 +81,22 @@ def _iter_component_assets(component_ids: set[str] | None = None) -> Iterable[Ba
             source = cf.rel_path
             asset_component_root = ""
             if cf.lifecycle == MODE_REQUIRED_MANAGED:
-                stripped_source = source[len(".audiagentic/"):] if source.startswith(".audiagentic/") else source
-                source_path = Path(REPO_ROOT) / component_root / stripped_source
+                stripped_source = (
+                    source[len(".audiagentic/") :] if source.startswith(".audiagentic/") else source
+                )
+                source_path = repo / component_root / stripped_source
                 if source_path.exists():
                     asset_component_root = component_root
                     source = stripped_source
             elif cf.lifecycle == MODE_CREATE_IF_MISSING and source.startswith(".audiagentic/"):
-                stripped_source = source[len(".audiagentic/"):]
-                template_path = Path(REPO_ROOT) / component_root / stripped_source
+                stripped_source = source[len(".audiagentic/") :]
+                template_path = repo / component_root / stripped_source
                 if template_path.exists():
                     asset_component_root = component_root
                     source = stripped_source
-            yield BaselineAsset(source, cf.rel_path, cf.lifecycle, cf.recursive, asset_component_root)
+            yield BaselineAsset(
+                source, cf.rel_path, cf.lifecycle, cf.recursive, asset_component_root
+            )
 
 
 def list_baseline_assets() -> list[dict[str, object]]:
@@ -135,7 +170,7 @@ def sync_managed_baseline(
     lifecycle_modes: set[str] | None = None,
     refresh_overrides: bool = False,
 ) -> dict[str, object]:
-    source_root = (source_root or REPO_ROOT).resolve()
+    source_root = _repo_root(source_root)
     target_root = target_root.resolve()
 
     report: dict[str, object] = {
@@ -152,12 +187,18 @@ def sync_managed_baseline(
 
     for asset in _iter_component_assets(component_ids):
         if asset.mode == MODE_RUNTIME_ONLY:
-            _append_report(report, "excluded-paths", asset.target if asset.target.endswith("/**") else f"{asset.target}/**")
+            _append_report(
+                report,
+                "excluded-paths",
+                asset.target if asset.target.endswith("/**") else f"{asset.target}/**",
+            )
             continue
         if lifecycle_modes is not None and asset.mode not in lifecycle_modes:
             continue
         if asset.mode == MODE_GENERATED_MANAGED:
-            _append_report(report, "skipped-files", {"path": asset.target, "reason": MODE_GENERATED_MANAGED})
+            _append_report(
+                report, "skipped-files", {"path": asset.target, "reason": MODE_GENERATED_MANAGED}
+            )
             continue
 
         if asset.mode == MODE_CREATE_IF_MISSING:
@@ -203,11 +244,17 @@ def sync_managed_baseline(
                 relative_target = asset.target.replace("\\", "/")
 
             if source_path.resolve() == target_path.resolve():
-                _append_report(report, "skipped-files", {"path": relative_target, "reason": "source-equals-target"})
+                _append_report(
+                    report,
+                    "skipped-files",
+                    {"path": relative_target, "reason": "source-equals-target"},
+                )
                 continue
 
             if target_path.exists() and _same_file_contents(source_path, target_path):
-                _append_report(report, "skipped-files", {"path": relative_target, "reason": "already-current"})
+                _append_report(
+                    report, "skipped-files", {"path": relative_target, "reason": "already-current"}
+                )
                 continue
 
             if target_path.exists():

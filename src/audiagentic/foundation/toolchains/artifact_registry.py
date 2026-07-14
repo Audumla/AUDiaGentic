@@ -11,15 +11,17 @@ as ``skipped``, never an error.
 from __future__ import annotations
 
 import json
-import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import make_error_factory
+from audiagentic.foundation.io import atomic_write_text
+
 from .config_patcher import ConfigPatcher, OwnedChange
 from .managed_block import BlockChange, remove_managed_block
 
-logger = logging.getLogger(__name__)
+_artifact_error = make_error_factory("CON", "ART", "artifact-registry")
 
 _SIDECAR = Path(".audiagentic") / "config" / "runtime" / "toolchain" / "artifacts.json"
 
@@ -55,17 +57,19 @@ class ArtifactRegistry:
             return {"recipes": {}}
         try:
             data = json.loads(self._path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            logger.warning("artifact registry unreadable, treating as empty: %s", self._path)
-            return {"recipes": {}}
-        if not isinstance(data, dict) or "recipes" not in data:
-            return {"recipes": {}}
+        except (OSError, json.JSONDecodeError) as exc:
+            raise _artifact_error(
+                1, "artifact ownership registry is unreadable", path=str(self._path)
+            ) from exc
+        if not isinstance(data, dict) or not isinstance(data.get("recipes"), dict):
+            raise _artifact_error(
+                1, "artifact ownership registry has invalid structure", path=str(self._path)
+            )
         return data
 
     def _save(self, data: dict[str, Any]) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        atomic_write_text(
+            self._path, json.dumps(data, indent=2, ensure_ascii=False) + "\n"
         )
 
     def _bucket(self, data: dict[str, Any], recipe: str) -> dict[str, Any]:

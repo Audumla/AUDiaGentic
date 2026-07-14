@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,14 @@ import yaml
 from audiagentic.foundation.contracts.errors import make_error_factory
 
 _io_error: Any = make_error_factory("CFG", "IO", "config")
+
+#: os.replace() onto a destination transiently locked by an antivirus/indexer
+#: scan can raise PermissionError (WinError 5) on Windows even though nothing
+#: in-process holds the file open. Bounded retry only for this exact
+#: transient-lock shape — never masks a genuine permission/ownership failure
+#: beyond the retry budget.
+_REPLACE_RETRY_ATTEMPTS = 5
+_REPLACE_RETRY_DELAY_SECONDS = 0.05
 
 
 def _ensure_dict(data: Any) -> dict[str, Any]:
@@ -28,7 +37,14 @@ def atomic_write_text(path: Path, content: str) -> None:
             fh.write(content)
             fh.flush()
             os.fsync(fh.fileno())
-        os.replace(tmp, path)
+        for attempt in range(_REPLACE_RETRY_ATTEMPTS):
+            try:
+                os.replace(tmp, path)
+                break
+            except PermissionError:
+                if attempt == _REPLACE_RETRY_ATTEMPTS - 1:
+                    raise
+                time.sleep(_REPLACE_RETRY_DELAY_SECONDS)
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)

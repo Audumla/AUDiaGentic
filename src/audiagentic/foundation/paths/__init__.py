@@ -1,7 +1,7 @@
 from audiagentic.foundation.config.merge import deep_merge
 
 from .component_paths import load_component_paths, resolve_component_path
-from .package import REPO_ROOT, SRC_ROOT, find_repo_root
+from .package import PACKAGE_ROOT, REPO_ROOT, SRC_ROOT, find_repo_root
 from .project import find_project_root
 from .resolution import (
     build_layered_path_map,
@@ -14,6 +14,7 @@ from .resolution import (
 )
 
 __all__ = [
+    "PACKAGE_ROOT",
     "REPO_ROOT",
     "SRC_ROOT",
     "build_layered_path_map",
