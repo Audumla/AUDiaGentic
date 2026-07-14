@@ -32,10 +32,29 @@ mcp-servers:
       - planning_status
       - planning_list_implementations
       - planning_select_implementation
+      - planning_get_config
+      - planning_set_config
     description: Planning component management — status and implementation selection
     propagate: audiagentic
     instructions: >
       Inspect or switch the active planning implementation and check current item counts.
+    tool-descriptions:
+      planning_status: >
+        Return planning component status including active implementation, item counts,
+        fragment count, and last sync time.
+      planning_list_implementations: >
+        List all registered planning implementations with their display name, description,
+        default flag, and current active selection.
+      planning_get_config: >
+        Return resolved config plus the settable-option schema for an implementation.
+        The schema field describes every option the implementation accepts (type,
+        description, required, default, allowed values). Use with planning_set_config.
+      planning_set_config: >
+        Validate and persist config updates for a planning implementation.
+        See planning_get_config for the option schema an implementation accepts.
+      planning_select_implementation: >
+        Switch the active planning implementation for this project. Returns success status
+        and any rollback information if switching fails.
 
   - name: ag-planning
     module: audiagentic.components.planning.planning_mcp
