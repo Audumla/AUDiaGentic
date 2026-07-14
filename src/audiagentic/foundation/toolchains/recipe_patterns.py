@@ -19,8 +19,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from audiagentic.foundation.steps import (
+    build_steps_from_defs,
+    lenient_substitute,
+)
+
 from .probes import CommandProbe, safe_command_parts
-from .provision_steps import steps_from_defs, substitute_params
 from .recipe_contract import ProvisioningRecipe, RecipeResult, RecipeState, run_steps
 
 # ---------------------------------------------------------------------------
@@ -122,7 +126,7 @@ class DeclaredStepRecipe(ProvisioningRecipe):
         if not self._m.status_command:
             return RecipeResult.ok(RecipeState.ABSENT, status="no status probe available")
         try:
-            cmd = substitute_params(self._m.status_command, self._params)
+            cmd = lenient_substitute(self._m.status_command, self._params)
             result = CommandProbe(tuple(safe_command_parts(cmd)), expect_exit=0, timeout=15).check()
         except Exception as exc:  # noqa: BLE001 - report probe failure, do not crash
             return RecipeResult.fail(f"{self._subject} probe failed: {exc}")
@@ -138,7 +142,7 @@ class DeclaredStepRecipe(ProvisioningRecipe):
             )
         if not self._m.install_steps:
             return RecipeResult.fail(f"no install steps for this {self._subject}")
-        steps = steps_from_defs(list(self._m.install_steps), self._params, recipe_id=self._m.recipe_id)
+        steps = build_steps_from_defs(list(self._m.install_steps), self._params, recipe_id=self._m.recipe_id)
         return run_steps(
             steps, context,
             ok_state=RecipeState.INSTALLING, ok_status=f"{self._subject} succeeded",
@@ -164,7 +168,7 @@ class DeclaredStepRecipe(ProvisioningRecipe):
             )
         if not self._m.uninstall_steps:
             return RecipeResult.fail(f"no uninstall steps for this {self._subject}")
-        steps = steps_from_defs(list(self._m.uninstall_steps), self._params, recipe_id=self._m.recipe_id)
+        steps = build_steps_from_defs(list(self._m.uninstall_steps), self._params, recipe_id=self._m.recipe_id)
         return run_steps(
             steps, context,
             ok_state=RecipeState.ABSENT, ok_status="uninstaller succeeded",
@@ -175,7 +179,7 @@ class DeclaredStepRecipe(ProvisioningRecipe):
         return RecipeResult.ok(RecipeState.ABSENT, status="nothing to prune")
 
     def provision_steps(self) -> list[Any]:
-        return steps_from_defs(list(self._m.install_steps), self._params, recipe_id=self._m.recipe_id)
+        return build_steps_from_defs(list(self._m.install_steps), self._params, recipe_id=self._m.recipe_id)
 
 
 __all__ = [

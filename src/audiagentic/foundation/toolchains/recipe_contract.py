@@ -110,15 +110,15 @@ def run_steps(
     ok_status: str = "steps succeeded",
     fail_prefix: str = "step sequence failed",
 ) -> RecipeResult:
-    """Run provision steps through CompensatingSequence, returning a RecipeResult.
+    """Run managed steps through canonical SequenceStep, returning a RecipeResult.
 
     Shared adapter between the step layer's SequenceResult and the recipe
     layer's RecipeResult so lifecycle methods don't each re-implement the
     run/branch/format dance.
     """
-    from .provision_steps import CompensatingSequence
+    from audiagentic.foundation.steps import SequenceStep
 
-    seq_result = CompensatingSequence(list(steps)).run(context)
+    seq_result = SequenceStep(list(steps), id="recipe-sequence", compensate_on_failure=True).run(context)
     if seq_result.status == "ok":
         return RecipeResult.ok(ok_state, status=ok_status)
     return RecipeResult.fail(
@@ -204,7 +204,7 @@ class ProvisioningRecipe(ABC):
         without re-installing. Stops and returns the failing result on any error.
 
         When the recipe exposes ``provision_steps()`` (TO12), execution delegates
-        to :class:`~.provision_steps.CompensatingSequence` for structured rollback
+        to :class:`audiagentic.foundation.steps.SequenceStep` for structured rollback
         instead of the primitive-call path. Recipes whose ``configure`` does work
         the steps cannot express must return an empty step list to stay on the
         primitive path.

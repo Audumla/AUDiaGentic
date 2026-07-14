@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.paths.names import find_package_root as _find_package_root
 
 
@@ -17,7 +16,15 @@ def find_package_root(start: Path) -> Path:
 
 
 def find_repo_root(start: Path | None = None) -> Path:
-    """Locate repo root for dev/runtime tooling."""
+    """Locate repo root for dev/runtime tooling.
+
+    Resolution order:
+    1. AUDIAGENTIC_REPO_ROOT env var (if it points to a valid checkout).
+    2. Walk up from *start* (default: this module's __file__) looking for
+        pyproject.toml or src/audiagentic — indicates a source checkout.
+    3. Fallback to the installed package parent when no source checkout is
+        found (installed wheel without explicit env var).
+    """
     env_root = os.environ.get("AUDIAGENTIC_REPO_ROOT")
     if env_root:
         candidate = Path(env_root).resolve()
@@ -36,20 +43,13 @@ def find_repo_root(start: Path | None = None) -> Path:
         if (candidate / "src" / "audiagentic").is_dir():
             return candidate
 
-    package_parent = Path(__file__).resolve().parent.parent
-    if (package_parent / "audiagentic").is_dir():
-        return package_parent
-
-    raise AudiaGenticError(
-        code="CFG-PATHS-001",
-        kind="paths",
-        message=(
-            f"Could not locate repository root from {anchor}. "
-            "Set AUDIAGENTIC_REPO_ROOT or run inside an audiagentic checkout."
-        ),
-        details={"anchor": str(anchor)},
-    )
+    # No source checkout found — likely a wheel install. Use the installed
+    # package parent so imports can succeed without a checkout-specific cwd.
+    return _find_package_root(Path(__file__)).parent.resolve()
 
 
+PACKAGE_ROOT: Path = find_package_root(Path(__file__))
 REPO_ROOT: Path = find_repo_root()
-SRC_ROOT: Path = REPO_ROOT / "src"
+# Import root containing ``audiagentic``. In a checkout this is ``<repo>/src``;
+# in a wheel it is site-packages. Never derive it from the repo fallback.
+SRC_ROOT: Path = PACKAGE_ROOT.parent

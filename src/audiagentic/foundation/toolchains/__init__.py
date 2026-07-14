@@ -1,3 +1,9 @@
+from audiagentic.foundation.steps import (
+    ConfigSetStep,
+    ManagedBlockStep,
+    WriteFileStep,
+)
+
 from .artifact_registry import ArtifactRegistry, PruneReport
 from .config_patcher import ConfigPatcher, OwnedChange
 from .config_reader import UNSET, dump_config, load_config, read_config_value
@@ -16,6 +22,7 @@ from .managed_block import (
     block_artifact_id,
     remove_managed_block,
 )
+from .managed_config import ManagedConfigSpec, ManagedFragmentRegistry, resolve_managed_config_path
 from .probes import (
     CommandProbe,
     CompositeHealthCheck,
@@ -25,17 +32,6 @@ from .probes import (
     ProbeResult,
     check_with_retry,
     safe_command_parts,
-)
-from .provision_steps import (
-    CompensatingSequence,
-    ConfigSetStep,
-    ManagedBlockStep,
-    ProvisionStep,
-    ShellProvisionStep,
-    WriteFileStep,
-    provision_step_from_dict,
-    steps_from_defs,
-    substitute_params,
 )
 from .recipe_contract import (
     CleanupHook,
@@ -50,7 +46,6 @@ __all__ = [
     "ArtifactRegistry",
     "BlockChange",
     "CleanupHook",
-    "CompensatingSequence",
     "CommandProbe",
     "CompositeHealthCheck",
     "ConfigKeyCheck",
@@ -63,15 +58,16 @@ __all__ = [
     "OwnedChange",
     "ReconcileResult",
     "reconcile_fragments",
+    "ManagedConfigSpec",
+    "ManagedFragmentRegistry",
+    "resolve_managed_config_path",
     "platform_key",
     "Probe",
-    "ProvisionStep",
     "ProvisioningRecipe",
     "ProbeResult",
     "PruneReport",
     "RecipeResult",
     "RecipeState",
-    "ShellProvisionStep",
     "WriteFileStep",
     "tool_available",
     "uv_available",
@@ -83,12 +79,9 @@ __all__ = [
     "has_action",
     "load_config",
     "platform_allowed",
-    "provision_step_from_dict",
     "raw_step",
     "read_config_value",
     "remove_managed_block",
     "run_steps",
     "safe_command_parts",
-    "steps_from_defs",
-    "substitute_params",
 ]

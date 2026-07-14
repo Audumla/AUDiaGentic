@@ -23,10 +23,10 @@ from audiagentic.foundation.toolchains import (
     uv_available,
 )
 from audiagentic.foundation.toolchains.loader import build_step, has_action, raw_step
-from audiagentic.foundation.workflow.invocation.steps import (
-    SelectStep,
+from audiagentic.foundation.steps import (
     SequenceStep,
-    WorkflowStep,
+    SelectStep,
+    Step as WorkflowStep,
     planned_commands,
 )
 

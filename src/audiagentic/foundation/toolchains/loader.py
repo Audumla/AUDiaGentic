@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 
-from audiagentic.foundation.workflow.invocation.steps import SequenceStep, ShellStep
+from audiagentic.foundation.steps import SequenceStep, ShellStep
 
 from .detect import privilege_prefix
 
