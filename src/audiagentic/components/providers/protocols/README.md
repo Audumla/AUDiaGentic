@@ -6,7 +6,6 @@ Communication protocols used to interact with external systems. Each protocol su
 ## Ownership
 - Protocol-level abstractions for external system communication
 - Streaming protocol implementation (`streaming/`)
-- Future protocol scaffolding (`acp/`)
 
 ## Must NOT Own
 - Provider-specific business logic (→ `interoperability/providers/`)
@@ -25,8 +24,8 @@ Generic streaming primitives shared across all provider adapters.
 - Command execution: `run_streaming_command()`
 - Result normalization: `ProviderCompletion`
 
-### acp/ (scaffold — deferred)
-Agent Communication Protocol. Reserved for future inter-agent messaging.
+ACP client framing is provider-neutral and lives in `foundation/execution/`.
+Provider adapters may declare only provider-specific ACP launch/config details.
 
 ## Related Domains
 - `interoperability/providers` — adapters use streaming/ sinks

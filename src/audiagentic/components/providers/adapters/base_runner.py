@@ -46,6 +46,18 @@ from audiagentic.components.providers.protocols.streaming.provider_streaming imp
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
+
+def resolve_execution_model(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> str | None:
+    """Select the model already resolved by gateway dispatch.
+
+    Gateway dispatch guarantees ``packet_ctx['model-id']`` after profile and
+    alias resolution.  Adapters must not resolve aliases or independently
+    prefer ``default-model``; the descriptor default is only a fallback for
+    direct callers that do not use the gateway.
+    """
+    model = packet_ctx.get("model-id") or provider_cfg.get("default-model")
+    return str(model) if model else None
+
 logger = logging.getLogger(__name__)
 
 ProviderRunner = Any  # Callable[[dict, dict], dict] — mirrors services.execution
@@ -240,7 +252,7 @@ def make_cli_runner(
             prompt = default_build_prompt(
                 packet_ctx, provider_cfg, provider_id=provider_id, title=title
             )
-        default_model = provider_cfg.get("default-model")
+        default_model = resolve_execution_model(packet_ctx, provider_cfg)
         working_root = packet_ctx.get("working-root")
         cwd = Path(working_root) if working_root else None
 

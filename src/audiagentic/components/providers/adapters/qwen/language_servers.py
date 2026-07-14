@@ -16,9 +16,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.coding_lsp.language_servers import LanguageServerEntry
 from audiagentic.foundation.io import _ensure_dict
-
-from ...descriptors.base import LanguageServerEntry
 
 
 def _load_json(path: Path) -> dict[str, Any]:

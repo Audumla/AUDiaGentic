@@ -7,7 +7,10 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.providers.adapters.base_runner import finalize_run
+from audiagentic.components.providers.adapters.base_runner import (
+    finalize_run,
+    resolve_execution_model,
+)
 from audiagentic.components.providers.adapters.cli import require_executable
 from audiagentic.components.providers.protocols.streaming.base_extractor import (
     BaseEventExtractor,
@@ -103,7 +106,7 @@ def _build_prompt(
         f"job={packet_ctx.get('job-id')} "
         f"packet={packet_ctx.get('packet-id')} "
         f"provider={packet_ctx.get('provider-id', 'gemini')} "
-        f"model={provider_cfg.get('default-model')} "
+        f"model={resolve_execution_model(packet_ctx, provider_cfg)} "
         f"workflow={packet_ctx.get('workflow-profile')}. "
         "Return a concise execution summary or the blocking reason if execution is impossible."
     )
@@ -144,7 +147,7 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
         packet_ctx["job-id"] = job_id
 
     prompt = _build_prompt(packet_ctx, provider_cfg, modified_prompt=modified_prompt)
-    default_model = provider_cfg.get("default-model")
+    default_model = resolve_execution_model(packet_ctx, provider_cfg)
     cwd = working_root
 
     execution_policy = provider_cfg.get("execution-policy", {})

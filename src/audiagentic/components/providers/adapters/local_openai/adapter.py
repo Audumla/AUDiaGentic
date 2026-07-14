@@ -12,6 +12,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
+from audiagentic.components.providers.adapters.base_runner import resolve_execution_model
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 logger = logging.getLogger(__name__)
@@ -191,7 +192,7 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
     """Execute a provider request against an OpenAI-compatible API endpoint."""
     base_url = _resolve_base_url(provider_cfg)
     api_key = _fetch_api_key(provider_cfg)
-    model = provider_cfg.get("default-model") or packet_ctx.get("model-id") or packet_ctx.get("model-alias")
+    model = resolve_execution_model(packet_ctx, provider_cfg)
 
     if not model:
         raise AudiaGenticError(

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from audiagentic.foundation.secrets import has_ambient_value
 from audiagentic.foundation.time import now_iso_z
 
 
@@ -11,8 +12,14 @@ def _config_status(config: dict[str, Any]) -> tuple[bool, str | None]:
         return False, "provider not configured"
     access_mode = config.get("access-mode")
     if access_mode == "env":
-        if not config.get("auth-ref"):
+        auth_ref = config.get("auth-ref")
+        if not auth_ref:
             return False, "auth-ref required for env access-mode"
+        try:
+            if not has_ambient_value(auth_ref):
+                return False, "referenced environment variable is not set"
+        except Exception:
+            return False, "auth-ref is invalid"
         return True, None
     if access_mode in {"cli", "none"}:
         return True, None

@@ -23,7 +23,47 @@ from ..descriptors.registry import (
 )
 from .health import health_check
 from .lifecycle import _probe_provider_cli
-from .models import resolve_model_selection
+from .models import model_ownership_registry, resolve_model_selection
+
+
+def _model_config_status(provider_id: str, descriptor, project_root: Path) -> dict[str, Any]:
+    """Model-config status fields (MO02 step 7 + RV265).
+
+    Reports BOTH managed-model-count (AG-materialized, from the ownership
+    registry) and availability-count (the runtime catalog where one exists) so
+    materialized-vs-observed drift per MO01 step 7b is visible.
+    """
+    spec = getattr(descriptor, "model_config", None) if descriptor else None
+    status: dict[str, Any] = {
+        "supported": spec is not None,
+        "config-path": None,
+        "format": spec.format if spec else None,
+        "refresh-mode": spec.refresh_mode if spec else None,
+        "managed-model-count": 0,
+        "managed-ids": [],
+    }
+    if spec is not None:
+        from audiagentic.foundation.toolchains.managed_config import (
+            resolve_managed_config_path,
+        )
+
+        try:
+            status["config-path"] = str(resolve_managed_config_path(spec, project_root))
+        except AudiaGenticError:
+            status["config-path"] = None
+        if spec.refresh_mode == "restart-required":
+            status["action-needed"] = (
+                f"restart {getattr(descriptor, 'display_name', provider_id)} "
+                "to apply model config changes"
+            )
+    try:
+        owned = model_ownership_registry(project_root).load().get(provider_id, {})
+    except AudiaGenticError as exc:
+        status["registry-error"] = exc.code
+        return status
+    status["managed-model-count"] = len(owned)
+    status["managed-ids"] = sorted(owned)
+    return status
 
 
 def _provider_entry(
@@ -78,6 +118,7 @@ def _provider_entry(
     entry["catalog-source"] = None
 
     descriptor = get_descriptor(provider_id)
+    entry["model-config"] = _model_config_status(provider_id, descriptor, project_root)
     cli_probe = descriptor.cli_probe if descriptor and descriptor.cli_probe else None
     entry["cli-check"] = _probe_provider_cli(descriptor) if descriptor and include_probes else None
 
@@ -150,6 +191,26 @@ def _provider_entry(
         else:
             entry["catalog-source"] = catalog.get("source")
             entry["catalog-model-count"] = len(catalog.get("models", []))
+            # RV265/MO01 step 7b: where a runtime catalog exists it is
+            # authoritative for availability; a managed entry missing from it
+            # is a reconcile discrepancy — surfaced, never silent success.
+            model_config_status = entry.get("model-config") or {}
+            model_config_status["availability-count"] = entry["catalog-model-count"]
+            managed_names = set(
+                model_ownership_registry(project_root).load().get(provider_id, {}).values()
+            )
+            if managed_names:
+                catalog_ids = {
+                    model.get("model-id") for model in catalog.get("models", [])
+                }
+                missing = sorted(managed_names - catalog_ids)
+                if missing:
+                    model_config_status["availability-drift"] = missing
+                    model_config_status["action-needed"] = (
+                        "managed model entries are not visible in the provider's "
+                        f"runtime catalog: {', '.join(missing)} — re-run model sync "
+                        "or refresh the catalog"
+                    )
             refresh = provider_cfg.get("catalog-refresh", {})
             max_age = refresh.get("max-age-hours")
             if isinstance(max_age, int) and max_age > 0:
