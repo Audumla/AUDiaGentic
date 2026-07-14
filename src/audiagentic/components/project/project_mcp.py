@@ -14,7 +14,6 @@ from audiagentic.foundation.mcp.component_server import (
     report_error,
     run_mcp_server,
     server_instructions,
-    tool_description,
 )
 
 from . import project_api
@@ -30,7 +29,7 @@ def build_server() -> FastMCP:
     decl = _server_decl()
     mcp = mcp_server(__name__, instructions=server_instructions(decl))
 
-    @mcp.tool(description=tool_description(decl, "project_status"))
+    @mcp.tool()
     @log_tool_call
     def project_status() -> dict[str, Any]:
         try:
@@ -38,7 +37,7 @@ def build_server() -> FastMCP:
         except Exception as exc:
             return report_error("project", "project_status", exc, logger)
 
-    @mcp.tool(description=tool_description(decl, "list_components"))
+    @mcp.tool()
     @log_tool_call
     def list_components() -> list[dict[str, Any]] | dict[str, Any]:
         try:
@@ -46,7 +45,7 @@ def build_server() -> FastMCP:
         except Exception as exc:
             return report_error("project", "list_components", exc, logger)
 
-    @mcp.tool(description=tool_description(decl, "install_component"))
+    @mcp.tool()
     @log_tool_call
     def install_component(component_id: str) -> dict[str, Any]:
         try:
@@ -54,7 +53,7 @@ def build_server() -> FastMCP:
         except Exception as exc:
             return report_error("project", "install_component", exc, logger)
 
-    @mcp.tool(description=tool_description(decl, "uninstall_component"))
+    @mcp.tool()
     @log_tool_call
     def uninstall_component(component_id: str, remove_configs: bool = False) -> dict[str, Any]:
         try:
@@ -66,7 +65,7 @@ def build_server() -> FastMCP:
         except Exception as exc:
             return report_error("project", "uninstall_component", exc, logger)
 
-    @mcp.tool(description=tool_description(decl, "enable_component"))
+    @mcp.tool()
     @log_tool_call
     def enable_component(component_id: str) -> dict[str, Any]:
         try:
@@ -74,7 +73,7 @@ def build_server() -> FastMCP:
         except Exception as exc:
             return report_error("project", "enable_component", exc, logger)
 
-    @mcp.tool(description=tool_description(decl, "disable_component"))
+    @mcp.tool()
     @log_tool_call
     def disable_component(component_id: str) -> dict[str, Any]:
         try:
@@ -82,7 +81,7 @@ def build_server() -> FastMCP:
         except Exception as exc:
             return report_error("project", "disable_component", exc, logger)
 
-    @mcp.tool(description=tool_description(decl, "read_project_file"))
+    @mcp.tool()
     @log_tool_call
     def read_project_file(relative_path: str) -> dict[str, Any]:
         try:
@@ -90,7 +89,7 @@ def build_server() -> FastMCP:
         except Exception as exc:
             return report_error("project", "read_project_file", exc, logger)
 
-    @mcp.tool(description=tool_description(decl, "runtime_sync_contract"))
+    @mcp.tool()
     @log_tool_call
     def runtime_sync_contract() -> dict[str, Any]:
         try:
@@ -126,3 +125,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

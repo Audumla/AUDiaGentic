@@ -31,6 +31,31 @@ mcp-servers:
     instructions: >
       CRUD for agent profiles (provider+model bindings). A profile's id is immutable —
       delete and recreate to rename.
+    tool-descriptions:
+      agent_list_profiles: List all agent profiles with summary information.
+      agent_get_profile:
+        description: >
+          Get a single agent profile by ID, returning full configuration including
+          provider_id, model_id, model_alias, params, and is-default flag.
+        parameters:
+          profile_id: "Agent profile identifier to look up"
+      agent_create_profile:
+        description: >
+          Create a new agent profile binding a provider to a specific model with optional
+          execution parameters. Returns the created profile.
+        parameters:
+          profile: "Profile dict with provider_id, model_id, and optional params/is-default"
+      agent_update_profile:
+        description: >
+          Update fields of an existing agent profile by ID. Profile id is immutable —
+          delete and recreate to rename. Returns the updated profile.
+        parameters:
+          profile_id: "Profile identifier to update"
+          updates: "Partial profile dict — only specified keys are modified"
+      agent_delete_profile:
+        description: Delete an agent profile by ID.
+        parameters:
+          profile_id: "Profile identifier to delete"
 
   - name: ag-agents
     module: audiagentic.components.agents.agents_mcp
@@ -43,9 +68,12 @@ mcp-servers:
     instructions: >
       Resolve agent profiles to provider+model at job launch.
     tool-descriptions:
-      agent_resolve_profile: >
-        Resolve an agent profile by ID. Returns provider_id, model_id, model_alias,
-        and params. Raises RES-AGP-001 if not found.
+      agent_resolve_profile:
+        description: >
+          Resolve an agent profile by ID. Returns provider_id, model_id, model_alias,
+          and params. Raises RES-AGP-001 if not found.
+        parameters:
+          profile_id: "Agent profile identifier to look up"
       agent_resolve_default_profile: >
         Resolve the profile marked as default. Raises RES-AGP-003 if no default exists.
       agent_list_profiles: >
