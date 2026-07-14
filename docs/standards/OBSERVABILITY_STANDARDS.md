@@ -30,6 +30,15 @@ Milestones should cover:
 Do not persist raw secrets, stdout/stderr dumps, or unredacted exception text in
 timeline attributes.
 
+## Degraded Remote-Service Outcomes
+
+Best-effort remote calls that degrade to cached or unavailable state emit a
+redacted timeline or warning event. Include `failure_class`, `fallback`
+(`cached|none`), `stale` and `stale_age` when known, `action_needed`, and the
+canonical owning-component `error_code`. Never include credentials,
+authorization headers, key-bearing URLs, raw response bodies, or unredacted
+exception text.
+
 If a component receives event metadata with `correlation_id`, propagate it into
 timeline events. Otherwise `record_timeline_event` falls back to the active
 logging correlation context.

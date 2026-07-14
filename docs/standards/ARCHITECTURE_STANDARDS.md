@@ -25,11 +25,34 @@ Runtime (orchestration) --bootstraps/wires via seams--> Foundation capabilities
 - Composition roots exempt from import direction.
 - Do not use `get_capability`/`register_capability` callbacks for direct imports: use events, no indirection, or composition-root registry check + import.
 
+### 1.1 Registries Are Extension Points, Not Hidden Coupling
+
+A string key does not remove a dependency. Registries may select among implementations
+only when all of these are explicit and machine-checked:
+
+- one owning layer/component defines the typed protocol and key namespace;
+- declarations identify support/capability, while handler binding occurs in that owner
+  or an approved composition root;
+- callers depend on the protocol and receive typed results, never retrieve arbitrary
+  services or call foreign implementation symbols;
+- keys carry no foreign removable-domain vocabulary or policy;
+- registration, replacement, lifetime, duplicate-key behavior, and unknown-key failure
+  are deterministic and tested.
+
+Forbidden: service-locator APIs, arbitrary `dict[str, Callable]` used to conceal a
+component call, string/dotpath lookup introduced only to evade an import boundary,
+requester-owned handler names, or a registry that makes a forbidden dependency appear
+indirect. Use a direct import for allowed same-layer dependencies, a typed event for
+decoupled notification, or composition-root wiring for optional implementations.
+
+Architecture graph checks follow resolved registry bindings as dependency edges. A
+registry never grants an exemption from layer, ownership, vocabulary, or mutation rules.
+
 ## 2. Config Over Code
 
 - Extensibility never requires Python edits.
 - Entity lists (components, providers, tools, states, policies, capabilities) live in YAML/JSON, never Python.
-- No entity-name `if/elif`; use `(key, handler)` registry or config lookup.
+- No entity-name `if/elif`; use config lookup or a §1.1-compliant typed extension registry.
 - New capability: config file or registry contribution.
 
 ## 3. Logic Containment
@@ -67,6 +90,39 @@ Runtime (orchestration) --bootstraps/wires via seams--> Foundation capabilities
 - `code`: canonical identity. `message`: concise operator statement. Config-only optional `resolution`: remediation/checks, not message repeat. `details`: context only.
 - `except Exception:` only at external boundaries. Every `except`: log `exc_info=True`, wrap `AudiaGenticError`, or safe default. Silent `pass` only harmless expected teardown.
 - Never place raw stdout/stderr, API keys, tokens, or prompts in error details; redact/summarize.
+
+### 8.1 External-service failures
+
+External services include remote APIs, catalog/discovery endpoints, and
+connectivity probes. Classify every failure as exactly one of:
+
+| Class | Examples | Retry | Fallback |
+|---|---|---|---|
+| `transient` | timeout, unreachable service, HTTP 429, HTTP 5xx | One bounded retry | Last-known-good cache when available |
+| `configuration` | invalid base URL, unsupported wire API, invalid local setup | Never | None |
+| `authorization` | HTTP 401/403, expired or absent credential | Never | None |
+| `contract` | malformed or incompatible response | Never | None |
+
+- Best-effort background work, including catalog refresh and connectivity
+  probes, degrades to cached state when available. It reports `action_needed`
+  and must not fail enclosing sync or reconcile solely for that remote failure.
+- Explicit user-invoked operations may return the owning component's canonical
+  `CON-*` error. Error details contain failure class and safe structural
+  context only.
+- A degraded result uses semantic fields `failure_class`, `fallback`
+  (`cached|none`), `stale`, `stale_age` when known, `action_needed`, and
+  `error_code`. Do not introduce a cross-domain result dataclass merely for
+  these fields.
+- Never retry authorization, configuration, or contract failures. Never add
+  retry loops, sleep-loop polling, or unbounded backoff.
+- Do not log or persist API keys, authorization headers, key-bearing URLs, raw
+  response bodies, or unredacted exception text. Apply canonical redaction at
+  the remote-call boundary before producing logs, timelines, results, or
+  dead-letter records.
+- When a remote call runs in an event-bus handler, §14 takes precedence:
+  handler exceptions never escape, the failure is redacted and dead-lettered,
+  and cached degradation/action-needed supplements rather than replaces that
+  record.
 
 ## 9. Logging
 
