@@ -11,41 +11,41 @@ requires-python = ">=3.10"
 license = { text = "MIT" }
 
 dependencies = [
-    "pyyaml>=6.0",
-    "rapidfuzz>=3.0",
-    "jsonschema>=4.18",
-    "mcp==1.27.0",
+  "pyyaml>=6.0",
+  "rapidfuzz>=3.0",
+  "jsonschema>=4.18",
+  "mcp==1.27.0",
 ]
 
 [project.optional-dependencies]
+# Standards-based streaming agent transport. Kept optional because CLI-stream
+# providers remain supported without ACP.
+acp = ["agent-client-protocol==0.11.0"]
 # MCP server support for the planning tool surface
-mcp = [
-    "mcp==1.27.0",
-    "tomli-w>=1.0",
-]
+mcp = ["mcp==1.27.0", "tomli-w>=1.0"]
 # Test dependencies
 test = [
-    "pytest>=9.0",
-    "pytest-asyncio>=1.3",
-    "pytest-cov>=5.0",
-    "pytest-timeout>=2.3",
-    "pytest-xdist>=3.0",
-    "mcp==1.27.0",
-    "tomli-w>=1.0",
-    "pyright>=1.1",
+  "pytest>=9.0",
+  "pytest-asyncio>=1.3",
+  "pytest-cov>=5.0",
+  "pytest-timeout>=2.3",
+  "pytest-xdist>=3.0",
+  "mcp==1.27.0",
+  "tomli-w>=1.0",
+  "pyright>=1.1",
 ]
 # Full development environment
 dev = [
-    "pytest>=9.0",
-    "pytest-asyncio>=1.3",
-    "pytest-cov>=5.0",
-    "pytest-timeout>=2.3",
-    "pytest-xdist>=3.0",
-    "mcp==1.27.0",
-    "tomli-w>=1.0",
-    "pyright>=1.1",
-    "ruff",
-    "mypy",
+  "pytest>=9.0",
+  "pytest-asyncio>=1.3",
+  "pytest-cov>=5.0",
+  "pytest-timeout>=2.3",
+  "pytest-xdist>=3.0",
+  "mcp==1.27.0",
+  "tomli-w>=1.0",
+  "pyright>=1.1",
+  "ruff",
+  "mypy",
 ]
 
 [project.scripts]
@@ -60,40 +60,43 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "audiagentic" = [
-    # Component descriptors and embedded markdown assets
-    "config/components/**/*.yaml",
-    "config/components/**/*.md",
-    "config/components/**/*.yml",
-    # Package-default configs
-    "config/provisioning/harness/*.yaml",
-    "config/provisioning/rig/*.yaml",
-    "config/provisioning/foundation/*.yaml",
-    # Toolchain action table (read at import time by descriptors)
-    "foundation/toolchains/*.yaml",
-    # JSON Schemas used for runtime payload validation (ledger, providers, planning)
-    "foundation/contracts/schemas/**/*.json",
-    # Knowledge component runtime data
-    "components/optional/knowledge/runtime_data/*.yml",
-    # Provider instruction / prompt-tag templates materialized onto surfaces
-    "components/optional/providers/adapters/**/*.md",
-    "components/optional/providers/surfaces/templates/*.md",
-    # Misc runtime data
-    "runtime/build/*.yaml",
-    "runtime/rig/external/*.yaml",
-    "runtime/harness/opencode/templates/**/*.md",
-    # Pi harness home templates
-    "runtime/harness/pi/templates/home/agent/**/*.ts",
-    "runtime/harness/pi/templates/home/agent/**/*.json",
-    "runtime/harness/pi/templates/home/agent/**/*.md",
-    # Embedded rig model profiles registry (machine-only, not user config)
-    "runtime/rig/embedded/models.json",
-    # Release-please provisioning templates
-    "components/release/release_please/templates/*.json",
-    "components/release/release_please/templates/*.yml",
-    "components/optional/providers/workflow/*.yaml",
-    # Component-local state workflow definitions (states + transitions)
-    "components/agent_jobs/*.yaml",
-    "components/planning/*.yaml",
+  # Component descriptors and embedded markdown assets
+  "config/components/**/*.yaml",
+  "config/components/**/*.md",
+  "config/components/**/*.yml",
+  "config/components/release/.github/workflows/*.yml",
+  # Package-default configs
+  "config/provisioning/harness/*.yaml",
+  "config/provisioning/rig/*.yaml",
+  "config/provisioning/foundation/*.yaml",
+  # Toolchain action table (read at import time by descriptors)
+  "foundation/toolchains/*.yaml",
+  # JSON Schemas used for runtime payload validation (ledger, providers, planning)
+  "foundation/contracts/schemas/**/*.json",
+  # Knowledge component runtime data
+  "components/optional/knowledge/runtime_data/*.yml",
+  # Provider instruction / prompt-tag templates materialized onto surfaces
+  "components/providers/adapters/**/*.md",
+  "components/providers/surfaces/templates/*.md",
+  # Misc runtime data
+  "runtime/build/*.yaml",
+  "runtime/rig/external/*.yaml",
+  "runtime/harness/opencode/templates/**/*.md",
+  # Pi harness home templates
+  "runtime/harness/pi/templates/home/agent/**/*.ts",
+  "runtime/harness/pi/templates/home/agent/**/*.json",
+  "runtime/harness/pi/templates/home/agent/**/*.md",
+  # Embedded rig model profiles registry (machine-only, not user config)
+  "runtime/rig/embedded/models.json",
+  # Release-please provisioning templates
+  "components/release/release_please/templates/*.json",
+  "components/release/release_please/templates/*.yml",
+  "components/providers/workflow/*.yaml",
+  # Component-local state workflow definitions (states + transitions)
+  "components/agent_jobs/*.yaml",
+  "components/planning/*.yaml",
+  # Agent LLM Gateway workflow definition (loaded at module load time)
+  "components/agents/*.yaml",
 ]
 
 [tool.pytest.ini_options]
@@ -106,31 +109,31 @@ timeout = 30
 # Safe for e2e because all e2e tests use tmp_path isolation.
 # xdist auto-detects CPU count; override with -n 4 etc.
 markers = [
-    # Tier markers — auto-applied by tests/conftest.py based on directory path
-    "unit: pure in-process test; no real I/O, subprocess, or network",
-    "integration: real filesystem (tmp_path) or subprocess; no Docker required",
-    "e2e: full user-facing path; real CLI, network, or Docker",
-    # Speed
-    "slow: single test takes >10s; excluded from quick runs (pytest -m 'not slow')",
-    # Resource / environment dependencies
-    "requires_docker: needs a Docker daemon running (not just isolation)",
-    "requires_network: needs outbound internet access",
-    "requires_uv: needs uv on PATH",
-    "requires_npm: needs npm on PATH",
-    "requires_cargo: needs cargo on PATH",
-    "requires_gh: needs gh CLI on PATH",
-    # Behaviour / intent
-    "smoke: minimal sanity check; should pass in every environment",
-    "opt_in: destructive or expensive; never run by default",
-    "mutates_host: installs/removes packages on the real host; always gated by Docker",
-    # Legacy / extended markers (kept for backward compatibility)
-    "docker: alias for requires_docker; prefer requires_docker in new tests",
-    "dev: exercises local filesystem state; not collected in CI (run: pytest tests/dev/)",
-    "mutates_project_fs: writes/deletes project files beyond ephemeral temp paths",
-    "long_running: expected runtime >60s; pair with @pytest.mark.timeout(N)",
-    "flaky_external: depends on unstable external systems or services",
-    # Parallel execution
-    "no_parallel: test shares a subprocess connection; must run serially",
+  # Tier markers — auto-applied by tests/conftest.py based on directory path
+  "unit: pure in-process test; no real I/O, subprocess, or network",
+  "integration: real filesystem (tmp_path) or subprocess; no Docker required",
+  "e2e: full user-facing path; real CLI, network, or Docker",
+  # Speed
+  "slow: single test takes >10s; excluded from quick runs (pytest -m 'not slow')",
+  # Resource / environment dependencies
+  "requires_docker: needs a Docker daemon running (not just isolation)",
+  "requires_network: needs outbound internet access",
+  "requires_uv: needs uv on PATH",
+  "requires_npm: needs npm on PATH",
+  "requires_cargo: needs cargo on PATH",
+  "requires_gh: needs gh CLI on PATH",
+  # Behaviour / intent
+  "smoke: minimal sanity check; should pass in every environment",
+  "opt_in: destructive or expensive; never run by default",
+  "mutates_host: installs/removes packages on the real host; always gated by Docker",
+  # Legacy / extended markers (kept for backward compatibility)
+  "docker: alias for requires_docker; prefer requires_docker in new tests",
+  "dev: exercises local filesystem state; not collected in CI (run: pytest tests/dev/)",
+  "mutates_project_fs: writes/deletes project files beyond ephemeral temp paths",
+  "long_running: expected runtime >60s; pair with @pytest.mark.timeout(N)",
+  "flaky_external: depends on unstable external systems or services",
+  # Parallel execution
+  "no_parallel: test shares a subprocess connection; must run serially",
 ]
 
 [tool.coverage.run]
