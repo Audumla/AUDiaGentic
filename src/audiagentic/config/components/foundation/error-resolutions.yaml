@@ -1,3 +1,4 @@
+CON-ART-001: "Restore or remove the corrupt artifact ownership registry after reviewing managed files; do not continue prune or adoption with unknown ownership."
 IO-JOBSTORE-001: "Failed to read the job record file. Check that the file exists and is valid JSON."
 VAL-JOBSTORE-001: "The job record failed schema validation. Check the job record fields."
 VAL-JOBSTORE-002: "The job record is missing the required 'job-id' field."
@@ -51,3 +52,7 @@ VAL-PSTEP-002: "A placeholder variable is unknown or could not be substituted. C
 VAL-REG-001: "A registry key is already registered with a different value. Use replace=True to overwrite, or use a unique key."
 VAL-REG-002: "A registry alias is already owned by a different key. Remove the conflicting alias or use a unique one."
 VAL-REG-003: "A registry alias shadows an existing primary key. Choose an alias that does not conflict with registered keys."
+VAL-SEC-001: "The secret reference is invalid or uses an unsupported scheme. Use env:UPPERCASE_VARIABLE_NAME."
+CON-SEC-001: "The referenced environment variable is unset. Set the named variable in the process environment and retry."
+VAL-MCFG-001: "The managed configuration contract or path is invalid. Check the declared path and ownership mapping."
+CON-MCFG-001: "The managed configuration ownership registry is unreadable or invalid. Restore a valid registry before applying changes."

@@ -31,6 +31,15 @@ mcp-servers:
       - prune_provider_surfaces
       - reconcile_provider
       - reconcile_all_providers
+      - model_source_list
+      - model_source_add
+      - model_source_update
+      - model_source_remove
+      - model_source_set_enabled
+      - list_provider_models_config
+      - sync_provider_models
+      - reload_provider_models
+      - describe_provider
     description: Providers MCP server for provider management and introspection
     propagate: audiagentic
     instructions: >
@@ -51,4 +60,13 @@ mcp-servers:
       prune_provider_surfaces: Remove stale managed provider surface blocks from agent files.
       reconcile_provider: Reconcile a single provider against host state and sync config or surfaces.
       reconcile_all_providers: Reconcile all registered providers against host state.
+      model_source_list: List declared model sources (local endpoints and remote accounts) from model-sources.yaml.
+      model_source_add: Add a model source declaration. Validates against the schema; use dry_run=true to preview, apply=true to reconcile provider configs after writing.
+      model_source_update: Update fields of an existing model source declaration. Same dry_run/apply semantics as model_source_add.
+      model_source_remove: Remove a model source declaration; reconcile prunes only AUDiaGentic-owned projections.
+      model_source_set_enabled: Enable or disable a model source without deleting its configuration.
+      list_provider_models_config: Read the MANAGED model-config view for a provider (what AUDiaGentic materialized), distinct from list_provider_models (runtime catalog).
+      sync_provider_models: Sync AUDiaGentic-owned model entries into one provider's config from declared model sources.
+      reload_provider_models: Signal or report reload requirements after model config changes for a provider.
+      describe_provider: Deep read-only interrogation of one provider - descriptor, status, execution support, model catalog and managed config, config surfaces, and ownership registries. For agent profiles use agent_list_profiles.
 
