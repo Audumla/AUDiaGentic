@@ -85,7 +85,7 @@ def update_workflow(project_root: Path, branch: str = "main", python_version: st
                 message=f"unreplaced placeholder {placeholder} in release.yml template",
                 details={"placeholder": placeholder},
             )
-    workflow_path.write_text(template, encoding="utf-8")
+    atomic_write_text(workflow_path, template)
     return {"updated": True, "path": str(workflow_path.relative_to(project_root))}
 
 

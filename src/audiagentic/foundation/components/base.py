@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 MODE_REQUIRED_MANAGED = "required-managed"
 MODE_CREATE_IF_MISSING = "create-if-missing"
@@ -40,10 +41,15 @@ class McpServerDeclaration:
     module: str
     managed_id: str | None = None
     args: tuple[str, ...] = ()
-    direct_tools: list[str, ...] = field(default_factory=list)
+    direct_tools: list[str] = field(default_factory=list)
     description: str = ""
     instructions: str = ""
-    tool_descriptions: dict[str, str] = field(default_factory=dict)
+    #: Rich tool metadata. Value is either a plain string (description only) or a
+    #: mapping. Known standard keys in a mapping value: ``description`` (str — the
+    #: MCP tool annotation), ``parameters`` (dict of param-name -> description str
+    #: or nested mapping). Any additional keys are provider/component-owned extension;
+    #: the foundation passes them through unchanged.
+    tool_descriptions: dict[str, Any] = field(default_factory=dict)
     propagate: str = "audiagentic"  # "audiagentic" | "providers" | "audiagentic,providers"
 
 

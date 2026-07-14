@@ -1,6 +1,6 @@
 # Check-In Summary
 
-Total changes: 141
+Total changes: 275
 
 - PRR08 complete: Provider recipe lifecycle tests added, foundation/toolchains cleaned of component-specific language, architecture boundary gates all pass, memory/provider separation verified.
 - Hindsight memory plan complete (HM01-HM09): Backend config export, remote MCP entry support, strategy contract, TOML writer for openhands, orchestration wiring, boundary gates clean.
@@ -143,3 +143,137 @@ Total changes: 141
 - Updated architecture standards to clarify test boundaries; added recipe usage guide; refreshed testing documentation.
 - Extended test infrastructure with provider lifecycle Docker targets and prompt-launch e2e test; updated hindsight memory tests for RecipeSpec framework.
 - Planning state updates: SL15 completed, EDJ reviews resolved, new cleanup items created.
+- Added active planning items for provider model endpoint management and multi-provider local model propagation.
+- Restructured foundation modules into nested packages for clearer separation of config, observability, path resolution, and event utilities.
+- Updated all source imports to match the foundation module restructuring into nested packages.
+- Updated test imports to match the foundation module restructuring.
+- Extended model-endpoint-management planning with MO05-MO06, updated existing items, and refreshed provider capabilities reference documentation.
+- Restructured interaction module into nested package with api, backend, mcp, models, and store submodules.
+- Added 7 new CLI command modules for install, job control, mcp, refresh, release bootstrap, session input, and update.
+- Fixed circular import in path resolution module and updated launcher to integrate new command modules.
+- Finalized circular import fix in paths module and added subprocess timeouts for safer rig cleanup.
+- Updated provider integration test specs for accuracy and improved CI timeout handling.
+- Major package reorganization: moved free-floating modules into their owning packages, splitting large monolithic files (interaction.py 556 lines → 5 focused modules), consolidated utilities, extracted CLI commands, and enforced layer boundaries per architecture standards.
+- Fix interaction backend output and paths module exports to match architectural decisions
+- Fixed: project config template resolution during fresh install, circular import on provider discovery, CLI JSON output corruption from interaction prompts, harness lifecycle wording, and antigravity uninstall metadata.
+- Fixed VS Code extension manifest sync so AUDiaGentic provider reconcile no longer logs repeated publisher metadata errors.
+- Fixed provider reconciliation startup policy so broker launch can reconcile providers on first run without repeating every startup.
+- Fixed audiagentic broker MCP materialization so provider-facing MCP servers such as ag-ledger, ag-planning, and ag-release-please are also available in the CLI.
+- Restored audiagentic CLI MCP materialization to only include audiagentic-propagated MCP servers while preserving all management MCP entries.
+- Fixed audiagentic startup MCP registration by writing real Python commands into the runtime MCP config while keeping provider-only MCPs out of the audiagentic CLI.
+- Moved ag-lsp and ag-agents-gateway back to provider-only propagation so the audiagentic CLI receives only management MCPs plus external MCPs.
+- Clarified LSP management behavior so missing language servers are described as auto-installed on first use, with eager install available via lsp_install_dependencies and manual commands only as fallback.
+- Disabling memory now fully removes Hindsight provider config instead of leaving stale OpenHands/OpenCode/Copilot artifacts, and Codex provider TOML no longer breaks cleanup on Windows paths.
+- Memory enable now installs/verifies Hindsight configs for supported providers and repairs Claude plugin launchers on Windows. Validation still shows Aider/Codex official installer/status gaps that need separate handling.
+- Codex Hindsight memory now installs and verifies correctly on Windows instead of relying on the bash installer path that can target WSL or emit POSIX hook commands.
+- Pi memory now installs and verifies through the community hindsight-pi extension instead of being reported as unsupported.
+- Memory disable now fully removes Codex Hindsight hook scripts before memory can be re-enabled cleanly.
+- Component enable/disable no longer prints a misleading harness reload timeout after successful config refresh.
+- Memory enable no longer spends most of its time retrying the Aider installer that cannot succeed on Python 3.13.
+- Provider instruction surfaces no longer advertise ag-memory-mgmt; Hindsight memory guidance remains provider-facing.
+- Cline MCP projection now writes to .cline/mcp.json, with Hindsight installed there and management MCPs kept out.
+- Event-driven ledger-to-plan linkage: include plan-item-ids in change events for automatic linkage
+- Hardened recipe-system review plan items with per-item standards references, detailed validation checklists, risk assessments, and explicit characterize-before-modify dependency chains.
+- Shell command output is now redacted of secrets and truncated to 500 chars for safe diagnostic summaries.
+- Documented shell step template substitution and path resolution design decisions (RS14).
+- Added architecture guard tests for recipe factory dispatch, output redaction, factory completeness, stale references, and method override policy.
+- Recipe system review: secret redaction for shell outputs, provider stamping consolidation, Hindsight helper extraction, step substitution documentation, architecture guard tests
+- Achieved full error-resolutions.yaml coverage — every AudiaGenticError code in source now has a config-driven resolution entry. Created 3 new and extended 4 existing error-resolutions.yaml files with 79 previously missing codes. Updated architecture standard to enforce ongoing YAML-coverage audits.
+- Added dotted-path template rendering for job prompts (EDJ06).
+- Add event-trigger configuration loader with JSON Schema validation (EDJ01).
+- Shared operational record helper for append-only ndjson sidecar files with validation and redaction guards.
+- Added generic agent job prompt context object with builders, redaction, size limits, session loading, and template dict conversion (EDJ10).
+- Added async event-handling error standard: handlers never raise out of the bus, no automatic retry for triggers by default, failed firings recorded as dead-letter entries with correlation context for manual replay.
+- Extended the model-endpoint plan to cover external providers: frontier vendor accounts (OpenAI, Anthropic, Gemini) enable model families as a set, account-based aggregators (OpenRouter, OpenCode Zen, Qwen) get connectivity-only or catalog-driven enablement, and local models stay individually configured — with a new standards item for handling external-service errors.
+- Fixed 7 remaining missing error-resolution entries that used factory-based error construction instead of inline AudiaGenticError calls.
+- EDJ11: Prompt templates can now be loaded from external files via prompt-template-file config key. Path safety checks prevent directory traversal and access outside the project root.
+- Simplified the model-source design to two classes (local endpoint vs remote account), added vendor key injection so agents that natively support OpenAI/Anthropic/Gemini/OpenRouter just get the key, added model filtering where agents take explicit model lists, and created a research item to verify each agent's vendor support before automating it.
+- Agent jobs now emit structured timeline events on every state transition and control action for observability.
+- Event-triggered jobs now carry full provenance via event-source block in job records, including correlation IDs, trigger metadata, and subject references.
+- Model sources (local models and vendor accounts) can now be added, updated, disabled, and removed through MCP management tools — the same pattern as managing languages under LSP — with schema validation and automatic reconcile.
+- Created seven critical EDJ review items documenting spec and standards failures in completed event-driven job work.
+- Validated the plan against the actual provider code: Codex can likely use project-level config instead of consent-gated user-global writes, OpenHands has a structured config file we already manage, Continue keeps its existing JSON config, and each provider now has a concrete example of how model and vendor configurations will be written.
+- Implemented gateway dispatch state transitions (EDJ04) and gateway outcome propagation (EDJ05): jobs now transition ready->running at dispatch, and LLM outcomes flow back to job states with request-id tracking and dead-letter safety.
+- Ledger-driven grouped check-in: event-driven jobs, agent jobs core, foundation layer enhancements, memory recipes, provider services, tests, planning completions, and documentation.
+- Moved 7 RS* review files from active/ to completed/ planning directory
+- Activate configured event-driven jobs when agent-jobs is installed, enabled, or reconfigured.
+- Make event-driven job work items implementation-ready and unambiguous.
+- Event-triggered jobs are now more reliable: triggers sharing an event pattern all fire, disabled triggers are auditable, gateway outcome errors are always dead-lettered, and failed dispatches no longer strand jobs in a non-terminal state.
+- Dead-letter and audit records no longer persist raw prompts, keys, or tokens: content is structurally summarized and redacted through the single shared redaction primitive.
+- Direct CLI/MCP/API job launches now share the same prompt context and template rendering pipeline as event-triggered jobs, including file-based templates, caller context, and session data.
+- Cancelling a job now also cancels its in-flight gateway LLM request instead of leaving it running or queued.
+- Operators can now get an on-demand summary of event-driven jobs — trigger firing/suppression/failure counts, job states, and recent failures — via a read-only MCP tool.
+- Event triggers can now declare payload/metadata filter conditions (e.g. only fire for P0/P1 planning items), with filtered-out events recorded as auditable suppressions instead of launching LLM jobs.
+- The agent-jobs README now documents how event-driven jobs work end to end, with a tested configuration example and a guide to every inspection point.
+- The gateway's single-process assumptions are now documented with a v1 decision record, and an executable test enforces that jobs talk to the gateway via events only.
+- The workflow action renderer and the prompt template renderer were confirmed to serve different contracts; a permanent compatibility test suite now guards the workflow renderer's behavior.
+- The model-endpoint plan is now implementation-ready with the first event-driven Reviewer scenario as its acceptance target, and new plan items lock down model availability queries, per-request model selection, the reviewer end-to-end flow, and a registry standard for event topics.
+- The provider management MCP tools are planned to answer deeper questions — the extended model listing gains refresh and staleness signals, and a new describe_provider tool composes a full read-only picture of what each provider can do and how it is wired into the project.
+- The external architecture review of the model-endpoint, event-topic, and reviewer-agent plans has been triaged: nine corrections were folded into the plan items and four items were confirmed as-is.
+- Established enforceable managed-config ownership standards and a complete audited remediation inventory.
+- Archive completed planning items: event-driven-jobs and recipe-system-review items moved to completed/
+- Event-driven jobs: trigger config, observer, dead-letter safety, payload filters, operator overview MCP tool
+- Agent jobs core: unified prompt rendering, cancel propagation, event-source provenance, path-safe templates
+- Foundation: workflow-renderer contract preserved, prompt-launch-request schema mirrored
+- Agents: job-cancel propagates to gateway LLM request, decision record documents boundary
+- Tests: event-driven jobs, redaction, operational records, gateway boundary checks
+- Planning: model-endpoint-management MO01-MO14, new plans (bus-topic-standards, reviewer-agent, cleanup), EDJ hardening
+- Docs: architecture standards (tests, events, errors), component creation, managed mutation audit
+- Added Docker-isolated startup and public CLI checks for wheel-installed AUDiaGentic.
+- Managed-config-consistency plan items updated with review feedback; new items MA10-MA15 added for remaining work
+- Archived unify-install-paths plan items (UN01-UN04) superseded by managed-config-consistency plan
+- Added code-cleanup items CC29-CC32: config-driven skill rendering and plan heading labels
+- Completed the implementation-readiness pass on the model-endpoint plan: all 11 open readiness reviews triaged and closed, every open design decision pinned to a single deterministic choice, and a new prerequisite item added for secret/API-key resolution and launch-time env injection, which nothing in the codebase currently provides.
+- Additional managed-config-consistency plan updates and MA16 item creation
+- Confirmed the secret resolver isn't a new concept: the config schema already defines env-variable key references (auth-ref) with nothing implementing them — the new plan item now builds the resolver that convention always implied and migrates the one ad-hoc key lookup onto it.
+- Confirmed the codebase already has a dedicated shared redaction module and a fan-out plan; the secret-resolver item now explicitly reuses it, and the two remaining hand-rolled redaction lists (MCP tool-arg logging, agent-job prompt context) were added to the redaction plan's consolidation scope.
+- Pinned where the secret resolver lives (providers component), confirmed no formal standard or library is needed for v1 env-variable references, and added a safer placement rule: write env-variable references into agent configs where the tool supports them so no key value is ever stored on disk.
+- The secret resolver moves to foundation as a core shared capability; config templating routes credentials through it while prompt templating never touches secrets; and provider configs using env-variable references now get an ambient-environment check so tools still start and work when run outside AUDiaGentic.
+- Corrected the key-delivery model to match how providers actually run: tools operate standalone outside AUDiaGentic, so enablement relies on user-environment variables or explicit config values that AUDiaGentic verifies and guides — injection at launch remains only a bonus for sessions AUDiaGentic starts itself.
+- Added standard remote-service failure and degradation guidance for model source work.
+- Fixed provider model selection precedence and improved catalog read status.
+- Added safe environment secret-reference support for provider model sources.
+- Added shared managed-config primitives for safe provider configuration ownership.
+- Moved MCP ownership registry onto shared managed-config storage.
+- Consolidated the MCP and language-server config machinery onto one shared foundation core, closing two tracked architecture-debt items and fixing a real corrupt-registry silent-failure bug and a Windows file-write flake along the way.
+- Implemented the model-sources contract: a schema and config file for declaring local models and vendor/aggregator accounts, plus the provider-descriptor fields that will let each coding agent tool advertise which connectors and vendor accounts it supports.
+- Completed the secret/launch-environment plumbing: API keys referenced as environment variables now get resolved and injected only at the moment a provider is launched, with strict guarantees they never leak into logs or status output — and providers with no working execution path now fail loudly instead of silently pretending to run.
+- Started unified foundation step execution: workflow and installation recipes now share one result contract and compensation sequence.
+- Local model declarations now flow end-to-end: declaring a model source materializes managed entries into compatible tools' configs with ownership tracking, MCP management tools for add/update/remove/enable with dry-run previews, status reporting with drift detection, and a fixed bug where config collisions could be reported as success.
+- Fixed two existing provider-memory validation failures by blocking unverified commands and avoiding invalid provider config mutation.
+- Unified shell execution foundation for toolchain installs, with safer redacted results.
+- Added the model catalog layer for remote accounts: vendor model families load from curated data files or the service's list API with safe caching, so a network outage degrades to the last known model list instead of breaking anything, and filters let you narrow huge aggregator catalogs.
+- Unified workflow and install shell execution under one reusable foundation implementation.
+- Added a describe_provider tool that gives one deep, read-only view of any provider — install status, execution support, model catalog and managed models, config file surfaces, and what AUDiaGentic owns in its configs.
+- Prevented step execution from being retried after an internal TypeError.
+- Standardized registries as typed extension points, preventing string-key service locators from hiding component coupling.
+- Made managed file ownership atomic and fail-closed to prevent unsafe pruning or re-adoption after registry corruption.
+- Aligned managed mutation steps with the unified foundation execution protocol.
+- Fixed order-dependent component capability loading after partial registry resets.
+- Moved callable and shell workflow execution onto the shared foundation step implementation.
+- Verified OpenCode v1.17.18 vendor support: native OAuth/API login required (env var key injection blocked); OpenRouter absent as native provider; catalog authoritative for model availability.
+- Verified Pi, OpenHands, Codex, Qwen vendor support for P1 vendors. OpenHands is best candidate for env-key-injection (unified LLM_API_KEY). Pi requires home-scoped config writes. Codex needs project-scope verification. Qwen has narrow openai-only surface.
+- Completed P1 vendor verification for Claude Code, Gemini CLI/Antigravity: confirmed native-vendor-only behavior with no external vendor routing. Updated provider capabilities matrix.
+- Fixed silent exception handlers in local-openai catalog adapter and removed unused error code factory.
+- Cleaned up remaining references to deleted workflow invocation steps module (MA11 Phase D)
+- Completed migration of the step subsystem from legacy provision_steps to canonical foundation.steps. The step factory now supports strict substitution, lenient substitution, and empty flag dropping. Legacy module deleted; all code migrated to canonical imports.
+- Fixed the clean-wheel startup/package issues so the packaged CLI, MCP servers, release workflow install, and Docker packaging smoke all pass from an installed wheel.
+- Packaged AUDiaGentic now starts and runs its CLI/MCP surfaces from a clean wheel without checkout path leakage; Docker tests verify errors, packaged resources, and mutation containment twice.
+- Dependency install previews now render correctly from shared workflow steps.
+- Added working OpenCode deep-coder gateway and ACP execution proofs while keeping provider-specific details isolated from generic execution transport.
+- MO09 RV353 correction complete: fixed Pi/Qwen evidence, downgraded Codex/OpenHands/Code over-claims.
+- Made remaining MA/MO plans implementation-ready for agent handoff with explicit sequencing and architecture boundaries.
+- Reorganized the managed-config and model-endpoint plans into a tracked, block-ordered execution program with a new coordination item and a separate plan for deferred harness runtime work.
+- Plan item section headings now load from planning.yaml config instead of hardcoded Python dicts, enabling localization and custom project conventions without code changes.
+- LSP label constants (symbol kinds, completion kinds, method labels, language mappings) now load from coding-lsp.yaml config instead of hardcoded Python dicts, enabling customization without code changes.
+- Extended model endpoint verification to long-tail providers, documenting config surfaces, key mechanisms, and multi-vendor support for cline, aider, copilot, claude
+- Simplified the capability-schema plan by splitting research/reference machinery into a sidecar item and pinned rules that keep the layered architecture easy to extend: components only touch declarations and gateway requests.
+- Captured the future 'any provider as the ag CLI' idea as a tracked research profile in the capability-catalog sidecar, covering config isolation, MCP segregation, and launch permission lockdowns.
+- Classified every plan item and step by the level of agent needed, so simple agents can take the mechanical and contract-following work while architect agents handle schema and boundary design.
+- Added annotations field to provider descriptors for arbitrary metadata; marked gemini as deprecated (replaced by antigravity)
+- Froze the agent-execution event contract and published the capability-schema draft, unblocking the simple-agent and mid-agent work queues while the schema draft awaits review.
+- Separated provider deprecation into structured field; annotations remain purely informational
+- Completed qwen and codex provider verification: confirmed env var names for qwen auth types, verified codex model_providers config path
+- Added I18n translation registry for config-driven string lookup with locale switching, pluralization, and interpolation — the standard access mechanism for all externalized user-facing text going forward.
+- Approved the capability schema shape with named recipe refs, per-capability bindings, and distinct capability kinds, clearing the way for the schema loader and catalog implementation.
+- Locked in the cross-cutting consolidation rules — event topic standards sequenced into the program, one canonical status mapping, one probe home — and parked the toolchains package tidy-up as a future cleanup item.

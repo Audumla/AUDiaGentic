@@ -6,6 +6,8 @@ the external-mcp-servers declarations in source-control.yaml.
 """
 from __future__ import annotations
 
+import logging
+import stat as _stat
 from pathlib import Path
 from typing import Any
 
@@ -15,12 +17,22 @@ from audiagentic.foundation.components.dependencies import (
 )
 from audiagentic.foundation.components.hooks import ComponentStatusPayload
 from audiagentic.foundation.components.loader import component_yaml_path
-from audiagentic.foundation.io import load_yaml_file
+from audiagentic.foundation.io import atomic_write_text, load_yaml_file
+from audiagentic.foundation.toolchains.artifact_registry import ArtifactRegistry
 from audiagentic.foundation.toolchains.detect import tool_available
+from audiagentic.foundation.toolchains.managed_block import (
+    apply_managed_block,
+    remove_managed_block,
+)
+
+logger = logging.getLogger(__name__)
 
 _COMPONENT_ID = "source-control"
+_SOURCE_CONTROL_RECIPE = "source-control/post-commit-hook"
 
 SOURCE_CONTROL_DEPENDENCY_IDS = ["git", "gh", "gh-mcp", "uv"]
+
+_HOOK_BLOCK_ID = "audiagentic-ledger-stamp"
 
 
 def _load_probes() -> dict[str, Any]:
@@ -44,9 +56,6 @@ def detect_availability() -> dict[str, Any]:
         "git-mcp-server-available": git_ok and uvx_ok,
         "github-mcp-server-available": gh_mcp_ok,
     }
-
-
-_HOOK_MARKER = "audiagentic-ledger-stamp"
 
 
 def _ledger_hook_template_path() -> Path:
@@ -76,47 +85,196 @@ def on_component_lifecycle(event_type: str, payload: dict, metadata: dict) -> No
         return
 
     if event_type == EVENT_INSTALLED:
-        _install_post_commit_hook(project_root)
+        install_post_commit_hook(project_root)
     elif event_type == EVENT_UNINSTALLED:
-        _remove_post_commit_hook(project_root)
+        remove_post_commit_hook(project_root)
 
 
-def _install_post_commit_hook(project_root: Path) -> bool:
-    """Install or update the post-commit hook. Returns True if installed."""
-    if not ledger_integration_enabled(project_root):
-        return False
-    hooks_dir = project_root / ".git" / "hooks"
-    if not hooks_dir.exists():
-        return False
-    hook_path = hooks_dir / "post-commit"
-    hook_body = _post_commit_hook_body()
-    if hook_path.exists():
-        existing = hook_path.read_text(encoding="utf-8")
-        if _HOOK_MARKER in existing:
-            return False  # already installed
-        # append to existing hook (shebang already present in existing file)
-        updated = existing.rstrip("\n") + "\n\n" + hook_body
-        hook_path.write_text(updated, encoding="utf-8", newline="\n")
-    else:
-        hook_path.write_text("#!/bin/sh\n" + hook_body, encoding="utf-8", newline="\n")
+def _hook_registry(project_root: Path) -> ArtifactRegistry:
+    return ArtifactRegistry(project_root)
+
+
+def _set_executable(path: Path) -> None:
+    """Set executable bits on hook; no-op on failure (Windows may not support)."""
     try:
-        import stat
-        hook_path.chmod(hook_path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+        path.chmod(path.stat().st_mode | _stat.S_IEXEC | _stat.S_IXGRP | _stat.S_IXOTH)
     except OSError:
         pass
+
+
+def _hook_body_lf() -> str:
+    """Return hook body with LF line endings enforced for shell script."""
+    return _post_commit_hook_body().replace("\r\n", "\n").rstrip("\n")
+
+
+def _install_hook_absent(hook_path: Path, project_root: Path) -> bool:
+    """Create fresh whole-owned hook file when no hook exists."""
+    content = "#!/bin/sh\n" + _hook_body_lf() + "\n"
+    atomic_write_text(hook_path, content)
+    _set_executable(hook_path)
+    reg = _hook_registry(project_root)
+    rel = Path(hook_path.relative_to(project_root)).as_posix() if hook_path.is_relative_to(project_root) else Path(hook_path).as_posix()
+    reg.register(_SOURCE_CONTROL_RECIPE, files=[rel])
     return True
 
 
-def _remove_post_commit_hook(project_root: Path) -> bool:
-    """Remove the AUDiaGentic post-commit hook block. Returns True if removed."""
+def _install_hook_user_owned(hook_path: Path, project_root: Path) -> bool:
+    """Append managed block to existing user-owned hook file."""
+    change = apply_managed_block(
+        hook_path,
+        _HOOK_BLOCK_ID,
+        _hook_body_lf(),
+    )
+    _set_executable(hook_path)
+    reg = _hook_registry(project_root)
+    reg.register(_SOURCE_CONTROL_RECIPE, blocks=[change])
+    return True
+
+
+def install_post_commit_hook(
+    project_root: Path,
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Install or update the post-commit hook with atomic writes and ownership tracking.
+
+    Returns dict with keys: installed (bool), path, ownership_mode (whole-file|block|collision|skipped),
+    reason, dry_run_changes. On collision a warning is logged; bytes never overwritten.
+    """
+    if not ledger_integration_enabled(project_root):
+        return {"installed": False, "reason": "ledger integration not enabled", "ownership_mode": "skipped"}
+
+    hooks_dir = project_root / ".git" / "hooks"
+    if not hooks_dir.exists():
+        return {"installed": False, "reason": "hooks directory absent", "ownership_mode": "skipped"}
+
+    hook_path = hooks_dir / "post-commit"
+    hook_body_lf = _hook_body_lf()
+
+    if not hook_path.exists():
+        # Absent file → create whole-owned
+        result = {
+            "installed": True,
+            "path": str(hook_path),
+            "ownership_mode": "whole-file",
+        }
+        if dry_run:
+            content = "#!/bin/sh\n" + hook_body_lf + "\n"
+            result["dry_run_changes"] = {
+                "action": "create",
+                "bytes_new": len(content.encode("utf-8")),
+                "executable": True,
+            }
+        else:
+            _install_hook_absent(hook_path, project_root)
+        return result
+
+    existing = hook_path.read_text(encoding="utf-8")
+
+    # Check for existing managed block via apply_managed_block detection logic
+    from audiagentic.foundation.toolchains.managed_block import (
+        _block_pattern as _detect_block_pattern,
+    )
+    pattern = _detect_block_pattern(_HOOK_BLOCK_ID, "#")
+    if pattern.search(existing):
+        change = apply_managed_block(hook_path, _HOOK_BLOCK_ID, hook_body_lf)
+        result = {
+            "installed": True,
+            "path": str(hook_path),
+            "ownership_mode": "block" if not change.existed else "block",
+            "reason": "replaced-existing-block" if change.existed else "appended-block",
+        }
+        if dry_run:
+            wrapped = f"# >>> audiagentic:{_HOOK_BLOCK_ID} >>>\n{hook_body_lf}\n# <<< audiagentic:{_HOOK_BLOCK_ID} <<<\n"
+            result["dry_run_changes"] = {
+                "action": "replace-block" if change.existed else "append-block",
+                "bytes_new": len(wrapped.encode("utf-8")),
+                "executable": True,
+            }
+        return result
+
+    # Check for legacy marker (pre-managed-block format)
+    if _HOOK_BLOCK_ID in existing:
+        # Legacy marker present but not wrapped in managed block markers — treat as installed
+        logger.info(
+            "Legacy hook marker detected without formal block delimiters; treating as installed.",
+            extra={"path": str(hook_path)},
+        )
+        return {
+            "installed": True,
+            "path": str(hook_path),
+            "ownership_mode": "block",
+            "reason": "legacy-marker-present",
+        }
+
+    # User-owned file (no marker, no block) → collision: append managed block
+    result = {
+        "installed": True,
+        "path": str(hook_path),
+        "ownership_mode": "block",
+        "reason": "appended-to-user-file",
+    }
+    if dry_run:
+        existing_bytes = len(existing.encode("utf-8"))
+        updated = existing.rstrip("\n") + "\n\n" + hook_body_lf + "\n"
+        result["dry_run_changes"] = {
+            "action": "append-block",
+            "bytes_before": existing_bytes,
+            "bytes_after": len(updated.encode("utf-8")),
+            "executable": True,
+        }
+    else:
+        _install_hook_user_owned(hook_path, project_root)
+    return result
+
+
+def remove_post_commit_hook(
+    project_root: Path,
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Remove the AUDiaGentic post-commit hook with registry-proven deletion.
+
+    Returns dict with keys: removed (bool), path, ownership_mode, reason.
+    Whole-owned file deleted with registry proof; block-owned preserves user content.
+    """
+    result = prune_post_commit_hook(project_root, dry_run=dry_run)
+    result.setdefault("removed", result.get("pruned", False))
+    if not dry_run:
+        _legacy_remove_fallback(project_root)
+    return result
+
+
+def _legacy_remove_fallback(project_root: Path) -> bool:
+    """Legacy removal path for pre-managed-block hooks (raw marker without block delimiters)."""
     hook_path = project_root / ".git" / "hooks" / "post-commit"
     if not hook_path.exists():
         return False
+
+    # Try managed-block removal first (preferred path)
+    change = remove_managed_block(hook_path, _HOOK_BLOCK_ID)
+    if change.existed:
+        reg = _hook_registry(project_root)
+        bucket = reg.owned(_SOURCE_CONTROL_RECIPE)
+        rel = Path(hook_path.relative_to(project_root)).as_posix() if hook_path.is_relative_to(project_root) else Path(hook_path).as_posix()
+        files_owned = rel in bucket.get("files", [])
+        if not files_owned:
+            return True
+        remaining = hook_path.read_text(encoding="utf-8").strip()
+        if not remaining:
+            try:
+                hook_path.unlink()
+            except OSError:
+                logger.warning("Could not unlink empty hook after block removal", exc_info=True)
+        reg.register(_SOURCE_CONTROL_RECIPE, files=[rel])
+        return True
+
+    # Legacy marker removal (pre-managed-block format)
     content = hook_path.read_text(encoding="utf-8")
-    if _HOOK_MARKER not in content:
+    if _HOOK_BLOCK_ID not in content:
         return False
     lines = content.splitlines()
-    marker_idx = next((idx for idx, line in enumerate(lines) if _HOOK_MARKER in line), None)
+    marker_idx = next((idx for idx, line in enumerate(lines) if _HOOK_BLOCK_ID in line), None)
     if marker_idx is None:
         return False
     out = lines[:marker_idx]
@@ -124,10 +282,88 @@ def _remove_post_commit_hook(project_root: Path) -> bool:
         out.pop()
     result = ("\n".join(out) + "\n") if out else ""
     if result.strip():
-        hook_path.write_text(result, encoding="utf-8")
+        atomic_write_text(hook_path, result)
     else:
-        hook_path.unlink()
+        _safe_unlink_on_prune(project_root, hook_path)
     return True
+
+
+def prune_post_commit_hook(
+    project_root: Path,
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Remove the managed hook with registry-proven deletion semantics.
+
+    Whole-owned file: deleted only with ArtifactRegistry proof.
+    Block-owned file: block removed, file preserved.
+    """
+    hook_path = project_root / ".git" / "hooks" / "post-commit"
+    reg = _hook_registry(project_root)
+    bucket = reg.owned(_SOURCE_CONTROL_RECIPE)
+    rel = Path(hook_path).as_posix()
+
+    result: dict[str, Any] = {
+        "pruned": False,
+        "path": str(hook_path),
+    }
+
+    if not hook_path.exists():
+        result["reason"] = "hook absent"
+        return result
+
+    files_owned = rel in bucket.get("files", [])
+    blocks_owned = any(
+        e.get("block_id") == _HOOK_BLOCK_ID
+        for e in bucket.get("blocks", [])
+    )
+
+    if files_owned:
+        # Whole-owned file — safe to delete entirely (registry proof exists)
+        if dry_run:
+            result["dry_run_changes"] = {"action": "delete-whole-file", "ownership_mode": "whole-file"}
+            result["pruned"] = True
+        else:
+            try:
+                import time as _time
+                for attempt in range(3):
+                    hook_path.unlink(missing_ok=True)
+                    if not hook_path.exists():
+                        break
+                    _time.sleep(0.05)
+                reg.register(_SOURCE_CONTROL_RECIPE, files=[rel])
+                result["pruned"] = True
+            except OSError as exc:
+                result["error"] = str(exc)
+
+    elif blocks_owned or _HOOK_BLOCK_ID in (hook_path.read_text(encoding="utf-8") if hook_path.exists() else ""):
+        # Block-owned file — remove block only, preserve user content
+        if dry_run:
+            result["dry_run_changes"] = {"action": "remove-block", "ownership_mode": "block"}
+            result["pruned"] = True
+        else:
+            removed = _legacy_remove_fallback(project_root)
+            result["pruned"] = removed
+
+    else:
+        result["reason"] = "not-owned"
+
+    return result
+
+
+def _safe_unlink_on_prune(project_root: Path, hook_path: Path) -> None:
+    """Delete hook file only if ArtifactRegistry proves AUDiaGentic created it."""
+    reg = _hook_registry(project_root)
+    bucket = reg.owned(_SOURCE_CONTROL_RECIPE)
+    rel = Path(hook_path.relative_to(project_root)).as_posix() if hook_path.is_relative_to(project_root) else Path(hook_path).as_posix()
+    if rel in bucket.get("files", []):
+        try:
+            hook_path.unlink()
+        except OSError:
+            logger.warning("Could not unlink whole-owned hook during prune", exc_info=True)
+    else:
+        # Block-owned or unknown — leave file with marker stripped (user content preserved)
+        pass
 
 
 def status_payload(project_root: Path | None = None) -> ComponentStatusPayload:

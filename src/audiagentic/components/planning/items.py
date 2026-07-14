@@ -31,7 +31,7 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
     if not title:
         raise AudiaGenticError(code="VAL-PLN-004", kind="validation", message="item 'title' is required")
 
-    created_by = item.get("created-by") or item.get("created_by") or item.get("creator_id")
+    created_by = item.get("created-by") or item.get("created_by") or item.get("creator_id") or "agent"
     if not created_by:
         raise AudiaGenticError(code="VAL-PLN-025", kind="validation", message="item 'created-by' is required")
 

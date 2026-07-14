@@ -118,3 +118,43 @@ def test_incremental_sync_appends_only(tmp_path: Path) -> None:
     ledger_api.sync(tmp_path)
     lines_noop = ledger_path.read_text(encoding="utf-8").splitlines()
     assert len([l for l in lines_noop if l.strip()]) == 3
+
+
+def test_sync_purges_synced_fragments(tmp_path: Path) -> None:
+    fragments_dir = tmp_path / ".audiagentic" / "runtime" / "ledger" / "fragments"
+
+    ledger_api.record_changes(
+        tmp_path,
+        [_event("chg_purge_001"), _event("chg_purge_002")],
+        sync=True,
+    )
+
+    remaining = list(fragments_dir.glob("*.json"))
+    assert len(remaining) == 0
+
+
+def test_sync_reported_purged_count(tmp_path: Path) -> None:
+    ledger_api.record_changes(
+        tmp_path,
+        [_event("chg_purge_count_001"), _event("chg_purge_count_002")],
+        sync=False,
+    )
+
+    fragments_dir = tmp_path / ".audiagentic" / "runtime" / "ledger" / "fragments"
+    assert len(list(fragments_dir.glob("*.json"))) == 2
+
+    result = ledger_api.sync(tmp_path)
+    assert result["purged-fragment-count"] == 2
+    assert len(list(fragments_dir.glob("*.json"))) == 0
+
+
+def test_sync_purges_stray_directories(tmp_path: Path) -> None:
+    ledger_api.record_change(tmp_path, _event("chg_stray_001"), sync=True)
+
+    fragments_dir = tmp_path / ".audiagentic" / "runtime" / "ledger" / "fragments"
+    stray = fragments_dir / "bad-stray-dir"
+    stray.mkdir(parents=True)
+    assert stray.is_dir()
+
+    ledger_api.record_change(tmp_path, _event("chg_stray_002"), sync=True)
+    assert not stray.exists()

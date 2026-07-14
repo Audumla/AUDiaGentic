@@ -50,6 +50,17 @@ def atomic_write_text(path: Path, content: str) -> None:
             os.unlink(tmp)
 
 
+def load_json_file(path: Path) -> dict[str, Any]:
+    """Load JSON mapping from path. Missing file or malformed content returns {}."""
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return _ensure_dict(data)
+
+
 def atomic_write_json(path: Path, payload: Any, *, indent: int = 2, sort_keys: bool = True) -> None:
     """Atomically write a JSON document."""
     atomic_write_text(path, json.dumps(payload, indent=indent, sort_keys=sort_keys))

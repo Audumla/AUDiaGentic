@@ -161,9 +161,15 @@ class ProviderDescriptor:
     # launch-example-template (default "@{tag}-{provider_id}").
     # Adapters with custom rendering keep a surface.py, which wins over this.
     surfaces: dict[str, Any] | None = None
-    # Free-form key/value annotations for arbitrary metadata not covered by
-    # structured fields — deprecation notices, migration notes, beta flags, etc.
-    # Consumed by interrogate(), status reporting, and any downstream reader.
+    # Whether this provider is deprecated (superseded by another tool or EOL).
+    # Drives structured behavior: filtering from active listings, warnings on
+    # dispatch, migration prompts. Distinct from annotations — do not store
+    # logic-driving state in the free-form annotations dict.
+    deprecated: bool = False
+    # Free-form key/value for informational metadata an agent or user can read.
+    # Not consumed by execution logic — use structured fields (deprecated, etc.)
+    # for anything that drives code behavior. Example keys: migration_guide,
+    # deprecation_notes, beta_status_links.
     annotations: dict[str, Any] = field(default_factory=dict)
 
     def host_extensions(self, host_id: str) -> tuple[HostCapability, ...]:

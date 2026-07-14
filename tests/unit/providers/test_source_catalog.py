@@ -269,3 +269,47 @@ def test_filter_table(model_filter, expected) -> None:
 def test_filter_is_stably_sorted() -> None:
     models = [{"model-id": "z"}, {"model-id": "a"}, {"model-id": "m"}]
     assert [m["model-id"] for m in apply_model_filter(models, None)] == ["a", "m", "z"]
+
+
+def _degraded_timeline_records(tmp_path: Path) -> list[dict]:
+    timeline = tmp_path / ".audiagentic" / "runtime" / "providers" / "source-catalog-timeline.jsonl"
+    records = [json.loads(line) for line in timeline.read_text(encoding="utf-8").splitlines() if line]
+    return [r for r in records if r.get("event") == "source-catalog.degraded"]
+
+
+def test_degraded_missing_timeline_carries_full_contract(tmp_path: Path) -> None:
+    """RV390: degraded outcomes persist failure class, error code, action
+    needed, and fallback — not just a bare failure-class marker."""
+    _refresh(tmp_path, [urllib.error.URLError("x"), urllib.error.URLError("x")])
+    records = _degraded_timeline_records(tmp_path)
+    assert records, "degraded refresh must record a timeline event"
+    attrs = records[-1]["attributes"]
+    assert attrs["failure-class"] == "transient"
+    assert attrs["error-code"] == "CON-SRCCAT-002"
+    assert attrs["action-needed"]
+    assert attrs["fallback"] == "none"
+    assert attrs["stale"] is False
+    assert records[-1]["resource-id"] == "src"
+
+
+def test_degraded_cached_timeline_carries_staleness(tmp_path: Path) -> None:
+    _refresh(tmp_path, [[{"model-id": "m1"}]])  # seed last-known-good cache
+    result, _ = _refresh(tmp_path, [urllib.error.URLError("x"), urllib.error.URLError("x")])
+    assert result.freshness == "cached"
+    attrs = _degraded_timeline_records(tmp_path)[-1]["attributes"]
+    assert attrs["fallback"] == "cached"
+    assert attrs["stale"] is True
+    assert attrs["cached-fetched-at"]
+    assert isinstance(attrs["stale-age-seconds"], int)
+    assert attrs["stale-age-seconds"] >= 0
+
+
+def test_degraded_timeline_never_contains_secret(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("CATALOG_KEY", _SENTINEL_KEY)
+    _refresh(
+        tmp_path,
+        [urllib.error.URLError("x"), urllib.error.URLError("x")],
+        **{"api-key-ref": "env:CATALOG_KEY"},
+    )
+    timeline = tmp_path / ".audiagentic" / "runtime" / "providers" / "source-catalog-timeline.jsonl"
+    assert _SENTINEL_KEY not in timeline.read_text(encoding="utf-8")

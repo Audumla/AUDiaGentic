@@ -708,4 +708,178 @@ class TestRecipeArchitectureGuards:
         )
 
 
+class TestFoundationCapabilityCatalogDeleted:
+    """RV405/RV406 — no capability vocabulary remains under foundation after deletion."""
+
+    def test_no_capability_package_exists(self):
+        """foundation/capability_catalog/ must not exist."""
+        catalog_dir = WORKSPACE_ROOT / "src" / "audiagentic" / "foundation" / "capability_catalog"
+        assert not catalog_dir.exists(), f"foundation/capability_catalog/ still exists: {catalog_dir}"
+
+    def test_no_capability_symbols_under_foundation(self):
+        """No Python file under foundation/ references capability vocabulary symbols."""
+        forbidden = {
+            "CapabilityRecord",
+            "CAPABILITY_KINDS",
+            "SUPPORT_STATES",
+            "EVIDENCE_REVIEW_STATES",
+            "OPERATION_NAMES",
+            "MODE_VALUES",
+            "SURFACE_TYPES",
+            "OWNERSHIP_TYPES",
+            "RELOAD_MODES",
+            "DRY_RUN_MODES",
+            "SECRETS_MODES",
+            "TRANSPORT_KINDS",
+            "SESSION_MODES",
+            "EVENT_DELIVERY_MODES",
+            "CANCELLATION_MODES",
+            "PERMISSION_MODES",
+            "LAUNCH_CLASS_TYPES",
+            "TRANSPORT_STATES",
+            "TransportManifestation",
+            "Contract",
+            "Manifestation",
+            "ModeDeclaration",
+        }
+        foundation_dir = WORKSPACE_ROOT / "src" / "audiagentic" / "foundation"
+        violations = []
+        for pyfile in _get_python_files(foundation_dir):
+            try:
+                with open(pyfile, encoding="utf-8") as f:
+                    source = f.read()
+                tree = ast.parse(source, filename=str(pyfile))
+            except (SyntaxError, SystemError, RecursionError):
+                continue
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Name) and node.id in forbidden:
+                    violations.append(f"{pyfile.relative_to(WORKSPACE_ROOT)}: references {node.id}")
+                elif isinstance(node, (ast.ImportFrom, ast.Import)):
+                    # Check import targets
+                    if isinstance(node, ast.ImportFrom) and node.module:
+                        for sym in forbidden:
+                            if sym in node.module:
+                                violations.append(f"{pyfile.relative_to(WORKSPACE_ROOT)}: imports from {node.module}")
+                    elif isinstance(node, ast.Import):
+                        for alias in node.names:
+                            if alias.name in forbidden:
+                                violations.append(f"{pyfile.relative_to(WORKSPACE_ROOT)}: imports {alias.name}")
+        assert not violations, (
+            "Capability vocabulary found under foundation/ after deletion:\n"
+            + "\n".join(violations)
+        )
+
+
+class TestRequesterProvidersImportAllowlist:
+    """RV405 — requester components may import ONLY providers_api, never internals."""
+
+    @pytest.fixture
+    def allowed_providers_prefix(self):
+        """The only allowed providers import prefix for requester components."""
+        return "audiagentic.components.providers.providers_api"
+
+    @pytest.fixture
+    def requester_component_dirs(self):
+        """Directories of requester components that must follow the allowlist.
+
+        Excludes memory/hindsight subpackage — it has its own controlled allowlist test
+        (TestMemoryComponentBoundaries.test_hindsight_provider_imports_are_contained).
+        """
+        return [
+            WORKSPACE_ROOT / "src" / "audiagentic" / "components" / "coding_lsp",
+        ]
+
+    def test_coding_lsp_providers_import_allowlist(
+        self, allowed_providers_prefix, requester_component_dirs
+    ):
+        """coding-lsp may import only from providers_api; never adapters/services internals.
+
+        Known pre-existing violations resolved by MA08 migration:
+        - language_servers_sync.py → providers.services.lsp_projection (should use public API)
+        """
+        # Allowlisted known violations — owned by MA08 resolution.
+        # Remove entries here when their owning item completes; assertion must pass clean.
+        known_violations = {
+            # MA08: coding-lsp still calls lsp_projection directly instead of public API
+            f"src\\audiagentic\\components\\coding_lsp\\language_servers_sync.py: imports audiagentic.components.providers.services.lsp_projection (allowed: {allowed_providers_prefix} only)",
+        }
+        violations = []
+        for comp_dir in requester_component_dirs:
+            if not comp_dir.exists():
+                continue
+            for pyfile in _get_python_files(comp_dir):
+                for imp in _get_imports(pyfile):
+                    # Skip foundation imports — those are allowed
+                    if not imp.startswith("audiagentic.components.providers"):
+                        continue
+                    # Allow only the sanctioned module
+                    if not imp.startswith(allowed_providers_prefix):
+                        v = (
+                            f"{pyfile.relative_to(WORKSPACE_ROOT)}: imports {imp} "
+                            f"(allowed: {allowed_providers_prefix} only)"
+                        )
+                        if v not in known_violations:
+                            violations.append(v)
+
+        assert not violations, (
+            "Requester component imports providers internals (not the sanctioned API module):\n"
+            + "\n".join(violations)
+        )
+
+
+class TestProvidersNoReverseImports:
+    """RV405 — providers must not import requester domains; handlers are requester-blind."""
+
+    @pytest.fixture
+    def providers_dir(self) -> Path:
+        return WORKSPACE_ROOT / "src" / "audiagentic" / "components" / "providers"
+
+    def test_no_providers_to_requester_domain_imports(self, providers_dir):
+        """Providers imports zero requester domain modules; handlers are requester-blind.
+
+        Known pre-existing violations resolved by their owning items:
+        - claude/hooks.py, gemini/adapter.py → agent_jobs.prompt_launch/parser (MA02/MO02)
+        - codex/opencode/qwen/language_servers.py → coding_lsp.language_servers (MA08)
+        - services/lsp_projection.py → coding_lsp.language_servers (MA08)
+        - skill_surfaces.py → agent_jobs.prompt_syntax (MA17 provider-domain boundary)
+        """
+        # Allowlisted known violations — owned by MA02/MA08/MO02 resolution.
+        # Remove entries here when their owning item completes; assertion must pass clean.
+        known_violations = {
+            # MA02: provider hooks import agent_jobs for prompt rendering
+            "src\\audiagentic\\components\\providers\\adapters\\claude\\hooks.py: imports audiagentic.components.agent_jobs.prompt_launch",
+            "src\\audiagentic\\components\\providers\\adapters\\claude\\hooks.py: imports audiagentic.components.agent_jobs.prompt_parser",
+            # MO02: gemini adapter imports agent_jobs for prompt rendering
+            "src\\audiagentic\\components\\providers\\adapters\\gemini\\adapter.py: imports audiagentic.components.agent_jobs.prompt_launch",
+            "src\\audiagentic\\components\\providers\\adapters\\gemini\\adapter.py: imports audiagentic.components.agent_jobs.prompt_parser",
+            # MA08: provider adapters import coding-lsp language_servers directly
+            "src\\audiagentic\\components\\providers\\adapters\\codex\\language_servers.py: imports audiagentic.components.coding_lsp.language_servers",
+            "src\\audiagentic\\components\\providers\\adapters\\opencode\\language_servers.py: imports audiagentic.components.coding_lsp.language_servers",
+            "src\\audiagentic\\components\\providers\\adapters\\qwen\\language_servers.py: imports audiagentic.components.coding_lsp.language_servers",
+            # MA08: lsp_projection service imports coding-lsp directly
+            "src\\audiagentic\\components\\providers\\services\\lsp_projection.py: imports audiagentic.components.coding_lsp.language_servers",
+            # MA17: skill surfaces import agent_jobs prompt syntax
+            "src\\audiagentic\\components\\providers\\skill_surfaces.py: imports audiagentic.components.agent_jobs.prompt_syntax",
+        }
+        forbidden_prefixes = (
+            "audiagentic.components.memory",
+            "audiagentic.components.coding_lsp",
+            "audiagentic.components.planning",
+            "audiagentic.components.agent_jobs",
+            "audiagentic.components.interaction",
+            "audiagentic.components.release",
+        )
+        violations = []
+        for pyfile in _get_python_files(providers_dir):
+            for imp in _get_imports(pyfile):
+                for prefix in forbidden_prefixes:
+                    if imp.startswith(prefix):
+                        v = f"{pyfile.relative_to(WORKSPACE_ROOT)}: imports {imp}"
+                        if v not in known_violations:
+                            violations.append(v)
+        assert not violations, (
+            "Providers component imports requester domain modules (reverse coupling):\n"
+            + "\n".join(violations)
+        )
+
 

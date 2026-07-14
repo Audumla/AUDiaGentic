@@ -45,6 +45,10 @@ JobStoreInterface = types.ModuleType
 
 logger = logging.getLogger(__name__)
 
+# Cross-component mirror for agents-owned gateway topic (BU02).
+# Owner: agents/agents_gateway_events.CANCEL_REQUESTED_TOPIC
+GW_TOPIC_CANCEL_REQUESTED = "agents.llm.gateway.cancel-requested"
+
 
 def _record_control_timeline_event(
     project_root: Path,
@@ -96,7 +100,7 @@ def _publish_gateway_cancel_requested(
     correlation_id = correlation_id or get_correlation_id() or ""
     try:
         get_bus().publish(
-            "agents.llm.gateway.cancel-requested",
+            GW_TOPIC_CANCEL_REQUESTED,
             {
                 "project-root": str(project_root),
                 "request-id": request_id,

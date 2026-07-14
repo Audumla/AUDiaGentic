@@ -31,11 +31,13 @@ _REGISTERED = False
 # name is broad enough that an unrelated future publisher could accidentally
 # trigger real provider dispatch by publishing to what looked like a neutral
 # "an LLM request happened" marker (RV32 finding).
-_REQUESTED_TOPIC = "agents.llm.gateway.requested"
-# EDJ08: reverse propagation — agent-jobs publishes this when a job with an
-# owning gateway request is cancelled. Topic literal is owned here; other
-# components publish the string, never import a constant.
-_CANCEL_REQUESTED_TOPIC = "agents.llm.gateway.cancel-requested"
+REQUESTED_TOPIC = "agents.llm.gateway.requested"
+CANCEL_REQUESTED_TOPIC = "agents.llm.gateway.cancel-requested"
+EVENT_REJECTED = "agents.llm.rejected"
+
+# Deprecated aliases — kept for import compatibility, will be removed.
+_REQUESTED_TOPIC = REQUESTED_TOPIC
+_CANCEL_REQUESTED_TOPIC = CANCEL_REQUESTED_TOPIC
 
 
 def _payload_get(payload: dict[str, Any], *keys: str) -> Any:
@@ -50,7 +52,7 @@ def _publish_rejected(reason: str, metadata: dict[str, Any]) -> None:
     there is no request-id yet, so this carries only the reason and whatever
     correlation/subject metadata the publisher supplied (RV18 finding)."""
     get_bus().publish(
-        "agents.llm.rejected",
+        EVENT_REJECTED,
         {"request-id": None, "error": {"code": "VAL-AGW-040", "message": reason, "kind": "agents"}},
         metadata=metadata,
     )

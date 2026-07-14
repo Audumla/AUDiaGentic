@@ -1,0 +1,16 @@
+# Planning component — English locale
+# Canonical source for all user-facing strings in the planning component.
+# Translated via I18n.t("planning.<key>") or _t_err(code).
+
+# ── Error messages (used by _t_err) ────────────────────────────────
+
+errors:
+  VAL-PLN-003: "The 'plan' field is required for plan items."
+  VAL-PLN-004: "The 'title' field is required for plan items."
+  VAL-PLN-025: "The 'created-by' field is required for plan items."
+  VAL-PLN-008: "The 'review-of' field is required for reviews."
+  VAL-PLN-009: "The 'title' field is required for reviews."
+
+# ── Item section headings (loaded by item_store.py via I18n) ──────
+# CC30 migrated these to planning.yaml; they can be consolidated here in a
+# follow-up once all consumers switch to I18n.t().

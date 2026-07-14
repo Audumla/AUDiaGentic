@@ -6,11 +6,12 @@ provider_id: gemini
 display_name: "Gemini (Google)"
 description: "Google's Gemini CLI. Agentic coding assistant with large context window and Google tool integrations."
 url: "https://github.com/google-gemini/gemini-cli"
+deprecated: true
 annotations:
-  deprecated: true
-  replacement_provider: antigravity
-  deprecated_since: "2026-07-13"
-  deprecation_message: "Google Gemini CLI is deprecated; migrate to Antigravity (agy v2.2.1+)."
+  deprecated:
+    since: "2026-07-13"
+    replacement_provider: antigravity
+    message: "Google Gemini CLI is deprecated; migrate to Antigravity (agy v2.2.1+)."
 prompt_aliases:
   - gm
 

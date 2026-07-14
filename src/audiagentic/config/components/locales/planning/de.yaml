@@ -1,0 +1,6 @@
+# Planning component — German locale (de)
+# Partial translations for demonstration; missing keys fall back to English.
+
+errors:
+  VAL-PLN-003: "Das 'plan'-Feld ist erforderlich für Planitems."
+  VAL-PLN-004: "Das 'title'-Feld ist erforderlich für Planitems."

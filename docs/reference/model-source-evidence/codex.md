@@ -67,7 +67,7 @@
 
 | Field | Value |
 |---|---|
-| **Config file** | `~/.codex/config.toml` (user-global, primary authority) AND `.codex/config.toml` (project-local, managed by repo for MCP/LSP). CLI `-c key=value` overrides at runtime. Project-scope precedence over global config: NOT verified — critical unknown for automation path. |
+| **Config file** | `~/.codex/config.toml` (user-global, primary authority) AND `.codex/config.toml` (project-local, managed by repo for MCP/LSP). CLI `-c key=value` overrides at runtime — model_providers entries accepted with full schema (`name`, `base_url`, `env_key`, `wire_api` required). Project-scope precedence over global config: NOT verified — critical unknown for automation path. The `-c` flag successfully injected a test provider entry (passed validation, failed on non-terminal stdin), confirming runtime override works. |
 | **Model config shape** | Top-level `model = "<id>"` selects active model. `[model_providers.<id>]` block: `name`, `base_url`, `env_key` (env var reference), `wire_api`, plus `model`/`model_provider` for selection. |
 | **Project-scope precedence** | **NOT verified** — global config may override project-local settings. This is the key blocker for automation: if AG writes to project `.codex/config.toml` but Codex reads only `~/.codex/config.toml`, the writer produces no effect. |
 | **Reload behavior** | Codex reads config at startup; no live reload observed. Changes require restart. |
