@@ -126,8 +126,8 @@ class ConditionalStep:
 def planned_commands(step: Any, context: dict[str, Any] | None = None) -> list[list[str]]:
     """Walk a step tree and return the shell commands it would run."""
     context = context or {}
-    from .shell import ShellStep
     from .sequence import SequenceStep
+    from .shell import ShellStep
 
     if isinstance(step, ShellStep):
         result = step.plan(context)
