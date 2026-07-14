@@ -36,7 +36,7 @@ from audiagentic.foundation.features.state import (
     get_feature_state,
     set_feature_state,
 )
-from audiagentic.foundation.workflow.invocation.steps import SequenceStep
+from audiagentic.foundation.steps import SequenceStep
 
 from .lsp_api import _sync_to_providers, resolve_project_root
 
