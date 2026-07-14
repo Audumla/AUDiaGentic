@@ -1,5 +1,12 @@
 from .callable import CallableStep
-from .control import ConditionalStep, ConfirmStep, SelectStep, WorkflowAnswer, WorkflowQuestion, planned_commands
+from .control import (
+    ConditionalStep,
+    ConfirmStep,
+    SelectStep,
+    WorkflowAnswer,
+    WorkflowQuestion,
+    planned_commands,
+)
 from .factory import (
     build_step,
     build_steps_from_defs,
