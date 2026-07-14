@@ -61,6 +61,26 @@ class TestLocalOpenAiAdapter(unittest.TestCase):
 
         self.assertEqual(result["model"], "packet-model")
 
+    def test_packet_model_overrides_default_model(self):
+        packet_ctx = {
+            "job-id": "test-job",
+            "prompt-body": "test prompt",
+            "model-id": "packet-model",
+        }
+        provider_cfg = {
+            "api-base-url": "http://localhost:11434",
+            "default-model": "provider-default",
+        }
+        mock_response = MagicMock()
+        mock_response.read.return_value = b'data: {"delta": {"content": "hello"}}\n'
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_response):
+            result = adapter.run(packet_ctx, provider_cfg)
+
+        self.assertEqual(result["model"], "packet-model")
+
     def test_run_non_stream(self):
         """run() handles non-streaming responses."""
         packet_ctx = {

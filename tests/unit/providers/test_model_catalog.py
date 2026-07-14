@@ -1,11 +1,33 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+from audiagentic.components.providers import providers_api
 from audiagentic.components.providers.services.models import resolve_model_selection
 from audiagentic.components.providers.services.provider_catalog import (
     build_model_catalog,
     validate_model_catalog,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+
+def test_list_provider_models_distinguishes_unsupported_catalog(monkeypatch, tmp_path) -> None:
+    from audiagentic.components.providers.descriptors import registry
+
+    monkeypatch.setattr(
+        registry, "all_descriptors", lambda: {"fixture": SimpleNamespace(fetch_catalog_fn=None)}
+    )
+
+    result = providers_api.list_provider_models(tmp_path, "fixture")
+
+    assert result == {
+        "provider_id": "fixture",
+        "models": [],
+        "ok": True,
+        "reason": "no-catalog-support",
+        "catalog_present": False,
+        "stale": False,
+    }
 
 
 def test_build_model_catalog_validates_shape() -> None:

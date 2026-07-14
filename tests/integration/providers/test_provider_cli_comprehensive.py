@@ -32,8 +32,8 @@ from audiagentic.components.providers.descriptors.registry import (
     all_descriptors,
     get_descriptor,
 )
+from audiagentic.foundation.steps import CallableStep, ShellStep
 from audiagentic.foundation.toolchains.loader import build_step
-from audiagentic.foundation.workflow.invocation.steps import CallableStep, ShellStep
 
 pytestmark = [
     pytest.mark.mutates_host,

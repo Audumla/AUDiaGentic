@@ -176,19 +176,19 @@ def test_inventory_rows_have_actionable_classification() -> None:
 
 
 def test_direct_managed_spec_calls_are_core_or_recorded_violation() -> None:
+    # MO06 closed: lsp_projection.py no longer calls spec.writer/remover
+    # directly — it routes through apply_managed_config_write/remove, the
+    # sanctioned indirection point in foundation/toolchains/managed_config.py.
     allowed_core = {
         "src/audiagentic/components/providers/services/mcp.py",
-    }
-    recorded_violation = {
-        "src/audiagentic/components/providers/services/lsp_projection.py",
+        "src/audiagentic/foundation/toolchains/managed_config.py",
     }
     found: dict[str, set[str]] = {}
     for path in sorted(SRC_ROOT.rglob("*.py")):
         calls = direct_spec_calls(path.read_text(encoding="utf-8"))
         if calls:
             found[path.relative_to(WORKSPACE_ROOT).as_posix()] = calls
-    assert set(found) <= allowed_core | recorded_violation, found
-    assert recorded_violation <= set(found), "MO06 violation disappeared; close audit row"
+    assert set(found) <= allowed_core, found
 
 
 def test_generic_hindsight_builder_provider_branches_are_pinned() -> None:
@@ -202,9 +202,12 @@ def test_generic_hindsight_builder_provider_branches_are_pinned() -> None:
 
 
 def test_generic_specs_component_type_leak_is_pinned() -> None:
+    # MO06 closed: ManagedConfigSpec's reader/writer/remover are Any-typed
+    # (domain-opaque, matching fragments.py), so base.py no longer needs to
+    # import coding_lsp.LanguageServerEntry for a type hint.
     path = SRC_ROOT / "components" / "providers" / "descriptors" / "base.py"
     leaks = component_imports(path.read_text(encoding="utf-8"))
-    assert leaks == {"audiagentic.components.coding_lsp.language_servers"}
+    assert leaks == set()
 
 
 def test_no_second_managed_registry_implementation() -> None:

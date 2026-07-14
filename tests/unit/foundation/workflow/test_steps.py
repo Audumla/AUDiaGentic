@@ -10,16 +10,17 @@ import sys
 
 import pytest
 
-from audiagentic.foundation.workflow.invocation.models import WorkflowAnswer, WorkflowQuestion
-from audiagentic.foundation.workflow.invocation.steps import (
+from audiagentic.foundation.steps import (
     ConditionalStep,
     ConfirmStep,
     PlatformOverrides,
     SelectStep,
     SequenceStep,
     ShellStep,
-    _platform_key,
+    WorkflowAnswer,
+    WorkflowQuestion,
 )
+from audiagentic.runtime.system.platform import platform_key as _platform_key
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -240,7 +241,7 @@ class TestSequenceStep:
         confirm = ConfirmStep(id="confirm", prompt="Go?")
         s_ok = ShellStep(id="ok", command=_true_cmd())
         seq = SequenceStep(id="seq", steps=(confirm, s_ok), fail_fast=True)
-        result = seq.run({}, {})
+        result = seq.run({"answers": {}})
         assert result.status == "waiting_for_input"
         assert result.question is not None
 
@@ -248,7 +249,7 @@ class TestSequenceStep:
         confirm, answers = self._make_confirm("confirm", answer="no")
         s_ok = ShellStep(id="ok", command=_true_cmd())
         seq = SequenceStep(id="seq", steps=(confirm, s_ok), fail_fast=True)
-        result = seq.run({}, answers)
+        result = seq.run({"answers": answers})
         assert result.status == "skipped"
         assert "ok" not in result.outputs
 
@@ -316,7 +317,7 @@ class TestConditionalStep:
         inner = ConfirmStep(id="inner", prompt="Go?")
         answers = {"inner": WorkflowAnswer(question_id="inner", value="yes")}
         step = ConditionalStep(id="cond", condition_key="flag", when_true=inner)
-        result = step.run({"flag": True}, answers)
+        result = step.run({"flag": True, "answers": answers})
         assert result.status == "ok"
 
 

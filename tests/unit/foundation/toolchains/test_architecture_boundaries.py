@@ -178,12 +178,14 @@ class TestProviderRecipeTests:
         expected = {
             "command_installer",
             "mcp_config",
+            "model_config",
             "hooks",
             "plugin_config",
             "rules",
             "wrapper_cli",
             "context_provider",
             "native_passthrough",
+            "launch_env",
             "hybrid",
             "guidance_only",
         }
@@ -485,20 +487,20 @@ class TestRecipeArchitectureGuards:
                             )
 
     def test_redaction_gate_on_shell_step_results(self):
-        """Std §8: ShellProvisionStep output must be redacted.
+        """Std §8: ShellStep output must be redacted.
 
         Create a shell step that outputs a token-like string and assert the result
         does NOT contain the raw token but DOES contain [REDACTED].
         """
-        from audiagentic.foundation.toolchains.provision_steps.shell import ShellProvisionStep
+        from audiagentic.foundation.steps import ShellStep
 
         test_token = "sk-aaaaaaaaaaaaaaaaaaaaaaaa"
 
         # Use a command that echoes the token; run through step to verify redaction.
         # On Windows, use PowerShell-compatible echo.
-        step = ShellProvisionStep(
+        step = ShellStep(
             id="test-redact",
-            command=f'echo {test_token}',
+            command=(f'echo {test_token}',),
             shell=True,
         )
         result = step.run({})
@@ -506,10 +508,10 @@ class TestRecipeArchitectureGuards:
         # The stdout in outputs should have the token redacted
         stdout = result.outputs.get("stdout", "")
         assert test_token not in stdout, (
-            f"ShellProvisionStep did not redact token in output: {stdout!r}"
+            f"ShellStep did not redact token in output: {stdout!r}"
         )
         assert "[REDACTED]" in stdout, (
-            f"ShellProvisionStep output missing [REDACTED] marker: {stdout!r}"
+            f"ShellStep output missing [REDACTED] marker: {stdout!r}"
         )
 
     def test_factory_completeness(self):
