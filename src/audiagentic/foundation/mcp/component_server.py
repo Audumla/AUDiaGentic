@@ -93,13 +93,51 @@ def server_instructions(decl: Any) -> str:
 
 
 def tool_description(decl: Any, name: str) -> str:
-    """Return tool description from a server declaration, or empty string."""
+    """Return tool description from a server declaration, or empty string.
+
+    Handles both plain-string and rich-format (dict with 'description' key) specs.
+    """
     if decl is None:
         return ""
     descriptions = getattr(decl, "tool_descriptions", None)
     if not descriptions:
         return ""
-    return descriptions.get(name, "")
+    entry = descriptions.get(name, "")
+    if isinstance(entry, dict):
+        return entry.get("description", "")
+    return entry
+
+
+def tool_parameter_spec(decl: Any, name: str) -> dict[str, Any]:
+    """Return parameter description mapping from a rich-format tool spec, or empty dict.
+
+    Rich format in YAML:
+      tool-descriptions:
+        some_tool:
+          description: "..."
+          parameters:
+            param_name: "description for this parameter"
+
+    Returns {param_name: {"description": "...", ...}} suitable for JSON Schema injection.
+    """
+    if decl is None:
+        return {}
+    descriptions = getattr(decl, "tool_descriptions", None)
+    if not descriptions:
+        return {}
+    entry = descriptions.get(name, "")
+    if not isinstance(entry, dict):
+        return {}
+    raw_params = entry.get("parameters", {})
+    if not raw_params:
+        return {}
+    schema: dict[str, Any] = {}
+    for param_name, param_desc in raw_params.items():
+        if isinstance(param_desc, str):
+            schema[param_name] = {"description": param_desc}
+        elif isinstance(param_desc, dict):
+            schema[param_name] = param_desc
+    return schema
 
 
 def report_error(

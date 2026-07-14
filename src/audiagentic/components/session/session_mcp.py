@@ -17,7 +17,6 @@ from audiagentic.foundation.mcp.component_server import (
     report_error,
     run_mcp_server,
     server_instructions,
-    tool_description,
 )
 
 from . import session_api
@@ -33,7 +32,7 @@ def build_server() -> FastMCP:
     decl = _server_decl()
     mcp = mcp_server(__name__, instructions=server_instructions(decl))
 
-    @mcp.tool(description=tool_description(decl, "status"))
+    @mcp.tool()
     @log_tool_call
     def status() -> dict[str, Any]:
         try:
@@ -41,7 +40,7 @@ def build_server() -> FastMCP:
         except Exception as exc:
             return report_error("session", "status", exc, logger)
 
-    @mcp.tool(description=tool_description(decl, "config"))
+    @mcp.tool()
     @log_tool_call
     def config() -> dict[str, Any]:
         try:
@@ -49,7 +48,7 @@ def build_server() -> FastMCP:
         except Exception as exc:
             return report_error("session", "config", exc, logger)
 
-    @mcp.tool(description=tool_description(decl, "set_auto_update"))
+    @mcp.tool()
     @log_tool_call
     def set_auto_update(enabled: bool) -> dict[str, Any]:
         try:
@@ -57,7 +56,7 @@ def build_server() -> FastMCP:
         except Exception as exc:
             return report_error("session", "set_auto_update", exc, logger)
 
-    @mcp.tool(description=tool_description(decl, "cli_visibility"))
+    @mcp.tool()
     @log_tool_call
     def cli_visibility() -> dict[str, Any]:
         try:
@@ -65,7 +64,7 @@ def build_server() -> FastMCP:
         except Exception as exc:
             return report_error("session", "cli_visibility", exc, logger)
 
-    @mcp.tool(description=tool_description(decl, "set_cli_visibility"))
+    @mcp.tool()
     @log_tool_call
     def set_cli_visibility(
         show_thinking_blocks: bool | None = None,
@@ -82,7 +81,7 @@ def build_server() -> FastMCP:
         except Exception as exc:
             return report_error("session", "set_cli_visibility", exc, logger)
 
-    @mcp.tool(description=tool_description(decl, "refresh_harness_config"))
+    @mcp.tool()
     @log_tool_call
     def refresh_harness_config() -> dict[str, Any]:
         try:
@@ -90,7 +89,7 @@ def build_server() -> FastMCP:
         except Exception as exc:
             return report_error("session", "refresh_harness_config", exc, logger)
 
-    @mcp.tool(description=tool_description(decl, "update_rig"))
+    @mcp.tool()
     @log_tool_call
     async def update_rig(scope: str = "local") -> dict[str, Any]:
         try:
@@ -115,3 +114,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
