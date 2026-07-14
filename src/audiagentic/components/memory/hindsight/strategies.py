@@ -35,6 +35,7 @@ from audiagentic.components.memory.hindsight.recipes import (
 from audiagentic.components.providers.descriptors.registry import get_descriptor
 from audiagentic.components.providers.services.recipes import ProviderRecipeKind
 from audiagentic.foundation.toolchains.detect import platform_allowed
+from audiagentic.foundation.toolchains.managed_config import REMOTE_CAPABILITY
 
 # ---------------------------------------------------------------------------
 # RecipeSpec definitions for config-collapsible kinds (SL15)
@@ -79,7 +80,11 @@ def _external_fallback_row(
     descriptor = get_descriptor(provider_id)
     # The fallback entry points at the external server (url-form), so it is
     # only viable when the provider's config can express remote entries.
-    if descriptor and descriptor.mcp_config and descriptor.mcp_config.remote:
+    if (
+        descriptor
+        and descriptor.mcp_config
+        and REMOTE_CAPABILITY in descriptor.mcp_config.capabilities
+    ):
         return HindsightRecipeRow(
             provider_id=provider_id,
             display_name=row.display_name,
@@ -312,7 +317,11 @@ def _build_mcp_recipe(
     # A remote (url-form) entry cannot be expressed in a stdio-only provider
     # config — fall through to the guidance path instead of writing a broken
     # entry (audit finding, HM21/RV155).
-    if spec is not None and not spec.remote and backend.transport != "stdio":
+    if (
+        spec is not None
+        and REMOTE_CAPABILITY not in spec.capabilities
+        and backend.transport != "stdio"
+    ):
         harness_path = None
     if harness_path:
         config_path = Path(harness_path)
