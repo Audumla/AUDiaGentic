@@ -154,6 +154,12 @@ def _main(argv: list[str] | None = None) -> int:
 
     args, remaining = parser.parse_known_args(argv)
 
+    # Registered commands own a closed argument contract. Unknown tokens must
+    # not leak through to handlers or be mistaken for harness passthrough args.
+    # No-command invocation intentionally retains passthrough for provider CLIs.
+    if args.command is not None and remaining:
+        parser.error(f"unrecognized arguments: {' '.join(remaining)}")
+
     # Propagate --component-profile and --project to env so loader and other
     # modules pick them up (AUDIAGENTIC_REPO_ROOT drives profile resolution,
     # MCP server env forwarding, logging discovery — closes CP13/RV128).

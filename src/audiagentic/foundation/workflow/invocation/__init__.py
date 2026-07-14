@@ -1,18 +1,27 @@
+from audiagentic.foundation.steps import (
+    CallableStep,
+    ConditionalStep,
+    ConfirmStep,
+    SequenceStep,
+    ShellStep,
+    SelectStep,
+    StepResult,
+)
+
 from .from_spec import build_step_from_spec
 from .models import (
-    StepResult,
     WorkflowAnswer,
     WorkflowInvocationResult,
     WorkflowProgress,
     WorkflowQuestion,
 )
 from .runner import WorkflowInvocationRunner
-from .steps import CallableStep, ConditionalStep, ConfirmStep, SequenceStep, ShellStep, WorkflowStep
 
 __all__ = [
     "CallableStep",
     "ConfirmStep",
     "ConditionalStep",
+    "SelectStep",
     "SequenceStep",
     "ShellStep",
     "StepResult",
@@ -22,5 +31,4 @@ __all__ = [
     "WorkflowInvocationRunner",
     "WorkflowProgress",
     "WorkflowQuestion",
-    "WorkflowStep",
 ]
