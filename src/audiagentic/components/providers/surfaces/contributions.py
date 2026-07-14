@@ -100,13 +100,6 @@ def load_tag_surface_contributions(project_root: Path | None = None) -> list[Sur
     return contributions
 
 
-_OVERVIEW_BODY = (
-    "This repository uses AUDiaGentic workflow jobs. The instruction blocks below "
-    "are generated from component sources — do not edit them directly; edit the "
-    "owning component config and re-run surface apply.\n"
-)
-
-
 def _build_canonical_tags_body(tags: dict) -> str:
     """Build the canonical-tags summary block body from all loaded tags.
 
@@ -129,13 +122,11 @@ def _build_canonical_tags_body(tags: dict) -> str:
 
 
 def build_summary_contributions(project_root: Path | None = None) -> list[SurfaceContribution]:
-    """Build synthetic cross-tag summary contributions.
+    """Build synthetic cross-tag canonical-rule contribution.
 
-    Generates the managed preamble and the canonical-tags list dynamically from
-    all loaded tag descriptors so they stay accurate without manual edits. The
-    canonical-rule documents every valid tag regardless of per-tag install state.
-    Tag-routing doctrine is owned by the agent-jobs/prompt-tags block and is not
-    duplicated here; alias tables live in the tag registry, not the surfaces.
+    The overview block has moved to config-driven contributions in agent-jobs.yaml.
+    Only the dynamic canonical-tags list is generated here since it depends on runtime
+    tag registry data and cannot be static-configured.
     """
     from audiagentic.components.providers.tags.registry import (  # noqa: PLC0415
         all_tags,
@@ -145,12 +136,6 @@ def build_summary_contributions(project_root: Path | None = None) -> list[Surfac
     if not tags:
         return []
     return [
-        SurfaceContribution(
-            contribution_id="agent-jobs/overview",
-            owner_component="agent-jobs",  # cross-component: prompt-tags contributions are owned by agent-jobs
-            title="AUDiaGentic agent instructions",
-            body=_OVERVIEW_BODY,
-        ),
         SurfaceContribution(
             contribution_id="agent-jobs/canonical-rule",
             owner_component="agent-jobs",  # cross-component: prompt-tags contributions are owned by agent-jobs

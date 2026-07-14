@@ -29,6 +29,17 @@ files:
     description: ag-review canonical skill source
 
 contributions:
+  - id: agent-jobs/overview
+    owner: agent-jobs
+    title: AUDiaGentic agent instructions
+    preferred-targets:
+      - instruction
+    content:
+      body: |
+        This repository uses AUDiaGentic workflow jobs. The instruction blocks below 
+        are generated from component sources — do not edit them directly; edit the 
+        owning component config and re-run surface apply.
+
   - id: agent-jobs/prompt-tags
     owner: agent-jobs
     title: Prompt tag doctrine
