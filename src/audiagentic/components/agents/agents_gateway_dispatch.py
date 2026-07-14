@@ -109,7 +109,17 @@ def _extract_model_id(result: dict[str, Any], profile: dict[str, Any]) -> str | 
     return result.get("model") or result.get("model-id") or profile.get("model_id")
 
 
-def _build_packet_ctx(record: dict[str, Any], profile: dict[str, Any], model: dict[str, Any]) -> dict[str, Any]:
+def _build_packet_ctx(
+    project_root: Path,
+    record: dict[str, Any],
+    profile: dict[str, Any],
+    model: dict[str, Any],
+) -> dict[str, Any]:
+    """Build provider-neutral execution context from gateway-owned state.
+
+    The gateway's project root is authoritative. Request metadata is correlation
+    data only and cannot redirect provider execution into another directory.
+    """
     return {
         "request-id": record["request-id"],
         "agent-profile-id": profile["profile_id"],
@@ -118,6 +128,8 @@ def _build_packet_ctx(record: dict[str, Any], profile: dict[str, Any], model: di
         "model-alias": profile.get("model_alias"),
         "prompt-body": record.get("prompt-body"),
         "params": profile.get("params", {}),
+        "working-root": str(project_root.resolve()),
+        "stream-controls": dict(profile.get("params", {}).get("stream-controls") or {}),
         "source": record.get("source"),
         "metadata": record.get("metadata", {}),
     }
@@ -156,7 +168,7 @@ def _dispatch_one_attempt(
         job_request={"model-id": profile.get("model_id"), "model-alias": profile.get("model_alias")},
     )
 
-    packet_ctx = _build_packet_ctx(record, profile, model)
+    packet_ctx = _build_packet_ctx(project_root, record, profile, model)
     return execute_provider(provider_id=provider_id, packet_ctx=packet_ctx, provider_cfg=provider_cfg)
 
 
