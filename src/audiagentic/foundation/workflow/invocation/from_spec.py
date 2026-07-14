@@ -13,8 +13,8 @@ from audiagentic.foundation.steps import (
     ConditionalStep,
     ConfirmStep,
     PlatformOverrides,
-    SequenceStep,
     SelectStep,
+    SequenceStep,
     ShellStep,
 )
 

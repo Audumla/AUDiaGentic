@@ -2,9 +2,9 @@ from audiagentic.foundation.steps import (
     CallableStep,
     ConditionalStep,
     ConfirmStep,
+    SelectStep,
     SequenceStep,
     ShellStep,
-    SelectStep,
     StepResult,
 )
 
