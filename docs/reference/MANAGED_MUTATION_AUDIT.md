@@ -39,7 +39,6 @@ Categories: `shared-config`, `adapter-serializer`, `generated-surface`,
 | src/audiagentic/components/providers/adapters/openhands/toml_format.py:write_mcp_toml | write_text | adapter-serializer | atomic foundation writer | MA04 | Valid format extension; atomicity missing. |
 | src/audiagentic/components/providers/adapters/qwen/language_servers.py:_save_json | write_text | adapter-serializer | atomic foundation writer | MA04 | Valid format extension; atomicity missing. |
 | src/audiagentic/components/providers/adapters/qwen/language_servers.py:remove_language_servers_qwen | unlink | adapter-serializer | atomic adapter contract | MA04 | Whole empty-file removal needs contract tests. |
-| src/audiagentic/components/providers/services/managed_mcp_registry.py:save_managed_mcp_registry | write_text | shared-config | ManagedFragmentRegistry | MO06 | Replace hard-coded registry implementation. |
 | src/audiagentic/components/providers/skill_surfaces.py:regenerate_skill_surfaces | atomic_write_text | generated-surface | registered renderer | keep | Compliant generated provider surface. |
 | src/audiagentic/components/providers/surfaces/extensions_json.py:prune_extensions_json | write_text | generated-surface | registered renderer + atomic writer | MA04 | Correct owner; atomicity missing. |
 | src/audiagentic/components/providers/surfaces/extensions_json.py:write_extensions_json | write_text | generated-surface | registered renderer + atomic writer | MA04 | Correct owner; atomicity missing. |
@@ -73,11 +72,17 @@ Categories: `shared-config`, `adapter-serializer`, `generated-surface`,
 
 | finding | owner | remedy |
 |---|---|---|
-| `providers/services/lsp_projection.py` calls `spec.writer`/`spec.remover` directly | MO06 | Adopt exact-match LSP ownership and route through `sync_managed_config`. |
-| `providers/descriptors/base.py` imports `coding_lsp.LanguageServerEntry` | MO06 | Domain-opaque `ManagedConfigSpec` payload; remove component type import. |
 | `memory/hindsight/strategies.py::_build_hooks_recipe` branches on `codex`, `pi`, `aider` | MA02 | Descriptor/matrix implementation refs and registry dispatch. |
 | Architecture test checks only `build_hindsight_recipe`, missing helper branches | MA01/MA02 | Scan all generic strategy comparisons. |
-| Registry loading treats corrupt managed/artifact registries as empty | MO06/MA02 | Canonical corruption error; never erase ownership silently. |
+| Artifact registry loading treats corrupt registries as empty | MA02 | Canonical corruption error; never erase ownership silently. |
+
+Closed (MO06): `lsp_projection.py` no longer calls `spec.writer`/`spec.remover`
+directly — routed through `apply_managed_config_write`/`apply_managed_config_remove`
+in `foundation/toolchains/managed_config.py`. `providers/descriptors/base.py` no
+longer imports `coding_lsp.LanguageServerEntry` — `ManagedConfigSpec`'s
+reader/writer/remover are `Any`-typed (domain-opaque). Managed-fragment
+registry loading (`ManagedFragmentRegistry`) now raises `CON-MCFG-001` on a
+corrupt file instead of silently treating it as empty.
 
 ## Explicit exclusions
 

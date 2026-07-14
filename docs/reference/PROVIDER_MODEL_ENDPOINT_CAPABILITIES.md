@@ -65,7 +65,9 @@ A **model source** is the AUDiaGentic-side declaration of where models come from
 
 **Projection** is how each agent provider gets the source, chosen per `(agent provider, source)` from the provider's declared capabilities — never by `if/elif`:
 
-1. `native-key-injection` (preferred where declared) — the agent natively supports the vendor/aggregator and needs only the key. Two mechanisms: `env` (e.g. `OPENROUTER_API_KEY` contributed through the existing launch-env seam — no fragments) or `config` (a key/base-url field written into the agent's config — a managed fragment, id `model-connections/<source-id>`). In this mode the agent enables **all** of the vendor's models itself; `model-filter` does not apply and this must be surfaced in status rather than silently ignored.
+1. `native-key-injection` (preferred where declared) — the agent natively supports the vendor/aggregator and needs only the key. Two mechanisms: `env` (the tool reads a well-known env var, e.g. `OPENROUTER_API_KEY`) or `config` (a key/base-url field written into the agent's config — a managed fragment, id `model-connections/<source-id>`; prefer the tool's own env-indirection syntax over literals where supported). In this mode the agent enables **all** of the vendor's models itself; `model-filter` does not apply and this must be surfaced in status rather than silently ignored.
+
+   **Standalone rule (providers run outside AG):** agents run in the user's own environment as the normal case — AG manages config externally; AG-launching is a separate capability. Enablement must therefore hold WITHOUT AG in the launch loop: for the `env` mechanism the var must exist in the **ambient user environment** (AG verifies presence via `has_ambient_value` and emits `action_needed` "set `<VAR>` user-globally" when absent — it never sets it). The AG launch-env contribution seam is a **supplement** for AG-launched sessions only; a pair whose only working channel is launch-env reports status "works in AG-launched sessions only", never plain auto/enabled.
 2. `custom-entries` (fallback where the connector is supported) — AG materializes explicit model entries into the agent's config from the discovered model set. `model-filter` (optional include/exclude patterns on the source) applies here and to AG-side alias exposure — mandatory in practice for `list-api` aggregators, whose raw lists run to hundreds of models.
 3. `none` — the agent cannot carry this source.
 
@@ -106,6 +108,19 @@ Keep this table current whenever a new external source is enabled or verified. R
 - `default-model` and model aliases resolve against the union of models materialized by **enabled** sources; disabling a source invalidates its aliases with a clear VAL error, never a silent fallback.
 - Enabling/disabling a source mutates project config (`.audiagentic/config/model-sources.yaml`) followed by sync — either by direct edit or through the `model_source_*` management tools (see Service shape), which validate against the schema and write the same file. Provider config files are never the mutation surface.
 
+### Availability vs materialization (decided, RV264)
+
+For providers with a `fetch_catalog_fn` (installed-tool CLI discovery — repo fact: OpenCode's `opencode models --verbose` fetcher), the post-refresh **runtime catalog is authoritative** for which models the tool can actually use right now. Source materialization and catalog refresh are two different, complementary operations, not the same fact observed twice:
+
+- Source materialization **adds** models to the tool (writing a `model-endpoints/<source-id>` entry into the tool's own config).
+- Catalog refresh **observes** what the tool currently has available (via `fetch_catalog_fn`), independent of whether AUDiaGentic materialized it.
+
+Agent-profile/alias model **validation** resolves against the runtime catalog where one exists for that provider; against the materialized-source union otherwise (providers with no `fetch_catalog_fn`, e.g. structured-file-only adapters). A managed/materialized entry that goes missing from the next tool catalog read is a **reconcile discrepancy** — surfaced via provider status/`action_needed` (status fields land in MO02; the read surface is MO10's extended `list_provider_models`) — never silent success and never a validation that just happens to pass anyway.
+
+Do not widen the source-level `model-discovery` enum for this: tool-CLI discovery is a **provider** property, already modeled by `fetch_catalog_fn` on the descriptor — not a **source** property. `model-discovery` stays scoped to what AUDiaGentic itself knows about a `remote-account` source's model set (static-catalog/list-api/none); it says nothing about what a specific agent tool can currently execute.
+
+First consumer: the reviewer-agent plan (RA01) binds a Reviewer profile to `provider=opencode` plus a model from the OpenCode runtime catalog — this section's availability definition is what makes that binding validatable.
+
 ## Managed mechanisms
 
 | Mechanism | Use for | Managed unit | Ownership model | Implementation vehicle |
@@ -119,11 +134,11 @@ Keep this table current whenever a new external source is enabled or verified. R
 
 ## Proposed managed model shape
 
-The contract's top-level key is `model-sources`, and the canonical declaration file is `<project-root>/.audiagentic/config/model-sources.yaml` (project-scoped, sibling to `agent-profiles.yaml` — same precedent). A `local-endpoint` source carries the full endpoint field set inline (this is the original `model-endpoints` shape, now one class of two). `remote-account` sources carry connectivity + discovery instead of a single model id.
+The contract's top-level key is `sources` (implemented: `contracts/model-sources.schema.json`), and the canonical declaration file is `<project-root>/.audiagentic/config/model-sources.yaml` (project-scoped, sibling to `agent-profiles.yaml` — same precedent). A `local-endpoint` source carries the full endpoint field set inline (this is the original `model-endpoints` shape, now one class of two). `remote-account` sources carry connectivity + discovery instead of a single model id.
 
 ```yaml
 contract-version: v1
-model-sources:
+sources:
   qwen36-local:
     source-class: local-endpoint
     display-name: Qwen3.6 local
@@ -189,6 +204,8 @@ Stable ownership rules:
 
 `openai-compatible` is only one connector. The endpoint declares its connector; each provider declares `supported-connectors`; projection occurs only when the provider can carry the endpoint's connector or a declared provider override maps to a supported fallback.
 
+Connector-specific parameters (anthropic API version, gemini API version, openrouter routing preferences / namespaced model ids, ...) live in a single free-form `connector-options: map[string, any]` field on the source (RV323) — the v1 schema does not hardcode a per-connector sub-schema. As MO09 verifies a connector's required/known keys, document them in the per-connector rows below and enforce them in the relevant renderer/adapter code, not by changing the schema. No connector currently has verified required `connector-options` keys; first-wave connectors (`openai-compatible`, `ollama`) need none beyond the base fields.
+
 | Connector | Wire/backend | Auth shape | Notes |
 |---|---|---|---|
 | `openai-compatible` | OpenAI-style `/v1` chat/completions or compatible gateway | Bearer/API key + base URL | Baseline for llama.cpp, vLLM, LM Studio, Ollama OpenAI shim, and many gateways. |
@@ -226,22 +243,22 @@ Stable ownership rules:
 
 | Provider | openai-compatible | anthropic | gemini | openrouter | ollama/local | Preferred projection |
 |---|---:|---:|---:|---:|---:|---|
-| `pi` | Yes | ⟨FILL⟩ | ⟨FILL⟩ | via compatible fallback ⟨FILL⟩ | Yes via shim | Pi provider block with `api`/`compat`. |
-| `opencode` | Yes | Yes | Yes | Yes | Yes | Native AI SDK provider where available; fallback OpenAI-compatible. |
+| `pi` | Yes (primary connector) | Yes via openai-completions adapter | Yes via openai-completions adapter (default provider name "google") | Yes via openai-compatible fallback | Yes via shim | Pi provider block with `api`/`compat` in `~/.pi/agent/models.json`. |
+| `opencode` | Yes (native AI SDK) | Yes (native AI SDK, OAuth login required) | Yes (native AI SDK, API login required) | No — not a listed credential provider | Yes | Native AI SDK provider where available; fallback OpenAI-compatible for custom entries. |
 | `local-openai` | Yes | No | No | via base URL only | Yes via OpenAI shim | AG OpenAI-compatible catalog. |
 | `openhands` | Yes | Yes via LiteLLM | Yes via LiteLLM | Yes via LiteLLM | Yes | LiteLLM/OpenAI model prefixes through launch env. |
 | `goose` | Yes | Yes | ⟨FILL⟩ | ⟨FILL⟩ | Yes | ⟨FILL: config path/schema/reload⟩. |
-| `codex` | Yes if required wire API is supported | Not generic | Not generic | ⟨FILL⟩ | built-ins/compat only | `~/.codex/config.toml`, consent-gated. |
-| `qwen` | Yes | ⟨FILL⟩ | ⟨FILL⟩ | ⟨FILL⟩ | ⟨FILL⟩ | `modelProviders` after merge semantics verified. |
+| `codex` | Yes via model_providers (chat wire_api) | Yes via model_providers if wire API matches | Yes via model_providers if wire API matches | Yes via model_providers openai-compatible | built-ins/compat only | `~/.codex/config.toml` or project `.codex/config.toml` [model_providers]; consent-gated for user-global writes. |
+| `qwen` | Yes (dedicated CLI flags: `--openai-api-key`, `--openai-base-url`) | No native integration | No native integration | Via openai-compatible proxy — not tested | ⟨FILL⟩ | Single-model via `-m <id>` + openai-compatible connector; no multi-provider config surface. |
 | `continue` | Yes | Yes | Yes | Yes | Yes | Continue provider type / YAML `models[]`. |
 | `cline` | Yes | Yes | Yes | Yes | Yes | Manual extension profile. |
 | `roo` | Yes | ⟨FILL⟩ | ⟨FILL⟩ | Yes | ⟨FILL⟩ | Manual extension profile until storage validated. |
 | `aider` | Yes | Yes via LiteLLM | Yes via LiteLLM | Yes | Yes | Env + model prefix/flag. |
 | `plandex` | Yes only for custom providers | No generic custom wire | No generic custom wire | As OpenAI-compatible only | If OpenAI-compatible | Custom model config after path discovery. |
 | `gemini` | Gemini API can expose an OpenAI-compatible endpoint to other clients, but Gemini CLI as consumer is not validated | No | Yes | No | No | Native vendor. |
-| `claude` | No generic OpenAI-compatible consumer path | Yes | No | Gateway only | No | Native vendor/gateway. |
+| `claude` | No generic OpenAI-compatible consumer path | Yes (primary) + 3P providers (Bedrock/Vertex/Foundry per help text) | No | Gateway only | No | Native vendor with 3P provider extension (enterprise routing through Bedrock, Vertex AI, Foundry — each uses its own credentials per help). |
 | `copilot` | No | No | No | No | No | N/A. |
-| `antigravity` | ⟨FILL⟩ | ⟨FILL⟩ | Gemini-managed | ⟨FILL⟩ | No | Managed-agent research. |
+| `antigravity` | not supported [§gemini-evidence](model-source-evidence/gemini.md#gemini-evidence) | not supported [§gemini-evidence](model-source-evidence/gemini.md#gemini-evidence) | verified native (oauth-personal; antigravity v2.2.1 active, CLI `agy`) [§gemini-evidence](model-source-evidence/gemini.md#gemini-evidence) | not supported [§gemini-evidence](model-source-evidence/gemini.md#gemini-evidence) | Google account OAuth login only; no external vendor routing surface [§gemini-evidence](model-source-evidence/gemini.md#gemini-evidence) | vendor set only (account tier determines models) [§gemini-evidence](model-source-evidence/gemini.md#gemini-evidence) |
 
 ## Agent provider × vendor support matrix (running reference — MO09 deep dive)
 
@@ -249,19 +266,19 @@ Per (agent provider, upstream vendor/aggregator): projection mode, key mechanism
 
 | Agent provider | OpenAI | Anthropic | Google | OpenRouter | Key mechanism (expected) | Model set granularity |
 |---|---|---|---|---|---|---|
-| `pi` | custom-entries | ⟨FILL⟩ | ⟨FILL⟩ | ⟨FILL⟩ via openai-compatible | config: provider block `apiKey`/env ⟨FILL⟩ | selectable (explicit `models[]`) |
-| `opencode` | native ⟨FILL⟩ | native ⟨FILL⟩ | native ⟨FILL⟩ | native ⟨FILL⟩ | config: provider `options.apiKey` or env `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/`OPENROUTER_API_KEY` ⟨FILL⟩ | all models per enabled vendor ⟨FILL⟩ |
-| `openhands` | native via LiteLLM | native via LiteLLM | native via LiteLLM | native via LiteLLM | env: `LLM_API_KEY` + model prefix (single active model) | single model at a time |
+| `pi` | verified native env var [§pi-openai](model-source-evidence/pi.md#pi-openai) | verified native env var [§pi-anthropic](model-source-evidence/pi.md#pi-anthropic) | verified native env var (default provider) [§pi-google](model-source-evidence/pi.md#pi-google) | verified native env var [§pi-openrouter](model-source-evidence/pi.md#pi-openrouter) | env: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY` + CLI `--api-key`; custom endpoints via `~/.pi/agent/models.json` [§pi-evidence](model-source-evidence/pi.md#pi-evidence) | all models per vendor (native); selectable for custom entries [§pi-evidence](model-source-evidence/pi.md#pi-evidence) |
+| `opencode` | verified native (OAuth; env path untested) [§opencode-openai](model-source-evidence/opencode.md#opencode-openai) | verified native (OAuth; env blocked by probe) [§opencode-anthropic](model-source-evidence/opencode.md#opencode-anthropic) | verified native (API login; env blocked by probe) [§opencode-google](model-source-evidence/opencode.md#opencode-google) | blocked: not a listed credential provider; custom-entries path unverified [§opencode-openrouter](model-source-evidence/opencode.md#opencode-openrouter) | OAuth/API login → `~\.local\share\opencode\auth.json`; standard env vars (`ANTHROPIC_API_KEY`/`GOOGLE_API_KEY`) confirmed NOT accepted; `OPENAI_API_KEY` path untested [§opencode-evidence](model-source-evidence/opencode.md#opencode-evidence) | all models per enabled vendor (OpenAI verified via catalog; Anthropic/Google expected pattern; config filename/container contract unresolved) [§opencode-evidence](model-source-evidence/opencode.md#opencode-evidence) |
+| `openhands` | verified launch-env route [§openhands-openai](model-source-evidence/openhands.md#openhands-openai) | verified launch-env route [§openhands-anthropic](model-source-evidence/openhands.md#openhands-anthropic) | verified launch-env route [§openhands-google](model-source-evidence/openhands.md#openhands-google) | verified launch-env route [§openhands-openrouter](model-source-evidence/openhands.md#openhands-openrouter) | env: `LLM_API_KEY` + `LLM_MODEL=<prefix>/<id>` + `--override-with-envs`; `[llm]` config fallback (keys unverified vs installed v) [§openhands-evidence](model-source-evidence/openhands.md#openhands-evidence) | single model at a time [§openhands-evidence](model-source-evidence/openhands.md#openhands-evidence) |
 | `goose` | native ⟨FILL⟩ | native ⟨FILL⟩ | ⟨FILL⟩ | native ⟨FILL⟩ | env keys via goose configure ⟨FILL⟩ | all models per vendor ⟨FILL⟩ |
-| `codex` | native (vendor account) | via model_providers ⟨FILL wire-api⟩ | ⟨FILL⟩ | ⟨FILL⟩ | config: `~/.codex/config.toml` env_key refs | selectable (provider tables) |
-| `qwen` | custom-entries ⟨FILL⟩ | ⟨FILL⟩ | ⟨FILL⟩ | ⟨FILL⟩ | config: `modelProviders` ⟨FILL⟩ | selectable ⟨FILL⟩ |
+| `codex` | verified native (vendor account, no key injection; v0.87.0) [§codex-openai](model-source-evidence/codex.md#codex-openai) | blocked: wire compat + project-scope unverified [§codex-anthropic](model-source-evidence/codex.md#codex-anthropic) | blocked: wire compat + project-scope unverified [§codex-google](model-source-evidence/codex.md#codex-google) | blocked: project-scope + execution unverified [§codex-openrouter](model-source-evidence/codex.md#codex-openrouter) | config: `~/.codex/config.toml` env_key refs; project `.codex/config.toml` managed by repo (project-scope precedence NOT verified) [§codex-evidence](model-source-evidence/codex.md#codex-evidence) | selectable (provider tables) [§codex-evidence](model-source-evidence/codex.md#codex-evidence) |
+| `qwen` | verified native (auth-type: openai; v0.13.1) [§qwen-openai](model-source-evidence/qwen.md#qwen-openai) | verified native (auth-type: anthropic; key mechanism partially verified) [§qwen-anthropic](model-source-evidence/qwen.md#qwen-anthropic) | verified native (auth-type: gemini/vertex-ai; key mechanism blocked) [§qwen-google](model-source-evidence/qwen.md#qwen-google) | blocked: not a listed auth type; possible via openai-compatible proxy — not tested [§qwen-openrouter](model-source-evidence/qwen.md#qwen-openrouter) | multi-auth-type selection (`--auth-type`); per-type env var keys expected (exact names blocked without isolated test); `-m <model>`; settings `~/.qwen/settings.json` [§qwen-evidence](model-source-evidence/qwen.md#qwen-evidence) | single model at a time via `-m` or settings `"model.name"` [§qwen-evidence](model-source-evidence/qwen.md#qwen-evidence) |
 | `continue` | custom-entries | custom-entries | custom-entries | custom-entries | config: per-model `apiKey` / env refs ⟨FILL⟩ | selectable (explicit `models[]`) |
 | `cline` | native (UI profile) | native (UI profile) | native (UI profile) | native (UI profile) | extension storage — manual only | all models per selected provider |
 | `roo` | native (UI profile) ⟨FILL⟩ | native ⟨FILL⟩ | native ⟨FILL⟩ | native ⟨FILL⟩ | extension storage — manual only | all models per selected provider ⟨FILL⟩ |
-| `aider` | native via LiteLLM | native via LiteLLM | native via LiteLLM | native via LiteLLM | env: `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/`OPENROUTER_API_KEY` ⟨FILL⟩ | all models addressable; one active via flag |
+| `aider` | verified native via LiteLLM | verified native via LiteLLM | verified native via LiteLLM (gemini prefix) | verified native via LiteLLM (openrouter prefix) | env: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`; generic `--api-key PROVIDER=KEY` flag; model flag selects active | all models addressable; one active via flag |
 | `plandex` | custom-entries ⟨FILL⟩ | ⟨FILL⟩ | ⟨FILL⟩ | as openai-compatible ⟨FILL⟩ | ⟨FILL⟩ | ⟨FILL⟩ |
-| `gemini` | no | no | native (account) | no | vendor account/login | vendor set only |
-| `claude` | no | native (account/gateway) | no | gateway only ⟨FILL⟩ | vendor account / env gateway vars | vendor set only |
+| `gemini` | not supported [§gemini-evidence](model-source-evidence/gemini.md#gemini-evidence) | not supported [§gemini-evidence](model-source-evidence/gemini.md#gemini-evidence) | verified native (oauth-personal; gemini CLI deprecated, antigravity v2.2.1 active) [§gemini-evidence](model-source-evidence/gemini.md#gemini-evidence) | not supported [§gemini-evidence](model-source-evidence/gemini.md#gemini-evidence) | Google account OAuth login only; no external vendor routing surface [§gemini-evidence](model-source-evidence/gemini.md#gemini-evidence) | vendor set only (account tier determines available models) [§gemini-evidence](model-source-evidence/gemini.md#gemini-evidence) |
+| `claude` | not supported [§claude-evidence](model-source-evidence/claude.md#claude-evidence) | verified native (ANTHROPIC_API_KEY or OAuth/keychain; claude-code v2.1.199 active) [§claude-evidence](model-source-evidence/claude.md#claude-evidence) | not supported [§claude-evidence](model-source-evidence/claude.md#claude-evidence) | not supported — enterprise auth gateway only [§claude-evidence](model-source-evidence/claude.md#claude-evidence) | ANTHROPIC_API_KEY or OAuth/keychain login; `~/.claude/settings.json` with `"model"` field; no external vendor routing [§claude-evidence](model-source-evidence/claude.md#claude-evidence) | vendor set only (any Anthropic model via name alias) [§claude-evidence](model-source-evidence/claude.md#claude-evidence) |
 | `copilot` | no | account-derived | account-derived | no | account service — not injectable | account set only |
 
 Matrix discipline: MO09 verifies rows provider-by-provider (installed version, docs, and repo adapter code), replaces `⟨FILL⟩` cells, and records the source of each verified fact. A verified "native + env" cell unlocks key injection for that pair; a verified "custom-entries" cell unlocks filtered materialization; anything unverified stays manual.
@@ -310,7 +327,7 @@ Matrix discipline: MO09 verifies rows provider-by-provider (installed version, d
 ```
 
 - Do not implement model writing until this is resolved atomically for MCP + LSP + model config; adapter must validate whether installed OpenCode expects `provider` or `providers` and which file wins (⟨FILL⟩ — MO09/MO03 gate).
-- Materialization once unified: local-endpoint / custom-entries → `provider.<source-id>` block with a models map (note casing `baseURL` here vs Pi's `baseUrl`). Vendor via native key injection → provider entry carrying only auth/options for OpenCode's built-in vendor ids (anthropic/openai/openrouter — exact option key ⟨FILL⟩), letting OpenCode enumerate models itself.
+- Materialization once unified: local-endpoint / custom-entries → `provider.<source-id>` block with a models map (note casing `baseURL` here vs Pi's `baseUrl`). Vendor via native key injection NOT viable for P1 vendors — OpenCode requires its own credential flow (`opencode providers login` → `~\.local\share\opencode\auth.json`) and does not accept standard env vars ([evidence](model-source-evidence/opencode.md#opencode-evidence)). Built-in credential vendor ids: openai (oauth), anthropic (oauth), google (api); openrouter NOT listed. Custom providers via `providers.<id>` entries using `@ai-sdk/openai-compatible` adapter are the only env-key-injection path and require structured config writes (gated by MO03).
 
 ### `local-openai`
 
@@ -393,23 +410,29 @@ model_provider = "<source-id>"
 
 ### Descriptor metadata
 
-Preferred target shape after MO06:
+Implemented (MO01): the model kind reuses the same top-level-sibling pattern as `mcp_config`/`language_servers_config` — a `ManagedConfigSpec` field (added when MO02 lands the model-endpoint desired-entry builder) plus two provider-YAML-declared capability fields on `ProviderDescriptor`, both empty by default (an undeclared pair projects nothing — never guessed):
 
 ```yaml
-managed_configs:
-  model-endpoints:
-    config_path: ".opencode/config.json"
-    reader: "...:read_opencode_models"
-    writer: "...:write_opencode_models"
-    remover: "...:remove_opencode_models"
-    format: "opencode-json"
-    refresh_mode: "file-watch"
-    supported_connectors:
-      - openai-compatible
-      - openrouter
+# per-provider config/providers/<id>.yaml
+model_config:                    # MO02: ManagedConfigSpec for this provider's
+  config_path: ".opencode/config.json"   # model-endpoint config surface
+  reader: "...:read_opencode_models"
+  writer: "...:write_opencode_models"
+  remover: "...:remove_opencode_models"
+  format: "opencode-json"
+  refresh_mode: "file-watch"
+
+supported_connectors:             # MO01, implemented: custom-entries projection path
+  - openai-compatible
+  - openrouter
+
+vendor_key_injection:             # MO01, implemented: native-key-injection path
+  anthropic:
+    mechanism: env
+    key: ANTHROPIC_API_KEY
 ```
 
-A backward-compatible interim shape may use `model_config`, but the implementation must not introduce a third long-lived `ModelConfigSpec` clone.
+No `managed_configs:` nesting — do not introduce a third long-lived `*ConfigSpec` clone; the model kind's `ManagedConfigSpec` is a sibling field to `mcp_config`/`language_servers_config`, same as those two.
 
 ### Service shape
 
@@ -467,7 +490,7 @@ Do not:
 |---|---|
 | MO05 catalog gate | `local-openai` catalog payload validates against `provider-model-catalog.schema.json`. |
 | MO06 shared-core gate | MCP and LSP tests pass unchanged through the generalized managed-config core. |
-| Endpoint schema gate | `model-sources` schema validates all three source classes, multiple endpoints, connector-specific fields, provider overrides, and secret refs. |
+| Endpoint schema gate | `model-sources` schema validates both source classes, multiple endpoints, connector-specific fields, provider overrides, and secret refs. |
 | Source enablement gate | Enabling a remote-account source projects per the verified (provider, vendor) mode — key injection or filtered custom entries — and disabling removes only owned entries/env contributions; catalog-refresh failure degrades to cached + `action_needed`, never a sync failure. |
 | Key injection gate | Injected keys come only from `api-key-ref` resolution at write/launch time; no key value ever lands in registries, status output, timelines, or logs; config-mechanism injection is dry-runnable. |
 | Structured adapter gate | First OpenCode/Pi writer preserves unmanaged entries, removes only owned entries, and reports collisions. |
