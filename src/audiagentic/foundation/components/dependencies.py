@@ -16,6 +16,14 @@ from typing import Any, cast
 
 from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.io import load_yaml_file
+from audiagentic.foundation.steps import (
+    SelectStep,
+    SequenceStep,
+    planned_commands,
+)
+from audiagentic.foundation.steps import (
+    Step as WorkflowStep,
+)
 from audiagentic.foundation.toolchains import (
     detect_pkg_manager,
     platform_key,
@@ -23,12 +31,6 @@ from audiagentic.foundation.toolchains import (
     uv_available,
 )
 from audiagentic.foundation.toolchains.loader import build_step, has_action, raw_step
-from audiagentic.foundation.steps import (
-    SequenceStep,
-    SelectStep,
-    Step as WorkflowStep,
-    planned_commands,
-)
 
 from .loader import component_yaml_path
 
