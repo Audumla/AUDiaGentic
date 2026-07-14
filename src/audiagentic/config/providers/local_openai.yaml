@@ -29,3 +29,9 @@ language_servers_config: null
 receive_lsp_mcp: false
 
 fetch_catalog_fn: "audiagentic.components.providers.adapters.local_openai.catalog:_fetch_catalog"
+
+# MO01: repo fact, not speculation — this adapter's only wire shape is the
+# OpenAI-compatible /v1 REST surface (see adapters/local_openai/catalog.py,
+# adapter.py).
+supported_connectors:
+  - openai-compatible
