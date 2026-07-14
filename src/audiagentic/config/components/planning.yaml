@@ -10,6 +10,21 @@ implementation-cardinality: exclusive
 status-hook: audiagentic.components.planning.planning_api.planning_status
 lifecycle-observer: audiagentic.components.planning.events
 
+item-section-headings:
+  description: "Description"
+  steps: "Steps"
+  files: "Files"
+  validation: "Validation"
+  effort_risk: "Effort & Risk"
+  standards: "Standards"
+  notes: "Notes"
+  ledger-events: "Ledger Events"
+
+review-sections:
+  notes: "Notes"
+  findings: "Findings"
+  conclusion: "Conclusion"
+
 mcp-servers:
   - name: ag-planning-mgmt
     module: audiagentic.components.planning.planning_manage_mcp

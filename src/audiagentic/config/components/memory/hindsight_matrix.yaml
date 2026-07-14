@@ -456,20 +456,10 @@ matrix:
     display_name: Pi
     integration_type: extension
     recipe_kind: hooks
-    install_steps:
-      - type: shell
-        id: pi-hindsight-install
-        command:
-          - pi
-          - install
-          - npm:@walodayeet/hindsight-pi
-    uninstall_steps:
-      - type: shell
-        id: pi-hindsight-remove
-        command:
-          - pi
-          - remove
-          - npm:@walodayeet/hindsight-pi
+    # Community source remains unverified. Do not retain executable commands
+    # until MA02 can submit this as a provider-owned declared capability.
+    install_steps: []
+    uninstall_steps: []
     status_command: ""
     config_artifacts:
       - ~/.hindsight/config.json
