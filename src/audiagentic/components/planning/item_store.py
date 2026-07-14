@@ -14,6 +14,7 @@ from typing import Any
 
 from audiagentic.components.planning import planning_paths
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.io import load_yaml_file
 from audiagentic.foundation.workflow import (
     is_known_state,
     load_workflow,
@@ -63,19 +64,20 @@ COMPLETED_STATES = {"completed"}
 
 _WORKFLOWS_PATH = Path(__file__).with_name("workflows.yaml")
 
-ITEM_SECTION_HEADING: dict[str, str] = {
-    "description": "Description",
-    "steps": "Steps",
-    "files": "Files",
-    "validation": "Validation",
-    "effort_risk": "Effort & Risk",
-    "standards": "Standards",
-    "notes": "Notes",
-    "ledger-events": "Ledger Events",
-}
+_PLANNING_YAML = Path(__file__).resolve().parents[2] / "config" / "components" / "planning.yaml"
+
+
+def _load_section_headings() -> tuple[dict[str, str], dict[str, str]]:
+    """Load section heading maps from the planning component YAML config."""
+    cfg = load_yaml_file(_PLANNING_YAML)
+    item_headings = {k: v for k, v in cfg.get("item-section-headings", {}).items()}
+    review_sections = {k: v for k, v in cfg.get("review-sections", {}).items()}
+    return item_headings, review_sections
+
+
+ITEM_SECTION_HEADING, REVIEW_SECTIONS = _load_section_headings()
 HEADING_TO_FIELD: dict[str, str] = {v: k for k, v in ITEM_SECTION_HEADING.items()}
 FRONTMATTER_FIELDS = {"id", "order", "plan", "state", "validate-first", "priority", "complexity", "created-by"}
-REVIEW_SECTIONS: dict[str, str] = {"notes": "Notes", "findings": "Findings", "conclusion": "Conclusion"}
 
 _ITEM_ID_RE = re.compile(r"^([A-Z]+)(\d+)$", re.IGNORECASE)
 
