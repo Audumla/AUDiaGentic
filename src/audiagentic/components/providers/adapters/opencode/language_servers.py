@@ -15,9 +15,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.coding_lsp.language_servers import LanguageServerEntry
 from audiagentic.foundation.io import _ensure_dict
-
-from ...descriptors.base import LanguageServerEntry
 
 # opencode keys its `lsp` object by opencode's own built-in server name, which is
 # not always our language id. coding-lsp stays language-keyed and generic; the

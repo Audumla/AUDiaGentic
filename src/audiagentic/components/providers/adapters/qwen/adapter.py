@@ -10,6 +10,7 @@ from audiagentic.components.providers.adapters.base_runner import (
     default_parse_completion,
     finalize_run,
     make_plaintext_extractor,
+    resolve_execution_model,
 )
 from audiagentic.components.providers.adapters.cli import require_executable
 from audiagentic.components.providers.protocols.streaming.provider_streaming import (
@@ -35,7 +36,7 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
     elif approval_mode == "auto-edit":
         command.extend(["--approval-mode", "auto-edit"])
 
-    default_model = provider_cfg.get("default-model")
+    default_model = resolve_execution_model(packet_ctx, provider_cfg)
     if default_model:
         command.extend(["-m", str(default_model)])
     command.append(prompt)

@@ -36,6 +36,11 @@ class ProviderRecipeKind(str, Enum):
     MCP_CONFIG = "mcp_config"
     """MCP server entry in harness config."""
 
+    MODEL_CONFIG = "model_config"
+    """Managed model-endpoint entries in provider config (MO02): recipes are
+    lifecycle/status/dry-run wrappers over services/models.py sync operations;
+    structured entry reconciliation stays in the shared managed-config core."""
+
     HOOKS = "hooks"
     """Hook scripts or event wiring."""
 
@@ -53,6 +58,12 @@ class ProviderRecipeKind(str, Enum):
 
     NATIVE_PASSTHROUGH = "native_passthrough"
     """Native harness capability, no extra config."""
+
+    LAUNCH_ENV = "launch_env"
+    """Env-var contribution resolved and injected only at provider launch
+    (MO15/RV313): recipes declare {env-name: secret-ref-or-literal} without
+    resolving; resolution happens inside the launch seam immediately before
+    subprocess spawn, never at descriptor load, reconcile, or status time."""
 
     HYBRID = "hybrid"
     """Combination of strategies."""
@@ -383,7 +394,146 @@ class ProviderRecipeRegistry:
         return self.install(provider_id, capability_id, backend_id, ctx)
 
 
+class LaunchEnvContributionRecipe(ProviderCapabilityRecipe):
+    """Deferred launch-env contribution for one provider (MO15).
+
+    Declares ``{env-name: secret-ref-or-literal}`` contributions WITHOUT
+    resolving them; ``configure`` registers them in the launch-env seam
+    (``services/launch_env.py``) and the execution dispatch resolves + injects
+    at launch time only. Every status surface reports env NAMES and ref
+    SCHEMES only — never values.
+
+    Inertness rule (MO04 validation 7 / RV313): a provider whose execution is
+    a stub/unsupported never receives an active projection — probe reports
+    ABSENT with 'execution bridge not wired' guidance and configure registers
+    nothing.
+
+    Standalone rule (RV338): this seam supplements AG-launched sessions only.
+    A pair whose only working channel is launch-env reports "works in
+    AG-launched sessions only", never plain enabled/auto — ambient-environment
+    presence (``has_ambient_value``) defines real enablement.
+    """
+
+    def __init__(
+        self,
+        provider_id: str,
+        capability_id: str,
+        contributions: dict[str, str],
+        *,
+        backend_id: str | None = None,
+        display_name: str = "",
+        source_url: str = "",
+        source_date: str = "",
+    ) -> None:
+        super().__init__(
+            provider_id,
+            capability_id,
+            backend_id=backend_id,
+            recipe_kind=ProviderRecipeKind.LAUNCH_ENV,
+            display_name=display_name,
+            source_url=source_url,
+            source_date=source_date,
+        )
+        # References/literals only — never resolved values.
+        self.contributions = dict(contributions)
+
+    def _execution_is_real(self) -> bool:
+        from audiagentic.components.providers.descriptors.registry import get_descriptor
+        from audiagentic.components.providers.services.execution import (
+            _adapter_module_path,
+        )
+
+        if _adapter_module_path(self.provider_id) is not None:
+            return True
+        descriptor = get_descriptor(self.provider_id)
+        execution = getattr(descriptor, "execution", None) if descriptor else None
+        return bool(execution) and execution.get("mode") == "cli"
+
+    def _contribution_summary(self) -> dict[str, str]:
+        from audiagentic.foundation.secrets import parse_secret_ref
+
+        summary: dict[str, str] = {}
+        for name, ref in self.contributions.items():
+            try:
+                summary[name] = parse_secret_ref(ref).scheme
+            except Exception:  # noqa: BLE001 — literal contribution
+                summary[name] = "literal"
+        return summary
+
+    def _ambient_gaps(self) -> list[str]:
+        from audiagentic.foundation.secrets import has_ambient_value, parse_secret_ref
+
+        gaps: list[str] = []
+        for ref in self.contributions.values():
+            try:
+                parsed = parse_secret_ref(ref)
+            except Exception:  # noqa: BLE001 — literal needs no ambient var
+                continue
+            if not has_ambient_value(parsed):
+                gaps.append(parsed.locator)
+        return gaps
+
+    def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        details = {"contributions": self._contribution_summary()}
+        if not self._execution_is_real():
+            return ProviderRecipeResult.ok(
+                RecipeState.ABSENT,
+                status="launch-env contribution inert",
+                details=details,
+                action_needed="execution bridge not wired; contribution stays inert",
+            )
+        gaps = self._ambient_gaps()
+        if gaps:
+            return ProviderRecipeResult.ok(
+                RecipeState.ABSENT,
+                status="works in AG-launched sessions only",
+                details=details,
+                action_needed=(
+                    f"set {', '.join(sorted(gaps))} in your shell environment — "
+                    "AG-launched sessions receive it automatically; standalone runs require it"
+                ),
+            )
+        return ProviderRecipeResult.ok(
+            RecipeState.VERIFIED, status="launch-env contribution active", details=details
+        )
+
+    def install(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        return self.configure(context)
+
+    def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        from audiagentic.components.providers.services.launch_env import (
+            register_launch_env_contribution,
+        )
+
+        if not self._execution_is_real():
+            return ProviderRecipeResult.ok(
+                RecipeState.ABSENT,
+                status="launch-env contribution inert",
+                details={"contributions": self._contribution_summary()},
+                action_needed="execution bridge not wired; contribution stays inert",
+            )
+        register_launch_env_contribution(self.provider_id, self.contributions)
+        return self.probe(context)
+
+    def verify(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        return self.probe(context)
+
+    def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        return self.prune(context)
+
+    def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
+        from audiagentic.components.providers.services.launch_env import (
+            remove_launch_env_contribution,
+        )
+
+        remove_launch_env_contribution(self.provider_id, set(self.contributions))
+        return ProviderRecipeResult.ok(
+            RecipeState.ABSENT, status="launch-env contribution removed"
+        )
+
+
 __all__ = [
+    "LaunchEnvContributionRecipe",
     "ProviderCapabilityRecipe",
     "ProviderRecipeKind",
     "ProviderRecipeRegistry",

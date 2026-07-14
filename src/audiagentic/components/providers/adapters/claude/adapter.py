@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.providers.adapters.base_runner import resolve_execution_model
 from audiagentic.components.providers.adapters.cli import require_executable
 from audiagentic.components.providers.protocols.streaming.base_extractor import (
     BaseEventExtractor,
@@ -147,7 +148,7 @@ def _parse_claude_completion(
 def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, Any]:
     executable = require_executable("claude", "claude")
     prompt = _build_prompt(packet_ctx, provider_cfg)
-    default_model = provider_cfg.get("default-model")
+    default_model = resolve_execution_model(packet_ctx, provider_cfg)
     working_root = packet_ctx.get("working-root")
     cwd = Path(working_root) if working_root else None
     job_id = packet_ctx.get("job-id")
