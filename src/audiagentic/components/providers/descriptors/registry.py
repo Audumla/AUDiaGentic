@@ -145,6 +145,7 @@ def interrogate(provider_id: str, project_root: Path) -> dict[str, Any]:
         "provider_id": provider_id,
         "display_name": descriptor.display_name,
         "registered": True,
+        "annotations": dict(descriptor.annotations) if descriptor.annotations else None,
         "cli": _probe_cli(cli_probe) if cli_probe else None,
         "host_capabilities": host_capabilities,
         "hosts": {host_id: {"workspace": workspace} for host_id, workspace in hosts.items()},

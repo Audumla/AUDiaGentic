@@ -180,6 +180,7 @@ PROVIDER_SPEC.add("on_lsp_enabled", yaml_key="on_lsp_enabled", kind="ref", defau
 PROVIDER_SPEC.add("receive_lsp_mcp", yaml_key="receive_lsp_mcp", kind="data", default=True)
 PROVIDER_SPEC.add("surfaces", yaml_key="surfaces", kind="data", default=None)
 PROVIDER_SPEC.add("execution", yaml_key="execution", kind="data", default=None)
+PROVIDER_SPEC.add("annotations", yaml_key="annotations", kind="data", default=dict())
 
 
 def provider_factory(data: dict[str, Any]) -> ProviderDescriptor:
