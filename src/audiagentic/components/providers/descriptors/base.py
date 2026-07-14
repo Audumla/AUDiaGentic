@@ -161,6 +161,10 @@ class ProviderDescriptor:
     # launch-example-template (default "@{tag}-{provider_id}").
     # Adapters with custom rendering keep a surface.py, which wins over this.
     surfaces: dict[str, Any] | None = None
+    # Free-form key/value annotations for arbitrary metadata not covered by
+    # structured fields — deprecation notices, migration notes, beta flags, etc.
+    # Consumed by interrogate(), status reporting, and any downstream reader.
+    annotations: dict[str, Any] = field(default_factory=dict)
 
     def host_extensions(self, host_id: str) -> tuple[HostCapability, ...]:
         """Capabilities declared for one editor host."""
