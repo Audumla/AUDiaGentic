@@ -16,7 +16,7 @@ from audiagentic.foundation.components.dependencies import (
 )
 from audiagentic.foundation.components.loader import component_yaml_path
 from audiagentic.foundation.io import load_yaml_file
-from audiagentic.foundation.workflow.invocation.steps import SequenceStep
+from audiagentic.foundation.steps import SequenceStep
 
 _PROBES = load_dependency_probes("source-control")
 
