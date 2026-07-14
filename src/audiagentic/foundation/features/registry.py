@@ -26,9 +26,11 @@ _logger = logging.getLogger(__name__)
 _SELF_POPULATING = False
 
 
-def _self_populate() -> None:
+def _self_populate(*, force: bool = False) -> None:
     global _SELF_POPULATING
-    if _SELF_POPULATING or _features or _impl_features or _implementations or _bindings:
+    if _SELF_POPULATING or (
+        not force and (_features or _impl_features or _implementations or _bindings)
+    ):
         return
     from audiagentic.foundation.components import registry as component_registry
 
@@ -79,8 +81,10 @@ def register(descriptor: FeatureDescriptor | ImplementationDescriptor | BindingD
 
 
 def get_feature(parent: str, kind: str, feature_id: str) -> FeatureDescriptor | None:
-    _self_populate()
-    return _features.get((parent, kind, feature_id))
+    key = (parent, kind, feature_id)
+    if key not in _features:
+        _self_populate(force=True)
+    return _features.get(key)
 
 
 def get_features(parent: str, kind: str | None = None) -> dict[str, FeatureDescriptor]:
@@ -103,8 +107,10 @@ def all_features() -> dict[tuple[str, str, str], FeatureDescriptor]:
 def get_implementation_feature(
     parent: str, implementation: str, kind: str, feature_id: str
 ) -> FeatureDescriptor | None:
-    _self_populate()
-    return _impl_features.get((parent, implementation, kind, feature_id))
+    key = (parent, implementation, kind, feature_id)
+    if key not in _impl_features:
+        _self_populate(force=True)
+    return _impl_features.get(key)
 
 
 def get_implementation_features(
@@ -123,8 +129,10 @@ def get_implementation_features(
 
 
 def get_implementation(parent: str, implementation_id: str) -> ImplementationDescriptor | None:
-    _self_populate()
-    return _implementations.get((parent, implementation_id))
+    key = (parent, implementation_id)
+    if key not in _implementations:
+        _self_populate(force=True)
+    return _implementations.get(key)
 
 
 def get_implementations(parent: str) -> dict[str, ImplementationDescriptor]:
@@ -187,8 +195,10 @@ def is_default_implementation(descriptor: ImplementationDescriptor) -> bool:
 
 
 def get_binding(parent: str, implementation: str, feature_kind: str, feature: str) -> BindingDescriptor | None:
-    _self_populate()
-    return _bindings.get((parent, implementation, feature_kind, feature))
+    key = (parent, implementation, feature_kind, feature)
+    if key not in _bindings:
+        _self_populate(force=True)
+    return _bindings.get(key)
 
 
 def get_bindings(parent: str) -> dict[tuple[str, str, str], BindingDescriptor]:

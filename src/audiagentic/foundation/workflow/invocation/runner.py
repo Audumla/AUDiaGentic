@@ -3,13 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .models import WorkflowAnswer, WorkflowInvocationResult, WorkflowProgress
-from .steps import WorkflowStep
+from audiagentic.foundation.steps.control import WorkflowAnswer
+
+from .models import WorkflowInvocationResult, WorkflowProgress
 
 
 @dataclass
 class WorkflowInvocationRunner:
-    steps: list[WorkflowStep]
+    steps: list[Any]
 
     def plan(self, context: dict[str, Any]) -> WorkflowInvocationResult:
         outputs: dict[str, Any] = {}
@@ -35,8 +36,11 @@ class WorkflowInvocationRunner:
     ) -> WorkflowInvocationResult:
         outputs: dict[str, Any] = {}
         progress: list[WorkflowProgress] = []
+        step_context = {**context}
+        if answers is not None:
+            step_context["answers"] = answers
         for step in self.steps:
-            result = step.run(context, answers)
+            result = step.run(step_context)
             outputs[step.id] = result.outputs
             progress.extend(result.progress)
             if result.status == "waiting_for_input":
