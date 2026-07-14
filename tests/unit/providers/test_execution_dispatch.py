@@ -1,7 +1,21 @@
 from __future__ import annotations
 
+import pytest
+
+from audiagentic.components.providers.adapters.base_runner import resolve_execution_model
 from audiagentic.components.providers.adapters.codex import adapter as codex_adapter
 from audiagentic.components.providers.services.execution import execute_provider
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+
+def test_resolve_execution_model_prefers_gateway_packet_model() -> None:
+    assert resolve_execution_model(
+        {"model-id": "packet-model"}, {"default-model": "provider-default"}
+    ) == "packet-model"
+
+
+def test_resolve_execution_model_uses_default_for_direct_callers() -> None:
+    assert resolve_execution_model({}, {"default-model": "provider-default"}) == "provider-default"
 
 
 def test_execute_provider_normalizes_adapter_result(monkeypatch) -> None:
@@ -28,14 +42,14 @@ def test_execute_provider_normalizes_adapter_result(monkeypatch) -> None:
     assert result["output"] == "stubbed-response"
 
 
-def test_execute_provider_handles_unknown_provider_as_stubbed() -> None:
-    result = execute_provider(
-        provider_id="unknown-provider",
-        packet_ctx={"provider-id": "unknown-provider"},
-        provider_cfg={"enabled": True, "access-mode": "none", "default-model": "fallback"},
-    )
-
-    assert result["provider-id"] == "unknown-provider"
-    assert result["status"] == "stubbed"
-    assert result["execution-mode"] == "none"
-    assert result["model"] == "fallback"
+def test_execute_provider_rejects_provider_without_execution() -> None:
+    """A provider with no adapter module AND no descriptor execution block is
+    an error condition — never a fabricated success-shaped 'stubbed' result.
+    Declared stubs (execution: {mode: stub}) remain honest stub runners."""
+    with pytest.raises(AudiaGenticError) as exc:
+        execute_provider(
+            provider_id="unknown-provider",
+            packet_ctx={"provider-id": "unknown-provider"},
+            provider_cfg={"enabled": True, "access-mode": "none", "default-model": "fallback"},
+        )
+    assert exc.value.code == "VAL-EXEC-002"

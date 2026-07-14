@@ -17,7 +17,7 @@ class TestResolveRef:
 
     def test_resolve_existing_class(self) -> None:
         """Resolve a known class."""
-        cls = resolve_ref("audiagentic.foundation.workflow.invocation.steps:ShellStep")
+        cls = resolve_ref("audiagentic.foundation.steps:ShellStep")
         assert cls.__name__ == "ShellStep"
 
     def test_resolve_nested_colon(self) -> None:

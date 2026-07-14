@@ -22,10 +22,7 @@ import pytest
 import tomllib
 import yaml
 
-from audiagentic.components.providers.descriptors.base import (
-    McpConfigSpec,
-    ProviderDescriptor,
-)
+from audiagentic.components.providers.descriptors.base import ProviderDescriptor
 from audiagentic.components.providers.descriptors.registry import (
     get_descriptor,
 )
@@ -118,7 +115,7 @@ _INSTRUCTION_PROVIDERS = {
 }
 
 
-def _resolve_mcp_path(spec: McpConfigSpec, project_root: Path) -> Path:
+def _resolve_mcp_path(spec: ManagedConfigSpec, project_root: Path) -> Path:
     """Resolve MCP config path, handling callable config_path."""
     cp = spec.config_path
     if callable(cp):

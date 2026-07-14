@@ -4,14 +4,14 @@ from __future__ import annotations
 import pytest
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.workflow.invocation.from_spec import build_step_from_spec
-from audiagentic.foundation.workflow.invocation.steps import (
+from audiagentic.foundation.steps import (
     CallableStep,
     ConditionalStep,
     ConfirmStep,
     SequenceStep,
     ShellStep,
 )
+from audiagentic.foundation.workflow.invocation.from_spec import build_step_from_spec
 
 
 class TestBuildStepFromSpec:

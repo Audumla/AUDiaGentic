@@ -119,7 +119,7 @@ class TestProviderYamlLoader:
             pytest.skip("pi.yaml not yet created")
 
         descriptor = load_provider_descriptor(pi_path)
-        from audiagentic.foundation.workflow.invocation.steps import CallableStep
+        from audiagentic.foundation.steps import CallableStep
 
         assert descriptor.cli_install is not None
         assert isinstance(descriptor.cli_install.install, CallableStep)
@@ -170,3 +170,20 @@ class TestLoadProvidersFromDirectory:
         assert expected == loaded, f"Missing: {expected - loaded}, Extra: {loaded - expected}"
         for descriptor in providers.values():
             assert isinstance(descriptor, ProviderDescriptor)
+
+    def test_supported_connectors_loads_from_yaml(self) -> None:
+        """MO01: local-openai declares supported_connectors — a genuine repo fact
+        (its only wire shape is the OpenAI-compatible REST surface)."""
+        providers = load_providers_from_directory(get_providers_config_dir())
+        assert providers["local-openai"].supported_connectors == ("openai-compatible",)
+
+    def test_supported_connectors_defaults_empty(self) -> None:
+        """MO01: an undeclared provider projects nothing — never a guessed default."""
+        providers = load_providers_from_directory(get_providers_config_dir())
+        assert providers["claude"].supported_connectors == ()
+
+    def test_vendor_key_injection_defaults_empty_mapping(self) -> None:
+        """MO01: values start empty and are populated only from MO09-verified evidence."""
+        providers = load_providers_from_directory(get_providers_config_dir())
+        for provider_id, descriptor in providers.items():
+            assert descriptor.vendor_key_injection == {}, provider_id

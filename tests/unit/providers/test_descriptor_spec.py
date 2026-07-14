@@ -65,7 +65,7 @@ class TestDescriptorSpec:
                 "command": ["npm", "install", "package"],
             }
         })
-        from audiagentic.foundation.workflow.invocation.steps import ShellStep
+        from audiagentic.foundation.steps import ShellStep
         assert isinstance(result["install_step"], ShellStep)
 
 

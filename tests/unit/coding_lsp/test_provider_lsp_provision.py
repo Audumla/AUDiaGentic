@@ -4,17 +4,15 @@ import subprocess
 from pathlib import Path
 
 from audiagentic.components.providers.adapters.pi import hooks as pi_desc
-from audiagentic.components.providers.descriptors.base import (
-    McpConfigSpec,
-    ProviderDescriptor,
-)
+from audiagentic.components.providers.descriptors.base import ProviderDescriptor
 from audiagentic.components.providers.services import lsp_projection
 from audiagentic.foundation.features import registry as feature_registry
 from audiagentic.foundation.features.base import BindingDescriptor
+from audiagentic.foundation.toolchains.managed_config import ManagedConfigSpec
 
 
-def _mcp_spec() -> McpConfigSpec:
-    return McpConfigSpec(
+def _mcp_spec() -> ManagedConfigSpec:
+    return ManagedConfigSpec(
         config_path=".mcp.json",
         reader=lambda p: {},
         writer=lambda p, e: None,
