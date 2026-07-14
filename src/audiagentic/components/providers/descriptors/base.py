@@ -5,45 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.coding_lsp.language_servers import LanguageServerEntry
-from audiagentic.foundation.mcp import McpServerEntry
-from audiagentic.foundation.workflow.invocation.steps import CallableStep, SequenceStep, ShellStep
-
-
-@dataclass(frozen=True)
-class McpConfigSpec:
-    """Declares how a provider reads/writes its MCP server config.
-
-    reader/writer/remover are supplied by each adapter — they own their format.
-    format is informational only (display, tests, logging).
-    """
-    config_path: str | Callable[[Path | None], Path]
-    reader: Callable[[Path], dict[str, McpServerEntry]]
-    writer: Callable[[Path, dict[str, McpServerEntry]], None]
-    remover: Callable[[Path, str], bool]
-    refresh_mode: str  # "file-watch" | "restart-required"
-    format: str = ""   # informational label
-    reload_fn: Callable[[Path], dict[str, Any]] | None = None
-    #: False when the provider's config format cannot express url-form
-    #: (remote) MCP entries — writers accept stdio entries only. Consulted by
-    #: capabilities (e.g. hindsight) before projecting a remote entry.
-    remote: bool = True
-
-
-@dataclass(frozen=True)
-class LanguageServersConfigSpec:
-    """Declares how a provider reads/writes its language server config.
-
-    reader/writer/remover are supplied by each adapter — they own their format.
-    writer upserts managed languages (preserving unmanaged entries); remover
-    deletes one managed language (also preserving unmanaged). format is
-    informational only (display, tests, logging).
-    """
-    config_path: str | Callable[[Path | None], Path]
-    reader: Callable[[Path], dict[str, LanguageServerEntry]]
-    writer: Callable[[Path, dict[str, LanguageServerEntry]], None]
-    remover: Callable[[Path, str], bool]
-    format: str = ""   # informational label
+from audiagentic.foundation.steps import CallableStep, SequenceStep, ShellStep
+from audiagentic.foundation.toolchains.managed_config import ManagedConfigSpec
 
 
 @dataclass(frozen=True)
@@ -140,9 +103,40 @@ class ProviderDescriptor:
     # status, supports-structured-output, context-window). None = not supported.
     fetch_catalog_fn: Callable[[dict[str, Any]], list[dict[str, Any]]] | None = None
     # MCP server config spec — None means this provider has no manageable MCP config.
-    mcp_config: McpConfigSpec | None = None
+    # kind="mcp"; capabilities may include managed_config.REMOTE_CAPABILITY when the
+    # format can express url-form (remote) entries — consulted by capabilities
+    # (e.g. hindsight) before projecting a remote entry.
+    mcp_config: ManagedConfigSpec | None = None
     # Language server config spec — None means this provider doesn't accept LSP config sync.
-    language_servers_config: LanguageServersConfigSpec | None = None
+    # kind="language-servers"; refresh_mode stays at the "none" default (no reload concept).
+    language_servers_config: ManagedConfigSpec | None = None
+    # Model-endpoint config spec — None means AUDiaGentic cannot write managed
+    # model entries into this provider's config (kind="model-endpoints"). The
+    # reader/writer/remover trio is adapter-owned, same contract as mcp_config.
+    # Declared per provider YAML only after MO09 verification (MO03/MO13/MO14).
+    model_config: ManagedConfigSpec | None = None
+    # Adapter-owned entry renderer: converts one provider-NEUTRAL
+    # MaterializedModelEntry into (visible_name, native_payload) — the payload
+    # model_config.writer accepts. Declared as a YAML dotted ref and resolved
+    # at load, exactly like reader/writer/remover — a plain callable on the
+    # descriptor, not a runtime string-keyed lookup. Provider-native
+    # vocabulary (Pi's baseUrl/compat, Codex's model_providers table) lives
+    # exclusively in these adapter functions (RV271).
+    model_entry_renderer: Callable[[Any], tuple[str, Any]] | None = None
+    # Model-source connector capability declarations (MO01 step 4). Empty by
+    # default: an undeclared (provider, connector)/(provider, vendor) pair
+    # projects nothing — values are populated only from MO09-verified evidence,
+    # never guessed. Config-over-code (arch-standards §2): provider YAML is the
+    # sole declaration surface, never a provider-id branch in service code.
+    #
+    # supported_connectors: connectors this provider's config format can render
+    # via custom-entries projection (e.g. ("openai-compatible", "ollama")).
+    supported_connectors: tuple[str, ...] = field(default_factory=tuple)
+    # vendor_key_injection: (vendor-id) -> {"mechanism": "env"|"config", "key": <env-var-name-or-config-path>}
+    # for the native-key-injection projection path (RV332/RV337 standalone-first
+    # ranking: config-mechanism entries prefer the tool's own env-indirection
+    # syntax over resolved literals where the tool supports it).
+    vendor_key_injection: dict[str, dict[str, str]] = field(default_factory=dict)
     # Optional hook fired when the coding-lsp component is enabled. Lets a provider
     # provision its own LSP support (e.g. pi installs the pi-lens extension, which
     # auto-discovers language servers from PATH). When set, the provider is treated

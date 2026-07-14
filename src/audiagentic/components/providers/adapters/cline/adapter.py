@@ -7,7 +7,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.providers.adapters.base_runner import default_build_prompt, finalize_run
+from audiagentic.components.providers.adapters.base_runner import (
+    default_build_prompt,
+    finalize_run,
+    resolve_execution_model,
+)
 from audiagentic.components.providers.adapters.cli import require_executable
 from audiagentic.components.providers.protocols.streaming.base_extractor import (
     BaseEventExtractor,
@@ -113,7 +117,7 @@ def _parse_cline_completion(
 def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, Any]:
     executable = require_executable("cline", "cline")
     prompt = default_build_prompt(packet_ctx, provider_cfg, provider_id="cline", title="Cline")
-    default_model = provider_cfg.get("default-model")
+    default_model = resolve_execution_model(packet_ctx, provider_cfg)
     timeout_seconds = provider_cfg.get("timeout-seconds", 60)
     working_root = packet_ctx.get("working-root")
     cwd = Path(working_root) if working_root else None

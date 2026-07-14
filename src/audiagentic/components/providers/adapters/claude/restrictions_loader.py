@@ -4,6 +4,7 @@ Loads stage-based tool policies from YAML config. The claude adapter
 owns the tool names; the policies define which tools are allowed per
 action tag. Unknown action tags fall back to read-only.
 """
+
 from __future__ import annotations
 
 import logging
@@ -11,16 +12,25 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.io import load_yaml_file
-from audiagentic.foundation.paths.package import SRC_ROOT
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_POLICIES_PATH = SRC_ROOT / "audiagentic" / "config" / "components" / "providers" / "claude-restrictions.yaml"
+
+def _default_policies_path() -> Path:
+    """Resolve the default claude-restrictions.yaml from package data.
+
+    Works for both dev (source checkout) and installed wheel by walking up
+    from this file to find the audiagentic package root.
+    """
+    from audiagentic.foundation.paths.package import find_package_root
+
+    pkg_root = find_package_root(Path(__file__))
+    return pkg_root / "config" / "components" / "providers" / "claude-restrictions.yaml"
 
 
 def _load_policies(path: Path | None = None) -> dict[str, Any]:
     """Load the tool restriction policies from YAML."""
-    policy_path = path or _DEFAULT_POLICIES_PATH
+    policy_path = path or _default_policies_path()
     if not policy_path.exists():
         logger.warning("claude restriction policies not found at %s; using defaults", policy_path)
         return {}

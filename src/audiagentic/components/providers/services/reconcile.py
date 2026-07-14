@@ -32,6 +32,45 @@ def _sync_provider_mcp(project_root: Path, on_progress: ComponentOutputSink | No
         _emit(on_progress, "MCP server config sync failed (non-fatal)", level="warning")
 
 
+def _sync_provider_models(
+    provider_id: str,
+    project_root: Path,
+    *,
+    enabled: bool,
+    on_progress: ComponentOutputSink | None = None,
+) -> None:
+    """Sync managed model entries for one provider (MO02 step 6, non-fatal).
+
+    Enabled providers receive the desired entries materialized from
+    model-sources; disabled providers receive an empty desired set so owned
+    entries are pruned (MO02 step 12). Providers without a model_config spec
+    are a clean skip inside the sync wrapper.
+    """
+    from audiagentic.components.providers.services.lifecycle import _emit
+    try:
+        from audiagentic.components.providers.services.model_source_config import (
+            load_model_sources,
+        )
+        from audiagentic.components.providers.services.models import (
+            materialize_local_endpoint_sources,
+            sync_managed_provider_models,
+        )
+
+        entries = (
+            materialize_local_endpoint_sources(load_model_sources(project_root))
+            if enabled
+            else []
+        )
+        result = sync_managed_provider_models(provider_id, project_root, entries)
+        if result.get("skipped"):
+            return
+        if result.get("updated") or result.get("removed"):
+            _emit(on_progress, f"Model config synced for {provider_id}")
+    except Exception:  # noqa: BLE001
+        logger.warning("Model config sync failed for %s", provider_id, exc_info=True, extra={"provider": provider_id})
+        _emit(on_progress, f"Model config sync failed for {provider_id} (non-fatal)", level="warning")
+
+
 def _sync_host_extensions(project_root: Path, on_progress: ComponentOutputSink | None = None) -> None:
     """Sync each detected host's extensions manifest from provider host capabilities."""
     from audiagentic.components.providers.services.host_adapter import all_host_adapters
@@ -105,6 +144,7 @@ def reconcile_provider(
         _seed_provider_config(project_root, provider_id, descriptor, enabled=True)
         surfaces_result = apply_provider_surfaces(project_root, provider_id=provider_id, on_progress=on_progress)
         _sync_provider_mcp(project_root, on_progress)
+        _sync_provider_models(provider_id, project_root, enabled=True, on_progress=on_progress)
         _sync_host_extensions(project_root, on_progress)
         action_taken = "enabled"
         if fetch_catalog and descriptor.fetch_catalog_fn is not None:
@@ -122,10 +162,12 @@ def reconcile_provider(
         _emit(on_progress, f"Disabling {provider_id} — CLI not found")
         set_provider_enabled(project_root, provider_id, enabled=False)
         surfaces_result = prune_provider_surfaces(project_root, provider_id=provider_id, on_progress=on_progress)
+        _sync_provider_models(provider_id, project_root, enabled=False, on_progress=on_progress)
         action_taken = "disabled"
     else:
         _emit(on_progress, f"{provider_id} already in sync ({('enabled' if currently_enabled else 'disabled')})")
         _sync_provider_mcp(project_root, on_progress)
+        _sync_provider_models(provider_id, project_root, enabled=currently_enabled, on_progress=on_progress)
         _sync_host_extensions(project_root, on_progress)
         action_taken = "ok"
 
