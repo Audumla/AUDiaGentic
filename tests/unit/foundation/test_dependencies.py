@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from audiagentic.foundation.components.dependencies import build_dependency_probes, detect_missing
-from audiagentic.foundation.workflow.invocation.models import StepResult
-from audiagentic.foundation.workflow.invocation.steps import SelectStep, SequenceStep, ShellStep
+from audiagentic.foundation.steps import SelectStep, SequenceStep, ShellStep, StepResult
 
 
 def _probe(value: bool):

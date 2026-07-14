@@ -2,10 +2,33 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.toolchains.artifact_registry import ArtifactRegistry
 from audiagentic.foundation.toolchains.config_patcher import ConfigPatcher
 from audiagentic.foundation.toolchains.config_reader import load_config
 from audiagentic.foundation.toolchains.managed_block import apply_managed_block
+
+
+def test_corrupt_registry_fails_closed(tmp_path):
+    registry_path = (
+        tmp_path / ".audiagentic" / "config" / "runtime" / "toolchain" / "artifacts.json"
+    )
+    registry_path.parent.mkdir(parents=True)
+    registry_path.write_text("{broken", encoding="utf-8")
+    with pytest.raises(AudiaGenticError, match="CON-ART-001"):
+        ArtifactRegistry(tmp_path).recipes()
+
+
+def test_invalid_registry_root_fails_closed(tmp_path):
+    registry_path = (
+        tmp_path / ".audiagentic" / "config" / "runtime" / "toolchain" / "artifacts.json"
+    )
+    registry_path.parent.mkdir(parents=True)
+    registry_path.write_text('{"recipes": []}', encoding="utf-8")
+    with pytest.raises(AudiaGenticError, match="CON-ART-001"):
+        ArtifactRegistry(tmp_path).recipes()
 
 
 def test_register_and_prune_files(tmp_path):

@@ -22,6 +22,7 @@ from audiagentic.components.memory.hindsight.recipes import (
     _McpConfigAdapter,
 )
 from audiagentic.foundation.mcp import McpServerEntry
+from audiagentic.foundation.toolchains.managed_config import REMOTE_CAPABILITY
 
 
 def _backend() -> HindsightBackendConfig:
@@ -225,7 +226,7 @@ class TestProviderWriterAudit:
 
         for provider_id, descriptor in self._providers_with_mcp().items():
             spec = descriptor.mcp_config
-            if not spec.remote:
+            if REMOTE_CAPABILITY not in spec.capabilities:
                 stdio_only.add(provider_id)
                 continue
             config_path = tmp_path / provider_id / "config-under-audit"

@@ -333,11 +333,15 @@ class TestPlatformGateFallback:
         assert row.integration_type == "rules-only"
 
     def test_fallback_to_mcp_config_when_descriptor_has_remote(self, monkeypatch):
-        """Installer-kind row on unsupported platform with descriptor.mcp_config.remote -> MCP_CONFIG."""
+        """Installer-kind row on unsupported platform with REMOTE_CAPABILITY in
+        descriptor.mcp_config.capabilities -> MCP_CONFIG."""
         from audiagentic.components.memory.hindsight import strategies
+        from audiagentic.foundation.toolchains.managed_config import REMOTE_CAPABILITY
 
         mock_descriptor = type(
-            "MockDescriptor", (), {"mcp_config": type("McpConfig", (), {"remote": True})()}
+            "MockDescriptor",
+            (),
+            {"mcp_config": type("McpConfig", (), {"capabilities": frozenset({REMOTE_CAPABILITY})})()},
         )()
 
         monkeypatch.setattr(strategies, "get_descriptor", lambda pid: mock_descriptor)

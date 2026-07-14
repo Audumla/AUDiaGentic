@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+from audiagentic.foundation.steps import StepResult
 from audiagentic.foundation.toolchains.recipe_contract import (
     ProvisioningRecipe,
     RecipeResult,
     RecipeState,
 )
-from audiagentic.foundation.workflow.invocation.models import StepResult
 
 
 class _Recipe(ProvisioningRecipe):
@@ -55,6 +55,10 @@ class _ProvisionStep:
     def run(self, context):
         self.run_called = True
         return StepResult(status=self.status, reason=f"{self.id} failed" if self.status == "failed" else None)
+
+    def compensate(self, context):
+        self.revert_called = True
+        return StepResult(status="ok")
 
     def revert(self, context):
         self.revert_called = True

@@ -24,7 +24,7 @@ from audiagentic.components.memory.hindsight.matrix import (
     get_matrix_rows,
     get_rows_for_provider,
 )
-from audiagentic.components.memory.hindsight.recipes import GuidanceOnlyRecipe
+from audiagentic.components.memory.hindsight.recipes import _RowRecipe
 from audiagentic.components.memory.hindsight.strategies import (
     _RECIPE_FACTORIES,
     build_hindsight_recipe,
@@ -78,7 +78,7 @@ class TestArchitectureGates:
         )
         backend = HindsightBackendConfig(base_url="http://x:8888")
         recipe = build_hindsight_recipe(row, backend, "test")
-        assert isinstance(recipe, GuidanceOnlyRecipe)
+        assert isinstance(recipe, _RowRecipe)
 
 
 class TestSourceGates:
@@ -96,7 +96,7 @@ class TestSourceGates:
         )
         backend = HindsightBackendConfig(base_url="http://x:8888")
         recipe = build_hindsight_recipe(row, backend, "test")
-        assert isinstance(recipe, GuidanceOnlyRecipe)
+        assert isinstance(recipe, _RowRecipe)
 
     def test_blocked_mcp_becomes_guidance_only(self):
         """MCP config with blocked status returns GuidanceOnlyRecipe."""
@@ -109,7 +109,7 @@ class TestSourceGates:
         )
         backend = HindsightBackendConfig(base_url="http://x:8888")
         recipe = build_hindsight_recipe(row, backend, "test")
-        assert isinstance(recipe, GuidanceOnlyRecipe)
+        assert isinstance(recipe, _RowRecipe)
 
 
 class TestPlatformGates:

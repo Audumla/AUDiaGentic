@@ -138,6 +138,59 @@ def test_copilot_golden_command(monkeypatch):
     assert result["completion"]["subject"] == payload
 
 
+def test_gemini_prefers_packet_model_over_provider_default(monkeypatch):
+    """MO10 regression: gemini/adapter.py used to read provider_cfg['default-model']
+    directly, ignoring any model-id resolved by gateway dispatch into packet_ctx.
+    Both the -m flag and the descriptive prompt text must honor the packet model."""
+    import importlib
+
+    captured: dict = {}
+
+    def fake_stream(command, *, cwd=None, stdout_sinks=None, stderr_sinks=None, **kw):
+        captured["command"] = list(command)
+        return _FakeCompleted(stdout=json.dumps({"kind": "adhoc", "summary": "done"}))
+
+    mod = importlib.import_module("audiagentic.components.providers.adapters.gemini.adapter")
+    monkeypatch.setattr(mod, "run_streaming_command", fake_stream)
+    monkeypatch.setattr(mod, "require_executable", lambda pid, *a: f"/bin/{pid}")
+    monkeypatch.setattr(mod, "build_extractor_stream_sinks", lambda *a, **k: ([], []))
+
+    from audiagentic.components.providers.services.execution import execute_provider
+
+    ctx = dict(_PACKET_CTX, **{"provider-id": "gemini", "model-id": "packet-model"})
+    provider_cfg = dict(_PROVIDER_CFG, **{"default-model": "provider-default-model"})
+    execute_provider(provider_id="gemini", packet_ctx=ctx, provider_cfg=provider_cfg)
+
+    assert "-m" in captured["command"]
+    assert captured["command"][captured["command"].index("-m") + 1] == "packet-model"
+    assert "provider-default-model" not in captured["command"]
+    prompt = captured["command"][captured["command"].index("-p") + 1]
+    assert "model=packet-model" in prompt
+    assert "provider-default-model" not in prompt
+
+
+def test_gemini_falls_back_to_provider_default_without_packet_model(monkeypatch):
+    import importlib
+
+    captured: dict = {}
+
+    def fake_stream(command, *, cwd=None, stdout_sinks=None, stderr_sinks=None, **kw):
+        captured["command"] = list(command)
+        return _FakeCompleted(stdout=json.dumps({"kind": "adhoc", "summary": "done"}))
+
+    mod = importlib.import_module("audiagentic.components.providers.adapters.gemini.adapter")
+    monkeypatch.setattr(mod, "run_streaming_command", fake_stream)
+    monkeypatch.setattr(mod, "require_executable", lambda pid, *a: f"/bin/{pid}")
+    monkeypatch.setattr(mod, "build_extractor_stream_sinks", lambda *a, **k: ([], []))
+
+    from audiagentic.components.providers.services.execution import execute_provider
+
+    ctx = dict(_PACKET_CTX, **{"provider-id": "gemini"})
+    execute_provider(provider_id="gemini", packet_ctx=ctx, provider_cfg=dict(_PROVIDER_CFG))
+
+    assert captured["command"][captured["command"].index("-m") + 1] == "model-x"
+
+
 @pytest.mark.parametrize(
     ("provider_id", "aliases"),
     [

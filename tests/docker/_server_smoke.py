@@ -15,9 +15,9 @@ import os
 import sys
 from pathlib import Path
 
-os.environ.setdefault("AUDIAGENTIC_REPO_ROOT", "/app")
-
-_ROOT = Path(os.environ["AUDIAGENTIC_REPO_ROOT"]).resolve()
+_ROOT = Path("/tmp/audiagentic-server-smoke").resolve()
+_ROOT.mkdir(parents=True, exist_ok=True)
+os.environ["AUDIAGENTIC_REPO_ROOT"] = str(_ROOT)
 
 # module -> tool -> params
 SMOKE_CALLS: dict[str, dict[str, dict[str, object]]] = {
