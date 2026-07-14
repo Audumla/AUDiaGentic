@@ -1,0 +1,65 @@
+# Agent LLM Gateway trigger events — consumed by agents_gateway_events
+agents.llm.gateway.requested:
+  description: "Agent job dispatched to gateway via event trigger"
+  payload-required: ["project-root", "prompt-body"]
+  payload-optional: ["agent-profile-id", "fallback-profile-ids", "source"]
+  metadata-keys: []
+  delivery: sync
+  since: v1.0.0
+
+agents.llm.gateway.cancel-requested:
+  description: "Gateway cancel request propagated from job control"
+  payload-required: ["project-root", "request-id"]
+  payload-optional: []
+  metadata-keys: []
+  delivery: sync
+  since: v1.0.0
+
+# Agent LLM Gateway lifecycle events — published by agents_gateway_queue
+agents.llm.queued:
+  description: "Gateway request accepted and queued for dispatch"
+  payload-required: ["request-id", "agent-profile-id", "state"]
+  payload-optional: []
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+agents.llm.started:
+  description: "Gateway request dispatched to a worker thread"
+  payload-required: ["request-id", "agent-profile-id", "state"]
+  payload-optional: []
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+agents.llm.completed:
+  description: "Gateway request completed successfully"
+  payload-required: ["request-id", "agent-profile-id", "state"]
+  payload-optional: ["provider-id", "model-id", "attempt_count"]
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+agents.llm.failed:
+  description: "Gateway request failed (runner exception or explicit failure)"
+  payload-required: ["request-id", "agent-profile-id", "state"]
+  payload-optional: ["provider-id", "model-id", "error", "attempt_count"]
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+agents.llm.cancelled:
+  description: "Gateway request cancelled before or during dispatch"
+  payload-required: ["request-id", "agent-profile-id", "state"]
+  payload-optional: ["provider-id", "model-id"]
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+agents.llm.rejected:
+  description: "Gateway request rejected (queue full or malformed event payload)"
+  payload-required: ["request-id", "agent-profile-id", "state"]
+  payload-optional: []
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0

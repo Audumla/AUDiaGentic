@@ -1,9 +1,26 @@
-"""Internal providers service API shared by MCP wrappers and in-process callers."""
+"""Sanctioned public-API module for requester components (arch §18).
+
+This is the **only** `audiagentic.components.providers.*` import path that
+requester components (memory, coding-lsp, runtime bootstrap, release) may use.
+Never import adapters, services internals, serializers, capability config,
+or handlers from a requester component — they are forbidden by architecture §18.
+
+Re-exports recipe contract types and registry so callers can build and dispatch
+provider operations without importing providers internals.
+"""
 from __future__ import annotations
 
 import asyncio
 from pathlib import Path
 from typing import Any
+
+# Sanctioned re-exports for requester components (arch §18)
+from audiagentic.components.providers.services.recipes import (
+    ProviderCapabilityRecipe,
+    ProviderRecipeKind,
+    ProviderRecipeRegistry,
+    ProviderRecipeResult,
+)  # noqa: F401 — sanctioned re-export
 
 
 def list_providers(project_root: Path) -> dict[str, Any]:
@@ -590,3 +607,37 @@ async def reconcile_all_providers(project_root: Path, *, fetch_catalogs: bool) -
     return await asyncio.to_thread(
         _reconcile_all, project_root=project_root, fetch_catalogs=fetch_catalogs
     )
+
+
+__all__ = [
+    "list_providers",
+    "get_provider_status",
+    "list_provider_descriptors",
+    "list_provider_models",
+    "refresh_provider_catalog",
+    "describe_provider",
+    # Model source management (MO02)
+    "model_source_list",
+    "model_source_add",
+    "model_source_update",
+    "model_source_remove",
+    "model_source_set_enabled",
+    "sync_provider_models",
+    "list_provider_models_config",
+    "reload_provider_models",
+    "refresh_all_catalogs",
+    # Provider lifecycle
+    "install_provider",
+    "uninstall_provider",
+    "repair_provider",
+    "reconcile_provider",
+    "reconcile_all_providers",
+    # Surfaces
+    "apply_provider_surfaces",
+    "prune_provider_surfaces",
+    # Recipe contract — sanctioned re-exports for requester components (arch §18)
+    "ProviderCapabilityRecipe",
+    "ProviderRecipeKind",
+    "ProviderRecipeRegistry",
+    "ProviderRecipeResult",
+]

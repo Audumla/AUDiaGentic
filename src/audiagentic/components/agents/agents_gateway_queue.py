@@ -27,6 +27,24 @@ logger = logging.getLogger(__name__)
 
 _TERMINAL_EVENT_SUFFIXES = {"completed", "failed", "cancelled", "rejected"}
 
+# BU02: explicit suffix→topic-constant map replaces the f-string publish.
+# Each value matches a registered agents-owned topic in events.yaml.
+_TOPIC_QUEUED = "agents.llm.queued"
+_TOPIC_STARTED = "agents.llm.started"
+_TOPIC_COMPLETED = "agents.llm.completed"
+_TOPIC_FAILED = "agents.llm.failed"
+_TOPIC_CANCELLED = "agents.llm.cancelled"
+_TOPIC_REJECTED = "agents.llm.rejected"
+
+_LIFECYCLE_SUFFIX_TOPIC_MAP: dict[str, str] = {
+    "queued": _TOPIC_QUEUED,
+    "started": _TOPIC_STARTED,
+    "completed": _TOPIC_COMPLETED,
+    "failed": _TOPIC_FAILED,
+    "cancelled": _TOPIC_CANCELLED,
+    "rejected": _TOPIC_REJECTED,
+}
+
 
 def _publish_lifecycle_event(event_suffix: str, record: dict[str, Any]) -> None:
     """Publish an agents.llm.<event_suffix> lifecycle event for any gateway
@@ -54,8 +72,15 @@ def _publish_lifecycle_event(event_suffix: str, record: dict[str, Any]) -> None:
         payload["error"] = record.get("error")
         payload["attempt_count"] = len(record.get("attempts") or [])
 
+    topic = _LIFECYCLE_SUFFIX_TOPIC_MAP.get(event_suffix)
+    if topic is None:
+        logger.error(
+            "unknown lifecycle event suffix; skipping publish",
+            extra={"request-id": record["request-id"], "event": event_suffix},
+        )
+        return
     try:
-        get_bus().publish(f"agents.llm.{event_suffix}", payload, metadata=record.get("metadata", {}))
+        get_bus().publish(topic, payload, metadata=record.get("metadata", {}))
     except Exception:  # noqa: BLE001
         logger.error(
             "failed to publish gateway lifecycle event", extra={"request-id": record["request-id"], "event": event_suffix},

@@ -33,9 +33,9 @@
 
 | Field | Value |
 |---|---|
-| **Sanitized source** | `qwen --help` shows `--auth-type [choices: ..., "anthropic", ...]`. No separate Anthropic-specific CLI flags, but the auth type choice exists with the same key injection surface (`--openai-api-key` may be multiplexed per auth-type). Settings file `"security.auth.selectedType"` controls active auth path. |
-| **Sanitized summary** | Anthropic is supported via `--auth-type anthropic`. Key mechanism: the tool's auth system resolves credentials per selected type — for Anthropic this means setting `ANTHROPIC_API_KEY` env var or passing equivalent at runtime (exact CLI flag name under Anthropic auth type not distinguished from OpenAI in help; same `--openai-api-key` may be repurposed by context, or an env var is expected). Model selection via `-m <model-id>`. Requires verification: whether a dedicated Anthropic key flag exists or the tool reads `ANTHROPIC_API_KEY` automatically under `auth-type: anthropic`. |
-| **Support state** | **verified native via auth-type** (`--auth-type anthropic`; key mechanism partially verified — env var expected, exact CLI flag name blocked without isolated test) |
+| **Sanitized source** | `qwen --help` shows `--auth-type [choices: ..., "anthropic", ...]`. Isolated test: `qwen -m claude-sonnet -p "test" --auth-type anthropic` returns error "ANTHROPIC_API_KEY environment variable not found (or set settings.security.auth.apiKey)". Settings file `"security.auth.selectedType"` controls active auth path. |
+| **Sanitized summary** | Anthropic is supported via `--auth-type anthropic`. Key mechanism: **confirmed `ANTHROPIC_API_KEY` env var** (from runtime error message). Model selection via `-m <model-id>`. Can also set key in settings at `settings.security.auth.apiKey`. Single active model at a time. |
+| **Support state** | **verified native via auth-type** (`--auth-type anthropic`; key ANTHROPIC_API_KEY confirmed) |
 
 ---
 
@@ -45,9 +45,9 @@
 
 | Field | Value |
 |---|---|
-| **Sanitized source** | `qwen --help` shows `--auth-type [choices: ..., "gemini", "vertex-ai"]`. The flag `--google-api-key` exists but is for Google Custom Search (web search), NOT model access. Gemini model access is controlled by `--auth-type gemini` or `--auth-type vertex-ai`. |
-| **Sanitized summary** | Google/Gemini has TWO auth type paths: `gemini` (standard Gemini API) and `vertex-ai` (Google Cloud Vertex AI). Key mechanism per auth type requires verification — the tool likely reads `GEMINI_API_KEY` or project credentials automatically under the respective auth-type selection. Model selection via `-m <model-id>`. The `--google-api-key` CLI flag is irrelevant for models (web search only). |
-| **Support state** | **verified native via auth-type** (`--auth-type gemini` and `--auth-type vertex-ai`; exact key mechanism blocked without isolated test) |
+| **Sanitized source** | `qwen --help` shows `--auth-type [choices: ..., "gemini", "vertex-ai"]`. The flag `--google-api-key` exists but is for Google Custom Search (web search), NOT model access. Isolated test: `qwen -m gemini-pro -p "test" --auth-type gemini` returns error "GEMINI_API_KEY environment variable not found (or set settings.security.auth.apiKey)". |
+| **Sanitized summary** | Google/Gemini has TWO auth type paths: `gemini` (standard Gemini API) and `vertex-ai` (Google Cloud Vertex AI). Key mechanism for gemini: **confirmed `GEMINI_API_KEY` env var** (from runtime error message). For vertex-ai: expected to use Google Cloud project credentials or settings key. Model selection via `-m <model-id>`. The `--google-api-key` CLI flag is irrelevant for models (web search only). |
+| **Support state** | **verified native via auth-type** (`--auth-type gemini`; key GEMINI_API_KEY confirmed; vertex-ai path not tested) |
 
 ---
 
@@ -68,7 +68,7 @@
 | Field | Value |
 |---|---|
 | **Config file** | `~/.qwen/settings.json` (user-global, home-scoped). Contains: `"security.auth.selectedType"` for active auth type, `"model.name"` for selected model. Project-local config path NOT verified — current settings appear user-global. |
-| **Auth mechanism** | Multi-type selection via `--auth-type <openai\|anthropic\|qwen-oauth\|gemini\|vertex-ai>`. Persists as `"selectedType"` in settings. Per-auth-type credentials: tool resolves from env vars or CLI flags depending on selected type. For openai: explicit `--openai-api-key` flag. For others: env var expected (exact name blocked without isolated test). |
+| **Auth mechanism** | Multi-type selection via `--auth-type <openai\|anthropic\|qwen-oauth\|gemini\|vertex-ai>`. Persists as `"selectedType"` in settings. Per-auth-type credentials: **confirmed env vars** — `OPENAI_API_KEY` (openai auth-type), `ANTHROPIC_API_KEY` (anthropic), `GEMINI_API_KEY` (gemini). Can also set via CLI flags (`--openai-api-key`) or `settings.security.auth.apiKey`. Only ONE auth-type active at a time. |
 | **Model selection** | `-m, --model <id>` CLI flag; persists as `"model.name"` in settings. Single active model at a time. |
 | **Reload behavior** | Not verified — Qwen may require restart to pick up settings.json changes. Auth type and model likely resolved at launch. |
 
@@ -76,6 +76,6 @@
 
 ## Projection mode implications for AG
 
-- **Native-key-injection (env)**: Primary viable path for P1 vendors. Set `--auth-type <vendor>` plus the expected env var (`OPENAI_API_KEY` for openai, likely `ANTHROPIC_API_KEY` for anthropic, `GEMINI_API_KEY` for gemini). The exact key mapping per auth type needs isolated verification to confirm env var names.
+- **Native-key-injection (env)**: Primary viable path for P1 vendors. Set `--auth-type <vendor>` plus the confirmed env vars: `OPENAI_API_KEY` (openai), `ANTHROPIC_API_KEY` (anthropic), `GEMINI_API_KEY` (gemini). Key mappings verified via runtime error messages.
 - **Custom-entries**: Not applicable — Qwen uses multi-auth-type model selection, not provider catalog entries. Only one active model at a time via settings/CLI.
 - **Limited scope note**: Unlike Pi which accepts all vendor keys simultaneously, Qwen switches auth mode per type — only ONE `--auth-type` is active at a time. This means AG cannot have multiple vendors enabled concurrently through the same tool instance.

@@ -11,16 +11,16 @@ files:
   - path: .audiagentic/config/interoperability/config.yaml
     lifecycle: create-if-missing
     description: Event bus and interoperability runtime config
-  - path: .audiagentic/config/interoperability/events.yaml
+  - path: .audiagentic/config/interoperability/event-subscriptions.yaml
     lifecycle: create-if-missing
-    description: Project event definitions
+    description: Project-local event subscriptions (not a topic registry; see ARCHITECTURE_STANDARDS §17)
   - path: .audiagentic/prompts/ag-review/default.md
     lifecycle: create-if-missing
     description: Ag-review prompt template
 mcp-servers:
   - name: ag-project-mgmt
     module: audiagentic.components.project.project_mcp
-    direct-tools: [project_status, list_components, install_component, uninstall_component, enable_component, disable_component, read_project_file, error_resolve]
+    direct-tools: [project_status, list_components, install_component, uninstall_component, enable_component, disable_component, read_project_file, runtime_sync_contract, get_option_provenance]
     description: Project MCP server for project-level component management
     propagate: audiagentic
     instructions: >
@@ -35,3 +35,7 @@ mcp-servers:
       enable_component: Enable a component in target project. Harness config is regenerated automatically — no manual refresh needed.
       disable_component: Disable a component in target project. Harness config is regenerated automatically — no manual refresh needed.
       read_project_file: Read a file inside project .audiagentic directory.
+      runtime_sync_contract: Return the runtime sync contract — describes what harness
+        refresh actions follow component mutations and which are automatic.
+      get_option_provenance: Show where each option value came from (project config,
+        harness defaults, or override). Optionally filter by component_id.

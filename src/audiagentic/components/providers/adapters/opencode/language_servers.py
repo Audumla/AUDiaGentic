@@ -11,12 +11,11 @@ entries are touched, leaving `mcp` and other keys intact.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 from audiagentic.components.coding_lsp.language_servers import LanguageServerEntry
-from audiagentic.foundation.io import _ensure_dict
+from audiagentic.foundation.io import atomic_write_json, load_json_file
 
 # opencode keys its `lsp` object by opencode's own built-in server name, which is
 # not always our language id. coding-lsp stays language-keyed and generic; the
@@ -52,23 +51,8 @@ def _to_language(opencode_key: str) -> str:
     return _OPENCODE_KEY_TO_LANGUAGE.get(opencode_key, opencode_key)
 
 
-def _load_json(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return {}
-    return _ensure_dict(data)
-
-
-def _save_json(path: Path, data: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-
-
 def read_language_servers_opencode(path: Path) -> dict[str, LanguageServerEntry]:
-    data = _load_json(path)
+    data = load_json_file(path)
     lsp = data.get("lsp", {})
     if not isinstance(lsp, dict):
         return {}
@@ -87,7 +71,7 @@ def read_language_servers_opencode(path: Path) -> dict[str, LanguageServerEntry]
 
 
 def write_language_servers_opencode(path: Path, entries: dict[str, LanguageServerEntry]) -> None:
-    data = _load_json(path)
+    data = load_json_file(path)
     lsp = data.get("lsp")
     if not isinstance(lsp, dict):
         lsp = {}
@@ -102,11 +86,11 @@ def write_language_servers_opencode(path: Path, entries: dict[str, LanguageServe
         if entry.settings:
             node["initialization"] = dict(entry.settings)
         lsp[_to_opencode_key(name)] = node
-    _save_json(path, data)
+    atomic_write_json(path, data)
 
 
 def remove_language_servers_opencode(path: Path, language: str) -> bool:
-    data = _load_json(path)
+    data = load_json_file(path)
     lsp = data.get("lsp", {})
     if not isinstance(lsp, dict):
         return False
@@ -121,5 +105,5 @@ def remove_language_servers_opencode(path: Path, language: str) -> bool:
     # than leaving an empty "lsp": {}.
     if not lsp:
         data.pop("lsp", None)
-    _save_json(path, data)
+    atomic_write_json(path, data)
     return True

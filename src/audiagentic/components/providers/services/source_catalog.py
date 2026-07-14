@@ -335,6 +335,18 @@ def _refresh_from_list_api(
     )
 
 
+def _stale_age_seconds(fetched_at: str) -> int | None:
+    from datetime import datetime, timezone
+
+    try:
+        fetched = datetime.fromisoformat(str(fetched_at).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if fetched.tzinfo is None:
+        fetched = fetched.replace(tzinfo=timezone.utc)
+    return max(0, int((datetime.now(timezone.utc) - fetched).total_seconds()))
+
+
 def _degraded(
     project_root: Path,
     source_id: str,
@@ -345,10 +357,22 @@ def _degraded(
 ) -> SourceCatalogResult:
     """Degrade to the last-known-good cache; missing when no cache exists."""
     cached = _read_cache(project_root, source_id)
-    _timeline(
-        project_root, source_id, "source-catalog.degraded",
-        {"failure-class": failure_class, "fallback": "cached" if cached else "none"},
-    )
+    # Timeline attribute keys are kebab-case (timeline convention); the result
+    # dataclass keeps the same facts as snake_case Python fields.
+    attributes: dict[str, Any] = {
+        "failure-class": failure_class,
+        "error-code": error_code,
+        "action-needed": action_needed,
+        "fallback": "cached" if cached else "none",
+        "stale": cached is not None,
+    }
+    fetched_at = cached.get("fetched-at") if cached else None
+    if fetched_at:
+        attributes["cached-fetched-at"] = fetched_at
+        stale_age = _stale_age_seconds(fetched_at)
+        if stale_age is not None:
+            attributes["stale-age-seconds"] = stale_age
+    _timeline(project_root, source_id, "source-catalog.degraded", attributes)
     if cached is None:
         return SourceCatalogResult(
             source_id=source_id,

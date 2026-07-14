@@ -15,8 +15,9 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 # helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_item(**kwargs) -> dict:
-    base = {"id": "TST01", "plan": "test-plan", "title": "Test item"}
+    base = {"id": "TST01", "plan": "test-plan", "title": "Test item", "created-by": "agent"}
     base.update(kwargs)
     return base
 
@@ -118,7 +119,7 @@ def test_create_item_optional_fields_in_frontmatter(tmp_path):
 
 
 def test_create_item_records_creator_identity(tmp_path):
-    planning_api.create_item(tmp_path, _make_item(created_by="codex"))
+    planning_api.create_item(tmp_path, _make_item(**{"created-by": "codex"}))
     item = planning_api.get_item(tmp_path, "TST01")
     listed = planning_api.list_items(tmp_path)
 
@@ -130,7 +131,7 @@ def test_create_item_event_includes_creator_identity(tmp_path, monkeypatch):
     published = []
     monkeypatch.setattr(planning_events, "publish_planning_event", lambda *args, **kwargs: published.append((args, kwargs)))
 
-    planning_api.create_item(tmp_path, _make_item(created_by="codex"))
+    planning_api.create_item(tmp_path, _make_item(**{"created-by": "codex"}))
 
     event_type, payload = published[0][0]
     assert event_type == planning_events.PLANNING_ITEM_CREATED

@@ -16,6 +16,7 @@ mcp-servers:
     module: audiagentic.components.memory.memory_mcp
     direct-tools:
       - memory_status
+      - memory_hindsight_status
       - memory_list_implementations
       - memory_select_implementation
       - memory_get_config
@@ -29,6 +30,10 @@ mcp-servers:
     tool-descriptions:
       memory_status: >
         Return memory component status: active implementation and configured state.
+      memory_hindsight_status: >
+        Return per-provider Hindsight integration status showing state
+        (active/inactive/not_registered), source verification, and owned artifacts
+        for each provider's Hindsight recipe.
       memory_list_implementations: >
         List available memory implementations with active/default flags and summary.
       memory_select_implementation: >

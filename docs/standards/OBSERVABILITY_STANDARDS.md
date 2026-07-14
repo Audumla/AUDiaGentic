@@ -49,6 +49,15 @@ Event bus messages notify other components. Timelines explain what happened for
 one resource after the fact. Use both when a resource lifecycle must be both
 reactive and debuggable.
 
+**Bus topics vs timeline event names:** State-machine timeline names
+(e.g., `JOB_TIMELINE_EVENTS`, "job.state-propagated", "queue.cancelled-before-dispatch")
+are NOT bus topics and stay outside the topic registry (ARCHITECTURE_STANDARDS §17). 
+They are local observability artifacts, not inter-component communication.
+Bus topics are registered in `config/components/<component>/events.yaml`;
+the project-scoped `.audiagentic/config/interoperability/event-subscriptions.yaml`
+is a separate configuration concern (project-local subscriptions) and should not
+be conflated with the package-owned topic registries.
+
 Regular `logger` calls remain useful for operator diagnostics, but must not be
 the only durable observability surface for async resource state.
 

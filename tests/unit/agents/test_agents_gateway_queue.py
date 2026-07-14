@@ -396,3 +396,55 @@ def test_lifecycle_event_publish_failure_does_not_crash_worker(tmp_path: Path, m
 
     result = manager.wait(tmp_path, record["request-id"], timeout_seconds=5)
     assert result["state"] == "completed"
+
+
+class TestGatewayLifecycleSuffixMap:
+    """BU02 validation V6: suffix→topic map correctness and unknown-suffix safety."""
+
+    def test_every_suffix_maps_to_registered_topic(self):
+        """Every allowed suffix in the lifecycle map resolves to a registered agents-owned topic."""
+        import audiagentic.foundation.event.topic_registry as mod
+        from audiagentic.foundation.event.topic_registry import (
+            get_topic_registry,
+            load_all_event_topics,
+        )
+
+        mod._registry_instance = None
+        load_all_event_topics()
+        registry = get_topic_registry()
+
+        for suffix, topic in queue_mod._LIFECYCLE_SUFFIX_TOPIC_MAP.items():
+            assert registry.is_registered(topic), (
+                f"Suffix {suffix!r} maps to {topic!r} which is not a registered topic"
+            )
+
+    def test_unknown_suffix_does_not_publish(self, tmp_path: Path):
+        """Unknown lifecycle event suffix logs error and skips publish."""
+        received = []
+
+        def _track(topic, payload, metadata=None):
+            received.append((topic, payload))
+
+        bus = get_bus()
+        bus.publish = _track  # type: ignore[method-assign]
+
+        manager = queue_mod.GatewayQueueManager()
+        record = store.build_record(agent_profile_id="p12", prompt_body="x")
+        store.write_record(tmp_path, record)
+
+        def _runner_with_unknown_suffix(project_root, rec):
+            queue_mod._publish_lifecycle_event("unknown_suffix", rec)
+            store.transition_record(
+                project_root, rec["request-id"], "completed",
+                updates={"output": "done", "finished-at": now_iso_z()},
+            )
+            return rec
+
+        manager.enqueue(tmp_path, record, {"max-concurrency": 1}, _runner_with_unknown_suffix)
+        result = manager.wait(tmp_path, record["request-id"], timeout_seconds=5)
+        assert result["state"] == "completed"
+
+        unknown_topics = [t for t, _ in received if "unknown" in t.lower()]
+        assert not unknown_topics, (
+            f"Unknown suffix produced unexpected publishes: {unknown_topics}"
+        )

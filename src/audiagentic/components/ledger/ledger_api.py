@@ -31,7 +31,7 @@ def record_change(project_root: Path, event: dict[str, Any], *, sync: bool = Fal
     if not sync:
         return result
     sync_result = sync_current_release_ledger(project_root)
-    return {**result, "ledger-count": sync_result.fragment_count}
+    return {**result, "ledger-count": sync_result.fragment_count, "purged-fragments": sync_result.purged_fragment_count}
 
 
 def record_changes(project_root: Path, events: list[dict[str, Any]], *, sync: bool = False) -> dict[str, Any]:
@@ -44,7 +44,7 @@ def record_changes(project_root: Path, events: list[dict[str, Any]], *, sync: bo
     if not sync:
         return payload
     sync_result = sync_current_release_ledger(project_root)
-    return {**payload, "ledger-count": sync_result.fragment_count}
+    return {**payload, "ledger-count": sync_result.fragment_count, "purged-fragments": sync_result.purged_fragment_count}
 
 
 def refresh_current_summary(project_root: Path) -> str:
@@ -66,6 +66,7 @@ def sync(project_root: Path) -> dict[str, Any]:
     result = sync_current_release_ledger(project_root)
     return {
         "fragment-count": result.fragment_count,
+        "purged-fragment-count": result.purged_fragment_count,
         "ledger-path": str(result.ledger_path),
         "warning": result.warning,
     }

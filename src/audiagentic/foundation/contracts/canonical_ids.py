@@ -16,6 +16,7 @@ CANONICAL_SCHEMA_IDS = (
     "component-config",
     "error-envelope",
     "event-envelope",
+    "event-topics",
     "interaction-request",
     "job-record",
     "lifecycle-plan",

@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.mcp import McpServerEntry
 
 
@@ -63,7 +64,7 @@ def write_opencode_mcp(path: Path, entries: dict[str, McpServerEntry]) -> None:
                 cfg["environment"] = dict(entry.env)
         servers[name] = cfg
     existing["mcp"] = servers
-    path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+    atomic_write_json(path, existing)
 
 
 def remove_opencode_mcp(path: Path, name: str) -> bool:
@@ -78,5 +79,5 @@ def remove_opencode_mcp(path: Path, name: str) -> bool:
         return False
     del servers[name]
     data["mcp"] = servers
-    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    atomic_write_json(path, data)
     return True
