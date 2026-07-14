@@ -11,11 +11,16 @@ from typing import Any
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.mcp import McpServerEntry
 from audiagentic.foundation.toolchains.config_patcher import ConfigPatcher
-from audiagentic.foundation.toolchains.fragments import FragmentStore, reconcile_fragments
+from audiagentic.foundation.toolchains.managed_config import (
+    ManagedConfigSpec,
+    reload_managed_config,
+    resolve_managed_config_path,
+    sync_managed_config,
+)
 
-from ..descriptors.base import McpConfigSpec, ProviderDescriptor
+from ..descriptors.base import ProviderDescriptor
 from ..descriptors.registry import get_descriptor
-from .managed_mcp_registry import load_managed_mcp_registry, save_managed_mcp_registry
+from .managed_mcp_registry import mcp_ownership_registry
 
 
 def _descriptor(provider_id: str) -> ProviderDescriptor:
@@ -30,13 +35,8 @@ def _descriptor(provider_id: str) -> ProviderDescriptor:
     return descriptor
 
 
-def _resolve_mcp_path(spec: McpConfigSpec, project_root: Path) -> Path:
-    if callable(spec.config_path):
-        return spec.config_path(project_root)
-    p = Path(spec.config_path).expanduser()
-    if p.is_absolute():
-        return p
-    return project_root / p
+def _resolve_mcp_path(spec: ManagedConfigSpec, project_root: Path) -> Path:
+    return resolve_managed_config_path(spec, project_root)
 
 
 def add_provider_mcp_server(
@@ -124,6 +124,7 @@ def reload_provider_mcp(
 ) -> dict[str, Any]:
     """Signal or reload a provider after its MCP config has changed.
 
+    Thin binding over the shared ``reload_managed_config`` core (MO06):
     file-watch providers auto-reload on file change — nothing extra needed.
     restart-required providers call reload_fn if defined, otherwise inform only.
     """
@@ -132,39 +133,9 @@ def reload_provider_mcp(
     if spec is None:
         return {"provider_id": provider_id, "ok": False, "error": "no mcp_config defined for this provider"}
 
-    if spec.refresh_mode == "file-watch":
-        return {
-            "provider_id": provider_id,
-            "ok": True,
-            "auto_refreshed": True,
-            "method": "file-watch",
-        }
-
-    if spec.reload_fn is not None:
-        try:
-            fn_result = spec.reload_fn(project_root)
-        except Exception as exc:  # noqa: BLE001
-            return {
-                "provider_id": provider_id,
-                "ok": False,
-                "method": "reload-fn",
-                "error": str(exc),
-            }
-        return {
-            "provider_id": provider_id,
-            "ok": True,
-            "auto_refreshed": True,
-            "method": "reload-fn",
-            **fn_result,
-        }
-
-    return {
-        "provider_id": provider_id,
-        "ok": True,
-        "auto_refreshed": False,
-        "method": "restart-required",
-        "action_needed": f"restart {descriptor.display_name} to apply MCP config changes",
-    }
+    result = reload_managed_config(spec, project_root, display_name=descriptor.display_name)
+    result["provider_id"] = provider_id
+    return result
 
 
 def _sync_managed_entries(
@@ -176,43 +147,27 @@ def _sync_managed_entries(
 ) -> dict[str, Any]:
     """Sync AUDiaGentic-owned MCP entries for one provider.
 
-    Thin MCP adapter over the generic fragment reconciler
-    (foundation/toolchains/fragments.py): the store is the descriptor's
-    reader/writer/remover trio, the owner scope is the provider id, and the
-    ownership registry is the existing managed-mcp-servers.json (format
-    unchanged). When ``managed_ids`` is ``None``, all managed entries for
-    the provider are synced; a non-empty set touches only those ids.
+    Thin MCP binding over the shared ``sync_managed_config`` core (MO06):
+    the store is the descriptor's reader/writer/remover trio, the owner
+    scope is the provider id, and the ownership registry is the existing
+    managed-mcp-servers.json (format unchanged). When ``managed_ids`` is
+    ``None``, all managed entries for the provider are synced; a non-empty
+    set touches only those ids.
     """
     descriptor = _descriptor(provider_id)
     spec = descriptor.mcp_config
     if spec is None:
         return {"provider_id": provider_id, "ok": True, "skipped": "no mcp_config defined"}
 
-    config_path = _resolve_mcp_path(spec, project_root)
-    store = FragmentStore(read=spec.reader, write=spec.writer, remove=spec.remover)
-    outcome = reconcile_fragments(
-        store,
-        config_path,
+    result = sync_managed_config(
+        spec,
+        project_root,
         provider_id,
         desired_entries,
-        registry_load=lambda: load_managed_mcp_registry(project_root),
-        registry_save=lambda registry: save_managed_mcp_registry(project_root, registry),
+        registry=mcp_ownership_registry(project_root),
         managed_ids=managed_ids,
     )
-
-    result: dict[str, Any] = {
-        "provider_id": provider_id,
-        "ok": outcome.ok,
-        "config_path": str(config_path),
-        "updated": outcome.updated,
-        "removed": outcome.removed,
-        "collisions": outcome.collisions,
-    }
-    if outcome.changed:
-        result.update(reload_provider_mcp(provider_id, project_root))
-    else:
-        result.update({"auto_refreshed": True, "method": "no-op"})
-    return result
+    return result.to_dict()
 
 
 def sync_managed_provider_mcp(

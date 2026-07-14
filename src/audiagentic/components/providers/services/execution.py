@@ -8,6 +8,7 @@ from collections.abc import Callable
 from importlib import import_module
 from typing import Any
 
+from audiagentic.components.providers.adapters.base_runner import resolve_execution_model
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 ProviderRunner = Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]
@@ -56,6 +57,40 @@ def _load_runner(provider_id: str) -> ProviderRunner | None:
     return runner
 
 
+_EXECUTION_MODE_BY_DECLARATION: dict[str, str] = {
+    "cli": "descriptor",
+    "stub": "stub",
+    "ok-stub": "stub",
+    "unsupported": "unsupported",
+}
+
+
+def describe_execution_support(provider_id: str) -> dict[str, Any]:
+    """Report execution support without importing or running adapter modules.
+
+    Modes (MO11 step 1): ``adapter`` (hand-written adapter module exists —
+    detected via find_spec, no import), ``descriptor`` (declarative
+    ``execution: {mode: cli}`` runner), ``stub``, ``unsupported``, ``none``.
+    Stable provider-service API consumed by describe_provider and recipes.
+    """
+    module_path = _adapter_module_path(provider_id)
+    if module_path is not None:
+        return {"mode": "adapter", "module": module_path}
+
+    from audiagentic.components.providers.descriptors.registry import all_descriptors
+
+    descriptor = all_descriptors().get(provider_id)
+    execution = getattr(descriptor, "execution", None) if descriptor else None
+    if not execution:
+        return {"mode": "none"}
+    declared = execution.get("mode", "")
+    mode = _EXECUTION_MODE_BY_DECLARATION.get(declared, "none")
+    result: dict[str, Any] = {"mode": mode, "declared": declared}
+    if execution.get("message"):
+        result["message"] = execution["message"]
+    return result
+
+
 def execute_provider(
     *,
     provider_id: str,
@@ -68,18 +103,28 @@ def execute_provider(
     packet context and adds execution metadata while leaving provider-specific
     behavior inside the provider adapter module.
     """
+    from audiagentic.components.providers.services.launch_env import launch_env_overlay
+
     provider_cfg = provider_cfg or {}
     runner = _load_runner(provider_id)
     if runner is None:
-        return {
-            "provider-id": provider_id,
-            "status": "stubbed",
-            "execution-mode": provider_cfg.get("access-mode", "none"),
-            "model": provider_cfg.get("default-model"),
-            "output": "stubbed-response",
-        }
+        # No adapter module and no descriptor execution block. Declared stubs
+        # (execution: {mode: stub}) get an honest stub runner upstream; a
+        # provider with NEITHER is an error condition — never fabricate a
+        # success-shaped "stubbed" result for it.
+        raise AudiaGenticError(
+            code="VAL-EXEC-002",
+            kind="providers",
+            message="provider has no execution adapter or descriptor execution block",
+            details={"provider-id": provider_id},
+        )
 
-    result = runner(packet_ctx, provider_cfg)
+    # MO15 launch-env seam: resolve deferred env contributions only for the
+    # duration of this launch frame so the adapter's subprocess inherits them.
+    # Stub providers never have registered contributions (recipe inertness
+    # rule), so this is a no-op overlay for them.
+    with launch_env_overlay(provider_id):
+        result = runner(packet_ctx, provider_cfg)
     if not isinstance(result, dict):
         raise AudiaGenticError(
             code="INT-EXEC-002",
@@ -91,6 +136,6 @@ def execute_provider(
     normalized = dict(result)
     normalized.setdefault("provider-id", provider_id)
     normalized.setdefault("execution-mode", provider_cfg.get("access-mode", "none"))
-    normalized.setdefault("model", provider_cfg.get("default-model"))
+    normalized.setdefault("model", resolve_execution_model(packet_ctx, provider_cfg))
     normalized.setdefault("status", "ok")
     return normalized

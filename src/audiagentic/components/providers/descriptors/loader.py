@@ -15,14 +15,16 @@ from typing import Any
 
 from audiagentic.foundation.paths.names import get_package_providers_config_dir
 from audiagentic.foundation.refs import resolve_ref
+from audiagentic.foundation.toolchains.managed_config import (
+    REMOTE_CAPABILITY,
+    ManagedConfigSpec,
+)
 from audiagentic.foundation.workflow.invocation.from_spec import build_step_from_spec
 
 from .base import (
     AgentFile,
     CliInstallRecipe,
     HostCapability,
-    LanguageServersConfigSpec,
-    McpConfigSpec,
     ProviderDescriptor,
     ProviderPermissions,
 )
@@ -113,9 +115,9 @@ def _build_cli_install(data: dict[str, Any]) -> CliInstallRecipe:
         )
 
 
-def _build_mcp_config(data: dict[str, Any]) -> McpConfigSpec:
-    """Build McpConfigSpec from YAML dict."""
-    return McpConfigSpec(
+def _build_mcp_config(data: dict[str, Any]) -> ManagedConfigSpec:
+    """Build the MCP ManagedConfigSpec from YAML dict."""
+    return ManagedConfigSpec(
         config_path=data["config_path"],
         reader=resolve_ref(data["reader"]),
         writer=resolve_ref(data["writer"]),
@@ -123,18 +125,31 @@ def _build_mcp_config(data: dict[str, Any]) -> McpConfigSpec:
         format=data.get("format", ""),
         refresh_mode=data["refresh_mode"],
         reload_fn=resolve_ref(data["reload_fn"]) if "reload_fn" in data else None,
-        remote=data.get("remote", True),
+        capabilities=frozenset({REMOTE_CAPABILITY}) if data.get("remote", True) else frozenset(),
     )
 
 
-def _build_language_servers_config(data: dict[str, Any]) -> LanguageServersConfigSpec:
-    """Build LanguageServersConfigSpec from YAML dict."""
-    return LanguageServersConfigSpec(
+def _build_language_servers_config(data: dict[str, Any]) -> ManagedConfigSpec:
+    """Build the language-servers ManagedConfigSpec from YAML dict."""
+    return ManagedConfigSpec(
         config_path=data["config_path"],
         reader=resolve_ref(data["reader"]),
         writer=resolve_ref(data["writer"]),
         remover=resolve_ref(data["remover"]),
         format=data.get("format", ""),
+    )
+
+
+def _build_model_config(data: dict[str, Any]) -> ManagedConfigSpec:
+    """Build the model-endpoints ManagedConfigSpec from YAML dict (MO02)."""
+    return ManagedConfigSpec(
+        config_path=data["config_path"],
+        reader=resolve_ref(data["reader"]),
+        writer=resolve_ref(data["writer"]),
+        remover=resolve_ref(data["remover"]),
+        format=data.get("format", ""),
+        refresh_mode=data.get("refresh_mode", "none"),
+        reload_fn=resolve_ref(data["reload_fn"]) if "reload_fn" in data else None,
     )
 
 
@@ -157,6 +172,10 @@ PROVIDER_SPEC.add("instruction_file", yaml_key="instruction_file", kind="data", 
 PROVIDER_SPEC.add("fetch_catalog_fn", yaml_key="fetch_catalog_fn", kind="ref", default=None)
 PROVIDER_SPEC.add("mcp_config", yaml_key="mcp_config", kind="nested", builder=_build_mcp_config, default=None)
 PROVIDER_SPEC.add("language_servers_config", yaml_key="language_servers_config", kind="nested", builder=_build_language_servers_config, default=None)
+PROVIDER_SPEC.add("model_config", yaml_key="model_config", kind="nested", builder=_build_model_config, default=None)
+PROVIDER_SPEC.add("model_entry_renderer", yaml_key="model_entry_renderer", kind="ref", default=None)
+PROVIDER_SPEC.add("supported_connectors", yaml_key="supported_connectors", kind="data", default=tuple(), converter=_list_to_tuple)
+PROVIDER_SPEC.add("vendor_key_injection", yaml_key="vendor_key_injection", kind="data", default=dict())
 PROVIDER_SPEC.add("on_lsp_enabled", yaml_key="on_lsp_enabled", kind="ref", default=None)
 PROVIDER_SPEC.add("receive_lsp_mcp", yaml_key="receive_lsp_mcp", kind="data", default=True)
 PROVIDER_SPEC.add("surfaces", yaml_key="surfaces", kind="data", default=None)

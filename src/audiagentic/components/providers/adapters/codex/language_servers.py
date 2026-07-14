@@ -11,9 +11,8 @@ from typing import Any
 
 import tomllib
 
+from audiagentic.components.coding_lsp.language_servers import LanguageServerEntry
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-
-from ...descriptors.base import LanguageServerEntry
 
 _BARE_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 

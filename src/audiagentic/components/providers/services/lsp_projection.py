@@ -8,6 +8,11 @@ from typing import Any
 from audiagentic.components.coding_lsp.language_servers import LanguageServerEntry
 from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.foundation.mcp import McpServerEntry
+from audiagentic.foundation.toolchains.managed_config import (
+    apply_managed_config_remove,
+    apply_managed_config_write,
+    resolve_managed_config_path,
+)
 
 from ..descriptors.registry import all_descriptors
 from .feature_resolution import enabled_provider_ids
@@ -38,14 +43,10 @@ def sync_language_servers_to_provider_configs(
             skipped.append(descriptor.provider_id)
             continue
         try:
-            config_path = spec.config_path
-            if callable(config_path):
-                config_path = config_path(project_root)
-            else:
-                config_path = project_root / config_path
+            config_path = resolve_managed_config_path(spec, project_root)
 
             if descriptor.provider_id in enabled:
-                spec.writer(config_path, servers_to_write)
+                apply_managed_config_write(spec, config_path, servers_to_write)
                 synced.append(descriptor.provider_id)
                 results[descriptor.provider_id] = {
                     "ok": True,
@@ -53,7 +54,10 @@ def sync_language_servers_to_provider_configs(
                     "servers_written": list(servers_to_write.keys()),
                 }
             else:
-                removed = [lang for lang in languages if spec.remover(config_path, lang)]
+                removed = [
+                    lang for lang in languages
+                    if apply_managed_config_remove(spec, config_path, lang)
+                ]
                 skipped.append(descriptor.provider_id)
                 results[descriptor.provider_id] = {
                     "ok": True,
@@ -140,12 +144,11 @@ def prune_language_servers_from_provider_configs(
             skipped.append(descriptor.provider_id)
             continue
         try:
-            config_path = spec.config_path
-            if callable(config_path):
-                config_path = config_path(project_root)
-            else:
-                config_path = project_root / config_path
-            removed = [lang for lang in languages if spec.remover(config_path, lang)]
+            config_path = resolve_managed_config_path(spec, project_root)
+            removed = [
+                lang for lang in languages
+                if apply_managed_config_remove(spec, config_path, lang)
+            ]
             pruned.append(descriptor.provider_id)
             results[descriptor.provider_id] = {
                 "ok": True,
