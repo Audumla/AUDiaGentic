@@ -13,6 +13,10 @@ from __future__ import annotations
 
 from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
 from audiagentic.components.memory.hindsight.matrix import HindsightRecipeRow
+from audiagentic.components.memory.hindsight.plugin_definition import (
+    HindsightPluginDefinition,
+    HindsightPluginDesired,
+)
 from audiagentic.components.memory.hindsight.plugin_recipes import (
     PluginConfigRecipe,
     _PluginArrayRecipe,
@@ -136,7 +140,8 @@ def test_hooks_unverified_fallback_golden():
 
 
 def test_plugin_config_probe_dry_run_golden():
-    r = PluginConfigRecipe(_row(recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG), _backend())
+    row = _row(recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG)
+    r = PluginConfigRecipe(HindsightPluginDefinition.from_row(row), HindsightPluginDesired.from_backend(_backend()))
     assert _snap(r.probe({})) == {
         "success": True,
         "state": "absent",
@@ -156,9 +161,10 @@ def test_plugin_config_probe_dry_run_golden():
 
 
 def test_plugin_url_config_probe_golden(tmp_path):
+    row = _row(recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG)
     r = _PluginUrlConfigRecipe(
-        _row(recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG),
-        _backend(),
+        HindsightPluginDefinition.from_row(row),
+        HindsightPluginDesired.from_backend(_backend()),
         tmp_path / "url.json",
     )
     assert _snap(r.probe({})) == {
@@ -173,9 +179,10 @@ def test_plugin_url_config_probe_golden(tmp_path):
 
 def test_plugin_url_config_uninstall_removes_file(tmp_path):
     path = tmp_path / "url.json"
+    row = _row(recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG)
     r = _PluginUrlConfigRecipe(
-        _row(recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG),
-        _backend(),
+        HindsightPluginDefinition.from_row(row),
+        HindsightPluginDesired.from_backend(_backend()),
         path,
     )
     r.configure({})
@@ -213,7 +220,7 @@ def test_plugin_url_repair_resolves_appdata_placeholder(tmp_path, monkeypatch):
     from audiagentic.components.memory.hindsight.plugin_definition import HindsightPluginDefinition
 
     ok, detail = _repair_windows_plugin_mcp(
-        _backend(), HindsightPluginDefinition.from_row(row)
+        HindsightPluginDesired.from_backend(_backend()), HindsightPluginDefinition.from_row(row)
     )
 
     assert ok, detail
@@ -227,8 +234,8 @@ def test_plugin_array_probe_golden(tmp_path):
     package = "@vectorize-io/opencode-hindsight"
     row = _row(recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG, plugin_array_package=package)
     r = _PluginArrayRecipe(
-        row,
-        _backend(),
+        HindsightPluginDefinition.from_row(row),
+        HindsightPluginDesired.from_backend(_backend()),
         tmp_path,
     )
     assert _snap(r.probe({})) == {
@@ -247,7 +254,7 @@ def test_plugin_array_uninstall_removes_entry(tmp_path, monkeypatch):
         recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG,
         plugin_array_package=package,
     )
-    r = _PluginArrayRecipe(row, _backend(), tmp_path)
+    r = _PluginArrayRecipe(HindsightPluginDefinition.from_row(row), HindsightPluginDesired.from_backend(_backend()), tmp_path)
     calls = []
     from audiagentic.components.providers.contracts.plugin_entry import PluginEntryResult
     monkeypatch.setattr(

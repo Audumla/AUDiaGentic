@@ -17,6 +17,10 @@ from audiagentic.components.memory.hindsight.matrix import (
     HINDSIGHT_RECIPE_MATRIX,
     HindsightRecipeRow,
 )
+from audiagentic.components.memory.hindsight.plugin_definition import (
+    HindsightPluginDefinition,
+    HindsightPluginDesired,
+)
 from audiagentic.components.memory.hindsight.plugin_recipes import (
     PluginConfigRecipe,
     _PluginArrayRecipe,
@@ -183,7 +187,9 @@ def _build_plugin_url_config_recipe(
 ) -> Any:
     """Build Plugin URL config recipe with optional Windows repair."""
     return _PluginUrlConfigRecipe(
-        row, backend, url_config_path,
+        HindsightPluginDefinition.from_row(row),
+        HindsightPluginDesired.from_backend(backend),
+        url_config_path,
         harness_config_path=harness_config_path,
     )
 
@@ -202,15 +208,17 @@ def _build_plugin_config_recipe(
     harness_path = _resolve_harness_config_path(provider_id, project_root)
     if row.source_status != "verified" and row.install_steps:
         return assemble_hindsight_recipe(row, backend, _GUIDANCE_SPEC)
+    definition = HindsightPluginDefinition.from_row(row)
+    desired = HindsightPluginDesired.from_backend(backend)
     if row.plugin_array_package and project_root:
-        return _PluginArrayRecipe(row, backend, project_root)
+        return _PluginArrayRecipe(definition, desired, project_root)
     if row.plugin_url_config_path:
         return _build_plugin_url_config_recipe(
             row, backend, row.plugin_url_config_path,
             harness_path or row.plugin_url_config_path,
         )
     if harness_path:
-        return PluginConfigRecipe(row, backend, Path(harness_path))
+        return PluginConfigRecipe(definition, desired, Path(harness_path))
     return assemble_hindsight_recipe(row, backend, _GUIDANCE_SPEC)
 
 

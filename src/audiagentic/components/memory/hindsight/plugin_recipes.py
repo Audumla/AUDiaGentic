@@ -6,16 +6,17 @@ settings JSON file with the Windows launcher repair
 (:class:`_PluginUrlConfigRecipe`), or a declarative plugin-array entry
 (:class:`_PluginArrayRecipe`).
 
-Split from recipes.py; shares the ``_RowRecipe`` provenance base and the
-``_hindsight_params`` vocabulary from that module.
+All three consume only typed HindsightPluginDefinition and
+HindsightPluginDesired objects. The raw HindsightRecipeRow exists only in the
+matrix-to-definition parser.
 """
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.memory.hindsight.declared_integration import IntegrationCommand
 from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
-from audiagentic.components.memory.hindsight.matrix import HindsightRecipeRow
 from audiagentic.components.memory.hindsight.mcp_recipe import (
     build_hindsight_managed_entry,
     hindsight_ownership_scope,
@@ -24,33 +25,57 @@ from audiagentic.components.memory.hindsight.plugin_definition import (
     HindsightPluginDefinition,
     HindsightPluginDesired,
 )
-from audiagentic.components.memory.hindsight.recipes import _hindsight_params, _RowRecipe
 from audiagentic.components.providers.services.recipes import (
+    ProviderCapabilityRecipe,
+    ProviderRecipeKind,
     ProviderRecipeResult,
+    RecipeResult,
     RecipeState,
 )
-from audiagentic.foundation.steps import build_step
+from audiagentic.foundation.steps import ShellStep
 from audiagentic.foundation.toolchains.recipe_contract import run_steps
 
 
-def _should_run_plugin_command(row: HindsightRecipeRow) -> bool:
-    return row.audia_action == "call_official_installer"
+def _should_run_plugin_command(definition: HindsightPluginDefinition) -> bool:
+    return definition.audia_action == "call_official_installer"
 
 
-def _build_steps(step_defs: list[Any], params: dict[str, str]) -> list[Any]:
-    """Build step instances from YAML definitions using the canonical factory."""
-    steps: list[Any] = []
-    for defn in step_defs:
-        step_data = dict(defn)
-        step_data.setdefault("id", f"step-{len(steps)}")
-        steps.append(build_step(step_data))
-    return steps
+def _render_command(
+    command: tuple[str, ...],
+    desired: HindsightPluginDesired,
+) -> tuple[str, ...]:
+    """Render {URL}/{KEY}/{TOKEN}/{ID} placeholders in command parts."""
+    values = {
+        "URL": desired.endpoint_url,
+        "KEY": desired.api_token or "",
+        "TOKEN": desired.api_token or "",
+        "ID": desired.bank_id or "",
+    }
+    return tuple(
+        next((part.replace(f"{{{k}}}", v) for k, v in values.items() if f"{{{k}}}" in part), part)
+        for part in command
+    )
+
+
+def _commands_to_steps(
+    commands: tuple[IntegrationCommand, ...],
+    desired: HindsightPluginDesired,
+) -> list[ShellStep]:
+    """Convert typed IntegrationCommand to ShellStep with rendered params."""
+    return [
+        ShellStep(
+            id=cmd.id,
+            command=_render_command(cmd.command, desired),
+            shell=cmd.shell,
+        )
+        for cmd in commands
+    ]
 
 
 def _run_gated_steps(
-    row: HindsightRecipeRow,
-    backend: HindsightBackendConfig,
-    step_defs: list[Any] | None,
+    definition: HindsightPluginDefinition,
+    desired: HindsightPluginDesired,
+    commands: tuple[IntegrationCommand, ...],
     context: dict[str, Any],
     stamp_fn,
     *,
@@ -61,30 +86,84 @@ def _run_gated_steps(
     Returns the stamped result if steps were executed (success or failure),
     or None if no steps to run (caller handles fallback).
     """
-    if not step_defs or not _should_run_plugin_command(row):
+    if not commands or not _should_run_plugin_command(definition):
         return None
 
-    if row.source_status != "verified":
+    if definition.source_status != "verified":
         if operation == "uninstall":
             return stamp_fn(ProviderRecipeResult.ok(
                 RecipeState.ABSENT,
-                status=f"source {row.source_status}; no plugin installer was executed",
-                action_needed=row.notes or row.audia_action,
+                status=f"source {definition.source_status}; no plugin installer was executed",
+                action_needed=definition.notes or definition.audia_action,
             ))
         return stamp_fn(ProviderRecipeResult.fail(
-            f"plugin {operation} source {row.source_status}; refusing to execute",
-            action_needed=row.notes or row.audia_action,
+            f"plugin {operation} source {definition.source_status}; refusing to execute",
+            action_needed=definition.notes or definition.audia_action,
         ))
 
-    params = _hindsight_params(backend)
-    steps = _build_steps(step_defs, params)
+    steps = _commands_to_steps(commands, desired)
     seq = run_steps(steps, context, fail_prefix=f"plugin {operation} failed")
     if not seq.success:
         return stamp_fn(seq)
     return None
 
 
-class PluginConfigRecipe(_RowRecipe):
+class _PluginRecipe(ProviderCapabilityRecipe):
+    """Base for Hindsight plugin recipes — consumes typed definition, not raw row."""
+
+    capability_id = "hindsight"
+    backend_id: str | None = None
+    provision_via_steps = False
+
+    def __init__(
+        self,
+        definition: HindsightPluginDefinition,
+        *,
+        recipe_kind: ProviderRecipeKind = ProviderRecipeKind.PLUGIN_CONFIG,
+    ) -> None:
+        super().__init__(
+            provider_id=definition.provider_id,
+            capability_id="hindsight",
+            recipe_kind=recipe_kind,
+            display_name=definition.display_name,
+            source_url=definition.source_url,
+            source_date=definition.source_date,
+        )
+        self._definition = definition
+
+    def _stamp(
+        self,
+        result: RecipeResult | ProviderRecipeResult,
+    ) -> ProviderRecipeResult:
+        if isinstance(result, ProviderRecipeResult):
+            return ProviderRecipeResult(
+                success=result.success,
+                state=result.state,
+                artifacts_owned=list(result.artifacts_owned),
+                status=result.status,
+                error=result.error,
+                details=dict(result.details or {}),
+                source_url=result.source_url or self.source_url,
+                source_date=result.source_date or self.source_date,
+                action_needed=result.action_needed or self._definition.audia_action,
+            )
+        return ProviderRecipeResult(
+            success=result.success,
+            state=result.state,
+            artifacts_owned=list(result.artifacts_owned),
+            status=result.status,
+            error=result.error,
+            details=dict(result.details or {}),
+            source_url=self.source_url,
+            source_date=self.source_date,
+            action_needed=result.action_needed or self._definition.audia_action,
+        )
+
+    def to_result(self, base: RecipeResult) -> ProviderRecipeResult:  # type: ignore[override]
+        return self._stamp(base)
+
+
+class PluginConfigRecipe(_PluginRecipe):
     """Plugin-config recipe: writes plugin registration to provider config.
 
     For providers like OpenCode, Claude that use plugin arrays or marketplace.
@@ -94,15 +173,29 @@ class PluginConfigRecipe(_RowRecipe):
 
     def __init__(
         self,
-        row: HindsightRecipeRow,
-        backend: HindsightBackendConfig,
+        definition: HindsightPluginDefinition,
+        desired: HindsightPluginDesired,
         config_path: Path | None = None,
     ) -> None:
-        super().__init__(row)
-        self._backend = backend
-        self._server_name = backend.server_name
-        self._managed_entry = build_hindsight_managed_entry(backend)
-        self._ownership_scope = hindsight_ownership_scope(backend)
+        super().__init__(definition)
+        self._desired = desired
+        self._server_name = desired.endpoint_url.split("/")[2] if "//" in desired.endpoint_url else desired.endpoint_url
+        self._managed_entry = build_hindsight_managed_entry(
+            HindsightBackendConfig(
+                base_url=desired.endpoint_url,
+                api_key=desired.api_token,
+                bank_id=desired.bank_id,
+                server_name=self._server_name,
+            )
+        )
+        self._ownership_scope = hindsight_ownership_scope(
+            HindsightBackendConfig(
+                base_url=desired.endpoint_url,
+                api_key=desired.api_token,
+                bank_id=desired.bank_id,
+                server_name=self._server_name,
+            )
+        )
         self._config_path = config_path
 
     def _mcp_status(self) -> dict[str, Any]:
@@ -141,7 +234,7 @@ class PluginConfigRecipe(_RowRecipe):
 
     def install(self, context: dict[str, Any]) -> ProviderRecipeResult:
         result = _run_gated_steps(
-            self._row, self._backend, self._row.install_steps, context,
+            self._definition, self._desired, self._definition.install_steps, context,
             self._stamp, operation="install",
         )
         if result is not None:
@@ -195,7 +288,7 @@ class PluginConfigRecipe(_RowRecipe):
 
     def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
         result = _run_gated_steps(
-            self._row, self._backend, self._row.uninstall_steps, context,
+            self._definition, self._desired, self._definition.uninstall_steps, context,
             self._stamp, operation="uninstall",
         )
         if result is not None:
@@ -208,9 +301,6 @@ class PluginConfigRecipe(_RowRecipe):
 
     def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
         if self._config_path:
-            # Fixture/custom paths without a registered provider cannot be
-            # reconciled through provider-owned config machinery.  Never fall
-            # back to a raw write; report the safe no-op instead.
             from audiagentic.components.providers.descriptors.registry import get_descriptor
             if get_descriptor(self.provider_id) is None:
                 return self._stamp(ProviderRecipeResult.ok(
@@ -232,19 +322,12 @@ class PluginConfigRecipe(_RowRecipe):
             RecipeState.ABSENT, status="nothing to prune",
         ))
 
-    def provision_steps(self) -> list[Any]:
-        params = _hindsight_params(self._backend)
-        if self._config_path:
-            params["CONFIG_PATH"] = str(self._config_path)
-        steps: list[Any] = []
-        if self._row.install_steps and _should_run_plugin_command(self._row):
-            steps.extend(_build_steps(
-                self._row.install_steps, params,
-            ))
-        if self._row.configure_steps:
-            steps.extend(_build_steps(
-                self._row.configure_steps, params,
-            ))
+    def provision_steps(self) -> list[ShellStep]:
+        steps: list[ShellStep] = []
+        if self._definition.install_steps and _should_run_plugin_command(self._definition):
+            steps.extend(_commands_to_steps(self._definition.install_steps, self._desired))
+        if self._definition.configure_steps:
+            steps.extend(_commands_to_steps(self._definition.configure_steps, self._desired))
         return steps
 
     def dry_run(self, context: dict[str, Any]) -> ProviderRecipeResult:
@@ -256,36 +339,32 @@ class PluginConfigRecipe(_RowRecipe):
 # RS18/RS06: intentional one-off — patches a third-party plugin file this recipe
 # does not create or own; no shared primitive (WriteFileStep/ArtifactRegistry) applies.
 def _repair_windows_plugin_mcp(
-    backend: HindsightBackendConfig,
-    definition: HindsightPluginDefinition | None = None,
+    desired: HindsightPluginDesired,
+    definition: HindsightPluginDefinition,
 ) -> tuple[bool, str]:
     """On Windows, patch the installed hindsight plugin's .mcp.json to use python.exe.
 
-    Uses YAML-driven repair metadata from the matrix row when available. Empty
-    fields short-circuit as no-ops: if no cache pattern is configured, the
-    function returns without attempting repair. The official plugin ships a
-    bash launcher (run_mcp.sh) that fails when Git Bash is absent. Idempotent.
+    Uses typed repair metadata from HindsightPluginDefinition. Empty fields
+    short-circuit as no-ops. The official plugin ships a bash launcher
+    (run_mcp.sh) that fails when Git Bash is absent. Idempotent.
     """
-    # Intentional one-off: patches third-party plugin .mcp.json file via glob discovery; no shared primitive covers OS-specific repair of unowned files (RS06/RS18)
     import glob
     import json
     import os
 
-    # Empty metadata = no-op
-    cache_pattern_str = definition.repair_cache_pattern if definition else ""
+    cache_pattern_str = definition.repair_cache_pattern
     if not cache_pattern_str:
         return False, "no plugin repair metadata configured"
 
     expanded_pattern = Path(cache_pattern_str).expanduser()
-    data_dir_str = definition.repair_data_dir if definition else ""
-    venv_python_rel = definition.repair_venv_python if definition else ""
-    server_script_rel = definition.repair_server_script if definition else ""
+    data_dir_str = definition.repair_data_dir
+    venv_python_rel = definition.repair_venv_python
+    server_script_rel = definition.repair_server_script
 
     mcp_files = glob.glob(str(expanded_pattern))
     if not mcp_files:
         return False, f"no .mcp.json found matching {expanded_pattern}"
 
-    # Resolve data directory from environment variable or fallback
     if data_dir_str:
         appdata = os.environ.get("APPDATA", "")
         if "${APPDATA}" in data_dir_str and not appdata:
@@ -312,7 +391,7 @@ def _repair_windows_plugin_mcp(
         server = servers.get("hindsight", {})
         cmd = str(server.get("command", ""))
         if "python" in cmd.lower() and "bash" not in cmd.lower():
-            continue  # already patched
+            continue
         plugin_dir = mcp_path.parent
         mcp_script = (
             plugin_dir / server_script_rel if server_script_rel else plugin_dir / "scripts/mcp_server.py"
@@ -336,19 +415,12 @@ def _repair_windows_plugin_mcp(
     return True, "already patched"
 
 
-def _build_plugin_url_config(backend: HindsightBackendConfig) -> dict[str, Any]:
-    """Build the plugin URL config dict from backend, omitting unset optional fields.
-
-    This dict is written to provider-specific config files (e.g.
-    ~/.hindsight/claude-code.json, ~/.hindsight/opencode.json) so the provider's
-    Hindsight plugin reads the correct server URL, token, and bank. Fields are
-    only included when the backend has a value — the plugin's own defaults apply
-    for absent keys, and empty strings are not written.
-    """
-    return HindsightPluginDesired.from_backend(backend).options()
+def _build_plugin_url_config(desired: HindsightPluginDesired) -> dict[str, Any]:
+    """Build the plugin URL config dict from desired, omitting unset optional fields."""
+    return desired.options()
 
 
-class _PluginUrlConfigRecipe(_RowRecipe):
+class _PluginUrlConfigRecipe(_PluginRecipe):
     """Writes hindsight connection config to a provider-specific JSON file.
 
     Used by providers whose Hindsight plugin reads a ~/.hindsight/<provider>.json
@@ -369,15 +441,13 @@ class _PluginUrlConfigRecipe(_RowRecipe):
 
     def __init__(
         self,
-        row: HindsightRecipeRow,
-        backend: HindsightBackendConfig,
+        definition: HindsightPluginDefinition,
+        desired: HindsightPluginDesired,
         url_config_path: str | Path,
         harness_config_path: str | Path | None = None,
     ) -> None:
-        super().__init__(row)
-        self._backend = backend
-        self._definition = HindsightPluginDefinition.from_row(row)
-        self._desired = HindsightPluginDesired.from_backend(backend)
+        super().__init__(definition)
+        self._desired = desired
         self._url_config_path = Path(url_config_path).expanduser()
         self._harness_config_path = Path(harness_config_path) if harness_config_path else None
 
@@ -391,21 +461,12 @@ class _PluginUrlConfigRecipe(_RowRecipe):
         except (OSError, ValueError):
             return {}
 
-    def provision_steps(self) -> list[Any]:
-        params = _hindsight_params(self._backend)
-        # configure_steps use {CONFIG_PATH} for the harness config (plugin array etc.),
-        # not the url config file. Fall back to url_config_path when no harness path.
-        config_path_for_steps = self._harness_config_path or self._url_config_path
-        params["CONFIG_PATH"] = str(config_path_for_steps)
-        steps: list[Any] = []
-        if self._row.install_steps and _should_run_plugin_command(self._row):
-            steps.extend(_build_steps(
-                self._row.install_steps, params,
-            ))
-        if self._row.configure_steps:
-            steps.extend(_build_steps(
-                self._row.configure_steps, params,
-            ))
+    def provision_steps(self) -> list[ShellStep]:
+        steps: list[ShellStep] = []
+        if self._definition.install_steps and _should_run_plugin_command(self._definition):
+            steps.extend(_commands_to_steps(self._definition.install_steps, self._desired))
+        if self._definition.configure_steps:
+            steps.extend(_commands_to_steps(self._definition.configure_steps, self._desired))
         return steps
 
     def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
@@ -415,7 +476,7 @@ class _PluginUrlConfigRecipe(_RowRecipe):
         if all(current.get(k) == v for k, v in expected.items()):
             artifacts = [str(self._url_config_path)]
             if os.name == "nt":
-                ok, detail = _repair_windows_plugin_mcp(self._backend, self._definition)
+                ok, detail = _repair_windows_plugin_mcp(self._desired, self._definition)
                 if ok and "patched" in detail:
                     artifacts.append(detail)
             return self._stamp(ProviderRecipeResult.ok(
@@ -429,7 +490,7 @@ class _PluginUrlConfigRecipe(_RowRecipe):
 
     def install(self, context: dict[str, Any]) -> ProviderRecipeResult:
         result = _run_gated_steps(
-            self._row, self._backend, self._row.install_steps, context,
+            self._definition, self._desired, self._definition.install_steps, context,
             self._stamp, operation="install",
         )
         if result is not None:
@@ -438,20 +499,14 @@ class _PluginUrlConfigRecipe(_RowRecipe):
 
     def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
         import os
-        if self._row.configure_steps:
-            params = _hindsight_params(self._backend)
-            config_path_for_steps = self._harness_config_path or self._url_config_path
-            params["CONFIG_PATH"] = str(config_path_for_steps)
-            steps = _build_steps(
-                self._row.configure_steps, params,
-            )
+        if self._definition.configure_steps:
+            steps = _commands_to_steps(self._definition.configure_steps, self._desired)
             seq = run_steps(steps, context, fail_prefix="plugin configure failed")
             if not seq.success:
                 return self._stamp(seq)
-        # Direct write: JSON config content built by _build_plugin_url_config(); WriteFileStep not used because this recipe doesn't maintain an ArtifactRegistry instance (RS06/RS18)
         from audiagentic.foundation.steps import WriteFileStep
 
-        content = _build_plugin_url_config(self._backend)
+        content = _build_plugin_url_config(self._desired)
         import json
         step = WriteFileStep(
             id="plugin-url-config-write",
@@ -463,7 +518,7 @@ class _PluginUrlConfigRecipe(_RowRecipe):
         step.run(context)
         artifacts = [str(self._url_config_path)]
         if os.name == "nt":
-            ok, detail = _repair_windows_plugin_mcp(self._backend, self._definition)
+            ok, detail = _repair_windows_plugin_mcp(self._desired, self._definition)
             if ok and "patched" in detail:
                 artifacts.append(detail)
         return self._stamp(ProviderRecipeResult.ok(
@@ -478,7 +533,7 @@ class _PluginUrlConfigRecipe(_RowRecipe):
 
     def uninstall(self, context: dict[str, Any]) -> ProviderRecipeResult:
         result = _run_gated_steps(
-            self._row, self._backend, self._row.uninstall_steps, context,
+            self._definition, self._desired, self._definition.uninstall_steps, context,
             self._stamp, operation="uninstall",
         )
         if result is not None:
@@ -486,7 +541,6 @@ class _PluginUrlConfigRecipe(_RowRecipe):
         return self.prune(context)
 
     def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        # Direct prune: URL config file not registered with ArtifactRegistry; bare unlink is acceptable for self-owned files (RS06/RS18)
         self._url_config_path.unlink(missing_ok=True)
         return self._stamp(ProviderRecipeResult.ok(
             RecipeState.ABSENT, status="plugin URL config removed",
@@ -498,29 +552,31 @@ class _PluginUrlConfigRecipe(_RowRecipe):
         ))
 
 
-class _PluginArrayRecipe(_RowRecipe):
+class _PluginArrayRecipe(_PluginRecipe):
     """Upserts one named entry into a provider's declarative plugin-array config.
 
     For providers (e.g. OpenCode) that auto-install packages listed in a config
     array on startup rather than exposing an install command. All provider
     knowledge — config path, package name, and the reader/writer/remover that
-    know the array's on-disk shape — comes from the matrix row; this class
+    know the array's on-disk shape — comes from the typed definition; this class
     contains none.
     """
 
     def __init__(
         self,
-        row: HindsightRecipeRow,
-        backend: HindsightBackendConfig,
+        definition: HindsightPluginDefinition,
+        desired: HindsightPluginDesired,
         project_root: Path,
     ) -> None:
-        super().__init__(row)
-        self._backend = backend
+        super().__init__(definition)
+        self._desired = desired
         self._project_root = Path(project_root)
-        self._package = row.plugin_array_package
+        if not definition.plugin_array_package:
+            raise ValueError("plugin_array_package is required for _PluginArrayRecipe")
+        self._package: str = definition.plugin_array_package
 
     def _expected_options(self) -> dict[str, Any]:
-        return _build_plugin_url_config(self._backend)
+        return _build_plugin_url_config(self._desired)
 
     def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
         from audiagentic.components.providers.providers_api import (
