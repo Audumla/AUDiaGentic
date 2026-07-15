@@ -16,7 +16,7 @@ Layering (SL11/SL12/SL13):
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Any
 
@@ -72,25 +72,20 @@ class ProviderRecipeKind(str, Enum):
     """Documentation/action-needed only, no automation."""
 
 
-@dataclass(frozen=True)
-class ProviderRecipeResult:
+@dataclass
+class ProviderRecipeResult(RecipeResult):
     """Provider-specific recipe operation result.
 
     Extends the generic RecipeResult with provider-scoped fields for source
-    tracking and user-facing action guidance.
+    tracking. The base RecipeResult already carries action_needed. This subclass
+    is covariant with RecipeResult so ProviderCapabilityRecipe lifecycle methods
+    can return ProviderRecipeResult where RecipeResult is expected.
     """
 
-    success: bool
-    state: RecipeState
-    artifacts_owned: list[str] = field(default_factory=list)
-    status: str = ""
-    error: str | None = None
-    details: dict[str, Any] = field(default_factory=dict)
     source_url: str = ""
     """URL to official integration docs for the capability recipe."""
     source_date: str = ""
     """Date the source was checked (ISO format)."""
-    action_needed: str = ""
     """User-facing guidance when automation is not possible."""
 
     @classmethod

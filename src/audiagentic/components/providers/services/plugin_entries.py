@@ -20,7 +20,7 @@ def manage_plugin_entry(
 ) -> PluginEntryResult:
     descriptor = get_descriptor(provider_id)
     spec = descriptor.plugin_config if descriptor else None
-    if spec is None:
+    if spec is None or descriptor.automation_capability("plugin-entry") is None:
         return PluginEntryResult(False, False, error_code="RES-PPLG-001")
     if mode not in {"apply", "prune", "status"}:
         return PluginEntryResult(False, True, error_code="CON-PPLG-002")

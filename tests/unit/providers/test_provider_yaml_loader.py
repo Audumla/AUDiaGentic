@@ -47,6 +47,10 @@ class TestProviderYamlLoader:
         assert descriptor.mcp_config.reader is read_mcp_json
         assert descriptor.mcp_config.writer is write_mcp_json
         assert descriptor.mcp_config.remover is remove_mcp_json
+        capability = descriptor.automation_capability("managed-mcp")
+        assert capability is not None
+        assert capability.supported_modes == ("apply", "prune", "status")
+        assert capability.ownership_scope_required is True
 
     def test_claude_permissions(self) -> None:
         """Claude permissions match expected values."""
@@ -170,6 +174,17 @@ class TestLoadProvidersFromDirectory:
         assert expected == loaded, f"Missing: {expected - loaded}, Extra: {loaded - expected}"
         for descriptor in providers.values():
             assert isinstance(descriptor, ProviderDescriptor)
+            assert descriptor.automation_capabilities is not None
+
+    def test_automation_capabilities_are_explicit_and_match_native_mechanics(self) -> None:
+        providers = load_providers_from_directory(get_providers_config_dir())
+        for provider_id, descriptor in providers.items():
+            managed_mcp = descriptor.automation_capability("managed-mcp")
+            assert (managed_mcp is not None) is (descriptor.mcp_config is not None), provider_id
+        plugin = providers["opencode"].automation_capability("plugin-entry")
+        assert plugin is not None
+        assert plugin.payload_contract == "provider-plugin-entry-payload/v1"
+        assert providers["opencode"].plugin_config is not None
 
     def test_supported_connectors_loads_from_yaml(self) -> None:
         """MO01: local-openai declares supported_connectors — a genuine repo fact

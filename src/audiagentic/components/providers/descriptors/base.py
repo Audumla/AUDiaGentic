@@ -8,6 +8,7 @@ from typing import Any
 from audiagentic.foundation.steps import CallableStep, SequenceStep, ShellStep
 from audiagentic.foundation.toolchains.managed_config import ManagedConfigSpec
 
+from .automation_capabilities import ProviderAutomationCapability
 from .plugin_config import PluginConfigSpec
 
 
@@ -114,6 +115,12 @@ class ProviderDescriptor:
     # Provider-owned knowledge/evidence. These records describe declared or
     # externally documented capabilities; they never register or execute them.
     capability_facts: tuple[ProviderCapabilityFact, ...] = field(default_factory=tuple)
+    # Explicitly declared automation families. These declarations are only
+    # capability metadata; explicit provider+family code registration is still
+    # required before an operation can execute.
+    automation_capabilities: tuple[ProviderAutomationCapability, ...] = field(
+        default_factory=tuple
+    )
     permissions: ProviderPermissions = field(default_factory=ProviderPermissions)
     agent_files: tuple[AgentFile, ...] = field(default_factory=tuple)
     # access-mode written to providers.yaml when this provider is first enabled.
@@ -210,6 +217,19 @@ class ProviderDescriptor:
             capability
             for capability in self.host_capabilities
             if capability.host == host_id
+        )
+
+    def automation_capability(
+        self, family_id: str
+    ) -> ProviderAutomationCapability | None:
+        """Return one explicitly declared automation family, if supported."""
+        return next(
+            (
+                capability
+                for capability in self.automation_capabilities
+                if capability.family_id == family_id
+            ),
+            None,
         )
 
     @property

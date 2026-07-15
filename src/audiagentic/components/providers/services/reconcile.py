@@ -9,7 +9,6 @@ from typing import Any
 from audiagentic.foundation.contracts.output import ComponentOutputEvent, ComponentOutputSink
 
 from ..descriptors.registry import all_descriptors
-from ..surfaces.manager import apply_provider_surfaces, prune_provider_surfaces
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +141,14 @@ def reconcile_provider(
     if cli_available and not currently_enabled:
         _emit(on_progress, f"Enabling {provider_id} and applying surfaces")
         _seed_provider_config(project_root, provider_id, descriptor, enabled=True)
-        surfaces_result = apply_provider_surfaces(project_root, provider_id=provider_id, on_progress=on_progress)
+        from ..providers_api import operate_provider_surface
+        from .lifecycle import _build_surface_request
+
+        surface_result = operate_provider_surface(
+            project_root, provider_id, mode="apply",
+            request=_build_surface_request(project_root, provider_id),
+        )
+        surfaces_result = surface_result.to_mapping()
         _sync_provider_mcp(project_root, on_progress)
         _sync_provider_models(provider_id, project_root, enabled=True, on_progress=on_progress)
         _sync_host_extensions(project_root, on_progress)
@@ -161,7 +167,14 @@ def reconcile_provider(
     elif not cli_available and currently_enabled:
         _emit(on_progress, f"Disabling {provider_id} — CLI not found")
         set_provider_enabled(project_root, provider_id, enabled=False)
-        surfaces_result = prune_provider_surfaces(project_root, provider_id=provider_id, on_progress=on_progress)
+        from ..providers_api import operate_provider_surface
+        from .lifecycle import _build_surface_request
+
+        surface_result = operate_provider_surface(
+            project_root, provider_id, mode="prune",
+            request=_build_surface_request(project_root, provider_id),
+        )
+        surfaces_result = surface_result.to_mapping()
         _sync_provider_models(provider_id, project_root, enabled=False, on_progress=on_progress)
         action_taken = "disabled"
     else:

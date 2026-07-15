@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, fields
 
 import pytest
 
@@ -62,15 +62,22 @@ def test_opencode_capability_facts_load_from_yaml() -> None:
     descriptor = load_provider_descriptor(get_providers_config_dir() / "opencode.yaml")
 
     assert tuple(fact.capability_id for fact in descriptor.capability_facts) == (
+        "cli-install",
+        "host-extension",
+        "mcp-config",
+        "plugin-config",
+        "lsp-config",
         "model-catalog-refresh",
+        "surface-skill",
+        "perm-declaration",
         "model-config-projection",
     )
-    verified = descriptor.capability_facts[0]
-    assert verified.subject == "fetch_catalog_fn"
-    assert verified.evidence.evidence_tier == "execution"
-    assert verified.evidence.review_state == "verified"
-    assert verified.constraints == ("Provider command requires an installed OpenCode CLI.",)
-    assert descriptor.capability_facts[1].evidence.review_state == "pending-review"
+    catalog_fact = descriptor.capability_facts[5]
+    assert catalog_fact.subject == "fetch_catalog_fn"
+    assert catalog_fact.evidence.evidence_tier == "execution"
+    assert catalog_fact.evidence.review_state == "verified"
+    assert catalog_fact.constraints == ("Provider command requires an installed OpenCode CLI.",)
+    assert descriptor.capability_facts[8].evidence.review_state == "pending-review"
 
 
 def test_capability_facts_default_empty() -> None:
@@ -180,3 +187,66 @@ def test_markdown_serializer_is_deterministic_and_complete() -> None:
     assert "installed tool required" in first
     assert "authentication dependent" in first
     assert "docs/reference/evidence.md#catalog" in first
+
+
+def test_ma19_ma20_authority_separation() -> None:
+    """MA19 capability_facts cannot declare MA20 automation families, modes, or contracts.
+
+    The loader rejects unknown fact fields, so a fact that attempts to carry
+    MA20-style fields (family_id, supported_modes, payload_contract, etc.)
+    is rejected at load time — MA19 facts are evidence only, never execution authority.
+    """
+    with pytest.raises(AudiaGenticError, match="VAL-PCAP-009"):
+        PROVIDER_SPEC.build(
+            {
+                "provider_id": "fixture",
+                "display_name": "Fixture",
+                "capability_facts": [
+                    {
+                        "capability_id": "fake-ma20",
+                        "subject": "external:fake-ma20",
+                        "family_id": "managed-mcp",
+                        "supported_modes": ["apply", "prune"],
+                        "payload_contract": "provider-managed-mcp-payload/v1",
+                        "result_contract": "provider-managed-mcp-result/v1",
+                        "ownership_scope_required": True,
+                    }
+                ],
+            }
+        )
+
+
+def test_ma19_fact_shape_cannot_hold_ma20_fields() -> None:
+    """ProviderCapabilityFact has no fields for MA20 automation declarations.
+
+    The fact shape is locked: capability_id, subject, mechanism, constraints,
+    limitations, support_assessment, action_needed, evidence. There is no
+    family_id, supported_modes, payload_contract, or result_contract.
+    """
+    fact_fields = {f.name for f in fields(ProviderCapabilityFact)}
+    ma20_fields = {"family_id", "supported_modes", "payload_contract", "result_contract", "ownership_scope_required"}
+
+    assert ma20_fields.isdisjoint(fact_fields), (
+        f"ProviderCapabilityFact must not contain MA20 fields: {ma20_fields & fact_fields}"
+    )
+
+
+def test_generated_views_not_imported_by_runtime() -> None:
+    """The capability_facts module's serializers produce strings; no generated
+
+    Python modules exist that runtime code could import. Verify the module
+    does not write generated views to disk as importable artifacts.
+    """
+    import audiagentic.components.providers.descriptors.capability_facts as cf
+
+    # The serializers return strings, not file paths or module references
+    descriptor = ProviderDescriptor("fixture", "Fixture", capability_facts=(_fact(),))
+    descriptors = {"fixture": descriptor}
+
+    json_output = render_capability_facts_json(descriptors)
+    md_output = render_capability_facts_markdown(descriptors)
+
+    assert isinstance(json_output, str)
+    assert isinstance(md_output, str)
+    assert not hasattr(cf, "write_capability_facts_json")
+    assert not hasattr(cf, "write_capability_facts_markdown")
