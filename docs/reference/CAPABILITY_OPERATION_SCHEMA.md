@@ -94,6 +94,30 @@ recipe inert. Unknown providers/families, contract mismatches, duplicate
 bindings, unsupported modes, and missing required ownership scope fail with
 canonical provider errors.
 
+## Provider capability catalogue
+
+Providers declare supported automation families in their descriptor as typed
+`automation_capabilities` entries. A declaration contains only family id,
+supported public modes, family input/result contract references, and whether
+opaque ownership scope is required. It is discoverable capability metadata; it
+does not bind or enable code.
+
+There is no closed global capability enum. A family id is valid only when a
+provider explicitly declares it and composition supplies its family-specific
+contracts. Explicit provider-plus-family registration remains the sole
+execution authority.
+
+Reusable generic mechanics are permitted, but only as separately named,
+descriptor-backed families with their own frozen request/result types and JSON
+schemas. Current examples are `managed-mcp` and `plugin-entry`. They may be
+reused only when desired-state semantics, ownership, modes, and result behavior
+are identical. There is no generic capability request, arbitrary config blob,
+or command-runner family.
+
+`annotations` and `capability_facts` remain free-form evidence/provenance only.
+They cannot declare a family, add a mode, select a handler, or contain commands,
+paths, serializers, or execution payloads.
+
 ## Automation modes
 
 | Mode | Contract |
