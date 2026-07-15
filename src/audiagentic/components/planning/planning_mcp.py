@@ -39,6 +39,11 @@ def plan_list_items(
     'code-*'). id_prefix filters by item-ID prefix (e.g. 'CC'). Returns
     {items, total, returned, offset, limit, has_more}; page through results
     with offset when has_more is true.
+
+    When id_prefix is provided and no items match the current state filter,
+    matching items from other states are returned as overflow_items with a
+    note explaining why — so you know the item exists but is in a different
+    state (e.g. completed instead of active).
     """
     return planning_api.list_items_page(
         project_root_from_env(), state, plan, id_prefix, limit, offset
@@ -102,6 +107,11 @@ def plan_list_reviews(
     wildcards (e.g. 'code-*'). id_prefix filters by review-ID prefix (e.g.
     'RV'). Returns {items, total, returned, offset, limit, has_more}; page
     through results with offset when has_more is true.
+
+    When id_prefix is provided and no reviews match the current state filter,
+    matching reviews from other states are returned as overflow_items with a
+    note explaining why — so you know the review exists but is in a different
+    state (e.g. closed instead of open).
     """
     return planning_api.list_reviews_page(
         project_root_from_env(), state, plan, review_of, id_prefix, limit, offset
