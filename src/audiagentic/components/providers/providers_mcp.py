@@ -42,10 +42,8 @@ def build_server() -> FastMCP:
 
     @mcp.tool()
     @log_tool_call
-    def list_provider_models(provider_id: str, refresh: bool = False) -> dict[str, Any]:
-        return providers_api.list_provider_models(
-            project_root_from_env(), provider_id, refresh=refresh
-        )
+    def list_provider_models(provider_id: str) -> dict[str, Any]:
+        return providers_api.list_provider_models(project_root_from_env(), provider_id)
 
     @mcp.tool()
     @log_tool_call
