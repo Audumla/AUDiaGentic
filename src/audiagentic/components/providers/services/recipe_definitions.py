@@ -17,6 +17,8 @@ from jsonschema import Draft202012Validator
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
+from ..descriptors.automation_capabilities import ProviderAutomationCapability
+
 AUTOMATION_MODES = frozenset({"plan", "apply", "prune", "status"})
 _SCHEMA_PATH = Path(__file__).resolve().parents[1] / "contracts" / "provider-recipe.schema.json"
 
@@ -99,9 +101,16 @@ class ProviderAutomationRegistry:
         *,
         known_provider_ids: Collection[str],
         family_contracts: Mapping[str, tuple[str, str]],
+        provider_capabilities: Mapping[
+            str, Collection[ProviderAutomationCapability]
+        ],
     ) -> None:
         self._known_provider_ids = frozenset(known_provider_ids)
         self._family_contracts = dict(family_contracts)
+        self._provider_capabilities = {
+            provider_id: {capability.family_id: capability for capability in capabilities}
+            for provider_id, capabilities in provider_capabilities.items()
+        }
         self._registrations: dict[
             tuple[str, str], tuple[RecipeDefinition, RecipeHandler]
         ] = {}
@@ -120,6 +129,35 @@ class ProviderAutomationRegistry:
                 3,
                 "unknown provider in recipe registration",
                 **{"provider-id": definition.provider_id},
+            )
+        declaration = self._provider_capabilities.get(definition.provider_id, {}).get(
+            definition.family_id
+        )
+        if declaration is None:
+            raise _error(
+                "VAL",
+                8,
+                "provider has not declared automation capability",
+                **{
+                    "provider-id": definition.provider_id,
+                    "family-id": definition.family_id,
+                },
+            )
+        if (
+            declaration.payload_contract != definition.payload_contract
+            or declaration.result_contract != definition.result_contract
+            or declaration.supported_modes != definition.supported_modes
+            or declaration.ownership_scope_required
+            != definition.ownership_scope_required
+        ):
+            raise _error(
+                "VAL",
+                9,
+                "recipe definition does not match provider capability declaration",
+                **{
+                    "provider-id": definition.provider_id,
+                    "family-id": definition.family_id,
+                },
             )
         contracts = self._family_contracts.get(definition.family_id)
         if contracts is None:

@@ -14,11 +14,15 @@ from audiagentic.components.providers.surfaces.base import (
 from audiagentic.components.providers.surfaces.contributions import (
     load_surface_contributions,
 )
+from audiagentic.components.providers.contracts.generated_surface import (
+    GeneratedSurfaceRequest,
+)
+from audiagentic.components.providers.providers_api import (
+    operate_provider_surface,
+)
 from audiagentic.components.providers.surfaces.manager import (
-    apply_provider_surfaces,
     build_provider_surface_blocks,
     plan_provider_surfaces,
-    prune_provider_surfaces,
 )
 
 
@@ -124,22 +128,24 @@ def test_provider_surface_blocks_dedupe_shared_agents_file(tmp_path: Path) -> No
 
 def test_apply_provider_surfaces_writes_provider_owned_paths(tmp_path: Path) -> None:
     _install_agent_ledger(tmp_path)
-    result = apply_provider_surfaces(tmp_path, provider_id="cline")
+    request = GeneratedSurfaceRequest(ownership_scope="cline", contribution_ids=("__all__",))
+    result = operate_provider_surface(tmp_path, "cline", mode="apply", request=request)
     target = tmp_path / ".clinerules" / "audiagentic.md"
 
-    assert result["ok"] is True
-    assert str(target) in result["written"]
+    assert result.ok is True
+    assert str(target) in result.written_paths
     # block_id is no longer emitted into the file; the friendly title is
     assert "Agent ledger process" in target.read_text(encoding="utf-8")
 
 
 def test_roo_provider_surface_owns_roo_rules_path(tmp_path: Path) -> None:
     _install_agent_ledger(tmp_path)
-    result = apply_provider_surfaces(tmp_path, provider_id="roo")
+    request = GeneratedSurfaceRequest(ownership_scope="roo", contribution_ids=("__all__",))
+    result = operate_provider_surface(tmp_path, "roo", mode="apply", request=request)
     target = tmp_path / ".roo" / "rules" / "audiagentic.md"
 
-    assert result["ok"] is True
-    assert str(target) in result["written"]
+    assert result.ok is True
+    assert str(target) in result.written_paths
     assert "Agent ledger process" in target.read_text(encoding="utf-8")
 
 
@@ -169,7 +175,8 @@ def test_no_instruction_file_when_agent_jobs_inactive(tmp_path: Path) -> None:
 def test_prune_provider_surfaces_removes_legacy_blocks(tmp_path: Path) -> None:
     _install_agent_ledger(tmp_path)
     _enable_provider(tmp_path, "cline")
-    apply_provider_surfaces(tmp_path, provider_id="cline")
+    request = GeneratedSurfaceRequest(ownership_scope="cline", contribution_ids=("__all__",))
+    operate_provider_surface(tmp_path, "cline", mode="apply", request=request)
     target = tmp_path / ".clinerules" / "audiagentic.md"
     assert target.exists()
     content_before = target.read_text(encoding="utf-8")
@@ -184,10 +191,10 @@ def test_prune_provider_surfaces_removes_legacy_blocks(tmp_path: Path) -> None:
     target.write_text(content_before + stale, encoding="utf-8")
 
     # Prune regenerates the region and migrates away legacy fences
-    result = prune_provider_surfaces(tmp_path, provider_id="cline")
+    result = operate_provider_surface(tmp_path, "cline", mode="prune", request=request)
 
-    assert result["ok"] is True
-    assert str(target) in result["pruned"]
+    assert result.ok is True
+    assert str(target) in result.removed_paths
     pruned_text = target.read_text(encoding="utf-8")
     assert "AUDIAGENTIC:BEGIN" not in pruned_text
     assert "Stale content" not in pruned_text
@@ -197,13 +204,14 @@ def test_prune_provider_surfaces_removes_legacy_blocks(tmp_path: Path) -> None:
 def test_prune_provider_surfaces_leaves_active_blocks(tmp_path: Path) -> None:
     _install_agent_ledger(tmp_path)
     _enable_provider(tmp_path, "cline")
-    apply_provider_surfaces(tmp_path, provider_id="cline")
+    request = GeneratedSurfaceRequest(ownership_scope="cline", contribution_ids=("__all__",))
+    operate_provider_surface(tmp_path, "cline", mode="apply", request=request)
     target = tmp_path / ".clinerules" / "audiagentic.md"
     content_before = target.read_text(encoding="utf-8")
 
-    result = prune_provider_surfaces(tmp_path, provider_id="cline")
+    result = operate_provider_surface(tmp_path, "cline", mode="prune", request=request)
 
     # No stale blocks — nothing should be rewritten
-    assert result["ok"] is True
-    assert result["pruned"] == []
+    assert result.ok is True
+    assert result.removed_paths == ()
     assert target.read_text(encoding="utf-8") == content_before

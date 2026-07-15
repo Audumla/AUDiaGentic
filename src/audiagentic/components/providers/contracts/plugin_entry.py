@@ -1,8 +1,9 @@
 """Typed generic provider plugin-entry capability contract."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
 PluginEntryMode = Literal["apply", "prune", "status"]
 
@@ -10,14 +11,31 @@ PluginEntryMode = Literal["apply", "prune", "status"]
 @dataclass(frozen=True)
 class PluginEntryRequest:
     entry_id: str
-    options: tuple[tuple[str, Any], ...] = ()
+    options: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.entry_id:
             raise ValueError("entry_id is required")
+        if len({key for key, _ in self.options}) != len(self.options):
+            raise ValueError("plugin option names must be unique")
+        if any(not key or not isinstance(value, str) for key, value in self.options):
+            raise ValueError("plugin options require non-empty string names and string values")
 
-    def options_mapping(self) -> dict[str, Any]:
+    @classmethod
+    def from_mapping(cls, value: Mapping[str, object]) -> PluginEntryRequest:
+        raw_options = value.get("options", {})
+        if not isinstance(raw_options, Mapping):
+            raise ValueError("plugin options must be a mapping")
+        return cls(
+            entry_id=str(value["entry_id"]),
+            options=tuple(sorted((str(key), str(item)) for key, item in raw_options.items())),
+        )
+
+    def options_mapping(self) -> dict[str, str]:
         return dict(self.options)
+
+    def to_mapping(self) -> dict[str, object]:
+        return {"entry_id": self.entry_id, "options": self.options_mapping()}
 
 
 @dataclass(frozen=True)
@@ -28,6 +46,16 @@ class PluginEntryResult:
     present: bool = False
     action_needed: str | None = None
     error_code: str | None = None
+
+    def to_mapping(self) -> dict[str, object]:
+        return {
+            "ok": self.ok,
+            "supported": self.supported,
+            "changed": self.changed,
+            "present": self.present,
+            "action_needed": self.action_needed,
+            "error_code": self.error_code,
+        }
 
 
 __all__ = ["PluginEntryMode", "PluginEntryRequest", "PluginEntryResult"]

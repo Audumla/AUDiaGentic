@@ -11,11 +11,23 @@ from audiagentic.foundation.workflow.invocation import WorkflowInvocationResult
 
 from ..descriptors.base import CliInstallRecipe, ProviderDescriptor
 from ..descriptors.registry import _probe_cli, all_descriptors, get_descriptor
-from ..surfaces.manager import apply_provider_surfaces, prune_provider_surfaces
 from ..workflow import (
     workflow_provider_cli_plan,
     workflow_provider_cli_run,
 )
+
+
+def _build_surface_request(project_root: Path, provider_id: str):
+    """Build a GeneratedSurfaceRequest for one provider."""
+    from ..contracts.generated_surface import GeneratedSurfaceRequest
+    from ..surfaces.contributions import load_surface_contributions
+
+    contributions = load_surface_contributions(project_root=project_root)
+    contribution_ids = tuple(c.contribution_id for c in contributions)
+    return GeneratedSurfaceRequest(
+        ownership_scope=provider_id,
+        contribution_ids=contribution_ids or ("__all__",),
+    )
 
 # Re-exported from reconcile module
 from .reconcile import (  # noqa: F401
@@ -168,7 +180,13 @@ def install_provider_cli(
     if status == "installed" and project_root is not None:
         _seed_provider_config(project_root, provider_id, descriptor, enabled=True)
         _emit(on_progress, "Applying provider surfaces...", provider_id=provider_id, action="install")
-        result["surfaces"] = apply_provider_surfaces(project_root, provider_id=provider_id)
+        from ..providers_api import operate_provider_surface
+
+        surface_result = operate_provider_surface(
+            project_root, provider_id, mode="apply",
+            request=_build_surface_request(project_root, provider_id),
+        )
+        result["surfaces"] = surface_result.to_mapping()
         # Populate managed MCP config now that the provider is enabled; under
         # enabled-aware propagation it would otherwise wait for the next sync.
         _sync_provider_mcp(project_root, on_progress)
@@ -222,7 +240,13 @@ def uninstall_provider_cli(
 
         set_provider_enabled(project_root, provider_id, enabled=False)
         _emit(on_progress, "Pruning provider surfaces...", provider_id=provider_id, action="uninstall")
-        result["surfaces"] = prune_provider_surfaces(project_root, provider_id=provider_id)
+        from ..providers_api import operate_provider_surface
+
+        surface_result = operate_provider_surface(
+            project_root, provider_id, mode="prune",
+            request=_build_surface_request(project_root, provider_id),
+        )
+        result["surfaces"] = surface_result.to_mapping()
     _emit(on_progress, f"{provider_id}: {status}", provider_id=provider_id, action="uninstall", status=status)
     return result
 

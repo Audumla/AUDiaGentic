@@ -14,6 +14,17 @@ from audiagentic.components.providers.contracts.managed_mcp import (
 from audiagentic.components.providers.services import managed_mcp_family as family
 
 
+def _descriptor(*, remote: bool = False):
+    return SimpleNamespace(
+        mcp_config=SimpleNamespace(
+            capabilities=frozenset({"remote"}) if remote else frozenset()
+        ),
+        automation_capability=lambda family_id: object()
+        if family_id == "managed-mcp"
+        else None,
+    )
+
+
 def _entry(*, remote: bool = False):
     if remote:
         return ManagedMcpEntry(
@@ -34,9 +45,7 @@ def _request(*, remote: bool = False, empty: bool = False):
 
 def test_descriptor_backed_provider_is_supported(monkeypatch, tmp_path):
     """Any provider with mcp_config in its descriptor is supported — no registrations."""
-    monkeypatch.setattr(family, "get_descriptor", lambda _pid: SimpleNamespace(
-        mcp_config=SimpleNamespace(capabilities=frozenset())
-    ))
+    monkeypatch.setattr(family, "get_descriptor", lambda _pid: _descriptor())
     result = family.manage_mcp_entries(
         tmp_path, "any-provider", mode="status",
         request=ManagedMcpRequest(ownership_scope="test/scope"),
@@ -74,9 +83,7 @@ def test_unknown_provider_and_unsupported_mode_are_safe(tmp_path):
 
 
 def test_apply_returns_only_frozen_result_and_uses_scope(monkeypatch, tmp_path):
-    monkeypatch.setattr(family, "get_descriptor", lambda _pid: SimpleNamespace(
-        mcp_config=SimpleNamespace(capabilities=frozenset({"remote"}))
-    ))
+    monkeypatch.setattr(family, "get_descriptor", lambda _pid: _descriptor(remote=True))
     scopes = []
     monkeypatch.setattr(family, "sync_managed_provider_mcp_scope", lambda pid, root, scope, desired, managed_ids=None: (
         scopes.append(scope) or {"ok": True, "updated": ["hindsight"], "removed": [], "collisions": [], "auto_refreshed": True}
@@ -95,9 +102,7 @@ def test_apply_returns_only_frozen_result_and_uses_scope(monkeypatch, tmp_path):
 
 
 def test_remote_entry_rejected_for_stdio_only_provider(monkeypatch, tmp_path):
-    monkeypatch.setattr(family, "get_descriptor", lambda _pid: SimpleNamespace(
-        mcp_config=SimpleNamespace(capabilities=frozenset())
-    ))
+    monkeypatch.setattr(family, "get_descriptor", lambda _pid: _descriptor())
     result = family.manage_mcp_entries(
         tmp_path, "cline", mode="apply", request=_request(remote=True),
     )

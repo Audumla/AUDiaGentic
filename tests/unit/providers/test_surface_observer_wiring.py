@@ -19,12 +19,49 @@ from audiagentic.components.providers.surfaces import observer
 def recorded(monkeypatch: pytest.MonkeyPatch) -> dict[str, list]:
     calls: dict[str, list] = {"apply": [], "prune": []}
     monkeypatch.setattr(
-        observer, "apply_provider_surfaces", lambda root: calls["apply"].append(root)
-    )
-    monkeypatch.setattr(
-        observer, "prune_provider_surfaces", lambda root: calls["prune"].append(root)
+        observer,
+        "operate_provider_surfaces",
+        lambda root, mode: calls[mode].append(root),
     )
     return calls
+
+
+@pytest.mark.parametrize(
+    ("event_type", "expect_prune", "expect_apply"),
+    [
+        ("lifecycle.component.installed", False, True),
+        ("lifecycle.component.enabled", False, True),
+        ("lifecycle.component.uninstalled", True, True),
+        ("lifecycle.component.disabled", True, True),
+    ],
+)
+def test_observer_maps_events_to_actions(
+    recorded: dict[str, list],
+    event_type: str,
+    expect_prune: bool,
+    expect_apply: bool,
+) -> None:
+    root = Path("/tmp/project")
+    observer._on_component_lifecycle(
+        event_type, {"component_id": "agent-jobs", "project_root": root}, {}
+    )
+
+    assert (len(recorded["prune"]) == 1) is expect_prune
+    assert (len(recorded["apply"]) == 1) is expect_apply
+    if expect_prune:
+        assert recorded["prune"] == [root]
+    if expect_apply:
+        assert recorded["apply"] == [root]
+
+
+def test_observer_ignores_non_path_project_root(recorded: dict[str, list]) -> None:
+    observer._on_component_lifecycle(
+        "lifecycle.component.disabled",
+        {"component_id": "agent-jobs", "project_root": "/tmp/project"},
+        {},
+    )
+    assert recorded["prune"] == []
+    assert recorded["apply"] == []
 
 
 @pytest.mark.parametrize(

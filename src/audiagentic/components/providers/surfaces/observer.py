@@ -18,21 +18,21 @@ from pathlib import Path
 
 from audiagentic.foundation.event import get_bus, subscribe_component_lifecycle
 
+from ..providers_api import operate_provider_surfaces
 from ..services.lsp_projection import (
     CODING_LSP_PROVIDER_PROJECTION,
     handle_lsp_provider_projection,
 )
 from ..services.mcp_projection import sync_component_mcp_to_providers
-from .manager import apply_provider_surfaces, prune_provider_surfaces
 
 
 def _apply_surfaces(project_root: Path, payload: dict, metadata: dict) -> None:
-    apply_provider_surfaces(project_root)
+    operate_provider_surfaces(project_root, mode="apply")
 
 
 def _prune_then_apply_surfaces(project_root: Path, payload: dict, metadata: dict) -> None:
-    prune_provider_surfaces(project_root)
-    apply_provider_surfaces(project_root)
+    operate_provider_surfaces(project_root, mode="prune")
+    operate_provider_surfaces(project_root, mode="apply")
 
 
 def _sync_component_mcp(project_root: Path, payload: dict, metadata: dict, *, enabled: bool) -> None:
