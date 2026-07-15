@@ -210,9 +210,6 @@ matrix:
     install_steps: []
     uninstall_steps: []
     plugin_array_package: "@vectorize-io/opencode-hindsight"
-    plugin_array_reader: "audiagentic.components.providers.adapters.opencode.plugin_array:read_opencode_plugin"
-    plugin_array_writer: "audiagentic.components.providers.adapters.opencode.plugin_array:write_opencode_plugin"
-    plugin_array_remover: "audiagentic.components.providers.adapters.opencode.plugin_array:remove_opencode_plugin"
     status_command: ""
     config_artifacts:
       - opencode.json (plugin array entry)

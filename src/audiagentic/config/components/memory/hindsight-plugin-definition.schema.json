@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hindsight-plugin-definition/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["provider_id", "plugin_id", "settings_path", "repair_cache_pattern", "repair_data_dir", "repair_venv_python", "repair_server_script"],
+  "properties": {
+    "provider_id": {"type": "string", "minLength": 1},
+    "plugin_id": {"type": ["string", "null"]},
+    "settings_path": {"type": ["string", "null"]},
+    "repair_cache_pattern": {"type": "string"},
+    "repair_data_dir": {"type": "string"},
+    "repair_venv_python": {"type": "string"},
+    "repair_server_script": {"type": "string"}
+  }
+}
